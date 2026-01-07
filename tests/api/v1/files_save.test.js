@@ -662,13 +662,13 @@ describe('Files Save API E2E Tests', () => {
 
     assert.ok(uploadResponse.ok, 'PDF upload should succeed');
     const uploadResult = await uploadResponse.json();
-    const pdfFileId = uploadResult.file_id;
-    logger.info(`Uploaded PDF with file_id: ${pdfFileId}`);
+    const pdfFileId = uploadResult.filename; // filename contains stable_id
+    logger.info(`Uploaded PDF with stable_id: ${pdfFileId}`);
 
     // Get initial PDF metadata (should have no label or doc_metadata)
     const initialMetadataResponse = await authenticatedApiCall(
       reviewerSession.sessionId,
-      `/files/metadata?file_id=${pdfFileId}`,
+      `/files/${pdfFileId}/metadata`,
       'GET',
       null,
       BASE_URL
@@ -699,7 +699,7 @@ describe('Files Save API E2E Tests', () => {
     // Get updated PDF metadata
     const updatedMetadataResponse = await authenticatedApiCall(
       reviewerSession.sessionId,
-      `/files/metadata?file_id=${pdfFileId}`,
+      `/files/${pdfFileId}/metadata`,
       'GET',
       null,
       BASE_URL
@@ -768,7 +768,7 @@ describe('Files Save API E2E Tests', () => {
     });
 
     const uploadResult = await uploadResponse.json();
-    const pdfFileId = uploadResult.file_id;
+    const pdfFileId = uploadResult.filename; // filename contains stable_id
 
     // Create gold standard first with basic metadata
     const goldTeiXml = createTeiXml(versionTestDocId, 'Gold content');
@@ -798,7 +798,7 @@ describe('Files Save API E2E Tests', () => {
     // Get PDF metadata after gold save
     const afterGoldMetadata = await authenticatedApiCall(
       reviewerSession.sessionId,
-      `/files/metadata?file_id=${pdfFileId}`,
+      `/files/${pdfFileId}/metadata`,
       'GET',
       null,
       BASE_URL
@@ -828,7 +828,7 @@ describe('Files Save API E2E Tests', () => {
     // Get PDF metadata after version save
     const afterVersionMetadata = await authenticatedApiCall(
       reviewerSession.sessionId,
-      `/files/metadata?file_id=${pdfFileId}`,
+      `/files/${pdfFileId}/metadata`,
       'GET',
       null,
       BASE_URL

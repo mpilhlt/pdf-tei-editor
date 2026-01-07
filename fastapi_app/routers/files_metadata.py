@@ -35,30 +35,44 @@ class UpdateFileMetadataRequest(BaseModel):
 @router.get("/{stable_id}/metadata", response_model=FileMetadata)
 async def get_file_metadata(
     stable_id: str,
-    user: dict = Depends(require_admin_user),
+    user: dict = Depends(require_authenticated_user),
     file_repo: FileRepository = Depends(get_file_repository)
 ) -> FileMetadata:
     """Get file metadata by stable_id.
 
-    Admin-only endpoint for retrieving complete file metadata.
+    Returns complete file metadata if user has access to the file's collections.
 
     Args:
         stable_id: The stable_id of the file
-        user: Authenticated admin user
+        user: Authenticated user
         file_repo: File repository instance
 
     Returns:
         Complete file metadata
 
     Raises:
-        HTTPException: If file not found
+        HTTPException: If file not found or user doesn't have access
     """
     logger_inst = get_logger(__name__)
+    settings = get_settings()
 
     # Get file
     file = file_repo.get_file_by_stable_id(stable_id)
     if not file:
         raise HTTPException(status_code=404, detail=f"File not found: {stable_id}")
+
+    # Check access control
+    user_has_access = False
+    for collection_id in file.doc_collections or []:
+        if user_has_collection_access(user, collection_id, settings.db_dir):
+            user_has_access = True
+            break
+
+    if not user_has_access:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this file"
+        )
 
     logger_inst.debug(f"Retrieved metadata for file {stable_id}")
     return file

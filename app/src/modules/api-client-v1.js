@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-05T20:33:55.622Z
+ * Generated from OpenAPI schema at 2026-01-07T21:18:19.481Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1236,6 +1236,8 @@ export class ApiClientV1 {
    * repo: File repository (injected)
    * session_id: Current session ID (injected)
    * current_user: Current user dict (injected)
+   * sse_service: SSE service (injected)
+   * session_manager: Session manager (injected)
    * Returns:
    * "OK" string on success (matches Flask API)
    * Raises:
@@ -1322,15 +1324,15 @@ export class ApiClientV1 {
 
   /**
    * Get file metadata by stable_id.
-   * Admin-only endpoint for retrieving complete file metadata.
+   * Returns complete file metadata if user has access to the file's collections.
    * Args:
    * stable_id: The stable_id of the file
-   * user: Authenticated admin user
+   * user: Authenticated user
    * file_repo: File repository instance
    * Returns:
    * Complete file metadata
    * Raises:
-   * HTTPException: If file not found
+   * HTTPException: If file not found or user doesn't have access
    *
    * @param {string} stable_id
    * @returns {Promise<FileMetadata>}

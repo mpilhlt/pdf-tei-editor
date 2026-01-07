@@ -11,7 +11,7 @@
 import { app, endpoints as ep } from '../app.js'
 import ui from '../ui.js'
 import {
-  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl
+  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, sse
 } from '../app.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -86,6 +86,39 @@ async function install(state) {
 
   // enable save button on dirty editor
   xmlEditor.on("editorReady",() => {ui.toolbar.documentActions.saveRevision.disabled = false});
+
+  // Listen for lock release events to attempt acquiring locks for read-only documents
+  sse.addEventListener('lockReleased', async (event) => {
+    const data = JSON.parse(event.data);
+    const releasedStableId = data.stable_id;
+
+    // Check if we're currently viewing this document in read-only mode
+    if (currentState.xml === releasedStableId && currentState.editorReadOnly) {
+      logger.debug(`Lock released for current document ${releasedStableId}, attempting to acquire`);
+
+      try {
+        // Try to acquire the lock (first client wins)
+        await client.acquireLock(releasedStableId);
+        logger.info(`Successfully acquired lock for ${releasedStableId}`);
+
+        // Update state to allow editing
+        await app.updateState({ editorReadOnly: false });
+
+        notify(
+          'You can now edit this document',
+          'success',
+          'unlock'
+        );
+      } catch (error) {
+        if (error instanceof client.LockedError) {
+          logger.debug(`Lock already acquired by another client for ${releasedStableId}`);
+          // Another client got the lock first, stay in read-only mode
+        } else {
+          logger.error(`Failed to acquire lock for ${releasedStableId}: ${error}`);
+        }
+      }
+    }
+  });
 }
 
 /**
@@ -173,6 +206,11 @@ async function load({ xml, pdf }) {
           if (error instanceof client.LockedError) {
             logger.debug(`File ${xml} is locked, loading in read-only mode`);
             file_is_locked = true
+            notify(
+              'This document is being edited by another user',
+              'warning',
+              'exclamation-triangle'
+            );
           } else {
             const errorMessage = String(error);
             dialog.error(errorMessage)

@@ -8,9 +8,17 @@ No Flask or FastAPI dependencies - all parameters are explicitly passed.
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 from .db_utils import get_connection, init_database
+
+
+class SessionDict(TypedDict):
+    """Type definition for session dictionary."""
+    session_id: str
+    username: str
+    created_at: float
+    last_access: float
 
 
 # SQLite schema for sessions table
@@ -292,12 +300,12 @@ class SessionManager:
         row = cursor.fetchone()
         return row['count'] if row else 0
 
-    def get_all_sessions(self) -> list[dict]:
+    def get_all_sessions(self) -> list[SessionDict]:
         """
         Get all active sessions.
 
         Returns:
-            List of session dictionaries
+            List of session dictionaries with keys: session_id, username, created_at, last_access
         """
         conn = get_connection(self.db_path)
         cursor = conn.execute(

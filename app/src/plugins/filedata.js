@@ -14,7 +14,7 @@
 
 import { endpoints as ep } from '../app.js'
 import { Plugin } from '../modules/plugin-base.js'
-import { logger, client, dialog, xmlEditor } from '../app.js'
+import { logger, client, dialog, xmlEditor, sse } from '../app.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
@@ -76,6 +76,47 @@ class FiledataPlugin extends Plugin {
 
     // Initially hide menu item until we check admin status
     ui.toolbar.toolbarMenu.menu.gcMenuItem.style.display = 'none';
+
+    // Listen for SSE events about file data changes
+    sse.addEventListener('fileDataChanged', async (event) => {
+      const data = JSON.parse(event.data);
+
+      // Only reload for metadata changes, not lock status changes
+      // Lock status is already updated through other mechanisms
+      if (data.reason === 'lock_acquired') {
+        return;
+      }
+
+      // Check if currently loaded document was deleted
+      if (data.reason === 'files_deleted' && data.stable_ids) {
+        const currentXml = this.state.xml;
+        if (currentXml && data.stable_ids.includes(currentXml)) {
+          logger.warn(`Currently loaded document ${currentXml} was deleted by another user`);
+
+          // Clear the editor
+          xmlEditor.clear();
+
+          // Update state to clear document
+          await this.context.updateState({
+            xml: null,
+            diff: null,
+            editorReadOnly: false
+          });
+
+          // Notify user
+          notify(
+            'The document you were viewing was deleted by another user',
+            'warning',
+            'trash'
+          );
+        }
+      }
+
+      logger.debug(`File data changed (reason: ${data.reason}), reloading file data`);
+
+      // Reload file data when changes occur from other sessions
+      this.reload({ refresh: true });
+    });
   }
 
   /**

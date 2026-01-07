@@ -156,7 +156,7 @@ function establishConnection(sessionId) {
   eventSource.onopen = () => {
     logger.info('SSE connection established successfully');
     reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-    
+
     // Clear any pending reconnection timeout
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout);
