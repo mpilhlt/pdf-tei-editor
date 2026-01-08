@@ -259,10 +259,16 @@ class LocalSyncPlugin(Plugin):
                     })
 
                 else:
-                    # Only in filesystem - skip
-                    results["skipped"].append({
+                    # Only in filesystem - import as new gold standard
+                    # doc_id (fileref) is already in encoded form, ready to use
+                    fs_path, fs_content, fs_hash, fs_timestamp = fs_map[key]
+                    if not dry_run:
+                        self._import_from_filesystem(file_repo, file_storage, doc_id, var, fs_content, context.user)
+                    results["updated_collection"].append({
                         "fileref": display_ref,
-                        "reason": "only_in_filesystem"
+                        "stable_id": "(new)",
+                        "fs_timestamp": fs_timestamp or "(unknown)",
+                        "source": "filesystem"
                     })
 
             except Exception as e:
@@ -324,6 +330,83 @@ class LocalSyncPlugin(Plugin):
             fs_path.rename(backup_path)
 
         fs_path.write_bytes(content)
+
+    def _import_from_filesystem(self, file_repo, file_storage, doc_id: str, variant: str, content: bytes, user):
+        """
+        Import a new gold standard TEI file from the filesystem.
+
+        Args:
+            file_repo: File repository instance
+            file_storage: File storage instance
+            doc_id: Document ID (fileref)
+            variant: Variant identifier
+            content: TEI content as bytes
+            user: User dict with username and fullname
+        """
+        import logging
+        from fastapi_app.lib.models import FileCreate
+        from fastapi_app.lib.tei_utils import extract_tei_metadata
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"DEBUG: _import_from_filesystem called: doc_id={doc_id}, variant={variant}")
+        logger.debug(f"Importing from filesystem: doc_id={doc_id}, variant={variant}")
+
+        # Calculate content hash
+        content_hash = hashlib.sha256(content).hexdigest()
+        logger.debug(f"Content hash: {content_hash[:16]}")
+
+        # Parse and extract metadata
+        root = etree.fromstring(content)
+        tei_metadata = extract_tei_metadata(root)
+
+        # Write file to storage
+        saved_hash, storage_path = file_storage.save_file(content, "tei", increment_ref=True)
+        logger.debug(f"Saved to storage: {saved_hash[:16]}, path: {storage_path}")
+
+        # Build filename
+        filename = f"{doc_id}.{variant}.tei.xml" if variant else f"{doc_id}.tei.xml"
+        logger.debug(f"Creating gold standard file: {filename}")
+
+        # Get collections for this document by finding any existing file with same doc_id
+        # list_files doesn't support doc_id filter, so get file by doc_id directly
+        try:
+            from fastapi_app.lib.database import get_db
+            db = get_db()
+            cursor = db.execute("SELECT doc_collections FROM files WHERE doc_id = ? LIMIT 1", (doc_id,))
+            row = cursor.fetchone()
+            if row and row['doc_collections']:
+                import json
+                doc_collections = json.loads(row['doc_collections'])
+            else:
+                doc_collections = []
+            logger.debug(f"Retrieved collections for doc_id={doc_id}: {doc_collections}")
+        except Exception as e:
+            logger.error(f"Failed to get collections: {e}", exc_info=True)
+            doc_collections = []
+
+        # Create file record as gold standard
+        try:
+            created_file = file_repo.insert_file(
+                FileCreate(
+                    id=content_hash,
+                    stable_id=None,  # Auto-generate
+                    doc_id=doc_id,
+                    filename=filename,
+                    file_type="tei",
+                    file_size=len(content),
+                    variant=variant or None,
+                    version=None,  # Gold standard has no version
+                    label=None,  # Gold standard has no label
+                    doc_collections=doc_collections,
+                    file_metadata={},
+                    is_gold_standard=True  # Import as gold standard
+                )
+            )
+            logger.debug(f"Created gold standard with stable_id: {created_file.stable_id}")
+            return created_file
+        except Exception as e:
+            logger.error(f"Failed to insert file: {e}", exc_info=True)
+            raise
 
     def _create_new_version(self, file_repo, file_storage, doc, content: bytes, user):
         """
@@ -486,10 +569,19 @@ class LocalSyncPlugin(Plugin):
         if results["updated_collection"]:
             html_parts.append("<h3>Collection Updates</h3><ul>")
             for item in results["updated_collection"]:
-                html_parts.append(
-                    f"<li><strong>{escape_html(item['fileref'])}</strong> - {escape_html(item['stable_id'])}<br>"
-                    f"<span class='timestamp'>Filesystem: {escape_html(item['fs_timestamp'])} → Collection: {escape_html(item['col_timestamp'])}</span></li>"
-                )
+                # Handle different update types
+                if item.get("source") == "filesystem":
+                    # Import from filesystem (no collection timestamp)
+                    html_parts.append(
+                        f"<li><strong>{escape_html(item['fileref'])}</strong> - {escape_html(item['stable_id'])}<br>"
+                        f"<span class='timestamp'>Imported from filesystem: {escape_html(str(item['fs_timestamp']))}</span></li>"
+                    )
+                else:
+                    # Update existing document (has both timestamps)
+                    html_parts.append(
+                        f"<li><strong>{escape_html(item['fileref'])}</strong> - {escape_html(item['stable_id'])}<br>"
+                        f"<span class='timestamp'>Filesystem: {escape_html(str(item.get('fs_timestamp', 'unknown')))} → Collection: {escape_html(str(item.get('col_timestamp', 'unknown')))}</span></li>"
+                    )
             html_parts.append("</ul>")
 
         # Show details for skipped identical

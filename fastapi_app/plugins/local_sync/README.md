@@ -207,19 +207,43 @@ See "Future Enhancements" in the implementation plan for planned features.
 
 ### Running Tests
 
+**Python Unit Tests:**
+
 ```bash
 uv run python -m pytest fastapi_app/plugins/local_sync/tests/test_plugin.py -v
 ```
 
+**Backend API Integration Tests:**
+
+```bash
+node tests/backend-test-runner.js --test-dir fastapi_app/plugins/local_sync/tests
+```
+
 ### Test Coverage
 
-- Filesystem scanning for TEI files
-- Fileref extraction from TEI documents
+**Unit tests** (`test_plugin.py`):
+
+- Filesystem scanning for TEI files with path filtering
+- Fileref and variant extraction from TEI documents
 - Timestamp extraction from revision history
 - Plugin availability checks
 - Filesystem updates with and without backups
 
-All tests pass.
+**Integration tests** (`test_sync_api.test.js`):
+
+- Plugin availability and authentication
+- Filesystem → Collection sync scenarios:
+  - Import new gold standard files from filesystem
+  - Update existing files (create new versions)
+  - Handle same timestamp with different content
+- Collection → Filesystem sync scenarios:
+  - Export newer collection files to filesystem
+  - Create timestamped backups (when enabled)
+- Edge cases:
+  - Skip files only in collection
+  - Skip identical files (no changes needed)
+
+All 12 integration tests and all unit tests pass.
 
 ## References
 
