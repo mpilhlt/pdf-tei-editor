@@ -7,12 +7,12 @@ database initialization code.
 
 Usage:
     from fastapi_app.lib.migration_runner import run_migrations_if_needed
-    from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+    from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 
     # In your database initialization code:
     run_migrations_if_needed(
         db_path=Path("data/db/metadata.db"),
-        migrations=ALL_MIGRATIONS,
+        migrations=METADATA_MIGRATIONS,
         logger=logger
     )
 """
@@ -69,11 +69,11 @@ def run_migrations_if_needed(
         Number of migrations applied (0 if none needed)
 
     Example:
-        from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+        from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 
         applied = run_migrations_if_needed(
             db_path=Path("data/db/metadata.db"),
-            migrations=ALL_MIGRATIONS,
+            migrations=METADATA_MIGRATIONS,
             logger=logger
         )
     """

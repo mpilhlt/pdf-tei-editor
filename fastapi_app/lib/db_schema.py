@@ -146,11 +146,11 @@ def initialize_database(conn: sqlite3.Connection, logger=None, db_path=None) -> 
         if db_path:
             from pathlib import Path
             from .migration_runner import run_migrations_if_needed
-            from .migrations.versions import ALL_MIGRATIONS
+            from .migrations.versions import METADATA_MIGRATIONS
 
             run_migrations_if_needed(
                 db_path=Path(db_path),
-                migrations=ALL_MIGRATIONS,
+                migrations=METADATA_MIGRATIONS,
                 logger=logger
             )
 
