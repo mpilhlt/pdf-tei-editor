@@ -57,6 +57,30 @@ Before using any method on a class or module:
 2. Consult generated API docs in `docs/api/` for signatures
 3. Machine-readable JSON available at `docs/api/backend-api.json` for Python class/function APIs
 
+### Debugging Live Application
+
+When debugging the live application, use `bin/debug-api.js` to test API endpoints directly:
+
+```bash
+# Authenticate and call any endpoint
+node bin/debug-api.js <method> <path> [json-params]
+
+# Examples:
+node bin/debug-api.js GET /api/v1/plugins
+node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+node bin/debug-api.js GET /api/v1/collections/test/files
+```
+
+The script:
+
+- Authenticates using credentials from `.env` file (API_USER, API_PASSWORD)
+- Uses SHA-256 password hashing (matching the auth API requirements)
+- Handles GET requests with query parameters
+- Handles POST/PUT/DELETE requests with JSON body
+- Returns formatted JSON responses with status codes
+
+See the OpenAPI specification at `http://localhost:8000/openapi.json` for all available endpoints and their parameters.
+
 ### Database Access
 
 - **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
@@ -172,6 +196,12 @@ timeout = config.get('session.timeout', default=3600)
 - Use `config.get(key, default)` to retrieve any configuration value
 - The config instance handles initialization and caching automatically
 - Never instantiate `ConfigManager` directly - use `get_config()` instead
+
+**Backend Plugin Configuration:**
+
+- Initialize plugin config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- Access config everywhere else using `get_config()` (retrieves existing keys)
+- See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
 
 ### Test Filtering: --grep Behavior
 
