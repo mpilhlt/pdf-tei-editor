@@ -190,9 +190,9 @@ startxref
         self.assertIsNotNone(pdf_file)
         self.assertIsNotNone(tei_file)
 
-        # Verify they share the same doc_id
+        # Verify they share the same doc_id (DOI is encoded for filesystem safety)
         self.assertEqual(pdf_file.doc_id, tei_file.doc_id)
-        self.assertEqual(pdf_file.doc_id, "10.1234/test")
+        self.assertEqual(pdf_file.doc_id, "10.1234__test")
 
         # Verify collection assignment
         self.assertEqual(pdf_file.doc_collections, ["corpus1"])
@@ -442,10 +442,10 @@ startxref
         files = self.repo.list_files()
         self.assertEqual(len(files), 4)
 
-        # All should have same doc_id
+        # All should have same doc_id (DOI is encoded for filesystem safety)
         doc_ids = set(f.doc_id for f in files)
         self.assertEqual(len(doc_ids), 1)
-        self.assertIn("10.1234/doc", doc_ids)
+        self.assertIn("10.1234__doc", doc_ids)
 
     def test_skip_marker_files(self):
         """Test that marker files are skipped."""

@@ -304,8 +304,20 @@ class TestMigrations(unittest.TestCase):
         ])
 
         applied2 = manager2.run_migrations(skip_backup=True)
-        # Should apply migrations 2 and 3
-        self.assertEqual(applied2, 2)
+        # Should apply migration 2 only (migration 3 is checked before migration 2 is applied)
+        self.assertEqual(applied2, 1)
+
+        # Now run migrations again - migration 3 should be applicable now
+        manager3 = MigrationManager(self.db_path, self.logger)
+        manager3.register_migrations([
+            TestMigration001(self.logger),
+            TestMigration002(self.logger),
+            TestMigration003Conditional(self.logger)
+        ])
+
+        applied3 = manager3.run_migrations(skip_backup=True)
+        # Should apply migration 3 now that migration 2 has been applied
+        self.assertEqual(applied3, 1)
 
     def test_rollback_migration(self):
         """Test rolling back migrations."""
