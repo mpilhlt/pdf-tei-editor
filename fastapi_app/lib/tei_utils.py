@@ -368,17 +368,20 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     metadata = {}
 
-    # Extract DOI (preferred doc_id)
-    doi_elem = tei_root.find('.//tei:idno[@type="DOI"]', ns)
-    if doi_elem is not None and doi_elem.text:
-        metadata['doc_id'] = doi_elem.text.strip()
-        metadata['doc_id_type'] = 'doi'
+    # Extract doc_id - prefer fileref (already encoded) over DOI (needs encoding)
+    fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
+    if fileref_elem is not None and fileref_elem.text:
+        # Fileref is already encoded for filesystem safety
+        metadata['doc_id'] = fileref_elem.text.strip()
+        metadata['doc_id_type'] = 'fileref'
     else:
-        # Try fileref as fallback
-        fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
-        if fileref_elem is not None and fileref_elem.text:
-            metadata['doc_id'] = fileref_elem.text.strip()
-            metadata['doc_id_type'] = 'fileref'
+        # Try DOI as fallback, but encode it for use as doc_id
+        doi_elem = tei_root.find('.//tei:idno[@type="DOI"]', ns)
+        if doi_elem is not None and doi_elem.text:
+            from .doi_utils import encode_doi
+            raw_doi = doi_elem.text.strip()
+            metadata['doc_id'] = encode_doi(raw_doi)
+            metadata['doc_id_type'] = 'doi'
         else:
             # No doc_id found - caller must provide fallback
             metadata['doc_id'] = None  # type: ignore[assignment]
