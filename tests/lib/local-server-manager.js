@@ -210,9 +210,10 @@ export class LocalServerManager extends ServerManager {
    *
    * @private
    * @param {Object} webdavConfig - WebDAV configuration object
+   * @param {Object} customEnv - Custom environment variables from test runner
    * @returns {Promise<string>} Path to temporary env file
    */
-  async createTempEnvFile(webdavConfig) {
+  async createTempEnvFile(webdavConfig, customEnv = {}) {
     const { tmpdir } = await import('os');
     const { randomBytes } = await import('crypto');
     const { resolve } = await import('path');
@@ -249,6 +250,18 @@ WEBDAV_USERNAME=${webdavConfig.WEBDAV_USERNAME}
 WEBDAV_PASSWORD=${webdavConfig.WEBDAV_PASSWORD}
 WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
 `;
+    }
+
+    // Add custom environment variables from .env.test or --env flags
+    if (customEnv && Object.keys(customEnv).length > 0) {
+      envContent += '\n# Custom Test Environment Variables\n';
+      for (const [key, value] of Object.entries(customEnv)) {
+        // Skip variables that are already set above or are Node.js specific
+        if (!['HOST', 'PORT', 'DATA_ROOT', 'DB_DIR', 'CONFIG_DIR', 'SESSION_TIMEOUT', 'LOG_LEVEL',
+              'PATH', 'HOME', 'USER', 'SHELL', 'NODE_ENV'].includes(key)) {
+          envContent += `${key}=${value}\n`;
+        }
+      }
     }
 
     await fs.writeFile(tempFileName, envContent, 'utf-8');
@@ -538,11 +551,12 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
     }
 
     // Always create temporary .env file (even without WebDAV) to set CONFIG_DIR
-    this.tempEnvFile = await this.createTempEnvFile(webdavConfig);
+    // Pass custom env vars so they're written to the temp file for FastAPI to read
+    this.tempEnvFile = await this.createTempEnvFile(webdavConfig, env);
     process.env.FASTAPI_ENV_FILE = this.tempEnvFile;
     console.log(`[INFO] Set FASTAPI_ENV_FILE=${this.tempEnvFile}\n`);
 
-    // Apply any additional environment variables
+    // Apply any additional environment variables to test runner process
     Object.assign(process.env, env);
 
     // Step 3: Start server
