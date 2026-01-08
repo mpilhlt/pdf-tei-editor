@@ -617,3 +617,273 @@ def get_annotator_name(tei_root: etree._Element, who_id: str) -> str:  # type: i
 
     # Fallback to the ID if name not found
     return clean_id
+
+
+def extract_xpath_text(
+    content: bytes | etree._Element,  # type: ignore[name-defined]
+    xpath_paths: list[str],
+    attribute: Optional[str] = None
+) -> Optional[str]:
+    """
+    Generic XPath lookup function for TEI documents.
+
+    Tries multiple XPath expressions in order and returns the first match.
+
+    Args:
+        content: TEI document as bytes or lxml Element
+        xpath_paths: List of XPath expressions to try (in order)
+        attribute: Optional attribute name to extract (if None, extracts text content)
+
+    Returns:
+        Text content or attribute value of first matching element, or None
+    """
+    try:
+        # Parse if bytes
+        if isinstance(content, bytes):
+            root = etree.fromstring(content)
+        else:
+            root = content
+
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+
+        for xpath in xpath_paths:
+            elements = root.xpath(xpath, namespaces=ns)
+            if isinstance(elements, list) and len(elements) > 0:
+                elem = elements[0]
+                if isinstance(elem, etree._Element):  # type: ignore[name-defined]
+                    if attribute:
+                        value = elem.get(attribute)
+                        if value:
+                            return value
+                    else:
+                        if elem.text:
+                            return elem.text.strip()
+    except Exception:
+        pass
+
+    return None
+
+
+def extract_fileref(content: bytes | etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Extract fileref from TEI document.
+
+    Path: /TEI/teiHeader/fileDesc/editionStmt/edition/idno[@type='fileref']
+
+    Args:
+        content: TEI document as bytes or lxml Element
+
+    Returns:
+        Fileref string or None
+    """
+    return extract_xpath_text(
+        content,
+        ["//tei:fileDesc/tei:editionStmt/tei:edition/tei:idno[@type='fileref']"]
+    )
+
+
+def extract_variant_id(content: bytes | etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Extract variant ID from TEI document.
+
+    Path: /TEI/teiHeader/encodingDesc/appInfo/application/label[@type='variant-id']
+
+    Args:
+        content: TEI document as bytes or lxml Element
+
+    Returns:
+        Variant ID string or None
+    """
+    return extract_xpath_text(
+        content,
+        ["//tei:encodingDesc/tei:appInfo/tei:application/tei:label[@type='variant-id']"]
+    )
+
+
+def extract_revision_timestamp(content: bytes | etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Extract timestamp from last revision change.
+
+    Path: /TEI/teiHeader/revisionDesc/change[last()]/@when
+
+    Args:
+        content: TEI document as bytes or lxml Element
+
+    Returns:
+        ISO timestamp string or None
+    """
+    try:
+        # Parse if bytes
+        if isinstance(content, bytes):
+            root = etree.fromstring(content)
+        else:
+            root = content
+
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+
+        # Get all change elements and take the last one
+        changes = root.xpath("//tei:revisionDesc/tei:change", namespaces=ns)
+        if isinstance(changes, list) and len(changes) > 0:
+            last_change = changes[-1]
+            if isinstance(last_change, etree._Element):  # type: ignore[name-defined]
+                return last_change.get("when")
+    except Exception:
+        pass
+
+    return None
+
+
+def extract_last_revision_status(content: bytes | etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Extract status from last revision change.
+
+    Path: /TEI/teiHeader/revisionDesc/change[last()]/@status
+
+    Args:
+        content: TEI document as bytes or lxml Element
+
+    Returns:
+        Status string or None
+    """
+    try:
+        # Parse if bytes
+        if isinstance(content, bytes):
+            root = etree.fromstring(content)
+        else:
+            root = content
+
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+
+        # Get all change elements and take the last one
+        changes = root.xpath("//tei:revisionDesc/tei:change", namespaces=ns)
+        if isinstance(changes, list) and len(changes) > 0:
+            last_change = changes[-1]
+            if isinstance(last_change, etree._Element):  # type: ignore[name-defined]
+                return last_change.get("status")
+    except Exception:
+        pass
+
+    return None
+
+
+def get_resp_stmt_by_id(root: etree._Element, pers_id: str) -> Optional[etree._Element]:  # type: ignore[name-defined]
+    """
+    Find respStmt element by persName xml:id.
+
+    Args:
+        root: TEI root element
+        pers_id: The xml:id to search for
+
+    Returns:
+        respStmt element or None
+    """
+    ns = {
+        'tei': 'http://www.tei-c.org/ns/1.0',
+        'xml': 'http://www.w3.org/XML/1998/namespace'
+    }
+
+    # Find persName with matching xml:id
+    persNames = root.xpath(
+        f"//tei:titleStmt/tei:respStmt/tei:persName[@xml:id='{pers_id}']",
+        namespaces=ns
+    )
+
+    if isinstance(persNames, list) and len(persNames) > 0:
+        persName = persNames[0]
+        if isinstance(persName, etree._Element):  # type: ignore[name-defined]
+            # Return parent respStmt
+            return persName.getparent()
+
+    return None
+
+
+def add_resp_stmt(root: etree._Element, pers_id: str, pers_name: str, resp: str = "editor") -> None:  # type: ignore[name-defined]
+    """
+    Add a respStmt element to the titleStmt of a TEI header.
+
+    Args:
+        root: TEI root element
+        pers_id: The ID of the person (will be used as xml:id)
+        pers_name: The name of the person
+        resp: The responsibility (default: "editor")
+
+    Raises:
+        ValueError: If respStmt with this pers_id already exists
+    """
+    ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+    xml_ns = 'http://www.w3.org/XML/1998/namespace'
+
+    # Check if already exists
+    if get_resp_stmt_by_id(root, pers_id):
+        raise ValueError(f"respStmt with xml:id='{pers_id}' already exists")
+
+    # Find or create titleStmt
+    tei_header = root.find('.//tei:teiHeader', ns)
+    if tei_header is None:
+        raise ValueError("teiHeader not found")
+
+    file_desc = tei_header.find('.//tei:fileDesc', ns)
+    if file_desc is None:
+        raise ValueError("fileDesc not found")
+
+    title_stmt = file_desc.find('.//tei:titleStmt', ns)
+    if title_stmt is None:
+        title_stmt = etree.SubElement(file_desc, "{http://www.tei-c.org/ns/1.0}titleStmt")
+
+    # Create respStmt
+    resp_stmt = etree.SubElement(title_stmt, "{http://www.tei-c.org/ns/1.0}respStmt")
+    pers_name_elem = etree.SubElement(resp_stmt, "{http://www.tei-c.org/ns/1.0}persName")
+    pers_name_elem.set(f"{{{xml_ns}}}id", pers_id)
+    pers_name_elem.text = pers_name
+
+    resp_elem = etree.SubElement(resp_stmt, "{http://www.tei-c.org/ns/1.0}resp")
+    resp_elem.text = resp
+
+
+def add_revision_change(
+    root: etree._Element,  # type: ignore[name-defined]
+    when: str,
+    status: str,
+    who: str,
+    desc: str,
+    full_name: Optional[str] = None
+) -> None:
+    """
+    Add a change element to the revisionDesc section.
+
+    Args:
+        root: TEI root element
+        when: ISO timestamp string
+        status: Status of the change (e.g., "draft", "published")
+        who: Person ID (will be prefixed with # if needed)
+        desc: Description of the change
+        full_name: Optional full name for the person (creates respStmt if needed)
+
+    Raises:
+        ValueError: If teiHeader is not found
+    """
+    ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+
+    # Ensure respStmt exists if full_name provided
+    clean_who = who.lstrip('#')
+    if full_name:
+        if not get_resp_stmt_by_id(root, clean_who):
+            add_resp_stmt(root, clean_who, full_name)
+
+    # Find or create revisionDesc
+    tei_header = root.find('.//tei:teiHeader', ns)
+    if tei_header is None:
+        raise ValueError("teiHeader not found")
+
+    revision_desc = tei_header.find('.//tei:revisionDesc', ns)
+    if revision_desc is None:
+        revision_desc = etree.SubElement(tei_header, "{http://www.tei-c.org/ns/1.0}revisionDesc")
+
+    # Create change element
+    change = etree.SubElement(revision_desc, "{http://www.tei-c.org/ns/1.0}change")
+    change.set("when", when)
+    change.set("status", status)
+    change.set("who", f"#{clean_who}" if not who.startswith('#') else who)
+
+    desc_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
+    desc_elem.text = desc

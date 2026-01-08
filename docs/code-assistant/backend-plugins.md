@@ -144,6 +144,99 @@ def is_available(cls) -> bool:
     return app_mode == "testing"
 ```
 
+## Plugin Configuration with Environment Variables
+
+Plugins often need configuration that can be set via environment variables or config keys.
+
+### Initialization Pattern
+
+**Initialize configuration values at plugin registration time** in `__init__.py`. This ensures config keys are created from environment variables when the plugin is loaded:
+
+```python
+# __init__.py
+from fastapi_app.lib.plugin_tools import get_plugin_config
+
+# Initialize config values from environment variables
+get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
+get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
+get_plugin_config("plugin.my-plugin.timeout", "MY_PLUGIN_TIMEOUT", default=30, value_type="number")
+
+from .plugin import MyPlugin
+
+plugin = MyPlugin()
+```
+
+**Access configuration in plugin methods** using `get_config()`:
+
+```python
+# plugin.py
+from fastapi_app.lib.config_utils import get_config
+
+class MyPlugin(Plugin):
+    async def execute(self, context, params: dict) -> dict:
+        config = get_config()
+        api_key = config.get("plugin.my-plugin.api-key")
+        timeout = config.get("plugin.my-plugin.timeout", default=30)
+
+        # Use config values...
+```
+
+**Access configuration in custom routes** using `get_config()`:
+
+```python
+# routes.py
+from fastapi_app.lib.config_utils import get_config
+
+@router.get("/action")
+async def custom_action():
+    config = get_config()
+    api_key = config.get("plugin.my-plugin.api-key")
+
+    # Use config values...
+```
+
+**Priority**: Config file (`data/db/config.json`) > Environment variable > Default value
+
+**Key points**:
+
+- Initialize config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- Access config everywhere else using `get_config()` (retrieves existing keys)
+- Config values are automatically created from environment variables on first initialization
+- Routes and plugin methods use the same `get_config()` pattern
+
+**Example - Plugin availability based on config**:
+
+```python
+@classmethod
+def is_available(cls) -> bool:
+    """Only available if enabled in config."""
+    from fastapi_app.lib.plugin_tools import get_plugin_config
+
+    enabled = get_plugin_config(
+        "plugin.my-plugin.enabled",
+        "MY_PLUGIN_ENABLED",
+        default=False,
+        value_type="boolean"
+    )
+
+    if not enabled:
+        return False
+
+    # Check if required configuration is present
+    api_key = get_plugin_config(
+        "plugin.my-plugin.api-key",
+        "MY_PLUGIN_API_KEY",
+        default=None
+    )
+
+    if not api_key:
+        return False
+
+    return True
+```
+
+**Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+
 ## Role-Based Access
 
 - `required_roles: ["admin"]` - Only admin users
@@ -338,7 +431,7 @@ The `callPluginApi` method:
 
 ## Plugin Response Formats
 
-Backend plugins can return results in two formats depending on the complexity of the output:
+Backend plugins can return results in three formats depending on the complexity and interaction requirements:
 
 ### 1. Inline HTML (for simple content)
 
@@ -452,6 +545,95 @@ async def execute(self, context, params: dict) -> dict:
 ```
 
 **See also:** [edit_history plugin](../../fastapi_app/plugins/edit_history) for complete example.
+
+### 3. Preview-then-Execute Pattern (for operations requiring confirmation)
+
+Use the `outputUrl` and `executeUrl` fields together for operations that should show a preview before execution:
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    """Return URLs for preview and execute endpoints."""
+    collection_id = params.get("collection")
+    variant = params.get("variant", "all")
+
+    # Build URLs for preview and execute
+    variant_param = f"&variant={variant}" if variant != "all" else ""
+    preview_url = f"/api/plugins/my-plugin/preview?collection={collection_id}{variant_param}"
+    execute_url = f"/api/plugins/my-plugin/execute?collection={collection_id}{variant_param}"
+
+    return {
+        "outputUrl": preview_url,      # Shows preview in iframe
+        "executeUrl": execute_url,      # Execute button calls this URL
+        "collection": collection_id,
+        "variant": variant
+    }
+```
+
+**When to use:**
+
+- Operations that modify data (syncing, batch updates, deletions)
+- Operations where users need to review changes before applying
+- Operations that can be expensive and should be confirmed
+
+**User flow:**
+
+1. Plugin returns `outputUrl` and `executeUrl`
+2. Frontend displays preview in iframe (from `outputUrl`)
+3. Execute button appears in dialog footer
+4. User reviews changes and clicks Execute
+5. Execute button loads `executeUrl` in the same iframe
+6. Execute button is hidden after clicking
+
+**Implementation pattern:**
+
+Create two routes in `routes.py`:
+
+```python
+@router.get("/preview", response_class=HTMLResponse)
+async def preview_operation(
+    collection: str = Query(...),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    """Generate preview HTML (dry-run mode)."""
+    # Authenticate user
+    # Perform dry-run operation
+    # Generate detailed HTML with preview notice
+    # Return HTML with message: "Click Execute to apply these changes"
+    return HTMLResponse(content=preview_html)
+
+@router.get("/execute", response_class=HTMLResponse)
+async def execute_operation(
+    collection: str = Query(...),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    """Execute the operation and return summary HTML."""
+    # Authenticate user
+    # Perform actual operation
+    # Generate summary HTML (statistics only)
+    return HTMLResponse(content=summary_html)
+```
+
+**Preview HTML structure:**
+
+- Include prominent notice: "Preview Mode - Click Execute to apply changes"
+- Show detailed list of changes that will be made
+- Use complete HTML document with styles
+- Keep layout clean and readable
+
+**Execute HTML structure:**
+
+- Show success message
+- Display summary statistics only (no details)
+- Optionally show errors if any occurred
+- Use complete HTML document with styles
+
+**See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
 
 ## Interactive HTML Content
 

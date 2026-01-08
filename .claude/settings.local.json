@@ -39,7 +39,8 @@
       "Bash(git add:*)",
       "Bash(ls:*)",
       "Bash(gh run view:*)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "Bash(node bin/debug-api.js:*)"
     ],
     "deny": [],
     "ask": []
