@@ -1394,17 +1394,17 @@ export class XMLEditor extends EventEmitter {
       const rejectButtons = document.querySelectorAll('button[name="reject"]');
 
       acceptButtons.forEach(b => {
-        if (b.innerHTML !== incoming) {
-          b.innerHTML = incoming;
-        }
-        b.title = `Accept "${incoming}"`;
-      });
-
-      rejectButtons.forEach(b => {
         if (b.innerHTML !== current) {
           b.innerHTML = current;
         }
         b.title = `Accept "${current}"`;
+      });
+
+      rejectButtons.forEach(b => {
+        if (b.innerHTML !== incoming) {
+          b.innerHTML = incoming;
+        }
+        b.title = `Accept "${incoming}"`;
       });
     };
 
