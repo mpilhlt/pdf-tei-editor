@@ -127,7 +127,15 @@ class LocalSyncPlugin(Plugin):
         # 1. Scan filesystem for TEI files
         fs_docs = self._scan_filesystem(repo_path, include_pattern, exclude_pattern)
 
-        # 2. Get gold standard collection documents using list_files
+        # 2. Get ALL gold standard documents in the collection (any variant) for doc_id filtering
+        all_collection_docs = file_repo.list_files(
+            collection=collection_id,
+            file_type="tei"
+        )
+        all_collection_docs = [d for d in all_collection_docs if d.is_gold_standard]
+        collection_doc_ids = {doc.doc_id for doc in all_collection_docs}
+
+        # Get gold standard collection documents for the specific variant (if specified)
         if variant != "all":
             collection_docs = file_repo.list_files(
                 collection=collection_id,
@@ -151,7 +159,7 @@ class LocalSyncPlugin(Plugin):
             key = (doc.doc_id, doc.variant or "")
             collection_map[key] = doc
 
-        # Key: (fileref, variant) -> (path, content, hash, timestamp)
+        # Key: (fileref, variant) -> (path, content, timestamp)
         fs_map = {}
         for path, content in fs_docs.items():
             try:
@@ -161,14 +169,13 @@ class LocalSyncPlugin(Plugin):
                     extract_revision_timestamp
                 )
 
-                content_hash = hashlib.sha256(content).hexdigest()
                 timestamp = extract_revision_timestamp(content)
                 fileref = extract_fileref(content)
                 fs_variant = extract_variant_id(content)
 
                 if fileref:
                     key = (fileref, fs_variant or "")
-                    fs_map[key] = (path, content, content_hash, timestamp)
+                    fs_map[key] = (path, content, timestamp)
                 else:
                     results["errors"].append({
                         "fileref": f"filesystem:{path.name}",
@@ -180,28 +187,41 @@ class LocalSyncPlugin(Plugin):
                     "error": f"Error reading filesystem document: {str(e)}"
                 })
 
+        # Filter filesystem map by variant if specified
+        if variant != "all":
+            fs_map = {k: v for k, v in fs_map.items() if k[1] == variant}
+
+        # Filter filesystem map to only include docs that exist in target collection
+        # This prevents importing documents that belong to other collections or are completely new
+        fs_map = {k: v for k, v in fs_map.items() if k[0] in collection_doc_ids}
+
+        # Build a cache of doc_id -> metadata for display labels
+        metadata_cache = {}
+        for doc_id in collection_doc_ids:
+            try:
+                # Get PDF file for this document to extract metadata
+                pdf_file = file_repo.get_pdf_for_document(doc_id)
+                if pdf_file:
+                    metadata_cache[doc_id] = pdf_file.doc_metadata or {}
+                else:
+                    metadata_cache[doc_id] = {}
+            except Exception:
+                metadata_cache[doc_id] = {}
+
         # 4. Compare and sync
         all_keys = set(collection_map.keys()) | set(fs_map.keys())
 
         for key in all_keys:
             doc_id, var = key
-            display_ref = f"{doc_id}:{var}" if var else doc_id
+            display_ref = self._format_display_label(doc_id, var, metadata_cache.get(doc_id, {}))
 
             try:
                 if key in collection_map and key in fs_map:
-                    # Both exist - check for differences
+                    # Both exist - compare timestamps only
                     col_doc = collection_map[key]
-                    fs_path, fs_content, fs_hash, fs_timestamp = fs_map[key]
+                    fs_path, fs_content, fs_timestamp = fs_map[key]
 
-                    if col_doc.id == fs_hash:
-                        results["skipped"].append({
-                            "fileref": display_ref,
-                            "reason": "identical"
-                        })
-                        continue
-
-                    # Content differs - check timestamps
-                    # Need to read collection file to get timestamp
+                    # Read collection file to get timestamp
                     col_content = file_storage.read_file(col_doc.id, "tei")
                     if col_content is None:
                         results["errors"].append({
@@ -235,15 +255,12 @@ class LocalSyncPlugin(Plugin):
                                 "fs_timestamp": fs_timestamp
                             })
                         else:
-                            # Same timestamp but different content - import as new version
-                            # This can happen if files were edited externally without updating timestamps
-                            if not dry_run:
-                                self._create_new_version(file_repo, file_storage, col_doc, fs_content, context.user)
-                            results["updated_collection"].append({
+                            # Same timestamp - skip sync
+                            # Revision timestamp is source of truth; if timestamps match, files are considered in sync
+                            # even if content differs (e.g., formatting differences, processing instructions)
+                            results["skipped"].append({
                                 "fileref": display_ref,
-                                "stable_id": col_doc.stable_id,
-                                "col_timestamp": col_timestamp,
-                                "fs_timestamp": fs_timestamp
+                                "reason": "same_timestamp"
                             })
                     else:
                         results["errors"].append({
@@ -261,9 +278,9 @@ class LocalSyncPlugin(Plugin):
                 else:
                     # Only in filesystem - import as new gold standard
                     # doc_id (fileref) is already in encoded form, ready to use
-                    fs_path, fs_content, fs_hash, fs_timestamp = fs_map[key]
+                    fs_path, fs_content, fs_timestamp = fs_map[key]
                     if not dry_run:
-                        self._import_from_filesystem(file_repo, file_storage, doc_id, var, fs_content, context.user)
+                        self._import_from_filesystem(file_repo, file_storage, doc_id, var, fs_content, context.user, collection_id)
                     results["updated_collection"].append({
                         "fileref": display_ref,
                         "stable_id": "(new)",
@@ -272,12 +289,65 @@ class LocalSyncPlugin(Plugin):
                     })
 
             except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Exception processing {display_ref}: {e}", exc_info=True)
                 results["errors"].append({
                     "fileref": display_ref,
                     "error": str(e)
                 })
 
         return results
+
+    def _format_display_label(self, doc_id: str, variant: str, metadata: dict) -> str:
+        """
+        Format a human-readable display label for a document.
+
+        Args:
+            doc_id: Document ID (fileref)
+            variant: Variant identifier
+            metadata: PDF metadata dictionary with authors, date, etc.
+
+        Returns:
+            Formatted label: "Lastname (Year) [doc_id:variant]" or fallback to doc_id:variant
+        """
+        # Try to extract author lastname and year
+        author_name = None
+        year = None
+
+        # Extract first author's lastname
+        if metadata and "authors" in metadata and len(metadata["authors"]) > 0:
+            first_author = metadata["authors"][0]
+            # Authors can be stored as dict with 'family' key or as string
+            if isinstance(first_author, dict):
+                author_name = first_author.get("family") or first_author.get("name")
+            elif isinstance(first_author, str):
+                # If it's a string, try to extract last name
+                parts = first_author.split()
+                author_name = parts[-1] if parts else first_author
+
+        # Extract year from date
+        if metadata and "date" in metadata and metadata["date"]:
+            date_str = metadata["date"]
+            # Try to extract 4-digit year
+            import re
+            year_match = re.search(r'\b(19|20)\d{2}\b', str(date_str))
+            if year_match:
+                year = year_match.group(0)
+
+        # Build the label
+        variant_part = f":{variant}" if variant else ""
+        doc_ref = f"[{doc_id}{variant_part}]"
+
+        if author_name and year:
+            return f"{author_name} ({year}) {doc_ref}"
+        elif author_name:
+            return f"{author_name} {doc_ref}"
+        elif year:
+            return f"({year}) {doc_ref}"
+        else:
+            # Fallback to just doc_id:variant
+            return f"{doc_id}{variant_part}"
 
     def _scan_filesystem(self, repo_path: Path, include_pattern: str | None = None, exclude_pattern: str | None = None) -> dict[Path, bytes]:
         """
@@ -331,7 +401,7 @@ class LocalSyncPlugin(Plugin):
 
         fs_path.write_bytes(content)
 
-    def _import_from_filesystem(self, file_repo, file_storage, doc_id: str, variant: str, content: bytes, user):
+    def _import_from_filesystem(self, file_repo, file_storage, doc_id: str, variant: str, content: bytes, user, collection_id: str):
         """
         Import a new gold standard TEI file from the filesystem.
 
@@ -342,13 +412,13 @@ class LocalSyncPlugin(Plugin):
             variant: Variant identifier
             content: TEI content as bytes
             user: User dict with username and fullname
+            collection_id: Collection ID to add the file to
         """
         import logging
         from fastapi_app.lib.models import FileCreate
         from fastapi_app.lib.tei_utils import extract_tei_metadata
 
         logger = logging.getLogger(__name__)
-        logger.info(f"DEBUG: _import_from_filesystem called: doc_id={doc_id}, variant={variant}")
         logger.debug(f"Importing from filesystem: doc_id={doc_id}, variant={variant}")
 
         # Calculate content hash
@@ -367,22 +437,9 @@ class LocalSyncPlugin(Plugin):
         filename = f"{doc_id}.{variant}.tei.xml" if variant else f"{doc_id}.tei.xml"
         logger.debug(f"Creating gold standard file: {filename}")
 
-        # Get collections for this document by finding any existing file with same doc_id
-        # list_files doesn't support doc_id filter, so get file by doc_id directly
-        try:
-            from fastapi_app.lib.database import get_db
-            db = get_db()
-            cursor = db.execute("SELECT doc_collections FROM files WHERE doc_id = ? LIMIT 1", (doc_id,))
-            row = cursor.fetchone()
-            if row and row['doc_collections']:
-                import json
-                doc_collections = json.loads(row['doc_collections'])
-            else:
-                doc_collections = []
-            logger.debug(f"Retrieved collections for doc_id={doc_id}: {doc_collections}")
-        except Exception as e:
-            logger.error(f"Failed to get collections: {e}", exc_info=True)
-            doc_collections = []
+        # Use the target collection being synced
+        doc_collections = [collection_id]
+        logger.debug(f"Adding file to collection: {collection_id}")
 
         # Create file record as gold standard
         try:
@@ -412,60 +469,60 @@ class LocalSyncPlugin(Plugin):
         """
         Create new annotation version from filesystem content.
 
-        Adds a revision change to the TEI document before saving to ensure unique content.
+        Imports the filesystem content as-is without adding revision changes.
         """
         import logging
         from fastapi_app.lib.models import FileCreate
         from fastapi_app.lib.tei_utils import (
             extract_tei_metadata,
-            extract_fileref,
-            extract_last_revision_status,
-            add_revision_change
+            extract_processing_instructions,
+            serialize_tei_with_formatted_header
         )
 
         logger = logging.getLogger(__name__)
         logger.debug(f"Creating new version for doc_id={doc.doc_id}, variant={doc.variant}")
 
+        # Extract processing instructions from original content before parsing
+        processing_instructions = extract_processing_instructions(content)
+
         # Parse TEI content
         root = etree.fromstring(content)
 
         # Format current date
-        import_timestamp = datetime.now().isoformat()
         import_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        version_name = f"Imported at {import_date}"
 
-        # Get previous status (maintain same status)
-        previous_status = extract_last_revision_status(root) or "draft"
-
-        # Add revision change to make content unique
-        # This also creates respStmt if needed
-        add_revision_change(
-            root=root,
-            when=import_timestamp,
-            status=previous_status,
-            who=user['username'],
-            desc=f"Imported from local filesystem at {import_date}",
-            full_name=user.get('fullname')
-        )
-
-        # Update edition title to mark as imported
+        # Update edition title to mark as imported and make content unique
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
         edition_title_elems = root.xpath('//tei:editionStmt/tei:edition/tei:title', namespaces=ns)
         if edition_title_elems:
             edition_title_elem = edition_title_elems[0]
             original_title = edition_title_elem.text or ""
             edition_title_elem.text = f"{original_title} (imported at {import_date})"
+            version_name = edition_title_elem.text
+        else:
+            version_name = f"Imported at {import_date}"
 
-        # Serialize modified content with pretty-printing
-        from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
-        content_str = serialize_tei_with_formatted_header(root)
+        # Serialize modified content with pretty-printing, preserving processing instructions
+        from fastapi_app.lib.xml_utils import apply_entity_encoding_from_config
+
+        content_str = serialize_tei_with_formatted_header(root, processing_instructions)
+
+        # Apply XML entity encoding if configured
+        content_str = apply_entity_encoding_from_config(content_str)
+
         content = content_str.encode('utf-8')
 
         # Calculate hash of modified content
         content_hash = hashlib.sha256(content).hexdigest()
-        logger.debug(f"Content hash (after revision): {content_hash[:16]}")
+        logger.debug(f"Content hash: {content_hash[:16]}")
 
-        # Extract metadata from TEI
+        # Check if this exact content already exists as a version
+        existing_file = file_repo.get_file_by_id(content_hash)
+        if existing_file and not existing_file.is_gold_standard:
+            logger.info(f"Version with this content already exists (stable_id: {existing_file.stable_id}), skipping creation")
+            return existing_file
+
+        # Extract metadata from modified TEI
         root = etree.fromstring(content)
         tei_metadata = extract_tei_metadata(root)
 
@@ -509,7 +566,7 @@ class LocalSyncPlugin(Plugin):
 
         total = len(results["skipped"]) + len(results["updated_fs"]) + len(results["updated_collection"]) + len(results["errors"])
 
-        skipped_identical = [s for s in results['skipped'] if s['reason'] == 'identical']
+        skipped_same_timestamp = [s for s in results['skipped'] if s['reason'] == 'same_timestamp']
         skipped_collection_only = [s for s in results['skipped'] if s['reason'] == 'only_in_collection']
         skipped_filesystem_only = [s for s in results['skipped'] if s['reason'] == 'only_in_filesystem']
 
@@ -545,7 +602,7 @@ class LocalSyncPlugin(Plugin):
             "<div class='stats'>"
             f"<p><strong>Total documents processed:</strong> {total}</p>"
             "<ul>"
-            f"<li><strong>Skipped (identical):</strong> {len(skipped_identical)}</li>"
+            f"<li><strong>Skipped (same timestamp):</strong> {len(skipped_same_timestamp)}</li>"
             f"<li><strong>Skipped (only in collection):</strong> {len(skipped_collection_only)}</li>"
             f"<li><strong>Skipped (only in filesystem):</strong> {len(skipped_filesystem_only)}</li>"
             f"<li><strong>Will update filesystem:</strong> {len(results['updated_fs'])}</li>"
@@ -584,10 +641,10 @@ class LocalSyncPlugin(Plugin):
                     )
             html_parts.append("</ul>")
 
-        # Show details for skipped identical
-        if skipped_identical:
-            html_parts.append("<h3>Skipped (Identical)</h3><ul>")
-            for item in skipped_identical:
+        # Show details for skipped same timestamp
+        if skipped_same_timestamp:
+            html_parts.append("<h3>Skipped (Same Timestamp)</h3><ul>")
+            for item in skipped_same_timestamp:
                 html_parts.append(f"<li>{escape_html(item['fileref'])}</li>")
             html_parts.append("</ul>")
 
@@ -622,7 +679,7 @@ class LocalSyncPlugin(Plugin):
 
         total = len(results["skipped"]) + len(results["updated_fs"]) + len(results["updated_collection"]) + len(results["errors"])
 
-        skipped_identical = [s for s in results['skipped'] if s['reason'] == 'identical']
+        skipped_same_timestamp = [s for s in results['skipped'] if s['reason'] == 'same_timestamp']
         skipped_collection_only = [s for s in results['skipped'] if s['reason'] == 'only_in_collection']
         skipped_filesystem_only = [s for s in results['skipped'] if s['reason'] == 'only_in_filesystem']
 
@@ -646,7 +703,7 @@ class LocalSyncPlugin(Plugin):
             "<div class='stats'>",
             f"<p><strong>Total documents processed:</strong> {total}</p>",
             "<ul>",
-            f"<li><strong>Skipped (identical):</strong> {len(skipped_identical)}</li>",
+            f"<li><strong>Skipped (same timestamp):</strong> {len(skipped_same_timestamp)}</li>",
             f"<li><strong>Skipped (only in collection):</strong> {len(skipped_collection_only)}</li>",
             f"<li><strong>Skipped (only in filesystem):</strong> {len(skipped_filesystem_only)}</li>",
             f"<li><strong>Updated filesystem:</strong> {len(results['updated_fs'])}</li>",

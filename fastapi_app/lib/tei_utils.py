@@ -240,6 +240,26 @@ def remove_whitespace(element):
         remove_whitespace(child)
 
 
+def extract_processing_instructions(xml_string: str) -> list[str]:
+    """
+    Extract processing instructions (e.g., <?xml-model ...?>) from XML string.
+
+    Args:
+        xml_string: XML content as string or bytes
+
+    Returns:
+        List of processing instruction strings (excluding XML declaration)
+    """
+    import re
+    # Ensure we have a string
+    if isinstance(xml_string, bytes):
+        xml_string = xml_string.decode('utf-8')
+    # Match processing instructions (excluding xml declaration)
+    pi_pattern = r'<\?(?!xml\s+version)[^\?]+\?>'
+    matches = re.findall(pi_pattern, xml_string)
+    return matches
+
+
 def create_schema_processing_instruction(schema_url: str) -> str:
     """
     Create an xml-model processing instruction for schema validation.
@@ -890,3 +910,63 @@ def add_revision_change(
 
     desc_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
     desc_elem.text = desc
+
+
+def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
+    """
+    Ensure fileref in XML matches the file_id.
+    Creates fileref element if missing.
+    Preserves processing instructions from the original XML.
+
+    Args:
+        xml_string: TEI XML content as string or bytes
+        file_id: File ID to set as fileref
+
+    Returns:
+        Updated XML string
+
+    Raises:
+        ValueError: If XML parsing fails or teiHeader structure is invalid
+    """
+    # Ensure we have a string
+    if isinstance(xml_string, bytes):
+        xml_string = xml_string.decode('utf-8')
+
+    # Extract processing instructions before parsing
+    processing_instructions = extract_processing_instructions(xml_string)
+
+    xml_root = etree.fromstring(xml_string.encode('utf-8'))
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+
+    # Find or create fileref element
+    fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
+
+    if fileref_elem is not None:
+        # Update existing fileref
+        if fileref_elem.text != file_id:
+            fileref_elem.text = file_id
+            return serialize_tei_with_formatted_header(xml_root, processing_instructions)
+        return xml_string
+
+    # Create fileref element
+    edition_stmt = xml_root.find('.//tei:editionStmt', ns)
+    if edition_stmt is None:
+        # Create editionStmt in teiHeader/fileDesc
+        file_desc = xml_root.find('.//tei:fileDesc', ns)
+        if file_desc is not None:
+            edition_stmt = etree.SubElement(file_desc, "{http://www.tei-c.org/ns/1.0}editionStmt")
+
+    if edition_stmt is not None:
+        # Find or create edition element
+        edition = edition_stmt.find('./tei:edition', ns)
+        if edition is None:
+            edition = etree.SubElement(edition_stmt, "{http://www.tei-c.org/ns/1.0}edition")
+
+        # Add idno with fileref
+        fileref_elem = etree.SubElement(edition, "{http://www.tei-c.org/ns/1.0}idno")
+        fileref_elem.set("type", "fileref")
+        fileref_elem.text = file_id
+
+        return serialize_tei_with_formatted_header(xml_root, processing_instructions)
+
+    return xml_string

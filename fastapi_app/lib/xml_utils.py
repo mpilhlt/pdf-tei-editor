@@ -199,3 +199,28 @@ def encode_xml_entities(xml_string: str, options: Optional[EncodeOptions] = None
         result_parts.append(escaped_content)
 
     return "".join(result_parts)
+
+
+def apply_entity_encoding_from_config(xml_string: str) -> str:
+    """
+    Apply XML entity encoding based on configuration settings.
+
+    Reads xml.encode-entities.server and xml.encode-quotes from config
+    and applies entity encoding if configured.
+
+    Args:
+        xml_string: The XML string to encode
+
+    Returns:
+        The XML string with entities encoded according to configuration
+    """
+    from .config_utils import get_config
+
+    config = get_config()
+    if config.get("xml.encode-entities.server", default=False):
+        encode_options: EncodeOptions = {
+            'encode_quotes': config.get("xml.encode-quotes", default=False)
+        }
+        return encode_xml_entities(xml_string, encode_options)
+
+    return xml_string

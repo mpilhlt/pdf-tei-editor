@@ -151,11 +151,11 @@ Line2</p>
 
 
 class TestProcessingInstructionsExtraction(unittest.TestCase):
-    """Test processing instruction extraction from files_save.py."""
+    """Test processing instruction extraction from tei_utils."""
 
     def test_extract_processing_instructions(self):
         """Test extraction of processing instructions from XML string."""
-        from fastapi_app.routers.files_save import _extract_processing_instructions
+        from fastapi_app.lib.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0"?>
 <?xml-model href="https://example.com/schema.rng" type="application/xml"?>
@@ -170,7 +170,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
   </teiHeader>
 </TEI>"""
 
-        pis = _extract_processing_instructions(xml_string)
+        pis = extract_processing_instructions(xml_string)
 
         # Should extract 2 PIs (not the xml declaration)
         self.assertEqual(len(pis), 2)
@@ -179,21 +179,21 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
 
     def test_does_not_extract_xml_declaration(self):
         """Test that XML declaration is not extracted as a processing instruction."""
-        from fastapi_app.routers.files_save import _extract_processing_instructions
+        from fastapi_app.lib.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader/>
 </TEI>"""
 
-        pis = _extract_processing_instructions(xml_string)
+        pis = extract_processing_instructions(xml_string)
 
         # Should be empty - xml declaration is not a processing instruction
         self.assertEqual(len(pis), 0)
 
     def test_grobid_training_schema_extraction(self):
         """Test extraction of grobid training schema processing instruction."""
-        from fastapi_app.routers.files_save import _extract_processing_instructions
+        from fastapi_app.lib.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0"?>
 <?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
@@ -201,7 +201,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
   <teiHeader/>
 </TEI>"""
 
-        pis = _extract_processing_instructions(xml_string)
+        pis = extract_processing_instructions(xml_string)
 
         self.assertEqual(len(pis), 1)
         self.assertIn('grobid.training.segmentation.rng', pis[0])

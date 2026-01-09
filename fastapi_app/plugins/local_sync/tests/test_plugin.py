@@ -271,6 +271,78 @@ class TestLocalSyncPlugin(unittest.TestCase):
         backups = list(test_path.glob("test.*.backup"))
         self.assertEqual(len(backups), 0)
 
+    def test_create_new_version_preserves_processing_instructions(self):
+        """Test that _create_new_version preserves processing instructions from filesystem."""
+        from fastapi_app.plugins.local_sync.plugin import LocalSyncPlugin
+        from unittest.mock import Mock
+        import hashlib
+
+        # TEI content with processing instruction
+        tei_content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="http://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+    <teiHeader>
+        <fileDesc>
+            <editionStmt>
+                <edition>
+                    <title>Test Edition</title>
+                </edition>
+            </editionStmt>
+        </fileDesc>
+    </teiHeader>
+    <text><body><p>Test content</p></body></text>
+</TEI>"""
+
+        plugin = LocalSyncPlugin()
+
+        # Mock dependencies
+        mock_file_repo = Mock()
+        mock_file_storage = Mock()
+        mock_doc = Mock()
+        mock_doc.doc_id = "test-doc"
+        mock_doc.variant = "test"
+        mock_doc.doc_collections = ["test-collection"]
+        mock_user = {"username": "testuser", "fullname": "Test User"}
+
+        # Track saved content
+        saved_content = None
+
+        # Mock file_storage.save_file to capture content
+        def mock_save_file(content, file_type, increment_ref=False):
+            nonlocal saved_content
+            saved_content = content
+            content_hash = hashlib.sha256(content).hexdigest()
+            return content_hash, f"/path/to/{content_hash}"
+
+        mock_file_storage.save_file = Mock(side_effect=mock_save_file)
+
+        # Mock file_repo.get_latest_tei_version
+        mock_file_repo.get_latest_tei_version.return_value = None
+
+        # Mock file_repo.insert_file to return the created file
+        def mock_insert_file(file_create):
+            mock_file = Mock()
+            mock_file.stable_id = "test-stable-id"
+            return mock_file
+
+        mock_file_repo.insert_file = Mock(side_effect=mock_insert_file)
+
+        # Call _create_new_version
+        result = plugin._create_new_version(
+            mock_file_repo,
+            mock_file_storage,
+            mock_doc,
+            tei_content,
+            mock_user
+        )
+
+        # Get the content that was saved
+        saved_content_str = saved_content.decode('utf-8')
+
+        # Verify processing instruction is preserved
+        self.assertIn('<?xml-model href="http://example.com/schema.rng"', saved_content_str)
+        self.assertIn('schematypens="http://relaxng.org/ns/structure/1.0"?>', saved_content_str)
+
 
 if __name__ == '__main__':
     unittest.main()
