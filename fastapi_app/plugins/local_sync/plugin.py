@@ -127,7 +127,15 @@ class LocalSyncPlugin(Plugin):
         # 1. Scan filesystem for TEI files
         fs_docs = self._scan_filesystem(repo_path, include_pattern, exclude_pattern)
 
-        # 2. Get gold standard collection documents using list_files
+        # 2. Get ALL gold standard documents in the collection (any variant) for doc_id filtering
+        all_collection_docs = file_repo.list_files(
+            collection=collection_id,
+            file_type="tei"
+        )
+        all_collection_docs = [d for d in all_collection_docs if d.is_gold_standard]
+        collection_doc_ids = {doc.doc_id for doc in all_collection_docs}
+
+        # Get gold standard collection documents for the specific variant (if specified)
         if variant != "all":
             collection_docs = file_repo.list_files(
                 collection=collection_id,
@@ -180,12 +188,33 @@ class LocalSyncPlugin(Plugin):
                     "error": f"Error reading filesystem document: {str(e)}"
                 })
 
+        # Filter filesystem map by variant if specified
+        if variant != "all":
+            fs_map = {k: v for k, v in fs_map.items() if k[1] == variant}
+
+        # Filter filesystem map to only include docs that exist in target collection
+        # This prevents importing documents that belong to other collections or are completely new
+        fs_map = {k: v for k, v in fs_map.items() if k[0] in collection_doc_ids}
+
+        # Build a cache of doc_id -> metadata for display labels
+        metadata_cache = {}
+        for doc_id in collection_doc_ids:
+            try:
+                # Get PDF file for this document to extract metadata
+                pdf_file = file_repo.get_pdf_for_document(doc_id)
+                if pdf_file:
+                    metadata_cache[doc_id] = pdf_file.doc_metadata or {}
+                else:
+                    metadata_cache[doc_id] = {}
+            except Exception:
+                metadata_cache[doc_id] = {}
+
         # 4. Compare and sync
         all_keys = set(collection_map.keys()) | set(fs_map.keys())
 
         for key in all_keys:
             doc_id, var = key
-            display_ref = f"{doc_id}:{var}" if var else doc_id
+            display_ref = self._format_display_label(doc_id, var, metadata_cache.get(doc_id, {}))
 
             try:
                 if key in collection_map and key in fs_map:
@@ -263,7 +292,7 @@ class LocalSyncPlugin(Plugin):
                     # doc_id (fileref) is already in encoded form, ready to use
                     fs_path, fs_content, fs_hash, fs_timestamp = fs_map[key]
                     if not dry_run:
-                        self._import_from_filesystem(file_repo, file_storage, doc_id, var, fs_content, context.user)
+                        self._import_from_filesystem(file_repo, file_storage, doc_id, var, fs_content, context.user, collection_id)
                     results["updated_collection"].append({
                         "fileref": display_ref,
                         "stable_id": "(new)",
@@ -278,6 +307,56 @@ class LocalSyncPlugin(Plugin):
                 })
 
         return results
+
+    def _format_display_label(self, doc_id: str, variant: str, metadata: dict) -> str:
+        """
+        Format a human-readable display label for a document.
+
+        Args:
+            doc_id: Document ID (fileref)
+            variant: Variant identifier
+            metadata: PDF metadata dictionary with authors, date, etc.
+
+        Returns:
+            Formatted label: "Lastname (Year) [doc_id:variant]" or fallback to doc_id:variant
+        """
+        # Try to extract author lastname and year
+        author_name = None
+        year = None
+
+        # Extract first author's lastname
+        if metadata and "authors" in metadata and len(metadata["authors"]) > 0:
+            first_author = metadata["authors"][0]
+            # Authors can be stored as dict with 'family' key or as string
+            if isinstance(first_author, dict):
+                author_name = first_author.get("family") or first_author.get("name")
+            elif isinstance(first_author, str):
+                # If it's a string, try to extract last name
+                parts = first_author.split()
+                author_name = parts[-1] if parts else first_author
+
+        # Extract year from date
+        if metadata and "date" in metadata and metadata["date"]:
+            date_str = metadata["date"]
+            # Try to extract 4-digit year
+            import re
+            year_match = re.search(r'\b(19|20)\d{2}\b', str(date_str))
+            if year_match:
+                year = year_match.group(0)
+
+        # Build the label
+        variant_part = f":{variant}" if variant else ""
+        doc_ref = f"[{doc_id}{variant_part}]"
+
+        if author_name and year:
+            return f"{author_name} ({year}) {doc_ref}"
+        elif author_name:
+            return f"{author_name} {doc_ref}"
+        elif year:
+            return f"({year}) {doc_ref}"
+        else:
+            # Fallback to just doc_id:variant
+            return f"{doc_id}{variant_part}"
 
     def _scan_filesystem(self, repo_path: Path, include_pattern: str | None = None, exclude_pattern: str | None = None) -> dict[Path, bytes]:
         """
@@ -331,7 +410,7 @@ class LocalSyncPlugin(Plugin):
 
         fs_path.write_bytes(content)
 
-    def _import_from_filesystem(self, file_repo, file_storage, doc_id: str, variant: str, content: bytes, user):
+    def _import_from_filesystem(self, file_repo, file_storage, doc_id: str, variant: str, content: bytes, user, collection_id: str):
         """
         Import a new gold standard TEI file from the filesystem.
 
@@ -342,13 +421,13 @@ class LocalSyncPlugin(Plugin):
             variant: Variant identifier
             content: TEI content as bytes
             user: User dict with username and fullname
+            collection_id: Collection ID to add the file to
         """
         import logging
         from fastapi_app.lib.models import FileCreate
         from fastapi_app.lib.tei_utils import extract_tei_metadata
 
         logger = logging.getLogger(__name__)
-        logger.info(f"DEBUG: _import_from_filesystem called: doc_id={doc_id}, variant={variant}")
         logger.debug(f"Importing from filesystem: doc_id={doc_id}, variant={variant}")
 
         # Calculate content hash
@@ -367,22 +446,9 @@ class LocalSyncPlugin(Plugin):
         filename = f"{doc_id}.{variant}.tei.xml" if variant else f"{doc_id}.tei.xml"
         logger.debug(f"Creating gold standard file: {filename}")
 
-        # Get collections for this document by finding any existing file with same doc_id
-        # list_files doesn't support doc_id filter, so get file by doc_id directly
-        try:
-            from fastapi_app.lib.database import get_db
-            db = get_db()
-            cursor = db.execute("SELECT doc_collections FROM files WHERE doc_id = ? LIMIT 1", (doc_id,))
-            row = cursor.fetchone()
-            if row and row['doc_collections']:
-                import json
-                doc_collections = json.loads(row['doc_collections'])
-            else:
-                doc_collections = []
-            logger.debug(f"Retrieved collections for doc_id={doc_id}: {doc_collections}")
-        except Exception as e:
-            logger.error(f"Failed to get collections: {e}", exc_info=True)
-            doc_collections = []
+        # Use the target collection being synced
+        doc_collections = [collection_id]
+        logger.debug(f"Adding file to collection: {collection_id}")
 
         # Create file record as gold standard
         try:

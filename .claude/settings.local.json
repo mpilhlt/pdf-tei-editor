@@ -41,7 +41,9 @@
       "Bash(gh run view:*)",
       "Bash(gh issue view:*)",
       "Bash(node bin/debug-api.js:*)",
-      "Bash(node tests/backend-test-runner.js:*)"
+      "Bash(node tests/backend-test-runner.js:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
