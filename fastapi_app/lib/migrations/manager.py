@@ -183,7 +183,22 @@ class MigrationManager:
 
         self.logger.info(f"Found {len(pending)} pending migrations")
 
-        # Backup database before migrations
+        # Check which migrations can actually be applied
+        applicable_migrations = []
+        with sqlite3.connect(str(self.db_path)) as conn:
+            for migration in pending:
+                if migration.check_can_apply(conn):
+                    applicable_migrations.append(migration)
+                else:
+                    self.logger.debug(
+                        f"Migration {migration.version} cannot be applied (check_can_apply returned False)"
+                    )
+
+        if not applicable_migrations:
+            self.logger.info("No migrations can be applied")
+            return 0
+
+        # Backup database before migrations (only if there are applicable migrations)
         backup_path = None
         if not skip_backup:
             try:
@@ -194,17 +209,11 @@ class MigrationManager:
 
         # Apply migrations
         applied_count = 0
-        for migration in pending:
+        for migration in applicable_migrations:
             self.logger.info(f"Applying migration {migration.version}: {migration.description}")
 
             try:
                 with sqlite3.connect(str(self.db_path)) as conn:
-                    # Ensure migration can be applied
-                    if not migration.check_can_apply(conn):
-                        self.logger.debug(
-                            f"Migration {migration.version} cannot be applied (check_can_apply returned False)"
-                        )
-                        continue
 
                     # Begin transaction
                     conn.execute("BEGIN")

@@ -2,6 +2,8 @@
 
 The PDF-TEI-Editor uses JSON configuration files to manage application settings. Configuration can be managed via the command-line interface.
 
+For programmatic use, see [Configuration Processing Architecture](#configuration-processing-architecture).
+
 ## Configuration Files
 
 - **`data/db/config.json`** - Runtime configuration (user-specific, gitignored)

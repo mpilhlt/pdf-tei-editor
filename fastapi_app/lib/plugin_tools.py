@@ -1,9 +1,74 @@
 """
-Utility functions for backend plugins to generate JavaScript code.
+Utility functions for backend plugins 
 """
 
 import re
 from pathlib import Path
+from typing import Any
+
+
+def get_plugin_config(
+    config_key: str,
+    env_var: str,
+    default: Any = None,
+    value_type: str = "string"
+) -> Any:
+    """
+    Get plugin configuration value with env var fallback.
+
+    Priority: config.json > environment variable > default
+    Creates config key from env var if it doesn't exist.
+
+    Args:
+        config_key: Dot-notation config key (e.g., "plugin.local-sync.enabled")
+        env_var: Environment variable name
+        default: Default value if neither source has value
+        value_type: Type for validation ("string", "boolean", "number", "array")
+
+    Returns:
+        Configuration value
+
+    Example:
+        >>> enabled = get_plugin_config(
+        ...     "plugin.local-sync.enabled",
+        ...     "PLUGIN_LOCAL_SYNC_ENABLED",
+        ...     default=False,
+        ...     value_type="boolean"
+        ... )
+    """
+    from fastapi_app.lib.config_utils import get_config
+    import os
+
+    config = get_config()
+
+    # Try to get from config
+    value = config.get(config_key)
+
+    if value is None:
+        # Check environment variable
+        env_value = os.environ.get(env_var)
+
+        if env_value is not None:
+            # Parse env value based on type
+            if value_type == "boolean":
+                value = env_value.lower() in ("true", "1", "yes")
+            elif value_type == "number":
+                value = int(env_value) if env_value.isdigit() else float(env_value)
+            elif value_type == "array":
+                import json
+                value = json.loads(env_value)
+            else:
+                value = env_value
+
+            # Create config key from env var
+            config.set(config_key, value)
+        else:
+            # Use default
+            value = default
+            if value is not None:
+                config.set(config_key, value)
+
+    return value
 
 
 def _extract_sandbox_methods() -> list[dict[str, str]]:

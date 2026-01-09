@@ -139,18 +139,29 @@ class MigrationXXX_Description(Migration):
 
 ### 2. Register the Migration
 
-Add your migration to `fastapi_app/lib/migrations/versions/__init__.py`:
+Add your migration to `fastapi_app/lib/migrations/versions/__init__.py` in the appropriate database-specific list:
 
 ```python
 from .m001_locks_file_id import Migration001LocksFileId
 from .mXXX_description import MigrationXXX_Description
 
-# List all migrations in order
+# Migrations by target database
+LOCKS_MIGRATIONS = [
+    Migration001LocksFileId,
+]
+
+METADATA_MIGRATIONS = [
+    MigrationXXX_Description,  # Add your migration to the correct list
+]
+
+# All migrations in order (for tools that need the complete list)
 ALL_MIGRATIONS = [
     Migration001LocksFileId,
     MigrationXXX_Description,
 ]
 ```
+
+**Important:** Add migrations to the database-specific list (`LOCKS_MIGRATIONS` or `METADATA_MIGRATIONS`) that matches their target database. This prevents unnecessary migration checks and log noise.
 
 ### 3. Test the Migration
 
@@ -258,7 +269,7 @@ For advanced use cases, you can run migrations programmatically using the centra
 ```python
 from pathlib import Path
 from fastapi_app.lib.migration_runner import run_migrations_if_needed
-from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -267,7 +278,7 @@ db_path = Path("data/db/metadata.db")
 # Run migrations (idempotent - safe to call multiple times)
 applied = run_migrations_if_needed(
     db_path=db_path,
-    migrations=ALL_MIGRATIONS,
+    migrations=METADATA_MIGRATIONS,  # Use database-specific migration list
     logger=logger
 )
 print(f"Applied {applied} migrations")
@@ -278,7 +289,7 @@ Or use the MigrationManager directly for more control:
 ```python
 from pathlib import Path
 from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -287,8 +298,8 @@ db_path = Path("data/db/metadata.db")
 # Initialize manager
 manager = MigrationManager(db_path, logger)
 
-# Register all migrations
-for migration_class in ALL_MIGRATIONS:
+# Register migrations for this database
+for migration_class in METADATA_MIGRATIONS:
     manager.register_migration(migration_class(logger))
 
 # Run all pending migrations
@@ -430,7 +441,7 @@ with sqlite3.connect("data/db/locks.db") as conn:
 1. **Development:**
    - Create migration file
    - Write upgrade and downgrade methods
-   - Add to `ALL_MIGRATIONS` list
+   - Add to appropriate database-specific migration list (`LOCKS_MIGRATIONS` or `METADATA_MIGRATIONS`) AND `ALL_MIGRATIONS`
    - Write tests
    - Test locally
 

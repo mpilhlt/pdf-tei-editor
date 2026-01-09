@@ -135,14 +135,14 @@ class TestFileZipImporter(unittest.TestCase):
         self.assertEqual(stats['files_skipped'], 0)
         self.assertEqual(len(stats['errors']), 0)
 
-        # Check database
-        files = self.repo.get_files_by_doc_id("10.1234/test")
+        # Check database (DOI is encoded for filesystem safety)
+        files = self.repo.get_files_by_doc_id("10.1234__test")
         self.assertEqual(len(files), 2)
         pdf_file = [f for f in files if f.file_type == 'pdf'][0]
         tei_file = [f for f in files if f.file_type == 'tei'][0]
 
-        self.assertEqual(pdf_file.doc_id, "10.1234/test")
-        self.assertEqual(tei_file.doc_id, "10.1234/test")
+        self.assertEqual(pdf_file.doc_id, "10.1234__test")
+        self.assertEqual(tei_file.doc_id, "10.1234__test")
         self.assertTrue(tei_file.is_gold_standard)
 
     def test_import_with_single_root_directory(self):

@@ -76,12 +76,12 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
 
     # Run migrations using centralized runner
     from fastapi_app.lib.migration_runner import run_migrations_if_needed
-    from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+    from fastapi_app.lib.migrations.versions import LOCKS_MIGRATIONS
 
     try:
         run_migrations_if_needed(
             db_path=db_path,
-            migrations=ALL_MIGRATIONS,
+            migrations=LOCKS_MIGRATIONS,
             logger=logger
         )
     except Exception as e:

@@ -25,7 +25,8 @@
       <edition>
         <date when="2025-09-12T13:50:06.033Z">12.9.2025 15:50:06</date>
         <title>Grobid document segmentation</title>
-      <idno type="fileref">10.5771/2699-1284-2020-1-83</idno></edition>
+        <idno type="fileref">10.5771/2699-1284-2020-1-83</idno>
+      </edition>
     </editionStmt>
     <publicationStmt>
       <publisher>Nomos Verlag</publisher>
