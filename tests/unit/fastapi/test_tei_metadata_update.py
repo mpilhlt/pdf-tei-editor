@@ -242,6 +242,13 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
                             </persName>
                         </author>
                     </titleStmt>
+                    <editionStmt>
+                    <edition>
+                        <date when="2025-09-12T13:50:06.033Z">12.9.2025 15:50:06</date>
+                        <title>Extraction</title>
+                        <idno type="fileref">10.1234__ml.dh.2023</idno>
+                    </edition>
+                    </editionStmt>                    
                     <publicationStmt>
                         <publisher>Academic Press</publisher>
                         <date type="publication">2023</date>
@@ -271,7 +278,7 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
         self.assertIn('doc_metadata', tei_metadata)
         self.assertEqual(tei_metadata['doc_metadata']['title'], 'Machine Learning in Digital Humanities')
         self.assertEqual(tei_metadata['doc_metadata']['date'], '2023')
-        self.assertEqual(tei_metadata['doc_id'], '10.1234/ml.dh.2023')
+        self.assertEqual(tei_metadata['doc_id'], '10.1234__ml.dh.2023')
         self.assertEqual(tei_metadata['variant'], 'grobid-segmentation')
 
         # Mock PDF file and repository
