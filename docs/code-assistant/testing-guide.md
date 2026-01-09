@@ -239,6 +239,66 @@ response = self.client.get(
 - **Run**: `npm run test:api`
 - **Features**: Local server, auto-cleanup, fixtures from `tests/api/fixtures/`
 
+#### SSE (Server-Sent Events) Tests
+
+SSE tests require special handling due to long-lived HTTP connections. When tests maintain multiple SSE connections and need to make additional HTTP requests, the Node.js HTTP connection pool can become exhausted.
+
+**HTTP Connection Pool Configuration:**
+
+SSE test files must increase the HTTP agent's max sockets at the top of the file:
+
+```javascript
+import http from 'node:http';
+
+// Increase connection pool to handle SSE connections + regular requests
+http.globalAgent.maxSockets = 50;
+```
+
+**Why This Is Needed:**
+
+- Node.js HTTP agent defaults to ~5-10 concurrent connections per host
+- Each SSE connection holds a connection slot for its entire lifetime
+- When multiple tests create SSE connections, these accumulate
+- Additional HTTP requests (like POST to trigger events) can timeout if no connections are available
+- Increasing `maxSockets` to 50 prevents connection pool exhaustion
+
+**Symptoms of Connection Pool Exhaustion:**
+
+- Tests pass in isolation but hang/timeout in full test suite
+- HTTP requests timeout after SSE connections are established
+- Error: "Broadcast request timed out after 5s" or similar
+
+**Example Pattern:**
+
+```javascript
+import { test, describe } from 'node:test';
+import http from 'node:http';
+import { createEventSource } from 'eventsource-client';
+
+// CRITICAL: Increase connection pool for SSE tests
+http.globalAgent.maxSockets = 50;
+
+describe('SSE Tests', () => {
+  test('Broadcast to multiple sessions', async () => {
+    // Create SSE connections (long-lived)
+    const conn1 = createEventSource({ url: '/sse/subscribe' });
+    const conn2 = createEventSource({ url: '/sse/subscribe' });
+
+    // Wait for connections to establish
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Make additional HTTP request - would fail without increased maxSockets
+    const response = await fetch('/sse/test/broadcast', { method: 'POST' });
+
+    // Clean up
+    conn1.close();
+    conn2.close();
+  });
+});
+```
+
+**See Also:** [tests/api/v1/sse.test.js](../../tests/api/v1/sse.test.js) for complete SSE testing patterns.
+
 #### Fixture System
 
 API tests use a two-phase fixture loading system:

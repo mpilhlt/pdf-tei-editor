@@ -12,8 +12,10 @@ from typing import List
 import logging
 import asyncio
 
-from ..lib.dependencies import get_sse_service, get_session_user, require_session_id
+from ..lib.dependencies import get_sse_service, get_session_user, require_session_id, get_session_manager
 from ..lib.sse_service import SSEService
+from ..lib.sessions import SessionManager
+from ..lib.sse_utils import broadcast_to_all_sessions
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sse", tags=["sse"])
@@ -110,4 +112,47 @@ async def echo_test(
     return {
         "status": "ok",
         "messages_sent": len(messages)
+    }
+
+
+@router.post("/test/broadcast")
+async def broadcast_test(
+    body: dict = Body(...),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager),
+    user: dict = Depends(get_session_user),
+    session_id: str = Depends(require_session_id)
+):
+    """
+    Test endpoint that broadcasts a message to all active sessions.
+
+    This endpoint is used for testing the broadcast_to_all_sessions utility.
+    It sends the provided message as an SSE event to all active sessions.
+
+    Args:
+        body: Dictionary containing "message" field to broadcast
+
+    Returns:
+        dict: Summary with status and sessions notified
+
+    Note:
+        All clients must be subscribed to /sse/subscribe to receive the broadcast.
+    """
+    message = body.get("message", "")
+    username = user.get('username', 'unknown')
+
+    logger.info(f"SSE broadcast test requested by {username} (session: {session_id[:8]}...)")
+
+    # Broadcast to all sessions
+    notified_count = broadcast_to_all_sessions(
+        sse_service=sse_service,
+        session_manager=session_manager,
+        event_type="broadcast",
+        data={"message": message},
+        logger=logger
+    )
+
+    return {
+        "status": "ok",
+        "sessions_notified": notified_count
     }
