@@ -340,11 +340,11 @@ sl-menu[name="pluginsMenu"] small {
 }
 
 .cm-chunkButtons button[name="accept"] {
-  background-color: #2196f3 !important; /* Blue (matches deleted/current) */
-  border-color: #1976d2 !important;
+  background-color: #ff9800 !important; /* Orange (matches inserted/incoming) */
+  border-color: #f57c00 !important;
 }
 
 .cm-chunkButtons button[name="reject"] {
-  background-color: #ff9800 !important; /* Orange (matches inserted/incoming) */
-  border-color: #f57c00 !important;
+  background-color: #2196f3 !important; /* Blue (matches deleted/current) */
+  border-color: #1976d2 !important;
 }
