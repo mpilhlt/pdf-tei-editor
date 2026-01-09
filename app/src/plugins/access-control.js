@@ -20,6 +20,7 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
+import { notify } from '../modules/sl-utils.js'
 import {
   userHasReviewerRole,
   userHasAnnotatorRole,
@@ -188,6 +189,11 @@ async function update(state) {
   if (shouldBeReadOnly && !state.editorReadOnly && !isUpdatingState) {
     // Document permissions require read-only - enforce it
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
+
+    // Show notification explaining why the document is read-only
+    const reason = getReadOnlyReason(state.user, currentPermissions, state.xml)
+    notify(reason, 'warning', 'exclamation-triangle')
+
     // Note: Defer state update to avoid circular update during reactive state cycle
     isUpdatingState = true
     setTimeout(async () => {
@@ -541,7 +547,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
  * @returns {void}
  */
 function updateAccessControlUI() {
-  //showAccessControlWidgets() // disabled until actually implemented
+  showAccessControlWidgets()
   updatePermissionInfoDisplay()
   updateStatusDropdownDisplay()
   updateStatusDropdownVisibility()
@@ -663,6 +669,38 @@ function hideAccessControlWidgets() {
 function canEditDocument(user) {
   const fileId = pluginState?.xml || undefined
   return canEditDocumentWithPermissions(user, currentPermissions, fileId)
+}
+
+/**
+ * Gets a user-friendly reason why the document is read-only
+ * @param {UserData|null} user - Current user object
+ * @param {DocumentPermissions} permissions - Document permissions
+ * @param {string|null} fileId - File identifier
+ * @returns {string} Reason for read-only state
+ */
+function getReadOnlyReason(user, permissions, fileId) {
+  const { visibility, editability, owner } = permissions
+
+  // Check role-based file type restrictions first
+  if (fileId) {
+    if (isGoldFile(fileId) && !userHasReviewerRole(user)) {
+      return 'This gold standard file requires reviewer role to edit. To edit it, create your own version.'
+    }
+    if (isVersionFile(fileId) && !userHasAnnotatorRole(user) && !userHasReviewerRole(user)) {
+      return 'This version file requires annotator or reviewer role to edit. To edit it, create your own version.'
+    }
+  }
+
+  // Check document-level permissions
+  if (editability === 'protected' && owner && owner !== user?.username) {
+    return `This document is protected and owned by ${owner}. To edit it, create your own version.`
+  }
+  if (visibility === 'private' && owner && owner !== user?.username) {
+    return `This document is private and owned by ${owner}. To edit it, create your own version.`
+  }
+
+  // Fallback
+  return 'You do not have permission to edit this document. To edit it, create your own version.'
 }
 
 /**

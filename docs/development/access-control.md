@@ -277,6 +277,102 @@ created_file = file_repo.insert_file(FileCreate(
 ))
 ```
 
+## Document-Level Access Control
+
+Documents have individual access control settings stored in their TEI XML headers. These settings work in combination with role-based and collection-based access control to determine final permissions.
+
+### Permission Attributes
+
+Each document has three permission attributes:
+
+- **visibility**: `public` | `private` - Controls who can view the document
+- **editability**: `editable` | `protected` - Controls who can edit the document
+- **owner**: `username` | `null` - The document owner (null for public editable documents)
+
+### TEI XML Storage
+
+Document permissions are stored in the `<revisionDesc>` element as `<label>` elements within a `<change>` entry:
+
+```xml
+<revisionDesc>
+  <change when="2025-01-09T12:00:00Z" who="#username">
+    <desc>Access permissions updated</desc>
+    <label type="visibility">private</label>
+    <label type="access">protected</label>
+    <label type="owner" ana="#username">Full Name</label>
+  </change>
+</revisionDesc>
+```
+
+**Legacy support:** The `type="access"` label historically used `private` to mean `protected`. The system automatically normalizes this to `protected` when parsing.
+
+### Permission Parsing
+
+The [access-control.js:338-411](../../app/src/plugins/access-control.js#L338-L411) plugin parses permissions from the TEI DOM tree:
+
+1. Finds all `<change>` elements in `<revisionDesc>`
+2. Locates the last `<change>` containing permission labels
+3. Extracts `visibility`, `access` (editability), and `owner` labels
+4. Owner is parsed from `ana="#username"` attribute (preferred) or text content (fallback)
+
+### Access Control Rules
+
+**View Access:**
+
+- Public documents: viewable by anyone
+- Private documents: viewable only by owner or admins
+
+**Edit Access:** (evaluated in order)
+
+1. Admin users: can edit any document
+2. Role-based restrictions (file type):
+   - Gold files: require `reviewer` role
+   - Version files: require `annotator` or `reviewer` role
+3. Private documents: only owner can edit
+4. Protected documents: only owner can edit
+
+See [acl-utils.js:215-247](../../app/src/modules/acl-utils.js#L215-L247) for the complete edit permission logic.
+
+### Permission Updates
+
+Permissions are updated via [access-control.js:421-537](../../app/src/plugins/access-control.js#L421-L537):
+
+1. Creates new `<change>` element with timestamp and current user
+2. Adds `<label>` elements for visibility, access, and owner
+3. Ensures `<respStmt>` exists for both current user and owner
+4. Pretty-prints the `<teiHeader>` for proper formatting
+5. Updates editor DOM and saves to file storage
+
+When setting `private` or `protected`, the current user automatically becomes owner if no owner exists.
+
+### Frontend Integration
+
+The access-control plugin ([access-control.js](../../app/src/plugins/access-control.js)):
+
+- Displays permission info in the status bar (public/private, editable/protected)
+- Provides dropdown for users who can modify permissions
+- Sets `editorReadOnly` state based on computed permissions
+- Updates read-only widget with context (e.g., "Read-only (owned by username)")
+
+The plugin enforces read-only state when:
+
+- Document is private and user is not owner
+- Document is protected and user is not owner
+- User lacks required role for file type (gold/version)
+
+### Backend Access Filtering
+
+The backend `/api/v1/files/list` endpoint filters documents by document-level permissions:
+
+```python
+from fastapi_app.lib.document_access import DocumentAccessFilter
+
+# After collection filtering
+files_data = DocumentAccessFilter.filter_files_by_access(files_data, current_user)
+```
+
+This removes documents the user cannot view based on visibility and ownership.
+
 ## RBAC Manager Plugin
 
 The frontend RBAC Manager plugin ([app/src/plugins/rbac-manager.js](../../app/src/plugins/rbac-manager.js)) provides a user interface for managing access control. It allows administrators to:
@@ -338,7 +434,7 @@ The `bin/manage.py` script provides commands to manage users, groups, and collec
 
 ### Reading Files (GET /api/v1/files/list)
 
-```
+```text
 1. User authenticates
 2. System loads user's groups from users.json
 3. System resolves accessible collections:
@@ -398,42 +494,6 @@ Collections are inherited from the source PDF file. Users cannot:
 - Change a document's collections via the save endpoint
 - Create files in collections they don't have access to
 - Edit files in collections they don't have access to
-
-## Testing
-
-The [test_collection_access_control.py](../../tests/unit/fastapi/test_collection_access_control.py) test suite verifies:
-
-- Anonymous user has no collection access
-- Wildcard roles grant access to all collections
-- Admin role grants access to all collections
-- Wildcard groups grant access to all collections
-- Specific group collections work correctly
-- Multiple group memberships combine collections
-- Group wildcard collections grant access to all
-- Users with no groups have no collection access
-- Nonexistent groups don't grant access
-- Mixed wildcard and specific groups resolve correctly
-
-### Test Isolation
-
-The tests use **isolated temporary directories** and do not modify the main application's data files in `data/db/`. Each test:
-
-1. Creates a `tempfile.TemporaryDirectory()` for the test database
-2. Passes the temporary `db_dir` to all utility functions
-3. Cleans up the temporary directory after the test completes
-
-This ensures tests are:
-
-- **Safe** - Never modify production/development data
-- **Fast** - No I/O to main filesystem
-- **Isolated** - Each test has a clean environment
-- **Repeatable** - No side effects between test runs
-
-Run tests:
-
-```bash
-uv run python -m pytest tests/unit/fastapi/test_collection_access_control.py -v
-```
 
 ## Examples
 
@@ -515,59 +575,3 @@ uv run python -m pytest tests/unit/fastapi/test_collection_access_control.py -v
 
 **Result:** User has access to all collections but limited to user-level permissions (read-only).
 
-## Migration Notes
-
-If migrating from a system without collection-based access control:
-
-1. **Create default collection**:
-
-   ```bash
-   ./bin/manage.py collection add default "Default Collection"
-   ```
-
-2. **Create default group**:
-
-   ```bash
-   ./bin/manage.py group add default "Default Group"
-   ./bin/manage.py group add-collection default default
-   ```
-
-3. **Add all users to default group**:
-
-   ```bash
-   ./bin/manage.py user add-group user1 default
-   ./bin/manage.py user add-group user2 default
-   # ... for all users
-   ```
-
-4. **Assign collections to existing documents** (requires database update):
-
-   ```sql
-   UPDATE files SET doc_collections = '["default"]' WHERE doc_collections IS NULL;
-   ```
-
-## Troubleshooting
-
-### User cannot see any documents
-
-**Check:**
-
-1. User has at least one group: `./bin/manage.py user list`
-2. Groups have collections: `./bin/manage.py group list`
-3. Documents have collections assigned (check `doc_collections` in database)
-
-### User can see documents but cannot edit
-
-**Check:**
-
-1. User has required role (annotator/reviewer) for the operation
-2. User has collection access to the document
-3. Document's visibility/editability settings (document-level ACL)
-
-### Wildcard not working
-
-**Check:**
-
-1. Wildcard is exactly `"*"` (string with single asterisk)
-2. Wildcard is in the correct field (roles/groups/collections)
-3. No typos in JSON configuration files
