@@ -38,8 +38,7 @@ from ..lib.user_utils import user_has_collection_access
 from ..config import get_settings
 from ..lib.models import FileCreate, FileUpdate
 from ..lib.models_files import SaveFileRequest, SaveFileResponse
-from ..lib.tei_utils import serialize_tei_with_formatted_header
-from ..lib.xml_utils import encode_xml_entities
+from ..lib.tei_utils import serialize_tei_with_formatted_header, update_fileref_in_xml
 from ..lib.sse_service import SSEService
 from ..lib.sessions import SessionManager
 from ..lib.sse_utils import broadcast_to_other_sessions
@@ -153,72 +152,36 @@ def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], log
         )
 
 
-def _extract_processing_instructions(xml_string: str) -> list[str]:
+def _update_fileref_in_xml_with_logging(xml_string: str, file_id: str, logger) -> str:
     """
-    Extract processing instructions (e.g., <?xml-model ...?>) from XML string.
+    Wrapper around update_fileref_in_xml with logging.
 
-    Returns:
-        List of processing instruction strings
-    """
-    import re
-    # Match processing instructions (excluding xml declaration)
-    pi_pattern = r'<\?(?!xml\s+version)[^\?]+\?>'
-    matches = re.findall(pi_pattern, xml_string)
-    return matches
-
-
-def _update_fileref_in_xml(xml_string: str, file_id: str, logger) -> str:
-    """
-    Ensure fileref in XML matches the file_id.
-    Creates fileref element if missing.
-    Preserves processing instructions from the original XML.
+    Args:
+        xml_string: TEI XML content
+        file_id: File ID to set as fileref
+        logger: Logger instance for logging operations
 
     Returns:
         Updated XML string
     """
     try:
-        # Extract processing instructions before parsing
-        processing_instructions = _extract_processing_instructions(xml_string)
-
+        # Check if fileref needs updating
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-
-        # Find or create fileref element
         fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
 
-        if fileref_elem is not None:
-            # Update existing fileref
-            if fileref_elem.text != file_id:
-                old_fileref = fileref_elem.text
-                fileref_elem.text = file_id
-                logger.debug(f"Updated fileref: {old_fileref} -> {file_id}")
-                return serialize_tei_with_formatted_header(xml_root, processing_instructions)
-            return xml_string
+        old_fileref = fileref_elem.text if fileref_elem is not None else None
 
-        # Create fileref element
-        edition_stmt = xml_root.find('.//tei:editionStmt', ns)
-        if edition_stmt is None:
-            # Create editionStmt in teiHeader/fileDesc
-            file_desc = xml_root.find('.//tei:fileDesc', ns)
-            if file_desc is not None:
-                edition_stmt = etree.SubElement(file_desc, "{http://www.tei-c.org/ns/1.0}editionStmt")
+        # Call centralized function
+        result = update_fileref_in_xml(xml_string, file_id)
 
-        if edition_stmt is not None:
-            # Find or create edition element
-            edition = edition_stmt.find('./tei:edition', ns)
-            if edition is None:
-                edition = etree.SubElement(edition_stmt, "{http://www.tei-c.org/ns/1.0}edition")
-
-            # Add idno with fileref
-            fileref_elem = etree.SubElement(edition, "{http://www.tei-c.org/ns/1.0}idno")
-            fileref_elem.set("type", "fileref")
-            fileref_elem.text = file_id
-
+        # Log what happened
+        if old_fileref and old_fileref != file_id:
+            logger.debug(f"Updated fileref: {old_fileref} -> {file_id}")
+        elif not old_fileref:
             logger.debug(f"Added fileref to XML: {file_id}")
-            return serialize_tei_with_formatted_header(xml_root, processing_instructions)
 
-        return xml_string
-
+        return result
     except Exception as e:
         logger.warning(f"Could not update fileref in XML: {e}")
         return xml_string
@@ -317,19 +280,11 @@ async def save_file(
 
         # Update fileref in XML to ensure consistency with resolved doc_id
         # This must happen AFTER resolving the correct doc_id from source file
-        xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
+        xml_string = _update_fileref_in_xml_with_logging(xml_string, file_id, logger_inst)
 
         # Encode XML entities if configured
-        from ..lib.config_utils import get_config
-        from ..lib.xml_utils import EncodeOptions
-        config = get_config()
-        config_data = config.load()
-        if config_data.get("xml.encode-entities.server", False):
-            logger_inst.debug("Encoding XML entities")
-            encode_options: EncodeOptions = {
-                'encode_quotes': config_data.get("xml.encode-quotes", False)
-            }
-            xml_string = encode_xml_entities(xml_string, encode_options)
+        from ..lib.xml_utils import apply_entity_encoding_from_config
+        xml_string = apply_entity_encoding_from_config(xml_string)
 
         # Refresh existing_gold after resolving doc_id
         if existing_file:

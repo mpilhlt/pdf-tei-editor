@@ -179,19 +179,26 @@ async def execute_sync(
         )
 
         # Notify all sessions about collection updates if any occurred
-        if results.get("updated_collection"):
+        updated_count = len(results.get("updated_collection", []))
+        logger.debug(f"Sync complete: {updated_count} files updated in collection")
+
+        if updated_count > 0:
             from fastapi_app.lib.sse_utils import broadcast_to_all_sessions
-            broadcast_to_all_sessions(
+            logger.debug(f"Broadcasting fileDataChanged event to all sessions")
+            notified = broadcast_to_all_sessions(
                 sse_service=sse_service,
                 session_manager=session_manager,
                 event_type="fileDataChanged",
                 data={
                     "reason": "local_sync",
                     "collection": collection,
-                    "count": len(results["updated_collection"])
+                    "count": updated_count
                 },
                 logger=logger
             )
+            logger.debug(f"Broadcast sent to {notified} sessions")
+        else:
+            logger.debug("No collection updates, skipping broadcast")
 
         # Generate HTML report with statistics only
         html = plugin._generate_summary_report_html(results, is_preview=False)

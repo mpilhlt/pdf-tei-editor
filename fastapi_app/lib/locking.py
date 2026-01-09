@@ -178,7 +178,7 @@ def acquire_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Lo
                         WHERE file_id = ?
                     """, (file_id,))
                     conn.commit()
-                    logger.info(f"[LOCK] Session {session_id[:8]}... refreshed own lock for file {file_id[:8]}...")
+                    logger.debug(f"[LOCK] Session {session_id[:8]}... refreshed own lock for file {file_id[:8]}...")
                     return True
                 elif is_stale:
                     # Lock is stale, take it over
