@@ -144,13 +144,6 @@ class SmartTestRunner {
       }
     }
 
-    // Discover JS unit tests in plugin directories
-    if (existsSync(pluginsDir)) {
-      const pluginJsPattern = normalizeGlobPattern(join(pluginsDir, '**/tests/**/*.test.js'));
-      const pluginJsFiles = await glob(pluginJsPattern);
-      jsTests.push(...pluginJsFiles.map(makeRelative));
-    }
-
     // Discover Python unit tests in tests/unit/ (recursively)
     const pyTests = [];
     if (existsSync(testsDir)) {
@@ -170,6 +163,8 @@ class SmartTestRunner {
     }
 
     // Discover API tests in tests/api/ (backend API integration tests)
+    // NOTE: Plugin integration tests (*.test.js in fastapi_app/plugins/**/tests/) are NOT included
+    // because they require custom .env.test configuration and should be run manually
     const apiTests = [];
     if (existsSync(testsDir)) {
       const apiDir = join(testsDir, 'api');

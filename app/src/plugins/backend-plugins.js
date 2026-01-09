@@ -33,6 +33,7 @@ import ui from '../ui.js';
  * @property {HTMLDivElement} content - Content container
  * @property {SlButton} openWindowBtn - Open in new window button
  * @property {SlButton} exportBtn - Export button
+ * @property {SlButton} executeBtn - Execute button
  * @property {SlButton} closeBtn - Close button
  */
 
@@ -387,6 +388,7 @@ export class BackendPluginsPlugin extends Plugin {
     });
 
     this.configureExportButton(dialog, plugin, result);
+    this.configureExecuteButton(dialog, result);
     dialog.show();
   }
 
@@ -460,6 +462,49 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
+   * Configure execute button for plugin result
+   * @param {SlDialog} dialog
+   * @param {any} result
+   */
+  configureExecuteButton(dialog, result) {
+    if (result.executeUrl) {
+      dialog.executeBtn.style.display = 'inline-flex';
+
+      const newExecuteBtn = dialog.executeBtn.cloneNode(true);
+      dialog.executeBtn.replaceWith(newExecuteBtn);
+      updateUi();
+
+      ui.pluginResultDialog.executeBtn.addEventListener('click', async () => {
+        try {
+          // Build execute URL with authentication
+          const executeUrl = new URL(result.executeUrl, window.location.origin);
+
+          // Add session ID if not already in URL
+          if (!executeUrl.searchParams.has('session_id') && this.state.sessionId) {
+            executeUrl.searchParams.set('session_id', this.state.sessionId);
+          }
+
+          // Load execute result in the same iframe
+          const iframe = ui.pluginResultDialog.content.querySelector('iframe');
+          if (iframe) {
+            iframe.src = executeUrl.toString();
+          }
+
+          // Hide execute button after clicking
+          ui.pluginResultDialog.executeBtn.style.display = 'none';
+
+          notify('Executing...', 'primary', 'info-circle');
+        } catch (error) {
+          console.error('Execute failed:', error);
+          notify(`Execute failed: ${error.message}`, 'danger', 'exclamation-octagon');
+        }
+      });
+    } else {
+      dialog.executeBtn.style.display = 'none';
+    }
+  }
+
+  /**
    * Display plugin execution result
    * @param {BackendPlugin} plugin
    * @param {any} result
@@ -497,6 +542,7 @@ export class BackendPluginsPlugin extends Plugin {
 
       dialog.openWindowBtn.style.display = 'none';
       this.configureExportButton(dialog, plugin, result);
+      dialog.executeBtn.style.display = 'none';
 
       dialog.show();
     } else if (result && result.error) {
@@ -507,6 +553,7 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.content.innerHTML = `<p>${result.error}</p>`;
       dialog.openWindowBtn.style.display = 'none';
       dialog.exportBtn.style.display = 'none';
+      dialog.executeBtn.style.display = 'none';
       dialog.show();
     } else {
       // Show JSON result in dialog
@@ -517,6 +564,7 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.content.innerHTML = `<pre style="overflow: auto; max-height: 60vh;">${resultText}</pre>`;
       dialog.openWindowBtn.style.display = 'none';
       dialog.exportBtn.style.display = 'none';
+      dialog.executeBtn.style.display = 'none';
       dialog.show();
     }
   }

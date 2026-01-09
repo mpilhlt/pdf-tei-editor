@@ -473,6 +473,236 @@ This prevents unnecessary test runs when only metadata (like timestamps) changes
 
 This enables smart test selection via `npm run test:changed`.
 
+### Plugin Integration Tests
+
+Plugin integration tests verify backend plugin functionality by testing custom routes and plugin endpoints with a live server. These tests are located in the plugin's `tests/` directory.
+
+#### Location and Structure
+
+```
+fastapi_app/plugins/
+└── my-plugin/
+    ├── __init__.py
+    ├── plugin.py
+    ├── routes.py
+    └── tests/
+        ├── .env.test          # Plugin-specific environment config
+        └── test_*.test.js     # Integration tests
+```
+
+#### Running Plugin Tests
+
+```bash
+# Run plugin tests with test-specific environment
+node tests/backend-test-runner.js \
+  --test-dir fastapi_app/plugins/my-plugin/tests \
+  --env-file fastapi_app/plugins/my-plugin/tests/.env.test
+```
+
+#### Plugin Test Environment Configuration
+
+Plugin tests require a `.env.test` file to configure the test environment. This file must include:
+
+**Required Settings:**
+
+```bash
+# Test Paths - runtime data is ephemeral
+DATA_ROOT=tests/api/runtime
+DB_DIR=tests/api/runtime/db
+LOG_DIR=tests/api/runtime/logs
+
+# Plugin Configuration
+PLUGIN_MY_PLUGIN_ENABLED=true
+PLUGIN_MY_PLUGIN_OPTION=value
+```
+
+**Why These Are Required:**
+
+- `DATA_ROOT`, `DB_DIR`, `LOG_DIR` - Tell the server to use test directories instead of production paths
+- Plugin config vars - Enable and configure the plugin for testing
+
+Without these paths, the server will try to use production directories (`fastapi_app/db`, etc.) which may not exist in the test environment.
+
+#### Authentication in Plugin Tests
+
+Plugin routes often require authentication. The `login()` helper returns an **object** with `sessionId` and `user` properties:
+
+```javascript
+import { login, authenticatedApiCall } from '../../../../tests/api/helpers/test-auth.js';
+
+// CORRECT - Destructure the session ID
+const { sessionId } = await login('admin', 'admin', BASE_URL);
+
+// WRONG - login() returns an object, not a string
+const sessionId = await login('admin', 'admin', BASE_URL); // sessionId will be an object!
+```
+
+Pass session ID in requests via header or query parameter:
+
+```javascript
+// Via header (preferred)
+const response = await fetch(`${BASE_URL}/api/plugins/my-plugin/route`, {
+  headers: { 'X-Session-Id': sessionId }
+});
+
+// Via query parameter
+const response = await authenticatedApiCall(
+  sessionId,
+  '/api/plugins/my-plugin/route',
+  'GET',
+  null,
+  BASE_URL
+);
+```
+
+#### Testing Custom Plugin Routes
+
+Backend plugins typically expose custom routes (not just plugin endpoints). Test these routes directly:
+
+```javascript
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
+import { login, authenticatedApiCall } from '../../../../tests/api/helpers/test-auth.js';
+import { logger } from '../../../../tests/api/helpers/test-logger.js';
+
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
+
+describe('My Plugin API Tests', () => {
+  let sessionId = null;
+
+  test('Setup: login to get session ID', async () => {
+    const loginResult = await login('admin', 'admin', BASE_URL);
+    sessionId = loginResult.sessionId;
+    assert.ok(sessionId, 'Should have session ID');
+    logger.success('Logged in successfully');
+  });
+
+  test('Plugin availability check', async () => {
+    const response = await authenticatedApiCall(
+      sessionId,
+      '/plugins',
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const myPlugin = response.plugins.find(p => p.id === 'my-plugin');
+    assert.ok(myPlugin, 'Plugin should be available');
+    logger.success('Plugin is available');
+  });
+
+  test('Preview route returns HTML', async () => {
+    const previewUrl = `/api/plugins/my-plugin/preview?param=value`;
+
+    const response = await fetch(`${BASE_URL}${previewUrl}`, {
+      headers: { 'X-Session-Id': sessionId }
+    });
+
+    assert.strictEqual(response.status, 200);
+    const html = await response.text();
+    assert.ok(html.includes('expected content'));
+    logger.success('Preview route works');
+  });
+
+  test('Execute route (GET request)', async () => {
+    // Note: Check route definition - some use GET, others POST
+    const executeUrl = `/api/plugins/my-plugin/execute?param=value`;
+
+    const response = await fetch(`${BASE_URL}${executeUrl}`, {
+      headers: { 'X-Session-Id': sessionId }
+    });
+
+    assert.strictEqual(response.status, 200);
+    logger.success('Execute route completes');
+  });
+});
+```
+
+#### Common Patterns
+
+**Check HTTP Method:**
+
+Custom routes may use GET or POST. Check the route definition:
+
+```python
+@router.get("/execute")  # GET request
+@router.post("/execute") # POST request
+```
+
+**Test with Fixtures:**
+
+Plugin tests run after fixture import. Use fixture data:
+
+```javascript
+test('Works with fixture data', async () => {
+  // Fixture files are already imported at this point
+  const response = await authenticatedApiCall(
+    sessionId,
+    '/files/list',
+    'GET',
+    null,
+    BASE_URL
+  );
+
+  // Use fixture document IDs in your tests
+  const fixtureDoc = response.files.find(f => f.doc_id === 'known-fixture-id');
+  assert.ok(fixtureDoc, 'Fixture document should exist');
+});
+```
+
+**Temporary Test Files:**
+
+Create temporary files for tests that need filesystem data:
+
+```javascript
+import { mkdir, writeFile, rm } from 'fs/promises';
+import { join } from 'path';
+
+const testDir = '/tmp/my-plugin-test';
+
+test('Setup: create test files', async () => {
+  await mkdir(testDir, { recursive: true });
+  await writeFile(join(testDir, 'test.xml'), '<root>test</root>');
+});
+
+test('Cleanup: remove test files', async () => {
+  await rm(testDir, { recursive: true, force: true });
+});
+```
+
+#### Debugging Plugin Tests
+
+```bash
+# Verbose output
+node tests/backend-test-runner.js \
+  --test-dir fastapi_app/plugins/my-plugin/tests \
+  --env-file fastapi_app/plugins/my-plugin/tests/.env.test \
+  --verbose
+
+# Keep server running
+node tests/backend-test-runner.js \
+  --test-dir fastapi_app/plugins/my-plugin/tests \
+  --env-file fastapi_app/plugins/my-plugin/tests/.env.test \
+  --no-cleanup
+
+# Keep database for inspection
+node tests/backend-test-runner.js \
+  --test-dir fastapi_app/plugins/my-plugin/tests \
+  --env-file fastapi_app/plugins/my-plugin/tests/.env.test \
+  --keep-db
+```
+
+#### Complete Example
+
+See `fastapi_app/plugins/local_sync/tests/test_sync_api.test.js` for a complete working example that includes:
+
+- Environment configuration via `.env.test`
+- Authentication setup
+- Plugin availability verification
+- Testing custom routes (preview and execute)
+- Temporary file creation and cleanup
+- Fixture data integration
+
 ### API Test Template
 
 ```javascript
@@ -483,15 +713,16 @@ import { login, authenticatedApiCall } from '../helpers/test-auth.js';
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
 describe('Feature Name', () => {
-  let session;
+  let sessionId;
 
   test('Setup: login', async () => {
-    session = await login('reviewer', 'reviewer', BASE_URL);
+    const { sessionId: sid } = await login('reviewer', 'reviewer', BASE_URL);
+    sessionId = sid;
   });
 
   test('should do something', async () => {
     const result = await authenticatedApiCall(
-      session.sessionId,
+      sessionId,
       '/api/endpoint',
       'POST',
       { data: 'value' },

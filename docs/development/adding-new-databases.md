@@ -73,11 +73,11 @@ def initialize_analytics_db(conn: sqlite3.Connection, logger=None, db_path=None)
         if db_path:
             from pathlib import Path
             from .migration_runner import run_migrations_if_needed
-            from .migrations.versions import ALL_MIGRATIONS
+            from .migrations.versions import ANALYTICS_MIGRATIONS  # Create a new list for this database
 
             run_migrations_if_needed(
                 db_path=Path(db_path),
-                migrations=ALL_MIGRATIONS,
+                migrations=ANALYTICS_MIGRATIONS,
                 logger=logger
             )
 
@@ -172,11 +172,20 @@ The `run_migrations_if_needed()` function:
 
 ## Migration System Integration
 
-All databases share the same migration registry in `fastapi_app/lib/migrations/versions/ALL_MIGRATIONS`. This means:
+Migrations are organized by target database in `fastapi_app/lib/migrations/versions/__init__.py`:
 
-- You don't need database-specific migration lists
-- Migrations can target any database by checking table existence
-- The system automatically skips migrations that don't apply to a specific database
+- **Database-specific lists**: `LOCKS_MIGRATIONS`, `METADATA_MIGRATIONS`, etc.
+- **Global list**: `ALL_MIGRATIONS` (for tools that need the complete list)
+- Each database uses its specific migration list to avoid unnecessary checks
+
+When adding a new database, create a new migration list for it in `fastapi_app/lib/migrations/versions/__init__.py`:
+
+```python
+ANALYTICS_MIGRATIONS = [
+    Migration003AnalyticsIndexes,
+    Migration005AnalyticsCleanup,
+]
+```
 
 ### Example Migration That Targets Specific Database
 

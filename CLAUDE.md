@@ -57,6 +57,30 @@ Before using any method on a class or module:
 2. Consult generated API docs in `docs/api/` for signatures
 3. Machine-readable JSON available at `docs/api/backend-api.json` for Python class/function APIs
 
+### Debugging Live Application
+
+When debugging the live application, use `bin/debug-api.js` to test API endpoints directly:
+
+```bash
+# Authenticate and call any endpoint
+node bin/debug-api.js <method> <path> [json-params]
+
+# Examples:
+node bin/debug-api.js GET /api/v1/plugins
+node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+node bin/debug-api.js GET /api/v1/collections/test/files
+```
+
+The script:
+
+- Authenticates using credentials from `.env` file (API_USER, API_PASSWORD)
+- Uses SHA-256 password hashing (matching the auth API requirements)
+- Handles GET requests with query parameters
+- Handles POST/PUT/DELETE requests with JSON body
+- Returns formatted JSON responses with status codes
+
+See the OpenAPI specification at `http://localhost:8000/openapi.json` for all available endpoints and their parameters.
+
 ### Database Access
 
 - **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
@@ -173,6 +197,12 @@ timeout = config.get('session.timeout', default=3600)
 - The config instance handles initialization and caching automatically
 - Never instantiate `ConfigManager` directly - use `get_config()` instead
 
+**Backend Plugin Configuration:**
+
+- Initialize plugin config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- Access config everywhere else using `get_config()` (retrieves existing keys)
+- See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
+
 ### Test Filtering: --grep Behavior
 
 **CRITICAL for debugging tests efficiently:**
@@ -225,6 +255,8 @@ The smart-test-runner automatically uses the correct approach:
 - **File identifiers on the client** - ALWAYS use `stable_id` (nanoid) when referencing files in client-side code (frontend plugins, HTML output, JavaScript). NEVER use `file_id` (content hash) on the client. The `stable_id` is the permanent identifier for files, while `file_id` is only used internally for storage and deduplication
 - **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing). For Python unit tests of FastAPI routes, see the section on dependency overrides vs @patch decorators
 - **Testing authenticated routes** - When writing tests for routes that use `Depends(get_session_manager)` and `Depends(get_auth_manager)`, ALWAYS use `app.dependency_overrides` in `setUp()` to mock these dependencies with valid authentication by default, and include `session_id` parameter in test requests. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) Authentication Testing Pattern section
+- **Backend plugin tests location** - Plugin tests MUST be placed in the plugin's `tests/` directory (e.g., `fastapi_app/plugins/<plugin-name>/tests/`). To run plugin tests, use `--test-dir` parameter: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/<plugin-name>/tests`. This keeps tests colocated with the plugin code
+- **Writing plugin integration tests** - ALWAYS consult the "Plugin Integration Tests" section in [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing integration tests for backend plugins. It covers: required `.env.test` configuration (DATA_ROOT, DB_DIR, LOG_DIR paths), authentication patterns (login returns object not string), testing custom routes, and working with fixtures
 - **FastAPI routes must use dependency injection** - ALWAYS use `Depends(get_db)` and `Depends(get_file_storage)` as route parameters, NEVER call `db = get_db()` or `file_storage = get_file_storage()` inside route functions. This enables proper test mocking via `app.dependency_overrides` and prevents CI failures when databases don't exist. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for details
 - **Check backend plugin guide when creating backend plugins** - ALWAYS consult [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) before creating or modifying backend plugins. It contains the plugin architecture, patterns, and Shadow DOM handling requirements
 - **CI/CD Workflow Changes** - ALWAYS consult [docs/development/ci-cd-pipeline.md](docs/development/ci-cd-pipeline.md) before modifying GitHub Actions workflows. The document describes the test execution strategy, release process, and dependencies between workflows
