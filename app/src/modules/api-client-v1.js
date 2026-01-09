@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-07T21:18:19.481Z
+ * Generated from OpenAPI schema at 2026-01-09T15:38:20.141Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1504,6 +1504,25 @@ export class ApiClientV1 {
    */
   async sseTestEcho(requestBody) {
     const endpoint = `/sse/test/echo`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Test endpoint that broadcasts a message to all active sessions.
+   * This endpoint is used for testing the broadcast_to_all_sessions utility.
+   * It sends the provided message as an SSE event to all active sessions.
+   * Args:
+   * body: Dictionary containing "message" field to broadcast
+   * Returns:
+   * dict: Summary with status and sessions notified
+   * Note:
+   * All clients must be subscribed to /sse/subscribe to receive the broadcast.
+   *
+   * @param {Object<string, any>} requestBody
+   * @returns {Promise<any>}
+   */
+  async sseTestBroadcast(requestBody) {
+    const endpoint = `/sse/test/broadcast`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
