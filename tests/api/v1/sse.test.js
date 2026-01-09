@@ -9,10 +9,14 @@
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert';
+import http from 'node:http';
 import { createEventSource } from 'eventsource-client';
 import { login, authenticatedRequest } from '../helpers/test-auth.js';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
+
+// Increase HTTP agent max sockets to handle SSE connections + regular requests
+http.globalAgent.maxSockets = 50;
 
 describe('SSE API Integration Tests', { concurrency: 1 }, () => {
 
@@ -47,18 +51,18 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       },
       onMessage: (message) => {
         if (debug) {
-          logger.info(`[SSE] Received event: ${message.event}, data: ${message.data}`);
+          console.log(`[SSE] Received event: ${message.event}, data: ${message.data}`);
         }
         // Filter by event type if specified
         if (!eventType || message.event === eventType) {
           events.push(message.data);
         } else if (debug) {
-          logger.info(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
+          console.log(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
         }
       },
       onDisconnect: () => {
         if (debug) {
-          logger.info(`[SSE] Connection disconnected`);
+          console.log(`[SSE] Connection disconnected`);
         }
       }
     });
@@ -302,5 +306,71 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
 
     connection1.close();
     connection2.close();
+  });
+
+  test('Test 9: Broadcast message sent to all sessions', { timeout: 15000 }, async () => {
+    // Clean up any lingering SSE queues from previous tests
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Create two separate sessions
+    const session1 = await login('reviewer', 'reviewer', BASE_URL);
+    const session2 = await login('reviewer', 'reviewer', BASE_URL);
+
+    // Create connections to collect all events (no filtering)
+    const connection1 = createSSEConnection(session1, null, false);
+    const connection2 = createSSEConnection(session2, null, false);
+
+    try {
+      // Wait for SSE connections to fully establish
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Send a broadcast message using session1
+      const broadcastMessage = 'Broadcast message to all';
+      const response = await authenticatedRequest(
+        session1.sessionId,
+        '/sse/test/broadcast',
+        'POST',
+        { message: broadcastMessage },
+        BASE_URL
+      );
+
+      assert.strictEqual(response.status, 200, 'Broadcast endpoint should return 200');
+      const data = await response.json();
+      assert.strictEqual(data.status, 'ok', 'Broadcast should return ok status');
+
+      // Wait for broadcast to be delivered
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Find broadcast events in the collected events (filter out pings)
+      /** @param {string[]} events */
+      const findBroadcast = (events) => {
+        for (const event of events) {
+          try {
+            const parsed = JSON.parse(event);
+            if (parsed.message === broadcastMessage) {
+              return parsed;
+            }
+          } catch (e) {
+            // Skip non-JSON events like 'keepalive'
+          }
+        }
+        return null;
+      };
+
+      const data1 = findBroadcast(connection1.events);
+      const data2 = findBroadcast(connection2.events);
+
+      assert.ok(data1, 'Connection 1 should receive broadcast message');
+      assert.ok(data2, 'Connection 2 should receive broadcast message');
+      assert.strictEqual(data1.message, broadcastMessage, 'Connection 1 message should match');
+      assert.strictEqual(data2.message, broadcastMessage, 'Connection 2 message should match');
+    } finally {
+      // Always close connections even if test fails
+      connection1.close();
+      connection2.close();
+
+      // Wait for SSE cleanup to complete before next test
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
   });
 });

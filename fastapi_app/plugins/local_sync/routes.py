@@ -178,13 +178,12 @@ async def execute_sync(
             collection, variant, repo_path_obj, backup_enabled, dry_run=False, context=context
         )
 
-        # Notify other sessions about collection updates if any occurred
+        # Notify all sessions about collection updates if any occurred
         if results.get("updated_collection"):
-            from fastapi_app.lib.sse_utils import broadcast_to_other_sessions
-            broadcast_to_other_sessions(
+            from fastapi_app.lib.sse_utils import broadcast_to_all_sessions
+            broadcast_to_all_sessions(
                 sse_service=sse_service,
                 session_manager=session_manager,
-                current_session_id=session_id_value,
                 event_type="fileDataChanged",
                 data={
                     "reason": "local_sync",
