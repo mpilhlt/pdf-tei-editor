@@ -1,6 +1,6 @@
-# Implementation Plan: Database-Backed Document Access Control
+# Implementation Plan: Document Access Control System
 
-Move document-level access control from TEI-embedded storage to a dedicated SQLite database.
+Implement a configurable document-level access control system with three modes: role-based, owner-based, and granular permissions.
 
 ## Current State
 
@@ -15,32 +15,140 @@ Access control code exists but **has not been used in production**:
 
 - Access control tied to document content
 - Requires parsing TEI XML for permission checks
-- Metadata cached in JSON field but still originates from XML
 - Permission changes modify document content
 - Feature has been disabled and never deployed
 
 ## Target State
 
-Access control stored in dedicated SQLite database at `data/db/permissions.db`.
+**Application-wide configurable access control** with three modes.
 
-**Permissions are per-artifact (stable_id)** - Each TEI annotation file has its own permissions, not grouped by doc_id.
+**Ownership tracking** via `created_by` field in file metadata (already exists).
 
-**Default permissions:** `public` visibility, `protected` editability for new artifacts.
+**Granular mode only** uses dedicated SQLite database at `data/db/permissions.db` for visibility/editability settings.
 
-## Database Schema
+## Access Control Modes
+
+### Configuration
+
+```python
+# Application-wide setting (cannot be mixed per collection)
+access-control.mode: 'role-based' | 'owner-based' | 'granular'  # default: 'role-based'
+
+# Only used in 'granular' mode
+access-control.default-visibility: 'collection' | 'owner'       # default: 'collection'
+access-control.default-editability: 'collection' | 'owner'      # default: 'owner'
+```
+
+### Mode 1: Role-Based (Default)
+
+**No document-level permissions.**
+
+**Rules:**
+
+- Gold versions: only reviewers can edit/delete
+- Other versions: everyone with collection access can edit/delete
+- Promotion/demotion: only reviewers
+
+**UI:**
+
+- No permission controls shown
+- Standard role-based behavior
+
+**Storage:**
+
+- No permissions database needed
+- Only uses `created_by` field for audit trail
+
+### Mode 2: Owner-Based
+
+**Documents editable only by owner (creator).**
+
+**Rules:**
+
+- Documents are read-only for everyone except owner
+- Reviewers can delete any version (including gold)
+- Reviewers can replace gold versions with their own versions
+- Promotion/demotion: only reviewers
+- To edit a non-owned document, user must create their own version
+
+**UI:**
+
+- No permission controls shown (automatic based on ownership)
+- Show notification when non-owner loads document: "This document is owned by [username]. Create your own version to edit."
+
+**Storage:**
+
+- No permissions database needed
+- Uses `created_by` field from file metadata
+
+**Reviewer override:**
+
+- Reviewers can always delete any document
+- Reviewers cannot edit non-owned documents (must create own version or replace gold)
+
+### Mode 3: Granular
+
+**Database-backed per-document permissions.**
+
+**Attributes per document:**
+
+- `visibility`: `'collection'` | `'owner'`
+- `editability`: `'collection'` | `'owner'`
+- `owner`: username (always required, set to creator)
+
+**Permission semantics:**
+
+- `visibility: 'collection'` → visible to anyone with collection access
+- `visibility: 'owner'` → visible only to owner (+ reviewers)
+- `editability: 'collection'` → editable by anyone with collection access
+- `editability: 'owner'` → editable only by owner (+ reviewers)
+
+**Rules:**
+
+- Collection access is baseline requirement (no "public" beyond collection)
+- Deletion follows same rules as editability
+- Promotion/demotion: only reviewers (independent of document permissions)
+- Permission modification: only owner + reviewers
+
+**Reviewer override:**
+
+- Reviewers can always read, delete, and modify permissions
+- Reviewers **cannot** edit non-owned documents when `editability: 'owner'` (prevents accidental overwriting)
+- To edit, reviewers must create their own version or change permissions first
+
+**UI:**
+
+- Two status switches in status bar (visible to owner + reviewers):
+  - **Visibility switch**: `label: "Visibility"`, `checkedText: "Collection"`, `uncheckedText: "Owner"`
+  - **Editability switch**: `label: "Editability"`, `checkedText: "Collection"`, `uncheckedText: "Owner"`
+- Tooltip on hover: "Collection = all users with collection access, Owner = document owner only"
+- Switches hidden for non-owners (non-reviewers)
+
+**Storage:**
+
+- SQLite database `data/db/permissions.db`
+- Table `document_permissions` (see schema below)
+
+**Default permissions for new documents:**
+
+- `visibility: 'collection'` (visible to all collection members)
+- `editability: 'owner'` (editable only by owner)
+- `owner: <creator_username>`
+
+## Database Schema (Granular Mode Only)
 
 ### Table: `document_permissions`
 
 ```sql
 CREATE TABLE IF NOT EXISTS document_permissions (
-    stable_id TEXT PRIMARY KEY,           -- Artifact stable ID (nanoid)
-    visibility TEXT NOT NULL DEFAULT 'public',   -- 'public' | 'private'
-    editability TEXT NOT NULL DEFAULT 'protected', -- 'editable' | 'protected'
-    owner TEXT,                           -- Username or NULL
+    stable_id TEXT PRIMARY KEY,                      -- Artifact stable ID (nanoid)
+    visibility TEXT NOT NULL DEFAULT 'collection',   -- 'collection' | 'owner'
+    editability TEXT NOT NULL DEFAULT 'owner',       -- 'collection' | 'owner'
+    owner TEXT NOT NULL,                             -- Username (always required)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CHECK (visibility IN ('public', 'private')),
-    CHECK (editability IN ('editable', 'protected'))
+    CHECK (visibility IN ('collection', 'owner')),
+    CHECK (editability IN ('collection', 'owner'))
 )
 ```
 
@@ -52,49 +160,48 @@ CREATE INDEX IF NOT EXISTS idx_owner ON document_permissions(owner);
 CREATE INDEX IF NOT EXISTS idx_visibility ON document_permissions(visibility);
 ```
 
-### Table: `permission_history`
-
-Track permission changes for audit purposes:
-
-```sql
-CREATE TABLE IF NOT EXISTS permission_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stable_id TEXT NOT NULL,
-    visibility TEXT NOT NULL,
-    editability TEXT NOT NULL,
-    owner TEXT,
-    changed_by TEXT,                      -- Username who made the change
-    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    description TEXT,                     -- Optional change description
-    FOREIGN KEY (stable_id) REFERENCES document_permissions(stable_id)
-)
-```
-
-**Indexes:**
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_history_stable_id ON permission_history(stable_id);
-CREATE INDEX IF NOT EXISTS idx_history_changed_at ON permission_history(changed_at);
-```
+**No permission history table needed** - audit trail not required.
 
 ## Backend Implementation
 
-### 1. Database Layer (`fastapi_app/lib/permissions_db.py`)
+### 1. Configuration (`fastapi_app/lib/config_utils.py`)
 
-Create database initialization and migration following `fastapi_app/lib/locking.py` pattern:
+Add configuration keys:
+
+```python
+# In config schema or environment variables
+ACCESS_CONTROL_MODE = 'role-based'  # role-based | owner-based | granular
+ACCESS_CONTROL_DEFAULT_VISIBILITY = 'collection'  # collection | owner
+ACCESS_CONTROL_DEFAULT_EDITABILITY = 'owner'      # collection | owner
+```
+
+Load via `get_config()`:
+
+```python
+from fastapi_app.lib.config_utils import get_config
+
+config = get_config()
+mode = config.get('access-control.mode', default='role-based')
+default_visibility = config.get('access-control.default-visibility', default='collection')
+default_editability = config.get('access-control.default-editability', default='owner')
+```
+
+### 2. Database Layer (`fastapi_app/lib/permissions_db.py`)
+
+**Only used in granular mode.**
 
 ```python
 """
-Document permissions database management.
+Document permissions database management (granular mode only).
 
-Stores document-level access control permissions in SQLite database.
+Stores document-level visibility/editability permissions in SQLite database.
 """
 
 import sqlite3
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Optional
 from dataclasses import dataclass
 import logging
 
@@ -102,70 +209,133 @@ import logging
 class DocumentPermissions:
     """Document permission data."""
     stable_id: str
-    visibility: str  # 'public' | 'private'
-    editability: str  # 'editable' | 'protected'
-    owner: Optional[str]
+    visibility: str      # 'collection' | 'owner'
+    editability: str     # 'collection' | 'owner'
+    owner: str           # Username (never None)
     created_at: datetime
     updated_at: datetime
 
 @contextmanager
 def get_db_connection(db_dir: Path, logger: logging.Logger):
     """Context manager for database connections."""
-    # Similar to locking.py pattern
-    # Enable WAL mode for concurrent access
-    # Use row factory for dict-like results
+    db_path = db_dir / "permissions.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 def init_permissions_db(db_dir: Path, logger: logging.Logger) -> None:
-    """Initialize permissions database with schema and migrations."""
-    # Create database if doesn't exist
-    # Run migrations using centralized runner
-    # Create indexes
+    """Initialize permissions database with schema."""
+    from fastapi_app.lib.migration_runner import run_migrations_if_needed
 
-def get_document_permissions(stable_id: str, db_dir: Path, logger: logging.Logger) -> DocumentPermissions:
-    """Get permissions for an artifact, returns defaults if not found."""
-    # Query database
-    # Return defaults (public, protected) if not found
+    db_path = db_dir / "permissions.db"
+
+    # Run migrations using centralized runner
+    run_migrations_if_needed(
+        db_path=db_path,
+        migration_type='permissions',
+        logger=logger
+    )
+
+def get_document_permissions(
+    stable_id: str,
+    db_dir: Path,
+    logger: logging.Logger,
+    default_visibility: str = 'collection',
+    default_editability: str = 'owner',
+    default_owner: Optional[str] = None
+) -> DocumentPermissions:
+    """
+    Get permissions for an artifact.
+
+    Returns defaults if not found in database.
+    """
+    with get_db_connection(db_dir, logger) as conn:
+        row = conn.execute(
+            "SELECT * FROM document_permissions WHERE stable_id = ?",
+            (stable_id,)
+        ).fetchone()
+
+        if row:
+            return DocumentPermissions(
+                stable_id=row['stable_id'],
+                visibility=row['visibility'],
+                editability=row['editability'],
+                owner=row['owner'],
+                created_at=datetime.fromisoformat(row['created_at']),
+                updated_at=datetime.fromisoformat(row['updated_at'])
+            )
+        else:
+            # Return defaults
+            return DocumentPermissions(
+                stable_id=stable_id,
+                visibility=default_visibility,
+                editability=default_editability,
+                owner=default_owner or 'unknown',
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
 
 def set_document_permissions(
     stable_id: str,
     visibility: str,
     editability: str,
-    owner: Optional[str],
-    changed_by: str,
+    owner: str,
     db_dir: Path,
-    logger: logging.Logger,
-    description: Optional[str] = None
+    logger: logging.Logger
 ) -> DocumentPermissions:
-    """Set permissions for an artifact, creating history entry."""
+    """Set permissions for an artifact."""
     # Validate inputs
-    # UPSERT into document_permissions
-    # Insert into permission_history
-    # Return updated permissions
+    if visibility not in ('collection', 'owner'):
+        raise ValueError(f"Invalid visibility: {visibility}")
+    if editability not in ('collection', 'owner'):
+        raise ValueError(f"Invalid editability: {editability}")
+    if not owner:
+        raise ValueError("Owner is required")
 
-def get_permission_history(stable_id: str, db_dir: Path, logger: logging.Logger) -> List[Dict]:
-    """Get permission change history for an artifact."""
-    # Query permission_history table
-    # Return list of changes
+    now = datetime.now(timezone.utc).isoformat()
+
+    with get_db_connection(db_dir, logger) as conn:
+        # UPSERT into document_permissions
+        conn.execute("""
+            INSERT INTO document_permissions (stable_id, visibility, editability, owner, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(stable_id) DO UPDATE SET
+                visibility = excluded.visibility,
+                editability = excluded.editability,
+                owner = excluded.owner,
+                updated_at = excluded.updated_at
+        """, (stable_id, visibility, editability, owner, now, now))
+        conn.commit()
+
+    return DocumentPermissions(
+        stable_id=stable_id,
+        visibility=visibility,
+        editability=editability,
+        owner=owner,
+        created_at=datetime.fromisoformat(now),
+        updated_at=datetime.fromisoformat(now)
+    )
 
 def delete_document_permissions(stable_id: str, db_dir: Path, logger: logging.Logger) -> bool:
     """Delete permissions record for an artifact (when artifact is deleted)."""
-    # Delete from document_permissions
-    # Keep history for audit trail
+    with get_db_connection(db_dir, logger) as conn:
+        conn.execute("DELETE FROM document_permissions WHERE stable_id = ?", (stable_id,))
+        conn.commit()
+        return True
 ```
 
-### 2. Migration (`fastapi_app/lib/migrations/versions/m002_permissions_db.py`)
-
-Create migration to set up permissions database:
+### 3. Migration (`fastapi_app/lib/migrations/versions/m002_permissions_db.py`)
 
 ```python
 """
 Migration 002: Create document permissions database
 
-Creates permissions.db with document_permissions and permission_history tables.
-This replaces TEI-embedded access control metadata.
-
-Before: Access control stored in TEI <change> elements
-After: Access control in dedicated SQLite database
+Creates permissions.db with document_permissions table.
+Used only in 'granular' access control mode.
 """
 
 import sqlite3
@@ -183,33 +353,18 @@ class Migration002PermissionsDb(Migration):
         return "Create document permissions database"
 
     def upgrade(self, conn: sqlite3.Connection) -> None:
-        """Create permissions tables."""
+        """Create permissions table."""
         # Create document_permissions table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS document_permissions (
                 stable_id TEXT PRIMARY KEY,
-                visibility TEXT NOT NULL DEFAULT 'public',
-                editability TEXT NOT NULL DEFAULT 'protected',
-                owner TEXT,
+                visibility TEXT NOT NULL DEFAULT 'collection',
+                editability TEXT NOT NULL DEFAULT 'owner',
+                owner TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CHECK (visibility IN ('public', 'private')),
-                CHECK (editability IN ('editable', 'protected'))
-            )
-        """)
-
-        # Create permission_history table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS permission_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                stable_id TEXT NOT NULL,
-                visibility TEXT NOT NULL,
-                editability TEXT NOT NULL,
-                owner TEXT,
-                changed_by TEXT,
-                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                description TEXT,
-                FOREIGN KEY (stable_id) REFERENCES document_permissions(stable_id)
+                CHECK (visibility IN ('collection', 'owner')),
+                CHECK (editability IN ('collection', 'owner'))
             )
         """)
 
@@ -217,12 +372,9 @@ class Migration002PermissionsDb(Migration):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_stable_id ON document_permissions(stable_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_owner ON document_permissions(owner)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_visibility ON document_permissions(visibility)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_stable_id ON permission_history(stable_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_changed_at ON permission_history(changed_at)")
 
     def downgrade(self, conn: sqlite3.Connection) -> None:
-        """Drop permissions tables."""
-        conn.execute("DROP TABLE IF EXISTS permission_history")
+        """Drop permissions table."""
         conn.execute("DROP TABLE IF EXISTS document_permissions")
 ```
 
@@ -241,91 +393,69 @@ ALL_MIGRATIONS = [
 ]
 ```
 
-### 3. API Models (`fastapi_app/lib/models_permissions.py`)
+### 4. API Models (`fastapi_app/lib/models_permissions.py`)
 
 ```python
-"""Pydantic models for permissions API."""
+"""Pydantic models for permissions API (granular mode only)."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from datetime import datetime
-from typing import Optional
+from typing import Literal
 
 class DocumentPermissionsModel(BaseModel):
     """Document permissions response model."""
     stable_id: str
-    visibility: str  # 'public' | 'private'
-    editability: str  # 'editable' | 'protected'
-    owner: Optional[str] = None
+    visibility: Literal['collection', 'owner']
+    editability: Literal['collection', 'owner']
+    owner: str
     created_at: datetime
     updated_at: datetime
-
-    @field_validator('visibility')
-    @classmethod
-    def validate_visibility(cls, v: str) -> str:
-        if v not in ('public', 'private'):
-            raise ValueError("visibility must be 'public' or 'private'")
-        return v
-
-    @field_validator('editability')
-    @classmethod
-    def validate_editability(cls, v: str) -> str:
-        if v not in ('editable', 'protected'):
-            raise ValueError("editability must be 'editable' or 'protected'")
-        return v
 
 class SetPermissionsRequest(BaseModel):
     """Request to set artifact permissions."""
     stable_id: str
-    visibility: str
-    editability: str
-    owner: Optional[str] = None
-    description: Optional[str] = None
+    visibility: Literal['collection', 'owner']
+    editability: Literal['collection', 'owner']
+    owner: str
 
-class PermissionHistoryEntry(BaseModel):
-    """Single permission history entry."""
-    id: int
-    stable_id: str
-    visibility: str
-    editability: str
-    owner: Optional[str]
-    changed_by: str
-    changed_at: datetime
-    description: Optional[str]
-
-class PermissionHistoryResponse(BaseModel):
-    """Permission history response."""
-    history: list[PermissionHistoryEntry]
+    @field_validator('visibility', 'editability')
+    @classmethod
+    def validate_permission_values(cls, v: str) -> str:
+        if v not in ('collection', 'owner'):
+            raise ValueError(f"Invalid permission value: {v}")
+        return v
 ```
 
-### 4. API Router (`fastapi_app/routers/files_permissions.py`)
+### 5. API Router (`fastapi_app/routers/files_permissions.py`)
 
-Following `fastapi_app/routers/files_locks.py` pattern:
+**Only active in granular mode.**
 
 ```python
 """
 File permissions API router for FastAPI.
 
+Only active when access-control.mode = 'granular'.
+
 Implements permission management endpoints:
 - GET /api/v1/files/permissions/{stable_id} - Get permissions for artifact
 - POST /api/v1/files/set_permissions - Set permissions for artifact
-- GET /api/v1/files/permission_history/{stable_id} - Get permission change history
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 from ..lib.permissions_db import (
     get_document_permissions,
-    set_document_permissions,
-    get_permission_history
+    set_document_permissions
 )
 from ..lib.models_permissions import (
     DocumentPermissionsModel,
-    SetPermissionsRequest,
-    PermissionHistoryResponse
+    SetPermissionsRequest
 )
 from ..lib.dependencies import get_current_user, get_file_repository
 from ..lib.file_repository import FileRepository
-from ..config import get_settings
+from ..lib.config_utils import get_config
+from fastapi_app.config import get_settings
 from ..lib.logging_utils import get_logger
+from ..lib.acl_utils import userHasReviewerRole
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -336,13 +466,35 @@ def get_permissions_endpoint(
     current_user: dict = Depends(get_current_user),
     repo: FileRepository = Depends(get_file_repository)
 ):
-    """Get permissions for an artifact."""
+    """Get permissions for an artifact (granular mode only)."""
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
+
+    if mode != 'granular':
+        raise HTTPException(
+            status_code=400,
+            detail=f"Permissions API only available in granular mode (current: {mode})"
+        )
+
     settings = get_settings()
 
-    # Verify artifact exists
-    # TODO: Need to verify user has access to view this artifact
+    # Get file to find owner
+    file = repo.get_file_by_stable_id(stable_id)
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
 
-    perms = get_document_permissions(stable_id, settings.db_dir, logger)
+    default_visibility = config.get('access-control.default-visibility', default='collection')
+    default_editability = config.get('access-control.default-editability', default='owner')
+
+    perms = get_document_permissions(
+        stable_id,
+        settings.db_dir,
+        logger,
+        default_visibility=default_visibility,
+        default_editability=default_editability,
+        default_owner=file.created_by
+    )
+
     return DocumentPermissionsModel(**perms.__dict__)
 
 @router.post("/set_permissions", response_model=DocumentPermissionsModel)
@@ -351,19 +503,38 @@ def set_permissions_endpoint(
     current_user: dict = Depends(get_current_user),
     repo: FileRepository = Depends(get_file_repository)
 ):
-    """Set permissions for an artifact (owner/admin only)."""
+    """Set permissions for an artifact (owner/reviewer only, granular mode only)."""
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
+
+    if mode != 'granular':
+        raise HTTPException(
+            status_code=400,
+            detail=f"Permissions API only available in granular mode (current: {mode})"
+        )
+
     settings = get_settings()
 
     # Get current permissions
-    current_perms = get_document_permissions(request.stable_id, settings.db_dir, logger)
+    file = repo.get_file_by_stable_id(request.stable_id)
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
 
-    # Check if user can modify permissions
-    # Only owner or admin can modify
-    from ..lib.acl_utils import userIsAdmin
-    if not userIsAdmin(current_user) and current_perms.owner != current_user.get('username'):
+    current_perms = get_document_permissions(
+        request.stable_id,
+        settings.db_dir,
+        logger,
+        default_owner=file.created_by
+    )
+
+    # Check if user can modify permissions (owner or reviewer)
+    is_reviewer = userHasReviewerRole(current_user)
+    is_owner = current_perms.owner == current_user.get('username')
+
+    if not (is_reviewer or is_owner):
         raise HTTPException(
             status_code=403,
-            detail="Only artifact owner or admin can modify permissions"
+            detail="Only artifact owner or reviewer can modify permissions"
         )
 
     # Set new permissions
@@ -372,26 +543,11 @@ def set_permissions_endpoint(
         visibility=request.visibility,
         editability=request.editability,
         owner=request.owner,
-        changed_by=current_user.get('username'),
         db_dir=settings.db_dir,
-        logger=logger,
-        description=request.description
+        logger=logger
     )
 
     return DocumentPermissionsModel(**updated.__dict__)
-
-@router.get("/permission_history/{stable_id}", response_model=PermissionHistoryResponse)
-def get_history_endpoint(
-    stable_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get permission change history for an artifact."""
-    settings = get_settings()
-
-    # TODO: Check if user has access to view this artifact
-
-    history = get_permission_history(stable_id, settings.db_dir, logger)
-    return PermissionHistoryResponse(history=history)
 ```
 
 Register router in `fastapi_app/main.py`:
@@ -401,107 +557,260 @@ from .routers import files_permissions
 app.include_router(files_permissions.router, prefix="/api/v1")
 ```
 
-### 5. Update Access Control Module (`fastapi_app/lib/access_control.py`)
+### 6. Access Control Logic (`fastapi_app/lib/access_control.py`)
 
-Replace metadata-based access checks with database lookups:
+Update to handle three modes:
 
 ```python
-def get_document_permissions_from_db(stable_id: str, db_dir: Path, logger: logging.Logger) -> DocumentPermissions:
-    """Get permissions for an artifact from database."""
-    from .permissions_db import get_document_permissions
-    return get_document_permissions(stable_id, db_dir, logger)
+"""
+Access control logic supporting three modes:
+- role-based: only role restrictions (gold = reviewers only)
+- owner-based: documents editable only by owner
+- granular: database-backed per-document permissions
+"""
 
-# Update check_file_access() to use database instead of metadata
-def check_file_access(file_metadata: Any, user: Optional[Dict], operation: str = 'read') -> bool:
-    """Check if user has access to a file using database permissions."""
-    from fastapi_app.config import get_settings
-    from fastapi_app.lib.logging_utils import get_logger
+from typing import Optional, Dict, Any
+from pathlib import Path
+import logging
+from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.acl_utils import (
+    userHasReviewerRole,
+    userHasAnnotatorRole,
+    isGoldFile,
+    isVersionFile
+)
 
-    settings = get_settings()
-    logger = get_logger(__name__)
+def can_view_document(
+    stable_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    db_dir: Path,
+    logger: logging.Logger
+) -> bool:
+    """
+    Check if user can view document.
 
-    # Get stable_id from file_metadata
-    stable_id = file_metadata.stable_id
+    Assumes user already has collection access.
+    """
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
 
-    # Get permissions from database
-    db_perms = get_document_permissions_from_db(stable_id, settings.db_dir, logger)
+    # Reviewers can always view
+    if userHasReviewerRole(user):
+        return True
 
-    # Convert to legacy DocumentPermissions format
-    permissions = DocumentPermissions(
-        visibility=db_perms.visibility,
-        editability=db_perms.editability,
-        owner=db_perms.owner,
-        status_values=[],
-        change_timestamp=db_perms.updated_at.isoformat() if db_perms.updated_at else None
-    )
+    if mode == 'role-based':
+        # Everyone with collection access can view
+        return True
 
-    # Map operation to access type
-    required_access = 'write' if operation in ['write', 'edit'] else 'read'
+    elif mode == 'owner-based':
+        # Everyone with collection access can view
+        return True
 
-    return AccessControlChecker.check_document_access(permissions, user, required_access)
+    elif mode == 'granular':
+        from fastapi_app.lib.permissions_db import get_document_permissions
+
+        default_visibility = config.get('access-control.default-visibility', default='collection')
+        default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+
+        perms = get_document_permissions(
+            stable_id,
+            db_dir,
+            logger,
+            default_visibility=default_visibility,
+            default_owner=default_owner
+        )
+
+        if perms.visibility == 'collection':
+            return True
+        elif perms.visibility == 'owner':
+            return perms.owner == user.get('username') if user else False
+
+    return True  # Default: allow view
+
+def can_edit_document(
+    stable_id: str,
+    file_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    db_dir: Path,
+    logger: logging.Logger
+) -> bool:
+    """
+    Check if user can edit document.
+
+    Assumes user already has collection access.
+    """
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
+
+    if mode == 'role-based':
+        # Reviewers can always edit in role-based mode
+        if userHasReviewerRole(user):
+            return True
+
+        # Role-based restrictions for file types
+        if isGoldFile(file_id):
+            return userHasReviewerRole(user)
+        if isVersionFile(file_id):
+            return userHasAnnotatorRole(user) or userHasReviewerRole(user)
+        return True
+
+    elif mode == 'owner-based':
+        # Only owner can edit (reviewers cannot edit to prevent accidental overwriting)
+        owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+        return owner == user.get('username') if user and owner else False
+
+    elif mode == 'granular':
+        from fastapi_app.lib.permissions_db import get_document_permissions
+
+        default_editability = config.get('access-control.default-editability', default='owner')
+        default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+
+        perms = get_document_permissions(
+            stable_id,
+            db_dir,
+            logger,
+            default_editability=default_editability,
+            default_owner=default_owner
+        )
+
+        if perms.editability == 'collection':
+            # Reviewers can edit in collection mode
+            if userHasReviewerRole(user):
+                return True
+            # Still apply role-based restrictions for file types
+            if isGoldFile(file_id):
+                return userHasReviewerRole(user)
+            return True
+        elif perms.editability == 'owner':
+            # Only owner can edit (reviewers cannot edit to prevent accidental overwriting)
+            return perms.owner == user.get('username') if user else False
+
+    return False
+
+def can_delete_document(
+    stable_id: str,
+    file_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    db_dir: Path,
+    logger: logging.Logger
+) -> bool:
+    """
+    Check if user can delete document.
+
+    Deletion follows same rules as edit, except:
+    - In owner-based mode, reviewers can delete any document
+    """
+    # Reviewers can always delete
+    if userHasReviewerRole(user):
+        return True
+
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
+
+    if mode == 'owner-based':
+        # Reviewers already handled above
+        # Only owner can delete
+        owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+        return owner == user.get('username') if user and owner else False
+
+    # For other modes, deletion follows edit rules
+    return can_edit_document(stable_id, file_id, file_metadata, user, db_dir, logger)
 ```
 
-### 6. File Operations Integration
-
-Update file operations to set default permissions:
+### 7. File Operations Integration
 
 **`fastapi_app/routers/files_save.py`:**
 
-- When creating new document (new gold or first version), set default permissions
-- Use `set_document_permissions()` with `changed_by=current_user.username`
+Set default permissions when creating new documents (granular mode only):
 
 ```python
 # After creating new file/artifact
-from ..lib.permissions_db import set_document_permissions
+from fastapi_app.lib.config_utils import get_config
 
-# Set default permissions for new artifacts
-set_document_permissions(
-    stable_id=stable_id,
-    visibility='public',
-    editability='protected',
-    owner=current_user.get('username'),
-    changed_by=current_user.get('username'),
-    db_dir=settings.db_dir,
-    logger=logger,
-    description='Initial permissions for new artifact'
-)
+config = get_config()
+mode = config.get('access-control.mode', default='role-based')
+
+if mode == 'granular':
+    from fastapi_app.lib.permissions_db import set_document_permissions
+
+    default_visibility = config.get('access-control.default-visibility', default='collection')
+    default_editability = config.get('access-control.default-editability', default='owner')
+
+    set_document_permissions(
+        stable_id=stable_id,
+        visibility=default_visibility,
+        editability=default_editability,
+        owner=current_user.get('username'),
+        db_dir=settings.db_dir,
+        logger=logger
+    )
 ```
 
 **`fastapi_app/routers/files_delete.py`:**
 
-- When deleting document, optionally delete permissions record
-- Use `delete_document_permissions()`
+Delete permissions when deleting document (granular mode only):
+
+```python
+from fastapi_app.lib.config_utils import get_config
+
+config = get_config()
+mode = config.get('access-control.mode', default='role-based')
+
+if mode == 'granular':
+    from fastapi_app.lib.permissions_db import delete_document_permissions
+    delete_document_permissions(stable_id, settings.db_dir, logger)
+```
 
 **`fastapi_app/routers/files_list.py`:**
 
-- Filter files by permissions using database
-- No longer parse `file_metadata['access_control']`
+Filter files by access control:
 
-### 7. Initialize in Application Startup
+```python
+from fastapi_app.lib.access_control import can_view_document
+
+# After collection filtering
+filtered_files = []
+for file in files_data:
+    if can_view_document(file.stable_id, file, current_user, settings.db_dir, logger):
+        filtered_files.append(file)
+
+files_data = filtered_files
+```
+
+### 8. Initialize in Application Startup
 
 In `fastapi_app/main.py` `lifespan()` function:
 
 ```python
-# Initialize permissions database
-from .lib.permissions_db import init_permissions_db
-permissions_db_path = settings.db_dir / "permissions.db"
-try:
-    init_permissions_db(settings.db_dir, logger)
-    logger.info(f"Permissions database initialized: {permissions_db_path}")
-except Exception as e:
-    logger.error(f"Error initializing permissions database: {e}")
-    raise
+# Initialize permissions database (granular mode only)
+from fastapi_app.lib.config_utils import get_config
+
+config = get_config()
+mode = config.get('access-control.mode', default='role-based')
+
+if mode == 'granular':
+    from fastapi_app.lib.permissions_db import init_permissions_db
+    permissions_db_path = settings.db_dir / "permissions.db"
+    try:
+        init_permissions_db(settings.db_dir, logger)
+        logger.info(f"Permissions database initialized: {permissions_db_path}")
+    except Exception as e:
+        logger.error(f"Error initializing permissions database: {e}")
+        raise
 ```
 
 ## Frontend Implementation
 
 ### 1. API Client Updates (`app/src/modules/api-client-v1.js`)
 
-Auto-generated from FastAPI OpenAPI schema - no manual changes needed after running build.
+Auto-generated from FastAPI OpenAPI schema - no manual changes needed.
 
 ### 2. Plugin Updates (`app/src/plugins/access-control.js`)
 
-Replace TEI XML parsing with API calls:
+Replace TEI XML parsing with mode-aware logic:
 
 **Remove:**
 
@@ -514,37 +823,94 @@ Replace TEI XML parsing with API calls:
 
 ```javascript
 /**
- * Fetches artifact permissions from database via API
+ * Fetches artifact permissions from backend
+ * - granular mode: calls API
+ * - owner-based mode: uses file metadata created_by
+ * - role-based mode: no permissions needed
  * @returns {Promise<DocumentPermissions>}
  */
 async function fetchDocumentPermissions() {
-  const stableId = pluginState.xml // This is the stable_id
+  const stableId = pluginState.xml
+  const mode = await getAccessControlMode()
 
-  const response = await api.files.getPermissions({ stable_id: stableId })
-  return response
+  if (mode === 'granular') {
+    // Fetch from database via API
+    const response = await api.files.getPermissions({ stable_id: stableId })
+    return {
+      visibility: response.visibility,
+      editability: response.editability,
+      owner: response.owner,
+      can_modify: canModifyPermissions(response.owner)
+    }
+  } else if (mode === 'owner-based') {
+    // Use file metadata
+    const fileData = fileselection.getCurrentFileData()
+    return {
+      visibility: 'collection',  // Always collection in owner-based
+      editability: 'owner',       // Always owner in owner-based
+      owner: fileData?.created_by,
+      can_modify: false           // No UI for owner-based
+    }
+  } else {
+    // role-based: no permissions
+    return {
+      visibility: 'collection',
+      editability: 'collection',
+      owner: null,
+      can_modify: false
+    }
+  }
 }
 
 /**
- * Updates artifact permissions via API
+ * Updates artifact permissions via API (granular mode only)
  * @param {string} visibility
  * @param {string} editability
- * @param {string} [owner]
- * @param {string} [description]
  * @returns {Promise<DocumentPermissions>}
  */
-async function updateDocumentPermissions(visibility, editability, owner, description) {
+async function updateDocumentPermissions(visibility, editability) {
   const stableId = pluginState.xml
+  const fileData = fileselection.getCurrentFileData()
 
   const response = await api.files.setPermissions({
     stable_id: stableId,
     visibility,
     editability,
-    owner,
-    description
+    owner: fileData?.created_by  // Owner doesn't change
   })
 
-  // No need to save XML - permissions are in database
-  return response
+  return {
+    visibility: response.visibility,
+    editability: response.editability,
+    owner: response.owner,
+    can_modify: canModifyPermissions(response.owner)
+  }
+}
+
+/**
+ * Gets access control mode from backend config
+ * @returns {Promise<string>}
+ */
+async function getAccessControlMode() {
+  // TODO: Add API endpoint to get config value
+  // For now, could be cached in app state
+  return 'role-based'  // default
+}
+
+/**
+ * Checks if current user can modify permissions
+ * @param {string|null} owner
+ * @returns {boolean}
+ */
+function canModifyPermissions(owner) {
+  const currentUser = authentication.getUser()
+  if (!currentUser) return false
+
+  // Owner or reviewer can modify
+  const isOwner = owner === currentUser.username
+  const isReviewer = userHasReviewerRole(currentUser)
+
+  return isOwner || isReviewer
 }
 ```
 
@@ -552,57 +918,105 @@ async function updateDocumentPermissions(visibility, editability, owner, descrip
 
 - `computeDocumentPermissions()` to use `fetchDocumentPermissions()`
 - `handlePermissionChange()` to use `updateDocumentPermissions()`
-- Remove dependency on `xmleditor.api` for permissions
+- `createStatusDropdown()` → replace with two `status-switch` widgets
 
-### 3. Remove TEI Utilities (`app/src/modules/tei-utils.js`)
+### 3. UI Widgets
 
-Remove functions no longer needed:
+Replace status dropdown with two status switches:
 
-- `ensureRespStmtForUser()` (if only used for permissions)
+```javascript
+/**
+ * Creates the visibility switch widget
+ * @returns {StatusSwitch}
+ */
+function createVisibilitySwitch() {
+  const visibilitySwitch = PanelUtils.createSwitch({
+    label: 'Visibility',
+    checkedText: 'Collection',
+    uncheckedText: 'Owner',
+    checked: true,  // default: collection
+    tooltip: 'Collection = all users with collection access, Owner = document owner only'
+  })
+
+  visibilitySwitch.addEventListener('sl-change', handleVisibilityChange)
+  return visibilitySwitch
+}
+
+/**
+ * Creates the editability switch widget
+ * @returns {StatusSwitch}
+ */
+function createEditabilitySwitch() {
+  const editabilitySwitch = PanelUtils.createSwitch({
+    label: 'Editability',
+    checkedText: 'Collection',
+    uncheckedText: 'Owner',
+    checked: false,  // default: owner
+    tooltip: 'Collection = all users with collection access, Owner = document owner only'
+  })
+
+  editabilitySwitch.addEventListener('sl-change', handleEditabilityChange)
+  return editabilitySwitch
+}
+```
 
 ### 4. State Management
 
-No changes needed - permissions still stored in `currentPermissions` object.
+Update `currentPermissions` object to use new vocabulary:
+
+```javascript
+/** @type {DocumentPermissions} */
+let currentPermissions = {
+    visibility: 'collection',    // 'collection' | 'owner'
+    editability: 'owner',        // 'collection' | 'owner'
+    owner: null,
+    can_modify: false
+}
+```
+
+### 5. Mode-Specific UI Behavior
+
+```javascript
+/**
+ * Updates UI based on access control mode
+ * @param {string} mode - 'role-based' | 'owner-based' | 'granular'
+ */
+function updateUIForMode(mode) {
+  if (mode === 'granular') {
+    // Show permission switches (if user can modify)
+    if (currentPermissions.can_modify) {
+      showPermissionSwitches()
+    } else {
+      showPermissionInfo()
+    }
+  } else if (mode === 'owner-based') {
+    // Show notification if non-owner
+    const currentUser = authentication.getUser()
+    if (currentPermissions.owner && currentPermissions.owner !== currentUser?.username) {
+      notify(
+        `This document is owned by ${currentPermissions.owner}. Create your own version to edit.`,
+        'warning',
+        'exclamation-triangle'
+      )
+    }
+    hidePermissionWidgets()
+  } else {
+    // role-based: hide all permission widgets
+    hidePermissionWidgets()
+  }
+}
+```
 
 ## Testing
 
 ### Backend Tests
-
-**`tests/api/v1/files_permissions.test.js`:**
-
-```javascript
-test('Get default permissions for new document', async () => {
-  // Create new document
-  // Get permissions
-  // Verify defaults: public, protected
-})
-
-test('Set permissions as owner', async () => {
-  // Create document as user1
-  // Set permissions to private
-  // Verify updated
-})
-
-test('Cannot set permissions as non-owner', async () => {
-  // Create document as user1
-  // Try to set permissions as user2
-  // Verify 403 error
-})
-
-test('Get permission history', async () => {
-  // Create document
-  // Change permissions twice
-  // Get history
-  // Verify 3 entries (initial + 2 changes)
-})
-```
 
 **`fastapi_app/lib/migrations/tests/test_migration_002.py`:**
 
 ```python
 def test_migration_creates_tables():
     # Run migration
-    # Verify tables exist
+    # Verify document_permissions table exists
     # Verify indexes exist
 
 def test_migration_is_idempotent():
@@ -610,47 +1024,102 @@ def test_migration_is_idempotent():
     # Verify no errors
 ```
 
-**Unit tests (`tests/api/v1/access_control.test.js`):**
+**`tests/api/v1/files_permissions.test.js`:**
 
-- Test permission checks with database
-- Test default permissions
-- Test permission filtering
+```javascript
+test('Get permissions in granular mode', async () => {
+  // Set mode to granular
+  // Create document
+  // Get permissions
+  // Verify defaults: visibility=collection, editability=owner
+})
+
+test('Set permissions as owner', async () => {
+  // Create document as user1
+  // Set permissions to visibility=owner
+  // Verify updated
+})
+
+test('Cannot set permissions as non-owner non-reviewer', async () => {
+  // Create document as user1
+  // Try to set permissions as user2 (not reviewer)
+  // Verify 403 error
+})
+
+test('Reviewer can set permissions', async () => {
+  // Create document as user1
+  // Set permissions as reviewer
+  // Verify success
+})
+
+test('Permissions API disabled in role-based mode', async () => {
+  // Set mode to role-based
+  // Try to get/set permissions
+  // Verify 400 error
+})
+```
+
+**`tests/api/v1/access_control.test.js`:**
+
+```javascript
+test('Role-based mode: everyone can edit non-gold', async () => {
+  // Set mode to role-based
+  // Create version file
+  // Verify user2 can edit
+})
+
+test('Owner-based mode: only owner can edit', async () => {
+  // Set mode to owner-based
+  // Create file as user1
+  // Verify user2 cannot edit
+  // Verify user1 can edit
+})
+
+test('Granular mode: collection editability allows all', async () => {
+  // Set mode to granular
+  // Create file with editability=collection
+  // Verify user2 can edit
+})
+
+test('Granular mode: owner editability restricts to owner', async () => {
+  // Set mode to granular
+  // Create file with editability=owner
+  // Verify user2 cannot edit
+  // Verify owner can edit
+})
+```
 
 ### Frontend Tests
 
 **`tests/e2e/tests/access-control.spec.js`:**
 
 ```javascript
-test('View permission status', async () => {
-  // Load document
-  // Verify status bar shows permissions
-})
-
-test('Change permissions via dropdown', async () => {
+test('Granular mode: shows permission switches for owner', async () => {
+  // Set mode to granular
   // Load document as owner
-  // Change to private
-  // Verify UI updates
-  // Reload page
-  // Verify permissions persisted
+  // Verify visibility switch shown
+  // Verify editability switch shown
 })
 
-test('Non-owner cannot change permissions', async () => {
-  // Load document as non-owner
-  // Verify dropdown hidden
-  // Verify only permission info shown
+test('Granular mode: change permissions via switches', async () => {
+  // Load document as owner
+  // Toggle visibility switch
+  // Verify API called
+  // Verify state updated
 })
-```
 
-### Integration Tests
+test('Owner-based mode: shows notification for non-owner', async () => {
+  // Set mode to owner-based
+  // Create document as user1
+  // Load as user2
+  // Verify notification shown
+  // Verify editor read-only
+})
 
-**`tests/e2e/tests/access-control-workflow.spec.js`:**
-
-```javascript
-test('Complete permission workflow', async () => {
-  // Create document → verify default permissions (public-protected)
-  // Change to private → verify read-only for other users
-  // Transfer ownership → verify new owner can edit
-  // Delete document → verify permissions deleted
+test('Role-based mode: no permission widgets shown', async () => {
+  // Set mode to role-based
+  // Load document
+  // Verify no permission widgets
 })
 ```
 
@@ -660,79 +1129,83 @@ test('Complete permission workflow', async () => {
 
 **`docs/development/access-control.md`:**
 
+- Add "Access Control Modes" section describing three modes
+- Add "Configuration" section with config keys
 - Update "Architecture" section - remove TEI references
-- Update "Implementation" section - document new API
-- Add "Database Schema" section with table definitions
-- Update "Permission Updates" section - API-based flow
+- Add "Granular Mode Database Schema" section
+- Update "Permission Logic" section with mode-specific rules
 - Remove "TEI XML Storage" section
 - Remove "Permission Parsing" section
-- Update all code examples to use database
-
-**`docs/api/backend-api.json`:**
-
-- Auto-generated from FastAPI OpenAPI schema
+- Update all code examples
 
 ### User-Facing Documentation
 
 **`docs/user-manual/access-control.md`:**
 
-- Remove note about system being disabled
-- Update to reflect database-backed system
-- Update examples and workflows
-- Document default permissions (public-protected)
-- Clarify that permissions are per-document, not per-file
-- All versions/artifacts of a document share permissions
+- Add "Understanding Access Control Modes" section
+- Document mode switching (admin/config task)
+- Document owner-based workflow ("create your own version")
+- Document granular mode UI (visibility/editability switches)
+- Clarify reviewer override privileges
 
 ## Migration Path
 
-**No backward compatibility or data migration needed** - feature has never been used in production.
+**No data migration needed** - feature has never been used in production.
 
 **Cleanup tasks:**
 
 1. Remove unused TEI parsing code from `app/src/plugins/access-control.js`
-2. Ignore `file_metadata['access_control']` field (no data exists)
-3. All documents start fresh with default permissions (public-protected)
-4. Remove TEI `<change>` element handling for permissions
+2. Remove TEI manipulation in `updateDocumentStatus()`
+3. Remove `ensureRespStmtForUser()` if only used for permissions
+4. All documents start with mode-appropriate default behavior
+
+**Mode switching:**
+
+- Changing mode at runtime just changes behavior
+- Existing permissions in database (if any) are ignored in non-granular modes
+- Switching to granular mode: documents get defaults until permissions are set
 
 ## Implementation Steps
 
-1. **Database Layer**
+1. **Configuration & Backend Core**
+   - Add config keys to `config_utils.py`
    - Create `fastapi_app/lib/permissions_db.py`
    - Create migration `m002_permissions_db.py`
-   - Register migration in versions list
-   - Write migration tests in `fastapi_app/lib/migrations/tests/test_migration_002.py`
+   - Update `fastapi_app/lib/access_control.py` with mode logic
+   - Write migration tests
 
-2. **API Layer**
+2. **API Layer (Granular Mode)**
    - Create `fastapi_app/lib/models_permissions.py`
    - Create `fastapi_app/routers/files_permissions.py`
-   - Update `fastapi_app/lib/access_control.py`
-   - Initialize in `main.py` lifespan
-   - Write API tests in `tests/api/v1/files_permissions.test.js`
+   - Initialize permissions DB in `main.py` lifespan (conditional)
+   - Write API tests
 
 3. **File Operations Integration**
-   - Update `files_save.py` - set default permissions for new documents
-   - Update `files_delete.py` - delete permissions on document delete
-   - Update `files_list.py` - use database filtering
+   - Update `files_save.py` - set default permissions (granular mode)
+   - Update `files_delete.py` - delete permissions (granular mode)
+   - Update `files_list.py` - filter by access control (all modes)
    - Write integration tests
 
 4. **Frontend Updates**
-   - Update `access-control.js` plugin to use API
+   - Update `access-control.js` plugin
+   - Replace dropdown with status switches
+   - Add mode detection logic
+   - Implement fetchDocumentPermissions() with mode handling
+   - Implement updateDocumentPermissions() (granular only)
+   - Add owner-based notification
    - Remove TEI parsing code
-   - Add API calls for get/set permissions
-   - Remove TEI utilities if no longer needed
-   - Test in browser
 
 5. **Testing**
-   - Write backend unit tests
-   - Write E2E tests for permission workflows
-   - Test access control enforcement
-   - Verify defaults applied to new documents
+   - Write backend unit tests for all modes
+   - Write E2E tests for mode-specific behavior
+   - Test mode switching
+   - Test reviewer override
 
 6. **Documentation**
    - Update `docs/development/access-control.md`
    - Update `docs/user-manual/access-control.md`
-   - Update API reference (auto-generated)
-   - Add migration notes if needed
+   - Add mode comparison guide
+   - Document configuration
 
 ## File References
 
@@ -744,28 +1217,32 @@ test('Complete permission workflow', async () => {
 - `fastapi_app/lib/migrations/versions/m002_permissions_db.py`
 - `fastapi_app/lib/migrations/tests/test_migration_002.py`
 - `tests/api/v1/files_permissions.test.js`
-- `tests/e2e/tests/access-control-workflow.spec.js`
+- `tests/api/v1/access_control.test.js`
+- `tests/e2e/tests/access-control-modes.spec.js`
 
 **Modified files:**
 
-- `fastapi_app/lib/access_control.py` - Use database instead of metadata
-- `fastapi_app/routers/files_save.py` - Set default permissions for new documents
-- `fastapi_app/routers/files_delete.py` - Delete permissions on document delete
-- `fastapi_app/routers/files_list.py` - Filter by database permissions
-- `fastapi_app/main.py` - Initialize permissions database in lifespan
-- `app/src/plugins/access-control.js` - Use API instead of TEI parsing
-- `app/src/modules/tei-utils.js` - Remove permission-related code if applicable
-- `docs/development/access-control.md` - Update implementation docs
-- `docs/user-manual/access-control.md` - Update user documentation
+- `fastapi_app/lib/config_utils.py` - Add config keys
+- `fastapi_app/lib/access_control.py` - Mode-aware logic
+- `fastapi_app/routers/files_save.py` - Set default permissions (granular)
+- `fastapi_app/routers/files_delete.py` - Delete permissions (granular)
+- `fastapi_app/routers/files_list.py` - Filter by access control
+- `fastapi_app/main.py` - Initialize permissions DB (conditional)
+- `app/src/plugins/access-control.js` - Mode-aware UI and API calls
+- `app/src/modules/tei-utils.js` - Remove permission-related code
+- `docs/development/access-control.md` - Document modes and implementation
+- `docs/user-manual/access-control.md` - User guide for modes
 - `fastapi_app/lib/migrations/versions/__init__.py` - Register migration
 
 ## Key Design Decisions
 
-1. **Permissions keyed by `stable_id`** - Each artifact has its own permissions (not grouped by doc_id)
-2. **Default: public-protected** - New artifacts are visible to all, editable by owner only
-3. **Separate history table** - Audit trail without cluttering main permissions table
-4. **Owner can be NULL** - For public-editable documents (though default sets owner)
-5. **Database-first** - Source of truth is database, not TEI content
-6. **No metadata caching** - Direct database queries for permission checks (fast with indexes)
-7. **Permission API separate from file API** - Clean separation of concerns
-8. **History preserved on delete** - Keep audit trail even when permissions deleted
+1. **Three distinct modes** - Clear separation of concerns, no mixing
+2. **Application-wide mode** - Cannot be set per collection (simplicity)
+3. **Granular uses database** - Owner-based uses file metadata only
+4. **Reviewer override limited** - Reviewers can delete/modify permissions but cannot edit non-owned documents when `editability: 'owner'` (prevents accidental overwriting)
+5. **Collection access is baseline** - No "public" beyond collection membership
+6. **Two permission levels** - 'collection' and 'owner' (not 'public/private')
+7. **Owner always set** - Tracked in file metadata `created_by` field
+8. **No permission history** - Audit trail not required
+9. **Status switches for UI** - Simple on/off toggles (granular mode)
+10. **Mode switching is clean** - Just hide/show UI, permissions ignored in other modes
