@@ -178,12 +178,12 @@ class LocalSyncPlugin(Plugin):
                     fs_map[key] = (path, content, timestamp)
                 else:
                     results["errors"].append({
-                        "fileref": f"filesystem:{path.name}",
+                        "fileref": f"filesystem:{path}",
                         "error": "No fileref found in TEI document"
                     })
             except Exception as e:
                 results["errors"].append({
-                    "fileref": f"filesystem:{path.name}",
+                    "fileref": f"filesystem:{path}",
                     "error": f"Error reading filesystem document: {str(e)}"
                 })
 
