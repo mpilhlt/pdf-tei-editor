@@ -13,7 +13,7 @@ import { app } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
   client, logger, dialog, authentication,
-  xmlEditor, sync, accessControl, testLog, fileselection, config
+  xmlEditor, sync, accessControl, testLog, fileselection, config, services
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
@@ -22,6 +22,7 @@ import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { encodeFilename, decodeFilename } from '../modules/utils.js'
 
 /**
  * plugin API
@@ -97,6 +98,7 @@ let currentState = null
  * Dialog for editing file metadata
  * @typedef {object} editMetadataDialogPart
  * @property {SlInput} docTitle - Document title input (readonly)
+ * @property {SlInput} docId - Document ID input (editable for gold files by reviewers)
  * @property {SlInput} label - Extraction label input
  * @property {SlInput} source - Source input
  * @property {SlButton} submit - Submit button
@@ -774,42 +776,91 @@ async function editFileMetadata(state) {
     return
   }
 
+  // Get file metadata to populate doc_id and determine if editable
+  const fileData = getFileDataById(state.xml)
+  const currentDocId = fileData?.file?.doc_id || ""
+  const isGold = isGoldFile(state.xml)
+  const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
+
   // Extract current values from TEI header
   const titleEl = xmlDoc.querySelector('teiHeader fileDesc titleStmt title')
   const editionTitleEl = xmlDoc.querySelector('teiHeader fileDesc editionStmt edition title')
   const biblEl = xmlDoc.querySelector('teiHeader fileDesc sourceDesc bibl')
 
-  // Pre-fill form with current values from TEI header
+  // Pre-fill form with current values from TEI header and file metadata
   metadataDlg.docTitle.value = titleEl?.textContent || ""
+  metadataDlg.docId.value = currentDocId
   metadataDlg.label.value = editionTitleEl?.textContent || ""
   metadataDlg.source.value = biblEl?.textContent || ""
 
-  try {
-    // Wait for dialog to be fully visible (attach listener before showing)
-    const dialogShown = new Promise(resolve => metadataDlg.addEventListener('sl-after-show', resolve, { once: true }))
-    metadataDlg.show()
-    await dialogShown
-    await new Promise((resolve, reject) => {
-      metadataDlg.submit.addEventListener('click', resolve, { once: true })
-      metadataDlg.cancel.addEventListener('click', reject, { once: true })
-      // Only reject on dialog hide, not on nested component events
-      const handleHide = (e) => {
-        if (e.target === metadataDlg) {
-          reject()
+  // Enable doc_id editing only for gold files by reviewers
+  metadataDlg.docId.disabled = !(isGold && isReviewer)
+
+  let updatedDocId = ""
+  let updatedLabel = ""
+  let updatedSource = ""
+  let validationPassed = false
+
+  while (!validationPassed) {
+    try {
+      // Wait for dialog to be fully visible (attach listener before showing)
+      const dialogShown = new Promise(resolve => metadataDlg.addEventListener('sl-after-show', resolve, { once: true }))
+      metadataDlg.show()
+      await dialogShown
+      await new Promise((resolve, reject) => {
+        metadataDlg.submit.addEventListener('click', resolve, { once: true })
+        metadataDlg.cancel.addEventListener('click', reject, { once: true })
+        // Only reject on dialog hide, not on nested component events
+        const handleHide = (e) => {
+          if (e.target === metadataDlg) {
+            reject()
+          }
+        }
+        metadataDlg.addEventListener('sl-hide', handleHide, { once: true })
+      })
+    } catch (e) {
+      console.warn("User cancelled")
+      return
+    } finally {
+      metadataDlg.hide()
+    }
+
+    // Gather updated values
+    updatedDocId = metadataDlg.docId.value.trim()
+    updatedLabel = metadataDlg.label.value.trim()
+    updatedSource = metadataDlg.source.value.trim()
+
+    // Validate doc_id if it changed and user has permission to edit it
+    if (updatedDocId !== currentDocId && isGold && isReviewer) {
+      // Check if the input needs encoding by doing encode(decode(input))
+      // This makes the check idempotent - if already encoded, it won't change
+      const decoded = decodeFilename(updatedDocId)
+      const encoded = encodeFilename(decoded)
+
+      // If encode(decode(input)) differs from input, the input has unsafe characters
+      if (encoded !== updatedDocId) {
+        const useEncoded = confirm(
+          `The document ID contains characters that need to be encoded for filesystem compatibility.\n\n` +
+          `Entered: ${updatedDocId}\n` +
+          `Encoded: ${encoded}\n\n` +
+          `Use the encoded version?`
+        )
+
+        if (useEncoded) {
+          // Update the field with encoded version and continue with validation loop
+          metadataDlg.docId.value = encoded
+          updatedDocId = encoded
+          continue
+        } else {
+          // User wants to re-enter, show dialog again
+          continue
         }
       }
-      metadataDlg.addEventListener('sl-hide', handleHide, { once: true })
-    })
-  } catch (e) {
-    console.warn("User cancelled")
-    return
-  } finally {
-    metadataDlg.hide()
-  }
+    }
 
-  // Gather updated values
-  const updatedLabel = metadataDlg.label.value.trim()
-  const updatedSource = metadataDlg.source.value.trim()
+    // Validation passed, exit loop
+    validationPassed = true
+  }
 
   ui.toolbar.documentActions.editMetadata.disabled = true
   try {
@@ -879,10 +930,29 @@ async function editFileMetadata(state) {
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
-    // Reload file data to reflect changes (label will be updated automatically by backend)
+    // Update doc_id if changed and user has permission
+    let docIdUpdated = false
+    if (updatedDocId !== currentDocId && isGold && isReviewer) {
+      try {
+        await client.apiClient.filesDocId(state.xml, { doc_id: updatedDocId })
+        docIdUpdated = true
+        notify("File metadata and document ID updated successfully")
+      } catch (docIdError) {
+        console.error("Failed to update document ID:", docIdError)
+        notify("File metadata updated, but failed to update document ID", "warning")
+      }
+    } else {
+      notify("File metadata updated successfully")
+    }
+
+    // Reload file data to reflect changes (label and doc_id will be updated automatically by backend)
     await fileselection.reload({refresh: true})
 
-    notify("File metadata updated successfully")
+    // If doc_id was updated, reload the document to show the updated fileref in the editor
+    // TODO this brute-force update could be replaced by a node-level update that is broadcast to all clients
+    if (docIdUpdated) {
+      await services.load({xml: state.xml})
+    }
 
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))

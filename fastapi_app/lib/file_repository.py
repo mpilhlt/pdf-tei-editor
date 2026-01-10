@@ -1142,6 +1142,117 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Updated metadata for file {stable_id}: {updates}")
 
+    def update_doc_id(
+        self,
+        stable_id: str,
+        new_doc_id: str,
+        file_storage=None
+    ) -> None:
+        """
+        Update doc_id for all files belonging to the same document.
+
+        This updates the doc_id for:
+        - The source PDF file
+        - All artifact files (TEI, variants, etc.) associated with the document
+        - The fileref in all TEI XML files
+
+        Args:
+            stable_id: The stable_id of the gold file to update
+            new_doc_id: New document ID value
+            file_storage: Optional FileStorage instance for updating XML content
+
+        Raises:
+            ValueError: If file not found, file is not gold standard, or new_doc_id is empty
+            sqlite3.Error: If database operation fails
+        """
+        if not new_doc_id:
+            raise ValueError("new_doc_id cannot be empty")
+
+        # Get the file to verify it's a gold standard
+        file = self.get_file_by_stable_id(stable_id)
+        if not file:
+            raise ValueError(f"File not found: {stable_id}")
+
+        if not file.is_gold_standard:
+            raise ValueError(f"File {stable_id} is not a gold standard file")
+
+        old_doc_id = file.doc_id
+        if not old_doc_id:
+            raise ValueError(f"File {stable_id} has no doc_id to update")
+
+        # Get all TEI files that need fileref updates
+        tei_files = []
+        if file_storage:
+            from ..lib.tei_utils import update_fileref_in_xml
+
+            # Query all TEI files with this doc_id
+            query_tei = """
+                SELECT id, stable_id, file_type
+                FROM files
+                WHERE doc_id = ? AND file_type = 'tei' AND deleted = 0
+            """
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query_tei, (old_doc_id,))
+                tei_files = cursor.fetchall()
+
+            # Update fileref in each TEI file
+            for tei_file in tei_files:
+                file_id, file_stable_id, file_type = tei_file
+                try:
+                    # Read XML content
+                    xml_content = file_storage.read_file(file_id, file_type)
+                    if xml_content:
+                        # Update fileref
+                        updated_xml = update_fileref_in_xml(xml_content, new_doc_id)
+
+                        # Save updated XML if it changed
+                        xml_to_compare = xml_content.decode('utf-8') if isinstance(xml_content, bytes) else xml_content
+                        if updated_xml != xml_to_compare:
+                            new_hash, _ = file_storage.save_file(
+                                updated_xml.encode('utf-8') if isinstance(updated_xml, str) else updated_xml,
+                                file_type,
+                                increment_ref=False
+                            )
+
+                            # Update file record if hash changed
+                            if new_hash != file_id:
+                                update_query = """
+                                    UPDATE files
+                                    SET id = ?,
+                                        local_modified_at = CURRENT_TIMESTAMP,
+                                        updated_at = CURRENT_TIMESTAMP
+                                    WHERE id = ? AND deleted = 0
+                                """
+                                with self.db.transaction() as update_conn:
+                                    update_cursor = update_conn.cursor()
+                                    update_cursor.execute(update_query, (new_hash, file_id))
+
+                            if self.logger:
+                                self.logger.debug(f"Updated fileref in {file_stable_id}")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Failed to update fileref in {file_stable_id}: {e}")
+
+        # Update all files with the same doc_id
+        query = """
+            UPDATE files
+            SET doc_id = ?,
+                local_modified_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE doc_id = ? AND deleted = 0
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (new_doc_id, old_doc_id))
+
+            if self.logger:
+                self.logger.info(
+                    f"Updated doc_id from '{old_doc_id}' to '{new_doc_id}' "
+                    f"for {cursor.rowcount} files"
+                )
+
     def set_gold_standard(
         self,
         stable_id: str,
