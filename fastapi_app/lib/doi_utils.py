@@ -279,7 +279,7 @@ def is_filename_encoded(filename: str) -> bool:
 
 def encode_filename(doc_id: str) -> str:
     """
-    Encode a document ID (e.g., DOI) to a filesystem-safe filename.
+    Encode a document ID candidate (e.g., DOI) to a filesystem-safe filename.
 
     Encoding rules:
     - Forward slashes (/) → double underscore (__)
