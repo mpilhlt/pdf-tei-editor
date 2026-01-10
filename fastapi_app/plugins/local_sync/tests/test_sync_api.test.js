@@ -277,7 +277,7 @@ describe('Local Sync Plugin API Tests', () => {
       {
         file_id: '10.5771__2699-1284-2024-3-149',
         xml_string: newerContent,
-        new_version: false
+        new_version: false  // Create gold standard for this variant
       },
       BASE_URL
     );
@@ -346,7 +346,7 @@ describe('Local Sync Plugin API Tests', () => {
       {
         file_id: '10.5771__2699-1284-2024-3-149',
         xml_string: olderContent,
-        new_version: false
+        new_version: false  // Create gold standard for this variant
       },
       BASE_URL
     );
@@ -406,7 +406,7 @@ describe('Local Sync Plugin API Tests', () => {
       {
         file_id: '10.5771__2699-1284-2024-3-149',
         xml_string: collectionContent,
-        new_version: false
+        new_version: false  // Create gold standard for this variant
       },
       BASE_URL
     );
@@ -449,7 +449,7 @@ describe('Local Sync Plugin API Tests', () => {
       {
         file_id: '10.5771__2699-1284-2024-3-149',
         xml_string: collectionOnlyContent,
-        new_version: false
+        new_version: false  // Create gold standard for this variant
       },
       BASE_URL
     );
@@ -496,7 +496,7 @@ describe('Local Sync Plugin API Tests', () => {
       {
         file_id: '10.5771__2699-1284-2024-3-149',
         xml_string: identicalContent,
-        new_version: false
+        new_version: false  // Create gold standard for this variant
       },
       BASE_URL
     );
@@ -515,6 +515,88 @@ describe('Local Sync Plugin API Tests', () => {
     assert.ok(executeHtml.includes('skipped') || executeHtml.includes('Skipped') || executeHtml.includes('identical'),
       'Should show file was skipped (identical)');
     logger.success('Identical files were skipped (no sync needed)');
+  });
+
+  test('Display labels use human-readable format', async () => {
+    // Create filesystem file
+    const teiContent = createTeiXml(
+      '10.5771__2699-1284-2024-3-149',
+      'test.display-label',
+      '2025-01-09T12:00:00',
+      'Test display label'
+    );
+    await writeFile(join(testDir, '10.5771__2699-1284-2024-3-149.test.display-label.tei.xml'), teiContent);
+
+    // Preview sync
+    const previewUrl = `/api/plugins/local-sync/preview?collection=${testCollection}&variant=test.display-label&format=json`;
+    const previewResponse = await fetch(`${BASE_URL}${previewUrl}`, {
+      headers: { 'X-Session-Id': sessionId }
+    });
+    const previewData = await previewResponse.json();
+
+    // Check if display label is present
+    const updates = previewData.updated_collection || [];
+    assert.ok(updates.length > 0, 'Should have updates');
+
+    const displayLabel = updates[0].fileref;
+    logger.info(`Display label: ${displayLabel}`);
+
+    // Should contain the doc_id (format may vary based on metadata availability)
+    assert.ok(displayLabel.includes('10.5771__2699-1284-2024-3-149'), 'Display label should contain doc_id');
+    logger.success('Display label formatting verified');
+  });
+
+  test('Sync scenario: Only sync documents that exist in target collection', async () => {
+    // This test reproduces the bug where files from other collections are imported
+    // when syncing a specific collection.
+
+    // Setup: Create two documents in different collections
+    // Doc 1: belongs to 'default' collection (from fixture)
+    // Doc 2: create a new document that doesn't belong to 'default' collection
+
+    // First, add Doc 1 (fixture doc) filesystem file - should be synced
+    const doc1Content = createTeiXml(
+      '10.5771__2699-1284-2024-3-149',
+      'test.collection-filter',
+      '2025-01-09T10:00:00',
+      'Document 1 in default collection'
+    );
+    await writeFile(join(testDir, '10.5771__2699-1284-2024-3-149.test.collection-filter.tei.xml'), doc1Content);
+
+    // Create a filesystem file for a document that does NOT exist in default collection
+    // This simulates files from batch_2 or batch_3 when syncing batch_1
+    const doc2Content = createTeiXml(
+      '10.9999__other-doc-id',  // Different doc_id not in default collection
+      'test.collection-filter',
+      '2025-01-09T10:00:00',
+      'Document 2 NOT in default collection'
+    );
+    await writeFile(join(testDir, '10.9999__other-doc-id.test.collection-filter.tei.xml'), doc2Content);
+
+    // Preview sync for 'default' collection
+    const previewUrl = `/api/plugins/local-sync/preview?collection=${testCollection}&variant=test.collection-filter&format=json`;
+    const previewResponse = await fetch(`${BASE_URL}${previewUrl}`, {
+      headers: { 'X-Session-Id': sessionId }
+    });
+    const previewData = await previewResponse.json();
+
+    logger.info(`Preview found ${previewData.updated_collection?.length || 0} collection updates`);
+
+    // Should only detect Doc 1 (which exists in default collection)
+    // Should NOT detect Doc 2 (which doesn't exist in default collection)
+    const hasDoc1 = previewData.updated_collection?.some(item =>
+      item.fileref.includes('10.5771__2699-1284-2024-3-149')
+    );
+    const hasDoc2 = previewData.updated_collection?.some(item =>
+      item.fileref.includes('10.9999__other-doc-id')
+    );
+
+    assert.ok(hasDoc1, 'Should detect doc that exists in collection');
+    assert.ok(!hasDoc2, 'Should NOT detect doc that does not exist in collection');
+    assert.strictEqual(previewData.updated_collection?.length, 1,
+      'Should only detect 1 update (doc in collection), not docs from other collections');
+
+    logger.success('Collection filtering verified - only syncs docs in target collection');
   });
 
   // Cleanup

@@ -135,7 +135,23 @@ The plugin displays an HTML report with:
 - **Updated collection** (filesystem was newer)
 - **Errors** (with details)
 
-Each section lists affected documents with their fileref and timestamps.
+### Display Labels
+
+Documents in the sync report are shown with human-readable labels in the format:
+
+```
+Lastname (Year) [doc_id:variant]
+```
+
+For example: `Smith (2024) [10.5771__2699-1284-2024-3-149:grobid.training.segmentation]`
+
+The label is automatically generated from PDF metadata:
+
+- **Lastname**: Last name of the first author
+- **Year**: Publication year extracted from the date field
+- **doc_id:variant**: Document identifier and variant for precise reference
+
+If metadata is not available, the label falls back to just the doc_id and variant.
 
 ## Backup Files
 
