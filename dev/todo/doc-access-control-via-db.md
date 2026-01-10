@@ -101,7 +101,7 @@ access-control.default-editability: 'collection' | 'owner'      # default: 'owne
 - `visibility: 'collection'` → visible to anyone with collection access
 - `visibility: 'owner'` → visible only to owner (+ reviewers)
 - `editability: 'collection'` → editable by anyone with collection access
-- `editability: 'owner'` → editable only by owner (+ reviewers)
+- `editability: 'owner'` → editable only by owner
 
 **Rules:**
 
