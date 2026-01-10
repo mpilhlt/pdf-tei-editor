@@ -135,7 +135,7 @@ async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = 
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {object} [body] - Request body for POST/PUT requests
  * @param {string} [baseUrl] - Optional base URL override
- * @returns {Promise<object>} JSON response
+ * @returns {Promise<object|string>} JSON response or text for non-JSON content types
  */
 async function authenticatedApiCall(sessionId, endpoint, method = 'GET', body = null, baseUrl = null) {
   const response = await authenticatedRequest(sessionId, endpoint, method, body, baseUrl);
@@ -145,6 +145,15 @@ async function authenticatedApiCall(sessionId, endpoint, method = 'GET', body = 
     throw new Error(`API call failed: ${method} ${endpoint} - ${response.status} ${response.statusText} - ${errorData.detail || errorData.error || 'Unknown error'}`);
   }
 
+  // Check content type to determine how to parse response
+  const contentType = response.headers.get('content-type') || '';
+
+  // Return text for XML and other non-JSON content types
+  if (contentType.includes('xml') || contentType.includes('text/plain')) {
+    return await response.text();
+  }
+
+  // Default to JSON
   return await response.json();
 }
 

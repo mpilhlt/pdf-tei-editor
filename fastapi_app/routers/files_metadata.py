@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ..lib.dependencies import (
     get_file_repository,
+    get_file_storage,
     require_authenticated_user,
     require_admin_user,
 )
@@ -205,3 +206,88 @@ async def set_gold_standard(
     except Exception as e:
         logger_inst.error(f"Failed to set gold standard: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to set gold standard: {str(e)}")
+
+
+class UpdateDocIdRequest(BaseModel):
+    """Request body for updating document ID."""
+    doc_id: str
+
+
+@router.patch("/{stable_id}/doc-id")
+async def update_doc_id(
+    stable_id: str,
+    request: UpdateDocIdRequest,
+    user: dict = Depends(require_authenticated_user),
+    file_repo: FileRepository = Depends(get_file_repository),
+    file_storage = Depends(get_file_storage)
+):
+    """Update document ID for all files belonging to a document.
+
+    Only users with reviewer or admin role can update doc_id.
+    Only gold standard files can have their doc_id updated.
+    Updates doc_id for all files (PDF and artifacts) with the same doc_id.
+    Also updates the fileref in all TEI XML files.
+
+    Args:
+        stable_id: The stable_id of the gold file
+        request: Request body with new doc_id
+        user: Authenticated user
+        file_repo: File repository instance
+        file_storage: File storage instance
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException: If file not found, not gold standard, user doesn't have access, or lacks reviewer role
+    """
+    logger_inst = get_logger(__name__)
+    settings = get_settings()
+
+    # Check if user has reviewer role
+    user_roles = user.get('roles', [])
+    if not any(role in ['admin', 'reviewer'] for role in user_roles):
+        raise HTTPException(
+            status_code=403,
+            detail="Only reviewers and admins can update document ID"
+        )
+
+    # Get file
+    file = file_repo.get_file_by_stable_id(stable_id)
+    if not file:
+        raise HTTPException(status_code=404, detail=f"File not found: {stable_id}")
+
+    # Check if file is gold standard
+    if not file.is_gold_standard:
+        raise HTTPException(
+            status_code=400,
+            detail="Only gold standard files can have their document ID updated"
+        )
+
+    # Check access control
+    user_has_access = False
+    for collection_id in file.doc_collections or []:
+        if user_has_collection_access(user, collection_id, settings.db_dir):
+            user_has_access = True
+            break
+
+    if not user_has_access:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to modify this file"
+        )
+
+    # Update doc_id
+    try:
+        file_repo.update_doc_id(stable_id, request.doc_id, file_storage)
+        logger_inst.info(
+            f"Updated doc_id to '{request.doc_id}' for document (stable_id: {stable_id}) "
+            f"by user {user.get('username')}"
+        )
+        return {"message": "Document ID updated successfully"}
+    except ValueError as e:
+        logger_inst.warning(f"Failed to update doc_id: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger_inst.error(f"Failed to update doc_id: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update document ID: {str(e)}")

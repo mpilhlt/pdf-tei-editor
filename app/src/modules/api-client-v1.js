@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-09T15:38:20.141Z
+ * Generated from OpenAPI schema at 2026-01-10T21:52:53.476Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -420,6 +420,11 @@
  * @property {number=} errors
  * @property {number=} new_version
  * @property {number=} duration_ms
+ */
+
+/**
+ * @typedef {Object} UpdateDocIdRequest
+ * @property {string} doc_id
  */
 
 /**
@@ -1382,6 +1387,32 @@ export class ApiClientV1 {
   async filesGoldStandard(stable_id) {
     const endpoint = `/files/${stable_id}/gold-standard`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Update document ID for all files belonging to a document.
+   * Only users with reviewer or admin role can update doc_id.
+   * Only gold standard files can have their doc_id updated.
+   * Updates doc_id for all files (PDF and artifacts) with the same doc_id.
+   * Also updates the fileref in all TEI XML files.
+   * Args:
+   * stable_id: The stable_id of the gold file
+   * request: Request body with new doc_id
+   * user: Authenticated user
+   * file_repo: File repository instance
+   * file_storage: File storage instance
+   * Returns:
+   * Success message
+   * Raises:
+   * HTTPException: If file not found, not gold standard, user doesn't have access, or lacks reviewer role
+   *
+   * @param {string} stable_id
+   * @param {UpdateDocIdRequest} requestBody
+   * @returns {Promise<any>}
+   */
+  async filesDocId(stable_id, requestBody) {
+    const endpoint = `/files/${stable_id}/doc-id`
+    return this.callApi(endpoint, 'PATCH', requestBody);
   }
 
   /**
