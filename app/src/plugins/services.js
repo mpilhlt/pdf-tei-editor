@@ -8,7 +8,7 @@
  * @import { SlButton } from '../ui.js'
  */
 
-import { app, endpoints as ep } from '../app.js'
+import { app, endpoints as ep, services } from '../app.js'
 import ui from '../ui.js'
 import {
   client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, sse
@@ -101,14 +101,15 @@ async function install(state) {
         await client.acquireLock(releasedStableId);
         logger.info(`Successfully acquired lock for ${releasedStableId}`);
 
-        // Update state to allow editing
-        await app.updateState({ editorReadOnly: false });
-
+        // Update state to allow editing        
         notify(
           'You can now edit this document',
           'success',
           'unlock'
         );
+        await services.load({xml: releasedStableId})
+        await app.updateState({ editorReadOnly: false });
+
       } catch (error) {
         if (error instanceof client.LockedError) {
           logger.debug(`Lock already acquired by another client for ${releasedStableId}`);
