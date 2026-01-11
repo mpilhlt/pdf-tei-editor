@@ -14,11 +14,12 @@
 import AuthenticationPlugin from './plugins/authentication.js'
 import BackendPluginsPlugin from './plugins/backend-plugins.js'
 import FiledataPlugin from './plugins/filedata.js'
+import HelpPlugin from './plugins/help.js'
 import LoggerPlugin from './plugins/logger.js'
 import { logLevel} from './plugins/logger.js'
 import UserAccountPlugin from './plugins/user-account.js'
 
-// legacy plugins
+// object-based plugins
 import { plugin as configPlugin, api as config } from './plugins/config.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
 import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
@@ -60,6 +61,9 @@ const plugins = [
   dialogPlugin,
   toolbarPlugin,
 
+  // Help plugin (must come before info plugin which depends on it)
+  HelpPlugin,
+
   // Toolbar menu items (order matters - determines menu item order)
   infoPlugin,          // User Manual (first)
   FiledataPlugin,      // Garbage Collection (second, admin only)
@@ -95,10 +99,11 @@ export default plugins
 export {
   // class-based plugins
   AuthenticationPlugin,
+  HelpPlugin,
   UserAccountPlugin,
   LoggerPlugin,
 
-  // legacy plugin APIs
+  // object plugin APIs
   logLevel,
   config,
   urlHash,
