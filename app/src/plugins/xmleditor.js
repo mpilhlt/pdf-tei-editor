@@ -57,9 +57,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {StatusText} teiHeaderLabel - TEI header label (from tei-tools plugin)
- * @property {StatusSwitch} teiHeaderToggleWidget - TEI header visibility toggle widget (from tei-tools plugin)
- * @property {StatusButton} revisionHistoryBtn - Revision history button (from tei-tools plugin)
+ * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -98,6 +96,22 @@ let cursorPositionWidget;
 /** @type {StatusText} */
 let indentationStatusWidget;
 
+/**
+ * Get line wrapping preference from localStorage
+ * @returns {boolean} Line wrapping enabled state (defaults to true)
+ */
+function getLineWrappingPreference() {
+  const stored = localStorage.getItem('xmleditor.lineWrapping')
+  return stored === null ? true : stored === 'true'
+}
+
+/**
+ * Set line wrapping preference in localStorage
+ * @param {boolean} enabled - Line wrapping enabled state
+ */
+function setLineWrappingPreference(enabled) {
+  localStorage.setItem('xmleditor.lineWrapping', String(enabled))
+}
 
 /**
  * component plugin
@@ -188,6 +202,10 @@ async function install(state) {
   indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget
   cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget
 
+  // Initialize line wrapping switch from stored preference
+  const lineWrappingEnabled = getLineWrappingPreference()
+  ui.xmlEditor.statusbar.lineWrappingSwitch.checked = lineWrappingEnabled
+
   // Attach event listeners to toolbar buttons
   ui.xmlEditor.toolbar.prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
   ui.xmlEditor.toolbar.nextDiffBtn.addEventListener('widget-click', () => xmlEditor.goToNextDiff())
@@ -262,8 +280,17 @@ async function install(state) {
     testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
     xmlEditor.whenReady().then(() => {
-      xmlEditor.setLineWrapping(true)
+      // Apply user's line wrapping preference after XML is loaded
+      xmlEditor.setLineWrapping(getLineWrappingPreference())
     })
+  })
+
+  // Add change handler for line wrapping toggle
+  ui.xmlEditor.statusbar.lineWrappingSwitch.addEventListener('widget-change', (e) => {
+    const enabled = e.detail.checked
+    setLineWrappingPreference(enabled)
+    xmlEditor.setLineWrapping(enabled)
+    logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`)
   })
 }
 
@@ -354,7 +381,8 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
 
-  [readOnlyStatusWidget, cursorPositionWidget, indentationStatusWidget]
+  [readOnlyStatusWidget, cursorPositionWidget,
+    indentationStatusWidget, ui.xmlEditor.statusbar.lineWrappingSwitch]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
