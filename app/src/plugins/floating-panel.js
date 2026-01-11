@@ -1,3 +1,6 @@
+// Broken and hidden by default
+// TODO Remove completely
+
 /** 
  * @import { ApplicationState } from '../state.js'
  * @import { UIPart } from '../ui.js'
@@ -158,6 +161,9 @@ async function install(state) {
 
   // Start with floating panel hidden
   api.hide()
+
+  /// ============= DISABLED =================
+  floatingPanelToggle.style.display = "none"
 }
 
 /**
