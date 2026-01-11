@@ -231,3 +231,30 @@ Reference from `status-switch.js`:
 
 - `app/src/templates/xmleditor-statusbar.html` - Add switch widget
 - `app/src/plugins/xmleditor.js` - Add toggle logic and state management
+
+---
+
+## Implementation Summary
+
+The line wrapping toggle has been successfully implemented. All planned changes were completed:
+
+### Template Changes
+- Added `<status-switch>` widget to `xmleditor-statusbar.html` with "Wrap" label, checked by default, size small
+
+### Plugin Changes (`xmleditor.js`)
+- Added `StatusSwitch` type import
+- Updated `xmlEditorStatusbarPart` typedef to include `lineWrappingSwitch` property
+- Added localStorage helper functions:
+  - `getLineWrappingPreference()` - Retrieves preference with default value `true`
+  - `setLineWrappingPreference(enabled)` - Persists preference to localStorage
+- Initialized switch checked state from localStorage in `install()` (lines 216-218)
+- Added `widget-change` event listener that updates localStorage and calls `xmlEditor.setLineWrapping()` (lines 318-324)
+- Updated line wrapping initialization in `editorAfterLoad` event to use `getLineWrappingPreference()` instead of hardcoded `true` (line 295)
+- Added switch to widget visibility logic in `update()` function (line 415)
+
+### Behavior
+- Switch appears in statusbar only when XML document is loaded
+- Preference persists across page reloads and browser sessions via localStorage
+- Default state is enabled (checked)
+- Toggle immediately applies wrapping change to editor
+- Preference stored under key `pdf-tei-editor.xmleditor.lineWrapping`
