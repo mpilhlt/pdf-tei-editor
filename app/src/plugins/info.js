@@ -12,7 +12,7 @@
 import ui, { updateUi } from '../ui.js'
 import { SlButton } from '../ui.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { dialog, logger, config } from '../app.js'
+import { dialog, logger, config, helpPlugin } from '../app.js'
 import markdownit from 'markdown-it'
 
 /**
@@ -33,7 +33,7 @@ const api = {
  */
 const plugin = {
   name: "info",
-  deps: ['authentication', 'toolbar'],
+  deps: ['authentication', 'toolbar', 'help'],
   install
 }
 
@@ -200,7 +200,14 @@ async function install(state) {
 
   // Add menu item event listener
   ui.toolbar.toolbarMenu.menu.infoMenuItem.addEventListener("click", () => api.open())
-  
+
+  // Register topic with help plugin
+  helpPlugin.registerTopic(
+    'User Manual',
+    'book',
+    () => api.open()
+  )
+
   // configure markdown parser
   const options = {
     html: true,
@@ -208,7 +215,7 @@ async function install(state) {
     typographer: true
   }
   md = markdownit(options);
-  
+
   // @ts-ignore
   window.appInfo = api
 }

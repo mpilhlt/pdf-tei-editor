@@ -1,0 +1,84 @@
+<style>
+  /* Help icon wrapper */
+  div[name="helpIcon"] {
+    position: absolute;
+    bottom: 30px;
+    right: 20px;
+    z-index: var(--sl-z-index-dialog);
+    display: none;
+    pointer-events: auto;
+  }
+
+  /* Hide help icon when any drawer is open */
+  body:has(sl-drawer[open]) div[name="helpIcon"] {
+    display: none !important;
+  }
+
+  /* Help icon */
+  div[name="helpIcon"] sl-icon {
+    font-size: 40px;
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.3));
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+    cursor: pointer;
+  }
+
+  div[name="helpIcon"]:hover sl-icon {
+    opacity: 0.8;
+  }
+
+  /* Topics container */
+  div[name="topicsContainer"] {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+    pointer-events: none;
+    z-index: calc(var(--sl-z-index-dialog) - 1);
+  }
+
+  div[name="topicsContainer"].visible {
+    pointer-events: auto;
+  }
+
+  /* Individual topic */
+  .help-topic {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+
+  .help-topic.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .help-topic:hover {
+    background: var(--sl-color-neutral-100);
+  }
+
+  .help-topic sl-icon {
+    font-size: 20px;
+  }
+
+  .help-topic span {
+    font-size: 14px;
+    font-weight: 500;
+  }
+</style>
+
+<div name="helpIcon">
+  <sl-icon name="question-circle" library="default"></sl-icon>
+</div>
+<div name="topicsContainer"></div>

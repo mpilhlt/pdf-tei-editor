@@ -92,6 +92,7 @@ sl-select::part(form-control-label) {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  position: relative;
 }
 
 #pdf-viewer {
