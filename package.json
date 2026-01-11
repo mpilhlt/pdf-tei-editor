@@ -68,6 +68,7 @@
         "glob": "^11.0.1",
         "js-plugin": "^1.1.0",
         "markdown-it": "^14.1.0",
+        "markdown-it-container": "^4.0.0",
         "pdfjs-dist": "5.4.449",
         "uuid": "^11.1.0"
     },

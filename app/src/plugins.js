@@ -38,6 +38,7 @@ import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/pro
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
+import { plugin as annotationGuidePlugin, api as annotationGuide } from './plugins/annotation-guide.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
@@ -66,6 +67,7 @@ const plugins = [
 
   // Toolbar menu items (order matters - determines menu item order)
   infoPlugin,          // User Manual (first)
+  annotationGuidePlugin, // Annotation Guide
   FiledataPlugin,      // Garbage Collection (second, admin only)
   rbacManagerPlugin,   // Manage Users & Roles (third, admin only)
   configEditorPlugin,  // Configuration Editor (fourth, admin only)
@@ -121,6 +123,7 @@ export {
   floatingPanel, 
   promptEditor,
   appInfo,
+  annotationGuide,
   sync, 
   accessControl, 
   heartbeat

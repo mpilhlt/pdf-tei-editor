@@ -44,6 +44,7 @@ import './modules/panels/index.js';
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'
+ * @import {annotationGuideDrawerPart} from './plugins/annotation-guide.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
@@ -75,6 +76,7 @@ import './modules/panels/index.js';
  * @property {HTMLDivElement} helpIcon - Help icon wrapper (added by help plugin)
  * @property {HTMLDivElement} topicsContainer - Help topics container (added by help plugin)
  * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
+ * @property {UIPart<SlDrawer, annotationGuideDrawerPart>} annotationGuideDrawer - Annotation guide drawer (added by annotation-guide plugin)
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
