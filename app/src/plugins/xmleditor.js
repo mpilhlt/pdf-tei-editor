@@ -6,6 +6,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
+ * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
@@ -57,6 +58,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
  * @property {StatusText} teiHeaderToggleWidget - TEI header visibility toggle widget
+ * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -100,6 +102,26 @@ let teiHeaderToggleWidget;
 
 // State to track teiHeader visibility (starts folded)
 let teiHeaderVisible = false
+
+// LocalStorage key for line wrapping preference
+const LINE_WRAP_STORAGE_KEY = 'pdf-tei-editor.xmleditor.lineWrapping'
+
+/**
+ * Get line wrapping preference from localStorage
+ * @returns {boolean} Line wrapping enabled state (default: true)
+ */
+function getLineWrappingPreference() {
+  const stored = localStorage.getItem(LINE_WRAP_STORAGE_KEY)
+  return stored !== null ? stored === 'true' : true // Default to enabled
+}
+
+/**
+ * Save line wrapping preference to localStorage
+ * @param {boolean} enabled - Whether line wrapping is enabled
+ */
+function setLineWrappingPreference(enabled) {
+  localStorage.setItem(LINE_WRAP_STORAGE_KEY, String(enabled))
+}
 
 /**
  * component plugin
@@ -191,6 +213,10 @@ async function install(state) {
   indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget
   cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget
 
+  // Initialize line wrapping switch from stored preference
+  const lineWrappingEnabled = getLineWrappingPreference()
+  ui.xmlEditor.statusbar.lineWrappingSwitch.checked = lineWrappingEnabled
+
   // Attach event listeners to toolbar buttons
   ui.xmlEditor.toolbar.prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
   ui.xmlEditor.toolbar.nextDiffBtn.addEventListener('widget-click', () => xmlEditor.goToNextDiff())
@@ -265,8 +291,8 @@ async function install(state) {
     testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
     xmlEditor.whenReady().then(() => {
-      // Restore line wrapping after XML is loaded
-      xmlEditor.setLineWrapping(true)
+      // Apply user's line wrapping preference after XML is loaded
+      xmlEditor.setLineWrapping(getLineWrappingPreference())
 
       // show only if there is a teiHeader in the document
       if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
@@ -287,6 +313,14 @@ async function install(state) {
   // Add click handler for teiHeader toggle widget
   teiHeaderToggleWidget.addEventListener('click', () => {
     toggleTeiHeaderVisibility()
+  })
+
+  // Add change handler for line wrapping toggle
+  ui.xmlEditor.statusbar.lineWrappingSwitch.addEventListener('widget-change', (e) => {
+    const enabled = e.detail.checked
+    setLineWrappingPreference(enabled)
+    xmlEditor.setLineWrapping(enabled)
+    logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`)
   })
 }
 
@@ -378,7 +412,7 @@ async function update(state) {
   currentState = state;
 
   [readOnlyStatusWidget, cursorPositionWidget,
-    indentationStatusWidget, teiHeaderToggleWidget]
+    indentationStatusWidget, teiHeaderToggleWidget, ui.xmlEditor.statusbar.lineWrappingSwitch]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
