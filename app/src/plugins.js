@@ -35,6 +35,7 @@ import { plugin as servicesPlugin, api as services } from './plugins/services.js
 import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
 import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
+import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
@@ -69,6 +70,7 @@ const plugins = [
   // Other plugins
   pdfViewerPlugin,
   xmlEditorPlugin,
+  teiToolsPlugin,
   fileselectionPlugin,
   fileSelectionDrawerPlugin,
   documentActionsPlugin,

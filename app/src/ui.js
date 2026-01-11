@@ -48,6 +48,7 @@ import './modules/panels/index.js';
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
+ * @import {teiRevisionHistoryDrawerPart} from './plugins/tei-tools.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
@@ -72,6 +73,7 @@ import './modules/panels/index.js';
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
  * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
+ * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
