@@ -6,6 +6,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
+ * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
@@ -56,7 +57,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {StatusText} teiHeaderToggleWidget - TEI header visibility toggle widget
+ * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -95,11 +96,22 @@ let cursorPositionWidget;
 /** @type {StatusText} */
 let indentationStatusWidget;
 
-/** @type {StatusText} */
-let teiHeaderToggleWidget;
+/**
+ * Get line wrapping preference from localStorage
+ * @returns {boolean} Line wrapping enabled state (defaults to true)
+ */
+function getLineWrappingPreference() {
+  const stored = localStorage.getItem('xmleditor.lineWrapping')
+  return stored === null ? true : stored === 'true'
+}
 
-// State to track teiHeader visibility (starts folded)
-let teiHeaderVisible = false
+/**
+ * Set line wrapping preference in localStorage
+ * @param {boolean} enabled - Line wrapping enabled state
+ */
+function setLineWrappingPreference(enabled) {
+  localStorage.setItem('xmleditor.lineWrapping', String(enabled))
+}
 
 /**
  * component plugin
@@ -187,9 +199,12 @@ async function install(state) {
   // Store references to widgets for later use
   titleWidget = ui.xmlEditor.headerbar.titleWidget
   lastUpdatedWidget = ui.xmlEditor.headerbar.lastUpdatedWidget
-  teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
   indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget
   cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget
+
+  // Initialize line wrapping switch from stored preference
+  const lineWrappingEnabled = getLineWrappingPreference()
+  ui.xmlEditor.statusbar.lineWrappingSwitch.checked = lineWrappingEnabled
 
   // Attach event listeners to toolbar buttons
   ui.xmlEditor.toolbar.prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
@@ -260,33 +275,22 @@ async function install(state) {
 
   // Note: editorXmlWellFormed handler moved to start() function
 
-  // Add widget to toggle <teiHeader> visibility
+  // Restore line wrapping after XML is loaded
   xmlEditor.on("editorAfterLoad", () => {
     testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
     xmlEditor.whenReady().then(() => {
-      // Restore line wrapping after XML is loaded
-      xmlEditor.setLineWrapping(true)
-
-      // show only if there is a teiHeader in the document
-      if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
-        teiHeaderToggleWidget.style.display = 'inline-flex'
-        try {
-          xmlEditor.foldByXpath('//tei:teiHeader')
-          teiHeaderVisible = false // Reset state after document load
-          updateTeiHeaderToggleWidget()
-        } catch (error) {
-          logger.debug(`Error folding teiHeader: ${String(error)}`)
-        }
-      } else {
-        teiHeaderToggleWidget.style.display = 'none'
-      }
+      // Apply user's line wrapping preference after XML is loaded
+      xmlEditor.setLineWrapping(getLineWrappingPreference())
     })
   })
 
-  // Add click handler for teiHeader toggle widget
-  teiHeaderToggleWidget.addEventListener('click', () => {
-    toggleTeiHeaderVisibility()
+  // Add change handler for line wrapping toggle
+  ui.xmlEditor.statusbar.lineWrappingSwitch.addEventListener('widget-change', (e) => {
+    const enabled = e.detail.checked
+    setLineWrappingPreference(enabled)
+    xmlEditor.setLineWrapping(enabled)
+    logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`)
   })
 }
 
@@ -378,7 +382,7 @@ async function update(state) {
   currentState = state;
 
   [readOnlyStatusWidget, cursorPositionWidget,
-    indentationStatusWidget, teiHeaderToggleWidget]
+    indentationStatusWidget, ui.xmlEditor.statusbar.lineWrappingSwitch]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
@@ -582,46 +586,5 @@ function updateIndentationStatus(indentUnit) {
   }
 
   indentationStatusWidget.text = displayText
-}
-
-/**
- * Toggles the visibility of the teiHeader node
- */
-function toggleTeiHeaderVisibility() {
-  if (!xmlEditor.isReady()) return
-
-  try {
-    if (teiHeaderVisible) {
-      // Fold the teiHeader
-      xmlEditor.foldByXpath('//tei:teiHeader')
-      teiHeaderVisible = false
-      logger.debug('Folded teiHeader')
-    } else {
-      // Unfold the teiHeader
-      xmlEditor.unfoldByXpath('//tei:teiHeader')
-      teiHeaderVisible = true
-      logger.debug('Unfolded teiHeader')
-    }
-    updateTeiHeaderToggleWidget()
-  } catch (error) {
-    logger.warn(`Error toggling teiHeader visibility: ${String(error)}`)
-  }
-}
-
-/**
- * Updates the teiHeader toggle widget appearance based on visibility state
- */
-function updateTeiHeaderToggleWidget() {
-  if (!teiHeaderToggleWidget) return
-
-  if (teiHeaderVisible) {
-    // teiHeader is visible, show filled icon
-    teiHeaderToggleWidget.icon = 'person-fill-gear'
-    teiHeaderToggleWidget.tooltip = 'Hide teiHeader'
-  } else {
-    // teiHeader is hidden, show outline icon
-    teiHeaderToggleWidget.icon = 'person-gear'
-    teiHeaderToggleWidget.tooltip = 'Show teiHeader'
-  }
 }
 

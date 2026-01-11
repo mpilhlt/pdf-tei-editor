@@ -15,7 +15,7 @@ export { ep as endpoints }
 
 // plugins
 import plugins, { services } from './plugins.js'
-import { logLevel, client, config, AuthenticationPlugin, LoggerPlugin } from './plugins.js'
+import { logLevel, client, config, AuthenticationPlugin, HelpPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
 // core application orchestration classes
@@ -47,6 +47,7 @@ app.registerPlugins(plugins)
 
 // Create plugin API exports after plugin registration
 export const authentication = AuthenticationPlugin.getInstance()
+export const helpPlugin = HelpPlugin.getInstance()
 export const logger = LoggerPlugin.getInstance()
 
 // Set log level after registration

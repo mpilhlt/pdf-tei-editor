@@ -42,12 +42,15 @@ import './modules/panels/index.js';
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {newVersionDialogPart, newRevisionChangeDialogPart, editMetadataDialogPart} from './plugins/document-actions.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
+ * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'
+ * @import {annotationGuideDrawerPart} from './plugins/annotation-guide.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
+ * @import {teiRevisionHistoryDrawerPart} from './plugins/tei-tools.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
@@ -70,8 +73,12 @@ import './modules/panels/index.js';
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
+ * @property {HTMLDivElement} helpIcon - Help icon wrapper (added by help plugin)
+ * @property {HTMLDivElement} topicsContainer - Help topics container (added by help plugin)
  * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
+ * @property {UIPart<SlDrawer, annotationGuideDrawerPart>} annotationGuideDrawer - Annotation guide drawer (added by annotation-guide plugin)
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
+ * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
