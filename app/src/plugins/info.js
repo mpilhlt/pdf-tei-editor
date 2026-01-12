@@ -162,9 +162,6 @@ async function install(state) {
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
-  createFromTemplate('info-menu-item', ui.toolbar.toolbarMenu.menu);
-
-  logger.debug('Info menu item added to toolbar menu');
 
   // Set up info dialog event listeners
   ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide());
@@ -197,9 +194,6 @@ async function install(state) {
   }).catch(error => {
     logger.debug('Failed to load version:', error)
   })
-
-  // Add menu item event listener
-  ui.toolbar.toolbarMenu.menu.infoMenuItem.addEventListener("click", () => api.open())
 
   // Register topic with help plugin
   helpPlugin.registerTopic(
