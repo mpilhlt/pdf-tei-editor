@@ -13,7 +13,7 @@ import ui, { updateUi } from '../ui.js'
 import { SlButton } from '../ui.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { dialog, logger, config, helpPlugin } from '../app.js'
-import markdownit from 'markdown-it'
+import { createMarkdownRenderer } from '../modules/markdown-utils.js'
 
 /**
  * plugin API
@@ -209,12 +209,7 @@ async function install(state) {
   )
 
   // configure markdown parser
-  const options = {
-    html: true,
-    linkify: true,
-    typographer: true
-  }
-  md = markdownit(options);
+  md = createMarkdownRenderer()
 
   // @ts-ignore
   window.appInfo = api
