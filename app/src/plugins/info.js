@@ -13,7 +13,7 @@ import ui, { updateUi } from '../ui.js'
 import { SlButton } from '../ui.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { dialog, logger, config, helpPlugin } from '../app.js'
-import markdownit from 'markdown-it'
+import { createMarkdownRenderer } from '../modules/markdown-utils.js'
 
 /**
  * plugin API
@@ -162,9 +162,6 @@ async function install(state) {
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
-  createFromTemplate('info-menu-item', ui.toolbar.toolbarMenu.menu);
-
-  logger.debug('Info menu item added to toolbar menu');
 
   // Set up info dialog event listeners
   ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide());
@@ -198,9 +195,6 @@ async function install(state) {
     logger.debug('Failed to load version:', error)
   })
 
-  // Add menu item event listener
-  ui.toolbar.toolbarMenu.menu.infoMenuItem.addEventListener("click", () => api.open())
-
   // Register topic with help plugin
   helpPlugin.registerTopic(
     'User Manual',
@@ -209,12 +203,7 @@ async function install(state) {
   )
 
   // configure markdown parser
-  const options = {
-    html: true,
-    linkify: true,
-    typographer: true
-  }
-  md = markdownit(options);
+  md = createMarkdownRenderer()
 
   // @ts-ignore
   window.appInfo = api
@@ -241,16 +230,38 @@ async function open() {
  * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
  */
 async function load(mdPath, addToHistory = true){
-  // Add current page to history if we're navigating to a new page
-  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== mdPath)) {
-    navigationHistory.push(mdPath)
+  // Resolve relative paths based on current page directory (only when adding to history, i.e., new navigation)
+  let resolvedPath = mdPath
+  if (addToHistory && !mdPath.startsWith('/') && !mdPath.startsWith('http') && currentPage && currentPage !== mdPath) {
+    // Get directory of current page
+    const currentDir = currentPage.substring(0, currentPage.lastIndexOf('/'))
+    if (currentDir) {
+      // Resolve relative path
+      const parts = currentDir.split('/').filter(p => p)
+      const pathParts = mdPath.split('/')
+
+      for (const part of pathParts) {
+        if (part === '..') {
+          parts.pop()
+        } else if (part !== '.') {
+          parts.push(part)
+        }
+      }
+      resolvedPath = parts.join('/')
+    }
+  }
+
+  // Add resolved page to history if we're navigating to a new page
+  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== resolvedPath)) {
+    navigationHistory.push(resolvedPath)
     // Clear forward history when navigating to a new page
     forwardHistory = []
     updateNavigationButtons()
   }
-  
+
   // Update current page for GitHub editing
-  currentPage = mdPath
+  currentPage = resolvedPath
+  mdPath = resolvedPath
   
   // remove existing content
   ui.infoDrawer.content.innerHTML = ""
@@ -334,7 +345,10 @@ function goBack() {
  * Goes to the home page (index.md)
  */
 function goHome() {
+  // Reset current page so path resolution doesn't happen
+  currentPage = ''
   load('index.md')
+  // currentPage will be set to 'index.md' by load()
 }
 
 /**

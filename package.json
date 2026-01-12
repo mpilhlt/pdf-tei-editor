@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.25.0",
+    "version": "0.25.1",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -66,6 +66,7 @@
         "dotenv": "^17.2.2",
         "entities": "^6.0.1",
         "glob": "^11.0.1",
+        "highlight.js": "^11.11.1",
         "js-plugin": "^1.1.0",
         "markdown-it": "^14.1.0",
         "markdown-it-container": "^4.0.0",
@@ -78,6 +79,7 @@
     "devDependencies": {
         "@jsenv/importmap-node-module": "^7.1.1",
         "@playwright/test": "^1.56.1",
+        "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@types/node": "^24.9.1",
         "@types/uuid": "^10.0.0",
