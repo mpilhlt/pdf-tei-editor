@@ -236,16 +236,38 @@ async function open() {
  * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
  */
 async function load(mdPath, addToHistory = true){
-  // Add current page to history if we're navigating to a new page
-  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== mdPath)) {
-    navigationHistory.push(mdPath)
+  // Resolve relative paths based on current page directory (only when adding to history, i.e., new navigation)
+  let resolvedPath = mdPath
+  if (addToHistory && !mdPath.startsWith('/') && !mdPath.startsWith('http') && currentPage && currentPage !== mdPath) {
+    // Get directory of current page
+    const currentDir = currentPage.substring(0, currentPage.lastIndexOf('/'))
+    if (currentDir) {
+      // Resolve relative path
+      const parts = currentDir.split('/').filter(p => p)
+      const pathParts = mdPath.split('/')
+
+      for (const part of pathParts) {
+        if (part === '..') {
+          parts.pop()
+        } else if (part !== '.') {
+          parts.push(part)
+        }
+      }
+      resolvedPath = parts.join('/')
+    }
+  }
+
+  // Add resolved page to history if we're navigating to a new page
+  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== resolvedPath)) {
+    navigationHistory.push(resolvedPath)
     // Clear forward history when navigating to a new page
     forwardHistory = []
     updateNavigationButtons()
   }
-  
+
   // Update current page for GitHub editing
-  currentPage = mdPath
+  currentPage = resolvedPath
+  mdPath = resolvedPath
   
   // remove existing content
   ui.infoDrawer.content.innerHTML = ""
@@ -329,7 +351,10 @@ function goBack() {
  * Goes to the home page (index.md)
  */
 function goHome() {
+  // Reset current page so path resolution doesn't happen
+  currentPage = ''
   load('index.md')
+  // currentPage will be set to 'index.md' by load()
 }
 
 /**
