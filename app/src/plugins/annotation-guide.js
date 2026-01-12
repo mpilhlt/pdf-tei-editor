@@ -93,7 +93,7 @@ async function install(state) {
   // Register topic with help plugin
   helpPlugin.registerTopic(
     'Annotation Guide',
-    'file-text',
+    'file-text', // <sl-icon name="file-text">
     () => api.open()
   )
 

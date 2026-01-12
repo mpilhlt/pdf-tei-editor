@@ -8,6 +8,10 @@
 import markdownit from 'markdown-it'
 import markdownItContainer from 'markdown-it-container'
 
+// highlight.js is loaded separately via highlight.js bundle
+// Access it from window.hljs (set by app/web/highlight.js)
+const hljs = typeof window !== 'undefined' ? window.hljs : null
+
 /**
  * Admonition type configuration
  * Maps both container types (:::info) and GFM alert types ([!NOTE]) to styling
@@ -55,14 +59,27 @@ function renderAdmonitionClose() {
 }
 
 /**
- * Creates a configured markdown-it instance with admonitions and TOC support
+ * Creates a configured markdown-it instance with admonitions, TOC support, and syntax highlighting
  * @returns {MarkdownIt} Configured markdown renderer
  */
 export function createMarkdownRenderer() {
   const options = {
     html: true,
     linkify: true,
-    typographer: true
+    typographer: true,
+    highlight: (str, lang) => {
+      if (hljs && lang && hljs.getLanguage(lang)) {
+        try {
+          return '<pre class="hljs"><code>' +
+                 hljs.highlight(str, { language: lang }).value +
+                 '</code></pre>'
+        } catch (error) {
+          console.warn(`Failed to highlight ${lang}:`, error)
+        }
+      }
+      // Fallback to plain code block without highlighting
+      return '<pre class="hljs"><code>' + markdownit().utils.escapeHtml(str) + '</code></pre>'
+    }
   }
   const md = markdownit(options)
 

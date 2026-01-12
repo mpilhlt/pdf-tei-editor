@@ -13,6 +13,8 @@
  *   - icons: Compile the app icons
  *   - templates: Bundle templates
  *   - version: Generate version.js from package.json
+ *   - pdfjs: Copy PDF.js files for production
+ *   - highlight: Bundle highlight.js for syntax highlighting
  *   - bundle: Bundle application with Rollup
  */
 
@@ -35,7 +37,7 @@ function runCommand(command, description) {
 
 // Parse command line arguments
 const args = process.argv.slice(2);
-let stepsToRun = new Set(['importmap', 'icons', 'templates', 'version', 'pdfjs', 'bundle']);
+let stepsToRun = new Set(['importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle']);
 let stepsToSkip = new Set();
 
 args.forEach(arg => {
@@ -64,6 +66,10 @@ const buildSteps = {
   templates: () => runCommand('node bin/bundle-templates.js', 'Bundling templates'),
   version: () => runCommand('node bin/generate-version.js', 'Generating version file'),
   pdfjs: () => runCommand('node bin/copy-pdfjs.js', 'Copying PDF.js files for production'),
+  highlight: () => {
+    const rollupPath = path.join('node_modules', '.bin', 'rollup');
+    runCommand(`"${rollupPath}" -c rollup.config.highlight.js`, 'Bundling highlight.js');
+  },
   bundle: () => {
     const rollupPath = path.join('node_modules', '.bin', 'rollup');
     runCommand(`"${rollupPath}" -c rollup.config.js`, 'Bundling application');
@@ -71,7 +77,7 @@ const buildSteps = {
 };
 
 // Execute selected steps in order
-const stepOrder = ['importmap', 'icons', 'templates', 'version', 'pdfjs', 'bundle'];
+const stepOrder = ['importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle'];
 stepOrder.forEach(step => {
   if (stepsToRun.has(step) && buildSteps[step]) {
     buildSteps[step]();
