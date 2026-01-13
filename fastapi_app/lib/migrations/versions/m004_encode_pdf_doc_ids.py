@@ -3,8 +3,8 @@ Migration 004: Encode PDF document IDs to be filesystem-compliant
 
 Encodes doc_id values in the files table to ensure they are filesystem-safe.
 Uses the encoding from doi_utils.py which converts:
-- Forward slashes (/) → double underscore (__)
-- Special characters like :, <, >, etc. → dollar-sign encoding ($XX$)
+- Forward slashes (/) -> double underscore (__)
+- Special characters like :, <, >, etc. -> dollar-sign encoding ($XX$)
 
 This migration only encodes doc_ids that are not already encoded.
 
@@ -130,7 +130,7 @@ class Migration004EncodePdfDocIds(Migration):
                 total_files_updated += files_updated
                 total_doc_ids_updated += 1
                 self.logger.info(
-                    f"Encoded doc_id: '{old_doc_id}' → '{new_doc_id}' "
+                    f"Encoded doc_id: '{old_doc_id}' -> '{new_doc_id}' "
                     f"({files_updated} file(s) updated)"
                 )
 
