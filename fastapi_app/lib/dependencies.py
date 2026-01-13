@@ -18,6 +18,7 @@ from .server_utils import get_session_id_from_request
 from .logging_utils import get_logger
 from .sse_service import SSEService
 from .sync_service import SyncService
+from .event_bus import EventBus, get_event_bus
 
 
 logger = get_logger(__name__)
