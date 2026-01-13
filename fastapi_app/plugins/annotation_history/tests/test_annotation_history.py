@@ -9,6 +9,7 @@ Tests XML parsing, nested HTML table generation, and error handling.
 
 import unittest
 from unittest.mock import MagicMock, patch
+from pathlib import Path
 from fastapi.testclient import TestClient
 
 from fastapi_app.plugins.annotation_history.plugin import AnnotationHistoryPlugin
@@ -410,6 +411,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         self.mock_session_manager = MagicMock()
         self.mock_auth_manager = MagicMock()
         self.mock_db = MagicMock()
+        self.mock_db.db_path = Path('/tmp/test.db')  # Set db_path to prevent MagicMock string as filename
         self.mock_storage = MagicMock()
 
         # Mock valid authentication by default
