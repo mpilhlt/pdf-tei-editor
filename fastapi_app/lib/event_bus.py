@@ -66,32 +66,44 @@ class EventBus:
                 logger.warning(f"Handler not found for event '{event_name}'")
 
     async def emit(self, event_name: str, **kwargs):
-        """Emit an event to all registered handlers.
+        """Emit an event to all registered handlers (fire-and-forget).
 
-        Handlers are called concurrently. Exceptions in individual handlers are
-        logged but don't affect other handlers.
+        Handlers are called asynchronously in the background. This method returns
+        immediately without waiting for handlers to complete. Exceptions in handlers
+        are logged but don't affect the caller.
+
+        This fire-and-forget approach prevents database access race conditions when
+        event handlers query the database during operations that are already using
+        database connections.
 
         Args:
             event_name: Name of the event to emit
             **kwargs: Event payload passed to all handlers
         """
+        
         if event_name not in self._handlers:
             logger.debug(f"No handlers registered for event '{event_name}'")
             return
 
         logger.debug(f"Emitting event '{event_name}' to {len(self._handlers[event_name])} handler(s)")
 
-        tasks = [handler(**kwargs) for handler in self._handlers[event_name]]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Create background task for handler execution (fire-and-forget)
+        async def run_handlers():
+            """Execute all handlers and log any exceptions."""
+            tasks = [handler(**kwargs) for handler in self._handlers[event_name]]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Log any exceptions from handlers
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                handler = self._handlers[event_name][i]
-                logger.error(
-                    f"Error in handler {handler.__name__} for event '{event_name}': {result}",
-                    exc_info=result
-                )
+            # Log any exceptions from handlers
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    handler = self._handlers[event_name][i]
+                    logger.error(
+                        f"Error in handler {handler.__name__} for event '{event_name}': {result}",
+                        exc_info=result
+                    )
+
+        # Launch handlers in background without awaiting
+        asyncio.create_task(run_handlers())
 
 
 # Singleton instance

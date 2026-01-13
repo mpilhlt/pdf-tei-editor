@@ -45,28 +45,27 @@ class AccessControlChecker:
         Returns:
             True if access allowed, False otherwise
         """
-        logger.debug(
-            f"ACCESS CONTROL: checking access for user={user}, "
-            f"permissions={permissions}, required_access={required_access}"
-        )
+        # logger.debug(
+        #     f"ACCESS CONTROL: checking access for user={user}, "
+        #     f"permissions={permissions}, required_access={required_access}"
+        # )
 
         if not user:
             # Anonymous users can only read public documents
             result = permissions.visibility == 'public' and required_access == 'read'
-            logger.debug(f"ACCESS CONTROL: anonymous user, result={result}")
             return result
 
         username = user.get('username')
-        logger.debug(f"ACCESS CONTROL: user={username}, roles={user.get('roles', [])}")
+        # logger.debug(f"ACCESS CONTROL: user={username}, roles={user.get('roles', [])}")
 
         # Check visibility permissions
         if permissions.visibility == 'private':
             # Private documents only accessible by owner
             if permissions.owner != username:
-                logger.debug(
-                    f"ACCESS CONTROL: private document, owner={permissions.owner}, "
-                    f"user={username}, access denied"
-                )
+                # logger.debug(
+                #    f"ACCESS CONTROL: private document, owner={permissions.owner}, "
+                #    f"user={username}, access denied"
+                # )
                 return False
 
         # Check write permissions
@@ -74,16 +73,16 @@ class AccessControlChecker:
             if permissions.editability == 'protected':
                 # Protected documents only writable by owner
                 if permissions.owner != username:
-                    logger.debug(
-                        f"ACCESS CONTROL: protected document, owner={permissions.owner}, "
-                        f"user={username}, write access denied"
-                    )
+                    # logger.debug(
+                    #    f"ACCESS CONTROL: protected document, owner={permissions.owner}, "
+                    #    f"user={username}, write access denied"
+                    # )
                     return False
 
-        logger.debug(
-            f"ACCESS CONTROL: allowing access - visibility={permissions.visibility}, "
-            f"editability={permissions.editability}, owner={permissions.owner}"
-        )
+        # logger.debug(
+        #    f"ACCESS CONTROL: allowing access - visibility={permissions.visibility}, "
+        #    f"editability={permissions.editability}, owner={permissions.owner}"
+        # )
         return True
 
     @staticmethod

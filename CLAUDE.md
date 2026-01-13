@@ -200,7 +200,9 @@ timeout = config.get('session.timeout', default=3600)
 
 **Backend Plugin Configuration:**
 
-- Initialize plugin config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- **CRITICAL**: Initialize plugin config in the plugin class `__init__()` method, NOT in `__init__.py`
+- Plugin `__init__.py` files are NEVER executed during plugin discovery (plugins are loaded directly via `importlib`)
+- Use `get_plugin_config()` in the plugin class `__init__()` to create config keys from environment variables
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
 
