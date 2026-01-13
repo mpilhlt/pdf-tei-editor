@@ -4,6 +4,11 @@ from functools import lru_cache
 import tempfile
 import os
 
+# Load .env file into os.environ before Settings instantiation
+# This ensures environment variables are available for plugin configuration
+from dotenv import load_dotenv
+load_dotenv()  # Loads .env by default
+
 class Settings(BaseSettings):
     """Application settings loaded from .env.fastapi (or custom env file)"""
 
