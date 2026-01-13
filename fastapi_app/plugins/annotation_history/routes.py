@@ -123,15 +123,14 @@ async def view_history(
         nested_table_html = plugin._generate_nested_table(documents, show_variant_column)
 
         # Wrap in proper HTML page using generate_datatable_page
-        from fastapi_app.lib.plugin_tools import generate_datatable_page
+        from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
 
         # Build title: PDF label - doc_id (variant)
         title = f"{pdf_label} - {doc_id}"
         if variant and variant != "all":
             title += f" ({variant})"
 
-        # Since we have custom nested table HTML, we'll use generate_datatable_page with empty rows
-        # and inject our custom HTML as a custom footer
+        # Generate HTML with sandbox client for iframe communication
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -151,21 +150,13 @@ async def view_history(
         }}
         {plugin._get_table_css()}
     </style>
+    <script>
+        {generate_sandbox_client_script()}
+    </script>
 </head>
 <body>
     <h1>{title}</h1>
     {nested_table_html}
-    <script>
-        // Initialize sandbox client for document opening
-        const sandbox = {{
-            openDocument: function(stableId) {{
-                window.parent.postMessage({{
-                    type: 'openDocument',
-                    stableId: stableId
-                }}, '*');
-            }}
-        }};
-    </script>
 </body>
 </html>"""
 
