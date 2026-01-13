@@ -190,18 +190,23 @@ class TestEventBusIntegration(unittest.TestCase):
 
 def run_async_test(coro):
     """Helper to run async test methods."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # Make async tests work with unittest
+def make_sync_wrapper(async_method):
+    """Create a synchronous wrapper for an async test method."""
+    def wrapper(self):
+        return run_async_test(async_method(self))
+    return wrapper
+
 for name, method in list(TestEventBus.__dict__.items()):
     if name.startswith("test_") and asyncio.iscoroutinefunction(method):
-        setattr(TestEventBus, name, lambda self, m=method: run_async_test(m(self)))
+        setattr(TestEventBus, name, make_sync_wrapper(method))
 
 for name, method in list(TestEventBusIntegration.__dict__.items()):
     if name.startswith("test_") and asyncio.iscoroutinefunction(method):
-        setattr(TestEventBusIntegration, name, lambda self, m=method: run_async_test(m(self)))
+        setattr(TestEventBusIntegration, name, make_sync_wrapper(method))
 
 
 if __name__ == "__main__":
