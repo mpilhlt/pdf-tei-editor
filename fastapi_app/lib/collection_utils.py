@@ -53,8 +53,11 @@ def get_available_collections(db_dir: Path) -> Optional[List[str]]:
     if not isinstance(collections_data, list):
         raise ValueError("Invalid collections file format. Expected a list.")
 
-    collection_ids = [collection.get('id') for collection in collections_data
-                      if isinstance(collection, dict) and 'id' in collection]
+    collection_ids: List[str] = [
+        collection['id']  # Use direct access since we check 'id' in collection
+        for collection in collections_data
+        if isinstance(collection, dict) and 'id' in collection
+    ]
     return collection_ids
 
 
