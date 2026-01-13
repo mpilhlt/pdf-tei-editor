@@ -1,8 +1,8 @@
-# Backend Plugin Development Guide
+# Backend Plugin System Architecture
 
-Practical guide for creating **backend plugins** in the PDF-TEI Editor.
+Technical architecture documentation for **backend plugins** in the PDF-TEI Editor.
 
-**Note**: This guide covers **backend plugins** (Python code running on the server). For **frontend plugins** (JavaScript code running in the browser), see [plugin-development.md](./plugin-development.md). For detailed backend plugin architecture, see [../development/plugin-system-backend.md](../development/plugin-system-backend.md).
+**Note**: This guide covers **backend plugins** (Python code running on the server). For **frontend plugins** (JavaScript code running in the browser), see [plugin-system-frontend.md](plugin-system-frontend.md). For practical backend plugin development, see [Backend Plugin Development Guide](../code-assistant/backend-plugins.md).
 
 **Key Differences**:
 
@@ -767,3 +767,12 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 - Use `PluginManager.get_instance()` to access plugin manager
 - **Plugin Sandbox**: Always available as `window.pluginSandbox` when plugin HTML is displayed
 - **HTML escaping**: Always escape user-provided content in HTML to prevent XSS attacks
+
+## Related Documentation
+
+- [Plugin System Overview](plugin-system.md) - Overview of frontend and backend plugin systems
+- [Frontend Plugin System](plugin-system-frontend.md) - Frontend plugin architecture
+- [Backend Plugin Development Guide](../code-assistant/backend-plugins.md) - Practical guide for creating backend plugins
+- [Architecture Overview](architecture.md) - Complete system architecture
+- [Access Control](access-control.md) - RBAC implementation
+- [API Reference](api-reference.md) - FastAPI endpoint documentation

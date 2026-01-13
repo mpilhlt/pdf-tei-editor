@@ -253,69 +253,31 @@ The application initializes in `app.js`:
 
 ## Plugin System
 
-The plugin system supports both object-based and class-based patterns.
+The application uses two independent plugin systems - one for frontend (JavaScript) and one for backend (Python).
 
-For detailed plugin development guidance, see [plugin-system.md](./plugin-system.md).
+**See**: [Plugin System Overview](plugin-system.md) for comparison and architecture details.
 
-### Plugin Manager
+### Frontend Plugins
 
-The `PluginManager` handles:
+Frontend plugins (`app/src/plugins/`) extend the browser UI with:
 
-- **Registration**: Collecting plugins and detecting duplicates
-- **Dependency Resolution**: Topological sort based on `deps` array
-- **Lifecycle Management**: Installing plugins in dependency order
-- **Endpoint Invocation**: Calling plugin methods via endpoint names
+- Dependency resolution via topological sorting
+- Immutable state management integration
+- Lifecycle hooks (install, start, shutdown)
+- Plugin classes with automatic state tracking
 
-### Plugin Context
+**See**: [Frontend Plugin System](plugin-system-frontend.md) for detailed architecture.
 
-Plugin classes receive a `PluginContext` facade that provides:
+### Backend Plugins
 
-- `dispatchStateChange(changes)`: Trigger state updates
-- `hasStateChanged(key)`: Check if specific property changed
-- `invokeEndpoint(name, ...args)`: Call endpoints on other plugins
+Backend plugins (`fastapi_app/plugins/`) provide server-side functionality with:
 
-This facade limits coupling between plugins and Application internals.
+- Runtime plugin discovery
+- Role-based access control
+- Custom FastAPI routes
+- Plugin endpoints for frontend integration
 
-### Endpoint System
-
-Endpoints defined in `endpoints.js`:
-
-**Lifecycle**:
-
-- `install(initialState)`: Setup UI, register event handlers
-- `start(state)`: Post-installation initialization
-- `shutdown()`: Cleanup on application exit
-
-**State Management**:
-
-- `updateInternalState(newState)`: Silent state sync (Plugin classes)
-- `onStateUpdate(changedKeys, fullState)`: Reactive notifications
-
-**Custom Endpoints**:
-
-- Plugins expose custom endpoints via `getEndpoints()` method
-- Other plugins invoke via `app.invokeEndpoint('plugin.method', ...args)`
-
-### Dependency Resolution
-
-Plugins specify dependencies via `deps` array:
-
-```javascript
-class XMLEditor extends Plugin {
-  constructor(context) {
-    super(context, {
-      name: 'xml-editor',
-      deps: ['authentication', 'filedata', 'validation']
-    });
-  }
-}
-```
-
-PluginManager ensures:
-
-- Dependencies installed before dependent
-- Circular dependencies detected and rejected
-- Missing dependencies cause clear error messages
+**See**: [Backend Plugin System](plugin-system-backend.md) for detailed architecture.
 
 ## State Management
 
@@ -502,7 +464,9 @@ const dialog = createSingleFromTemplate('dialog', parent, { title: 'Save' });
 
 ## Related Documentation
 
-- [Plugin System](./plugin-system.md) - Detailed plugin architecture
+- [Plugin System Overview](./plugin-system.md) - Frontend and backend plugin comparison
+- [Frontend Plugin System](./plugin-system-frontend.md) - Frontend plugin architecture
+- [Backend Plugin System](./plugin-system-backend.md) - Backend plugin architecture
 - [State Management](./state-management.md) - State patterns and best practices
 - [Database](./database.md) - SQLite schema and migrations
 - [Access Control](./access-control.md) - RBAC implementation

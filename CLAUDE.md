@@ -14,6 +14,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
 - **[API Reference](docs/development/api-reference.md) - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
+- **[Class Dependencies](docs/development/class-dependencies.md)** - FastAPI dependency injection system, available dependencies
 - **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
 - **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
 - **[CI/CD Pipeline](docs/development/ci-cd-pipeline.md)** - GitHub Actions workflows, test execution, release process
