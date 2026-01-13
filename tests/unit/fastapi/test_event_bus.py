@@ -75,8 +75,9 @@ class TestEventBus(unittest.TestCase):
         self.bus.on("test.event", handler2)
         self.bus.on("test.event", handler3)
 
-        # Should not raise exception
-        await self.bus.emit("test.event", arg="value")
+        # Should not raise exception, but will log the error
+        with self.assertLogs("fastapi_app.lib.event_bus", level="ERROR"):
+            await self.bus.emit("test.event", arg="value")
 
         # All handlers should have been called despite handler1 failing
         handler1.assert_called_once_with(arg="value")
