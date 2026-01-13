@@ -1,11 +1,9 @@
-from fastapi_app.lib.plugin_tools import get_plugin_config
+"""Local Sync plugin initialization.
 
-# Initialize config values from environment variables
-get_plugin_config("plugin.local-sync.enabled", "PLUGIN_LOCAL_SYNC_ENABLED", default=False, value_type="boolean")
-get_plugin_config("plugin.local-sync.repo.path", "PLUGIN_LOCAL_SYNC_REPO_PATH", default=None)
-get_plugin_config("plugin.local-sync.backup", "PLUGIN_LOCAL_SYNC_BACKUP", default=True, value_type="boolean")
-get_plugin_config("plugin.local-sync.repo.include", "PLUGIN_LOCAL_SYNC_REPO_INCLUDE", default=None)
-get_plugin_config("plugin.local-sync.repo.exclude", "PLUGIN_LOCAL_SYNC_REPO_EXCLUDE", default=None)
+Note: This __init__.py is NOT executed during plugin discovery.
+Plugins are loaded directly from plugin.py via importlib.
+Configuration initialization happens in the plugin class is_available() method.
+"""
 
 from .plugin import LocalSyncPlugin
 
