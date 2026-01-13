@@ -457,17 +457,25 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
     if variant_label is not None and variant_label.text:
         metadata['variant'] = variant_label.text.strip()
 
+    # Extract status from last revision change
+    last_status = None
+    revision_desc = tei_root.find('.//tei:revisionDesc', ns)
+    if revision_desc is not None:
+        changes = revision_desc.findall('tei:change', ns)
+        if changes:
+            # Get status from last change element
+            last_change = changes[-1]
+            last_status = last_change.get('status')
+
+    if last_status:
+        metadata['status'] = last_status  # type: ignore[assignment]
+
     # Check for gold standard status
     # Gold standard files typically don't have version markers
     # and may have specific status indicators
-    revision_desc = tei_root.find('.//tei:revisionDesc', ns)
     is_gold = False
-    if revision_desc is not None:
-        for change in revision_desc.findall('tei:change', ns):
-            status = change.get('status', '')
-            if status in ['gold', 'final', 'published']:
-                is_gold = True
-                break
+    if last_status and last_status in ['gold', 'final', 'published']:
+        is_gold = True
 
     metadata['is_gold_standard'] = is_gold  # type: ignore[assignment]
 

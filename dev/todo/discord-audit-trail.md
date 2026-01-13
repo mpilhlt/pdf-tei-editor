@@ -469,3 +469,59 @@ DISCORD_AUDIT_TRAIL_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcde
 - 60-second threshold prevents notification spam on bulk imports
 - Discord webhooks support rich embeds with formatting and timestamps
 - Collection name resolution uses existing Database API
+
+## Implementation Summary
+
+Implemented Discord audit trail plugin that posts document revision notifications to Discord webhooks.
+
+**Files created:**
+- [fastapi_app/plugins/discord_audit_trail/__init__.py](../../../fastapi_app/plugins/discord_audit_trail/__init__.py) - Package marker (note: NOT executed during plugin discovery)
+- [fastapi_app/plugins/discord_audit_trail/plugin.py](../../../fastapi_app/plugins/discord_audit_trail/plugin.py) - Main plugin with event handlers and config initialization
+- [fastapi_app/plugins/discord_audit_trail/tests/test_plugin.py](../../../fastapi_app/plugins/discord_audit_trail/tests/test_plugin.py) - Unit tests (18 tests, all passing)
+
+**Files modified:**
+- [fastapi_app/config.py](../../../fastapi_app/config.py:7-10) - Added `load_dotenv()` to load `.env` into `os.environ` before Settings instantiation
+- [fastapi_app/routers/files_save.py](../../../fastapi_app/routers/files_save.py:333-366) - Added `document.save` event emission in update path with diff computation
+- [fastapi_app/routers/files_save.py](../../../fastapi_app/routers/files_save.py:450-485) - Added event emission in new version path with diff from previous version
+- [fastapi_app/routers/files_save.py](../../../fastapi_app/routers/files_save.py:558-593) - Added event emission in new gold path with diff from existing gold
+
+**Key features:**
+- Listens to `document.save` events from event bus
+- Configurable via `DISCORD_AUDIT_TRAIL_ENABLED` and `DISCORD_AUDIT_TRAIL_WEBHOOK_URL` environment variables
+- Plugin availability check: Won't load if `DISCORD_AUDIT_TRAIL_ENABLED=false` (using `is_available()` class method)
+- Extracts most recent TEI `revisionDesc/change` element (must be within 60 seconds)
+- Resolves person names via `xml:id` lookup in `respStmt/persName`
+- Resolves collection names from database
+- Posts formatted Discord embed with collection, document title, change description, author, and timestamp
+- Event payload includes unified diff between versions for potential future use
+- All tests passing (18/18)
+
+**Event payload structure:**
+
+```python
+{
+    "file_id": str,           # stable_id
+    "doc_id": str,            # document ID
+    "xml_content": str,       # TEI XML content
+    "label": str,             # document label
+    "collections": list[str], # collection IDs
+    "is_gold": bool,          # gold standard flag
+    "version": int | None,    # version number
+    "variant": str | None,    # variant name
+    "previous_hash": str | None,  # hash of previous version
+    "diff": str | None        # unified diff (if previous exists)
+}
+```
+
+## Configuration Loading Issue and Fix
+
+**Problem discovered:** Plugin configuration from environment variables wasn't being loaded properly.
+
+**Root cause:** Backend plugins are loaded via `importlib.util.spec_from_file_location()` which loads `plugin.py` directly, **bypassing the `__init__.py` file**. This means any config initialization in `__init__.py` is never executed.
+
+**Solution implemented:**
+
+1. **Moved config initialization from `__init__.py` to plugin class `__init__()`** - Configuration via `get_plugin_config()` now happens when the plugin instance is created
+2. **Added `load_dotenv()` to `config.py`** - Ensures `.env` file is loaded into `os.environ` before any imports, making environment variables available to all plugins
+
+**Key learning:** Backend plugins should initialize configuration in the plugin class `__init__()` method, NOT in the package `__init__.py` file.
