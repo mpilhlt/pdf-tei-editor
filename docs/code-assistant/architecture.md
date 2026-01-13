@@ -24,65 +24,25 @@ For comprehensive architecture details, see [development/architecture.md](../dev
 - **Templates**: `app/src/templates/` - HTML templates for UI components
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
-## Plugin System Architecture
+## Plugin System
 
-The application uses a dual-architecture plugin system supporting both object-based and class-based patterns.
+The application uses two independent plugin systems - one for frontend (JavaScript) and one for backend (Python). See [../development/plugin-system.md](../development/plugin-system.md) for overview.
 
-### Architecture Overview
+### Frontend Plugins
 
-- **Central Management**: `PluginManager` handles registration, dependency resolution, and endpoint invocation
-- **State Orchestration**: `Application` class coordinates between plugins and state management
-- **Immutable State**: All state updates create new objects, maintaining history for debugging
-- **Dependency Resolution**: Automatic topological sorting ensures plugins load in correct order
+Frontend plugins extend the browser UI using a class or object-based architecture with dependency resolution, state management, and lifecycle hooks.
 
-### Plugin Types
+For detailed information:
+- [Frontend Plugin System Architecture](../development/plugin-system-frontend.md)
+- [Frontend Plugin Development Guide](./plugin-development.md)
 
-**Plugin Objects** (legacy pattern):
+### Backend Plugins
 
-Object-based style compatible with original implementation. Requires manual state management.
+Backend plugins provide server-side functionality and API endpoints with role-based access control.
 
-```javascript
-const plugin = {
-  name: "my-plugin",
-  deps: ['dependency1'],
-  install: async (state) => { /* setup UI */ },
-  onStateUpdate: async (changedKeys, fullState) => { /* react to changes */ }
-};
-```
-
-**Plugin Classes** (recommended):
-
-Plugin classes offer automatic state management via the `this.state` property.
-
-```javascript
-class MyPlugin extends Plugin {
-  constructor(context) {
-    super(context, { name: 'my-plugin', deps: ['dependency1'] });
-  }
-
-  async install(state) { /* setup UI */ }
-  async onStateUpdate(changedKeys, fullState) { /* reactive updates */ }
-  async dispatchStateChange(changes) { /* trigger state updates */ }
-}
-```
-
-For detailed plugin development patterns, see [plugin-development.md](./plugin-development.md).
-
-### Plugin Endpoints System
-
-Plugins expose functionality through endpoints defined in `endpoints.js`:
-
-**Lifecycle Endpoints:**
-- `install` - Plugin initialization and DOM setup
-- `start` - Application startup after all plugins installed
-- `shutdown` - Cleanup on application exit
-
-**State Management Endpoints:**
-- `updateInternalState` - Silent state sync for Plugin classes
-- `onStateUpdate` - Reactive notifications with changed keys and full state
-
-**Custom Endpoints:**
-- Plugin-specific endpoints exposed via `getEndpoints()` method
+For detailed information:
+- [Backend Plugin System Architecture](../development/plugin-system-backend.md)
+- [Backend Plugin Development Guide](./backend-plugins.md)
 
 ## UI Component System
 
