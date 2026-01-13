@@ -176,6 +176,9 @@ class DiscordAuditTrailPlugin(Plugin):
             try:
                 # Parse ISO 8601 timestamp (handle both Z and +00:00 formats)
                 when_dt = datetime.fromisoformat(when_str.replace('Z', '+00:00'))
+                # Ensure datetime is timezone-aware (assume UTC if naive)
+                if when_dt.tzinfo is None:
+                    when_dt = when_dt.replace(tzinfo=timezone.utc)
                 changes_with_time.append((when_dt, change))
             except (ValueError, AttributeError):
                 continue
