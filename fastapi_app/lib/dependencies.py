@@ -7,6 +7,8 @@ Provides injectable dependencies for database, repositories, storage, auth, etc.
 from typing import Optional, Dict
 from fastapi import Request, HTTPException, Depends
 from functools import wraps
+import threading
+from pathlib import Path
 
 from ..config import get_settings
 from .database import DatabaseManager
@@ -28,6 +30,7 @@ _sse_service_instance: Optional[SSEService] = None
 _db_manager_instance: Optional[DatabaseManager] = None
 _db_manager_lock = None  # Lazy init to avoid import-time issues
 
+
 def _get_db_manager_lock():
     """Get the lock for database manager initialization"""
     global _db_manager_lock
@@ -39,24 +42,64 @@ def _get_db_manager_lock():
 
 # Database dependencies
 
+class _DatabaseManagerSingleton:
+    """
+    Proper singleton implementation for DatabaseManager.
+    
+    This ensures only one DatabaseManager instance exists per database
+    throughout the application lifecycle.
+    """
+    _instances: Dict[str, DatabaseManager] = {}
+    _locks: Dict[str, threading.Lock] = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def get_instance(cls, db_path: str) -> DatabaseManager:
+        """
+        Get or create a singleton DatabaseManager instance for the given database path.
+        
+        Args:
+            db_path: Path to the database file
+            
+        Returns:
+            DatabaseManager instance
+        """
+        with cls._lock:
+            if db_path not in cls._instances:
+                # Create lock for this specific database path
+                cls._locks[db_path] = threading.Lock()
+                
+        # Get the lock for this specific database
+        db_lock = cls._locks[db_path]
+        
+        with db_lock:
+            # Double-check pattern
+            if db_path not in cls._instances:
+                settings = get_settings()
+                logger.debug(f"Initializing database at {db_path}")
+                # Convert string to Path object before passing to DatabaseManager
+                cls._instances[db_path] = DatabaseManager(Path(db_path))
+                logger.debug("Database initialized successfully")
+            
+            return cls._instances[db_path]
+
+    @classmethod
+    def reset_instances(cls) -> None:
+        """
+        Reset all singleton instances.
+        
+        This is primarily for testing purposes.
+        """
+        with cls._lock:
+            cls._instances.clear()
+            cls._locks.clear()
+
+
 def get_db() -> DatabaseManager:
     """Get singleton DatabaseManager instance"""
-    global _db_manager_instance
-
-    if _db_manager_instance is not None:
-        return _db_manager_instance
-
-    with _get_db_manager_lock():
-        # Double-check after acquiring lock
-        if _db_manager_instance is not None:
-            return _db_manager_instance
-
-        settings = get_settings()
-        db_path = settings.db_dir / "metadata.db"
-        logger.debug(f"Initializing database at {db_path}")
-        _db_manager_instance = DatabaseManager(db_path)
-        logger.debug("Database initialized successfully")
-        return _db_manager_instance
+    settings = get_settings()
+    db_path = str(settings.db_dir / "metadata.db")
+    return _DatabaseManagerSingleton.get_instance(db_path)
 
 
 def reset_db_manager() -> None:
@@ -66,9 +109,9 @@ def reset_db_manager() -> None:
     This is primarily for testing purposes, to allow re-initialization
     after database files are deleted/recreated.
     """
-    global _db_manager_instance
-    _db_manager_instance = None
-
+    settings = get_settings()
+    db_path = str(settings.db_dir / "metadata.db")
+    _DatabaseManagerSingleton.reset_instances()
 
 def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository:
     """Get FileRepository instance with database"""
@@ -270,4 +313,5 @@ def get_sync_service(
 
 
 # Alias for backward compatibility with Phase 3-5 naming
+generate_session_id = require_session_id
 get_session_user = require_authenticated_user
