@@ -6,6 +6,7 @@ Uses context managers for proper resource cleanup.
 """
 
 import sqlite3
+import queue
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
@@ -32,6 +33,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.logger = logger
         self._ensure_db_exists()
+        self._pool = queue.Queue()
 
     def _ensure_db_exists(self) -> None:
         """
@@ -49,9 +51,18 @@ class DatabaseManager:
 
         # Use per-database lock to prevent concurrent schema initialization
         with sqlite_utils.with_db_lock(self.db_path):
-            # Create database and initialize schema (including migrations)
-            with self.get_connection() as conn:
+            # Use raw connection to avoid recursive locking from sqlite_utils.get_connection
+            # and to ensure we have control over WAL mode setting
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, isolation_level=None)
+            try:
+                # Enable WAL mode explicitly
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA foreign_keys = ON")
+
+                # Create database and initialize schema (including migrations)
                 initialize_database(conn, self.logger, db_path=self.db_path)
+            finally:
+                conn.close()
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -69,9 +80,22 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection
         """
-        # Use centralized connection utility with WAL mode and retry logic
-        with sqlite_utils.get_connection(self.db_path) as conn:
+        try:
+            conn = self._pool.get(block=False)
+        except queue.Empty:
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, check_same_thread=False, isolation_level=None)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        try:
             yield conn
+        finally:
+            # Rollback any uncommitted changes to ensure clean state for next use
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            self._pool.put(conn)
 
     @contextmanager
     def transaction(self) -> Generator[sqlite3.Connection, None, None]:
@@ -91,11 +115,19 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection with transaction
         """
-        # Use centralized transaction utility
-        with sqlite_utils.transaction(self.db_path) as conn:
-            yield conn
-            if self.logger:
-                self.logger.debug("Transaction committed")
+        with self.get_connection() as conn:
+            conn.execute("BEGIN")
+            try:
+                yield conn
+                conn.commit()
+                if self.logger:
+                    self.logger.debug("Transaction committed")
+            except Exception:
+                try:
+                    conn.rollback()
+                except sqlite3.OperationalError:
+                    pass
+                raise
 
     def execute_query(
         self,

@@ -83,12 +83,25 @@ def _ensure_wal_mode(db_path: Path) -> None:
         # Use a dedicated connection to set WAL mode
         for attempt in range(DEFAULT_RETRY_COUNT):
             try:
-                conn = sqlite3.connect(str(db_path), timeout=30.0)
+                conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
                 try:
-                    conn.execute("PRAGMA journal_mode = WAL")
+                    # Try WAL2 mode first (available in SQLite 3.37+)
+                    try:
+                        conn.execute("PRAGMA journal_mode = WAL2")
+                        result = conn.execute("PRAGMA journal_mode").fetchone()[0]
+                        if result == 'wal2':
+                            logger.debug(f"WAL2 mode enabled for {db_path.name}")
+                        else:
+                            # Fall back to WAL mode
+                            conn.execute("PRAGMA journal_mode = WAL")
+                            logger.debug(f"WAL mode enabled for {db_path.name}")
+                    except sqlite3.OperationalError:
+                        # WAL2 not supported, fall back to WAL mode
+                        conn.execute("PRAGMA journal_mode = WAL")
+                        logger.debug(f"WAL mode enabled for {db_path.name}")
+                    
                     with _init_lock:
                         _initialized_databases.add(db_key)
-                    logger.debug(f"WAL mode enabled for {db_path.name}")
                     return
                 finally:
                     conn.close()
@@ -176,8 +189,8 @@ def get_connection(
             if foreign_keys:
                 conn.execute("PRAGMA foreign_keys = ON")
 
-            yield conn
-            return
+            # Connection successful
+            break
 
         except sqlite3.OperationalError as e:
             last_error = e
@@ -201,12 +214,13 @@ def get_connection(
                     f"Database connection failed for {db_path.name} "
                     f"after {retry_count} attempts: {e}"
                 )
-        finally:
-            if conn:
-                conn.close()
+                raise last_error or sqlite3.OperationalError("Connection failed")
 
-    # If we get here, all retries failed
-    raise last_error or sqlite3.OperationalError("Connection failed")
+    try:
+        yield conn # type: ignore
+    finally:
+        if conn:
+            conn.close()
 
 
 @contextmanager

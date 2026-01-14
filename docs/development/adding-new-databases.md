@@ -97,42 +97,69 @@ Analytics database manager.
 """
 
 import sqlite3
+import queue
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from .analytics_schema import initialize_analytics_db
+from . import sqlite_utils
 
 
 class AnalyticsDB:
-    """Manages analytics database connections."""
+    """
+    Manages analytics database connections with pooling.
+    
+    Implements connection pooling and safe WAL mode initialization
+    similar to the main DatabaseManager.
+    """
 
     def __init__(self, db_path: Path, logger=None):
         self.db_path = db_path
         self.logger = logger
+        self._pool = queue.Queue()
         self._ensure_db_exists()
 
     def _ensure_db_exists(self) -> None:
         """Ensure database and schema exist with migrations."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with self.get_connection() as conn:
-            initialize_analytics_db(conn, self.logger, db_path=self.db_path)
+        # Use per-database lock to prevent concurrent schema initialization
+        with sqlite_utils.with_db_lock(self.db_path):
+            # Use raw connection for initialization to set WAL mode explicitly
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, isolation_level=None)
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA foreign_keys = ON")
+                initialize_analytics_db(conn, self.logger, db_path=self.db_path)
+            finally:
+                conn.close()
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
-        """Context manager for database connections."""
-        conn = None
+        """
+        Context manager for database connections with pooling.
+        """
         try:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._pool.get(block=False)
+        except queue.Empty:
+            conn = sqlite3.connect(
+                str(self.db_path), 
+                timeout=60.0, 
+                check_same_thread=False, 
+                isolation_level=None
+            )
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        try:
             yield conn
-        except sqlite3.Error as e:
-            if self.logger:
-                self.logger.error(f"Database connection error: {e}")
-            raise
         finally:
-            if conn:
-                conn.close()
+            # Rollback any uncommitted changes to ensure clean state for next use
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            self._pool.put(conn)
 ```
 
 ### Step 3: Initialize in Application Startup

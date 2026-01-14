@@ -151,13 +151,13 @@ def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str, dict
         return False, f"Collection '{collection_id}' not found.", {}
 
     # Import database utilities
-    from .database import DatabaseManager
     from .file_repository import FileRepository
     from .models import FileUpdate
+    from .dependencies import _DatabaseManagerSingleton
 
     # Initialize database access
     db_path = db_dir / "metadata.db"
-    db_manager = DatabaseManager(db_path)
+    db_manager = _DatabaseManagerSingleton.get_instance(str(db_path))
     file_repo = FileRepository(db_manager)
 
     files_updated = 0

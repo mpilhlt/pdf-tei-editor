@@ -15,6 +15,7 @@ from .locking import init_locks_db
 from .sessions import SessionManager
 from .auth import AuthManager
 from .logging_utils import get_logger
+from .dependencies import _DatabaseManagerSingleton
 
 
 logger = get_logger(__name__)
@@ -37,7 +38,9 @@ def initialize_all_databases(db_dir: Path, data_root: Path) -> None:
     # Initialize file metadata database
     metadata_db_path = db_dir / "metadata.db"
     logger.debug(f"Initializing metadata database at {metadata_db_path}")
-    db_manager = DatabaseManager(metadata_db_path, logger)
+
+    # Use singleton to ensure it's registered and reused by dependencies.get_db()
+    _DatabaseManagerSingleton.get_instance(str(metadata_db_path))
     logger.debug("Metadata database initialized successfully")
     
     # Initialize locks database
@@ -80,8 +83,20 @@ def initialize_database_with_pooling(db_path: Path, logger) -> sqlite3.Connectio
         isolation_level=None  # Autocommit mode
     )
     
-    # Enable WAL mode
-    conn.execute("PRAGMA journal_mode = WAL")
+    # Try to enable WAL2 mode first (available in SQLite 3.37+)
+    try:
+        conn.execute("PRAGMA journal_mode = WAL2")
+        result = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        if result == 'wal2':
+            logger.debug(f"Database {db_path.name} initialized with WAL2 mode")
+        else:
+            # Fall back to WAL mode
+            conn.execute("PRAGMA journal_mode = WAL")
+            logger.debug(f"Database {db_path.name} initialized with WAL mode")
+    except sqlite3.OperationalError:
+        # WAL2 not supported, fall back to WAL mode
+        conn.execute("PRAGMA journal_mode = WAL")
+        logger.debug(f"Database {db_path.name} initialized with WAL mode")
     
     # Enable foreign key constraints
     conn.execute("PRAGMA foreign_keys = ON")
@@ -89,7 +104,6 @@ def initialize_database_with_pooling(db_path: Path, logger) -> sqlite3.Connectio
     # Set busy timeout for concurrent access
     conn.execute("PRAGMA busy_timeout = 30000")
     
-    logger.debug(f"Database {db_path.name} initialized with WAL mode")
     return conn
 
 

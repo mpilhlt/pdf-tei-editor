@@ -20,6 +20,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[CI/CD Pipeline](docs/development/ci-cd-pipeline.md)** - GitHub Actions workflows, test execution, release process
 - **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
 - **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
+- **[Database Connections](docs/code-assistant/database-connections.md)** - SQLite connection pooling, WAL mode, and transaction handling
 - **[CLI](docs/user-manual/cli.md) - Command Line Interface reference
 - **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
@@ -87,6 +88,8 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 - **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
 - **AVOID raw SQL queries** except in exceptional cases where no API method exists
 - **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
+- **ALWAYS pass `DatabaseManager` instances** to classes that need database access, do not pass file paths or create new `DatabaseManager` instances. This ensures connection pooling works correctly.
+- **Use `db.transaction()`** for write operations to ensure atomicity and proper locking.
 - This prevents breaking changes when the database schema evolves
 
 ### Database Migrations

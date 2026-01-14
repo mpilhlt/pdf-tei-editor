@@ -28,6 +28,8 @@ logger = get_logger(__name__)
 # Global service instances (singletons)
 _sse_service_instance: Optional[SSEService] = None
 _db_manager_instance: Optional[DatabaseManager] = None
+_session_manager_instance: Optional[SessionManager] = None
+_auth_manager_instance: Optional[AuthManager] = None
 _db_manager_lock = None  # Lazy init to avoid import-time issues
 
 
@@ -112,6 +114,9 @@ def reset_db_manager() -> None:
     settings = get_settings()
     db_path = str(settings.db_dir / "metadata.db")
     _DatabaseManagerSingleton.reset_instances()
+    
+    from .storage_references import StorageReferenceManager
+    StorageReferenceManager.reset_cache()
 
 def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository:
     """Get FileRepository instance with database"""
@@ -122,22 +127,29 @@ def get_file_storage() -> FileStorage:
     """Get FileStorage instance with reference counting support"""
     settings = get_settings()
     storage_root = settings.data_root / "files"
-    db_path = settings.db_dir / "metadata.db"
-    return FileStorage(storage_root, db_path)
+    db_path = str(settings.db_dir / "metadata.db")
+    db_manager = _DatabaseManagerSingleton.get_instance(db_path)
+    return FileStorage(storage_root, db_manager)
 
 
 # Auth dependencies
 
 def get_session_manager() -> SessionManager:
     """Get SessionManager instance"""
-    settings = get_settings()
-    return SessionManager(settings.db_dir, logger=logger)
+    global _session_manager_instance
+    if _session_manager_instance is None:
+        settings = get_settings()
+        _session_manager_instance = SessionManager(settings.db_dir, logger=logger)
+    return _session_manager_instance
 
 
 def get_auth_manager() -> AuthManager:
     """Get AuthManager instance"""
-    settings = get_settings()
-    return AuthManager(settings.db_dir, logger=logger)
+    global _auth_manager_instance
+    if _auth_manager_instance is None:
+        settings = get_settings()
+        _auth_manager_instance = AuthManager(settings.db_dir, logger=logger)
+    return _auth_manager_instance
 
 
 # Session ID extraction
