@@ -46,20 +46,16 @@ class StorageReferenceManager:
     @contextmanager
     def _get_connection(self):
         """Get database connection with proper settings."""
-        conn = None
+        from . import sqlite_utils
+
         try:
-            conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA journal_mode = WAL")
-            yield conn
+            # Use centralized connection utility with WAL mode and retry logic
+            with sqlite_utils.get_connection(self.db_path) as conn:
+                yield conn
         except sqlite3.Error as e:
             if self.logger:
                 self.logger.error(f"Database error: {e}")
             raise
-        finally:
-            if conn:
-                conn.close()
 
     def _ensure_table_exists(self) -> None:
         """

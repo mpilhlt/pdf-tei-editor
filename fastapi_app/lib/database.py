@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
 from .db_schema import initialize_database
+from . import sqlite_utils
 
 
 class DatabaseManager:
@@ -39,13 +40,18 @@ class DatabaseManager:
         Creates database file and initializes schema if needed.
         Runs any pending migrations automatically.
         This method is idempotent - safe to call multiple times.
+
+        Uses a per-database lock to prevent concurrent schema initialization
+        which can corrupt the database.
         """
         # Ensure parent directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create database and initialize schema (including migrations)
-        with self.get_connection() as conn:
-            initialize_database(conn, self.logger, db_path=self.db_path)
+        # Use per-database lock to prevent concurrent schema initialization
+        with sqlite_utils.with_db_lock(self.db_path):
+            # Create database and initialize schema (including migrations)
+            with self.get_connection() as conn:
+                initialize_database(conn, self.logger, db_path=self.db_path)
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -63,28 +69,9 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection
         """
-        conn = None
-        try:
-            conn = sqlite3.connect(
-                str(self.db_path),
-                # Enable foreign keys
-                isolation_level=None  # autocommit mode by default
-            )
-            # Enable row factory for dict-like access
-            conn.row_factory = sqlite3.Row
-
-            # Set pragmas for better performance
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging
-
+        # Use centralized connection utility with WAL mode and retry logic
+        with sqlite_utils.get_connection(self.db_path) as conn:
             yield conn
-        except sqlite3.Error as e:
-            if self.logger:
-                self.logger.error(f"Database connection error: {e}")
-            raise
-        finally:
-            if conn:
-                conn.close()
 
     @contextmanager
     def transaction(self) -> Generator[sqlite3.Connection, None, None]:
@@ -104,38 +91,11 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection with transaction
         """
-        conn = None
-        try:
-            conn = sqlite3.connect(str(self.db_path))
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-
-            # Begin transaction
-            conn.execute("BEGIN")
-
+        # Use centralized transaction utility
+        with sqlite_utils.transaction(self.db_path) as conn:
             yield conn
-
-            # Commit transaction
-            conn.commit()
-
             if self.logger:
                 self.logger.debug("Transaction committed")
-
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-                if self.logger:
-                    self.logger.error(f"Transaction rolled back: {e}")
-            raise
-        except Exception as e:
-            if conn:
-                conn.rollback()
-                if self.logger:
-                    self.logger.error(f"Transaction rolled back due to error: {e}")
-            raise
-        finally:
-            if conn:
-                conn.close()
 
     def execute_query(
         self,

@@ -23,17 +23,51 @@ from .event_bus import EventBus, get_event_bus
 
 logger = get_logger(__name__)
 
-# Global SSE service instance (singleton)
+# Global service instances (singletons)
 _sse_service_instance: Optional[SSEService] = None
+_db_manager_instance: Optional[DatabaseManager] = None
+_db_manager_lock = None  # Lazy init to avoid import-time issues
+
+def _get_db_manager_lock():
+    """Get the lock for database manager initialization"""
+    global _db_manager_lock
+    if _db_manager_lock is None:
+        import threading
+        _db_manager_lock = threading.Lock()
+    return _db_manager_lock
 
 
 # Database dependencies
 
 def get_db() -> DatabaseManager:
-    """Get DatabaseManager instance"""
-    settings = get_settings()
-    db_path = settings.db_dir / "metadata.db"
-    return DatabaseManager(db_path)
+    """Get singleton DatabaseManager instance"""
+    global _db_manager_instance
+
+    if _db_manager_instance is not None:
+        return _db_manager_instance
+
+    with _get_db_manager_lock():
+        # Double-check after acquiring lock
+        if _db_manager_instance is not None:
+            return _db_manager_instance
+
+        settings = get_settings()
+        db_path = settings.db_dir / "metadata.db"
+        logger.debug(f"Initializing database at {db_path}")
+        _db_manager_instance = DatabaseManager(db_path)
+        logger.debug("Database initialized successfully")
+        return _db_manager_instance
+
+
+def reset_db_manager() -> None:
+    """
+    Reset the DatabaseManager singleton.
+
+    This is primarily for testing purposes, to allow re-initialization
+    after database files are deleted/recreated.
+    """
+    global _db_manager_instance
+    _db_manager_instance = None
 
 
 def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository:
