@@ -195,15 +195,19 @@ default_editability = config.get('access-control.default-editability', default='
 Document permissions database management (granular mode only).
 
 Stores document-level visibility/editability permissions in SQLite database.
+Uses DELETE journal mode (simple database with infrequent writes).
 """
 
 import sqlite3
+import queue
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Generator
 from dataclasses import dataclass
 import logging
+
+from . import sqlite_utils
 
 @dataclass
 class DocumentPermissions:
@@ -215,35 +219,117 @@ class DocumentPermissions:
     created_at: datetime
     updated_at: datetime
 
-@contextmanager
-def get_db_connection(db_dir: Path, logger: logging.Logger):
-    """Context manager for database connections."""
-    db_path = db_dir / "permissions.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+
+class PermissionsDB:
+    """
+    Manages permissions database connections with pooling.
+
+    Uses DELETE journal mode (not WAL) since this is a simple database
+    with infrequent writes that doesn't benefit from WAL's read concurrency.
+    """
+
+    def __init__(self, db_path: Path, logger=None):
+        self.db_path = db_path
+        self.logger = logger
+        self._pool = queue.Queue()
+        self._ensure_db_exists()
+
+    def _ensure_db_exists(self) -> None:
+        """Ensure database and schema exist with migrations."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Use per-database lock to prevent concurrent schema initialization
+        with sqlite_utils.with_db_lock(self.db_path):
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, isolation_level=None)
+            try:
+                conn.execute("PRAGMA journal_mode = DELETE")
+                conn.execute("PRAGMA busy_timeout = 30000")
+                conn.execute("PRAGMA foreign_keys = ON")
+                initialize_permissions_schema(conn, self.logger, db_path=self.db_path)
+            finally:
+                conn.close()
+
+    @contextmanager
+    def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
+        """Context manager for database connections with pooling."""
+        try:
+            conn = self._pool.get(block=False)
+        except queue.Empty:
+            conn = sqlite3.connect(
+                str(self.db_path),
+                timeout=60.0,
+                check_same_thread=False,
+                isolation_level=None
+            )
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        try:
+            yield conn
+        finally:
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            self._pool.put(conn)
+
+
+def initialize_permissions_schema(conn: sqlite3.Connection, logger=None, db_path=None) -> None:
+    """
+    Initialize permissions database schema.
+
+    Creates tables and runs any pending migrations.
+    """
     try:
-        yield conn
-    finally:
-        conn.close()
+        cursor = conn.cursor()
 
-def init_permissions_db(db_dir: Path, logger: logging.Logger) -> None:
-    """Initialize permissions database with schema."""
-    from fastapi_app.lib.migration_runner import run_migrations_if_needed
+        if logger:
+            logger.info("Creating permissions tables...")
 
-    db_path = db_dir / "permissions.db"
+        # Create document_permissions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS document_permissions (
+                stable_id TEXT PRIMARY KEY,
+                visibility TEXT NOT NULL DEFAULT 'collection',
+                editability TEXT NOT NULL DEFAULT 'owner',
+                owner TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CHECK (visibility IN ('collection', 'owner')),
+                CHECK (editability IN ('collection', 'owner'))
+            )
+        """)
 
-    # Run migrations using centralized runner
-    run_migrations_if_needed(
-        db_path=db_path,
-        migration_type='permissions',
-        logger=logger
-    )
+        # Create indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_permissions_owner ON document_permissions(owner)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_permissions_visibility ON document_permissions(visibility)")
+
+        conn.commit()
+
+        if logger:
+            logger.info("Permissions database schema initialized")
+
+        # Run migrations if db_path provided
+        if db_path:
+            from pathlib import Path
+            from .migration_runner import run_migrations_if_needed
+            from .migrations.versions import PERMISSIONS_MIGRATIONS
+
+            run_migrations_if_needed(
+                db_path=Path(db_path),
+                migrations=PERMISSIONS_MIGRATIONS,
+                logger=logger
+            )
+
+    except sqlite3.Error as e:
+        if logger:
+            logger.error(f"Failed to initialize permissions database: {e}")
+        raise
 
 def get_document_permissions(
     stable_id: str,
-    db_dir: Path,
-    logger: logging.Logger,
+    permissions_db: PermissionsDB,
     default_visibility: str = 'collection',
     default_editability: str = 'owner',
     default_owner: Optional[str] = None
@@ -252,8 +338,15 @@ def get_document_permissions(
     Get permissions for an artifact.
 
     Returns defaults if not found in database.
+
+    Args:
+        stable_id: Artifact stable ID
+        permissions_db: PermissionsDB instance (use dependency injection)
+        default_visibility: Default visibility if not in database
+        default_editability: Default editability if not in database
+        default_owner: Default owner if not in database
     """
-    with get_db_connection(db_dir, logger) as conn:
+    with permissions_db.get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM document_permissions WHERE stable_id = ?",
             (stable_id,)
@@ -284,10 +377,18 @@ def set_document_permissions(
     visibility: str,
     editability: str,
     owner: str,
-    db_dir: Path,
-    logger: logging.Logger
+    permissions_db: PermissionsDB
 ) -> DocumentPermissions:
-    """Set permissions for an artifact."""
+    """
+    Set permissions for an artifact.
+
+    Args:
+        stable_id: Artifact stable ID
+        visibility: 'collection' or 'owner'
+        editability: 'collection' or 'owner'
+        owner: Username (required)
+        permissions_db: PermissionsDB instance (use dependency injection)
+    """
     # Validate inputs
     if visibility not in ('collection', 'owner'):
         raise ValueError(f"Invalid visibility: {visibility}")
@@ -298,7 +399,7 @@ def set_document_permissions(
 
     now = datetime.now(timezone.utc).isoformat()
 
-    with get_db_connection(db_dir, logger) as conn:
+    with permissions_db.get_connection() as conn:
         # UPSERT into document_permissions
         conn.execute("""
             INSERT INTO document_permissions (stable_id, visibility, editability, owner, created_at, updated_at)
@@ -320,78 +421,38 @@ def set_document_permissions(
         updated_at=datetime.fromisoformat(now)
     )
 
-def delete_document_permissions(stable_id: str, db_dir: Path, logger: logging.Logger) -> bool:
-    """Delete permissions record for an artifact (when artifact is deleted)."""
-    with get_db_connection(db_dir, logger) as conn:
+def delete_document_permissions(stable_id: str, permissions_db: PermissionsDB) -> bool:
+    """
+    Delete permissions record for an artifact (when artifact is deleted).
+
+    Args:
+        stable_id: Artifact stable ID
+        permissions_db: PermissionsDB instance (use dependency injection)
+    """
+    with permissions_db.get_connection() as conn:
         conn.execute("DELETE FROM document_permissions WHERE stable_id = ?", (stable_id,))
         conn.commit()
         return True
 ```
 
-### 3. Migration (`fastapi_app/lib/migrations/versions/m002_permissions_db.py`)
+### 3. Migration Registration
 
-```python
-"""
-Migration 002: Create document permissions database
-
-Creates permissions.db with document_permissions table.
-Used only in 'granular' access control mode.
-"""
-
-import sqlite3
-from ..base import Migration
-
-class Migration002PermissionsDb(Migration):
-    """Create document permissions database."""
-
-    @property
-    def version(self) -> int:
-        return 2
-
-    @property
-    def description(self) -> str:
-        return "Create document permissions database"
-
-    def upgrade(self, conn: sqlite3.Connection) -> None:
-        """Create permissions table."""
-        # Create document_permissions table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS document_permissions (
-                stable_id TEXT PRIMARY KEY,
-                visibility TEXT NOT NULL DEFAULT 'collection',
-                editability TEXT NOT NULL DEFAULT 'owner',
-                owner TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CHECK (visibility IN ('collection', 'owner')),
-                CHECK (editability IN ('collection', 'owner'))
-            )
-        """)
-
-        # Create indexes
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_stable_id ON document_permissions(stable_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_owner ON document_permissions(owner)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_visibility ON document_permissions(visibility)")
-
-    def downgrade(self, conn: sqlite3.Connection) -> None:
-        """Drop permissions table."""
-        conn.execute("DROP TABLE IF EXISTS document_permissions")
-```
+Since the schema is created in `initialize_permissions_schema()`, migrations are only needed for future schema changes.
 
 Register in `fastapi_app/lib/migrations/versions/__init__.py`:
 
 ```python
-from .m002_permissions_db import Migration002PermissionsDb
+# Permissions database migrations (for future schema changes)
+PERMISSIONS_MIGRATIONS = []
 
-PERMISSIONS_MIGRATIONS = [
-    Migration002PermissionsDb,
-]
-
+# Add to ALL_MIGRATIONS if needed for tooling
 ALL_MIGRATIONS = [
     Migration001LocksFileId,
-    Migration002PermissionsDb,
+    # Future: add permissions migrations here
 ]
 ```
+
+**Note:** The base schema is created by `initialize_permissions_schema()` in the database layer. Only add migrations here for subsequent schema changes (adding columns, indexes, etc.).
 
 ### 4. API Models (`fastapi_app/lib/models_permissions.py`)
 
@@ -443,6 +504,7 @@ Implements permission management endpoints:
 
 from fastapi import APIRouter, Depends, HTTPException
 from ..lib.permissions_db import (
+    PermissionsDB,
     get_document_permissions,
     set_document_permissions
 )
@@ -450,10 +512,9 @@ from ..lib.models_permissions import (
     DocumentPermissionsModel,
     SetPermissionsRequest
 )
-from ..lib.dependencies import get_current_user, get_file_repository
+from ..lib.dependencies import get_current_user, get_file_repository, get_permissions_db
 from ..lib.file_repository import FileRepository
 from ..lib.config_utils import get_config
-from fastapi_app.config import get_settings
 from ..lib.logging_utils import get_logger
 from ..lib.acl_utils import userHasReviewerRole
 
@@ -464,7 +525,8 @@ router = APIRouter(prefix="/files", tags=["files"])
 def get_permissions_endpoint(
     stable_id: str,
     current_user: dict = Depends(get_current_user),
-    repo: FileRepository = Depends(get_file_repository)
+    repo: FileRepository = Depends(get_file_repository),
+    permissions_db: PermissionsDB = Depends(get_permissions_db)
 ):
     """Get permissions for an artifact (granular mode only)."""
     config = get_config()
@@ -476,8 +538,6 @@ def get_permissions_endpoint(
             detail=f"Permissions API only available in granular mode (current: {mode})"
         )
 
-    settings = get_settings()
-
     # Get file to find owner
     file = repo.get_file_by_stable_id(stable_id)
     if not file:
@@ -488,8 +548,7 @@ def get_permissions_endpoint(
 
     perms = get_document_permissions(
         stable_id,
-        settings.db_dir,
-        logger,
+        permissions_db,
         default_visibility=default_visibility,
         default_editability=default_editability,
         default_owner=file.created_by
@@ -501,7 +560,8 @@ def get_permissions_endpoint(
 def set_permissions_endpoint(
     request: SetPermissionsRequest,
     current_user: dict = Depends(get_current_user),
-    repo: FileRepository = Depends(get_file_repository)
+    repo: FileRepository = Depends(get_file_repository),
+    permissions_db: PermissionsDB = Depends(get_permissions_db)
 ):
     """Set permissions for an artifact (owner/reviewer only, granular mode only)."""
     config = get_config()
@@ -513,8 +573,6 @@ def set_permissions_endpoint(
             detail=f"Permissions API only available in granular mode (current: {mode})"
         )
 
-    settings = get_settings()
-
     # Get current permissions
     file = repo.get_file_by_stable_id(request.stable_id)
     if not file:
@@ -522,8 +580,7 @@ def set_permissions_endpoint(
 
     current_perms = get_document_permissions(
         request.stable_id,
-        settings.db_dir,
-        logger,
+        permissions_db,
         default_owner=file.created_by
     )
 
@@ -543,11 +600,48 @@ def set_permissions_endpoint(
         visibility=request.visibility,
         editability=request.editability,
         owner=request.owner,
-        db_dir=settings.db_dir,
-        logger=logger
+        permissions_db=permissions_db
     )
 
     return DocumentPermissionsModel(**updated.__dict__)
+```
+
+**Add dependency provider in `fastapi_app/lib/dependencies.py`:**
+
+```python
+from .permissions_db import PermissionsDB
+
+class _PermissionsDBSingleton:
+    """Singleton for PermissionsDB to enable connection pooling."""
+    _instance: PermissionsDB | None = None
+
+    @classmethod
+    def get_instance(cls, db_path: Path, logger=None) -> PermissionsDB:
+        if cls._instance is None:
+            cls._instance = PermissionsDB(db_path, logger)
+        return cls._instance
+
+def get_permissions_db() -> PermissionsDB:
+    """
+    Dependency provider for PermissionsDB.
+
+    Returns None if not in granular mode (caller should check mode first).
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.config_utils import get_config
+    from fastapi_app.lib.logging_utils import get_logger
+
+    config = get_config()
+    mode = config.get('access-control.mode', default='role-based')
+
+    if mode != 'granular':
+        return None
+
+    settings = get_settings()
+    logger = get_logger(__name__)
+    db_path = settings.db_dir / "permissions.db"
+
+    return _PermissionsDBSingleton.get_instance(db_path, logger)
 ```
 
 Register router in `fastapi_app/main.py`:
@@ -559,7 +653,7 @@ app.include_router(files_permissions.router, prefix="/api/v1")
 
 ### 6. Access Control Logic (`fastapi_app/lib/access_control.py`)
 
-Update to handle three modes:
+Update to handle three modes. Uses dependency injection for `PermissionsDB`:
 
 ```python
 """
@@ -570,7 +664,6 @@ Access control logic supporting three modes:
 """
 
 from typing import Optional, Dict, Any
-from pathlib import Path
 import logging
 from fastapi_app.lib.config_utils import get_config
 from fastapi_app.lib.acl_utils import (
@@ -584,13 +677,18 @@ def can_view_document(
     stable_id: str,
     file_metadata: Any,
     user: Optional[Dict],
-    db_dir: Path,
-    logger: logging.Logger
+    permissions_db=None  # PermissionsDB instance, required for granular mode
 ) -> bool:
     """
     Check if user can view document.
 
     Assumes user already has collection access.
+
+    Args:
+        stable_id: Artifact stable ID
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
     """
     config = get_config()
     mode = config.get('access-control.mode', default='role-based')
@@ -608,6 +706,9 @@ def can_view_document(
         return True
 
     elif mode == 'granular':
+        if permissions_db is None:
+            raise ValueError("permissions_db required for granular mode")
+
         from fastapi_app.lib.permissions_db import get_document_permissions
 
         default_visibility = config.get('access-control.default-visibility', default='collection')
@@ -615,8 +716,7 @@ def can_view_document(
 
         perms = get_document_permissions(
             stable_id,
-            db_dir,
-            logger,
+            permissions_db,
             default_visibility=default_visibility,
             default_owner=default_owner
         )
@@ -633,13 +733,19 @@ def can_edit_document(
     file_id: str,
     file_metadata: Any,
     user: Optional[Dict],
-    db_dir: Path,
-    logger: logging.Logger
+    permissions_db=None  # PermissionsDB instance, required for granular mode
 ) -> bool:
     """
     Check if user can edit document.
 
     Assumes user already has collection access.
+
+    Args:
+        stable_id: Artifact stable ID
+        file_id: File ID (content hash)
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
     """
     config = get_config()
     mode = config.get('access-control.mode', default='role-based')
@@ -662,6 +768,9 @@ def can_edit_document(
         return owner == user.get('username') if user and owner else False
 
     elif mode == 'granular':
+        if permissions_db is None:
+            raise ValueError("permissions_db required for granular mode")
+
         from fastapi_app.lib.permissions_db import get_document_permissions
 
         default_editability = config.get('access-control.default-editability', default='owner')
@@ -669,8 +778,7 @@ def can_edit_document(
 
         perms = get_document_permissions(
             stable_id,
-            db_dir,
-            logger,
+            permissions_db,
             default_editability=default_editability,
             default_owner=default_owner
         )
@@ -694,14 +802,20 @@ def can_delete_document(
     file_id: str,
     file_metadata: Any,
     user: Optional[Dict],
-    db_dir: Path,
-    logger: logging.Logger
+    permissions_db=None  # PermissionsDB instance, required for granular mode
 ) -> bool:
     """
     Check if user can delete document.
 
     Deletion follows same rules as edit, except:
     - In owner-based mode, reviewers can delete any document
+
+    Args:
+        stable_id: Artifact stable ID
+        file_id: File ID (content hash)
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
     """
     # Reviewers can always delete
     if userHasReviewerRole(user):
@@ -717,36 +831,41 @@ def can_delete_document(
         return owner == user.get('username') if user and owner else False
 
     # For other modes, deletion follows edit rules
-    return can_edit_document(stable_id, file_id, file_metadata, user, db_dir, logger)
+    return can_edit_document(stable_id, file_id, file_metadata, user, permissions_db)
 ```
 
 ### 7. File Operations Integration
 
 **`fastapi_app/routers/files_save.py`:**
 
-Set default permissions when creating new documents (granular mode only):
+Set default permissions when creating new documents (granular mode only). Use dependency injection:
 
 ```python
-# After creating new file/artifact
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.dependencies import get_permissions_db
 
-config = get_config()
-mode = config.get('access-control.mode', default='role-based')
+@router.post("/save")
+async def save_file(
+    # ... other params ...
+    permissions_db: PermissionsDB = Depends(get_permissions_db)
+):
+    # ... file creation logic ...
 
-if mode == 'granular':
-    from fastapi_app.lib.permissions_db import set_document_permissions
+    # After creating new file/artifact (granular mode only)
+    if permissions_db is not None:
+        from fastapi_app.lib.config_utils import get_config
+        from fastapi_app.lib.permissions_db import set_document_permissions
 
-    default_visibility = config.get('access-control.default-visibility', default='collection')
-    default_editability = config.get('access-control.default-editability', default='owner')
+        config = get_config()
+        default_visibility = config.get('access-control.default-visibility', default='collection')
+        default_editability = config.get('access-control.default-editability', default='owner')
 
-    set_document_permissions(
-        stable_id=stable_id,
-        visibility=default_visibility,
-        editability=default_editability,
-        owner=current_user.get('username'),
-        db_dir=settings.db_dir,
-        logger=logger
-    )
+        set_document_permissions(
+            stable_id=stable_id,
+            visibility=default_visibility,
+            editability=default_editability,
+            owner=current_user.get('username'),
+            permissions_db=permissions_db
+        )
 ```
 
 **`fastapi_app/routers/files_delete.py`:**
@@ -754,14 +873,20 @@ if mode == 'granular':
 Delete permissions when deleting document (granular mode only):
 
 ```python
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.dependencies import get_permissions_db
 
-config = get_config()
-mode = config.get('access-control.mode', default='role-based')
+@router.delete("/delete/{stable_id}")
+async def delete_file(
+    stable_id: str,
+    # ... other params ...
+    permissions_db: PermissionsDB = Depends(get_permissions_db)
+):
+    # ... deletion logic ...
 
-if mode == 'granular':
-    from fastapi_app.lib.permissions_db import delete_document_permissions
-    delete_document_permissions(stable_id, settings.db_dir, logger)
+    # After deleting file (granular mode only)
+    if permissions_db is not None:
+        from fastapi_app.lib.permissions_db import delete_document_permissions
+        delete_document_permissions(stable_id, permissions_db)
 ```
 
 **`fastapi_app/routers/files_list.py`:**
@@ -770,33 +895,50 @@ Filter files by access control:
 
 ```python
 from fastapi_app.lib.access_control import can_view_document
+from fastapi_app.lib.dependencies import get_permissions_db
 
-# After collection filtering
-filtered_files = []
-for file in files_data:
-    if can_view_document(file.stable_id, file, current_user, settings.db_dir, logger):
-        filtered_files.append(file)
+@router.get("/list")
+async def list_files(
+    # ... other params ...
+    permissions_db: PermissionsDB = Depends(get_permissions_db)
+):
+    # ... get files_data ...
 
-files_data = filtered_files
+    # Filter by access control (granular mode uses permissions_db)
+    filtered_files = []
+    for file in files_data:
+        if can_view_document(file.stable_id, file, current_user, permissions_db):
+            filtered_files.append(file)
+
+    files_data = filtered_files
 ```
 
 ### 8. Initialize in Application Startup
 
-In `fastapi_app/main.py` `lifespan()` function:
+The `PermissionsDB` is initialized lazily via the dependency provider `get_permissions_db()`. No explicit initialization in `main.py` is needed.
+
+The singleton pattern in `dependencies.py` ensures:
+
+1. Database is only created when first accessed (lazy initialization)
+2. Only created if mode is 'granular'
+3. Connection pool is shared across all requests
+
+**Optional: Pre-warm the database on startup (only if immediate startup validation is needed):**
 
 ```python
-# Initialize permissions database (granular mode only)
+# In fastapi_app/main.py lifespan() function
 from fastapi_app.lib.config_utils import get_config
 
 config = get_config()
 mode = config.get('access-control.mode', default='role-based')
 
 if mode == 'granular':
-    from fastapi_app.lib.permissions_db import init_permissions_db
-    permissions_db_path = settings.db_dir / "permissions.db"
+    # Pre-initialize permissions database to catch startup errors early
+    from fastapi_app.lib.dependencies import get_permissions_db
     try:
-        init_permissions_db(settings.db_dir, logger)
-        logger.info(f"Permissions database initialized: {permissions_db_path}")
+        permissions_db = get_permissions_db()
+        if permissions_db:
+            logger.info(f"Permissions database initialized: {permissions_db.db_path}")
     except Exception as e:
         logger.error(f"Error initializing permissions database: {e}")
         raise
