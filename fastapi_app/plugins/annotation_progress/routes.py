@@ -548,6 +548,7 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
             "last_change_status": last_change_status,
             "last_change_timestamp": last_change_timestamp,
             "change_signatures": change_signatures,
+            "is_gold_standard": getattr(file_metadata, "is_gold_standard", False),
         }
 
     except Exception as e:
@@ -559,11 +560,13 @@ def _format_version_chains_html(annotations: list[dict]) -> str:
     """
     Format annotation versions as HTML showing linear ancestry chains.
 
-    The version with the newest timestamp is marked with a star emoji.
+    The gold standard version is marked with 🥇 emoji.
+    The version with the newest timestamp is marked with ⭐ emoji (only if not gold).
 
     Args:
         annotations: List of annotation info dicts with 'annotation_label',
-                     'stable_id', 'change_signatures', and 'last_change_timestamp' keys
+                     'stable_id', 'change_signatures', 'last_change_timestamp',
+                     and 'is_gold_standard' keys
 
     Returns:
         HTML string with version chains, each on a separate line
@@ -589,15 +592,29 @@ def _format_version_chains_html(annotations: list[dict]) -> str:
             newest_timestamp = ts
             newest_stable_id = ann["stable_id"]
 
-    # Format each chain as: version foo → version bar → ⭐ version baz
+    # Find the gold standard version
+    gold_stable_id = None
+    for ann in annotations:
+        if ann.get("is_gold_standard"):
+            gold_stable_id = ann["stable_id"]
+            break
+
+    # Format each chain as: version foo → version bar → 🥇 version baz
     chain_htmls = []
     for chain in chains:
         version_links = []
         for version in chain:
             label = version["annotation_label"]
             stable_id = version["stable_id"]
-            # Prepend star emoji if this is the newest version
-            prefix = "⭐ " if stable_id == newest_stable_id else ""
+            # Determine prefix: gold gets medal, latest gets star (only if not gold)
+            is_gold = stable_id == gold_stable_id
+            is_newest = stable_id == newest_stable_id
+            if is_gold:
+                prefix = "🥇 "
+            elif is_newest:
+                prefix = "⭐ "
+            else:
+                prefix = ""
             link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" class="version-link">{prefix}{escape_html(label)}</a>'
             version_links.append(link)
 
