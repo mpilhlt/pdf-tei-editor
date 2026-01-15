@@ -27,6 +27,7 @@ class FileMetadata(BaseModel):
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
     version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
 
@@ -82,6 +83,7 @@ class FileCreate(BaseModel):
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
     version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
     doc_collections: list[str] = Field(default_factory=list)
@@ -110,6 +112,7 @@ class FileUpdate(BaseModel):
     filename: Optional[str] = None
     file_size: Optional[int] = None
     label: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
     version: Optional[int] = None
     is_gold_standard: Optional[bool] = None
     doc_collections: Optional[list[str]] = None
