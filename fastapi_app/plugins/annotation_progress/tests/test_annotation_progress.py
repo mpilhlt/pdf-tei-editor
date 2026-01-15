@@ -166,11 +166,14 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
 
     def test_format_version_chains_html(self):
         """Test HTML formatting of version chains."""
+        from datetime import datetime
+
         annotations = [
             {
                 "annotation_label": "Version A",
                 "stable_id": "id-a",
                 "change_signatures": [("user1", "2024-01-01", "created")],
+                "last_change_timestamp": datetime(2024, 1, 1, 10, 0, 0),
             },
             {
                 "annotation_label": "Version B",
@@ -179,6 +182,7 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
                     ("user1", "2024-01-01", "created"),
                     ("user1", "2024-01-02", "updated"),
                 ],
+                "last_change_timestamp": datetime(2024, 1, 2, 10, 0, 0),
             },
         ]
 
@@ -191,6 +195,11 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
         self.assertIn("id-a", html)
         self.assertIn("id-b", html)
         self.assertIn("version-chain", html)
+        # Version B has the newest timestamp, so it should have a star
+        self.assertIn("⭐", html)
+        self.assertIn("⭐ Version B", html)
+        # Version A should not have a star
+        self.assertNotIn("⭐ Version A", html)
 
     def test_format_version_chains_html_empty(self):
         """Test HTML formatting with no annotations."""
