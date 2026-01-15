@@ -85,6 +85,8 @@ def _ensure_wal_mode(db_path: Path) -> None:
             try:
                 conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
                 try:
+                    # Set busy timeout to wait for locks
+                    conn.execute("PRAGMA busy_timeout = 30000")
                     # Try WAL2 mode first (available in SQLite 3.37+)
                     try:
                         conn.execute("PRAGMA journal_mode = WAL2")
@@ -189,6 +191,10 @@ def get_connection(
             if foreign_keys:
                 conn.execute("PRAGMA foreign_keys = ON")
 
+            # Set busy timeout to wait for locks instead of failing immediately
+            # This helps prevent "disk I/O error" during concurrent access
+            conn.execute("PRAGMA busy_timeout = 30000")
+
             # Connection successful
             break
 
@@ -258,6 +264,9 @@ def transaction(
 
         if foreign_keys:
             conn.execute("PRAGMA foreign_keys = ON")
+
+        # Set busy timeout to wait for locks instead of failing immediately
+        conn.execute("PRAGMA busy_timeout = 30000")
 
         conn.execute("BEGIN")
         yield conn

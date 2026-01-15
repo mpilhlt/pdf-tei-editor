@@ -281,6 +281,45 @@ def test_analytics_db_initialization():
         shutil.rmtree(temp_dir)
 ```
 
+## Choosing a Journal Mode
+
+SQLite supports different journal modes. Choose based on your database's characteristics:
+
+### WAL Mode (Default)
+
+Use for databases with high concurrency and frequent reads:
+
+```python
+conn.execute("PRAGMA journal_mode = WAL")
+```
+
+**Use when**: High read concurrency, frequent queries, larger databases.
+
+### DELETE Mode
+
+Use for simple databases with infrequent writes:
+
+```python
+conn.execute("PRAGMA journal_mode = DELETE")
+```
+
+**Use when**:
+
+- Small databases with infrequent writes
+- Short-lived data (like locks or temporary state)
+- Databases that don't benefit from WAL's read concurrency
+- When rapid concurrent access during tests causes WAL file corruption
+
+**Example**: The `locks.db` database uses DELETE mode because it's small, has infrequent writes, and WAL mode caused "disk I/O error" issues during rapid test execution. See `fastapi_app/lib/locking.py` for implementation.
+
+### Always Set Busy Timeout
+
+Regardless of journal mode, always set a busy timeout to prevent immediate failures:
+
+```python
+conn.execute("PRAGMA busy_timeout = 30000")  # 30 seconds
+```
+
 ## Best Practices
 
 1. **Always pass `db_path` to your initialization function** - This enables migrations
@@ -288,10 +327,13 @@ def test_analytics_db_initialization():
 3. **Use `check_can_apply()`** in migrations to target specific databases
 4. **Test with a fresh database** to ensure initialization works correctly
 5. **Document your schema** in the schema file
+6. **Choose the right journal mode** - Use WAL for high-concurrency, DELETE for simple low-write databases
+7. **Always set busy_timeout** - Prevents "database is locked" errors
 
 ## Reference
 
 - Migration system: [docs/development/migrations.md](migrations.md)
 - Migration runner: `fastapi_app/lib/migration_runner.py`
-- Example database: `fastapi_app/lib/database.py` (metadata.db)
-- Example initialization: `fastapi_app/lib/locking.py` (locks.db)
+- Database connections guide: [docs/code-assistant/database-connections.md](../code-assistant/database-connections.md)
+- Example WAL database: `fastapi_app/lib/database.py` (metadata.db)
+- Example DELETE database: `fastapi_app/lib/locking.py` (locks.db)

@@ -9,6 +9,7 @@ Ported from server/lib/locking.py with FastAPI adaptations:
 """
 
 import sqlite3
+import threading
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,11 +18,20 @@ import logging
 
 LOCK_TIMEOUT_SECONDS = 90
 
+# Track if locks database has been initialized (to avoid redundant init calls)
+_locks_db_initialized: set[str] = set()
+_locks_db_init_lock = threading.Lock()
+
 
 @contextmanager
 def get_db_connection(db_dir: Path, logger: logging.Logger):
     """
     Context manager for database connections with proper error handling.
+
+    Uses DELETE journal mode instead of WAL for the locks database because:
+    - It's a small database with infrequent writes
+    - Locks are short-lived and don't benefit from WAL's read concurrency
+    - DELETE mode avoids WAL file corruption under rapid concurrent access
 
     Args:
         db_dir: Directory containing locks.db
@@ -30,82 +40,114 @@ def get_db_connection(db_dir: Path, logger: logging.Logger):
     Yields:
         sqlite3.Connection: Database connection with row factory enabled
     """
-    from . import sqlite_utils
-
     db_path = db_dir / "locks.db"
+    conn = None
     try:
-        # Use centralized connection utility with WAL mode and retry logic
-        with sqlite_utils.get_connection(db_path) as conn:
-            yield conn
-            conn.commit()
+        conn = sqlite3.connect(
+            str(db_path),
+            timeout=30.0,
+            check_same_thread=False
+        )
+        conn.row_factory = sqlite3.Row
+        # Use DELETE journal mode (simpler, avoids WAL corruption issues)
+        conn.execute("PRAGMA journal_mode = DELETE")
+        # Set busy timeout to wait for locks
+        conn.execute("PRAGMA busy_timeout = 30000")
+        yield conn
+        conn.commit()
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
         raise RuntimeError(f"Database error: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
-def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
+def init_locks_db(db_dir: Path, logger: logging.Logger, force: bool = False) -> None:
     """
     Initialize the locks database with the required schema.
     Creates tables and indexes, and runs any pending migrations.
 
+    This function tracks initialization state to avoid redundant calls
+    during concurrent request handling. The database is initialized once
+    at application startup via database_init.initialize_all_databases().
+
+    Uses DELETE journal mode instead of WAL to avoid corruption issues.
+
     Args:
         db_dir: Directory containing locks.db
         logger: Logger instance
+        force: If True, force re-initialization (used at startup)
     """
-    from . import sqlite_utils
-
     db_path = db_dir / "locks.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_key = str(db_path.resolve())
 
-    # Create database and schema if it doesn't exist
-    if not db_path.exists():
-        with sqlite_utils.get_connection(db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS locks (
-                    file_hash TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+    # Quick check without lock - skip if already initialized
+    if not force:
+        with _locks_db_init_lock:
+            if db_key in _locks_db_initialized:
+                return
 
-    # Run migrations using centralized runner
-    from fastapi_app.lib.migration_runner import run_migrations_if_needed
-    from fastapi_app.lib.migrations.versions import LOCKS_MIGRATIONS
+    # Acquire lock for actual initialization
+    with _locks_db_init_lock:
+        # Double-check after acquiring lock
+        if not force and db_key in _locks_db_initialized:
+            return
 
-    try:
-        run_migrations_if_needed(
-            db_path=db_path,
-            migrations=LOCKS_MIGRATIONS,
-            logger=logger
-        )
-    except Exception as e:
-        logger.error(f"Failed to run migrations for locks.db: {e}")
-        raise
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create/update indexes with current structure
-    try:
-        with sqlite_utils.get_connection(db_path) as conn:
-            # Ensure indexes exist with current schema
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_file_id
-                ON locks(file_id)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_session
-                ON locks(session_id)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_updated
-                ON locks(updated_at)
-            """)
-            logger.debug(f"Locks database initialized at {db_path}")
-    except sqlite3.Error as e:
-        logger.error(f"Failed to create indexes: {e}")
-        raise RuntimeError(f"Database error: {e}")
+        # Create database and schema if it doesn't exist
+        if not db_path.exists():
+            with get_db_connection(db_dir, logger) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS locks (
+                        file_hash TEXT PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+        # Run migrations using centralized runner
+        from fastapi_app.lib.migration_runner import run_migrations_if_needed
+        from fastapi_app.lib.migrations.versions import LOCKS_MIGRATIONS
+
+        try:
+            run_migrations_if_needed(
+                db_path=db_path,
+                migrations=LOCKS_MIGRATIONS,
+                logger=logger
+            )
+        except Exception as e:
+            logger.error(f"Failed to run migrations for locks.db: {e}")
+            raise
+
+        # Create/update indexes with current structure
+        try:
+            with get_db_connection(db_dir, logger) as conn:
+                # Ensure indexes exist with current schema
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_file_id
+                    ON locks(file_id)
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_session
+                    ON locks(session_id)
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_updated
+                    ON locks(updated_at)
+                """)
+                logger.debug(f"Locks database initialized at {db_path}")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to create indexes: {e}")
+            raise RuntimeError(f"Database error: {e}")
+
+        # Mark as initialized
+        _locks_db_initialized.add(db_key)
 
 
-def acquire_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> bool:
+def acquire_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger, max_retries: int = 3) -> bool:
     """
     Tries to acquire a lock for a given file. Returns True on success, False on failure.
 
@@ -119,18 +161,48 @@ def acquire_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Lo
         session_id: The session ID requesting the lock
         db_dir: Directory containing locks.db
         logger: Logger instance
+        max_retries: Maximum number of retry attempts for transient errors
 
     Returns:
         bool: True if lock was acquired/refreshed, False if held by another active session
 
     Raises:
-        RuntimeError: If database operations fail
+        RuntimeError: If database operations fail after all retries
     """
+    import time
+
     logger.debug(f"[LOCK] Session {session_id[:8]}... attempting to acquire lock for file {file_id[:8]}...")
 
     # Ensure database is initialized
     init_locks_db(db_dir, logger)
 
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return _acquire_lock_impl(file_id, session_id, db_dir, logger)
+        except (sqlite3.OperationalError, RuntimeError) as e:
+            last_error = e
+            error_msg = str(e).lower()
+            # Retry on transient errors like disk I/O, busy, or locked
+            if any(err in error_msg for err in ['disk i/o', 'busy', 'locked', 'database is malformed']):
+                if attempt < max_retries - 1:
+                    delay = 0.1 * (2 ** attempt)  # Exponential backoff: 0.1, 0.2, 0.4 seconds
+                    logger.warning(
+                        f"[LOCK] Transient error on attempt {attempt + 1}/{max_retries}: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    continue
+            # Non-transient error or max retries exceeded
+            raise
+
+    # Should not reach here, but handle it
+    logger.error(f"[LOCK] Failed to acquire lock after {max_retries} attempts: {last_error}")
+    raise RuntimeError(f"Database error after {max_retries} retries: {last_error}")
+
+
+def _acquire_lock_impl(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> bool:
+    """Internal implementation of acquire_lock without retry logic."""
     with get_db_connection(db_dir, logger) as conn:
         # Use IMMEDIATE transaction to get write lock upfront, preventing race conditions
         # This ensures only one transaction can modify locks at a time
@@ -423,3 +495,14 @@ def check_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logg
             return {"is_locked": True, "locked_by": lock_owner}
 
     return {"is_locked": False, "locked_by": None}
+
+
+def reset_locks_db_initialized() -> None:
+    """
+    Reset the locks database initialization tracking.
+
+    This is primarily for testing purposes, to allow re-initialization
+    after database files are deleted/recreated between tests.
+    """
+    with _locks_db_init_lock:
+        _locks_db_initialized.clear()
