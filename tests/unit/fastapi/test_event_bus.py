@@ -56,6 +56,8 @@ class TestEventBus(unittest.TestCase):
         self.bus.on("test.event", handler2)
 
         await self.bus.emit("test.event", arg1="value1", arg2="value2")
+        # Allow background tasks to complete (emit is fire-and-forget)
+        await asyncio.sleep(0.01)
 
         handler1.assert_called_once_with(arg1="value1", arg2="value2")
         handler2.assert_called_once_with(arg1="value1", arg2="value2")
@@ -78,6 +80,8 @@ class TestEventBus(unittest.TestCase):
         # Should not raise exception, but will log the error
         with self.assertLogs("fastapi_app.lib.event_bus", level="ERROR"):
             await self.bus.emit("test.event", arg="value")
+            # Allow background tasks to complete (emit is fire-and-forget)
+            await asyncio.sleep(0.01)
 
         # All handlers should have been called despite handler1 failing
         handler1.assert_called_once_with(arg="value")
@@ -102,6 +106,8 @@ class TestEventBus(unittest.TestCase):
         self.bus.on("test.event", handler2)
 
         await self.bus.emit("test.event")
+        # Allow background tasks to complete (emit is fire-and-forget)
+        await asyncio.sleep(0.15)
 
         # If concurrent, handler2 should finish before handler1
         self.assertEqual(execution_order[0], "handler1_start")
@@ -119,6 +125,8 @@ class TestEventBus(unittest.TestCase):
 
         await self.bus.emit("event.one", arg="value1")
         await self.bus.emit("event.two", arg="value2")
+        # Allow background tasks to complete (emit is fire-and-forget)
+        await asyncio.sleep(0.01)
 
         handler1.assert_called_once_with(arg="value1")
         handler2.assert_called_once_with(arg="value2")
@@ -164,6 +172,8 @@ class TestEventBusIntegration(unittest.TestCase):
         self.bus.on("file.updated", index_updater)
 
         await self.bus.emit("file.updated", file_id="abc123", variant="tei")
+        # Allow background tasks to complete (emit is fire-and-forget)
+        await asyncio.sleep(0.01)
 
         self.assertEqual(len(results), 3)
         self.assertIn("cache_invalidated:abc123:tei", results)
@@ -180,10 +190,13 @@ class TestEventBusIntegration(unittest.TestCase):
         # Plugin registers
         self.bus.on("plugin.lifecycle", plugin_handler)
         await self.bus.emit("plugin.lifecycle", action="initialized")
+        # Allow background tasks to complete (emit is fire-and-forget)
+        await asyncio.sleep(0.01)
 
         # Plugin unregisters
         self.bus.off("plugin.lifecycle", plugin_handler)
         await self.bus.emit("plugin.lifecycle", action="shutdown")
+        await asyncio.sleep(0.01)
 
         # Only the first event should have been processed
         self.assertEqual(results, ["initialized"])
