@@ -539,9 +539,10 @@ Write-Ahead Logging enables:
 ### Connection Pooling
 
 Single DatabaseManager instance per application:
-- Context managers handle connection lifecycle
-- No connection pooling needed (SQLite is local file)
-- Thread-safe via context managers
+- **Connection Pooling**: Implemented using `queue.Queue` to reuse connections and reduce file open/close overhead.
+- **Singleton Pattern**: `_DatabaseManagerSingleton` ensures one pool per database file.
+- **Concurrency**: Optimized for high concurrency with WAL mode and explicit transaction management.
+- **Thread-safe**: Context managers handle connection checkout/return and transaction boundaries.
 
 ## Migration and Maintenance
 

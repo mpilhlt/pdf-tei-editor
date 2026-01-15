@@ -95,7 +95,7 @@ class TestSyncService(unittest.TestCase):
         # Initialize database components
         self.db = DatabaseManager(self.db_path)
         self.file_repo = FileRepository(self.db)
-        self.file_storage = FileStorage(self.test_dir, self.db_path)
+        self.file_storage = FileStorage(self.test_dir, self.db)
 
         # WebDAV config
         self.webdav_config = {

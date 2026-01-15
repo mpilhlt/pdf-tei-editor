@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .config import get_settings
 from .lib.logging_utils import setup_logging, get_logger
+from .lib.database_init import initialize_all_databases
 
 
 logger = get_logger(__name__)
@@ -82,23 +83,14 @@ async def lifespan(app: FastAPI):
     file_storage_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"File storage directory: {file_storage_dir}")
 
-    # Initialize file metadata database
-    from .lib.database import DatabaseManager
-    db_path = settings.db_dir / "metadata.db"
+    # Initialize ALL databases at startup (application-level initialization)
+    # This prevents SQLite WAL concurrency issues by ensuring all databases
+    # are ready before any concurrent requests arrive
     try:
-        db = DatabaseManager(db_path, logger)
-        logger.info(f"File metadata database initialized: {db_path}")
+        initialize_all_databases(settings.db_dir, settings.data_root)
+        logger.info("All databases initialized successfully")
     except Exception as e:
-        logger.error(f"Error initializing database: {e}")
-        raise
-
-    # Initialize locks database
-    from .lib.locking import init_locks_db
-    try:
-        init_locks_db(settings.db_dir, logger)
-        logger.info(f"Locks database initialized: {settings.db_dir / 'locks.db'}")
-    except Exception as e:
-        logger.error(f"Error initializing locks database: {e}")
+        logger.error(f"Error initializing databases: {e}")
         raise
 
     # Initialize plugins (discovery and route registration happen at module level)

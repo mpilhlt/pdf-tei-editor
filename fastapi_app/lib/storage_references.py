@@ -21,6 +21,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
+import threading
 
 
 class StorageReferenceManager:
@@ -31,35 +32,48 @@ class StorageReferenceManager:
     by tracking how many database entries reference each hash.
     """
 
-    def __init__(self, db_path: Path, logger=None):
+    _init_cache = set()
+    _init_lock = threading.Lock()
+
+    def __init__(self, db_manager, logger=None):
         """
         Initialize storage reference manager.
 
         Args:
-            db_path: Path to metadata.db (same as main database)
+            db_manager: DatabaseManager instance
             logger: Optional logger instance
         """
-        self.db_path = db_path
+        self.db_manager = db_manager
+        self.db_path = db_manager.db_path
         self.logger = logger
-        self._ensure_table_exists()
+        self._ensure_initialized()
+
+    def _ensure_initialized(self):
+        path_key = str(self.db_path.resolve())
+        if path_key in self._init_cache:
+            return
+
+        with self._init_lock:
+            if path_key in self._init_cache:
+                return
+            self._ensure_table_exists()
+            self._init_cache.add(path_key)
+
+    @classmethod
+    def reset_cache(cls):
+        with cls._init_lock:
+            cls._init_cache.clear()
 
     @contextmanager
     def _get_connection(self):
-        """Get database connection with proper settings."""
-        conn = None
+        """Get database connection from manager."""
         try:
-            conn = sqlite3.connect(str(self.db_path), timeout=10.0)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA journal_mode = WAL")
-            yield conn
+            with self.db_manager.get_connection() as conn:
+                yield conn
         except sqlite3.Error as e:
             if self.logger:
                 self.logger.error(f"Database error: {e}")
             raise
-        finally:
-            if conn:
-                conn.close()
 
     def _ensure_table_exists(self) -> None:
         """

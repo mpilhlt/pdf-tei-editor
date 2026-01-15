@@ -53,8 +53,11 @@ def get_available_collections(db_dir: Path) -> Optional[List[str]]:
     if not isinstance(collections_data, list):
         raise ValueError("Invalid collections file format. Expected a list.")
 
-    collection_ids = [collection.get('id') for collection in collections_data
-                      if isinstance(collection, dict) and 'id' in collection]
+    collection_ids: List[str] = [
+        collection['id']  # Use direct access since we check 'id' in collection
+        for collection in collections_data
+        if isinstance(collection, dict) and 'id' in collection
+    ]
     return collection_ids
 
 
@@ -148,13 +151,13 @@ def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str, dict
         return False, f"Collection '{collection_id}' not found.", {}
 
     # Import database utilities
-    from .database import DatabaseManager
     from .file_repository import FileRepository
     from .models import FileUpdate
+    from .dependencies import _DatabaseManagerSingleton
 
     # Initialize database access
     db_path = db_dir / "metadata.db"
-    db_manager = DatabaseManager(db_path)
+    db_manager = _DatabaseManagerSingleton.get_instance(str(db_path))
     file_repo = FileRepository(db_manager)
 
     files_updated = 0

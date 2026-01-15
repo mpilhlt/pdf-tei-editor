@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS files (
     -- File-specific metadata (TEI files only)
     label TEXT,                        -- User-assigned label (can override doc_metadata.title)
     variant TEXT,                      -- Variant identifier (TEI files only, NULL for PDF)
+    -- status column added by migration 005
 
     -- Version management (TEI files only)
     version INTEGER DEFAULT 1,         -- Version number for TEI files (NULL for PDF)
@@ -75,6 +76,7 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_doc_id_type ON files(doc_id, file_type)",
     "CREATE INDEX IF NOT EXISTS idx_file_type ON files(file_type)",
     "CREATE INDEX IF NOT EXISTS idx_variant ON files(variant)",
+    # idx_status is created by migration 005
     "CREATE INDEX IF NOT EXISTS idx_created_at ON files(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_is_gold ON files(is_gold_standard) WHERE is_gold_standard = 1",
 

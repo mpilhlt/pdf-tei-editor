@@ -51,7 +51,7 @@ class FileRepository:
         self.db = db_manager
         self.logger = logger
         # Initialize reference manager for storage cleanup
-        self.ref_manager = StorageReferenceManager(db_manager.db_path, logger)
+        self.ref_manager = StorageReferenceManager(db_manager, logger)
 
     def resolve_file_id(self, file_id: str) -> str:
         """
@@ -313,7 +313,7 @@ class FileRepository:
                 from .file_storage import FileStorage
                 from ..config import get_settings
                 settings = get_settings()
-                storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
+                storage = FileStorage(settings.data_root / "files", self.db, self.logger)
                 deleted = storage.delete_file(file_id, file_type, decrement_ref=False)
 
                 # Clean up reference entry after successful deletion
@@ -436,7 +436,7 @@ class FileRepository:
             from .file_storage import FileStorage
             from ..config import get_settings
             settings = get_settings()
-            storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
+            storage = FileStorage(settings.data_root / "files", self.db, self.logger)
             deleted = storage.delete_file(file_id, file_metadata.file_type, decrement_ref=False)
 
             # Clean up reference entry after successful deletion

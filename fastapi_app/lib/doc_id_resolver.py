@@ -2,7 +2,7 @@
 DOI resolution and filename encoding for cross-platform filesystem compatibility.
 
 This module handles:
-1. DOI ↔ filename encoding (filesystem-safe, human-readable)
+1. DOI - filename encoding (filesystem-safe, human-readable)
 2. PDF-TEI matching using multiple strategies
 3. Backward compatibility with Flask encoding formats
 4. Document ID resolution with intelligent fallbacks
@@ -42,13 +42,13 @@ class DocIdResolver:
     Resolve document IDs (preferring DOIs) and encode them for filesystem storage.
 
     Modern approach (for 99.9% of DOIs):
-        - Encode: "/" → "__"  (double underscore)
+        - Encode: "/" -> "__"  (double underscore)
         - Human-readable, filesystem-safe, reversible
-        - Example: "10.5771/2699-1284-2024-3-149" → "10.5771__2699-1284-2024-3-149"
+        - Example: "10.5771/2699-1284-2024-3-149" - "10.5771__2699-1284-2024-3-149"
 
     Legacy approach (pre-2008 DOIs with special chars):
-        - Hybrid: "/" → "__", other special chars → "$x$"
-        - Example: "10.1234/old:doi" → "10.1234__old$2$doi"
+        - Hybrid: "/" -> "__", other special chars -> "$x$"
+        - Example: "10.1234/old:doi" -> "10.1234__old$2$doi"
 
     Backward compatibility:
         - Detects and decodes Flask pure "$1$" format
@@ -95,9 +95,9 @@ class DocIdResolver:
         Decode filename to DOI, handling multiple legacy formats.
 
         Supports:
-        - Modern double-underscore: "10.5771__xxx" → "10.5771/xxx"
-        - Flask pure $x$: "10.5771$1$xxx" → "10.5771/xxx"
-        - Hybrid: "10.5771__old$2$doi" → "10.5771/old:doi"
+        - Modern double-underscore: "10.5771__xxx" -> "10.5771/xxx"
+        - Flask pure $x$: "10.5771$1$xxx" -> "10.5771/xxx"
+        - Hybrid: "10.5771__old$2$doi" -> "10.5771/old:doi"
 
         Args:
             filename: Encoded filename
@@ -206,36 +206,36 @@ class DocIdResolver:
 
         Examples:
             With matching TEI containing DOI:
-                → ("10.5771/2699-1284-2024-3-149", "doi")
+                -> ("10.5771/2699-1284-2024-3-149", "doi")
 
             Without TEI, filename is "10.5771__2699-1284-2024-3-149.pdf":
-                → ("10.5771/2699-1284-2024-3-149", "doi")
+                -> ("10.5771/2699-1284-2024-3-149", "doi")
 
             Without TEI, filename is "my-paper.pdf":
-                → ("my-paper", "custom")
+                -> ("my-paper", "custom")
         """
         # Strategy 1: Get DOI from matching TEI
         if matching_teis:
             tei_path, metadata = matching_teis[0]  # Use first match
             if metadata.get('doc_id'):
                 doc_id_type = metadata.get('doc_id_type', 'doi')
-                logger.debug(f"Resolved PDF {pdf_path.name} → {metadata['doc_id']} from TEI")
+                logger.debug(f"Resolved PDF {pdf_path.name} -> {metadata['doc_id']} from TEI")
                 return (metadata['doc_id'], doc_id_type)
 
             # Fallback to fileref
             if metadata.get('fileref'):
-                logger.debug(f"Resolved PDF {pdf_path.name} → {metadata['fileref']} from TEI fileref")
+                logger.debug(f"Resolved PDF {pdf_path.name} -> {metadata['fileref']} from TEI fileref")
                 return (metadata['fileref'], 'fileref')
 
         # Strategy 2: Extract DOI from PDF filename
         doi = self.extract_doi_from_filename(pdf_path.name)
         if doi:
-            logger.debug(f"Resolved PDF {pdf_path.name} → {doi} from filename")
+            logger.debug(f"Resolved PDF {pdf_path.name} -> {doi} from filename")
             return (doi, 'doi')
 
         # Strategy 3: Use filename as custom ID
         doc_id = pdf_path.stem
-        logger.debug(f"Resolved PDF {pdf_path.name} → {doc_id} (custom ID)")
+        logger.debug(f"Resolved PDF {pdf_path.name} -> {doc_id} (custom ID)")
         return (doc_id, 'custom')
 
     def resolve_doc_id_for_tei(self, tei_metadata: Dict[str, Any]) -> Tuple[str, str]:

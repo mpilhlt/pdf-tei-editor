@@ -4,6 +4,12 @@ from functools import lru_cache
 import tempfile
 import os
 
+# Load .env file into os.environ before Settings instantiation
+# This ensures environment variables are available for plugin configuration
+# override=False means existing environment variables (e.g., from test .env files) take precedence
+from dotenv import load_dotenv
+load_dotenv(override=False)  # Don't override existing env vars
+
 class Settings(BaseSettings):
     """Application settings loaded from .env.fastapi (or custom env file)"""
 

@@ -6,10 +6,12 @@ Uses context managers for proper resource cleanup.
 """
 
 import sqlite3
+import queue
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
 from .db_schema import initialize_database
+from . import sqlite_utils
 
 
 class DatabaseManager:
@@ -31,6 +33,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.logger = logger
         self._ensure_db_exists()
+        self._pool = queue.Queue()
 
     def _ensure_db_exists(self) -> None:
         """
@@ -39,13 +42,27 @@ class DatabaseManager:
         Creates database file and initializes schema if needed.
         Runs any pending migrations automatically.
         This method is idempotent - safe to call multiple times.
+
+        Uses a per-database lock to prevent concurrent schema initialization
+        which can corrupt the database.
         """
         # Ensure parent directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create database and initialize schema (including migrations)
-        with self.get_connection() as conn:
-            initialize_database(conn, self.logger, db_path=self.db_path)
+        # Use per-database lock to prevent concurrent schema initialization
+        with sqlite_utils.with_db_lock(self.db_path):
+            # Use raw connection to avoid recursive locking from sqlite_utils.get_connection
+            # and to ensure we have control over WAL mode setting
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, isolation_level=None)
+            try:
+                # Enable WAL mode explicitly
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA foreign_keys = ON")
+
+                # Create database and initialize schema (including migrations)
+                initialize_database(conn, self.logger, db_path=self.db_path)
+            finally:
+                conn.close()
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -63,28 +80,22 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection
         """
-        conn = None
         try:
-            conn = sqlite3.connect(
-                str(self.db_path),
-                # Enable foreign keys
-                isolation_level=None  # autocommit mode by default
-            )
-            # Enable row factory for dict-like access
+            conn = self._pool.get(block=False)
+        except queue.Empty:
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, check_same_thread=False, isolation_level=None)
             conn.row_factory = sqlite3.Row
-
-            # Set pragmas for better performance
             conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging
 
+        try:
             yield conn
-        except sqlite3.Error as e:
-            if self.logger:
-                self.logger.error(f"Database connection error: {e}")
-            raise
         finally:
-            if conn:
-                conn.close()
+            # Rollback any uncommitted changes to ensure clean state for next use
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            self._pool.put(conn)
 
     @contextmanager
     def transaction(self) -> Generator[sqlite3.Connection, None, None]:
@@ -104,38 +115,19 @@ class DatabaseManager:
         Yields:
             sqlite3.Connection: Database connection with transaction
         """
-        conn = None
-        try:
-            conn = sqlite3.connect(str(self.db_path))
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-
-            # Begin transaction
+        with self.get_connection() as conn:
             conn.execute("BEGIN")
-
-            yield conn
-
-            # Commit transaction
-            conn.commit()
-
-            if self.logger:
-                self.logger.debug("Transaction committed")
-
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
+            try:
+                yield conn
+                conn.commit()
                 if self.logger:
-                    self.logger.error(f"Transaction rolled back: {e}")
-            raise
-        except Exception as e:
-            if conn:
-                conn.rollback()
-                if self.logger:
-                    self.logger.error(f"Transaction rolled back due to error: {e}")
-            raise
-        finally:
-            if conn:
-                conn.close()
+                    self.logger.debug("Transaction committed")
+            except Exception:
+                try:
+                    conn.rollback()
+                except sqlite3.OperationalError:
+                    pass
+                raise
 
     def execute_query(
         self,

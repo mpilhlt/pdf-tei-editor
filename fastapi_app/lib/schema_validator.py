@@ -399,12 +399,12 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
 
         except ValidationTimeoutError as e:
             logger.warning(
-                f"⏰ VALIDATION TIMEOUT: {namespace} schema validation timed out after "
+                f"VALIDATION TIMEOUT: {namespace} schema validation timed out after "
                 f"{validation_timeout}s - {schema_location}"
             )
             errors.append({
                 "message": (
-                    f"⏰ Schema validation timed out after {validation_timeout} seconds. "
+                    f"Schema validation timed out after {validation_timeout} seconds. "
                     "The schema may be too complex or the document too large. "
                     "Validation was skipped for performance reasons."
                 ),
@@ -421,3 +421,5 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
             })
 
     return errors
+
+

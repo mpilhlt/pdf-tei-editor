@@ -29,6 +29,8 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     Returns:
         SQLite connection for the current thread
     """
+    from . import sqlite_utils
+
     # Check if this thread has a connection to this database
     if not hasattr(_thread_local, 'connections'):
         _thread_local.connections = {}
@@ -39,10 +41,12 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
         # Create parent directory if needed
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Ensure WAL mode is set centrally (idempotent)
+        sqlite_utils._ensure_wal_mode(db_path)
+
         # Create new connection for this thread
         conn = sqlite3.connect(str(db_path), check_same_thread=False)
         conn.row_factory = sqlite3.Row  # Enable row access by column name
-        conn.execute('PRAGMA journal_mode=WAL')  # Write-Ahead Logging for better concurrency
         conn.execute('PRAGMA foreign_keys=ON')  # Enable foreign key constraints
 
         _thread_local.connections[db_key] = conn
@@ -118,20 +122,25 @@ def init_database(db_path: Path, schema: str, logger=None):
     Initialize database with schema.
 
     Creates tables if they don't exist.
+    Uses per-database locking to prevent concurrent schema creation.
 
     Args:
         db_path: Path to the SQLite database file
         schema: SQL schema (CREATE TABLE statements)
         logger: Optional logger for logging operations
     """
-    conn = get_connection(db_path)
+    from . import sqlite_utils
 
-    if logger:
-        logger.debug(f"Initializing database at {db_path}")
+    # Use per-database lock to prevent concurrent schema initialization
+    with sqlite_utils.with_db_lock(db_path):
+        conn = get_connection(db_path)
 
-    # Execute schema (CREATE TABLE IF NOT EXISTS statements)
-    conn.executescript(schema)
-    conn.commit()
+        if logger:
+            logger.debug(f"Initializing database at {db_path}")
+
+        # Execute schema (CREATE TABLE IF NOT EXISTS statements)
+        conn.executescript(schema)
+        conn.commit()
 
     if logger:
         logger.debug("Database initialized successfully")

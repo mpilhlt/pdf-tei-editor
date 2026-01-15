@@ -38,7 +38,7 @@ class TestGarbageCollection(unittest.TestCase):
         # Initialize database and components
         self.db = DatabaseManager(self.db_path)
         self.repo = FileRepository(self.db)
-        self.storage = FileStorage(self.storage_root, self.db_path)
+        self.storage = FileStorage(self.storage_root, self.db)
 
     def tearDown(self):
         """Clean up temporary directories."""
