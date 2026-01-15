@@ -559,9 +559,11 @@ def _format_version_chains_html(annotations: list[dict]) -> str:
     """
     Format annotation versions as HTML showing linear ancestry chains.
 
+    The version with the newest timestamp is marked with a star emoji.
+
     Args:
         annotations: List of annotation info dicts with 'annotation_label',
-                     'stable_id', and 'change_signatures' keys
+                     'stable_id', 'change_signatures', and 'last_change_timestamp' keys
 
     Returns:
         HTML string with version chains, each on a separate line
@@ -578,14 +580,25 @@ def _format_version_chains_html(annotations: list[dict]) -> str:
     if not chains:
         return "No annotations"
 
-    # Format each chain as: version foo → version bar → version baz
+    # Find the version with the newest timestamp
+    newest_stable_id = None
+    newest_timestamp = None
+    for ann in annotations:
+        ts = ann.get("last_change_timestamp")
+        if ts and (newest_timestamp is None or ts > newest_timestamp):
+            newest_timestamp = ts
+            newest_stable_id = ann["stable_id"]
+
+    # Format each chain as: version foo → version bar → ⭐ version baz
     chain_htmls = []
     for chain in chains:
         version_links = []
         for version in chain:
             label = version["annotation_label"]
             stable_id = version["stable_id"]
-            link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" class="version-link">{escape_html(label)}</a>'
+            # Prepend star emoji if this is the newest version
+            prefix = "⭐ " if stable_id == newest_stable_id else ""
+            link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" class="version-link">{prefix}{escape_html(label)}</a>'
             version_links.append(link)
 
         chain_html = ' <span class="arrow">→</span> '.join(version_links)
