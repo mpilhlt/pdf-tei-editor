@@ -192,7 +192,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
         assert titleStmt is not None
-        edition_stmt = create_edition_stmt(timestamp, f"Extraction ({variant_id}/{flavor})")
+        edition_stmt = create_edition_stmt(timestamp, "Extraction")
 
         # Add fileref to edition - use doc_id from options if provided, otherwise extract from PDF path
         file_id = options.get('doc_id')
@@ -251,7 +251,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         if existing_revisionDesc is not None:
             tei_header.remove(existing_revisionDesc)
         
-        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with createTraining API")
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Extraction")
         tei_header.append(revision_desc)
         
         # Add header to new document
