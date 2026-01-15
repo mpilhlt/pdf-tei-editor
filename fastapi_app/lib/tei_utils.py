@@ -6,6 +6,7 @@ No Flask or FastAPI dependencies.
 """
 
 import datetime
+from collections import defaultdict
 from typing import Dict, Any, List, Optional
 from lxml import etree
 
@@ -910,6 +911,142 @@ def add_revision_change(
 
     desc_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
     desc_elem.text = desc
+
+
+def extract_change_signatures(content: bytes | etree._Element) -> list[tuple[str, str, str]]:  # type: ignore[name-defined]
+    """
+    Extract change element signatures from TEI document.
+
+    Each signature is a tuple of (who, when, status) that uniquely identifies a change.
+    This is useful for determining version ancestry - if version B contains all of
+    version A's change signatures, B is derived from A.
+
+    Args:
+        content: TEI document as bytes or lxml Element
+
+    Returns:
+        List of (who, when, status) tuples in document order
+    """
+    try:
+        if isinstance(content, bytes):
+            root = etree.fromstring(content)
+        else:
+            root = content
+
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+
+        change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
+        signatures = []
+
+        for change in change_elements:
+            who = change.get("who", "")
+            when = change.get("when", "")
+            status = change.get("status", "")
+            signatures.append((who, when, status))
+
+        return signatures
+
+    except Exception:
+        return []
+
+
+def build_version_ancestry_chains(
+    versions: list[dict]
+) -> list[list[dict]]:
+    """
+    Build linear ancestry chains from a list of annotation versions.
+
+    Determines ancestry by comparing change signatures - version B is derived from
+    version A if B contains all of A's signatures as a prefix.
+
+    Args:
+        versions: List of dicts with 'label', 'stable_id', and 'change_signatures' keys.
+                  change_signatures is a list of (who, when, status) tuples.
+
+    Returns:
+        List of ancestry chains. Each chain is a list of version dicts ordered
+        from oldest ancestor to newest descendant. Chains share no common versions.
+
+    Example:
+        If versions have these signature lengths: A(1), B(2 extends A), C(3 extends B),
+        D(2 extends A but different from B), the result would be:
+        [[A, B, C], [A, D]] but since A appears in multiple chains, we deduplicate
+        to get separate chains: [[A, B, C], [D]] where D shows its full lineage.
+    """
+    if not versions:
+        return []
+
+    # Sort by number of change signatures (fewer = older ancestor)
+    sorted_versions = sorted(versions, key=lambda v: len(v.get("change_signatures", [])))
+
+    # Build parent-child relationships
+    # For each version, find its direct parent (the version with the most signatures
+    # that are a prefix of this version's signatures)
+    parent_map: dict[str, str | None] = {}  # stable_id -> parent stable_id
+    children_map: dict[str, list[str]] = defaultdict(list)  # stable_id -> list of child stable_ids
+
+    version_by_id = {v["stable_id"]: v for v in versions}
+
+    for version in sorted_versions:
+        sigs = version.get("change_signatures", [])
+        stable_id = version["stable_id"]
+        parent_map[stable_id] = None
+
+        if not sigs:
+            continue
+
+        # Find the best parent - the version with the most signatures that are a prefix of ours
+        best_parent = None
+        best_parent_sig_count = 0
+
+        for potential_parent in sorted_versions:
+            if potential_parent["stable_id"] == stable_id:
+                continue
+
+            parent_sigs = potential_parent.get("change_signatures", [])
+            if not parent_sigs:
+                continue
+
+            # Check if parent_sigs is a proper prefix of sigs
+            if len(parent_sigs) >= len(sigs):
+                continue
+
+            # Check if all parent signatures match the beginning of our signatures
+            is_prefix = all(
+                parent_sigs[i] == sigs[i]
+                for i in range(len(parent_sigs))
+            )
+
+            if is_prefix and len(parent_sigs) > best_parent_sig_count:
+                best_parent = potential_parent["stable_id"]
+                best_parent_sig_count = len(parent_sigs)
+
+        parent_map[stable_id] = best_parent
+        if best_parent:
+            children_map[best_parent].append(stable_id)
+
+    # Find root versions (no parent)
+    roots = [v["stable_id"] for v in versions if parent_map.get(v["stable_id"]) is None]
+
+    # Build chains by traversing from each root to all leaf descendants
+    chains: list[list[dict]] = []
+
+    def build_chain_to_leaves(current_id: str, current_chain: list[dict]) -> None:
+        current_chain.append(version_by_id[current_id])
+        children = children_map.get(current_id, [])
+
+        if not children:
+            # This is a leaf - save the chain
+            chains.append(current_chain.copy())
+        else:
+            # Continue to each child
+            for child_id in children:
+                build_chain_to_leaves(child_id, current_chain.copy())
+
+    for root_id in roots:
+        build_chain_to_leaves(root_id, [])
+
+    return chains
 
 
 def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
