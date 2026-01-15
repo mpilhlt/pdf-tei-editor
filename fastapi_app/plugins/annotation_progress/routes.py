@@ -5,16 +5,13 @@ Custom routes for Annotation Progress plugin.
 import csv
 import io
 import logging
-from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
-from lxml import etree
 
 from fastapi_app.lib.dependencies import (
     get_auth_manager,
     get_db,
-    get_file_storage,
     get_session_manager,
 )
 
@@ -47,9 +44,9 @@ async def view_progress(
         HTML page with DataTables-powered table
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.config_utils import get_config
     from fastapi_app.lib.file_repository import FileRepository
     from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+    from fastapi_app.lib.config_utils import get_config
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -72,123 +69,64 @@ async def view_progress(
         raise HTTPException(status_code=403, detail="Access denied to collection")
 
     try:
+        from fastapi_app.lib.statistics import calculate_collection_statistics
+        from fastapi_app.lib.config_utils import get_config
+
         db = get_db()
         file_repo = FileRepository(db)
-        file_storage = get_file_storage()
 
         # Get lifecycle order from config
         config = get_config()
         lifecycle_order = config.get("annotation.lifecycle.order", [])
 
-        # Get all files in the collection
-        all_files = file_repo.get_files_by_collection(collection)
-
-        # Get all unique doc_ids from the collection (from PDF and TEI files)
-        all_doc_ids = set()
-        for f in all_files:
-            if f.doc_id:
-                all_doc_ids.add(f.doc_id)
-
-        # Filter to TEI files only
-        tei_files = [f for f in all_files if f.file_type == "tei"]
-
-        # Filter by variant if specified
-        if variant and variant not in ("all", ""):
-            tei_files = [
-                f for f in tei_files if getattr(f, "variant", None) == variant
-            ]
-
-        # Group annotations by doc_id
-        doc_annotations = defaultdict(list)
-        for file_metadata in tei_files:
-            try:
-                content_bytes = file_storage.read_file(file_metadata.id, "tei")
-                if not content_bytes:
-                    continue
-
-                xml_content = content_bytes.decode("utf-8")
-                annotation_info = _extract_annotation_info(xml_content, file_metadata)
-
-                if annotation_info:
-                    doc_id = file_metadata.doc_id or "Unknown"
-                    doc_annotations[doc_id].append(annotation_info)
-
-            except Exception as e:
-                logger.error(f"Failed to parse TEI file {file_metadata.id}: {e}")
-                continue
-
         # Calculate collection statistics
-        total_docs = len(all_doc_ids)
-        total_annotations = sum(len(anns) for anns in doc_annotations.values())
+        stats = calculate_collection_statistics(
+            file_repo=file_repo,
+            collection=collection,
+            variant=variant,
+            lifecycle_order=lifecycle_order
+        )
 
-        # Count documents by lifecycle stage and calculate progress
-        stage_counts = {stage: 0 for stage in lifecycle_order}
-        stage_counts["no-status"] = 0
-        total_progress_sum = 0
-
-        for doc_id in all_doc_ids:
-            annotations = doc_annotations[doc_id]
-            if not annotations:
-                stage_counts["no-status"] += 1
-                continue
-
-            # Find the most recent status across all annotations for this document
-            newest_timestamp = None
-            newest_status = ""
-            for ann in annotations:
-                ann_timestamp = ann.get("last_change_timestamp")
-                if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
-                    newest_timestamp = ann_timestamp
-                    newest_status = ann.get("last_change_status", "")
-
-            if newest_status in stage_counts:
-                stage_counts[newest_status] += 1
-            else:
-                stage_counts["no-status"] += 1
-
-            # Calculate progress for this document (0-100%)
-            if newest_status and newest_status in lifecycle_order:
-                current_index = lifecycle_order.index(newest_status)
-                doc_progress = ((current_index + 1) / len(lifecycle_order)) * 100
-                total_progress_sum += doc_progress
-
-        # Calculate average progress across all documents
-        avg_progress = (total_progress_sum / total_docs) if total_docs > 0 else 0
+        total_docs = stats["total_docs"]
+        total_annotations = stats["total_annotations"]
+        avg_progress = stats["avg_progress"]
+        stage_counts = stats["stage_counts"]
+        doc_annotations = stats["doc_annotations"]
 
         # Prepare table data
-        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator", "Status", "Date"]
+        headers = ["Document ID", "Annotations", "Status", "Date"]
         rows = []
+
+        # Get all doc_ids from the statistics
+        all_doc_ids = set()
+        file_repo_files = file_repo.get_files_by_collection(collection)
+        for f in file_repo_files:
+            if f.doc_id:
+                all_doc_ids.add(f.doc_id)
 
         # Sort by doc_id and include all documents even if they have no annotations
         for doc_id in sorted(all_doc_ids):
             annotations = doc_annotations[doc_id]
 
-            # Create annotation links with revision counts
+            # Create annotation links
             annotation_links = []
-            newest_change_desc = ""
-            newest_annotator = ""
             newest_status = ""
             newest_timestamp = None
 
             for ann in annotations:
                 label = ann["annotation_label"]
-                count = ann["revision_count"]
                 stable_id = ann["stable_id"]
 
-                link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(label)} ({count})</a>'
+                link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(label)}</a>'
                 annotation_links.append(link)
 
-                # Track the newest change across all annotations for this document
-                ann_timestamp = ann.get("last_change_timestamp")
+                # Track the newest status across all annotations for this document
+                ann_timestamp = ann.get("updated_at")
                 if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
                     newest_timestamp = ann_timestamp
-                    newest_change_desc = ann.get("last_change_desc", "")
-                    newest_annotator = ann.get("last_annotator", "")
-                    newest_status = ann.get("last_change_status", "")
+                    newest_status = ann.get("status", "")
 
             annotations_cell = ", ".join(annotation_links) if annotation_links else "No annotations"
-            last_change_cell = escape_html(newest_change_desc) if newest_change_desc else ""
-            last_annotator_cell = escape_html(newest_annotator) if newest_annotator else ""
 
             # Create visual status indicator
             status_cell = _create_status_indicator(newest_status, lifecycle_order)
@@ -201,8 +139,6 @@ async def view_progress(
             rows.append([
                 escape_html(doc_id),
                 annotations_cell,
-                last_change_cell,
-                last_annotator_cell,
                 status_cell,
                 date_cell
             ])
@@ -364,46 +300,32 @@ async def export_csv(
         raise HTTPException(status_code=403, detail="Access denied to collection")
 
     try:
+        from fastapi_app.lib.statistics import calculate_collection_statistics
+        from fastapi_app.lib.config_utils import get_config
+
         db = get_db()
         file_repo = FileRepository(db)
-        file_storage = get_file_storage()
 
-        # Get all files in the collection
-        all_files = file_repo.get_files_by_collection(collection)
+        # Get lifecycle order from config
+        config = get_config()
+        lifecycle_order = config.get("annotation.lifecycle.order", [])
 
-        # Get all unique doc_ids from the collection (from PDF and TEI files)
+        # Calculate collection statistics
+        stats = calculate_collection_statistics(
+            file_repo=file_repo,
+            collection=collection,
+            variant=variant,
+            lifecycle_order=lifecycle_order
+        )
+
+        doc_annotations = stats["doc_annotations"]
+
+        # Get all doc_ids from the collection
         all_doc_ids = set()
-        for f in all_files:
+        file_repo_files = file_repo.get_files_by_collection(collection)
+        for f in file_repo_files:
             if f.doc_id:
                 all_doc_ids.add(f.doc_id)
-
-        # Filter to TEI files only
-        tei_files = [f for f in all_files if f.file_type == "tei"]
-
-        # Filter by variant if specified
-        if variant and variant not in ("all", ""):
-            tei_files = [
-                f for f in tei_files if getattr(f, "variant", None) == variant
-            ]
-
-        # Group annotations by doc_id
-        doc_annotations = defaultdict(list)
-        for file_metadata in tei_files:
-            try:
-                content_bytes = file_storage.read_file(file_metadata.id, "tei")
-                if not content_bytes:
-                    continue
-
-                xml_content = content_bytes.decode("utf-8")
-                annotation_info = _extract_annotation_info(xml_content, file_metadata)
-
-                if annotation_info:
-                    doc_id = file_metadata.doc_id or "Unknown"
-                    doc_annotations[doc_id].append(annotation_info)
-
-            except Exception as e:
-                logger.error(f"Failed to parse TEI file {file_metadata.id}: {e}")
-                continue
 
         # Generate CSV
         output = io.StringIO()
@@ -411,7 +333,7 @@ async def export_csv(
 
         # Write header
         writer.writerow(
-            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator", "Status", "Date"]
+            ["Document ID", "Annotation Label", "Status", "Date"]
         )
 
         # Write data - sort by doc_id and include all documents even if they have no annotations
@@ -420,7 +342,7 @@ async def export_csv(
 
             if not annotations:
                 # Document with no annotations
-                writer.writerow([doc_id, "", "", "", "", "", ""])
+                writer.writerow([doc_id, "", "", ""])
             else:
                 # Sort annotations by label for consistent output
                 annotations.sort(key=lambda x: x["annotation_label"])
@@ -428,7 +350,7 @@ async def export_csv(
                 for ann in annotations:
                     # Format timestamp as timezone-aware ISO format with Z suffix
                     date_str = ""
-                    timestamp = ann.get("last_change_timestamp")
+                    timestamp = ann.get("updated_at")
                     if timestamp:
                         # Assume UTC if no timezone info (since we stripped it during parsing)
                         from datetime import timezone
@@ -439,10 +361,7 @@ async def export_csv(
                     writer.writerow([
                         doc_id,
                         ann["annotation_label"],
-                        ann["revision_count"],
-                        ann.get("last_change_desc", ""),
-                        ann.get("last_annotator", ""),
-                        ann.get("last_change_status", ""),
+                        ann.get("status", ""),
                         date_str,
                     ])
 
@@ -459,85 +378,6 @@ async def export_csv(
     except Exception as e:
         logger.error(f"Failed to export annotation progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
-    """
-    Extract annotation information from TEI document.
-
-    Args:
-        xml_content: TEI XML content as string
-        file_metadata: File metadata object
-
-    Returns:
-        Dictionary with annotation label, revision count, last change info
-    """
-    try:
-        from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
-
-        root = etree.fromstring(xml_content.encode("utf-8"))
-        ns = {
-            "tei": "http://www.tei-c.org/ns/1.0",
-        }
-
-        # Get extraction label from edition title
-        tei_metadata = extract_tei_metadata(root)
-        # Use edition_title (extraction label) if available, fallback to title
-        annotation_label = tei_metadata.get("edition_title") or tei_metadata.get(
-            "title", "Untitled"
-        )
-
-        # Count all change elements (revision count)
-        change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
-        revision_count = len(change_elements)
-
-        # Get the last change element
-        last_change = root.find(".//tei:revisionDesc/tei:change[last()]", ns)
-
-        last_change_desc = ""
-        last_annotator = ""
-        last_change_status = ""
-        last_change_timestamp = None
-
-        if last_change is not None:
-            # Get description from text content or desc subelement
-            desc_elem = last_change.find("tei:desc", ns)
-            if desc_elem is not None and desc_elem.text:
-                last_change_desc = desc_elem.text.strip()
-            elif last_change.text:
-                last_change_desc = last_change.text.strip()
-
-            # Get annotator name
-            who_id = last_change.get("who", "")
-            last_annotator = get_annotator_name(root, who_id)
-
-            # Get status attribute
-            last_change_status = last_change.get("status", "")
-
-            # Get timestamp for comparison
-            when = last_change.get("when", "")
-            if when:
-                try:
-                    from datetime import datetime
-                    last_change_timestamp = datetime.fromisoformat(when.replace("Z", "+00:00"))
-                    if last_change_timestamp.tzinfo is not None:
-                        last_change_timestamp = last_change_timestamp.replace(tzinfo=None)
-                except (ValueError, AttributeError):
-                    pass
-
-        return {
-            "annotation_label": annotation_label,
-            "revision_count": revision_count,
-            "stable_id": file_metadata.stable_id,
-            "last_change_desc": last_change_desc,
-            "last_annotator": last_annotator,
-            "last_change_status": last_change_status,
-            "last_change_timestamp": last_change_timestamp,
-        }
-
-    except Exception as e:
-        logger.error(f"Error extracting annotation info: {e}")
-        return None
 
 
 def _get_stage_color(stage_index: int, total_stages: int) -> tuple[str, str]:

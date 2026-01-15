@@ -96,6 +96,44 @@ from .plugin import MyPlugin
 plugin = MyPlugin()
 ```
 
+**CRITICAL: `__init__.py` is NOT executed during plugin discovery!**
+
+The plugin discovery system loads `plugin.py` directly using `importlib.util.spec_from_file_location()`, which bypasses the normal Python package import mechanism. This means:
+
+- **`__init__.py` is never executed** during plugin discovery and registration
+- Any code in `__init__.py` (including config initialization) will NOT run
+- The `plugin = MyPlugin()` line in `__init__.py` is only for IDE/type support
+- The actual plugin instance is created by calling the plugin class found in `plugin.py`
+
+**Consequence**: Configuration initialization, imports, or any other setup code MUST be placed in the plugin class `__init__()` method, NOT in `__init__.py`.
+
+**Correct pattern** (config in plugin class):
+
+```python
+# plugin.py
+class MyPlugin(Plugin):
+    def __init__(self):
+        super().__init__()
+
+        # Initialize config here - this WILL execute
+        from fastapi_app.lib.plugin_tools import get_plugin_config
+        get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=True, value_type="boolean")
+        get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
+```
+
+**Incorrect pattern** (config in `__init__.py`):
+
+```python
+# __init__.py - DON'T DO THIS!
+from fastapi_app.lib.plugin_tools import get_plugin_config
+
+# This code will NEVER execute during plugin discovery
+get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=True, value_type="boolean")
+
+from .plugin import MyPlugin
+plugin = MyPlugin()
+```
+
 ## Conditional Availability
 
 Plugins can define runtime availability conditions using the `is_available()` class method. This allows plugins to be conditionally loaded based on:
@@ -150,20 +188,23 @@ Plugins often need configuration that can be set via environment variables or co
 
 ### Initialization Pattern
 
-**Initialize configuration values at plugin registration time** in `__init__.py`. This ensures config keys are created from environment variables when the plugin is loaded:
+**CRITICAL**: Configuration must be initialized in the plugin class `__init__()` method, NOT in `__init__.py` (see Plugin Registration section above for why).
+
+**Initialize configuration values when plugin is instantiated** in the plugin class:
 
 ```python
-# __init__.py
-from fastapi_app.lib.plugin_tools import get_plugin_config
+# plugin.py
+class MyPlugin(Plugin):
+    def __init__(self):
+        super().__init__()
 
-# Initialize config values from environment variables
-get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
-get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
-get_plugin_config("plugin.my-plugin.timeout", "MY_PLUGIN_TIMEOUT", default=30, value_type="number")
+        # Initialize config values from environment variables
+        from fastapi_app.lib.plugin_tools import get_plugin_config
+        get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
+        get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
+        get_plugin_config("plugin.my-plugin.timeout", "MY_PLUGIN_TIMEOUT", default=30, value_type="number")
 
-from .plugin import MyPlugin
-
-plugin = MyPlugin()
+        # Rest of plugin initialization...
 ```
 
 **Access configuration in plugin methods** using `get_config()`:
@@ -199,8 +240,8 @@ async def custom_action():
 
 **Key points**:
 
-- Initialize config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
-- Access config everywhere else using `get_config()` (retrieves existing keys)
+- Initialize config in plugin class `__init__()` using `get_plugin_config()` (creates keys from env vars)
+- Access config in methods and routes using `get_config()` (retrieves existing keys)
 - Config values are automatically created from environment variables on first initialization
 - Routes and plugin methods use the same `get_config()` pattern
 
@@ -235,7 +276,7 @@ def is_available(cls) -> bool:
     return True
 ```
 
-**Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**Reference Implementation**: See [discord_audit_trail plugin](../../fastapi_app/plugins/discord_audit_trail/plugin.py) for a complete example with config initialization in `__init__()`.
 
 ## Role-Based Access
 
@@ -760,6 +801,7 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 
 ## Notes
 
+- **CRITICAL - `__init__.py` is not executed**: Plugin discovery loads `plugin.py` directly via `importlib`, completely bypassing `__init__.py`. All initialization code (config, imports, setup) MUST be in the plugin class `__init__()` method, NOT in `__init__.py`. See Plugin Registration section for details.
 - **Directory naming**: Use underscores (e.g., `my_plugin`) not hyphens (e.g., `my-plugin`) in directory names to avoid Python import issues
 - Shadow DOM: Frontend uses `querySelector` to access Shoelace menu elements
 - Plugin discovery happens at startup

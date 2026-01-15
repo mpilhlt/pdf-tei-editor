@@ -78,8 +78,7 @@ def main():
             "fastapi_app/plugins/discord_audit_trail/tests/test_plugin.py",
             "fastapi_app/plugins/edit_history/tests/test_edit_history_export.py",
             "fastapi_app/plugins/local_sync/__init__.py",
-            "fastapi_app/plugins/local_sync/plugin.py",
-            "app/src/modules/oa-utils.js"
+            "fastapi_app/plugins/local_sync/plugin.py"
         ]
     }
 

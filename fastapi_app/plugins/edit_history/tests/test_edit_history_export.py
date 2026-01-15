@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,6 +36,7 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
         self.mock_session_manager = MagicMock()
         self.mock_auth_manager = MagicMock()
         self.mock_db = MagicMock()
+        self.mock_db.db_path = Path('/tmp/test.db')  # Set db_path to prevent MagicMock string as filename
         self.mock_storage = MagicMock()
 
         # Override dependencies
