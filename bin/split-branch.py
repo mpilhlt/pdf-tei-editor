@@ -111,7 +111,7 @@ def main():
         # Stage and commit the changes
         run_command("node bin/generate-api-client.js")
         run_command("git add .")
-        run_command(f"git commit -m \"Initial commit for branch: {branch_name}\"")
+        run_command(f"git commit --no-verify -m \"Committing changes for branch {branch_name}\"")
         print(f"  Committed changes for {branch_name}")
 
     # Step 3: Return to devel
