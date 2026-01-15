@@ -185,7 +185,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         assert tei_header is not None
 
         # Add custom elements to header
-        timestamp = datetime.datetime.now().isoformat() + "Z"
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
         # Add editionStmt after titleStmt with fileref
         fileDesc = tei_header.find("fileDesc")

@@ -90,7 +90,7 @@ class MockExtractor(BaseExtractor):
         assert tei_header is not None
 
         # Add editionStmt with fileref
-        timestamp = datetime.datetime.now().isoformat() + "Z"
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         # Use doc_id from options if provided (preferred), otherwise derive from PDF path
         file_id = options.get('doc_id')
         if not file_id:
