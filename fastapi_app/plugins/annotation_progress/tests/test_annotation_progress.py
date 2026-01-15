@@ -2,6 +2,7 @@
 Unit tests for Annotation Progress plugin.
 
 @testCovers fastapi_app/plugins/annotation_progress/plugin.py
+@testCovers fastapi_app/plugins/annotation_progress/routes.py
 """
 
 import asyncio
@@ -9,6 +10,10 @@ import unittest
 from unittest.mock import MagicMock
 
 from fastapi_app.plugins.annotation_progress.plugin import AnnotationProgressPlugin
+from fastapi_app.plugins.annotation_progress.routes import (
+    _extract_annotation_info,
+    _format_version_chains_html,
+)
 
 
 class TestAnnotationProgressPlugin(unittest.TestCase):
@@ -104,7 +109,7 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         file_metadata = MagicMock()
         file_metadata.stable_id = "test-stable-id"
 
-        result = self.plugin._extract_annotation_info(xml_content, file_metadata)
+        result = _extract_annotation_info(xml_content, file_metadata)
 
         self.assertIsNotNone(result)
         self.assertEqual(result["annotation_label"], "Test Annotation")
@@ -115,6 +120,9 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         # Verify timestamp is parsed correctly (timezone stripped)
         expected_timestamp = datetime(2024, 1, 3, 10, 0, 0)
         self.assertEqual(result["last_change_timestamp"], expected_timestamp)
+        # Verify change signatures are extracted
+        self.assertIn("change_signatures", result)
+        self.assertEqual(len(result["change_signatures"]), 3)
 
     def test_extract_annotation_info_no_edition_title(self):
         """Test annotation info extraction with no edition title."""
@@ -146,11 +154,48 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         file_metadata = MagicMock()
         file_metadata.stable_id = "test-stable-id"
 
-        result = self.plugin._extract_annotation_info(xml_content, file_metadata)
+        result = _extract_annotation_info(xml_content, file_metadata)
 
         self.assertIsNotNone(result)
         self.assertEqual(result["annotation_label"], "Test Document Title")
         self.assertEqual(result["revision_count"], 1)
+
+
+class TestFormatVersionChainsHtml(unittest.TestCase):
+    """Test cases for version chain HTML formatting."""
+
+    def test_format_version_chains_html(self):
+        """Test HTML formatting of version chains."""
+        annotations = [
+            {
+                "annotation_label": "Version A",
+                "stable_id": "id-a",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+            },
+            {
+                "annotation_label": "Version B",
+                "stable_id": "id-b",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                ],
+            },
+        ]
+
+        html = _format_version_chains_html(annotations)
+
+        # Should contain version links and arrow
+        self.assertIn("Version A", html)
+        self.assertIn("Version B", html)
+        self.assertIn("→", html)
+        self.assertIn("id-a", html)
+        self.assertIn("id-b", html)
+        self.assertIn("version-chain", html)
+
+    def test_format_version_chains_html_empty(self):
+        """Test HTML formatting with no annotations."""
+        html = _format_version_chains_html([])
+        self.assertEqual(html, "No annotations")
 
 
 if __name__ == "__main__":

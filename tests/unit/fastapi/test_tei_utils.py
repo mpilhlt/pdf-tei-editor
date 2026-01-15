@@ -237,5 +237,162 @@ class TestCreateSchemaProcessingInstruction(unittest.TestCase):
         self.assertIn('type="application/xml"', result)
 
 
+class TestExtractChangeSignatures(unittest.TestCase):
+    """Test extract_change_signatures function."""
+
+    def test_extract_change_signatures(self):
+        """Test extraction of change signatures from TEI XML."""
+        from fastapi_app.lib.tei_utils import extract_change_signatures
+
+        xml_content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <revisionDesc>
+      <change when="2024-01-01" who="#user1" status="created">First</change>
+      <change when="2024-01-02" who="#user2" status="updated">Second</change>
+    </revisionDesc>
+  </teiHeader>
+</TEI>"""
+
+        signatures = extract_change_signatures(xml_content)
+
+        self.assertEqual(len(signatures), 2)
+        self.assertEqual(signatures[0], ("#user1", "2024-01-01", "created"))
+        self.assertEqual(signatures[1], ("#user2", "2024-01-02", "updated"))
+
+    def test_extract_change_signatures_empty(self):
+        """Test extraction with no change elements."""
+        from fastapi_app.lib.tei_utils import extract_change_signatures
+
+        xml_content = b"""<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <revisionDesc/>
+  </teiHeader>
+</TEI>"""
+
+        signatures = extract_change_signatures(xml_content)
+        self.assertEqual(len(signatures), 0)
+
+
+class TestBuildVersionAncestryChains(unittest.TestCase):
+    """Test build_version_ancestry_chains function."""
+
+    def test_build_version_ancestry_chains_linear(self):
+        """Test building ancestry chains for linear version history."""
+        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+
+        # Version A (1 change) -> B (2 changes, extends A) -> C (3 changes, extends B)
+        versions = [
+            {
+                "annotation_label": "Version A",
+                "stable_id": "id-a",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+            },
+            {
+                "annotation_label": "Version B",
+                "stable_id": "id-b",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                ],
+            },
+            {
+                "annotation_label": "Version C",
+                "stable_id": "id-c",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                    ("user1", "2024-01-03", "reviewed"),
+                ],
+            },
+        ]
+
+        chains = build_version_ancestry_chains(versions)
+
+        # Should have one chain: A -> B -> C
+        self.assertEqual(len(chains), 1)
+        self.assertEqual(len(chains[0]), 3)
+        self.assertEqual(chains[0][0]["stable_id"], "id-a")
+        self.assertEqual(chains[0][1]["stable_id"], "id-b")
+        self.assertEqual(chains[0][2]["stable_id"], "id-c")
+
+    def test_build_version_ancestry_chains_branching(self):
+        """Test building ancestry chains for branching version history."""
+        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+
+        # Version A (1 change) -> B (2 changes, extends A)
+        # Version A (1 change) -> D (2 changes, extends A but different from B)
+        versions = [
+            {
+                "annotation_label": "Version A",
+                "stable_id": "id-a",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+            },
+            {
+                "annotation_label": "Version B",
+                "stable_id": "id-b",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                ],
+            },
+            {
+                "annotation_label": "Version D",
+                "stable_id": "id-d",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user2", "2024-01-02", "edited"),  # Different second change
+                ],
+            },
+        ]
+
+        chains = build_version_ancestry_chains(versions)
+
+        # Should have two chains: A -> B and A -> D
+        self.assertEqual(len(chains), 2)
+
+        # Both chains should start with A
+        chain_starts = [c[0]["stable_id"] for c in chains]
+        self.assertEqual(chain_starts, ["id-a", "id-a"])
+
+        # Check chain ends
+        chain_ends = [c[-1]["stable_id"] for c in chains]
+        self.assertIn("id-b", chain_ends)
+        self.assertIn("id-d", chain_ends)
+
+    def test_build_version_ancestry_chains_independent(self):
+        """Test building ancestry chains for independent versions."""
+        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+
+        # Two independent versions with no common ancestor
+        versions = [
+            {
+                "annotation_label": "Version X",
+                "stable_id": "id-x",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+            },
+            {
+                "annotation_label": "Version Y",
+                "stable_id": "id-y",
+                "change_signatures": [("user2", "2024-02-01", "created")],
+            },
+        ]
+
+        chains = build_version_ancestry_chains(versions)
+
+        # Should have two separate chains
+        self.assertEqual(len(chains), 2)
+        self.assertEqual(len(chains[0]), 1)
+        self.assertEqual(len(chains[1]), 1)
+
+    def test_build_version_ancestry_chains_empty(self):
+        """Test building ancestry chains with empty input."""
+        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+
+        chains = build_version_ancestry_chains([])
+        self.assertEqual(len(chains), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

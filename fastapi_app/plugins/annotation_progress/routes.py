@@ -156,29 +156,20 @@ async def view_progress(
         avg_progress = (total_progress_sum / total_docs) if total_docs > 0 else 0
 
         # Prepare table data
-        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator", "Status", "Date"]
+        headers = ["Document ID", "Version History", "Last Change", "Last Annotator", "Status", "Date"]
         rows = []
 
         # Sort by doc_id and include all documents even if they have no annotations
         for doc_id in sorted(all_doc_ids):
             annotations = doc_annotations[doc_id]
 
-            # Create annotation links with revision counts
-            annotation_links = []
+            # Track the newest change across all annotations for this document
             newest_change_desc = ""
             newest_annotator = ""
             newest_status = ""
             newest_timestamp = None
 
             for ann in annotations:
-                label = ann["annotation_label"]
-                count = ann["revision_count"]
-                stable_id = ann["stable_id"]
-
-                link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(label)} ({count})</a>'
-                annotation_links.append(link)
-
-                # Track the newest change across all annotations for this document
                 ann_timestamp = ann.get("last_change_timestamp")
                 if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
                     newest_timestamp = ann_timestamp
@@ -186,7 +177,8 @@ async def view_progress(
                     newest_annotator = ann.get("last_annotator", "")
                     newest_status = ann.get("last_change_status", "")
 
-            annotations_cell = ", ".join(annotation_links) if annotation_links else "No annotations"
+            # Format annotations as version history chains
+            annotations_cell = _format_version_chains_html(annotations)
             last_change_cell = escape_html(newest_change_desc) if newest_change_desc else ""
             last_annotator_cell = escape_html(newest_annotator) if newest_annotator else ""
 
@@ -305,6 +297,21 @@ async def view_progress(
                     background: #e9ecef;
                     padding: 2px 8px;
                     border-radius: 3px;
+                }
+                .version-chain {
+                    margin: 2px 0;
+                    white-space: nowrap;
+                }
+                .version-link {
+                    color: #0066cc;
+                    text-decoration: underline;
+                }
+                .version-link:hover {
+                    color: #004499;
+                }
+                .arrow {
+                    color: #6c757d;
+                    margin: 0 2px;
                 }
             """,
             extra_content_before_table=summary_html
@@ -470,10 +477,14 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
         file_metadata: File metadata object
 
     Returns:
-        Dictionary with annotation label, revision count, last change info
+        Dictionary with annotation label, revision count, last change info, and change signatures
     """
     try:
-        from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
+        from fastapi_app.lib.tei_utils import (
+            extract_tei_metadata,
+            get_annotator_name,
+            extract_change_signatures,
+        )
 
         root = etree.fromstring(xml_content.encode("utf-8"))
         ns = {
@@ -490,6 +501,9 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
         # Count all change elements (revision count)
         change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
         revision_count = len(change_elements)
+
+        # Extract change signatures for ancestry tracking
+        change_signatures = extract_change_signatures(root)
 
         # Get the last change element
         last_change = root.find(".//tei:revisionDesc/tei:change[last()]", ns)
@@ -533,11 +547,51 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
             "last_annotator": last_annotator,
             "last_change_status": last_change_status,
             "last_change_timestamp": last_change_timestamp,
+            "change_signatures": change_signatures,
         }
 
     except Exception as e:
         logger.error(f"Error extracting annotation info: {e}")
         return None
+
+
+def _format_version_chains_html(annotations: list[dict]) -> str:
+    """
+    Format annotation versions as HTML showing linear ancestry chains.
+
+    Args:
+        annotations: List of annotation info dicts with 'annotation_label',
+                     'stable_id', and 'change_signatures' keys
+
+    Returns:
+        HTML string with version chains, each on a separate line
+    """
+    from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+    from fastapi_app.lib.plugin_tools import escape_html
+
+    if not annotations:
+        return "No annotations"
+
+    # Build ancestry chains
+    chains = build_version_ancestry_chains(annotations)
+
+    if not chains:
+        return "No annotations"
+
+    # Format each chain as: version foo → version bar → version baz
+    chain_htmls = []
+    for chain in chains:
+        version_links = []
+        for version in chain:
+            label = version["annotation_label"]
+            stable_id = version["stable_id"]
+            link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" class="version-link">{escape_html(label)}</a>'
+            version_links.append(link)
+
+        chain_html = ' <span class="arrow">→</span> '.join(version_links)
+        chain_htmls.append(f'<div class="version-chain">{chain_html}</div>')
+
+    return "\n".join(chain_htmls)
 
 
 def _get_stage_color(stage_index: int, total_stages: int) -> tuple[str, str]:
