@@ -5,6 +5,7 @@ This directory contains concise technical documentation for AI code assistants (
 ## Purpose
 
 These guides provide:
+
 - Quick reference for common tasks
 - Implementation rules and patterns
 - Anti-patterns to avoid
@@ -13,22 +14,35 @@ These guides provide:
 ## Available Guides
 
 ### [architecture.md](./architecture.md)
+
 Core system architecture patterns including:
+
 - Backend structure (FastAPI)
 - Frontend structure (ES modules, plugin system)
 - Plugin types (objects vs classes)
 - UI component system
 - Template registration
 
+### [database-connections.md](./database-connections.md)
+
+SQLite connection management details:
+
+- Connection pooling and WAL mode
+- Transaction handling and locking
+
 ### [coding-standards.md](./coding-standards.md)
+
 Code quality rules and conventions:
+
 - JSDoc type annotation requirements (CRITICAL)
 - Python development patterns
 - Frontend development patterns (Shoelace, debugging)
 - General code conventions
 
 ### [development-commands.md](./development-commands.md)
+
 Command reference for common tasks:
+
 - Development server commands
 - Build system
 - Testing commands
@@ -36,7 +50,9 @@ Command reference for common tasks:
 - Development workflow
 
 ### [plugin-development.md](./plugin-development.md)
+
 Plugin creation and state management:
+
 - Creating plugin classes
 - Plugin registration
 - State management rules (immutable state)
@@ -44,7 +60,9 @@ Plugin creation and state management:
 - Legacy plugin object migration
 
 ### [testing-guide.md](./testing-guide.md)
+
 Testing practices and patterns:
+
 - Test structure and types
 - Writing API and E2E tests
 - Using helper functions (CRITICAL)
@@ -52,7 +70,9 @@ Testing practices and patterns:
 - Backend authentication requirements
 
 ### [api-client.md](./api-client.md)
+
 FastAPI client usage patterns:
+
 - Using the generated client
 - Client regeneration
 - Dependency injection pattern

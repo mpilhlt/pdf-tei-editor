@@ -30,23 +30,17 @@ def get_db_connection(db_dir: Path, logger: logging.Logger):
     Yields:
         sqlite3.Connection: Database connection with row factory enabled
     """
-    conn = None
+    from . import sqlite_utils
+
+    db_path = db_dir / "locks.db"
     try:
-        db_path = db_dir / "locks.db"
-        conn = sqlite3.connect(str(db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        # Enable WAL mode for better concurrent access
-        conn.execute("PRAGMA journal_mode=WAL")
-        yield conn
-        conn.commit()
+        # Use centralized connection utility with WAL mode and retry logic
+        with sqlite_utils.get_connection(db_path) as conn:
+            yield conn
+            conn.commit()
     except sqlite3.Error as e:
-        if conn:
-            conn.rollback()
         logger.error(f"Database error: {e}")
         raise RuntimeError(f"Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
 
 
 def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
@@ -58,12 +52,14 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
         db_dir: Directory containing locks.db
         logger: Logger instance
     """
+    from . import sqlite_utils
+
     db_path = db_dir / "locks.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create database and schema if it doesn't exist
     if not db_path.exists():
-        with sqlite3.connect(str(db_path)) as conn:
+        with sqlite_utils.get_connection(db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS locks (
                     file_hash TEXT PRIMARY KEY,
@@ -72,7 +68,6 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.commit()
 
     # Run migrations using centralized runner
     from fastapi_app.lib.migration_runner import run_migrations_if_needed
@@ -90,7 +85,7 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
 
     # Create/update indexes with current structure
     try:
-        with sqlite3.connect(str(db_path)) as conn:
+        with sqlite_utils.get_connection(db_path) as conn:
             # Ensure indexes exist with current schema
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_file_id
@@ -104,7 +99,6 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
                 CREATE INDEX IF NOT EXISTS idx_updated
                 ON locks(updated_at)
             """)
-            conn.commit()
             logger.debug(f"Locks database initialized at {db_path}")
     except sqlite3.Error as e:
         logger.error(f"Failed to create indexes: {e}")
