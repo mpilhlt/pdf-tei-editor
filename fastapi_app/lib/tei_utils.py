@@ -97,7 +97,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
 
     # revisionDesc
     revisionDesc = etree.SubElement(teiHeader, 'revisionDesc')
-    timestamp = datetime.datetime.now().isoformat()
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     change = etree.SubElement(revisionDesc, 'change', when=timestamp, status="created")
     etree.SubElement(change, 'desc').text = "First version extracted automatically."
 

@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-15T09:52:15.309Z
+ * Generated from OpenAPI schema at 2026-01-15T20:16:10.459Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1018,7 +1018,6 @@ export class ApiClientV1 {
    * Supports:
    * - PDF-based extraction (e.g., Grobid, Gemini)
    * - XML-based extraction (e.g., metadata refiners)
-   * - RNG schema generation from XML
    * The extracted content is saved as a new file with appropriate metadata.
    * Args:
    * request: Extraction request with extractor ID, file ID, and options

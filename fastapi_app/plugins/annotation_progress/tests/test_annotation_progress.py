@@ -165,7 +165,7 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
     """Test cases for version chain HTML formatting."""
 
     def test_format_version_chains_html(self):
-        """Test HTML formatting of version chains."""
+        """Test HTML formatting of version chains without gold standard."""
         from datetime import datetime
 
         annotations = [
@@ -174,6 +174,7 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
                 "stable_id": "id-a",
                 "change_signatures": [("user1", "2024-01-01", "created")],
                 "last_change_timestamp": datetime(2024, 1, 1, 10, 0, 0),
+                "is_gold_standard": False,
             },
             {
                 "annotation_label": "Version B",
@@ -183,6 +184,7 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
                     ("user1", "2024-01-02", "updated"),
                 ],
                 "last_change_timestamp": datetime(2024, 1, 2, 10, 0, 0),
+                "is_gold_standard": False,
             },
         ]
 
@@ -199,6 +201,79 @@ class TestFormatVersionChainsHtml(unittest.TestCase):
         self.assertIn("⭐", html)
         self.assertIn("⭐ Version B", html)
         # Version A should not have a star
+        self.assertNotIn("⭐ Version A", html)
+        # No gold medal since no gold standard
+        self.assertNotIn("🥇", html)
+
+    def test_format_version_chains_html_with_gold_standard(self):
+        """Test HTML formatting with gold standard version."""
+        from datetime import datetime
+
+        annotations = [
+            {
+                "annotation_label": "Version A",
+                "stable_id": "id-a",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+                "last_change_timestamp": datetime(2024, 1, 1, 10, 0, 0),
+                "is_gold_standard": True,  # Gold standard
+            },
+            {
+                "annotation_label": "Version B",
+                "stable_id": "id-b",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                ],
+                "last_change_timestamp": datetime(2024, 1, 2, 10, 0, 0),
+                "is_gold_standard": False,
+            },
+        ]
+
+        html = _format_version_chains_html(annotations)
+
+        # Version A should have gold medal (gold standard)
+        self.assertIn("🥇", html)
+        self.assertIn("🥇 Version A", html)
+        # Version B should have star (newest but not gold)
+        self.assertIn("⭐", html)
+        self.assertIn("⭐ Version B", html)
+        # Neither should have the other's marker
+        self.assertNotIn("🥇 Version B", html)
+        self.assertNotIn("⭐ Version A", html)
+
+    def test_format_version_chains_html_gold_is_newest(self):
+        """Test HTML formatting when gold standard is also the newest version."""
+        from datetime import datetime
+
+        annotations = [
+            {
+                "annotation_label": "Version A",
+                "stable_id": "id-a",
+                "change_signatures": [("user1", "2024-01-01", "created")],
+                "last_change_timestamp": datetime(2024, 1, 1, 10, 0, 0),
+                "is_gold_standard": False,
+            },
+            {
+                "annotation_label": "Version B",
+                "stable_id": "id-b",
+                "change_signatures": [
+                    ("user1", "2024-01-01", "created"),
+                    ("user1", "2024-01-02", "updated"),
+                ],
+                "last_change_timestamp": datetime(2024, 1, 2, 10, 0, 0),
+                "is_gold_standard": True,  # Gold standard AND newest
+            },
+        ]
+
+        html = _format_version_chains_html(annotations)
+
+        # Version B should have gold medal (gold standard takes precedence)
+        self.assertIn("🥇", html)
+        self.assertIn("🥇 Version B", html)
+        # No star should appear since gold version is also newest
+        self.assertNotIn("⭐", html)
+        # Version A should have no marker
+        self.assertNotIn("🥇 Version A", html)
         self.assertNotIn("⭐ Version A", html)
 
     def test_format_version_chains_html_empty(self):

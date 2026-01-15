@@ -197,7 +197,7 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
         csv_content = response.text
         self.assertIn("Change Date", csv_content)
         self.assertIn("Document ID", csv_content)
-        self.assertIn("Extraction Label", csv_content)
+        self.assertIn("Annotation Label", csv_content)
         self.assertIn("Change Description", csv_content)
         self.assertIn("Annotator ID", csv_content)
         self.assertIn("Annotator Name", csv_content)

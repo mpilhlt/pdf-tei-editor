@@ -137,7 +137,7 @@ class LLamoreExtractor(BaseExtractor):
         assert tei_header is not None
 
         # Add editionStmt with fileref
-        timestamp = datetime.datetime.now().isoformat() + "Z"
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         # Use doc_id from options if provided, otherwise extract from PDF path
         file_id = options.get('doc_id')
         if not file_id:
@@ -155,7 +155,7 @@ class LLamoreExtractor(BaseExtractor):
         date_elem = etree.SubElement(edition, "date", when=timestamp)
         date_elem.text = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
         title_elem = etree.SubElement(edition, "title")
-        title_elem.text = "Extraction (llamore-gemini)"
+        title_elem.text = "Extraction"
         fileref_elem = etree.SubElement(edition, "idno", type="fileref")
         fileref_elem.text = file_id
         
