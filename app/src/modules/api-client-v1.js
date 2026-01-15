@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-18T18:29:18.149Z
+ * Generated from OpenAPI schema at 2026-01-15T09:52:15.309Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -269,7 +269,6 @@
  * @property {number} purged_count
  * @property {number} files_deleted
  * @property {number} storage_freed
- * @property {number=} orphaned_xml_deleted
  */
 
 /**
@@ -1019,6 +1018,7 @@ export class ApiClientV1 {
    * Supports:
    * - PDF-based extraction (e.g., Grobid, Gemini)
    * - XML-based extraction (e.g., metadata refiners)
+   * - RNG schema generation from XML
    * The extracted content is saved as a new file with appropriate metadata.
    * Args:
    * request: Extraction request with extractor ID, file ID, and options
@@ -1554,28 +1554,6 @@ export class ApiClientV1 {
    */
   async sseTestBroadcast(requestBody) {
     const endpoint = `/sse/test/broadcast`
-    return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Test endpoint that simulates a progress bar workflow.
-   * Sends progressShow, progressValue, progressLabel, and progressHide events
-   * to test the frontend progress widget.
-   * Args:
-   * body: Optional dictionary with:
-   * - steps: Number of progress steps (default: 5)
-   * - delay_ms: Delay between steps in ms (default: 500)
-   * - label_prefix: Prefix for step labels (default: "Processing step")
-   * Returns:
-   * dict: Summary with status and progress_id
-   * Note:
-   * Client must be subscribed to /sse/subscribe before calling this endpoint.
-   *
-   * @param {Object<string, any>} requestBody
-   * @returns {Promise<any>}
-   */
-  async sseTestProgress(requestBody) {
-    const endpoint = `/sse/test/progress`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
