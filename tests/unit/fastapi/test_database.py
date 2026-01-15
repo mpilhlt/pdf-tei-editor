@@ -526,7 +526,8 @@ class TestFileStorage(unittest.TestCase):
         """Create temporary directory for file storage."""
         self.test_dir = Path(tempfile.mkdtemp())
         self.db_path = self.test_dir / "test.db"
-        self.storage = FileStorage(self.test_dir, self.db_path)
+        self.db = DatabaseManager(self.db_path)
+        self.storage = FileStorage(self.test_dir, self.db)
 
     def tearDown(self):
         """Clean up temporary directory."""

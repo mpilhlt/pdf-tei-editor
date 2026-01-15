@@ -8,7 +8,7 @@ Guide for creating and working with **frontend plugins** in the PDF-TEI Editor.
 - **Frontend plugins**: JavaScript classes in `app/src/plugins/` that extend the UI and handle client-side logic
 - **Backend plugins**: Python modules in `fastapi_app/plugins/` that provide server-side functionality and API endpoints
 
-For detailed frontend plugin architecture, see [architecture.md](./architecture.md#plugin-system-architecture).
+For detailed frontend plugin architecture, see [../development/plugin-system-frontend.md](../development/plugin-system-frontend.md).
 
 ## Creating New Plugin Classes
 

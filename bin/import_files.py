@@ -142,7 +142,7 @@ Examples:
     logger.info(f"Storage: {storage_root}")
 
     db = DatabaseManager(db_path, logger)
-    storage = FileStorage(storage_root, db_path, logger)
+    storage = FileStorage(storage_root, db, logger)
     repo = FileRepository(db)
 
     # Clean database if requested

@@ -29,18 +29,18 @@ class FileStorage:
     - No orphaned files from content changes
     """
 
-    def __init__(self, data_root: Path, db_path: Path, logger=None):
+    def __init__(self, data_root: Path, db_manager, logger=None):
         """
         Initialize file storage with reference counting.
 
         Args:
             data_root: Root directory for file storage
-            db_path: Path to metadata database (for reference counting)
+            db_manager: DatabaseManager instance (for reference counting)
             logger: Optional logger instance
         """
         self.data_root = Path(data_root)
         self.logger = logger
-        self.ref_manager = StorageReferenceManager(db_path, logger)
+        self.ref_manager = StorageReferenceManager(db_manager, logger)
 
         # Ensure data root exists
         self.data_root.mkdir(parents=True, exist_ok=True)

@@ -97,42 +97,69 @@ Analytics database manager.
 """
 
 import sqlite3
+import queue
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from .analytics_schema import initialize_analytics_db
+from . import sqlite_utils
 
 
 class AnalyticsDB:
-    """Manages analytics database connections."""
+    """
+    Manages analytics database connections with pooling.
+    
+    Implements connection pooling and safe WAL mode initialization
+    similar to the main DatabaseManager.
+    """
 
     def __init__(self, db_path: Path, logger=None):
         self.db_path = db_path
         self.logger = logger
+        self._pool = queue.Queue()
         self._ensure_db_exists()
 
     def _ensure_db_exists(self) -> None:
         """Ensure database and schema exist with migrations."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with self.get_connection() as conn:
-            initialize_analytics_db(conn, self.logger, db_path=self.db_path)
+        # Use per-database lock to prevent concurrent schema initialization
+        with sqlite_utils.with_db_lock(self.db_path):
+            # Use raw connection for initialization to set WAL mode explicitly
+            conn = sqlite3.connect(str(self.db_path), timeout=60.0, isolation_level=None)
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA foreign_keys = ON")
+                initialize_analytics_db(conn, self.logger, db_path=self.db_path)
+            finally:
+                conn.close()
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
-        """Context manager for database connections."""
-        conn = None
+        """
+        Context manager for database connections with pooling.
+        """
         try:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._pool.get(block=False)
+        except queue.Empty:
+            conn = sqlite3.connect(
+                str(self.db_path), 
+                timeout=60.0, 
+                check_same_thread=False, 
+                isolation_level=None
+            )
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        try:
             yield conn
-        except sqlite3.Error as e:
-            if self.logger:
-                self.logger.error(f"Database connection error: {e}")
-            raise
         finally:
-            if conn:
-                conn.close()
+            # Rollback any uncommitted changes to ensure clean state for next use
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            self._pool.put(conn)
 ```
 
 ### Step 3: Initialize in Application Startup
@@ -254,6 +281,45 @@ def test_analytics_db_initialization():
         shutil.rmtree(temp_dir)
 ```
 
+## Choosing a Journal Mode
+
+SQLite supports different journal modes. Choose based on your database's characteristics:
+
+### WAL Mode (Default)
+
+Use for databases with high concurrency and frequent reads:
+
+```python
+conn.execute("PRAGMA journal_mode = WAL")
+```
+
+**Use when**: High read concurrency, frequent queries, larger databases.
+
+### DELETE Mode
+
+Use for simple databases with infrequent writes:
+
+```python
+conn.execute("PRAGMA journal_mode = DELETE")
+```
+
+**Use when**:
+
+- Small databases with infrequent writes
+- Short-lived data (like locks or temporary state)
+- Databases that don't benefit from WAL's read concurrency
+- When rapid concurrent access during tests causes WAL file corruption
+
+**Example**: The `locks.db` database uses DELETE mode because it's small, has infrequent writes, and WAL mode caused "disk I/O error" issues during rapid test execution. See `fastapi_app/lib/locking.py` for implementation.
+
+### Always Set Busy Timeout
+
+Regardless of journal mode, always set a busy timeout to prevent immediate failures:
+
+```python
+conn.execute("PRAGMA busy_timeout = 30000")  # 30 seconds
+```
+
 ## Best Practices
 
 1. **Always pass `db_path` to your initialization function** - This enables migrations
@@ -261,10 +327,13 @@ def test_analytics_db_initialization():
 3. **Use `check_can_apply()`** in migrations to target specific databases
 4. **Test with a fresh database** to ensure initialization works correctly
 5. **Document your schema** in the schema file
+6. **Choose the right journal mode** - Use WAL for high-concurrency, DELETE for simple low-write databases
+7. **Always set busy_timeout** - Prevents "database is locked" errors
 
 ## Reference
 
 - Migration system: [docs/development/migrations.md](migrations.md)
 - Migration runner: `fastapi_app/lib/migration_runner.py`
-- Example database: `fastapi_app/lib/database.py` (metadata.db)
-- Example initialization: `fastapi_app/lib/locking.py` (locks.db)
+- Database connections guide: [docs/code-assistant/database-connections.md](../code-assistant/database-connections.md)
+- Example WAL database: `fastapi_app/lib/database.py` (metadata.db)
+- Example DELETE database: `fastapi_app/lib/locking.py` (locks.db)

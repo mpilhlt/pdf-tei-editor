@@ -14,11 +14,13 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
 - **[API Reference](docs/development/api-reference.md) - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
+- **[Class Dependencies](docs/development/class-dependencies.md)** - FastAPI dependency injection system, available dependencies
 - **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
 - **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
 - **[CI/CD Pipeline](docs/development/ci-cd-pipeline.md)** - GitHub Actions workflows, test execution, release process
 - **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
 - **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
+- **[Database Connections](docs/code-assistant/database-connections.md)** - SQLite connection pooling, WAL mode, and transaction handling
 - **[CLI](docs/user-manual/cli.md) - Command Line Interface reference
 - **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
@@ -86,6 +88,8 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 - **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
 - **AVOID raw SQL queries** except in exceptional cases where no API method exists
 - **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
+- **ALWAYS pass `DatabaseManager` instances** to classes that need database access, do not pass file paths or create new `DatabaseManager` instances. This ensures connection pooling works correctly.
+- **Use `db.transaction()`** for write operations to ensure atomicity and proper locking.
 - This prevents breaking changes when the database schema evolves
 
 ### Database Migrations
@@ -199,7 +203,9 @@ timeout = config.get('session.timeout', default=3600)
 
 **Backend Plugin Configuration:**
 
-- Initialize plugin config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- **CRITICAL**: Initialize plugin config in the plugin class `__init__()` method, NOT in `__init__.py`
+- Plugin `__init__.py` files are NEVER executed during plugin discovery (plugins are loaded directly via `importlib`)
+- Use `get_plugin_config()` in the plugin class `__init__()` to create config keys from environment variables
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
 

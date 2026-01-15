@@ -43,7 +43,7 @@ class TestFileImporter(unittest.TestCase):
 
         # Initialize database and components
         self.db = DatabaseManager(self.db_path)
-        self.storage = FileStorage(self.storage_root, self.db_path)
+        self.storage = FileStorage(self.storage_root, self.db)
         self.repo = FileRepository(self.db)
 
     def tearDown(self):
