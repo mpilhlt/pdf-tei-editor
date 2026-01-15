@@ -107,10 +107,10 @@ async def view_history(
         history_entries.sort(key=lambda x: x["timestamp"], reverse=True)
 
         # Prepare table data
-        headers = ["Change Date", "Document ID", "Extraction Label", "Change Description", "Who", "Status"]
+        headers = ["Change Date", "Document ID", "Annotation Label", "Change Description", "Who", "Status"]
         rows = []
         for entry in history_entries:
-            # Make extraction label clickable
+            # Make annotation label clickable
             doc_link = f'<a href="#" onclick="sandbox.openDocument(\'{entry["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(entry["doc_label"])}</a>'
 
             rows.append([
@@ -235,7 +235,7 @@ async def export_csv(
 
         # Write header
         writer.writerow(
-            ["Change Date", "Document ID", "Extraction Label", "Change Description", "Annotator ID", "Annotator Name", "Status"]
+            ["Change Date", "Document ID", "Annotation Label", "Change Description", "Annotator ID", "Annotator Name", "Status"]
         )
 
         # Write data
@@ -286,9 +286,9 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
             "tei": "http://www.tei-c.org/ns/1.0",
         }
 
-        # Get extraction label from edition title
+        # Get annotation label from edition title
         tei_metadata = extract_tei_metadata(root)
-        # Use edition_title (extraction label) if available, fallback to title
+        # Use edition_title (annotation label) if available, fallback to title
         doc_label = tei_metadata.get("edition_title") or tei_metadata.get(
             "title", "Untitled"
         )

@@ -99,7 +99,7 @@ let currentState = null
  * @typedef {object} editMetadataDialogPart
  * @property {SlInput} docTitle - Document title input (readonly)
  * @property {SlInput} docId - Document ID input (editable for gold files by reviewers)
- * @property {SlInput} label - Extraction label input
+ * @property {SlInput} label - Annotation label input
  * @property {SlInput} source - Source input
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button

@@ -4,7 +4,7 @@
 
 Write a backend plugin that creates a report about recent activity in the current collection. It should output a table:
 
-|Change Date|Document id|Extraction label|Change Description|Who
+|Change Date|Document id|Annotation label|Change Description|Who
 |---|---|---|---|---
 |2025-12-28 15:00:10|10.3456.abcd|Changes Christian|Final Corrections|Christian Boulanger
 ...
@@ -35,7 +35,7 @@ Write a backend plugin that creates a report about recent activity in the curren
    - Extracts from `/TEI/teiHeader/revisionDesc/change[last()]`
    - Gets `@who` and `@when` attributes
    - Gets description from text content or `./desc` subelement
-   - Uses `edition_title` (extraction label) from `/TEI/teiHeader/editionStmt/edition/title`, falls back to document title
+   - Uses `edition_title` (annotation label) from `/TEI/teiHeader/editionStmt/edition/title`, falls back to document title
    - Formats dates with non-breaking space to prevent wrapping
 
 3. **Sortable Table** - Uses DataTables library (jQuery plugin) from CDN:
@@ -45,7 +45,7 @@ Write a backend plugin that creates a report about recent activity in the curren
    - Striped rows using DataTables "stripe" class
    - Search/filter functionality built into DataTables
 
-4. **Interactive Document Links** - Clicking extraction label opens document:
+4. **Interactive Document Links** - Clicking annotation label opens document:
    - Uses `window.pluginSandbox.openDocument()` to open artifact
    - Closes plugin result window automatically
 
@@ -152,7 +152,7 @@ Fixed two remaining issues with iframe communication and name lookup:
 2. **Iframe message handler** - [backend-plugin-sandbox.js](../../app/src/modules/backend-plugin-sandbox.js:33-34) already had permanent message handler:
    - Constructor sets up `messageHandler` that listens for both iframe and popup messages
    - Uses `event.source.postMessage()` to respond to correct source window
-   - Enables clicking extraction labels in iframe-displayed results to open documents
+   - Enables clicking annotation labels in iframe-displayed results to open documents
 
 All 7 tests passing after fixes.
 

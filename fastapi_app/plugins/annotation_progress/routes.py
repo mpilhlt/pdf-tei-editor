@@ -491,9 +491,9 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
             "tei": "http://www.tei-c.org/ns/1.0",
         }
 
-        # Get extraction label from edition title
+        # Get annotation label from edition title
         tei_metadata = extract_tei_metadata(root)
-        # Use edition_title (extraction label) if available, fallback to title
+        # Use edition_title (annotation label) if available, fallback to title
         annotation_label = tei_metadata.get("edition_title") or tei_metadata.get(
             "title", "Untitled"
         )

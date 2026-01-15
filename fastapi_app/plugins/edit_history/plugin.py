@@ -103,9 +103,9 @@ class EditHistoryPlugin(Plugin):
                 "tei": "http://www.tei-c.org/ns/1.0",
             }
 
-            # Get extraction label from edition title
+            # Get annotation label from edition title
             tei_metadata = extract_tei_metadata(root)
-            # Use edition_title (extraction label) if available, fallback to title
+            # Use edition_title (annotation label) if available, fallback to title
             doc_label = tei_metadata.get("edition_title") or tei_metadata.get(
                 "title", "Untitled"
             )
