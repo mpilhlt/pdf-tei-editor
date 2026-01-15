@@ -21,7 +21,7 @@ def run_command(command, cwd=None):
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {command}")
         print(f"Error: {e.stderr}")
-        return None
+        exit(0)
 
 def main():
     # Define the branches and their file mappings
@@ -92,52 +92,29 @@ def main():
         print(f"Creating branch {branch_name}...")
         run_command(f"git checkout -B {branch_name}")
 
-    # Step 2: Get the list of changed files from feat-discord-plugin
-    print("Getting changed files from feat-discord-plugin...")
-    changed_files_output = run_command("git diff --name-only devel")
-    if changed_files_output is None:
-        print("Failed to get changed files")
-        return
-    
-    changed_files = [f.strip() for f in changed_files_output.strip().split('\n') if f.strip()]
-    
-    # Verify we have all the expected files
-    all_expected_files = []
-    for files_list in branch_files.values():
-        all_expected_files.extend(files_list)
-    
-    missing_files = set(all_expected_files) - set(changed_files)
-    if missing_files:
-        print(f"Warning: Missing expected files: {missing_files}")
-    
-    # Step 3: For each branch, copy its files from feat-discord-plugin
+    # Step 2: For each branch, copy its files from feat-discord-plugin
     for branch_name, files_list in branch_files.items():
         print(f"\nProcessing branch: {branch_name}")
         
         # Switch to the target branch
         run_command(f"git checkout {branch_name}")
         
-        # Copy each file from feat-discord-plugin to the current branch
+        # Get each file from feat-discord-plugin
         for file_path in files_list:
-            # Check if file exists in feat-discord-plugin
-            if os.path.exists(file_path):
-                # Ensure directory structure exists
-                dir_path = os.path.dirname(file_path)
-                if dir_path and not os.path.exists(dir_path):
-                    os.makedirs(dir_path)
-                
-                # Copy file from feat-discord-plugin to current branch
-                run_command(f"cp \"{file_path}\" \"{file_path}\"")
-                print(f"  Copied: {file_path}")
+            # Get file from feat-discord-plugin branch
+            result = run_command(f"git checkout feat-discord-plugin -- \"{file_path}\"")
+            if result is None:
+                print(f"  Warning: Could not get file from feat-discord-plugin: {file_path}")
             else:
-                print(f"  Warning: File not found in feat-discord-plugin: {file_path}")
+                print(f"  Got: {file_path}")
         
         # Stage and commit the changes
+        run_command("node bin/generate-api-client.js")
         run_command("git add .")
-        run_command("git commit -m \"Initial commit for branch: {branch_name}\"")
+        run_command(f"git commit -m \"Initial commit for branch: {branch_name}\"")
         print(f"  Committed changes for {branch_name}")
 
-    # Step 4: Return to devel
+    # Step 3: Return to devel
     print("\nReturning to devel branch...")
     run_command("git checkout devel")
     
