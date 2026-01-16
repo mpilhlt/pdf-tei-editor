@@ -16,7 +16,6 @@
 
 
 import { logger, hasStateChanged } from '../app.js';
-import { notify } from '../modules/sl-utils.js';
 import { ApiClientV1 } from '../modules/api-client-v1.js';
 
 /**
@@ -294,10 +293,6 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
   } while (retryAttempts-- > 0);
 
-  // notify the user about server errors
-  if (error instanceof ServerError) {
-    notify(String(error), 'error');
-  }
   throw error
 }
 

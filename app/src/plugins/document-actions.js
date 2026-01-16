@@ -99,7 +99,7 @@ let currentState = null
  * @typedef {object} editMetadataDialogPart
  * @property {SlInput} docTitle - Document title input (readonly)
  * @property {SlInput} docId - Document ID input (editable for gold files by reviewers)
- * @property {SlInput} label - Annotation label input
+ * @property {SlInput} label - Extraction label input
  * @property {SlInput} source - Source input
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
@@ -586,7 +586,7 @@ async function saveRevision(state) {
     xmlEditor.markAsClean()
   } catch (error) {
     console.error(error)
-    dialog.error(String(error))
+    notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon');
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
   }
@@ -707,8 +707,7 @@ async function createNewVersion(state) {
     }
   } catch (e) {
     console.error(e)
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    dialog.error(errorMessage)
+    notify(`Could not create new version: ${String(error)}`, 'danger', 'exclamation-octagon');
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
     newVersiondialog.hide()
@@ -961,7 +960,7 @@ async function editFileMetadata(state) {
     xmlEditor.markAsClean()
   } catch (error) {
     console.error(error)
-    dialog.error(String(error))
+    notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon');
   } finally {
     ui.toolbar.documentActions.editMetadata.disabled = false
   }
