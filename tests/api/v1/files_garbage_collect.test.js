@@ -336,6 +336,24 @@ describe('File Garbage Collection API E2E Tests', { concurrency: 1 }, () => {
     }
   });
 
+  test('POST /api/files/garbage_collect should return orphaned_xml_deleted count', async () => {
+    const session = await getSession();
+
+    // Set cutoff to future to get all deleted files
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 365);
+
+    const result = await authenticatedApiCall(session.sessionId, '/files/garbage_collect', 'POST', {
+      deleted_before: cutoff.toISOString()
+    }, BASE_URL);
+
+    // Verify orphaned_xml_deleted field exists in response
+    assert.ok(result.orphaned_xml_deleted !== undefined, 'Should return orphaned_xml_deleted count');
+    assert.ok(result.orphaned_xml_deleted >= 0, 'orphaned_xml_deleted should be non-negative');
+
+    logger.success(`Garbage collection returned orphaned_xml_deleted: ${result.orphaned_xml_deleted}`);
+  });
+
   test('Cleanup: Purge all remaining test files', async () => {
     const session = await getSession();
 
