@@ -11,9 +11,12 @@ Security:
 - Requires admin role for timestamps younger than 24 hours (prevents accidental deletion)
 """
 
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..config import get_settings
 from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
 from ..lib.models_files import GarbageCollectRequest, GarbageCollectResponse
@@ -271,6 +274,30 @@ def garbage_collect_files(
         logger.info(f"Orphaned XML cleanup completed: {orphaned_xml_deleted} files deleted")
     else:
         logger.info("No orphaned XML files found")
+
+    # Clean up schema cache
+    logger.info("Cleaning up schema cache...")
+    settings = get_settings()
+    schema_cache_dir = settings.data_root / "schema" / "cache"
+    schema_cache_deleted = 0
+
+    if schema_cache_dir.exists() and schema_cache_dir.is_dir():
+        try:
+            for item in schema_cache_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        schema_cache_deleted += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        schema_cache_deleted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete schema cache item {item.name}: {e}")
+            logger.info(f"Schema cache cleanup completed: {schema_cache_deleted} items deleted")
+        except Exception as e:
+            logger.error(f"Failed to clean schema cache directory: {e}")
+    else:
+        logger.info("Schema cache directory does not exist or is empty")
 
     return GarbageCollectResponse(
         purged_count=purged_count,
