@@ -271,6 +271,18 @@ async function install(state) {
   // TODO: Autosearch is not working, hide until fixed
   autoSearchSwitchWidget.style.display = 'none'
 
+  // Capture Ctrl/Cmd+S to trigger PDF download instead of browser save
+  const pdfViewerContainer = document.getElementById('pdf-viewer')
+  if (pdfViewerContainer) {
+    pdfViewerContainer.addEventListener('keydown', (evt) => {
+      if ((evt.ctrlKey || evt.metaKey) && evt.key === 's') {
+        evt.preventDefault()
+        evt.stopPropagation()
+        onDownloadPdf()
+      }
+    })
+  }
+
   // Listen to PDF viewer events to update controls
   pdfViewer.eventBus.on('pagechanging', (evt) => {
     updatePageInfo(evt.pageNumber, pdfViewer.pdfDoc?.numPages || 0)

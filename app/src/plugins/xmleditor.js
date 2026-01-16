@@ -293,6 +293,20 @@ async function install(state) {
     xmlEditor.setLineWrapping(enabled)
     logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`)
   })
+
+  // Capture Ctrl/Cmd+S to trigger XML download instead of browser save
+  const xmlEditorContainer = document.getElementById('codemirror-container')
+  if (xmlEditorContainer) {
+    xmlEditorContainer.addEventListener('keydown', (evt) => {
+      if ((evt.ctrlKey || evt.metaKey) && evt.key === 's') {
+        evt.preventDefault()
+        evt.stopPropagation()
+        if (currentState) {
+          services.downloadXml(currentState)
+        }
+      }
+    })
+  }
 }
 
 /**
