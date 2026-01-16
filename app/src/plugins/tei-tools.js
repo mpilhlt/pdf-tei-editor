@@ -35,10 +35,27 @@ await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-draw
 let currentState
 
 /**
- * teiHeader visibility state (starts hidden)
+ * Get teiHeader visibility preference from localStorage
+ * @returns {boolean} Header visibility enabled state (defaults to false - folded)
+ */
+function getTeiHeaderVisibilityPreference() {
+  const stored = localStorage.getItem('tei-tools.teiHeaderVisible')
+  return stored === 'true'
+}
+
+/**
+ * Set teiHeader visibility preference in localStorage
+ * @param {boolean} visible - Whether the header should be visible
+ */
+function setTeiHeaderVisibilityPreference(visible) {
+  localStorage.setItem('tei-tools.teiHeaderVisible', String(visible))
+}
+
+/**
+ * teiHeader visibility state (initialized from localStorage)
  * @type {boolean}
  */
-let teiHeaderVisible = false
+let teiHeaderVisible = getTeiHeaderVisibilityPreference()
 
 /**
  * Plugin object
@@ -118,10 +135,13 @@ async function start(state) {
 async function onStateUpdate(changedKeys, state) {
   currentState = state
 
-  // Hide widgets when no document is loaded
-  if (!state.xml) {
-    ui.xmlEditor.statusbar.teiHeaderLabel.style.display = 'none'
-    ui.xmlEditor.statusbar.teiHeaderToggleWidget.style.display = 'none'
+  // Keep Header switch visible but disable when no document is loaded
+  const hasDocument = !!state.xml
+  ui.xmlEditor.statusbar.teiHeaderToggleWidget.disabled = !hasDocument
+  ui.xmlEditor.statusbar.teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
+
+  // Hide revision history button when no document
+  if (!hasDocument) {
     ui.xmlEditor.statusbar.revisionHistoryBtn.style.display = 'none'
   }
 }
@@ -136,21 +156,25 @@ function updateTeiHeaderToggle() {
   // Check if document has a teiHeader
   const hasTeiHeader = !!xmlEditor.getDomNodeByXpath("//tei:teiHeader")
 
-  if (hasTeiHeader) {
-    teiHeaderLabel.style.display = 'inline-flex'
-    teiHeaderToggleWidget.style.display = 'inline-flex'
+  // Enable/disable based on whether document has teiHeader
+  teiHeaderToggleWidget.disabled = !hasTeiHeader
+  teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
 
-    // Fold teiHeader by default and reset state
+  if (hasTeiHeader) {
+    // Apply user's preference for teiHeader visibility
+    const preferredVisible = getTeiHeaderVisibilityPreference()
     try {
-      xmlEditor.foldByXpath('//tei:teiHeader')
-      teiHeaderVisible = false
-      teiHeaderToggleWidget.checked = false
+      if (preferredVisible) {
+        xmlEditor.unfoldByXpath('//tei:teiHeader')
+        teiHeaderVisible = true
+      } else {
+        xmlEditor.foldByXpath('//tei:teiHeader')
+        teiHeaderVisible = false
+      }
+      teiHeaderToggleWidget.checked = preferredVisible
     } catch (error) {
-      logger.debug(`Error folding teiHeader: ${String(error)}`)
+      logger.debug(`Error setting teiHeader visibility: ${String(error)}`)
     }
-  } else {
-    teiHeaderLabel.style.display = 'none'
-    teiHeaderToggleWidget.style.display = 'none'
   }
 }
 
@@ -189,6 +213,8 @@ function toggleTeiHeaderVisibility(show) {
       teiHeaderVisible = false
       logger.debug('Folded teiHeader')
     }
+    // Persist the preference
+    setTeiHeaderVisibilityPreference(show)
   } catch (error) {
     logger.warn(`Error toggling teiHeader visibility: ${String(error)}`)
   }

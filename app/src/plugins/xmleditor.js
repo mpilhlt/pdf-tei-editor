@@ -382,8 +382,11 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
 
-  [readOnlyStatusWidget, cursorPositionWidget,
-    indentationStatusWidget, ui.xmlEditor.statusbar.lineWrappingSwitch]
+  // Keep line wrapping switch always visible but disable when no document
+  ui.xmlEditor.statusbar.lineWrappingSwitch.disabled = !state.xml
+
+  // Hide other statusbar widgets when no document
+  ;[readOnlyStatusWidget, cursorPositionWidget, indentationStatusWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
