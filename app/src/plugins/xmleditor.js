@@ -23,6 +23,7 @@ import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
 import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { notify } from '../modules/sl-utils.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -518,7 +519,6 @@ async function saveIfDirty() {
       logger.warn("Invalid result from filedata.saveXml: " + result)
       return
     }
-    hashBeingSaved = null
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
@@ -530,9 +530,11 @@ async function saveIfDirty() {
     }
     xmlEditor.markAsClean()
   } catch (error) {
-    logger.warn(`Save failed: ${String(error)}`)
+    logger.error(error)
+    notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon');
+  } finally {
+    hashBeingSaved = null
   }
-
 }
 
 /**

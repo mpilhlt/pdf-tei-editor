@@ -264,14 +264,8 @@ class FiledataPlugin extends Plugin {
         ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
       }
       const xmlContent = xmlEditor.getXML()
-
       const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
       return /** @type {{file_id: string, status: string}} */ (result);
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      console.error("Error while saving XML:", errorMessage);
-      dialog.error(`Could not save XML: ${errorMessage}`);
-      throw new Error(`Could not save XML: ${errorMessage}`);
     } finally {
       // clear status message after 1 second
       setTimeout(() => {

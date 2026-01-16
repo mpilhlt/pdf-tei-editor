@@ -280,7 +280,8 @@ async function handlePermissionChange(event) {
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined)
     logger.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`)
   } catch (error) {
-    logger.error(`Failed to update document status: ${String(error)}`)
+    logger.error(error)
+    notify(`Failed to update document status: ${String(error)}`, 'danger', 'exclamation-octagon');
     // Revert dropdown to previous state
     updateStatusDropdownDisplay()
   }
@@ -417,122 +418,119 @@ function parsePermissionsFromXmlTree(xmlTree) {
  * @param {string} [owner] - Optional new owner
  * @param {string} [description] - Optional change description
  * @returns {Promise<DocumentPermissions>} Updated permissions
+ * @throws {Error}
  */
 async function updateDocumentStatus(visibility, editability, owner, description) {
-  try {
-    if (!pluginState?.xml) {
-      throw new Error('No document loaded in application state')
-    }
+
+  if (!pluginState?.xml) {
+    throw new Error('No document loaded in application state')
+  }
+  
+  const xmlTree = xmlEditor.getXmlTree()
+  if (!xmlTree) {
+    throw new Error('No XML document loaded')
+  }
+  
+  // Find or create teiHeader
+  let teiHeader = /** @type {Element} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader'))
+  if (!teiHeader) {
+    throw new Error('No teiHeader found in document')
+  }
+  
+  // Find or create revisionDesc
+  let revisionDesc = /** @type {Element|null} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader/tei:revisionDesc'))
+  if (!revisionDesc) {
+    revisionDesc = xmlTree.createElementNS(TEI_NS, 'revisionDesc')
+    teiHeader.appendChild(revisionDesc)
+  }
+  
+  // Create new change element
+  const change = xmlTree.createElementNS(TEI_NS, 'change')
+  const timestamp = new Date().toISOString()
+  change.setAttribute('when', timestamp)
+  
+  // Add who attribute to document who made the change
+  const currentUser = authentication.getUser()
+  if (currentUser) {
+    // Ensure respStmt exists for current user
+    logger.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`)
+    ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username)
+    change.setAttribute('who', `#${currentUser.username}`)
+  }
+  
+  // Add description
+  const desc = xmlTree.createElementNS(TEI_NS, 'desc')
+  desc.textContent = description || 'Access permissions updated'
+  change.appendChild(desc)
+  
+  // Add visibility label
+  const visibilityLabel = xmlTree.createElementNS(TEI_NS, 'label')
+  visibilityLabel.setAttribute('type', 'visibility')
+  visibilityLabel.textContent = visibility
+  change.appendChild(visibilityLabel)
+  
+  // Add access label (editability)
+  const accessLabel = xmlTree.createElementNS(TEI_NS, 'label')
+  accessLabel.setAttribute('type', 'access')
+  accessLabel.textContent = editability === 'protected' ? 'protected' : 'editable'
+  change.appendChild(accessLabel)
+  
+  // Add owner label only if the document needs an owner (private or protected documents)
+  const needsOwner = visibility === 'private' || editability === 'protected'
+  if (needsOwner) {
+    const finalOwner = owner || currentPermissions.owner || currentUser?.username
     
-    const xmlTree = xmlEditor.getXmlTree()
-    if (!xmlTree) {
-      throw new Error('No XML document loaded')
-    }
-    
-    // Find or create teiHeader
-    let teiHeader = /** @type {Element} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader'))
-    if (!teiHeader) {
-      throw new Error('No teiHeader found in document')
-    }
-    
-    // Find or create revisionDesc
-    let revisionDesc = /** @type {Element|null} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader/tei:revisionDesc'))
-    if (!revisionDesc) {
-      revisionDesc = xmlTree.createElementNS(TEI_NS, 'revisionDesc')
-      teiHeader.appendChild(revisionDesc)
-    }
-    
-    // Create new change element
-    const change = xmlTree.createElementNS(TEI_NS, 'change')
-    const timestamp = new Date().toISOString()
-    change.setAttribute('when', timestamp)
-    
-    // Add who attribute to document who made the change
-    const currentUser = authentication.getUser()
-    if (currentUser) {
-      // Ensure respStmt exists for current user
-      logger.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`)
-      ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username)
-      change.setAttribute('who', `#${currentUser.username}`)
-    }
-    
-    // Add description
-    const desc = xmlTree.createElementNS(TEI_NS, 'desc')
-    desc.textContent = description || 'Access permissions updated'
-    change.appendChild(desc)
-    
-    // Add visibility label
-    const visibilityLabel = xmlTree.createElementNS(TEI_NS, 'label')
-    visibilityLabel.setAttribute('type', 'visibility')
-    visibilityLabel.textContent = visibility
-    change.appendChild(visibilityLabel)
-    
-    // Add access label (editability)
-    const accessLabel = xmlTree.createElementNS(TEI_NS, 'label')
-    accessLabel.setAttribute('type', 'access')
-    accessLabel.textContent = editability === 'protected' ? 'protected' : 'editable'
-    change.appendChild(accessLabel)
-    
-    // Add owner label only if the document needs an owner (private or protected documents)
-    const needsOwner = visibility === 'private' || editability === 'protected'
-    if (needsOwner) {
-      const finalOwner = owner || currentPermissions.owner || currentUser?.username
-      
-      if (finalOwner) {
-        // Ensure respStmt exists for owner
-        const ownerUser = authentication.getUser() // For now, assume current user is the owner
-        if (ownerUser && finalOwner === ownerUser.username) {
-          logger.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`)
-          ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner)
-        }
-        
-        const ownerLabel = xmlTree.createElementNS(TEI_NS, 'label')
-        ownerLabel.setAttribute('type', 'owner')
-        ownerLabel.setAttribute('ana', `#${finalOwner}`)
-        
-        // Set text content to full name if available, otherwise username
-        if (ownerUser && finalOwner === ownerUser.username) {
-          ownerLabel.textContent = ownerUser.fullname || ownerUser.username
-        } else {
-          ownerLabel.textContent = finalOwner || 'Unknown' // fallback to username
-        }
-        
-        change.appendChild(ownerLabel)
+    if (finalOwner) {
+      // Ensure respStmt exists for owner
+      const ownerUser = authentication.getUser() // For now, assume current user is the owner
+      if (ownerUser && finalOwner === ownerUser.username) {
+        logger.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`)
+        ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner)
       }
+      
+      const ownerLabel = xmlTree.createElementNS(TEI_NS, 'label')
+      ownerLabel.setAttribute('type', 'owner')
+      ownerLabel.setAttribute('ana', `#${finalOwner}`)
+      
+      // Set text content to full name if available, otherwise username
+      if (ownerUser && finalOwner === ownerUser.username) {
+        ownerLabel.textContent = ownerUser.fullname || ownerUser.username
+      } else {
+        ownerLabel.textContent = finalOwner || 'Unknown' // fallback to username
+      }
+      
+      change.appendChild(ownerLabel)
     }
-    // Note: For public & editable documents, no owner label is added
-    
-    // Add the change element to revisionDesc
-    revisionDesc.appendChild(change)
-    
-    // Pretty-print the entire TEI header for proper formatting
-    prettyPrintNode(teiHeader)
-    
-    // Update the entire TEI header in the editor to reflect formatting changes
-    await xmlEditor.updateEditorFromNode(teiHeader)
-    
-    // Save the document using services API
-    await FiledataPlugin.getInstance().saveXml(pluginState.xml)
-    
-    // Update cached permissions
-    currentPermissions.visibility = visibility
-    currentPermissions.editability = editability
-    if (owner) {
-      currentPermissions.owner = owner
-    }
-    
-    // Update UI
-    updateAccessControlUI()
-    
-    return {
-      visibility,
-      editability,
-      owner: currentPermissions.owner,
-      can_modify: true
-    }
-  } catch (error) {
-    logger.error(`Failed to update document permissions: ${String(error)}`)
-    throw error
+  }
+  // Note: For public & editable documents, no owner label is added
+  
+  // Add the change element to revisionDesc
+  revisionDesc.appendChild(change)
+  
+  // Pretty-print the entire TEI header for proper formatting
+  prettyPrintNode(teiHeader)
+  
+  // Update the entire TEI header in the editor to reflect formatting changes
+  await xmlEditor.updateEditorFromNode(teiHeader)
+  
+  // Save the document using services API
+  await FiledataPlugin.getInstance().saveXml(pluginState.xml)
+  
+  // Update cached permissions
+  currentPermissions.visibility = visibility
+  currentPermissions.editability = editability
+  if (owner) {
+    currentPermissions.owner = owner
+  }
+  
+  // Update UI
+  updateAccessControlUI()
+  
+  return {
+    visibility,
+    editability,
+    owner: currentPermissions.owner,
+    can_modify: true
   }
 }
 
