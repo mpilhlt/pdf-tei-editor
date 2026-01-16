@@ -268,6 +268,8 @@ async function install(state) {
 
   autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
   statusBar.add(autoSearchSwitchWidget, 'left', 10)
+  // TODO: Autosearch is not working, hide until fixed
+  autoSearchSwitchWidget.style.display = 'none'
 
   // Listen to PDF viewer events to update controls
   pdfViewer.eventBus.on('pagechanging', (evt) => {
