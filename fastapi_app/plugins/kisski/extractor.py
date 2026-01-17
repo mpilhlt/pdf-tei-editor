@@ -1,14 +1,18 @@
+"""
+KISSKI API-based text processing extractor.
+"""
+
 import os
 from typing import Dict, Any, List
-import json
-from .llm_base_extractor import LLMBaseExtractor
-from .http_utils import get_retry_session
+
+from fastapi_app.lib.extraction import LLMBaseExtractor, get_retry_session
+
 
 class KisskiExtractor(LLMBaseExtractor):
     """
     Extractor that uses the KISSKI API for text processing tasks.
     """
-    
+
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
         """Return information about this extractor"""
@@ -21,7 +25,7 @@ class KisskiExtractor(LLMBaseExtractor):
             "requires_api_key": True,
             "api_key_env": "KISSKI_API_KEY"
         }
-    
+
     def get_models(self) -> List[str]:
         """Return list of available KISSKI models from API with retry logic"""
         # Ensure we have access to the API
@@ -50,15 +54,15 @@ class KisskiExtractor(LLMBaseExtractor):
                 return models
 
         raise RuntimeError("Could not retrieve model list from KISSKI API")
-    
+
     def _get_api_key_env_var(self) -> str:
         """Return the environment variable name for the API key"""
         return "KISSKI_API_KEY"
-    
+
     def _initialize_client(self, api_key: str) -> Any:
         """Initialize the KISSKI client - just store the API key"""
         return api_key
-    
+
     def _call_llm(self, system_prompt: str, user_prompt: str, model: str = None, temperature: float = 0.1) -> str:
         """Call the KISSKI API and return the response text with retry logic"""
         url = "https://chat-ai.academiccloud.de/v1/chat/completions"

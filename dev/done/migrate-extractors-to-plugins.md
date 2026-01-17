@@ -1,7 +1,7 @@
 # Migration: Extractors to Plugin System
 
 **Issue:** [#217](https://github.com/mpilhlt/pdf-tei-editor/issues/217)
-**Status:** Planning
+**Status:** Completed
 
 ## Overview
 
@@ -65,6 +65,7 @@ fastapi_app/plugins/
 4. Create `http_utils.py` (copy from `extractors/http_utils.py`)
 
 5. Create `registry.py` with simplified `ExtractorRegistry`:
+
    ```python
    class ExtractorRegistry:
        """Registry for managing extraction engines."""
@@ -110,6 +111,7 @@ fastapi_app/plugins/
    - Update imports to use `fastapi_app.lib.extraction`
 
 3. Create `plugin.py`:
+
    ```python
    from fastapi_app.lib.plugin_base import Plugin, PluginContext
    from fastapi_app.lib.extraction import ExtractorRegistry
@@ -145,6 +147,7 @@ fastapi_app/plugins/
    ```
 
 4. Create `__init__.py`:
+
    ```python
    from .plugin import GrobidPlugin
    __all__ = ["GrobidPlugin"]
@@ -159,6 +162,7 @@ fastapi_app/plugins/
    - Update imports to use `fastapi_app.lib.extraction`
 
 3. Create `plugin.py`:
+
    ```python
    from fastapi_app.lib.plugin_base import Plugin, PluginContext
    from fastapi_app.lib.extraction import ExtractorRegistry
@@ -236,6 +240,7 @@ from fastapi_app.lib.extraction import (
 ### Phase 7: Update Extraction Router
 
 Update `fastapi_app/routers/extraction.py`:
+
 - Update imports to use `fastapi_app.lib.extraction`
 
 ### Phase 8: Delete Old Extractors Directory
@@ -249,6 +254,7 @@ After verifying everything works:
 ## File Changes Summary
 
 ### New Files
+
 - `fastapi_app/lib/extraction/__init__.py`
 - `fastapi_app/lib/extraction/base.py`
 - `fastapi_app/lib/extraction/llm_base.py`
@@ -266,11 +272,13 @@ After verifying everything works:
 - `fastapi_app/plugins/sample_analyzer/extractor.py`
 
 ### Modified Files
+
 - `fastapi_app/lib/extractor_manager.py` - Update imports
 - `fastapi_app/routers/extraction.py` - Update imports
 - `fastapi_app/plugins/sample_analyzer/plugin.py` - Add MockExtractor registration
 
 ### Deleted Files
+
 - `fastapi_app/extractors/__init__.py`
 - `fastapi_app/extractors/discovery.py`
 - `fastapi_app/extractors/http_utils.py`
@@ -296,4 +304,39 @@ After verifying everything works:
 
 ## Implementation Progress
 
-_(To be updated during implementation)_
+### Completed
+
+All phases implemented. Final structure:
+
+```text
+fastapi_app/lib/extraction/
+├── __init__.py      # Exports all public APIs
+├── base.py          # BaseExtractor ABC
+├── llm_base.py      # LLMBaseExtractor ABC
+├── registry.py      # ExtractorRegistry singleton
+├── manager.py       # Convenience functions + should_use_mock_extractor
+└── http_utils.py    # get_retry_session
+
+fastapi_app/plugins/
+├── grobid/          # GrobidPlugin + GrobidTrainingExtractor
+├── llamore/         # LLamorePlugin + LLamoreExtractor
+├── kisski/          # KisskiPlugin + KisskiExtractor
+└── sample_analyzer/ # Extended with MockExtractor (testing mode only)
+```
+
+### Tests Added
+
+- `tests/unit/fastapi/test_extraction_registry.py` - Registry singleton, register/unregister, filtering
+- `tests/unit/fastapi/test_extractor_plugins.py` - Plugin registration/cleanup lifecycle
+- `tests/unit/fastapi/test_extraction.py` - Updated imports to new locations
+
+### Key Changes from Plan
+
+- Added `manager.py` to `lib/extraction/` (moved from `lib/extractor_manager.py`) for cleaner module organization
+- `should_use_mock_extractor` now exported from extraction module
+- Router imports directly from `..lib.extraction` instead of separate manager module
+
+### Post-Migration Fixes
+
+- Fixed plugin loading to support relative imports: Updated `PluginRegistry._load_plugin()` to use standard `importlib.import_module()` with proper package paths instead of `spec_from_file_location()`, enabling relative imports in plugin modules
+- Converted `print()` statements in `ExtractorRegistry` to `logger.debug()`/`logger.warning()` to suppress expected output during tests
