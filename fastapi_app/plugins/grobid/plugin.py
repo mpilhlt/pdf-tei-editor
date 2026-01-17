@@ -2,6 +2,7 @@
 GROBID extractor plugin.
 
 Registers the GrobidTrainingExtractor with the extraction registry.
+Provides a download endpoint for reviewers to download complete training packages.
 """
 
 import logging
@@ -27,12 +28,22 @@ class GrobidPlugin(Plugin):
             "category": "extractor",
             "version": "1.0.0",
             "required_roles": ["user"],
-            "endpoints": []  # No menu items - accessed via extraction API
+            "endpoints": [
+                {
+                    "name": "download_training",
+                    "label": "Download GROBID Training Data",
+                    "description": "Download complete GROBID training package with gold annotations",
+                    "state_params": ["pdf"],
+                    "required_roles": ["reviewer"],
+                },
+            ],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
         """Return available endpoints."""
-        return {}  # Extractor accessed via /api/v1/extract endpoint
+        return {
+            "download_training": self.download_training,
+        }
 
     @classmethod
     def is_available(cls) -> bool:

@@ -4,12 +4,13 @@ GROBID-based training data extraction engine.
 
 import os
 import zipfile
-import tempfile
 import datetime
 import re
+import time
 from typing import Dict, Any, Optional
 from lxml import etree
 
+from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
 from fastapi_app.lib.doi_utils import fetch_doi_metadata
 from fastapi_app.lib.tei_utils import (
@@ -335,56 +336,86 @@ class GrobidTrainingExtractor(BaseExtractor):
             print(f"Warning: Could not fetch GROBID version: {e}")
             return "unknown", "unknown"
 
-    def _create_training_data(self, pdf_path: str, grobid_server_url: str, variant_id: str, flavor: str) -> str:
-        """Create training data using GROBID createTraining API with retry logic."""
+    def _fetch_training_package(self, pdf_path: str, grobid_server_url: str, flavor: str) -> tuple[str, list[str]]:
+        """
+        Fetch training data package from GROBID and extract to temp directory.
+
+        Args:
+            pdf_path: Path to the PDF file
+            grobid_server_url: GROBID server URL
+            flavor: Processing flavor
+
+        Returns:
+            Tuple of (temp_dir path, list of extracted filenames)
+        """
         import logging
         from urllib.parse import urlparse
         from requests.exceptions import ConnectionError, RequestException  # type: ignore[import-untyped]
 
         logger = logging.getLogger(__name__)
-        print(f"Creating training data from {pdf_path} via GROBID")
+        logger.info(f"Fetching training package from {pdf_path} via GROBID")
 
         # Create session with retry logic
         session = get_retry_session(retries=5, backoff_factor=2.0)
 
-        # Create temporary directory for processing
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Call GROBID createTraining API
-            url = f"{grobid_server_url}/api/createTraining"
+        # Create project temp directory for processing
+        settings = get_settings()
+        temp_base = settings.tmp_dir / "grobid"
+        temp_base.mkdir(parents=True, exist_ok=True)
 
-            try:
-                with open(pdf_path, 'rb') as pdf_file:
-                    files = {
-                        'input': pdf_file,
-                        'flavor': ('', flavor)
-                    }
+        timestamp = int(time.time() * 1000)
+        temp_dir = temp_base / f"{timestamp}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
 
-                    response = session.post(url, files=files, timeout=300)  # 5 minute timeout
-                    response.raise_for_status()
-            except (ConnectionError, RequestException) as e:
-                # Log full error for debugging
-                logger.error(f"GROBID connection failed: {e}", exc_info=True)
+        # Call GROBID createTraining API
+        url = f"{grobid_server_url}/api/createTraining"
 
-                # Extract hostname for user-friendly message
-                parsed_url = urlparse(grobid_server_url)
-                hostname = parsed_url.netloc or parsed_url.path
+        try:
+            with open(pdf_path, 'rb') as pdf_file:
+                files = {
+                    'input': pdf_file,
+                    'flavor': ('', flavor)
+                }
 
-                # Raise user-friendly error
-                raise RuntimeError(f"Cannot connect to {hostname}")
+                response = session.post(url, files=files, timeout=300)  # 5 minute timeout
+                response.raise_for_status()
+        except (ConnectionError, RequestException) as e:
+            # Log full error for debugging
+            logger.error(f"GROBID connection failed: {e}", exc_info=True)
 
-            # Save ZIP file
-            zip_path = os.path.join(temp_dir, 'training.zip')
-            with open(zip_path, 'wb') as f:
-                f.write(response.content)
+            # Extract hostname for user-friendly message
+            parsed_url = urlparse(grobid_server_url)
+            hostname = parsed_url.netloc or parsed_url.path
 
-            # Extract ZIP file
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
+            # Raise user-friendly error
+            raise RuntimeError(f"Cannot connect to {hostname}")
 
+        # Save ZIP file
+        zip_path = temp_dir / "training.zip"
+        with open(zip_path, 'wb') as f:
+            f.write(response.content)
+
+        # Extract ZIP file
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+
+        # Get list of extracted files (excluding the zip itself)
+        extracted_files = [f for f in os.listdir(temp_dir) if f != "training.zip"]
+
+        return str(temp_dir), extracted_files
+
+    def _create_training_data(self, pdf_path: str, grobid_server_url: str, variant_id: str, flavor: str) -> str:
+        """Create training data using GROBID createTraining API with retry logic."""
+        import shutil
+
+        settings = get_settings()
+        temp_dir, extracted_files = self._fetch_training_package(pdf_path, grobid_server_url, flavor)
+
+        try:
             # Find the file that corresponds to the variant
             training_file = None
             suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
-            for filename in os.listdir(temp_dir):
+            for filename in extracted_files:
                 if filename.endswith(suffix):
                     training_file = os.path.join(temp_dir, filename)
                     break
@@ -395,3 +426,8 @@ class GrobidTrainingExtractor(BaseExtractor):
             # Read the training file content
             with open(training_file, 'r', encoding='utf-8') as f:
                 return f.read()
+
+        finally:
+            # Clean up temp directory in production mode
+            if settings.application_mode == "production":
+                shutil.rmtree(temp_dir, ignore_errors=True)

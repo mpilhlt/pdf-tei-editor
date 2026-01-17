@@ -136,6 +136,11 @@ class Settings(BaseSettings):
         """Return application mode (development, production, testing)"""
         return self.APPLICATION_MODE.lower()
 
+    @property
+    def tmp_dir(self) -> Path:
+        """Temporary directory for application use - always data_root/tmp"""
+        return self.data_root / "tmp"
+
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance"""
