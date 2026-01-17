@@ -61,3 +61,31 @@ class GrobidPlugin(Plugin):
         registry = ExtractorRegistry.get_instance()
         registry.unregister("grobid-training")
         logger.info("GROBID extractor plugin cleaned up")
+
+    async def download_training(
+        self, context: PluginContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Generate download URL for GROBID training package.
+
+        Args:
+            context: Plugin context
+            params: Parameters including 'pdf' (stable_id of PDF)
+
+        Returns:
+            downloadUrl pointing to the download route
+        """
+        pdf_stable_id = params.get("pdf")
+        if not pdf_stable_id:
+            return {
+                "error": "No PDF selected",
+                "message": "Please select a PDF document first.",
+            }
+
+        # Build download URL
+        download_url = f"/api/plugins/grobid/download?pdf={pdf_stable_id}"
+
+        return {
+            "downloadUrl": download_url,
+            "pdf": pdf_stable_id,
+        }
