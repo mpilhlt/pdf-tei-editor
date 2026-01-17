@@ -71,15 +71,23 @@ class PluginRegistry:
             Plugin instance or None if loading failed
         """
         try:
-            # Load the module
-            module_name = f"plugin_{plugin_path.name}"
-            spec = importlib.util.spec_from_file_location(module_name, plugin_file)
-            if spec is None or spec.loader is None:
-                logger.error(f"Could not load spec for {plugin_file}")
-                return None
+            # Use standard package import to support relative imports
+            plugin_name = plugin_path.name
+            module_name = f"fastapi_app.plugins.{plugin_name}.plugin"
 
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            # Try standard import first (works when fastapi_app is in sys.path)
+            try:
+                import importlib
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError:
+                # Fallback to spec-based loading for edge cases
+                spec = importlib.util.spec_from_file_location(module_name, plugin_file)
+                if spec is None or spec.loader is None:
+                    logger.error(f"Could not load spec for {plugin_file}")
+                    return None
+
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
 
             # Find Plugin subclass in module
             plugin_class = None
@@ -219,6 +227,8 @@ class PluginRegistry:
         for plugin_id, plugin in self._plugins.items():
             try:
                 await plugin.initialize(context)
+                metadata = self._plugin_metadata.get(plugin_id, {})
+                logger.info(f"Initialized plugin: {plugin_id} ({metadata.get('name', 'unknown')})")
             except Exception as e:
                 logger.error(f"Error initializing plugin {plugin_id}: {e}")
 

@@ -20,7 +20,7 @@ from ..lib.models_extraction import (
     ExtractRequest,
     ExtractResponse
 )
-from ..lib.extractor_manager import (
+from ..lib.extraction import (
     list_extractors,
     create_extractor,
     should_use_mock_extractor

@@ -1,5 +1,5 @@
 """
-Mock extraction engine for testing without external dependencies
+Mock extraction engine for testing without external dependencies.
 """
 
 import os
@@ -7,12 +7,11 @@ import datetime
 from typing import Dict, Any, Optional
 from lxml import etree
 
-from . import BaseExtractor
-from ..lib.tei_utils import (
+from fastapi_app.lib.extraction import BaseExtractor
+from fastapi_app.lib.tei_utils import (
     create_tei_document,
     create_tei_header,
     create_revision_desc_with_status,
-    create_schema_processing_instruction,
     serialize_tei_with_formatted_header
 )
 
@@ -26,7 +25,7 @@ class MockExtractor(BaseExtractor):
         return {
             "id": "mock-extractor",
             "name": "Mock Extractor",
-            "description": "Mock extractor for testing without external dependencies (available in development and testing modes only)",
+            "description": "Mock extractor for testing without external dependencies (available in testing mode only)",
             "input": ["pdf", "xml"],
             "output": ["tei-document"],
             "options": {
