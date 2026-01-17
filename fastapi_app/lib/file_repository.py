@@ -1054,6 +1054,36 @@ class FileRepository:
 
             return [self._row_to_model(row) for row in rows]
 
+    def get_orphaned_xml_files(self) -> List[FileMetadata]:
+        """
+        Find XML files that have no corresponding PDF for the same doc_id.
+
+        An orphaned XML file is one where:
+        - file_type = 'tei' (XML file)
+        - deleted = 0 (not soft-deleted)
+        - No non-deleted PDF exists with the same doc_id
+
+        Returns:
+            List of FileMetadata models for orphaned XML files
+        """
+        query = """
+            SELECT xml.*
+            FROM files xml
+            LEFT JOIN files pdf ON xml.doc_id = pdf.doc_id
+                AND pdf.file_type = 'pdf'
+                AND pdf.deleted = 0
+            WHERE xml.file_type = 'tei'
+                AND xml.deleted = 0
+                AND pdf.id IS NULL
+        """
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+            return [self._row_to_model(row) for row in rows]
+
     def permanently_delete_file(self, file_id: str) -> None:
         """
         Permanently delete a file record from the database.

@@ -11,9 +11,12 @@ Security:
 - Requires admin role for timestamps younger than 24 hours (prevents accidental deletion)
 """
 
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..config import get_settings
 from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
 from ..lib.models_files import GarbageCollectRequest, GarbageCollectResponse
@@ -218,8 +221,87 @@ def garbage_collect_files(
     else:
         logger.info("No orphaned files found")
 
+    # Clean up orphaned XML files (XML files with no corresponding PDF)
+    logger.info("Scanning for orphaned XML files (XML with no PDF)...")
+    orphaned_xml_files = repo.get_orphaned_xml_files()
+    orphaned_xml_deleted = 0
+
+    for xml_file in orphaned_xml_files:
+        file_hash = xml_file.id
+        file_type = xml_file.file_type
+
+        try:
+            # Get file size before deletion
+            file_path = storage.get_file_path(file_hash, file_type)
+            file_size = file_path.stat().st_size if file_path and file_path.exists() else 0
+
+            # Permanently delete the database record
+            repo.permanently_delete_file(file_hash)
+            purged_count += 1
+            orphaned_xml_deleted += 1
+
+            # Check if we should delete the physical file
+            if file_hash not in deleted_hashes:
+                ref_count = repo.ref_manager.get_reference_count(file_hash)
+
+                if ref_count == 0 and file_path and file_path.exists():
+                    # Physically delete the file
+                    deleted = storage.delete_file(file_hash, file_type, decrement_ref=False)
+
+                    if deleted:
+                        files_deleted += 1
+                        storage_freed += file_size
+                        deleted_hashes.add(file_hash)
+                        repo.ref_manager.remove_reference_entry(file_hash)
+                        logger.debug(
+                            f"Deleted orphaned XML physical file {file_hash[:8]}... "
+                            f"({file_size} bytes)"
+                        )
+
+            logger.info(
+                f"Deleted orphaned XML file: {file_hash[:8]}... "
+                f"(doc_id={xml_file.doc_id}, variant={xml_file.variant})"
+            )
+
+        except ValueError as e:
+            logger.warning(f"Failed to purge orphaned XML file {file_hash[:8]}...: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"Unexpected error purging orphaned XML file {file_hash[:8]}...: {e}")
+            continue
+
+    if orphaned_xml_deleted > 0:
+        logger.info(f"Orphaned XML cleanup completed: {orphaned_xml_deleted} files deleted")
+    else:
+        logger.info("No orphaned XML files found")
+
+    # Clean up schema cache
+    logger.info("Cleaning up schema cache...")
+    settings = get_settings()
+    schema_cache_dir = settings.data_root / "schema" / "cache"
+    schema_cache_deleted = 0
+
+    if schema_cache_dir.exists() and schema_cache_dir.is_dir():
+        try:
+            for item in schema_cache_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        schema_cache_deleted += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        schema_cache_deleted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete schema cache item {item.name}: {e}")
+            logger.info(f"Schema cache cleanup completed: {schema_cache_deleted} items deleted")
+        except Exception as e:
+            logger.error(f"Failed to clean schema cache directory: {e}")
+    else:
+        logger.info("Schema cache directory does not exist or is empty")
+
     return GarbageCollectResponse(
         purged_count=purged_count,
         files_deleted=files_deleted,
-        storage_freed=storage_freed
+        storage_freed=storage_freed,
+        orphaned_xml_deleted=orphaned_xml_deleted
     )
