@@ -11,6 +11,7 @@ import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
 import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu } from '../ui.js';
 import ui from '../ui.js';
+import { logger } from '../app.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -528,6 +529,11 @@ export class BackendPluginsPlugin extends Plugin {
       });
 
       if (!response.ok) {
+        // Status 499 = cancelled by user, don't show error (notification already sent via SSE)
+        if (response.status === 499) {
+          logger.info('Download cancelled by user');
+          return;
+        }
         throw new Error(`Download failed: ${response.statusText}`);
       }
 

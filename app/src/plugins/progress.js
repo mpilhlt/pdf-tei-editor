@@ -279,7 +279,7 @@ async function handleCancel(progressId) {
   const cancelUrl = cancelUrls.get(progressId)
   if (cancelUrl) {
     try {
-      await client.request('POST', cancelUrl)
+      await client.callApi(cancelUrl, 'POST')
     } catch (err) {
       logger.warn(`Failed to send cancel request: ${err}`)
     }

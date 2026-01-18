@@ -371,6 +371,77 @@ async def cancel_progress(progress_id: str):
     return {"status": "not_found"}
 ```
 
+## Handling Blocking Operations
+
+SSE events are delivered through the async event loop. If your route contains **synchronous blocking code** (e.g., HTTP requests using `requests`, file I/O, CPU-intensive operations), SSE events will be queued but not delivered until the blocking operation completes.
+
+### Problem: Blocking Code Prevents SSE Delivery
+
+```python
+# BAD: Blocking call prevents SSE updates from being delivered
+@router.get("/process")
+async def process_files(session_id: str, sse_service = Depends(get_sse_service)):
+    progress = ProgressBar(sse_service, session_id)
+    progress.show(label="Starting...")  # Event queued but not sent yet
+
+    for file in files:
+        progress.set_label(f"Processing {file.name}")  # Queued
+        result = blocking_http_request(file)  # Blocks event loop!
+        # SSE events won't be delivered until this returns
+
+    progress.hide()
+```
+
+### Solution 1: Run Blocking Code in Thread Pool
+
+Use `asyncio.to_thread()` to run blocking operations in a thread pool, allowing the event loop to process SSE events:
+
+```python
+import asyncio
+
+@router.get("/process")
+async def process_files(session_id: str, sse_service = Depends(get_sse_service)):
+    progress = ProgressBar(sse_service, session_id)
+    progress.show(label="Starting...")
+    await asyncio.sleep(0)  # Yield to deliver the show event
+
+    for i, file in enumerate(files):
+        progress.set_label(f"Processing {file.name}")
+        progress.set_value(int((i / len(files)) * 100))
+        await asyncio.sleep(0)  # Yield to deliver updates
+
+        # Run blocking operation in thread pool
+        result = await asyncio.to_thread(blocking_http_request, file)
+
+    progress.hide()
+```
+
+### Solution 2: Yield Control After SSE Calls
+
+For quick operations, adding `await asyncio.sleep(0)` after SSE calls yields control to the event loop:
+
+```python
+progress.show(label="Starting...")
+await asyncio.sleep(0)  # Allow event to be sent
+
+for i, item in enumerate(items):
+    progress.set_label(f"Item {i+1}")
+    progress.set_value(int((i / len(items)) * 100))
+    await asyncio.sleep(0)  # Allow updates to be sent
+
+    await process_item(item)  # Must be async
+```
+
+### When to Use Each Approach
+
+| Scenario | Solution |
+| -------- | -------- |
+| Calling external APIs with `requests` | `asyncio.to_thread()` |
+| Heavy file I/O operations | `asyncio.to_thread()` |
+| CPU-intensive processing | `asyncio.to_thread()` |
+| Quick async operations | `await asyncio.sleep(0)` after SSE calls |
+| Mixed sync/async code | Combine both approaches |
+
 ## Best Practices
 
 1. **Always hide on completion or error**: Ensure `progress.hide()` is called in all code paths
@@ -379,3 +450,5 @@ async def cancel_progress(progress_id: str):
 4. **Use notifications for final status**: Send success/error notifications when operations complete
 5. **Check cancellation frequently**: Check `token.is_cancelled` at the start of each iteration
 6. **Use indeterminate mode for unknown durations**: Pass `value=None` when total count is unknown
+7. **Run blocking code in thread pool**: Use `asyncio.to_thread()` for synchronous operations to allow SSE delivery
+8. **Yield after SSE calls**: Add `await asyncio.sleep(0)` after progress updates when needed

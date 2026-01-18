@@ -4,6 +4,7 @@ Custom routes for GROBID plugin.
 Provides download endpoint for GROBID training data packages.
 """
 
+import asyncio
 import io
 import json
 import logging
@@ -158,6 +159,7 @@ async def download_training_package(
             cancellable=True,
             cancel_url=cancel_url
         )
+        await asyncio.sleep(0)  # Yield to allow SSE event delivery
 
         try:
             # Create output ZIP in memory
@@ -184,6 +186,7 @@ async def download_training_package(
 
                     progress.set_label(f"Document {i+1}/{len(pdf_files)}: {doc_id[:20]}...")
                     progress.set_value(int((i / len(pdf_files)) * 100))
+                    await asyncio.sleep(0)  # Yield to allow SSE event delivery
 
                     # Get PDF file path
                     pdf_path = file_storage.get_file_path(pdf_file.id, "pdf")
@@ -229,7 +232,9 @@ async def download_training_package(
                         extracted_files = cached_data["files"]
                     else:
                         try:
-                            temp_dir, extracted_files = extractor._fetch_training_package(
+                            # Run blocking GROBID fetch in thread pool to allow SSE events
+                            temp_dir, extracted_files = await asyncio.to_thread(
+                                extractor._fetch_training_package,
                                 str(pdf_path), grobid_server_url, flavor
                             )
                             # Cache the training data
@@ -240,36 +245,72 @@ async def download_training_package(
                             continue
 
                     try:
-                        # Process each variant
-                        for variant in variants_to_process:
-                            has_gold = variant in gold_by_variant
+                        if gold_only:
+                            # Only include supported variants that have gold files
+                            for variant in variants_to_process:
+                                has_gold = variant in gold_by_variant
 
-                            # Find the GROBID output file for this variant
-                            variant_suffix = variant.removeprefix("grobid.")
-                            grobid_file = None
+                                # Find the GROBID output file for this variant
+                                variant_suffix = variant.removeprefix("grobid.")
+                                grobid_file = None
+                                for filename in extracted_files:
+                                    if filename.endswith(f".{variant_suffix}.tei.xml"):
+                                        grobid_file = os.path.join(temp_dir, filename)
+                                        break
+
+                                if not grobid_file or not os.path.exists(grobid_file):
+                                    continue
+
+                                # Read GROBID output
+                                with open(grobid_file, "r", encoding="utf-8") as f:
+                                    grobid_content = f.read()
+
+                                # Add files to ZIP in doc_id subdirectory
+                                if has_gold:
+                                    # Gold file as main, GROBID as .generated
+                                    gold_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
+                                    generated_name = f"{doc_id}/{doc_id}.{variant_suffix}.generated.tei.xml"
+                                    zf.writestr(gold_name, gold_by_variant[variant])
+                                    zf.writestr(generated_name, grobid_content)
+                                else:
+                                    # GROBID as main (no .generated suffix)
+                                    main_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
+                                    zf.writestr(main_name, grobid_content)
+                        else:
+                            # Include ALL files from GROBID package
+                            # Gold files replace originals, originals get .generated infix
                             for filename in extracted_files:
-                                if filename.endswith(f".{variant_suffix}.tei.xml"):
-                                    grobid_file = os.path.join(temp_dir, filename)
-                                    break
+                                src_path = os.path.join(temp_dir, filename)
+                                if not os.path.exists(src_path):
+                                    continue
 
-                            if not grobid_file or not os.path.exists(grobid_file):
-                                continue
+                                # Extract suffix after hash prefix
+                                # e.g., "hash.training.segmentation.tei.xml" -> "training.segmentation.tei.xml"
+                                parts = filename.split(".", 1)
+                                if len(parts) < 2:
+                                    continue
+                                file_suffix = parts[1]
 
-                            # Read GROBID output
-                            with open(grobid_file, "r", encoding="utf-8") as f:
-                                grobid_content = f.read()
+                                # Check if this file has a corresponding gold file
+                                matching_gold_variant = None
+                                for variant in gold_by_variant:
+                                    variant_suffix = variant.removeprefix("grobid.")
+                                    if file_suffix == f"{variant_suffix}.tei.xml":
+                                        matching_gold_variant = variant
+                                        break
 
-                            # Add files to ZIP in doc_id subdirectory
-                            if has_gold:
-                                # Gold file as main, GROBID as .generated
-                                gold_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
-                                generated_name = f"{doc_id}/{doc_id}.{variant_suffix}.generated.tei.xml"
-                                zf.writestr(gold_name, gold_by_variant[variant])
-                                zf.writestr(generated_name, grobid_content)
-                            else:
-                                # GROBID as main (no .generated suffix)
-                                main_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
-                                zf.writestr(main_name, grobid_content)
+                                if matching_gold_variant:
+                                    # Gold replaces original, original gets .generated infix
+                                    base = file_suffix[:-8]  # Remove ".tei.xml"
+                                    gold_name = f"{doc_id}/{doc_id}.{file_suffix}"
+                                    generated_name = f"{doc_id}/{doc_id}.{base}.generated.tei.xml"
+                                    zf.writestr(gold_name, gold_by_variant[matching_gold_variant])
+                                    with open(src_path, "r", encoding="utf-8") as f:
+                                        zf.writestr(generated_name, f.read())
+                                else:
+                                    # No gold - include file as-is with doc_id prefix
+                                    dest_name = f"{doc_id}/{doc_id}.{file_suffix}"
+                                    zf.write(src_path, dest_name)
 
                         documents_processed += 1
 
