@@ -18,7 +18,9 @@ from fastapi_app.lib.dependencies import (
     get_db,
     get_file_storage,
     get_session_manager,
+    get_sse_service,
 )
+from fastapi_app.lib.sse_utils import ProgressBar
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ async def download_training_package(
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
     session_manager=Depends(get_session_manager),
     auth_manager=Depends(get_auth_manager),
+    sse_service=Depends(get_sse_service),
 ):
     """
     Download GROBID training package as ZIP.
@@ -109,13 +112,21 @@ async def download_training_package(
         if not grobid_server_url:
             raise HTTPException(status_code=503, detail="GROBID server not configured")
 
-        # Fetch training package from GROBID
-        from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+        # Show progress widget while fetching from GROBID
+        progress = ProgressBar(sse_service, session_id_value)
+        progress.show(label="Retrieving training data from GROBID...", cancellable=False)
 
-        extractor = GrobidTrainingExtractor()
-        temp_dir, extracted_files = extractor._fetch_training_package(
-            str(pdf_path), grobid_server_url, flavor
-        )
+        try:
+            # Fetch training package from GROBID
+            from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+
+            extractor = GrobidTrainingExtractor()
+            temp_dir, extracted_files = extractor._fetch_training_package(
+                str(pdf_path), grobid_server_url, flavor
+            )
+        finally:
+            # Hide progress widget before download starts
+            progress.hide()
 
         try:
             # Get all gold standard TEI files for this document

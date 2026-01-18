@@ -1,0 +1,63 @@
+<div name="progressWidget" class="progress-widget">
+  <style>
+    .progress-widget {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10000;
+      background: var(--sl-color-neutral-0);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      min-width: 300px;
+      display: none;
+      transition: all 0.3s ease;
+    }
+    .progress-widget.minimized {
+      top: auto;
+      left: 50px;
+      bottom: 50px;
+      transform: none;
+      min-width: auto;
+      width: 10vw;
+      min-width: 80px;
+      padding: 8px;
+    }
+    .progress-widget .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .progress-widget .progress-row sl-progress-bar {
+      flex-grow: 1;
+    }
+    .progress-widget.minimized .progress-row sl-progress-bar {
+      --height: 6px;
+    }
+    .progress-widget .progress-row sl-icon-button {
+      font-size: 1.25rem;
+    }
+    .progress-widget.minimized .progress-row sl-icon-button {
+      font-size: 0.875rem;
+    }
+    .progress-widget .label-row {
+      margin-top: 8px;
+      color: var(--sl-color-neutral-700);
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .progress-widget.minimized .label-row {
+      display: none;
+    }
+  </style>
+  <div class="progress-row">
+    <sl-progress-bar name="progressBar" value="0"></sl-progress-bar>
+    <sl-icon-button data-name="cancelBtn" name="x-circle" library="default" title="Cancel"></sl-icon-button>
+    <sl-icon-button data-name="minimizeBtn" name="caret-down-square" library="default" title="Minimize"></sl-icon-button>
+    <sl-icon-button data-name="maximizeBtn" name="caret-up-square" library="default" style="display: none;" title="Maximize"></sl-icon-button>
+  </div>
+  <div name="labelRow" class="label-row"></div>
+</div>

@@ -1,11 +1,136 @@
 """
 SSE utility functions for broadcasting events to multiple clients.
+
+Includes:
+- Broadcast functions for sending events to multiple sessions
+- ProgressBar class for controlling the frontend progress widget via SSE
 """
 
 import json
 from typing import Any, Optional
 from .sse_service import SSEService
 from .sessions import SessionManager, SessionDict
+
+
+class ProgressBar:
+    """
+    Controls the frontend progress widget via SSE events.
+
+    Sends the following SSE event types to the frontend:
+    - progressShow: Shows the widget (with optional initial settings)
+    - progressValue: Sets progress value (0-100) or indeterminate (None)
+    - progressLabel: Sets the text label
+    - progressHide: Hides the widget
+
+    Example usage:
+        ```python
+        from fastapi import Depends
+        from fastapi_app.lib.dependencies import get_sse_service
+        from fastapi_app.lib.sse_utils import ProgressBar
+
+        @router.post("/process")
+        async def process_files(
+            session_id: str,
+            sse_service: SSEService = Depends(get_sse_service)
+        ):
+            progress = ProgressBar(sse_service, session_id)
+
+            progress.show(label="Starting...", cancellable=True)
+
+            for i, file in enumerate(files):
+                progress.set_label(f"Processing {file.name}")
+                progress.set_value(int((i + 1) / len(files) * 100))
+                await process_file(file)
+
+            progress.hide()
+        ```
+    """
+
+    def __init__(self, sse_service: SSEService, session_id: str):
+        """
+        Initialize the progress bar controller.
+
+        Args:
+            sse_service: SSE service instance for sending events
+            session_id: Target session ID to receive progress events
+        """
+        self._sse_service = sse_service
+        self._session_id = session_id
+
+    def show(
+        self,
+        label: Optional[str] = None,
+        value: Optional[int] = None,
+        cancellable: bool = True
+    ) -> bool:
+        """
+        Show the progress widget.
+
+        Args:
+            label: Initial text label
+            value: Initial progress value (0-100), None for indeterminate
+            cancellable: Whether to show the cancel button
+
+        Returns:
+            True if message was queued successfully
+        """
+        data: dict[str, Any] = {"cancellable": cancellable}
+        if label is not None:
+            data["label"] = label
+        if value is not None:
+            data["value"] = value
+
+        return self._sse_service.send_message(
+            client_id=self._session_id,
+            event_type="progressShow",
+            data=json.dumps(data)
+        )
+
+    def hide(self) -> bool:
+        """
+        Hide the progress widget.
+
+        Returns:
+            True if message was queued successfully
+        """
+        return self._sse_service.send_message(
+            client_id=self._session_id,
+            event_type="progressHide",
+            data=""
+        )
+
+    def set_value(self, value: Optional[int]) -> bool:
+        """
+        Set the progress value.
+
+        Args:
+            value: Progress value (0-100), None for indeterminate mode
+
+        Returns:
+            True if message was queued successfully
+        """
+        data = "null" if value is None else str(value)
+        return self._sse_service.send_message(
+            client_id=self._session_id,
+            event_type="progressValue",
+            data=data
+        )
+
+    def set_label(self, label: str) -> bool:
+        """
+        Set the text label.
+
+        Args:
+            label: Label text to display
+
+        Returns:
+            True if message was queued successfully
+        """
+        return self._sse_service.send_message(
+            client_id=self._session_id,
+            event_type="progressLabel",
+            data=label
+        )
 
 
 def _broadcast_event(
