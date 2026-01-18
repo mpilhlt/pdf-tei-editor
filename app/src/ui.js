@@ -26,6 +26,8 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
 import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import SlSwitch from '@shoelace-style/shoelace/dist/components/switch/switch.js';
+import SlIconButton from '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
+import SlProgressBar from '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 import SlDrawer from '@shoelace-style/shoelace/dist/components/drawer/drawer.js';
 import SlTree from '@shoelace-style/shoelace/dist/components/tree/tree.js';
 import SlTreeItem from '@shoelace-style/shoelace/dist/components/tree-item/tree-item.js';
@@ -55,6 +57,7 @@ import './modules/panels/index.js';
  * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
+ * @import {progressWidgetPart} from './plugins/progress.js'
  */
 
 /**
@@ -90,6 +93,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
+ * @property {UIPart<HTMLDivElement, progressWidgetPart>} progressWidget - Progress indicator widget (added by progress plugin)
  */
 
 /**
@@ -112,7 +116,8 @@ updateUi()
 export {
   updateUi, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer, SlTree, SlTreeItem
+  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer,
+  SlTree, SlTreeItem, SlIconButton, SlProgressBar
 }
 export default ui;
 

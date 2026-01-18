@@ -43,7 +43,9 @@
       "Bash(node bin/debug-api.js:*)",
       "Bash(node tests/backend-test-runner.js:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(xargs -I {} sh -c 'unzip -l \"\"{}\"\" 2>/dev/null | head -20')",
+      "Bash(xargs -I {} sh -c 'unzip -l \"\"{}\"\" 2>/dev/null')"
     ],
     "deny": [],
     "ask": []

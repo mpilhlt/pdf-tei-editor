@@ -2,4 +2,4 @@
 
 from .plugin import GrobidPlugin
 
-__all__ = ["GrobidPlugin"]
+plugin = GrobidPlugin()

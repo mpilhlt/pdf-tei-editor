@@ -299,6 +299,29 @@ def garbage_collect_files(
     else:
         logger.info("Schema cache directory does not exist or is empty")
 
+    # Clean up application tmp directory
+    logger.info("Cleaning up application tmp directory...")
+    tmp_dir = settings.tmp_dir
+    tmp_deleted = 0
+
+    if tmp_dir.exists() and tmp_dir.is_dir():
+        try:
+            for item in tmp_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        tmp_deleted += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        tmp_deleted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete tmp item {item.name}: {e}")
+            logger.info(f"Tmp directory cleanup completed: {tmp_deleted} items deleted")
+        except Exception as e:
+            logger.error(f"Failed to clean tmp directory: {e}")
+    else:
+        logger.info("Tmp directory does not exist or is empty")
+
     return GarbageCollectResponse(
         purged_count=purged_count,
         files_deleted=files_deleted,

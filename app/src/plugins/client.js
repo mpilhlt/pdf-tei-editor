@@ -182,7 +182,8 @@ async function update(state) {
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
-  let url = `${api_base_url}${endpoint}`;
+  // If endpoint already starts with /api, use it directly (skip api_base_url prefix)
+  let url = endpoint.startsWith('/api') ? endpoint : `${api_base_url}${endpoint}`;
   /** @type {RequestInit} */
   const options = {
     method,
