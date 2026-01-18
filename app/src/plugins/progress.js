@@ -56,7 +56,7 @@
  * @import { SlIconButton, SlProgressBar } from '../ui.js'
  */
 
-import { registerTemplate } from '../ui.js'
+import { registerTemplate, createFromTemplate } from '../ui.js'
 import { logger, sse, client } from '../app.js'
 
 /**
@@ -96,6 +96,9 @@ const cancelUrls = new Map()
 /** @type {HTMLTemplateElement|null} */
 let widgetTemplate = null
 
+/** @type {string} */
+let currentSessionId = null
+
 /**
  * Get minimized state from session storage for a specific widget
  * @param {string} progressId
@@ -131,6 +134,7 @@ async function install(state) {
   currentSessionId = state.sessionId
 
   // Get the template element
+  createFromTemplate("progress-template", document.body)
   widgetTemplate = document.getElementById('progress-widget-template')
   if (!widgetTemplate) {
     logger.error('Progress widget template not found')

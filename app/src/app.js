@@ -15,7 +15,7 @@ export { ep as endpoints }
 
 // plugins
 import plugins, { services } from './plugins.js'
-import { logLevel, client, config, AuthenticationPlugin, HelpPlugin, LoggerPlugin } from './plugins.js'
+import { logLevel, client, config, sse, AuthenticationPlugin, HelpPlugin, LoggerPlugin, progress } from './plugins.js'
 import initialState from './state.js'
 
 // core application orchestration classes
@@ -105,6 +105,7 @@ await app.installPlugins(state)
 
 // @test-start
 // Expose necessary objects to global scope for E2E testing
+// TODO expose all plugins as global objects
 if (applicationMode == 'testing' || applicationMode == 'development' ) {
   // @ts-ignore
   window.app = app;
@@ -114,6 +115,10 @@ if (applicationMode == 'testing' || applicationMode == 'development' ) {
   window.services = services;
   // @ts-ignore
   window.testLog = testLog;
+  // @ts-ignore
+  window.sse = sse;
+    // @ts-ignore
+  window.progress = progress;
 }
 // @test-end
 

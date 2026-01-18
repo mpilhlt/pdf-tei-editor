@@ -373,4 +373,110 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       await new Promise(resolve => setTimeout(resolve, 200));
     }
   });
+
+  test('Test 10: Progress widget events are received', { timeout: 15000 }, async () => {
+    // Create fresh session
+    const session = await login('reviewer', 'reviewer', BASE_URL);
+
+    // Collect all progress-related events
+    /** @type {Array<{event: string, data: any}>} */
+    const progressEvents = [];
+
+    const eventSource = createEventSource({
+      url: `${BASE_URL}/api/v1/sse/subscribe`,
+      headers: {
+        'X-Session-Id': session.sessionId
+      },
+      onMessage: (message) => {
+        // Capture all progress events
+        if (message.event.startsWith('progress')) {
+          try {
+            progressEvents.push({
+              event: message.event,
+              data: JSON.parse(message.data)
+            });
+          } catch (e) {
+            progressEvents.push({
+              event: message.event,
+              data: message.data
+            });
+          }
+        }
+      }
+    });
+
+    try {
+      // Wait for connection to establish
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Trigger progress test with 3 quick steps
+      const response = await authenticatedRequest(
+        session.sessionId,
+        '/sse/test/progress',
+        'POST',
+        { steps: 3, delay_ms: 200, label_prefix: 'Test step' },
+        BASE_URL
+      );
+
+      assert.strictEqual(response.status, 200, 'Progress endpoint should return 200');
+      const data = await response.json();
+      assert.strictEqual(data.status, 'ok', 'Should return ok status');
+      assert.strictEqual(data.steps_completed, 3, 'Should report 3 steps completed');
+      assert.ok(data.progress_id, 'Should return progress_id');
+
+      // Wait for all progress events to be received
+      // Expected: 1 show + 3 value + 3 label + 1 hide = 8 events
+      const expectedMinEvents = 8;
+      const waitStart = Date.now();
+      while (progressEvents.length < expectedMinEvents && Date.now() - waitStart < 5000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Verify we received the key events
+      const eventTypes = progressEvents.map(e => e.event);
+
+      assert.ok(
+        eventTypes.includes('progressShow'),
+        `Should receive progressShow event. Got: ${eventTypes.join(', ')}`
+      );
+      assert.ok(
+        eventTypes.includes('progressValue'),
+        `Should receive progressValue events. Got: ${eventTypes.join(', ')}`
+      );
+      assert.ok(
+        eventTypes.includes('progressLabel'),
+        `Should receive progressLabel events. Got: ${eventTypes.join(', ')}`
+      );
+      assert.ok(
+        eventTypes.includes('progressHide'),
+        `Should receive progressHide event. Got: ${eventTypes.join(', ')}`
+      );
+
+      // Verify progress_id is consistent across events
+      const progressId = data.progress_id;
+      const allEventsHaveCorrectId = progressEvents.every(
+        e => e.data.progress_id === progressId
+      );
+      assert.ok(
+        allEventsHaveCorrectId,
+        `All events should have progress_id=${progressId}`
+      );
+
+      // Verify progressShow has expected fields
+      const showEvent = progressEvents.find(e => e.event === 'progressShow');
+      assert.ok(showEvent, 'Should have progressShow event');
+      assert.strictEqual(showEvent.data.cancellable, true, 'Should be cancellable');
+      assert.ok(showEvent.data.label, 'Should have initial label');
+      assert.strictEqual(showEvent.data.value, 0, 'Should start at 0');
+
+      // Verify final progressValue is 100
+      const valueEvents = progressEvents.filter(e => e.event === 'progressValue');
+      const lastValue = valueEvents[valueEvents.length - 1];
+      assert.strictEqual(lastValue.data.value, 100, 'Final progress value should be 100');
+
+    } finally {
+      eventSource.close();
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  });
 });
