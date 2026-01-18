@@ -42,6 +42,7 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * The main toolbar navigation properties.
  * This documents the structure created by various plugins that add controls to the toolbar.
  * @typedef {object} toolbarPart
+ * @property {SlSelect} collection - The selectbox for the collection filter (added by file-selection plugin)
  * @property {SlSelect} variant - The selectbox for the variant filter (added by file-selection plugin)
  * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)
  * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)

@@ -32,6 +32,7 @@
  * @property {boolean} offline  - Whether the application is in offline mode, i.e. the backend has disconnected
  * @property {UserData|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
+ * @property {string|null} collectionFilter - The collection filter for the file selection (empty string = all)
  * @property {FileListItem[]|null} fileData - The file data loaded from the server
  * @property {CollectionInfo[]|null} collections - The list of accessible collections
  * @property {boolean} hasInternet - Whether the backend has internet access
@@ -54,6 +55,7 @@ const initialState = {
   sessionId: null,
   user: null,
   collection: null,
+  collectionFilter: null,
   fileData: null,
   collections: null,
   offline: false,
