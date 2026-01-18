@@ -625,72 +625,42 @@ def set_training_data_id(tei_root: etree._Element, training_data_id: str) -> boo
 
 ## Status
 
-### Completed
+### Completed (2026-01-18)
 
-- Progress widget template with minimize/maximize functionality
-- Progress plugin with SSE event handling (singleton version)
-- Session storage persistence for minimized state
-- Backend `ProgressBar` class in `sse_utils.py` (singleton version)
-- UI system `data-name` attribute support
-- Plugin registration and type definitions
-- Integration in GROBID download route (single document)
+All implementation tasks have been completed:
 
-### Remaining Work
+1. **Architectural Changes**
+   - Added `plugins_dir` property to `fastapi_app/config.py`
+   - Created `fastapi_app/plugins/grobid/config.py` with `SUPPORTED_VARIANTS` list
+   - Added `send_notification()` helper to `sse_utils.py`
+   - Updated `ProgressBar` class for multi-instance support with `progress_id` and `cancel_url`
+   - Added notification event listener in `sse.js`
+   - Added TEI utility functions `get_training_data_id()` and `set_training_data_id()` in `tei_utils.py`
+   - Added `file.deleted` event emission in `files_delete.py`
 
-1. **Progress Widget Multi-Instance Support**
-   - Convert progress widget to use templates for cloning
-   - Maintain Map of active instances by progress_id
-   - Implement widget stacking (CSS and JS)
-   - Change minimize/maximize to click-to-toggle
-   - Update SSE event handlers for progress_id
+2. **Progress Widget Multi-Instance Support**
+   - Converted `progress.html` to `<template>` element for cloning
+   - Updated `progress.js` with Map-based instance tracking by `progress_id`
+   - Implemented widget stacking via CSS `data-stack-index` attribute
+   - Changed minimize/maximize to click-to-toggle behavior
+   - Made `cancelUrl` configurable per progress instance
 
-2. **SSE Notification System**
-   - Add notification event listener in `sse.js`
-   - Add `send_notification()` helper in `sse_utils.py`
+3. **GROBID Plugin Updates**
+   - Updated `extractor.py` to use `get_supported_variants()` from config
+   - Implemented collection-based download route (`/api/plugins/grobid/download?collection=...`)
+   - Added caching of GROBID training data in `settings.plugins_dir/grobid/extractions/{doc_id}/`
+   - Added `force_refresh` and `gold_only` query parameters
+   - Implemented `CancellationToken` pattern with `/api/plugins/grobid/cancel/{progress_id}` endpoint
+   - Added cache cleanup on file deletion via event bus handler
+   - Updated plugin endpoint to use collection instead of pdf
 
-3. **Settings: Plugin Data Directory**
-   - Add `plugins_dir` property to `fastapi_app/config.py`
-   - Update existing code to use `settings.plugins_dir`
+4. **Key Implementation Details**
+   - Progress widgets are created dynamically from template and removed on hide
+   - Cancel requests are sent via POST to configurable `cancelUrl`
+   - Caching uses doc_id-based directories with ZIP files and metadata.json
+   - File deletion triggers cache cleanup only when no other PDFs exist for the doc_id
 
-4. **Event Bus: File Deletion Events**
-   - Modify `files_delete.py` to emit `file.deleted` event
-   - Emit event for each deleted stable_id
-
-5. **GROBID Plugin: Cache Cleanup**
-   - Register event handler for `file.deleted` event
-   - Implement mapping table for stable_id -> training_data_id
-   - Delete cached ZIP when file is deleted
-
-6. **Supported Variants Configuration**
-   - Create `fastapi_app/plugins/grobid/config.py` with `SUPPORTED_VARIANTS`
-   - Update `extractor.py` to import from config
-
-7. **Collection-Based Download**
-   - Update route to accept `collection` instead of `pdf`
-   - Add `gold_only` parameter (default: False)
-   - Iterate over all documents in collection
-   - Process all supported variants per document
-   - Include gold files as main, GROBID as .generated when gold exists
-   - Create subdirectory structure in output ZIP
-   - Send progress updates per document
-
-8. **Training Data Caching**
-   - Extract training_data_id from GROBID output filenames
-   - Save ZIP copies to `settings.plugins_dir/grobid/extractions/`
-   - Add TEI utility functions for training-data-id
-   - Update extractor to save training-data-id in TEI header
-   - Save stable_id -> training_data_id mapping
-   - Check cache before fetching from GROBID
-   - Add `force_refresh` parameter to override caching
-
-9. **Cancel Functionality**
-   - Implement CancellationToken pattern
-   - Add cancel endpoint
-   - Frontend POST to cancel endpoint
-   - Check cancellation during iteration
-   - Send notification on cancellation
-
-10. **Testing**
+### Testing Required
 
 - Test progress widget multi-instance behavior
 - Test widget stacking and state persistence

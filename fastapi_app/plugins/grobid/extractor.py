@@ -13,6 +13,7 @@ from lxml import etree
 from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
 from fastapi_app.lib.doi_utils import fetch_doi_metadata
+from fastapi_app.plugins.grobid.config import get_supported_variants
 from fastapi_app.lib.tei_utils import (
     create_tei_header,
     create_edition_stmt,
@@ -47,11 +48,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                     "label": "Variant identifier",
                     "description": "Variant identifier for the training data type",
                     "required": False,
-                    "options": [
-                        "grobid.training.segmentation",
-                        "grobid.training.references.referenceSegmenter",
-                        "grobid.training.references"
-                    ]
+                    "options": get_supported_variants()
                 },
                 "flavor": {
                     "type": "string",

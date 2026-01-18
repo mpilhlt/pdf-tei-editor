@@ -1115,3 +1115,65 @@ def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
         return serialize_tei_with_formatted_header(xml_root, processing_instructions)
 
     return xml_string
+
+
+def get_training_data_id(tei_root: etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Extract training-data-id from TEI header.
+
+    Path: /TEI/teiHeader/encodingDesc/appInfo/application[@ident="GROBID"]/label[@type="training-data-id"]
+
+    Args:
+        tei_root: TEI root element
+
+    Returns:
+        Training data ID string or None if not found
+    """
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    label = tei_root.find(
+        ".//tei:encodingDesc/tei:appInfo/tei:application[@ident='GROBID']/"
+        "tei:label[@type='training-data-id']",
+        namespaces=ns
+    )
+    return label.text if label is not None else None
+
+
+def set_training_data_id(tei_root: etree._Element, training_data_id: str) -> bool:  # type: ignore[name-defined]
+    """
+    Set or update training-data-id in TEI header.
+
+    Adds <label type="training-data-id"> to the GROBID application element.
+
+    Args:
+        tei_root: TEI root element
+        training_data_id: The training data ID to set
+
+    Returns:
+        True if successful, False if GROBID application element not found
+    """
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    grobid_app = tei_root.find(
+        ".//tei:encodingDesc/tei:appInfo/tei:application[@ident='GROBID']",
+        namespaces=ns
+    )
+    if grobid_app is None:
+        return False
+
+    # Check if label already exists
+    existing_label = grobid_app.find("tei:label[@type='training-data-id']", namespaces=ns)
+    if existing_label is not None:
+        existing_label.text = training_data_id
+    else:
+        # Create new label element with TEI namespace
+        tei_ns = "http://www.tei-c.org/ns/1.0"
+        label = etree.Element(f"{{{tei_ns}}}label", type="training-data-id")
+        label.text = training_data_id
+
+        # Insert before <ref> element if present, otherwise append
+        ref = grobid_app.find("tei:ref", namespaces=ns)
+        if ref is not None:
+            ref.addprevious(label)
+        else:
+            grobid_app.append(label)
+
+    return True

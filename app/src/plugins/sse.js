@@ -6,6 +6,7 @@
  * @import { ApplicationState } from '../state.js' 
  */
 import { logger, config } from '../app.js'
+import { notify } from '../modules/sl-utils.js'
 
 /**
  * plugin API
@@ -223,6 +224,19 @@ function establishConnection(sessionId) {
   // Standard message channels
   eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
     logger.log('SSE Status Update:' + evt.data)
+  });
+
+  // Notification channel for toast messages
+  eventSource.addEventListener('notification', /** @param {MessageEvent} evt */ evt => {
+    try {
+      const data = JSON.parse(evt.data)
+      const { message, variant, icon } = data
+      // Map "error" to "danger" for Shoelace
+      const slVariant = variant === 'error' ? 'danger' : variant
+      notify(message, slVariant, icon)
+    } catch (e) {
+      logger.warn(`Failed to parse notification event: ${e}`)
+    }
   });
 }
 

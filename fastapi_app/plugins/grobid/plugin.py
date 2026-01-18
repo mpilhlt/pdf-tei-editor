@@ -6,10 +6,12 @@ Provides a download endpoint for reviewers to download complete training package
 """
 
 import logging
+import shutil
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
+from fastapi_app.lib.event_bus import get_event_bus
 from .extractor import GrobidTrainingExtractor
 
 logger = logging.getLogger(__name__)
@@ -32,8 +34,8 @@ class GrobidPlugin(Plugin):
                 {
                     "name": "download_training",
                     "label": "Download GROBID Training Data",
-                    "description": "Download complete GROBID training package with gold annotations",
-                    "state_params": ["pdf"],
+                    "description": "Download complete GROBID training package for a collection",
+                    "state_params": ["collection"],
                     "required_roles": ["reviewer"],
                 },
             ],
@@ -51,16 +53,72 @@ class GrobidPlugin(Plugin):
         return GrobidTrainingExtractor.is_available()
 
     async def initialize(self, context: PluginContext) -> None:
-        """Register the GROBID extractor."""
+        """Register the GROBID extractor and event handlers."""
         registry = ExtractorRegistry.get_instance()
         registry.register(GrobidTrainingExtractor)
+
+        # Register event handler for file deletion cache cleanup
+        event_bus = get_event_bus()
+        event_bus.on("file.deleted", self._on_file_deleted)
+
         logger.info("GROBID extractor plugin initialized")
 
     async def cleanup(self) -> None:
-        """Unregister the GROBID extractor."""
+        """Unregister the GROBID extractor and event handlers."""
         registry = ExtractorRegistry.get_instance()
         registry.unregister("grobid-training")
+
+        # Unregister event handler
+        event_bus = get_event_bus()
+        event_bus.off("file.deleted", self._on_file_deleted)
+
         logger.info("GROBID extractor plugin cleaned up")
+
+    async def _on_file_deleted(self, stable_id: str, **kwargs) -> None:
+        """
+        Clean up cached GROBID training data when a file is deleted.
+
+        This handler is called when any file is deleted. It checks if the file
+        was a PDF and removes any cached training data for that document.
+
+        Args:
+            stable_id: The stable_id of the deleted file
+        """
+        from fastapi_app.config import get_settings
+        from fastapi_app.lib.dependencies import get_db
+        from fastapi_app.lib.file_repository import FileRepository
+
+        try:
+            # Get file info to check if it was a PDF
+            db = get_db()
+            file_repo = FileRepository(db)
+            file_info = file_repo.get_file_by_stable_id(stable_id)
+
+            if not file_info or file_info.file_type != "pdf":
+                return
+
+            doc_id = file_info.doc_id
+            if not doc_id:
+                return
+
+            # Check if any other PDFs exist for this doc_id
+            doc_files = file_repo.get_files_by_doc_id(doc_id)
+            other_pdfs = [f for f in doc_files if f.file_type == "pdf" and f.stable_id != stable_id and not f.deleted]
+
+            if other_pdfs:
+                # Other PDFs exist, don't delete cache
+                return
+
+            # Delete cached training data for this document
+            settings = get_settings()
+            cache_path = settings.plugins_dir / "grobid" / "extractions" / doc_id
+
+            if cache_path.exists():
+                shutil.rmtree(cache_path, ignore_errors=True)
+                logger.info(f"Deleted cached GROBID training data for {doc_id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to clean up GROBID cache for {stable_id}: {e}")
 
     async def download_training(
         self, context: PluginContext, params: dict[str, Any]
@@ -70,22 +128,30 @@ class GrobidPlugin(Plugin):
 
         Args:
             context: Plugin context
-            params: Parameters including 'pdf' (stable_id of PDF)
+            params: Parameters including 'collection' (collection ID)
 
         Returns:
             downloadUrl pointing to the download route
         """
-        pdf_stable_id = params.get("pdf")
-        if not pdf_stable_id:
+        collection = params.get("collection")
+        if not collection:
             return {
-                "error": "No PDF selected",
-                "message": "Please select a PDF document first.",
+                "error": "No collection selected",
+                "message": "Please select a collection first.",
             }
 
-        # Build download URL
-        download_url = f"/api/plugins/grobid/download?pdf={pdf_stable_id}"
+        # Build download URL with optional parameters
+        download_url = f"/api/plugins/grobid/download?collection={collection}"
+
+        # Add optional parameters if provided
+        if params.get("gold_only"):
+            download_url += "&gold_only=true"
+        if params.get("force_refresh"):
+            download_url += "&force_refresh=true"
+        if params.get("flavor"):
+            download_url += f"&flavor={params['flavor']}"
 
         return {
             "downloadUrl": download_url,
-            "pdf": pdf_stable_id,
+            "collection": collection,
         }

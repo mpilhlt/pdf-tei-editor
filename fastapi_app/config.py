@@ -141,6 +141,11 @@ class Settings(BaseSettings):
         """Temporary directory for application use - always data_root/tmp"""
         return self.data_root / "tmp"
 
+    @property
+    def plugins_dir(self) -> Path:
+        """Plugin data directory - always data_root/plugins"""
+        return self.data_root / "plugins"
+
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance"""
