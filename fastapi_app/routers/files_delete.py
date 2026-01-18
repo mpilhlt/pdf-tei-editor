@@ -30,6 +30,7 @@ from ..lib.logging_utils import get_logger
 from ..lib.sse_service import SSEService
 from ..lib.sessions import SessionManager
 from ..lib.sse_utils import broadcast_to_other_sessions
+from ..lib.event_bus import get_event_bus
 
 
 logger = get_logger(__name__)
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 @router.post("/delete", response_model=DeleteFilesResponse)
-def delete_files(
+async def delete_files(
     body: DeleteFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
@@ -113,5 +114,10 @@ def delete_files(
             },
             logger=logger
         )
+
+        # Emit file.deleted events for each deleted file
+        event_bus = get_event_bus()
+        for stable_id in deleted_stable_ids:
+            await event_bus.emit("file.deleted", stable_id=stable_id)
 
     return DeleteFilesResponse(result="ok")

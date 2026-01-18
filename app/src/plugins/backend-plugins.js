@@ -11,6 +11,7 @@ import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
 import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu } from '../ui.js';
 import ui from '../ui.js';
+import { logger } from '../app.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -176,6 +177,11 @@ export class BackendPluginsPlugin extends Plugin {
     const categories = Object.keys(pluginsByCategory).sort();
 
     categories.forEach((category, index) => {
+      // Skip if no plugins in a category
+      if (pluginsByCategory[category].length === 0) {
+        return;
+      }
+
       // Add category label
       const categoryLabel = document.createElement('small');
       categoryLabel.textContent = this.formatCategoryName(category);
@@ -505,12 +511,69 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
+   * Trigger a file download from a URL
+   * @param {BackendPlugin} plugin
+   * @param {string} downloadUrl - URL to download from
+   */
+  async triggerDownload(plugin, downloadUrl) {
+    try {
+      const url = new URL(downloadUrl, window.location.origin);
+
+      // Add session ID if not already in URL
+      if (!url.searchParams.has('session_id') && this.state.sessionId) {
+        url.searchParams.set('session_id', this.state.sessionId);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: { 'X-Session-ID': this.state.sessionId || '' }
+      });
+
+      if (!response.ok) {
+        // Status 499 = cancelled by user, don't show error (notification already sent via SSE)
+        if (response.status === 499) {
+          logger.info('Download cancelled by user');
+          return;
+        }
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${plugin.id}_download`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?(.+?)"?$/);
+        if (match) filename = match[1];
+      }
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+
+      notify('Download started', 'success', 'check-circle');
+    } catch (error) {
+      console.error('Download failed:', error);
+      notify(`Download failed: ${error.message}`, 'danger', 'exclamation-octagon');
+    }
+  }
+
+  /**
    * Display plugin execution result
    * @param {BackendPlugin} plugin
    * @param {any} result
    */
   displayResult(plugin, result) {
     const dialog = ui.pluginResultDialog;
+
+    // Check if result contains downloadUrl for direct file download
+    if (result && result.downloadUrl) {
+      this.triggerDownload(plugin, result.downloadUrl);
+      return;
+    }
 
     // Check if result contains outputUrl for iframe rendering
     if (result && result.outputUrl) {

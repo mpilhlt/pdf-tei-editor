@@ -156,3 +156,72 @@ async def broadcast_test(
         "status": "ok",
         "sessions_notified": notified_count
     }
+
+
+@router.post("/test/progress")
+async def progress_test(
+    body: dict = Body(default={}),
+    sse_service: SSEService = Depends(get_sse_service),
+    user: dict = Depends(get_session_user),
+    session_id: str = Depends(require_session_id)
+):
+    """
+    Test endpoint that simulates a progress bar workflow.
+
+    Sends progressShow, progressValue, progressLabel, and progressHide events
+    to test the frontend progress widget.
+
+    Args:
+        body: Optional dictionary with:
+            - steps: Number of progress steps (default: 5)
+            - delay_ms: Delay between steps in ms (default: 500)
+            - label_prefix: Prefix for step labels (default: "Processing step")
+
+    Returns:
+        dict: Summary with status and progress_id
+
+    Note:
+        Client must be subscribed to /sse/subscribe before calling this endpoint.
+    """
+    from ..lib.sse_utils import ProgressBar
+
+    steps = body.get("steps", 5)
+    delay_ms = body.get("delay_ms", 500)
+    label_prefix = body.get("label_prefix", "Processing step")
+
+    username = user.get('username', 'unknown')
+
+    logger.info(f"SSE progress test requested by {username} (session: {session_id[:8]}...) with {steps} steps")
+
+    # Create progress bar instance
+    progress = ProgressBar(sse_service, session_id)
+
+    # Show progress widget
+    progress.show(label=f"{label_prefix} 0/{steps}", value=0, cancellable=True)
+    logger.debug(f"Progress test: show (progress_id={progress.progress_id})")
+
+    # Run progress simulation in background without blocking
+    async def simulate_progress():
+        # Simulate progress steps
+        for i in range(1, steps + 1):
+            await asyncio.sleep(delay_ms / 1000)
+            value = int((i / steps) * 100)
+            progress.set_value(value)
+            progress.set_label(f"{label_prefix} {i}/{steps}")
+            logger.debug(f"Progress test: step {i}/{steps}, value={value}")
+
+        # Small delay before hiding
+        await asyncio.sleep(delay_ms / 1000)
+
+        # Hide progress widget
+        progress.hide()
+        logger.debug(f"Progress test: hide (progress_id={progress.progress_id})")
+
+    # Start progress simulation in background
+    asyncio.create_task(simulate_progress())
+    
+    return {
+        "status": "ok",
+        "progress_id": progress.progress_id,
+        "steps_completed": steps
+    }

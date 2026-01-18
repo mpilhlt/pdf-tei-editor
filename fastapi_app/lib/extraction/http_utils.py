@@ -1,5 +1,5 @@
 """
-HTTP utilities for extractors with retry logic
+HTTP utilities for extractors with retry logic.
 """
 
 import requests

@@ -65,11 +65,12 @@ async function install(state) {
   // Create UI elements
   teiWizardButton = createSingleFromTemplate('tei-wizard-button');
   const teiWizardDialog = createSingleFromTemplate('tei-wizard-dialog', document.body);
-  
-  ui.toolbar.teiActions.append(teiWizardButton);
+
+  // Add TEI wizard button to XML editor toolbar (priority 51.5, between validateBtn at 51 and spacer at 50)
+  ui.xmlEditor.toolbar.add(teiWizardButton, 51.5);
   updateUi()
 
-  ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
+  ui.xmlEditor.toolbar.teiWizardBtn.addEventListener("widget-click", runTeiWizard)
 
   /** @type {teiWizardDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.teiWizardDialog);
@@ -103,7 +104,7 @@ async function update(state) {
   currentState = state
   const isAnnotator = userHasRole(state.user, ["admin", "reviewer", "annotator"]);
   const isReviewer = userHasRole(state.user, ["admin", "reviewer"]);
-  ui.toolbar.teiActions.teiWizard.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
+  ui.xmlEditor.toolbar.teiWizardBtn.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
 }
 
 async function getSelectedEnhancements() {

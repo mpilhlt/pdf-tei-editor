@@ -54,9 +54,13 @@ function createProgressBar(current, total, barLength = 40) {
 function updateProgress(message) {
   // Only use progress bar if stdout is a TTY (not being redirected/piped)
   if (stdout.isTTY) {
-    stdout.clearLine(0);
-    stdout.cursorTo(0);
-    stdout.write(message);
+    // Truncate message to terminal width to prevent line wrapping
+    const termWidth = stdout.columns || 80;
+    const maxLen = termWidth - 1;
+    const truncatedMessage = message.length > maxLen
+      ? message.slice(0, maxLen - 3) + '...'
+      : message.padEnd(maxLen);
+    stdout.write(`\r${truncatedMessage}`);
   } else {
     // In non-TTY mode (tests, logs), just print the message
     console.log(message);
@@ -415,10 +419,10 @@ async function batchUpload(options) {
 
     } catch (error) {
       failCount++;
-      // Clear progress bar and show error
+      // Clear progress bar and show error on new line
       if (stdout.isTTY) {
-        stdout.clearLine(0);
-        stdout.cursorTo(0);
+        const termWidth = stdout.columns || 80;
+        stdout.write(`\r${' '.repeat(termWidth)}\r`);
       }
       console.log(`❌ Error processing ${fileName}: ${error.message}`);
     }

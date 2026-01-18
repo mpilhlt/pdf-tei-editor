@@ -5,7 +5,6 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginConfig } from '../modules/plugin-manager.js'
- * @import { SlButton } from '../ui.js'
  */
 
 import { app, endpoints as ep, services } from '../app.js'
@@ -30,7 +29,6 @@ const api = {
   removeMergeView,
   downloadXml,
   uploadXml,
-  inProgress,
   searchNodeContentsInPdf
 }
 
@@ -43,7 +41,6 @@ const plugin = {
   deps: ['file-selection', 'document-actions'],
   install,
   onStateUpdate,
-  validation: { inProgress },
   shutdown
 }
 
@@ -56,18 +53,6 @@ export default plugin
 let currentState = null
 
 //
-// UI
-//
-
-/**
- * TEI services button group navigation properties
- * @typedef {object} teiServicesPart
- * @property {SlButton} validate - Validate XML button
- * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
- */
-
-
-//
 // Implementation
 //
 
@@ -77,12 +62,6 @@ let currentState = null
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-
-  // === TEI button group ===
-
-  const ta = ui.toolbar.teiActions
-  // validate xml button
-  ta.validate.addEventListener('click', onClickValidateButton);
 
   // enable save button on dirty editor
   xmlEditor.on("editorReady",() => {ui.toolbar.documentActions.saveRevision.disabled = false});
@@ -130,17 +109,6 @@ async function onStateUpdate(changedKeys, state) {
   currentState = state;
 }
 
-
-/**
- * Invoked when a plugin starts a validation
- * @param {Promise<any>} validationPromise 
- */
-async function inProgress(validationPromise) {
-  // do not start validation if another one is going on
-  ui.toolbar.teiActions.validate.disabled = true
-  await validationPromise
-  ui.toolbar.teiActions.validate.disabled = false
-}
 
 /**
  * Called when the application is shutting down (beforeunload)
@@ -426,15 +394,6 @@ async function uploadXml(state) {
   const { services } = await import('../app.js')
   await services.load({ xml: path })
   notify("Document was uploaded. You are now editing the new version.")
-}
-
-/**
- * Called when the "Validate" button is executed
- */
-async function onClickValidateButton() {
-  ui.toolbar.teiActions.validate.disabled = true
-  const diagnostics = await validateXml()
-  notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
 }
 
 /**

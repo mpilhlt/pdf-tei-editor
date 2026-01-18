@@ -7,11 +7,26 @@ import datetime
 from pathlib import Path
 from typing import Optional
 
+from fastapi_app.config import get_settings
+from fastapi_app.lib.config_utils import get_config
 
-def create_debug_log_dir() -> Path:
-    """Create and return the debug log directory."""
-    log_dir = Path(os.environ.get('LOG_DIR', Path(__file__).resolve().parent.parent.parent / 'log'))
-    log_dir.mkdir(exist_ok=True)
+
+def create_debug_log_dir(extractor_name: Optional[str] = None) -> Path:
+    """
+    Create and return the debug log directory.
+
+    Args:
+        extractor_name: Optional extractor name for subdirectory
+
+    Returns:
+        Path to the log directory (creates if needed)
+    """
+    settings = get_settings()
+    if extractor_name:
+        log_dir = settings.tmp_dir / extractor_name
+    else:
+        log_dir = settings.tmp_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
 def write_comment(f, comment, prefix = "# ", suffix = ""):
@@ -23,22 +38,26 @@ def log_extraction_response(
     response_content: str,
     file_suffix: str = ".xml",
     error: Optional[str] = None
-) -> Path:
+) -> Optional[Path]:
     """
-    Log extraction response content to a debug file.
-    
+    Log extraction response content to a debug file (development mode only).
+
     Args:
         extractor_name: Name of the extractor (e.g., "grobid", "llamore")
         pdf_path: Path to the source PDF file
         response_content: The raw response content to log
         file_suffix: File extension for the log file
         error: Optional error message to include
-        
+
     Returns:
-        Path to the created log file
+        Path to the created log file, or None if not in development mode
     """
-    log_dir = create_debug_log_dir()
-    
+    config = get_config()
+    if config.get("application.mode", "development") != "development":
+        return None
+
+    log_dir = create_debug_log_dir(extractor_name)
+
     # Create timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
@@ -76,18 +95,18 @@ def log_xml_parsing_error(
     pdf_path: str,
     xml_content: str,
     error_message: str
-) -> Path:
+) -> Optional[Path]:
     """
-    Log XML content that failed to parse.
-    
+    Log XML content that failed to parse (development mode only).
+
     Args:
         extractor_name: Name of the extractor
         pdf_path: Path to the source PDF file
         xml_content: The XML content that failed to parse
         error_message: The parsing error message
-        
+
     Returns:
-        Path to the created log file
+        Path to the created log file, or None if not in development mode
     """
     return log_extraction_response(
         extractor_name=extractor_name,

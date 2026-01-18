@@ -92,6 +92,7 @@ async function install(state) {
   const controlPriorities = {
     'pdf': 10,    // High priority - essential (source file)
     'xml': 10,    // High priority - essential (target file)
+    'collection': 6, // Medium-high priority (collection filter)
     'variant': 5, // Medium priority
     'diff': 3     // Lower priority
   };
@@ -108,6 +109,7 @@ async function install(state) {
 
   /**  @type {[SlSelect,function][]} */
   const handlers = [
+    [ui.toolbar.collection, onChangeCollectionSelection],
     [ui.toolbar.variant, onChangeVariantSelection],
     [ui.toolbar.pdf, onChangePdfSelection],
     [ui.toolbar.xml, onChangeXmlSelection],
@@ -157,10 +159,15 @@ async function update(state) {
     // Note: Don't mutate state directly in update() - that would cause infinite loops
     // The state.collection should be managed by other functions that call updateState()
 
+    // Check if collections state changed - repopulate collection selectbox
+    if (hasStateChanged(state, 'collections') && state.collections) {
+      await populateCollectionSelectbox(state);
+    }
+
     // Check if relevant state properties have changed
-    if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
+    if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter') && state.fileData) {
       const fileDataChanged = hasStateChanged(state, 'fileData');
-      const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
+      const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'collectionFilter');
 
       if (selectionsChanged || fileDataChanged) {
         await populateSelectboxes(state);
@@ -254,6 +261,48 @@ let collections
 let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
 let isPopulatingSelectboxes = false
+
+/**
+ * Populates the collection filter selectbox
+ * @param {ApplicationState} state
+ */
+async function populateCollectionSelectbox(state) {
+  if (!state.collections) {
+    return;
+  }
+
+  // Clear existing options
+  ui.toolbar.collection.innerHTML = "";
+
+  // Add "All" option (no filtering)
+  const allOption = new SlOption();
+  allOption.value = "";
+  allOption.textContent = "All";
+  // @ts-ignore - size property not in SlOption type definition
+  allOption.size = "small";
+  ui.toolbar.collection.appendChild(allOption);
+
+  // Add collection options sorted alphabetically
+  const sortedCollections = [...state.collections]
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const collection of sortedCollections) {
+    const option = new SlOption();
+    option.value = collection.id;
+    option.textContent = collection.name;
+    // @ts-ignore - size property not in SlOption type definition
+    option.size = "small";
+    ui.toolbar.collection.appendChild(option);
+  }
+
+  // Set current selection (with guard to prevent triggering events)
+  isUpdatingProgrammatically = true;
+  try {
+    ui.toolbar.collection.value = state.collectionFilter || "";
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
+}
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -351,19 +400,29 @@ async function populateSelectboxes(state) {
 
   const fileData = state.fileData;
 
-  // Filter files by variant selection
+  // Filter files by collection filter selection
   let filteredFileData = fileData;
+  const collectionFilter = state.collectionFilter;
+
+  if (collectionFilter && collectionFilter !== "") {
+    // Show only files in the selected collection
+    filteredFileData = fileData.filter(file =>
+      file.collections && file.collections.includes(collectionFilter)
+    );
+  }
+
+  // Filter files by variant selection
   const variant = state.variant;
 
   if (variant === "none") {
     // Show only files without variant in artifacts
-    filteredFileData = fileData.filter(file => {
+    filteredFileData = filteredFileData.filter(file => {
       const hasArtifactVariant = file.artifacts && file.artifacts.some(a => !!a.variant);
       return !hasArtifactVariant;
     });
   } else if (variant && variant !== "") {
     // Show only files with the selected variant in artifacts
-    filteredFileData = fileData.filter(file => {
+    filteredFileData = filteredFileData.filter(file => {
       const matchesArtifact = file.artifacts && file.artifacts.some(a => a.variant === variant);
       return matchesArtifact;
     });
@@ -675,4 +734,33 @@ async function onChangeDiffSelection() {
 async function onChangeVariantSelection() {
   const variant = String(ui.toolbar.variant.value)
   await app.updateState({ variant, xml: null })
+}
+
+/**
+ * Called when the selection in the collection filter selectbox changes
+ */
+async function onChangeCollectionSelection() {
+  const state = app.getCurrentState()
+  const collectionFilter = String(ui.toolbar.collection.value)
+
+  // Set collection to the selected value, or null if "All" is selected
+  const collection = collectionFilter || null
+
+  // Check if current file is in the selected collection
+  let shouldClearSelection = false
+  if (collectionFilter && state.pdf && state.fileData) {
+    const currentFile = state.fileData.find(file =>
+      file.source && file.source.id === state.pdf
+    )
+    if (currentFile && !currentFile.collections.includes(collectionFilter)) {
+      shouldClearSelection = true
+    }
+  }
+
+  if (shouldClearSelection) {
+    await services.removeMergeView()
+    await app.updateState({ collectionFilter, collection, pdf: null, xml: null, diff: null })
+  } else {
+    await app.updateState({ collectionFilter, collection })
+  }
 }

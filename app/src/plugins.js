@@ -23,6 +23,7 @@ import UserAccountPlugin from './plugins/user-account.js'
 import { plugin as configPlugin, api as config } from './plugins/config.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
 import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
+import { plugin as progressPlugin, api as progress } from './plugins/progress.js'
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
@@ -89,6 +90,7 @@ const plugins = [
   validationPlugin,
   moveFilesPlugin,
   ssePlugin,
+  progressPlugin,
   accessControlPlugin,
   heartbeatPlugin,
   startPlugin
@@ -124,9 +126,10 @@ export {
   promptEditor,
   appInfo,
   annotationGuide,
-  sync, 
-  accessControl, 
-  heartbeat
+  sync,
+  accessControl,
+  heartbeat,
+  progress
 }
 
 // Export FiledataPlugin class for getInstance() access

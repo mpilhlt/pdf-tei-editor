@@ -29,6 +29,7 @@ import { notify } from '../modules/sl-utils.js'
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
 await registerTemplate('xmleditor-headerbar-right', 'xmleditor-headerbar-right.html')
 await registerTemplate('xmleditor-toolbar', 'xmleditor-toolbar.html')
+await registerTemplate('xmleditor-tei-buttons', 'xmleditor-tei-buttons.html')
 await registerTemplate('xmleditor-import-export-buttons', 'xmleditor-import-export-buttons.html')
 await registerTemplate('xmleditor-statusbar', 'xmleditor-statusbar.html')
 await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.html')
@@ -51,6 +52,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} nextDiffBtn - Next diff button
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
+ * @property {StatusButton} validateBtn - Validate XML button
+ * @property {StatusButton} teiWizardBtn - TEI Wizard button (added by tei-wizard plugin)
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
  */
@@ -123,10 +126,13 @@ const plugin = {
   start,
   state: {
     update
+  },
+  validation: {
+    inProgress
   }
 }
 
-export { xmlEditor as api, plugin, XMLEditor, saveIfDirty, openDocumentAtLine }
+export { xmlEditor as api, plugin, XMLEditor, saveIfDirty, openDocumentAtLine, inProgress }
 export default plugin
 
 /**
@@ -174,6 +180,15 @@ async function install(state) {
   toolbarWidgets.forEach((widget, index) => {
     if (widget instanceof HTMLElement) {
       ui.xmlEditor.toolbar.add(widget, toolbarPriorities[index] || 1)
+    }
+  })
+
+  // Create TEI action buttons and add to toolbar (to the left of upload/download)
+  const teiButtons = createFromTemplate('xmleditor-tei-buttons')
+  const teiButtonsPriorities = [52, 51] // separator, validateBtn
+  teiButtons.forEach((widget, index) => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.toolbar.add(widget, teiButtonsPriorities[index] || 1)
     }
   })
 
@@ -225,6 +240,13 @@ async function install(state) {
   })
   ui.xmlEditor.toolbar.downloadBtn.addEventListener('widget-click', () => {
     if (currentState) services.downloadXml(currentState)
+  })
+
+  // Attach event listener to validate button
+  ui.xmlEditor.toolbar.validateBtn.addEventListener('widget-click', async () => {
+    ui.xmlEditor.toolbar.validateBtn.disabled = true
+    const diagnostics = await validation.validate()
+    notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
   })
 
   // selection => xpath state
@@ -607,3 +629,12 @@ function updateIndentationStatus(indentUnit) {
   indentationStatusWidget.text = displayText
 }
 
+/**
+ * Invoked when a plugin starts a validation to disable the validate button
+ * @param {Promise<any>} validationPromise
+ */
+async function inProgress(validationPromise) {
+  ui.xmlEditor.toolbar.validateBtn.disabled = true
+  await validationPromise
+  ui.xmlEditor.toolbar.validateBtn.disabled = false
+}

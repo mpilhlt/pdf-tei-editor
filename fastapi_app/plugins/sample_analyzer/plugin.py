@@ -2,7 +2,8 @@
 Sample analyzer plugin for testing the plugin system.
 
 This plugin demonstrates the basic plugin structure and provides
-a simple text analysis endpoint.
+a simple text analysis endpoint. Also registers the MockExtractor
+for testing extraction functionality.
 """
 
 import logging
@@ -10,6 +11,8 @@ import os
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.extraction import ExtractorRegistry
+from .extractor import MockExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +62,21 @@ class SampleAnalyzerPlugin(Plugin):
         return app_mode in ("testing")
 
     async def initialize(self, context: PluginContext) -> None:
-        """Initialize plugin (optional lifecycle hook)."""
+        """Initialize plugin and register MockExtractor in testing mode."""
+        # Register MockExtractor for testing
+        if MockExtractor.is_available():
+            registry = ExtractorRegistry.get_instance()
+            registry.register(MockExtractor)
+            logger.info("MockExtractor registered for testing")
         logger.info("Sample analyzer plugin initialized")
 
     async def cleanup(self) -> None:
-        """Cleanup plugin (optional lifecycle hook)."""
+        """Cleanup plugin and unregister MockExtractor."""
+        # Unregister MockExtractor
+        if MockExtractor.is_available():
+            registry = ExtractorRegistry.get_instance()
+            registry.unregister("mock-extractor")
+            logger.info("MockExtractor unregistered")
         logger.info("Sample analyzer plugin cleaned up")
 
     async def execute(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:

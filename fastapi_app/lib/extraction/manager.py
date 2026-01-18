@@ -1,22 +1,22 @@
 """
 Extractor discovery and management for FastAPI.
 
-This module wraps the existing server.extractors.discovery module which is already
-framework-agnostic and can be shared between Flask and FastAPI implementations.
-
-For FastAPI migration - Phase 5.
+This module wraps the extraction registry which is populated by plugins
+during initialization.
 """
 
+import os
 from typing import List, Dict, Any
-from fastapi_app.extractors.discovery import (
+
+from .registry import (
     list_extractors as _list_extractors,
     create_extractor as _create_extractor,
-    get_extractor as _get_extractor
+    get_extractor as _get_extractor,
 )
-from fastapi_app.extractors import BaseExtractor
+from .base import BaseExtractor
 
 # Re-export types
-__all__ = ['list_extractors', 'create_extractor', 'get_extractor', 'BaseExtractor']
+__all__ = ['list_extractors', 'create_extractor', 'get_extractor', 'BaseExtractor', 'should_use_mock_extractor']
 
 
 def list_extractors(
@@ -96,8 +96,6 @@ def should_use_mock_extractor(extractor_id: str, error_message: str) -> bool:
     Returns:
         True if we should use mock extractor, False otherwise
     """
-    import os
-
     # Use mock extractor when external dependencies are missing
     mock_conditions = [
         "GROBID_SERVER_URL" in error_message,

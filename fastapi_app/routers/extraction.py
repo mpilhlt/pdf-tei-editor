@@ -20,7 +20,7 @@ from ..lib.models_extraction import (
     ExtractRequest,
     ExtractResponse
 )
-from ..lib.extractor_manager import (
+from ..lib.extraction import (
     list_extractors,
     create_extractor,
     should_use_mock_extractor
@@ -308,8 +308,8 @@ def _save_pdf_extraction_result(
             doc_collections=doc_collections,
             doc_metadata={},  # TEI files don't store doc metadata
             variant=variant,
-            version=None,  # Gold files have no version number
-            is_gold_standard=True,  # First extraction is gold standard
+            version=1,  # Extractions are versioned artifacts
+            is_gold_standard=False,  # Extractions are not gold standard
             label=label,
             file_metadata={'extractor': options.get('extractor', 'unknown')}
         )
@@ -398,8 +398,8 @@ def _save_xml_extraction_result(
         doc_collections=[collection],
         doc_metadata={},
         variant=file_variant,
-        version=None,
-        is_gold_standard=True,
+        version=1,  # Extractions are versioned artifacts
+        is_gold_standard=False,  # Extractions are not gold standard
         label=default_label,
         file_metadata={'extractor': extractor_id}
     )
