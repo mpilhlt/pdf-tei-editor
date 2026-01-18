@@ -10,7 +10,6 @@
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlButton, SlButtonGroup, SlDropdown, UIPart } from '../ui.js'
  * @import { documentActionsPart } from './document-actions.js'
- * @import { teiServicesPart } from './services.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  */
@@ -48,7 +47,6 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)
  * @property {SlSelect} diff - The selectbox for the xml-diff document (added by file-selection plugin)
  * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by document-actions plugin)
- * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {UIPart<SlButtonGroup, backendPluginsButtonPart>} backendPluginsGroup - Backend plugins dropdown (added by backend-plugins plugin)
  * @property {UIPart<import('../ui.js').SlDropdown, toolbarMenuPart>} toolbarMenu - Generic toolbar menu dropdown (added by toolbar plugin)
