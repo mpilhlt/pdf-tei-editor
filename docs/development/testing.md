@@ -336,6 +336,34 @@ await page.evaluate(() => {
 });
 ```
 
+### Using the API Client in Browser Context
+
+**CRITICAL:** Code running in browser context (inside `page.evaluate()`) should **never** use manual `fetch()` calls to the API backend. Instead, always use the `client` object exposed as a global:
+
+```javascript
+/**
+ * @import { api as Client } from '../../../app/src/plugins/client.js'
+ */
+
+// Inside page.evaluate():
+const result = await page.evaluate(async () => {
+  /** @type {Client} */
+  const client = /** @type {any} */(window).client;
+
+  // Use the typed API client
+  return await client.apiClient.sseTestProgress({
+    steps: 3,
+    delay_ms: 500,
+    label_prefix: 'E2E Test step'
+  });
+});
+```
+
+**Why:**
+- The `client.apiClient` provides typed methods for all API endpoints
+- Handles authentication headers automatically
+- See `app/src/modules/api-client-v1.js` for all available API methods (auto-generated from OpenAPI schema)
+
 ### Test Logging System
 
 Use `testLog()` for state verification instead of DOM queries:

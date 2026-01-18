@@ -819,6 +819,31 @@ test('should do something', async ({ page }) => {
 });
 ```
 
+### Using API Client in Browser Context (E2E Tests)
+
+**CRITICAL:** Never use manual `fetch()` calls to the API backend in `page.evaluate()`. Always use the `client` object:
+
+```javascript
+/**
+ * @import { api as Client } from '../../../app/src/plugins/client.js'
+ */
+
+const result = await page.evaluate(async () => {
+  /** @type {Client} */
+  const client = /** @type {any} */(window).client;
+
+  // Use typed API methods
+  return await client.apiClient.sseTestProgress({
+    steps: 3,
+    delay_ms: 500,
+    label_prefix: 'Test step'
+  });
+});
+```
+
+- Check `app/src/modules/api-client-v1.js` for all available API methods (auto-generated from OpenAPI schema)
+- See [../development/testing.md](../development/testing.md#using-the-api-client-in-browser-context) for full documentation
+
 ## Key Principles
 
 1. **Use `@testCovers` annotations** - Enables smart test selection

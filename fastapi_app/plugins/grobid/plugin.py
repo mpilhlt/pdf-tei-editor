@@ -101,11 +101,11 @@ class GrobidPlugin(Plugin):
             if not doc_id:
                 return
 
-            # Check if any other PDFs exist for this doc_id
+            # Check if any other TEI files still exist for this doc_id
             doc_files = file_repo.get_files_by_doc_id(doc_id)
-            other_pdfs = [f for f in doc_files if f.file_type == "pdf" and f.stable_id != stable_id and not f.deleted]
+            other_teis = [f for f in doc_files if f.file_type == "tei" and f.stable_id != stable_id and not f.deleted]
 
-            if other_pdfs:
+            if other_teis:
                 # Other PDFs exist, don't delete cache
                 return
 
