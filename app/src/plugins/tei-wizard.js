@@ -28,6 +28,7 @@ import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { config } from '../plugins.js';
+import { encodeXmlEntities } from '../modules/tei-utils.js';
 
 
 const plugin = {
@@ -157,6 +158,12 @@ async function runTeiWizard() {
   //@ts-ignore
   let xmlstring = (new XMLSerializer()).serializeToString(teiDoc)
   xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '');
+
+  // Apply entity encoding if configured (respects xml.encode-quotes setting)
+  if (await config.get('xml.encode-entities.client')) {
+    const encodeQuotes = await config.get('xml.encode-quotes', false);
+    xmlstring = encodeXmlEntities(xmlstring, { encodeQuotes });
+  }
 
   // Display the result in the merge view
   xmlEditor.showMergeView(xmlstring);
