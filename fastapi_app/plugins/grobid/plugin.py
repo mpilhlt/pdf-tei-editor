@@ -141,7 +141,8 @@ class GrobidPlugin(Plugin):
             }
 
         # Build download URL with optional parameters
-        download_url = f"/api/plugins/grobid/download?collection={collection}"
+        # no_progress=false enables SSE progress events for UI usage
+        download_url = f"/api/plugins/grobid/download?collection={collection}&no_progress=false"
 
         # Add optional parameters if provided
         if params.get("gold_only"):

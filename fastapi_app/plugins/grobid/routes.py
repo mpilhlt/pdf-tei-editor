@@ -79,6 +79,7 @@ async def download_training_package(
     flavor: str = Query("default", description="GROBID processing flavor"),
     force_refresh: bool = Query(False, description="Force re-download from GROBID"),
     gold_only: bool = Query(False, description="Only include documents/variants with gold files"),
+    no_progress: bool = Query(True, description="Suppress SSE progress events (for programmatic API use)"),
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
     session_manager=Depends(get_session_manager),
@@ -149,17 +150,20 @@ async def download_training_package(
 
         supported_variants = get_supported_variants()
 
-        # Set up progress tracking with cancellation
-        progress = ProgressBar(sse_service, session_id_value)
-        cancel_url = f"/api/plugins/grobid/cancel/{progress.progress_id}"
-        cancellation_token = CancellationToken(progress.progress_id)
+        # Set up progress tracking with cancellation (only if progress is enabled)
+        progress = None
+        cancellation_token = None
+        if not no_progress:
+            progress = ProgressBar(sse_service, session_id_value)
+            cancel_url = f"/api/plugins/grobid/cancel/{progress.progress_id}"
+            cancellation_token = CancellationToken(progress.progress_id)
 
-        progress.show(
-            label=f"Processing {len(pdf_files)} documents...",
-            cancellable=True,
-            cancel_url=cancel_url
-        )
-        await asyncio.sleep(0)  # Yield to allow SSE event delivery
+            progress.show(
+                label=f"Processing {len(pdf_files)} documents...",
+                cancellable=True,
+                cancel_url=cancel_url
+            )
+            await asyncio.sleep(0)  # Yield to allow SSE event delivery
 
         try:
             # Create output ZIP in memory
@@ -170,7 +174,7 @@ async def download_training_package(
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                 for i, pdf_file in enumerate(pdf_files):
                     # Check for cancellation
-                    if cancellation_token.is_cancelled:
+                    if cancellation_token and cancellation_token.is_cancelled:
                         send_notification(
                             sse_service, session_id_value,
                             "Download cancelled", "warning"
@@ -184,9 +188,10 @@ async def download_training_package(
                         documents_skipped += 1
                         continue
 
-                    progress.set_label(f"Document {i+1}/{len(pdf_files)}: {doc_id[:20]}...")
-                    progress.set_value(int((i / len(pdf_files)) * 100))
-                    await asyncio.sleep(0)  # Yield to allow SSE event delivery
+                    if progress:
+                        progress.set_label(f"Document {i+1}/{len(pdf_files)}: {doc_id[:20]}...")
+                        progress.set_value(int((i / len(pdf_files)) * 100))
+                        await asyncio.sleep(0)  # Yield to allow SSE event delivery
 
                     # Get PDF file path
                     pdf_path = file_storage.get_file_path(pdf_file.id, "pdf")
@@ -320,8 +325,10 @@ async def download_training_package(
                             shutil.rmtree(temp_dir, ignore_errors=True)
 
             # Hide progress and clean up
-            progress.hide()
-            cancellation_token.cleanup()
+            if progress:
+                progress.hide()
+            if cancellation_token:
+                cancellation_token.cleanup()
 
             if documents_processed == 0:
                 raise HTTPException(
@@ -335,12 +342,13 @@ async def download_training_package(
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             zip_filename = f"{collection}-training-data-{timestamp}.zip"
 
-            # Send success notification
-            send_notification(
-                sse_service, session_id_value,
-                f"Processed {documents_processed} documents ({documents_skipped} skipped)",
-                "success"
-            )
+            # Send success notification (only if progress is enabled)
+            if not no_progress:
+                send_notification(
+                    sse_service, session_id_value,
+                    f"Processed {documents_processed} documents ({documents_skipped} skipped)",
+                    "success"
+                )
 
             # Return ZIP as streaming response
             return StreamingResponse(
@@ -352,12 +360,16 @@ async def download_training_package(
             )
 
         except HTTPException:
-            progress.hide()
-            cancellation_token.cleanup()
+            if progress:
+                progress.hide()
+            if cancellation_token:
+                cancellation_token.cleanup()
             raise
         except Exception as e:
-            progress.hide()
-            cancellation_token.cleanup()
+            if progress:
+                progress.hide()
+            if cancellation_token:
+                cancellation_token.cleanup()
             raise e
 
     except HTTPException:
