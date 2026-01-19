@@ -37,7 +37,7 @@
  */
 
 import { basicSetup } from 'codemirror';
-import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
+import { EditorState, EditorSelection, Compartment, Transaction } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
@@ -396,9 +396,11 @@ export class XMLEditor extends EventEmitter {
     await this.emit("editorBeforeLoad", xml)
     
     // display xml in editor, this triggers the update handlers
+    // use addToHistory: false to prevent undo from going back before document load (fixes #221)
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
-      selection: EditorSelection.cursor(0)
+      selection: EditorSelection.cursor(0),
+      annotations: Transaction.addToHistory.of(false)
     });
     this.#documentVersion = 0;
     await this.isReadyPromise();
