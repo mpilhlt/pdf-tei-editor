@@ -55,7 +55,7 @@ COPY . .
 
 # Run the build and cleanup in one layer
 RUN uv run python bin/compile-sl-icons.py \
-    && node bin/build.js --steps=templates,pdfjs,bundle \
+    && node bin/build.js --steps=templates,version,pdfjs,bundle \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \
     && npm cache clean --force \
@@ -91,7 +91,6 @@ COPY --from=builder /app/docs /app/docs
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
 COPY --from=builder /app/bin /app/bin
 COPY --from=builder /app/schema /app/schema
-COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 COPY --from=builder /app/run_fastapi.py /app/run_fastapi.py
 
