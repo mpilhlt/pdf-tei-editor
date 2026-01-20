@@ -17,16 +17,26 @@ class PluginContext:
     Plugins should only interact with the application through this context.
     """
 
-    def __init__(self, app: Any = None, user: dict | None = None):
+    def __init__(
+        self,
+        app: Any = None,
+        user: dict | None = None,
+        plugin_id: str | None = None,
+        registry: Any = None,
+    ):
         """
         Initialize plugin context.
 
         Args:
             app: FastAPI application instance
             user: Current user dict with roles, if authenticated
+            plugin_id: ID of the plugin this context belongs to
+            registry: Plugin registry for accessing dependencies
         """
         self._app = app
         self._user = user
+        self._plugin_id = plugin_id
+        self._registry = registry
 
     @property
     def app(self) -> Any:
@@ -37,6 +47,20 @@ class PluginContext:
     def user(self) -> dict | None:
         """Get the current user."""
         return self._user
+
+    def get_dependency(self, dependency_id: str) -> "Plugin | None":
+        """
+        Get a declared dependency plugin instance.
+
+        Args:
+            dependency_id: ID of the dependency plugin to retrieve
+
+        Returns:
+            Plugin instance or None if not a declared dependency
+        """
+        if not self._registry or not self._plugin_id:
+            return None
+        return self._registry.get_dependency(self._plugin_id, dependency_id)
 
 
 class Plugin(ABC):
@@ -62,6 +86,8 @@ class Plugin(ABC):
             - required_roles (list[str]): Roles required to access plugin (empty = all users)
 
         Optional fields:
+            - dependencies (list[str]): Plugin IDs this plugin depends on. Dependencies
+              are loaded before this plugin and can be accessed via context.get_dependency().
             - endpoints (list[dict]): Menu endpoint definitions for multi-endpoint plugins
               Each endpoint definition contains:
                 - name (str): Endpoint method name (must match key in get_endpoints())
