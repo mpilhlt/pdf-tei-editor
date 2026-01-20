@@ -96,6 +96,50 @@ from .plugin import MyPlugin
 plugin = MyPlugin()
 ```
 
+## Plugin Dependencies
+
+Plugins can declare dependencies on other plugins. The plugin system loads dependencies first and provides runtime access to them.
+
+### Declaring Dependencies
+
+Add a `dependencies` field to your plugin metadata:
+
+```python
+@property
+def metadata(self) -> dict[str, Any]:
+    return {
+        "id": "my-plugin",
+        "name": "My Plugin",
+        "description": "Plugin that uses another plugin",
+        "category": "analyzer",
+        "version": "1.0.0",
+        "required_roles": ["user"],
+        "dependencies": ["base-analyzer", "data-exporter"],
+    }
+```
+
+### Accessing Dependencies
+
+Use `context.get_dependency()` in your endpoint methods:
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    # Get dependency plugin instance
+    analyzer = context.get_dependency("base-analyzer")
+    if analyzer:
+        # Call dependency endpoint
+        result = await analyzer.get_endpoints()["analyze"](context, params)
+        return {"analysis": result}
+    return {"error": "Dependency not available"}
+```
+
+### Behavior
+
+- Plugins are loaded in dependency order (dependencies first)
+- Missing dependencies prevent plugin registration
+- Circular dependencies are detected and reported
+- Undeclared dependency access logs a warning and returns None
+
 ## Conditional Availability
 
 Plugins can define runtime availability conditions using the `is_available()` class method. This allows plugins to be conditionally loaded based on:

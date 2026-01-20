@@ -262,8 +262,13 @@ class PluginManager:
 
         endpoint_func = endpoints[endpoint]
 
-        # Create context for this execution
-        context = PluginContext(app=self._app, user=user)
+        # Create context for this execution with plugin_id and registry for dependency access
+        context = PluginContext(
+            app=self._app,
+            user=user,
+            plugin_id=plugin_id,
+            registry=self.registry,
+        )
 
         # Execute endpoint (pass both context and params)
         return await endpoint_func(context, params)
