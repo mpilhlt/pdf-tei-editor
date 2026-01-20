@@ -24,7 +24,7 @@
 import ui from '../ui.js';
 import { xmlEditor, logger, app } from '../app.js';
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
-import enhancements from './tei-wizard/enhancements.js';
+import { getEnhancements } from '../modules/enhancement-registry.js';
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { config } from '../plugins.js';
@@ -58,14 +58,58 @@ let currentState;
 
 
 /**
- * @param {ApplicationState} state 
+ * Load enhancements from the backend plugin system
+ * @returns {Promise<void>}
+ */
+async function loadEnhancements() {
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = '/api/plugins/tei-wizard/enhancements.js';
+    script.onload = () => {
+      logger.debug(`Loaded ${getEnhancements().length} TEI enhancements from backend`);
+      resolve();
+    };
+    script.onerror = (err) => {
+      logger.warn('Failed to load TEI enhancements from backend:', err);
+      resolve(); // Don't fail installation if enhancements can't be loaded
+    };
+    document.head.appendChild(script);
+  });
+}
+
+/**
+ * Populate the enhancement list in the dialog
+ */
+function populateEnhancementList() {
+  /** @type {teiWizardDialogPart & SlDialog} */
+  const dialog = /** @type {any} */(ui.teiWizardDialog);
+
+  // Clear existing items
+  dialog.enhancementList.innerHTML = '';
+
+  const enhancements = getEnhancements();
+  enhancements.forEach(enhancement => {
+    const checkboxHtml = `
+    <sl-tooltip content="${enhancement.description}" hoist placement="right">
+      <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
+    </sl-tooltip>
+    <br />`;
+    dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml);
+  });
+}
+
+/**
+ * @param {ApplicationState} state
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
+  // Load enhancements from backend before setting up UI
+  await loadEnhancements();
+
   // Create UI elements
   teiWizardButton = createSingleFromTemplate('tei-wizard-button');
-  const teiWizardDialog = createSingleFromTemplate('tei-wizard-dialog', document.body);
+  createSingleFromTemplate('tei-wizard-dialog', document.body);
 
   // Add TEI wizard button to XML editor toolbar (priority 51.5, between validateBtn at 51 and spacer at 50)
   ui.xmlEditor.toolbar.add(teiWizardButton, 51.5);
@@ -77,14 +121,7 @@ async function install(state) {
   const dialog = /** @type {any} */(ui.teiWizardDialog);
 
   // Populate enhancement list
-  enhancements.forEach(enhancement => {
-    const checkboxHtml = `
-    <sl-tooltip content="${enhancement.description}" hoist placement="right">
-      <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
-    </sl-tooltip>
-    <br />`;
-    dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml);
-  });
+  populateEnhancementList();
 
   // Select all and none buttons
   dialog.selectAll.addEventListener('click', () => {
@@ -115,6 +152,7 @@ async function getSelectedEnhancements() {
   return new Promise((resolve) => {
     dialog.cancel.addEventListener('click', () => dialog.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
+      const enhancements = getEnhancements();
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
         .map(checkbox => enhancements.find(e => e.name === checkbox.dataset.enhancement));
