@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS files (
     label TEXT,                        -- User-assigned label (can override doc_metadata.title)
     variant TEXT,                      -- Variant identifier (TEI files only, NULL for PDF)
     -- status column added by migration 005
+    -- last_revision column added by migration 006
 
     -- Version management (TEI files only)
     version INTEGER DEFAULT 1,         -- Version number for TEI files (NULL for PDF)
