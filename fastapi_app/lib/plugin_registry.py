@@ -30,10 +30,15 @@ class PluginRegistry:
         Discover plugins from the specified directories.
 
         Each plugin directory should contain a plugin.py file with a Plugin subclass.
+        Uses two-phase registration to handle dependencies:
+        1. Load all plugins
+        2. Register in dependency order
 
         Args:
             plugin_dirs: List of directories to search for plugins
         """
+        pending_plugins: list[Plugin] = []
+
         for plugin_dir in plugin_dirs:
             if not plugin_dir.exists():
                 logger.warning(f"Plugin directory does not exist: {plugin_dir}")
@@ -55,9 +60,12 @@ class PluginRegistry:
                 try:
                     plugin = self._load_plugin(plugin_path, plugin_file)
                     if plugin:
-                        self._register_plugin(plugin)
+                        pending_plugins.append(plugin)
                 except Exception as e:
                     logger.error(f"Failed to load plugin from {plugin_path}: {e}")
+
+        # Second pass: register with dependency resolution
+        self._register_with_dependencies(pending_plugins)
 
     def _load_plugin(self, plugin_path: Path, plugin_file: Path) -> Plugin | None:
         """
@@ -146,6 +154,92 @@ class PluginRegistry:
         self._plugins[plugin_id] = plugin
         self._plugin_metadata[plugin_id] = metadata
         logger.info(f"Registered plugin: {plugin_id} ({metadata['name']})")
+
+    def _register_with_dependencies(self, plugins: list[Plugin]) -> None:
+        """
+        Register plugins in dependency order using topological sort.
+
+        Args:
+            plugins: List of plugin instances to register
+        """
+        # Build plugin map by ID
+        plugin_map = {p.metadata["id"]: p for p in plugins}
+        registered: set[str] = set()
+
+        def register_plugin(plugin_id: str, path: list[str]) -> bool:
+            """
+            Recursively register a plugin and its dependencies.
+
+            Args:
+                plugin_id: Plugin ID to register
+                path: Current dependency path (for cycle detection)
+
+            Returns:
+                True if registration succeeded, False otherwise
+            """
+            if plugin_id in registered:
+                return True
+
+            if plugin_id in path:
+                cycle = " -> ".join(path + [plugin_id])
+                logger.error(f"Circular dependency detected: {cycle}")
+                return False
+
+            if plugin_id not in plugin_map:
+                logger.error(f"Missing dependency: {plugin_id}")
+                return False
+
+            plugin = plugin_map[plugin_id]
+            deps = plugin.metadata.get("dependencies", [])
+
+            # Register dependencies first
+            for dep_id in deps:
+                if not register_plugin(dep_id, path + [plugin_id]):
+                    logger.error(
+                        f"Plugin {plugin_id} not registered due to "
+                        f"failed dependency: {dep_id}"
+                    )
+                    return False
+
+            # Now register this plugin
+            try:
+                self._register_plugin(plugin)
+                registered.add(plugin_id)
+                return True
+            except Exception as e:
+                logger.error(f"Failed to register plugin {plugin_id}: {e}")
+                return False
+
+        # Register all plugins
+        for plugin_id in plugin_map:
+            register_plugin(plugin_id, [])
+
+    def get_dependency(self, plugin_id: str, dependency_id: str) -> Plugin | None:
+        """
+        Get a dependency plugin instance.
+
+        Only returns the dependency if it was declared in the requesting plugin's
+        metadata. Logs a warning if an undeclared dependency is requested.
+
+        Args:
+            plugin_id: ID of the requesting plugin
+            dependency_id: ID of the dependency to retrieve
+
+        Returns:
+            Plugin instance or None if not a declared dependency
+        """
+        plugin = self._plugins.get(plugin_id)
+        if not plugin:
+            return None
+
+        deps = plugin.metadata.get("dependencies", [])
+        if dependency_id not in deps:
+            logger.warning(
+                f"Plugin {plugin_id} requested undeclared dependency {dependency_id}"
+            )
+            return None
+
+        return self._plugins.get(dependency_id)
 
     def get_plugin(self, plugin_id: str) -> Plugin | None:
         """
