@@ -43,6 +43,9 @@ class TestMigration005AddStatusColumn(unittest.TestCase):
     def _create_files_table_without_status(self, conn: sqlite3.Connection):
         """Create files table without status column (pre-migration schema)."""
         conn.execute("""
+            DROP TABLE IF EXISTS files
+        """)
+        conn.execute("""
             CREATE TABLE files (
                 id TEXT PRIMARY KEY,
                 stable_id TEXT UNIQUE NOT NULL,
