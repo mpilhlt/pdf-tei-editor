@@ -154,7 +154,9 @@ class TestMigration005AddStatusColumn(unittest.TestCase):
 
         # Create physical TEI files in storage first to get their hashes
         from fastapi_app.lib.file_storage import FileStorage
-        file_storage = FileStorage(self.files_dir, self.db_path, logger=test_logger)
+        from fastapi_app.lib.database import DatabaseManager
+        db_manager = DatabaseManager(self.db_path, test_logger)
+        file_storage = FileStorage(self.files_dir, db_manager, logger=test_logger)
 
         # Create and save TEI files with different statuses
         tei_draft_content = self._create_test_tei_file('tei_draft', 'draft')
@@ -328,3 +330,7 @@ class TestMigration005AddStatusColumn(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+
