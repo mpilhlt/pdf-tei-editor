@@ -20,7 +20,7 @@ import { getFileDataById } from '../modules/file-data-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
-import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
+import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { encodeFilename, decodeFilename } from '../modules/utils.js'
 
