@@ -262,13 +262,18 @@ export function canViewDocumentWithPermissions(user, permissions) {
     return true
   }
 
-  // Public documents can be viewed by anyone
-  if (permissions.visibility === 'public') {
+  // Reviewers can view everything
+  if (user && userHasReviewerRole(user)) {
     return true
   }
 
-  // Private documents only viewable by owner
-  if (permissions.visibility === 'private') {
+  // Collection-visible documents can be viewed by anyone with collection access
+  if (permissions.visibility === 'collection') {
+    return true
+  }
+
+  // Owner-only documents only viewable by owner
+  if (permissions.visibility === 'owner') {
     if (!user) return false
     return permissions.owner === user.username
   }
@@ -312,13 +317,16 @@ export function canEditFile(user, fileId) {
 
     const { visibility, editability, owner } = fileData.item.metadata.access_control
 
-    // Check visibility permissions
-    if (visibility === 'private' && owner !== user.username) {
-      return false
+    // Check visibility permissions ('collection' or 'owner')
+    if (visibility === 'owner' && owner !== user.username) {
+      if (!userHasReviewerRole(user)) {
+        return false
+      }
     }
 
-    // Check editability permissions
-    if (editability === 'protected' && owner !== user.username) {
+    // Check editability permissions ('collection' or 'owner')
+    if (editability === 'owner' && owner !== user.username) {
+      // In owner-only editability, only owner can edit
       return false
     }
 

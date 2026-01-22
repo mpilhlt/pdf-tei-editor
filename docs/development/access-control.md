@@ -546,6 +546,149 @@ If migrating from a system without collection-based access control:
    UPDATE files SET doc_collections = '["default"]' WHERE doc_collections IS NULL;
    ```
 
+## Document-Level Access Control Modes
+
+In addition to collection-based access control, the system supports three modes for document-level permissions. This is configured application-wide via `access-control.mode` in `config/config.json`.
+
+### Configuration
+
+```json
+{
+  "access-control.mode": "role-based",
+  "access-control.default-visibility": "collection",
+  "access-control.default-editability": "owner"
+}
+```
+
+**Mode values:**
+
+- `role-based` (default) - No document-level permissions, only role restrictions
+- `owner-based` - Documents editable only by their creator
+- `granular` - Database-backed per-document visibility and editability settings
+
+### Mode 1: Role-Based (Default)
+
+In role-based mode, document access is determined solely by user roles and file types:
+
+- **Gold files**: Only reviewers can edit
+- **Version files**: Annotators and reviewers can edit
+- **Deletion**: Only reviewers and document owners can delete
+
+No document-level permission UI is shown. This mode is suitable for teams where role-based restrictions are sufficient.
+
+### Mode 2: Owner-Based
+
+In owner-based mode, documents are editable only by their creator:
+
+- Documents are read-only for everyone except the owner
+- Reviewers can delete any document
+- To edit a non-owned document, users must create their own version
+
+When a non-owner opens a document, they see a notification: "This document is owned by [username]. Create your own version to edit."
+
+### Mode 3: Granular
+
+Granular mode provides per-document visibility and editability settings stored in a SQLite database (`data/db/permissions.db`).
+
+**Permission attributes:**
+
+- `visibility`: `'collection'` (visible to all with collection access) or `'owner'` (visible only to owner and reviewers)
+- `editability`: `'collection'` (editable by all) or `'owner'` (editable only by owner)
+- `owner`: Username of the document creator
+
+**UI:** Owners and reviewers see two toggle switches in the status bar:
+
+- **Visibility switch**: Toggle between "Visible to all" and "Visible to owner"
+- **Editability switch**: Toggle between "Editable by all" and "Editable by owner"
+
+**Default permissions for new documents:**
+
+- `visibility`: value of `access-control.default-visibility` (default: `collection`)
+- `editability`: value of `access-control.default-editability` (default: `owner`)
+
+### Backend Implementation
+
+**Core modules:**
+
+- [access_control.py](../../fastapi_app/lib/access_control.py) - Mode-aware permission checking functions
+- [acl_utils.py](../../fastapi_app/lib/acl_utils.py) - Role checking and high-level permission API
+- [permissions_db.py](../../fastapi_app/lib/permissions_db.py) - SQLite database for granular permissions
+
+**API endpoints (granular mode only):**
+
+- `GET /api/v1/files/access_control_mode` - Returns current mode and defaults
+- `GET /api/v1/files/permissions/{stable_id}` - Get permissions for a document
+- `POST /api/v1/files/set_permissions` - Set permissions for a document
+
+**Permission checking functions:**
+
+```python
+from fastapi_app.lib.access_control import (
+    can_view_document,
+    can_edit_document,
+    can_delete_document,
+    can_modify_permissions,
+    can_promote_demote,
+    check_file_access,  # Backwards-compatible wrapper
+    DocumentAccessFilter  # For filtering file lists
+)
+```
+
+**High-level API (handles mode internally):**
+
+```python
+from fastapi_app.lib.acl_utils import (
+    get_access_control_mode,
+    get_file_permissions,
+    set_default_permissions_for_new_file,
+    delete_permissions_for_file
+)
+```
+
+### Frontend Implementation
+
+The [access-control.js](../../app/src/plugins/access-control.js) plugin:
+
+1. Fetches the access control mode on startup via `filesAccessControlMode()`
+2. Shows/hides UI elements based on mode
+3. In granular mode, displays switches for owners/reviewers to modify permissions
+4. Enforces read-only state when user lacks edit permissions
+
+**ACL utilities in frontend:**
+
+```javascript
+import {
+  canEditDocumentWithPermissions,
+  canViewDocumentWithPermissions,
+  canEditFile,
+  userHasReviewerRole,
+  userHasAnnotatorRole
+} from '../modules/acl-utils.js'
+```
+
+### Database Schema (Granular Mode)
+
+```sql
+CREATE TABLE document_permissions (
+    stable_id TEXT PRIMARY KEY,
+    visibility TEXT NOT NULL DEFAULT 'collection',
+    editability TEXT NOT NULL DEFAULT 'owner',
+    owner TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (visibility IN ('collection', 'owner')),
+    CHECK (editability IN ('collection', 'owner'))
+)
+```
+
+### Reviewer Override Rules
+
+Reviewers have elevated privileges but with intentional limitations:
+
+- **Can always**: View all documents, delete any document, modify permissions
+- **Cannot**: Edit documents with `editability: 'owner'` when not the owner (prevents accidental overwriting)
+- To edit such documents, reviewers must create their own version or change the editability first
+
 ## Troubleshooting
 
 ### User cannot see any documents

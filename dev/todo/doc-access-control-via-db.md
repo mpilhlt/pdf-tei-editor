@@ -1403,12 +1403,14 @@ test('Role-based mode: no permission widgets shown', async () => {
 ### Completed: Backend Implementation
 
 **Configuration:**
+
 - Added access control config keys to `config/config.json`:
   - `access-control.mode` (role-based/owner-based/granular)
   - `access-control.default-visibility` (collection/owner)
   - `access-control.default-editability` (collection/owner)
 
 **Core Access Control Logic (`fastapi_app/lib/access_control.py`):**
+
 - Rewrote with mode-aware functions:
   - `can_view_document()` - view access based on mode
   - `can_edit_document()` - edit access based on mode
@@ -1419,6 +1421,7 @@ test('Role-based mode: no permission widgets shown', async () => {
 - `DocumentAccessFilter` class for list filtering
 
 **ACL Utilities (`fastapi_app/lib/acl_utils.py`):**
+
 - Role checking: `user_has_role`, `user_has_reviewer_role`, `user_has_annotator_role`, `user_is_admin`
 - File type checking: `is_gold_file`, `is_version_file`
 - High-level permission API (hides implementation details):
@@ -1428,6 +1431,7 @@ test('Role-based mode: no permission widgets shown', async () => {
   - `delete_permissions_for_file(stable_id)` - cleanup on delete
 
 **Permissions Database (`fastapi_app/lib/permissions_db.py`):**
+
 - `PermissionsDB` class with connection pooling
 - DELETE journal mode (simple database, infrequent writes)
 - `DocumentPermissions` dataclass
@@ -1436,46 +1440,89 @@ test('Role-based mode: no permission widgets shown', async () => {
 - Registered `PERMISSIONS_MIGRATIONS` in `migrations/versions/__init__.py`
 
 **API Models (`fastapi_app/lib/models_permissions.py`):**
+
 - `DocumentPermissionsModel` - full permission record
 - `SetPermissionsRequest` - request for setting permissions
 - `AccessControlModeResponse` - mode and defaults
 
 **Permissions Router (`fastapi_app/routers/files_permissions.py`):**
+
 - `GET /files/access_control_mode` - current mode and defaults
 - `GET /files/permissions/{stable_id}` - get permissions (granular only)
 - `POST /files/set_permissions` - set permissions (granular only)
 - Singleton pattern for PermissionsDB connection pooling
 
 **Router Updates:**
+
 - `files_save.py` - calls `set_default_permissions_for_new_file()` after file creation
 - `files_delete.py` - calls `delete_permissions_for_file()` after successful delete
 - `main.py` - registered `files_permissions` router
 
-### Remaining Steps
+### Completed: Frontend Implementation
 
-1. **Frontend Updates (`app/src/plugins/access-control.js`)**
-   - Call `GET /files/access_control_mode` on load
-   - Show/hide permission controls based on mode
-   - Add visibility/editability toggle switches for granular mode
-   - Call permission API endpoints when switches change
-   - Update file list filtering based on permissions
+**Frontend Plugin (`app/src/plugins/access-control.js`):**
 
-2. **Regenerate API Client**
-   - Run OpenAPI schema generation
-   - Regenerate `app/src/modules/api-client-v1.js`
+- Rewrote plugin to use mode-aware permission logic
+- Fetches access control mode from `GET /files/access_control_mode` on start
+- Mode-specific behavior:
+  - **Role-based**: Hides all permission widgets, uses role-based file type restrictions
+  - **Owner-based**: Shows notification when non-owner loads document, enforces owner-only editing
+  - **Granular**: Shows visibility/editability switches for owners and reviewers
+- Visibility switch: toggles between "collection" (visible to all) and "owner" (visible only to owner)
+- Editability switch: toggles between "collection" (editable by all) and "owner" (editable only by owner)
+- Calls `POST /files/set_permissions` when switches change
+- Updates read-only context text based on access control reason
 
-3. **Backend Tests**
-   - Unit tests for `access_control.py` (all three modes)
-   - Unit tests for `acl_utils.py` functions
-   - Unit tests for `permissions_db.py`
-   - API tests for `files_permissions.py` endpoints
+**Frontend Utilities (`app/src/modules/acl-utils.js`):**
 
-4. **E2E Tests**
-   - Test mode-specific behavior in file operations
-   - Test permission modification in granular mode
-   - Test deletion rules (owner vs reviewer)
-   - Test mode switching
+- Updated `canEditDocumentWithPermissions()` to use new vocabulary (collection/owner)
+- Updated `canViewDocumentWithPermissions()` to use new vocabulary
+- Updated `canEditFile()` to use new vocabulary
 
-5. **Documentation**
-   - Update `docs/development/access-control.md`
-   - Update `docs/user-manual/access-control.md`
+**API Client:**
+
+- Regenerated `app/src/modules/api-client-v1.js` with new permission endpoints:
+  - `filesAccessControlMode()` - get current mode
+  - `filesPermissions(stable_id)` - get permissions for artifact
+  - `filesSetPermissions(request)` - set permissions for artifact
+
+### Completed: Backend Tests
+
+**API Tests (`tests/api/v1/files_permissions.test.js`):**
+
+- Tests for `GET /files/access_control_mode` endpoint
+- Tests for permissions API returning 400 in role-based mode
+- Tests for getting permissions in granular mode
+- Tests for setting permissions as owner in granular mode
+- Tests for non-owner being rejected when setting permissions
+- Tests for restoring default permissions
+
+### Completed: Documentation
+
+**Developer Documentation (`docs/development/access-control.md`):**
+
+Added new section "Document-Level Access Control Modes" covering:
+
+- Mode overview (role-based, owner-based, granular)
+- Configuration via `config/config.json`
+- Permission semantics (collection vs owner)
+- Database schema for granular mode
+- API endpoints reference
+- Reviewer override rules
+- Mode-specific behavior details
+
+**User Documentation (`docs/user-manual/access-control.md`):**
+
+Complete rewrite covering:
+
+- Access Control Layers (collection-based, role-based, document-level)
+- Role capabilities table (User, Annotator, Reviewer, Admin)
+- Access Control Modes explanations for end users
+- Using Permission Controls (status bar switches in granular mode)
+- Read-Only Indicators and their meanings
+- Creating your own version workflow
+- Document Ownership rules (upload, extraction, new versions, gold files)
+- Ownership and Deletion permissions
+- Tips for Collaborative Editing
+- Troubleshooting section
+- Administrator configuration section
