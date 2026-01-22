@@ -190,6 +190,7 @@ def _update_fileref_in_xml_with_logging(xml_string: str, file_id: str, logger) -
 @router.post("/save", response_model=SaveFileResponse)
 async def save_file(
     request: SaveFileRequest,
+    http_request: Request,
     user: dict = Depends(require_authenticated_user),
     session_id: str = Depends(get_session_id),
     file_repo: FileRepository = Depends(get_file_repository),
@@ -230,11 +231,13 @@ async def save_file(
         # Extract metadata from XML
         file_id, variant = _extract_metadata_from_xml(xml_string, request.file_id, logger_inst)
 
-        # Extract full TEI metadata including label
+        # Extract full TEI metadata including label, status and last_revision
         from ..lib.tei_utils import extract_tei_metadata
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         tei_metadata = extract_tei_metadata(xml_root)
         label = tei_metadata.get('edition_title')  # Extract edition title for label
+        status = tei_metadata.get('status')  # Extract status from last revision
+        last_revision = tei_metadata.get('last_revision')  # Extract timestamp from last revision
 
         # For new saves, file_id becomes the doc_id (PDF and TEI share same doc_id)
         doc_id = file_id
@@ -330,6 +333,29 @@ async def save_file(
             if not acquire_lock(existing_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
+        # Emit document.save event before saving
+            from ..lib.event_bus import get_event_bus
+            # Build base URL from request
+            base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
+            # Get PDF stable_id
+            pdf_file = file_repo.get_pdf_for_document(doc_id)
+            pdf_stable_id = pdf_file.stable_id if pdf_file else ""
+            logger_inst.info(f"DEBUG: Emitting document.save event for {existing_file.stable_id}")
+            await get_event_bus().emit("document.save",
+                file_id=existing_file.stable_id,
+                doc_id=doc_id,
+                pdf_stable_id=pdf_stable_id,
+                xml_content=xml_string,
+                label=label,
+                status=status,
+                collections=doc_collections,
+                is_gold=existing_file.is_gold_standard,
+                version=existing_file.version,
+                variant=existing_file.variant,
+                base_url=base_url
+            )
+            logger_inst.info("DEBUG: Event emitted")
+
         # Save to storage (hash might change if content changed)
             xml_bytes = xml_string.encode('utf-8')
             saved_hash, storage_path = file_storage.save_file(xml_bytes, existing_file.file_type, increment_ref=False)
@@ -347,6 +373,8 @@ async def save_file(
                     FileUpdate(
                         id=saved_hash,  # Update hash if content changed
                         label=label,  # Update label from edition title
+                        status=status,  # Update status from last revision
+                        last_revision=last_revision,  # Update timestamp from last revision
                         file_size=file_size,
                         file_metadata={}  # Could extract more metadata from XML
                     )
@@ -358,6 +386,8 @@ async def save_file(
                     existing_file.id,
                     FileUpdate(
                         label=label,  # Still update label even if content unchanged
+                        status=status,  # Update status from last revision
+                        last_revision=last_revision,  # Update timestamp from last revision
                         file_size=file_size,
                         file_metadata={}
                     )
@@ -412,6 +442,26 @@ async def save_file(
         # Validate collection access before creating new version (may assign "_inbox" if empty)
             doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
 
+        # Emit document.save event before saving
+            from ..lib.event_bus import get_event_bus
+            # Build base URL from request
+            base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
+            # Get PDF stable_id (pdf_file already retrieved above for collections)
+            pdf_stable_id = pdf_file.stable_id if pdf_file else ""
+            await get_event_bus().emit("document.save",
+                file_id=None,  # Will be set after creation
+                doc_id=doc_id,
+                pdf_stable_id=pdf_stable_id,
+                xml_content=xml_string,
+                label=label,
+                status=status,
+                collections=doc_collections,
+                is_gold=False,
+                version=next_version,
+                variant=variant,
+                base_url=base_url
+            )
+
         # Save to storage
             xml_bytes = xml_string.encode('utf-8')
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
@@ -437,6 +487,8 @@ async def save_file(
                 doc_id=doc_id,
                 file_type='tei',
                 label=label,  # Use extracted edition title
+                status=status,  # Status from last revision
+                last_revision=last_revision,  # Timestamp from last revision
                 variant=variant,
                 version=next_version,
                 is_gold_standard=False,
@@ -483,6 +535,26 @@ async def save_file(
         # Validate collection access before creating new gold standard (may assign "_inbox" if empty)
             doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
 
+        # Emit document.save event before saving
+            from ..lib.event_bus import get_event_bus
+            # Build base URL from request
+            base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
+            # Get PDF stable_id (pdf_file already retrieved above for collections)
+            pdf_stable_id = pdf_file.stable_id if pdf_file else ""
+            await get_event_bus().emit("document.save",
+                file_id=None,  # Will be set after creation
+                doc_id=doc_id,
+                pdf_stable_id=pdf_stable_id,
+                xml_content=xml_string,
+                label=label,
+                status=status,
+                collections=doc_collections,
+                is_gold=True,
+                version=None,
+                variant=variant,
+                base_url=base_url
+            )
+
         # Save to storage
             xml_bytes = xml_string.encode('utf-8')
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
@@ -497,6 +569,8 @@ async def save_file(
                 doc_id=doc_id,
                 file_type='tei',
                 label=label,  # Use extracted edition title
+                status=status,  # Status from last revision
+                last_revision=last_revision,  # Timestamp from last revision
                 variant=variant,
                 version=None,  # Gold files have no version
                 is_gold_standard=True,

@@ -715,6 +715,109 @@ Examples:
 
 **Note**: If the specified collection does not exist, it will be created automatically.
 
+### maintenance
+
+Administrative maintenance commands for the PDF-TEI Editor.
+
+```bash
+npm run maintenance -- <command> [options]
+```
+
+**Global Options**:
+
+- `--env <path>`: Path to .env file (default: ./.env)
+- `--user <username>`: Username for authentication (default: from .env API_USER)
+- `--password <password>`: Password for authentication (default: from .env API_PASSWORD)
+- `--base-url <url>`: API base URL (default: from .env API_BASE_URL or http://localhost:8000)
+
+**Environment Variables** (in .env file):
+
+```bash
+API_USER=admin
+API_PASSWORD=admin
+API_BASE_URL=http://localhost:8000
+```
+
+#### maintenance repopulate
+
+Re-extracts fields from TEI documents and updates the database.
+
+```bash
+npm run maintenance -- repopulate [fields...]
+```
+
+**Arguments**:
+
+- `[fields...]`: Optional list of fields to repopulate (default: all fields)
+
+**Available Fields**:
+
+- `status`: Revision status from `revisionDesc/change/@status`
+- `last_revision`: Timestamp from `revisionDesc/change/@when`
+
+**Examples**:
+
+```bash
+# Repopulate all fields
+npm run maintenance -- repopulate
+
+# Repopulate only the status field
+npm run maintenance -- repopulate status
+
+# Repopulate multiple specific fields
+npm run maintenance -- repopulate status last_revision
+
+# With custom credentials
+npm run maintenance -- --user admin --password secret repopulate
+```
+
+**What it does**:
+
+1. Authenticates with the API server (requires admin role)
+2. For each specified field (or all fields):
+   - Iterates through all TEI files in the database
+   - Re-extracts the field value from the TEI XML
+   - Updates the database with the extracted value
+3. Reports statistics for each field (updated, skipped, errors)
+
+**Use cases**:
+
+- Refresh metadata after updating extraction logic
+- Fix inconsistent data after schema changes
+- Bulk update fields after manual TEI edits
+
+**Output example**:
+
+```
+Base URL: http://localhost:8000
+Fields: all
+
+Logging in...
+Login successful
+
+Repopulating fields from TEI documents...
+
+=== Results ===
+
+status:
+  Total files: 150
+  Updated: 145
+  Skipped (no value): 3
+  Errors: 2
+
+last_revision:
+  Total files: 150
+  Updated: 148
+  Skipped (no value): 2
+  Errors: 0
+
+=== Summary ===
+Success: No
+Message: Repopulated 2 field(s): 293 updates, 2 errors
+```
+
+**Note**: This command requires admin privileges. Non-admin users will receive a 403 Forbidden error.
+
 ## Release Commands
 
 ### release:patch / release:minor / release:major

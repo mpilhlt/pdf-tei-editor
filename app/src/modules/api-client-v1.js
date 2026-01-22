@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-18T18:29:18.149Z
+ * Generated from OpenAPI schema at 2026-01-22T12:28:00.095Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -220,6 +220,15 @@
  */
 
 /**
+ * @typedef {Object} FieldResult
+ * @property {string} field
+ * @property {number} updated
+ * @property {number} errors
+ * @property {number} skipped
+ * @property {number} total
+ */
+
+/**
  * @typedef {Object} FileItemModel
  * @property {string} id
  * @property {string} filename
@@ -245,6 +254,8 @@
  * @property {number} file_size
  * @property {string=} label
  * @property {string=} variant
+ * @property {string=} status
+ * @property {string=} last_revision
  * @property {number=} version
  * @property {boolean=} is_gold_standard
  * @property {Array<string>=} doc_collections
@@ -352,6 +363,18 @@
 /**
  * @typedef {Object} ReleaseLockResponse
  * @property {string} action
+ * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RepopulateRequest
+ * @property {Array<string>=} fields
+ */
+
+/**
+ * @typedef {Object} RepopulateResponse
+ * @property {boolean} success
+ * @property {Array<FieldResult>} results
  * @property {string} message
  */
 
@@ -1153,6 +1176,34 @@ export class ApiClientV1 {
    */
   async filesGarbageCollect(requestBody) {
     const endpoint = `/files/garbage_collect`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Re-populate database fields from TEI documents.
+   * Extracts metadata from TEI files and updates the corresponding database fields.
+   * This is useful for maintenance when extraction logic has been updated or when
+   * fields need to be refreshed.
+   * Available fields:
+   * - status: Revision status from revisionDesc/change/@status
+   * - last_revision: Timestamp from revisionDesc/change/@when
+   * Security:
+   * - Admin role required
+   * Args:
+   * body: RepopulateRequest with optional list of fields to repopulate
+   * db: Database manager (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * RepopulateResponse with statistics for each field
+   * Raises:
+   * HTTPException: 403 if user is not admin
+   * HTTPException: 400 if invalid field name provided
+   *
+   * @param {RepopulateRequest} requestBody
+   * @returns {Promise<RepopulateResponse>}
+   */
+  async filesRepopulate(requestBody) {
+    const endpoint = `/files/repopulate`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

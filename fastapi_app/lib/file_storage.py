@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict
 from .hash_utils import generate_file_hash, get_storage_path, get_file_extension
 from .storage_references import StorageReferenceManager
+from .database import DatabaseManager
 
 
 class FileStorage:
@@ -29,7 +30,7 @@ class FileStorage:
     - No orphaned files from content changes
     """
 
-    def __init__(self, data_root: Path, db_manager, logger=None):
+    def __init__(self, data_root: Path, db_manager: DatabaseManager, logger=None):
         """
         Initialize file storage with reference counting.
 
@@ -242,7 +243,7 @@ class FileStorage:
         """
         return self.get_file_path(file_hash, file_type) is not None
 
-    def get_storage_stats(self) -> Dict[str, any]:
+    def get_storage_stats(self) -> Dict[str, any]: # type:ignore
         """
         Get storage statistics.
 
