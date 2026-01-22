@@ -27,6 +27,10 @@ METADATA_MIGRATIONS = [
     Migration006AddLastRevisionColumn,
 ]
 
+# Permissions database migrations (for future schema changes)
+# Base schema is created by initialize_permissions_schema() in permissions_db.py
+PERMISSIONS_MIGRATIONS = []
+
 # All migrations in order (for tools that need the complete list)
 ALL_MIGRATIONS = [
     Migration001LocksFileId,
@@ -37,5 +41,5 @@ ALL_MIGRATIONS = [
     Migration006AddLastRevisionColumn,
 ]
 
-__all__ = ["ALL_MIGRATIONS", "LOCKS_MIGRATIONS", "METADATA_MIGRATIONS"]
+__all__ = ["ALL_MIGRATIONS", "LOCKS_MIGRATIONS", "METADATA_MIGRATIONS", "PERMISSIONS_MIGRATIONS"]
 

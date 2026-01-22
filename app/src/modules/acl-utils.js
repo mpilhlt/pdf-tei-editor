@@ -233,13 +233,17 @@ export function canEditDocumentWithPermissions(user, permissions, fileId) {
     }
   }
 
-  // Check visibility permissions
-  if (permissions.visibility === 'private' && permissions.owner !== user.username) {
-    return false
+  // Check visibility permissions ('collection' or 'owner')
+  if (permissions.visibility === 'owner' && permissions.owner !== user.username) {
+    // Reviewers can still view owner-only documents
+    if (!userHasReviewerRole(user)) {
+      return false
+    }
   }
 
-  // Check editability permissions
-  if (permissions.editability === 'protected' && permissions.owner !== user.username) {
+  // Check editability permissions ('collection' or 'owner')
+  if (permissions.editability === 'owner' && permissions.owner !== user.username) {
+    // In owner-only editability, only owner can edit (reviewers cannot to prevent accidental overwriting)
     return false
   }
 

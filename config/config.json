@@ -64,5 +64,14 @@
     "candidate",
     "published"
   ],
-  "annotation.lifecycle.role.reviewer.type": "array"
+  "annotation.lifecycle.role.reviewer.type": "array",
+  "access-control.mode": "role-based",
+  "access-control.mode.type": "string",
+  "access-control.mode.values": ["role-based", "owner-based", "granular"],
+  "access-control.default-visibility": "collection",
+  "access-control.default-visibility.type": "string",
+  "access-control.default-visibility.values": ["collection", "owner"],
+  "access-control.default-editability": "owner",
+  "access-control.default-editability.type": "string",
+  "access-control.default-editability.values": ["collection", "owner"]
 }
