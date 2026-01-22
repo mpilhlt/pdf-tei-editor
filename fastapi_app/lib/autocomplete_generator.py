@@ -1,10 +1,6 @@
 """
 CodeMirror autocomplete data generation from RelaxNG schemas.
 
-This module wraps the existing relaxng_to_codemirror library which is already
-framework-agnostic and can be shared between Flask and FastAPI implementations.
-
-For FastAPI migration - Phase 5.
 """
 
 from typing import Dict

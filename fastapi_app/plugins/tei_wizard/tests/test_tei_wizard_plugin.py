@@ -95,8 +95,8 @@ class TestTeiWizardPlugin(unittest.TestCase):
         finally:
             file1.unlink(missing_ok=True)
             file2.unlink(missing_ok=True)
-            test_dir1.rmdir(missing_ok=True)
-            test_dir2.rmdir(missing_ok=True)
+            test_dir1.rmdir()
+            test_dir2.rmdir()
 
     def test_get_enhancement_files_returns_copy(self):
         """get_enhancement_files returns a copy, not the original list."""
@@ -136,4 +136,3 @@ class TestTeiWizardPlugin(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-"""
