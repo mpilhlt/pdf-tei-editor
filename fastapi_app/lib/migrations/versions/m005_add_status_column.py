@@ -75,11 +75,11 @@ class Migration005AddStatusColumn(Migration):
 
     def downgrade(self, conn: sqlite3.Connection) -> None:
         """
-        Downgrade not supported - status column provides valuable metadata.
+        Revert migration: remove status column and index.
         """
-        raise NotImplementedError(
-            "Migration 005 cannot be reverted. "
-            "The status column is now part of the schema."
-        )
+        self.logger.info("Removing status column from files table")
+        conn.execute("DROP INDEX IF EXISTS idx_status")
+        conn.execute("ALTER TABLE files DROP COLUMN status")
+        self.logger.info("Status column removed successfully")
 
 

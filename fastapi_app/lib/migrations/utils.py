@@ -72,24 +72,22 @@ def update_file_column(conn: sqlite3.Connection, file_id: str, column_name: str,
     conn.execute(query, (value, file_id))
 
 
-def populate_column_from_tei_files(
+def add_column_with_index(
     conn: sqlite3.Connection,
     column_name: str,
     column_type: str,
     index_name: str,
-    extract_function: Callable[[bytes], Optional[str]],
     logger: Any,
     column_description: str = "column"
 ) -> None:
     """
-    Generic function to add a column and populate it from TEI files.
-    
+    Add a column and index to the files table.
+
     Args:
         conn: SQLite database connection
         column_name: Name of the column to add
         column_type: SQL type for the column (e.g., 'TEXT', 'INTEGER')
         index_name: Name of the index to create
-        extract_function: Function that extracts value from TEI XML bytes
         logger: Logger instance
         column_description: Human-readable description of the column
     """
@@ -110,15 +108,37 @@ def populate_column_from_tei_files(
 
     logger.info(f"{column_description.capitalize()} column and index created successfully")
 
-    # Now populate from existing TEI files
+
+def repopulate_column_from_tei_files(
+    conn: sqlite3.Connection,
+    files_dir: Path,
+    column_name: str,
+    extract_function: Callable[[bytes], Optional[str]],
+    logger: Any,
+    column_description: str = "column"
+) -> dict:
+    """
+    Repopulate an existing column from TEI files.
+
+    This function can be used both during migrations and for maintenance
+    re-population of fields from TEI documents.
+
+    Args:
+        conn: SQLite database connection
+        files_dir: Path to the files storage directory
+        column_name: Name of the column to populate
+        extract_function: Function that extracts value from TEI XML bytes
+        logger: Logger instance
+        column_description: Human-readable description of the column
+
+    Returns:
+        dict with statistics: {updated: int, errors: int, skipped: int, total: int}
+    """
     logger.info(f"Populating {column_description} from existing TEI files")
 
-    # Get file storage path
-    db_dir, files_dir = get_file_storage_paths(conn)
-    
     if not files_dir or not files_dir.exists():
         logger.debug(f"Files directory not found: {files_dir}, skipping data population")
-        return
+        return {"updated": 0, "errors": 0, "skipped": 0, "total": 0}
 
     # Get all TEI files
     tei_files = get_tei_files(conn)
@@ -157,8 +177,68 @@ def populate_column_from_tei_files(
                 f"Failed to extract {column_description} from file {file_id_short}: {e}"
             )
 
+    skipped_count = total_files - updated_count - error_count
     logger.info(
-        f"Migration complete: updated {updated_count} file(s), "
+        f"Population complete: updated {updated_count} file(s), "
         f"{error_count} skipped due to issues, "
-        f"{total_files - updated_count - error_count} file(s) without {column_description}"
+        f"{skipped_count} file(s) without {column_description}"
+    )
+
+    return {
+        "updated": updated_count,
+        "errors": error_count,
+        "skipped": skipped_count,
+        "total": total_files
+    }
+
+
+def populate_column_from_tei_files(
+    conn: sqlite3.Connection,
+    column_name: str,
+    column_type: str,
+    index_name: str,
+    extract_function: Callable[[bytes], Optional[str]],
+    logger: Any,
+    column_description: str = "column"
+) -> None:
+    """
+    Generic function to add a column and populate it from TEI files.
+
+    This is a convenience function for migrations that combines
+    add_column_with_index and repopulate_column_from_tei_files.
+
+    Args:
+        conn: SQLite database connection
+        column_name: Name of the column to add
+        column_type: SQL type for the column (e.g., 'TEXT', 'INTEGER')
+        index_name: Name of the index to create
+        extract_function: Function that extracts value from TEI XML bytes
+        logger: Logger instance
+        column_description: Human-readable description of the column
+    """
+    # Add column and index
+    add_column_with_index(
+        conn=conn,
+        column_name=column_name,
+        column_type=column_type,
+        index_name=index_name,
+        logger=logger,
+        column_description=column_description
+    )
+
+    # Get file storage path
+    db_dir, files_dir = get_file_storage_paths(conn)
+
+    if not files_dir or not files_dir.exists():
+        logger.debug(f"Files directory not found: {files_dir}, skipping data population")
+        return
+
+    # Populate from TEI files
+    repopulate_column_from_tei_files(
+        conn=conn,
+        files_dir=files_dir,
+        column_name=column_name,
+        extract_function=extract_function,
+        logger=logger,
+        column_description=column_description
     )

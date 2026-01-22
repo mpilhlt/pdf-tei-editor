@@ -18,6 +18,7 @@
         "import": "uv run python bin/import_files.py",
         "export": "uv run python bin/export_files.py",
         "batch-extract": "node bin/batch-extract.js",
+        "maintenance": "node bin/maintenance.js",
         "start": "uv run python bin/start-prod",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",

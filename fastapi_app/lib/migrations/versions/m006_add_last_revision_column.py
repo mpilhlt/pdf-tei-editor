@@ -75,10 +75,10 @@ class Migration006AddLastRevisionColumn(Migration):
 
     def downgrade(self, conn: sqlite3.Connection) -> None:
         """
-        Downgrade not supported - last_revision column provides valuable metadata.
+        Revert migration: remove last_revision column and index.
         """
-        raise NotImplementedError(
-            "Migration 006 cannot be reverted. "
-            "The last_revision column is now part of the schema."
-        )
+        self.logger.info("Removing last_revision column from files table")
+        conn.execute("DROP INDEX IF EXISTS idx_last_revision")
+        conn.execute("ALTER TABLE files DROP COLUMN last_revision")
+        self.logger.info("Last_revision column removed successfully")
 
