@@ -42,9 +42,8 @@ class TestMigration005AddStatusColumn(unittest.TestCase):
 
     def _create_files_table_without_status(self, conn: sqlite3.Connection):
         """Create files table without status column (pre-migration schema)."""
-        conn.execute("""
-            DROP TABLE IF EXISTS files
-        """)
+        conn.execute("DROP TABLE IF EXISTS files")
+        conn.commit()
         conn.execute("""
             CREATE TABLE files (
                 id TEXT PRIMARY KEY,
@@ -226,7 +225,9 @@ class TestMigration005AddStatusColumn(unittest.TestCase):
 </TEI>"""
 
         from fastapi_app.lib.file_storage import FileStorage
-        file_storage = FileStorage(self.files_dir, self.db_path, logger=self.logger)
+        from fastapi_app.lib.database import DatabaseManager
+        db_manager = DatabaseManager(self.db_path, self.logger)
+        file_storage = FileStorage(self.files_dir, db_manager, logger=self.logger)
         no_status_hash, _ = file_storage.save_file(tei_no_status, 'tei', increment_ref=False)
 
         with sqlite3.connect(str(self.db_path)) as conn:
