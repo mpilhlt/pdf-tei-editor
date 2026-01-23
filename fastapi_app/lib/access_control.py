@@ -14,7 +14,8 @@ from .acl_utils import (
     user_has_annotator_role,
     is_gold_file,
     is_version_file,
-    user_is_admin
+    user_is_admin,
+    get_access_control_mode
 )
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,7 @@ def can_view_document(
         user: Current user dict
         permissions_db: PermissionsDB instance (required for granular mode)
     """
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_access_control_mode()
 
     # Reviewers and admins can always view
     if user_has_reviewer_role(user) or user_is_admin(user):
@@ -93,8 +93,7 @@ def can_edit_document(
         user: Current user dict
         permissions_db: PermissionsDB instance (required for granular mode)
     """
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_access_control_mode()
 
     if mode == 'role-based':
         # Reviewers and admins can always edit in role-based mode
@@ -109,13 +108,24 @@ def can_edit_document(
         return True
 
     elif mode == 'owner-based':
-        # Only owner can edit (reviewers cannot edit to prevent accidental overwriting)
+        # Admins can always edit (they have ultimate authority)
+        if user_is_admin(user):
+            return True
+
         owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
-        return owner == user.get('username') if user and owner else False
+        username = user.get('username') if user else None
+
+        # If file has no owner, allow reviewers to manage it
+        if not owner:
+            return user_has_reviewer_role(user)
+
+        # Otherwise only owner can edit
+        return owner == username
 
     elif mode == 'granular':
         if permissions_db is None:
             raise ValueError("permissions_db required for granular mode")
+        config = get_config()
 
         from .permissions_db import get_document_permissions
 
@@ -138,8 +148,9 @@ def can_edit_document(
                 return user_has_reviewer_role(user)
             return True
         elif perms.editability == 'owner':
-            # Only owner can edit (reviewers cannot edit to prevent accidental overwriting)
-            return perms.owner == user.get('username') if user else False
+            # Only owner can edit
+            username = user.get('username') if user else None
+            return perms.owner == username if user else False
 
     return False
 
@@ -169,8 +180,7 @@ def can_delete_document(
     if user_has_reviewer_role(user) or user_is_admin(user):
         return True
 
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_access_control_mode()
 
     if mode in ('role-based', 'owner-based'):
         # Only owner can delete (reviewers already handled above)
@@ -207,8 +217,7 @@ def can_modify_permissions(
     if not user:
         return False
 
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_access_control_mode()
 
     if mode != 'granular':
         return False  # Permission modification only in granular mode
@@ -271,8 +280,7 @@ def check_file_access(file_metadata: Any, user: Optional[Dict], operation: str =
         return True
 
     # Get permissions_db if in granular mode
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_access_control_mode()
 
     permissions_db = None
     if mode == 'granular':
@@ -307,8 +315,7 @@ class DocumentAccessFilter:
         Returns:
             Filtered list containing only accessible documents
         """
-        config = get_config()
-        mode = config.get('access-control.mode', default='role-based')
+        mode = get_access_control_mode()
 
         permissions_db = None
         if mode == 'granular':

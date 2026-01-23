@@ -191,9 +191,27 @@ def get_access_control_mode() -> str:
     """
     Get the current access control mode.
 
+    Environment variable ACCESS_CONTROL_MODE takes precedence over config.
+    This allows testing different modes without changing config files.
+
     Returns:
         'role-based', 'owner-based', or 'granular'
     """
+    import os
+
+    # Check environment variable first (useful for testing)
+    env_mode = os.environ.get('ACCESS_CONTROL_MODE')
+    if env_mode:
+        valid_modes = ('role-based', 'owner-based', 'granular')
+        if env_mode in valid_modes:
+            return env_mode
+        else:
+            logger.warning(
+                f"Invalid ACCESS_CONTROL_MODE '{env_mode}', "
+                f"must be one of {valid_modes}. Falling back to config."
+            )
+
+    # Fall back to config
     from .config_utils import get_config
     config = get_config()
     return config.get('access-control.mode', default='role-based')

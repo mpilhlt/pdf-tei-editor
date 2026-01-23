@@ -31,7 +31,11 @@ from ..lib.dependencies import (
 from ..lib.file_repository import FileRepository
 from ..lib.config_utils import get_config
 from ..lib.logging_utils import get_logger
-from ..lib.acl_utils import user_has_reviewer_role, user_is_admin
+from ..lib.acl_utils import (
+    user_has_reviewer_role,
+    user_is_admin,
+    get_access_control_mode as get_mode
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -45,8 +49,7 @@ def get_permissions_db() -> Optional[PermissionsDB]:
     """
     from ..config import get_settings
 
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_mode()
 
     if mode != 'granular':
         return None
@@ -75,12 +78,12 @@ class _PermissionsDBSingleton:
 
 
 @router.get("/access_control_mode", response_model=AccessControlModeResponse)
-def get_access_control_mode():
+def get_access_control_mode_endpoint():
     """Get current access control mode and defaults."""
     config = get_config()
 
     return AccessControlModeResponse(
-        mode=config.get('access-control.mode', default='role-based'),
+        mode=get_mode(),
         default_visibility=config.get('access-control.default-visibility', default='collection'),
         default_editability=config.get('access-control.default-editability', default='owner')
     )
@@ -94,8 +97,7 @@ def get_permissions_endpoint(
     permissions_db: Optional[PermissionsDB] = Depends(get_permissions_db)
 ):
     """Get permissions for an artifact (granular mode only)."""
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_mode()
 
     if mode != 'granular':
         raise HTTPException(
@@ -108,6 +110,7 @@ def get_permissions_endpoint(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
+    config = get_config()
     default_visibility = config.get('access-control.default-visibility', default='collection')
     default_editability = config.get('access-control.default-editability', default='owner')
 
@@ -130,8 +133,7 @@ def set_permissions_endpoint(
     permissions_db: Optional[PermissionsDB] = Depends(get_permissions_db)
 ):
     """Set permissions for an artifact (owner/reviewer only, granular mode only)."""
-    config = get_config()
-    mode = config.get('access-control.mode', default='role-based')
+    mode = get_mode()
 
     if mode != 'granular':
         raise HTTPException(

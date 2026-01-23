@@ -1015,9 +1015,27 @@ async function loginAsAdmin() {
 // Authentication and API calls
 import {
   login,
+  logout,
   createAdminSession,
   hashPassword,
-  authenticatedApiCall
+  authenticatedApiCall,
+  authenticatedRequest
+} from '../helpers/test-auth.js';
+
+// Role-based login helpers (use standard fixture users)
+import {
+  loginAsAdmin,      // Returns {sessionId, user} for admin user
+  loginAsReviewer,   // Returns {sessionId, user} for reviewer user
+  loginAsAnnotator,  // Returns {sessionId, user} for annotator user
+  loginAsBasicUser   // Returns {sessionId, user} for basic user (no special roles)
+} from '../helpers/test-auth.js';
+
+// Lock management helpers
+import {
+  tryAcquireLock,  // Returns Response object (check .status)
+  acquireLock,     // Throws on failure
+  releaseLock,     // Release a held lock
+  checkLock        // Check lock status: {is_locked, locked_by}
 } from '../helpers/test-auth.js';
 
 // Test logging and state verification
@@ -1026,6 +1044,37 @@ import {
   waitForTestMessage
 } from './helpers/test-logging.js';
 ```
+
+### Lock Management in Tests
+
+When testing file operations that require locks:
+
+```javascript
+import { loginAsReviewer, tryAcquireLock, releaseLock } from '../helpers/test-auth.js';
+
+const session = await loginAsReviewer(BASE_URL);
+
+// Try to acquire lock (returns Response for status checking)
+const response = await tryAcquireLock(session.sessionId, fileId, BASE_URL);
+if (response.status === 200) {
+  // Lock acquired - perform operations
+  // ...
+
+  // Always release lock in cleanup
+  await releaseLock(session.sessionId, fileId, BASE_URL);
+} else if (response.status === 403) {
+  // Access denied (permission issue)
+} else if (response.status === 409) {
+  // Conflict (already locked by another user)
+}
+```
+
+**Role-based login helpers** use standard fixture users:
+
+- `loginAsAdmin()` - User with wildcard (`*`) access
+- `loginAsReviewer()` - User with `reviewer` role (can edit gold files)
+- `loginAsAnnotator()` - User with `annotator` role (can edit version files)
+- `loginAsBasicUser()` - User with no special roles (limited permissions)
 
 ## Troubleshooting
 
