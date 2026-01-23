@@ -149,7 +149,9 @@ def can_edit_document(
                 return user_has_reviewer_role(user)
             return True
         elif perms.editability == 'owner':
-            # Only owner can edit
+            # Only owner can edit (admins can always edit as they have ultimate authority)
+            if user_is_admin(user):
+                return True
             username = user.get('username') if user else None
             return perms.owner == username if user else False
 

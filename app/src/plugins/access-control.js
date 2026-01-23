@@ -10,12 +10,13 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
- * @import { SlSwitch } from '../ui.js'
+ * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { UserData } from './authentication.js'
  * @import { AccessControlModeResponse } from '../modules/api-client-v1.js'
  */
 
-import { app, services, authentication, fileselection } from '../app.js'
+import { app, client, authentication } from '../app.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
@@ -54,9 +55,11 @@ let accessControlConfig = null
 // Status widgets for access control
 /** @type {StatusText | null} */
 let permissionInfoWidget = null
-/** @type {SlSwitch | null} */
+/** @type {HTMLElement | null} */
+let permissionsDropdown = null
+/** @type {StatusSwitch | null} */
 let visibilitySwitch = null
-/** @type {SlSwitch | null} */
+/** @type {StatusSwitch | null} */
 let editabilitySwitch = null
 
 // Current document permissions cache
@@ -125,13 +128,72 @@ async function install(_state) {
   // Create editability switch (for granular mode)
   editabilitySwitch = createEditabilitySwitch()
 
-  // Add widgets to left side of statusbar (lower priority = more to the left)
+  // Create dropdown menu with gear button for permission controls
+  permissionsDropdown = createPermissionsDropdown()
+
+  // Add widgets to left side of statusbar
+  // Lower priority = hidden first when space is limited
   ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
-  ui.xmlEditor.statusbar.add(visibilitySwitch, 'left', 2)
-  ui.xmlEditor.statusbar.add(editabilitySwitch, 'left', 3)
+  ui.xmlEditor.statusbar.add(permissionsDropdown, 'left', 2)
 
   // Initially hide widgets until document is loaded
   hideAccessControlWidgets()
+}
+
+/**
+ * Creates the permissions dropdown with gear button
+ * @returns {HTMLElement}
+ */
+function createPermissionsDropdown() {
+  // Create the dropdown container
+  const dropdown = document.createElement('sl-dropdown')
+  dropdown.setAttribute('placement', 'top-start')
+  dropdown.setAttribute('distance', '4')
+
+  // Create the trigger button with gear icon
+  const triggerButton = document.createElement('sl-icon-button')
+  triggerButton.setAttribute('slot', 'trigger')
+  triggerButton.setAttribute('name', 'gear')
+  triggerButton.setAttribute('label', 'Document Permissions')
+  triggerButton.title = 'Document permission settings'
+  triggerButton.style.fontSize = '1rem'
+
+  // Create the menu
+  const menu = document.createElement('sl-menu')
+  menu.style.minWidth = '200px'
+  menu.style.padding = '8px'
+
+  // Create menu header
+  const header = document.createElement('div')
+  header.style.cssText = 'font-weight: 600; font-size: 0.75rem; color: var(--sl-color-neutral-500); padding: 4px 8px; text-transform: uppercase;'
+  header.textContent = 'Permissions'
+
+  // Create visibility menu item (contains the switch)
+  const visibilityItem = document.createElement('sl-menu-item')
+  visibilityItem.style.cssText = '--submenu-offset: 0;'
+  visibilityItem.appendChild(visibilitySwitch)
+
+  // Create editability menu item (contains the switch)
+  const editabilityItem = document.createElement('sl-menu-item')
+  editabilityItem.style.cssText = '--submenu-offset: 0;'
+  editabilityItem.appendChild(editabilitySwitch)
+
+  // Prevent menu from closing when clicking switches
+  menu.addEventListener('sl-select', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+
+  // Assemble the menu
+  menu.appendChild(header)
+  menu.appendChild(visibilityItem)
+  menu.appendChild(editabilityItem)
+
+  // Assemble the dropdown
+  dropdown.appendChild(triggerButton)
+  dropdown.appendChild(menu)
+
+  return dropdown
 }
 
 /**
@@ -144,7 +206,7 @@ async function start(_state) {
 
   // Fetch access control mode from backend
   try {
-    accessControlConfig = await services.apiClient.filesAccessControlMode()
+    accessControlConfig = await client.apiClient.filesAccessControlMode()
     logger.info(`Access control mode: ${accessControlConfig.mode}`)
   } catch (error) {
     logger.error(`Failed to fetch access control mode: ${error}`)
@@ -179,19 +241,25 @@ async function update(state) {
 
   // Nothing more to do if the xml doc hasn't changed
   if (state.xml === state_xml_cache) {
-    // But update switch disabled state based on editorReadOnly
-    if (visibilitySwitch) visibilitySwitch.disabled = state.editorReadOnly
-    if (editabilitySwitch) editabilitySwitch.disabled = state.editorReadOnly
+    // But update dropdown disabled state based on editorReadOnly
+    if (permissionsDropdown) {
+      const triggerButton = permissionsDropdown.querySelector('sl-icon-button')
+      if (triggerButton) triggerButton.disabled = state.editorReadOnly
+    }
     return
   }
 
   state_xml_cache = state.xml
   logger.debug(`Access control: Updating for document: ${state.xml}`)
 
-  await computeDocumentPermissions()
+  try {
+    await computeDocumentPermissions()
 
-  // Update UI based on permissions and mode
-  updateAccessControlUI()
+    // Update UI based on permissions and mode
+    updateAccessControlUI()
+  } catch (error) {
+    logger.error(`Access control error in update(): ${error}`)
+  }
 
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user)
@@ -218,44 +286,46 @@ async function update(state) {
 
 /**
  * Creates the visibility switch widget
- * @returns {SlSwitch}
+ * @returns {StatusSwitch}
  */
 function createVisibilitySwitch() {
-  const switchEl = /** @type {SlSwitch} */ (document.createElement('sl-switch'))
-  switchEl.setAttribute('name', 'visibility-switch')
-  switchEl.setAttribute('size', 'small')
-  switchEl.checked = true // Default: collection (checked)
-  switchEl.textContent = 'Visible to all'
-  switchEl.title = 'Collection = visible to all users with collection access, Owner = visible only to document owner'
+  const switchEl = PanelUtils.createSwitch({
+    name: 'visibilitySwitch',
+    text: 'Visible',
+    checked: true, // Default: collection (checked)
+    size: 'small'
+  })
+  switchEl.title = 'Checked = visible to all users with collection access, Unchecked = visible only to document owner'
 
-  switchEl.addEventListener('sl-change', handleVisibilityChange)
+  switchEl.addEventListener('widget-change', handleVisibilityChange)
   return switchEl
 }
 
 /**
  * Creates the editability switch widget
- * @returns {SlSwitch}
+ * @returns {StatusSwitch}
  */
 function createEditabilitySwitch() {
-  const switchEl = /** @type {SlSwitch} */ (document.createElement('sl-switch'))
-  switchEl.setAttribute('name', 'editability-switch')
-  switchEl.setAttribute('size', 'small')
-  switchEl.checked = false // Default: owner (unchecked)
-  switchEl.textContent = 'Editable by owner'
-  switchEl.title = 'Collection = editable by all users with collection access, Owner = editable only by document owner'
+  const switchEl = PanelUtils.createSwitch({
+    name: 'editabilitySwitch',
+    text: 'Editable',
+    checked: false, // Default: owner (unchecked)
+    size: 'small'
+  })
+  switchEl.title = 'Checked = editable by all users with collection access, Unchecked = editable only by document owner'
 
-  switchEl.addEventListener('sl-change', handleEditabilityChange)
+  switchEl.addEventListener('widget-change', handleEditabilityChange)
   return switchEl
 }
 
 /**
  * Handles visibility switch change
- * @param {Event} event
+ * @param {CustomEvent} event
  * @returns {Promise<void>}
  */
 async function handleVisibilityChange(event) {
-  const switchEl = /** @type {SlSwitch} */ (event.target)
-  const newVisibility = switchEl.checked ? 'collection' : 'owner'
+  const checked = event.detail.checked
+  const newVisibility = checked ? 'collection' : 'owner'
 
   try {
     await updateDocumentPermissions(newVisibility, currentPermissions.editability)
@@ -264,18 +334,18 @@ async function handleVisibilityChange(event) {
     logger.error(`Failed to update visibility: ${error}`)
     notify(`Failed to update visibility: ${String(error)}`, 'danger', 'exclamation-octagon')
     // Revert switch
-    switchEl.checked = currentPermissions.visibility === 'collection'
+    if (visibilitySwitch) visibilitySwitch.checked = currentPermissions.visibility === 'collection'
   }
 }
 
 /**
  * Handles editability switch change
- * @param {Event} event
+ * @param {CustomEvent} event
  * @returns {Promise<void>}
  */
 async function handleEditabilityChange(event) {
-  const switchEl = /** @type {SlSwitch} */ (event.target)
-  const newEditability = switchEl.checked ? 'collection' : 'owner'
+  const checked = event.detail.checked
+  const newEditability = checked ? 'collection' : 'owner'
 
   try {
     await updateDocumentPermissions(currentPermissions.visibility, newEditability)
@@ -284,7 +354,7 @@ async function handleEditabilityChange(event) {
     logger.error(`Failed to update editability: ${error}`)
     notify(`Failed to update editability: ${String(error)}`, 'danger', 'exclamation-octagon')
     // Revert switch
-    switchEl.checked = currentPermissions.editability === 'collection'
+    if (editabilitySwitch) editabilitySwitch.checked = currentPermissions.editability === 'collection'
   }
 }
 
@@ -294,7 +364,7 @@ async function handleEditabilityChange(event) {
  */
 async function computeDocumentPermissions() {
   const mode = accessControlConfig?.mode || 'role-based'
-  const fileData = fileselection.getCurrentFileData()
+  const fileData = getFileDataById(pluginState?.xml)
   const currentUser = authentication.getUser()
 
   if (mode === 'role-based') {
@@ -327,7 +397,7 @@ async function computeDocumentPermissions() {
     }
 
     try {
-      const perms = await services.apiClient.filesPermissions(pluginState.xml)
+      const perms = await client.apiClient.filesPermissions(pluginState.xml)
       const isOwner = perms.owner === currentUser?.username
       const isReviewer = userHasReviewerRole(currentUser)
       const isAdmin = userIsAdmin(currentUser)
@@ -340,7 +410,7 @@ async function computeDocumentPermissions() {
       }
     } catch (error) {
       // API may return 400 if not in granular mode - use defaults
-      logger.debug(`Failed to fetch permissions: ${error}`)
+      logger.debug(`Failed to fetch permissions (using defaults): ${error}`)
       currentPermissions = {
         visibility: accessControlConfig?.default_visibility || 'collection',
         editability: accessControlConfig?.default_editability || 'owner',
@@ -370,9 +440,9 @@ async function updateDocumentPermissions(visibility, editability) {
     throw new Error('No document loaded')
   }
 
-  const fileData = fileselection.getCurrentFileData()
+  const fileData = getFileDataById(pluginState?.xml)
 
-  const response = await services.apiClient.filesSetPermissions({
+  const response = await client.apiClient.filesSetPermissions({
     stable_id: pluginState.xml,
     visibility,
     editability,
@@ -419,8 +489,7 @@ function updateAccessControlUI() {
  */
 function showPermissionSwitches() {
   if (permissionInfoWidget) permissionInfoWidget.style.display = 'none'
-  if (visibilitySwitch) visibilitySwitch.style.display = ''
-  if (editabilitySwitch) editabilitySwitch.style.display = ''
+  if (permissionsDropdown) permissionsDropdown.style.display = ''
 }
 
 /**
@@ -429,8 +498,7 @@ function showPermissionSwitches() {
  */
 function showPermissionInfo() {
   if (permissionInfoWidget) permissionInfoWidget.style.display = ''
-  if (visibilitySwitch) visibilitySwitch.style.display = 'none'
-  if (editabilitySwitch) editabilitySwitch.style.display = 'none'
+  if (permissionsDropdown) permissionsDropdown.style.display = 'none'
 }
 
 /**
@@ -499,8 +567,7 @@ function showOwnerBasedNotification() {
  */
 function hideAccessControlWidgets() {
   if (permissionInfoWidget) permissionInfoWidget.style.display = 'none'
-  if (visibilitySwitch) visibilitySwitch.style.display = 'none'
-  if (editabilitySwitch) editabilitySwitch.style.display = 'none'
+  if (permissionsDropdown) permissionsDropdown.style.display = 'none'
 }
 
 
