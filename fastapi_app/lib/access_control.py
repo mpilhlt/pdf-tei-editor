@@ -55,6 +55,7 @@ def can_view_document(
     elif mode == 'granular':
         if permissions_db is None:
             raise ValueError("permissions_db required for granular mode")
+        config = get_config()
 
         from .permissions_db import get_document_permissions
 

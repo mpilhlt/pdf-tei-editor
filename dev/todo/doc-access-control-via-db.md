@@ -22,7 +22,7 @@ Access control code exists but **has not been used in production**:
 
 **Application-wide configurable access control** with three modes.
 
-**Ownership tracking** via `created_by` field in file metadata (already exists).
+**Ownership tracking** via `created_by` field in file metadata (added by migration 007).
 
 **Granular mode only** uses dedicated SQLite database at `data/db/permissions.db` for visibility/editability settings.
 
@@ -1526,3 +1526,49 @@ Complete rewrite covering:
 - Tips for Collaborative Editing
 - Troubleshooting section
 - Administrator configuration section
+
+### Completed: File Ownership Tracking (`created_by` Field)
+
+**Database Migration 007 (`fastapi_app/lib/migrations/versions/m007_add_created_by_column.py`):**
+
+- Added `created_by TEXT` column to `files` table
+- Created `idx_created_by` index for efficient owner lookups
+- Existing files have `created_by=NULL` (reviewers can manage them)
+- Migration is idempotent with `check_can_apply()` verification
+- Downgrade support: drops index and column
+
+**Model Updates (`fastapi_app/lib/models.py`):**
+
+- Added `created_by: Optional[str] = None` to `FileMetadata` model
+- Added `created_by: Optional[str] = None` to `FileCreate` model
+
+**Schema Documentation (`fastapi_app/lib/db_schema.py`):**
+
+- Removed `created_by` from base schema (added by migration only)
+- Added comment: `-- Note: created_by column is added by migration 007`
+- Added comment: `# idx_created_by is created by migration 007`
+
+**File Creation Points Updated:**
+
+- `fastapi_app/routers/files_save.py` - Sets `created_by=user.get('username')` when:
+  - Creating new version files
+  - Creating gold standard files
+- `fastapi_app/routers/files_upload.py` - Sets `created_by=user.get('username')` on PDF/TEI upload
+- `fastapi_app/routers/extraction.py` - Sets `created_by=current_user.get('username')` when extracting TEI from PDF
+
+**Migration Registration (`fastapi_app/lib/migrations/versions/__init__.py`):**
+
+- Added `Migration007AddCreatedByColumn` import
+- Added to `METADATA_MIGRATIONS` list
+- Added to `ALL_MIGRATIONS` list
+
+**Migration Tests (`fastapi_app/lib/migrations/tests/test_migrations_005-007.py`):**
+
+- Renamed from `test_migrations_005_006.py`
+- Added tests for migration 007:
+  - `test_migration_007_adds_created_by_column` - verifies column addition
+  - `test_migration_007_creates_index` - verifies index creation
+  - `test_migration_007_existing_files_have_null_created_by` - verifies NULL for existing files
+  - `test_migration_007_is_idempotent` - verifies repeated application
+  - `test_migration_007_skips_if_column_exists` - verifies skip when already applied
+  - `test_migration_007_downgrade` - verifies rollback removes column and index

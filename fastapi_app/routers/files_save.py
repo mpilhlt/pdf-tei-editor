@@ -496,7 +496,8 @@ async def save_file(
                 doc_collections=doc_collections,
                 doc_metadata={},
                 file_metadata={},
-                file_size=file_size
+                file_size=file_size,
+                created_by=user.get('username')  # Track file creator for access control
             ))
 
         # Now acquire lock using stable_id
@@ -581,7 +582,8 @@ async def save_file(
                 doc_collections=doc_collections,
                 doc_metadata={},
                 file_metadata={},
-                file_size=file_size
+                file_size=file_size,
+                created_by=user.get('username')  # Track file creator for access control
             ))
 
         # Now acquire lock using stable_id

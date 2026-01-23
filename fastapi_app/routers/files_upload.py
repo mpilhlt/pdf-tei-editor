@@ -31,7 +31,8 @@ from ..lib.models import FileCreate
 from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
-    get_session_id
+    get_session_id,
+    get_current_user
 )
 from ..lib.logging_utils import get_logger
 
@@ -56,7 +57,8 @@ async def upload_file(
     file: UploadFile = File(...),
     storage: FileStorage = Depends(get_file_storage),
     repo: FileRepository = Depends(get_file_repository),
-    session_id: Optional[str] = Depends(get_session_id)
+    session_id: Optional[str] = Depends(get_session_id),
+    user: dict = Depends(get_current_user)
 ):
     """
     Upload a PDF or XML file.
@@ -180,7 +182,8 @@ async def upload_file(
             "original_filename": file.filename,
             "upload_source": "upload_endpoint",
             "session_id": session_id
-        }
+        },
+        created_by=user.get('username') if user else None  # Track file creator
     )
 
     try:
