@@ -88,9 +88,8 @@ When a document is read-only, you'll see an indicator in the status bar explaini
 If you cannot edit a document due to permissions, you can create your own version:
 
 1. Open the document
-2. Make your desired changes (the editor may allow local changes even in read-only mode)
-3. Use "Save as New Version" instead of regular save
-4. Your new version will be owned by you
+2. Use the "Duplicate current document" to make your own verions
+3. Your new version will be owned by you and you can edit it as you wish
 
 ## Document Ownership
 
@@ -108,7 +107,7 @@ Deletion permissions depend on the access control mode:
 - **Role-based/Owner-based**: Only reviewers and document owners can delete files
 - **Granular mode**: Follows editability settings (if you can edit, you can delete)
 
-Documents without an owner can only be deleted by reviewers.
+Legacy documents without an owner can only be deleted by reviewers and admins.
 
 ## Tips for Collaborative Editing
 
@@ -139,24 +138,6 @@ Documents without an owner can only be deleted by reviewers.
 
 ## For Administrators
 
-To change the access control mode, modify `config/config.json`:
-
-```json
-{
-  "access-control.mode": "role-based"
-}
-```
-
-Valid values: `"role-based"`, `"owner-based"`, `"granular"`
-
-For granular mode, you can also set defaults for new documents:
-
-```json
-{
-  "access-control.mode": "granular",
-  "access-control.default-visibility": "collection",
-  "access-control.default-editability": "owner"
-}
-```
+To change the access control mode, modify the "access-control.mode" config setting.
 
 See the [developer documentation](../development/access-control.md) for technical details.

@@ -177,14 +177,9 @@ export class LocalServerManager extends ServerManager {
       }
     }
 
-    // Remove config.json to prevent stale configuration
-    try {
-      const configPath = join(this.dbDir, 'config.json');
-      await fs.rm(configPath, { force: true });
-      console.log('[INFO] Removed config.json');
-    } catch (err) {
-      // Ignore if doesn't exist
-    }
+    // Note: JSON config files are NOT removed here.
+    // They are copied fresh by loadFixture to runtime/db before wipeDatabase runs.
+    // This ensures config files like users.json are available when the server starts.
 
     // Remove all files from storage (runtime/files)
     // This removes the hash-sharded storage but preserves the directory structure

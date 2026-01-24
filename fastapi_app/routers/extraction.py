@@ -212,7 +212,8 @@ def extract_metadata(
                 tei_xml,
                 extraction_options,
                 repo,
-                storage
+                storage,
+                current_user
             )
             return ExtractResponse(
                 id=file_metadata.doc_id,
@@ -250,7 +251,8 @@ def _save_pdf_extraction_result(
     tei_xml: str,
     options: dict,
     repo: FileRepository,
-    storage: FileStorage
+    storage: FileStorage,
+    current_user: dict = None
 ) -> dict:
     """
     Save PDF extraction result as associated TEI file.
