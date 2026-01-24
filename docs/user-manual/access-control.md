@@ -1,69 +1,143 @@
-# Document-level Access Control and Permissions
+# Document Access Control
 
-> Note: the permission system is not fully working yet and has therefore been disabled for the moment. The following (ai-generated) document outlines its capabilities. 
+The PDF-TEI Editor uses a layered access control system to manage who can view and edit documents.
 
-The PDF-TEI Editor includes an access control system that manages document ownership, permissions, and collaborative editing capabilities.
+## Access Control Layers
 
-## Permission System
+### 1. Collection-Based Access
 
-### Document Status Levels
+Documents belong to collections, and users access documents through their group memberships. You can only see and edit documents in collections your groups have access to.
 
-Documents can have different visibility and editability settings:
+**Example:** If you belong to the "Editors" group which has access to the "Manuscripts" collection, you can see all documents in that collection.
 
-#### Visibility Options
+### 2. Role-Based Restrictions
 
-- **Public**: Visible to all users with system access
-- **Private**: Visible only to document owner and explicitly granted users
+Your user role determines what operations you can perform:
 
-#### Editability Options  
+| Role          | Capabilities                                                                    |
+| ------------- | ------------------------------------------------------------------------------- |
+| **User**      | View documents                                                                  |
+| **Annotator** | View documents, create and edit version files                                   |
+| **Reviewer**  | All annotator capabilities, plus edit gold standard files and promote versions  |
+| **Admin**     | Full access to all documents and settings                                       |
 
-- **Editable**: Users with appropriate permissions can modify the document
-- **Read-only**: Document can be viewed but not modified
-- **Locked**: Temporarily locked during editing by another user
+### 3. Document-Level Permissions
 
-### User Roles
+Depending on how your system is configured, additional document-level permissions may apply.
 
-- **Owner**: Full control over document, including permission management
-- **Editor**: Can modify document content and create new versions
-- **Viewer**: Read-only access to document content
-- **Admin**: System-wide administrative privileges
+## Access Control Modes
+
+Your administrator configures one of three access control modes:
+
+### Role-Based Mode (Default)
+
+In this mode, access is determined by your role and the file type:
+
+- **Gold standard files**: Only reviewers can edit
+- **Version files**: Annotators and reviewers can edit
+- **Viewing**: Everyone with collection access can view all documents
+
+This is the simplest mode and works well for most teams.
+
+### Owner-Based Mode
+
+In this mode, documents can only be edited by their creator (owner):
+
+- You can edit documents you created
+- You can view documents created by others, but they are read-only
+- To modify someone else's document, create your own version
+
+When you open a document owned by someone else, you'll see a notification:
+> "This document is owned by [username]. Create your own version to edit."
+
+### Granular Mode
+
+In this mode, document owners and reviewers can set per-document visibility and editability:
+
+**Visibility options:**
+
+- **Collection** (default): Visible to everyone with collection access
+- **Owner**: Visible only to the owner (and reviewers)
+
+**Editability options:**
+
+- **Collection**: Editable by everyone with collection access
+- **Owner** (default): Editable only by the owner
+
+## Using Permission Controls
+
+### Status Bar Switches (Granular Mode Only)
+
+If your system uses granular mode and you own a document (or are a reviewer), you'll see toggle switches in the editor's status bar:
+
+- **Visibility switch**: Toggle between "Visible to all" and "Visible to owner"
+- **Editability switch**: Toggle between "Editable by all" and "Editable by owner"
+
+Changes take effect immediately when you toggle a switch.
+
+### Read-Only Indicators
+
+When a document is read-only, you'll see an indicator in the status bar explaining why:
+
+- "Read-only (gold file - reviewer role required)" - You need reviewer role to edit gold files
+- "Read-only (version file - annotator role required)" - You need annotator role to edit versions
+- "Read-only (owned by [username])" - The document's editability is set to owner-only
+
+### Creating Your Own Version
+
+If you cannot edit a document due to permissions, you can create your own version:
+
+1. Open the document
+2. Use the "Duplicate current document" to make your own verions
+3. Your new version will be owned by you and you can edit it as you wish
 
 ## Document Ownership
 
-### Ownership Assignment
+### How Ownership Works
 
-- **Initial Creation**: User who uploads or creates a document becomes the owner
-- **Extraction Results**: User who performs extraction owns the resulting document
-- **Version Creation**: New versions inherit ownership from parent document
-- **Transfer Rights**: Owners can transfer ownership to other users
+- **Initial upload**: The user who uploads a PDF becomes its owner
+- **Extraction**: The user who runs extraction owns the resulting TEI file
+- **New versions**: When you create a version, you become its owner
+- **Gold files**: The user who creates or promotes a gold file becomes its owner
 
-Ownership only matters if the document is protected (private or restricted). Public documents can be edited by any logged-in user with edit permissions.
+### Ownership and Deletion
 
-### Owner Privileges
+Deletion permissions depend on the access control mode:
 
-Document owners can:
+- **Role-based/Owner-based**: Only reviewers and document owners can delete files
+- **Granular mode**: Follows editability settings (if you can edit, you can delete)
 
-- Modify document content and metadata
-- Create and manage document versions
-- Set access permissions for other users
-- Transfer ownership
-- Delete documents and versions
-- Move documents between collections
+Legacy documents without an owner can only be deleted by reviewers and admins.
 
-## Permission Management Interface
+## Tips for Collaborative Editing
 
-### Status Bar Indicators
+1. **Use versions**: Create versions to work on documents without affecting the original
+2. **Communicate ownership**: When working in owner-based mode, coordinate with team members about who owns what
+3. **Check permissions first**: If you can't edit, check the status bar for the reason
+4. **Ask reviewers**: If you need to edit a protected document, ask a reviewer to adjust permissions
 
-The XML editor status bar displays current permission information:
+## Troubleshooting
 
-- **Owner Name**: Shows document owner (if different from current user)
-- **Permission Level**: Displays current user's access level
-- **Edit Status**: Indicates if document is editable or read-only
-- **Lock Status**: Shows if document is locked by another user
+### "I can't see any documents"
 
-### Status Dropdown
+- Check that you're logged in
+- Verify you belong to at least one group
+- Ask your administrator to confirm your group has collection access
 
-A status dropdown widget allows owners to modify document settings:
+### "I can see a document but can't edit it"
 
-- Change between public and private access
-- Lock/unlock document for editing
+- Check your role (annotators can edit versions, reviewers can edit gold files)
+- In owner-based mode, check if you're the document owner
+- In granular mode, check if editability is set to "owner"
+
+### "The permission switches aren't showing"
+
+- Permission switches only appear in granular mode
+- You must be the document owner or a reviewer to see them
+- Make sure a document is loaded in the editor
+
+## For Administrators
+
+To change the access control mode, modify the "access-control.mode" config setting.
+
+See the [developer documentation](../development/access-control.md) for technical details.

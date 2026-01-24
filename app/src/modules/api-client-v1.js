@@ -1,12 +1,19 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-18T18:29:18.149Z
+ * Generated from OpenAPI schema at 2026-01-23T20:40:01.285Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
 
 // Type Definitions
+/**
+ * @typedef {Object} AccessControlModeResponse
+ * @property {string} mode
+ * @property {string} default_visibility
+ * @property {string} default_editability
+ */
+
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
@@ -183,6 +190,16 @@
  */
 
 /**
+ * @typedef {Object} DocumentPermissionsModel
+ * @property {string} stable_id
+ * @property {string} visibility
+ * @property {string} editability
+ * @property {string} owner
+ * @property {string} created_at
+ * @property {string} updated_at
+ */
+
+/**
  * @typedef {Object} ExecuteRequest
  * @property {string} endpoint
  * @property {Object<string, any>} params
@@ -220,6 +237,15 @@
  */
 
 /**
+ * @typedef {Object} FieldResult
+ * @property {string} field
+ * @property {number} updated
+ * @property {number} errors
+ * @property {number} skipped
+ * @property {number} total
+ */
+
+/**
  * @typedef {Object} FileItemModel
  * @property {string} id
  * @property {string} filename
@@ -245,6 +271,8 @@
  * @property {number} file_size
  * @property {string=} label
  * @property {string=} variant
+ * @property {string=} status
+ * @property {string=} last_revision
  * @property {number=} version
  * @property {boolean=} is_gold_standard
  * @property {Array<string>=} doc_collections
@@ -256,6 +284,7 @@
  * @property {boolean=} deleted
  * @property {string=} created_at
  * @property {string=} updated_at
+ * @property {string=} created_by
  */
 
 /**
@@ -356,6 +385,18 @@
  */
 
 /**
+ * @typedef {Object} RepopulateRequest
+ * @property {Array<string>=} fields
+ */
+
+/**
+ * @typedef {Object} RepopulateResponse
+ * @property {boolean} success
+ * @property {Array<FieldResult>} results
+ * @property {string} message
+ */
+
+/**
  * @typedef {Object} Role
  * @property {string} id - Unique role identifier
  * @property {string} roleName - Role display name
@@ -379,6 +420,14 @@
 /**
  * @typedef {Object} SaveInstructionsResponse
  * @property {string} result
+ */
+
+/**
+ * @typedef {Object} SetPermissionsRequest
+ * @property {string} stable_id
+ * @property {string} visibility
+ * @property {string} editability
+ * @property {string} owner
  */
 
 /**
@@ -1157,6 +1206,34 @@ export class ApiClientV1 {
   }
 
   /**
+   * Re-populate database fields from TEI documents.
+   * Extracts metadata from TEI files and updates the corresponding database fields.
+   * This is useful for maintenance when extraction logic has been updated or when
+   * fields need to be refreshed.
+   * Available fields:
+   * - status: Revision status from revisionDesc/change/@status
+   * - last_revision: Timestamp from revisionDesc/change/@when
+   * Security:
+   * - Admin role required
+   * Args:
+   * body: RepopulateRequest with optional list of fields to repopulate
+   * db: Database manager (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * RepopulateResponse with statistics for each field
+   * Raises:
+   * HTTPException: 403 if user is not admin
+   * HTTPException: 400 if invalid field name provided
+   *
+   * @param {RepopulateRequest} requestBody
+   * @returns {Promise<RepopulateResponse>}
+   */
+  async filesRepopulate(requestBody) {
+    const endpoint = `/files/repopulate`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * Move files to a different collection.
    * In the multi-collection system, this replaces the document's doc_collections
    * array with the destination collection for both the PDF and all associated TEI files.
@@ -1413,6 +1490,38 @@ export class ApiClientV1 {
   async filesDocId(stable_id, requestBody) {
     const endpoint = `/files/${stable_id}/doc-id`
     return this.callApi(endpoint, 'PATCH', requestBody);
+  }
+
+  /**
+   * Get current access control mode and defaults.
+   *
+   * @returns {Promise<AccessControlModeResponse>}
+   */
+  async filesAccessControlMode() {
+    const endpoint = `/files/access_control_mode`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Get permissions for an artifact (granular mode only).
+   *
+   * @param {string} stable_id
+   * @returns {Promise<DocumentPermissionsModel>}
+   */
+  async filesPermissions(stable_id) {
+    const endpoint = `/files/permissions/${stable_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Set permissions for an artifact (owner/reviewer only, granular mode only).
+   *
+   * @param {SetPermissionsRequest} requestBody
+   * @returns {Promise<DocumentPermissionsModel>}
+   */
+  async filesSetPermissions(requestBody) {
+    const endpoint = `/files/set_permissions`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**

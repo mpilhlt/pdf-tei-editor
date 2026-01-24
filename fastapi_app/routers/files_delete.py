@@ -31,6 +31,7 @@ from ..lib.sse_service import SSEService
 from ..lib.sessions import SessionManager
 from ..lib.sse_utils import broadcast_to_other_sessions
 from ..lib.event_bus import get_event_bus
+from ..lib.acl_utils import delete_permissions_for_file
 
 
 logger = get_logger(__name__)
@@ -96,6 +97,9 @@ async def delete_files(
         try:
             repo.delete_file(file_metadata.id)
             deleted_stable_ids.append(file_metadata.stable_id)
+
+            # Delete permissions for the file (granular mode only)
+            delete_permissions_for_file(file_metadata.stable_id)
 
         except ValueError as e:
             logger.error(f"Failed to delete file {file_id}: {e}")

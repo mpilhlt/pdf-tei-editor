@@ -212,7 +212,8 @@ def extract_metadata(
                 tei_xml,
                 extraction_options,
                 repo,
-                storage
+                storage,
+                current_user
             )
             return ExtractResponse(
                 id=file_metadata.doc_id,
@@ -226,7 +227,8 @@ def extract_metadata(
                 request.extractor,
                 request.options,
                 repo,
-                storage
+                storage,
+                username=current_user.get('username') if current_user else None
             )
             return ExtractResponse(
                 id=None,
@@ -249,7 +251,8 @@ def _save_pdf_extraction_result(
     tei_xml: str,
     options: dict,
     repo: FileRepository,
-    storage: FileStorage
+    storage: FileStorage,
+    current_user: dict = None
 ) -> dict:
     """
     Save PDF extraction result as associated TEI file.
@@ -311,7 +314,8 @@ def _save_pdf_extraction_result(
             version=1,  # Extractions are versioned artifacts
             is_gold_standard=False,  # Extractions are not gold standard
             label=label,
-            file_metadata={'extractor': options.get('extractor', 'unknown')}
+            file_metadata={'extractor': options.get('extractor', 'unknown')},
+            created_by=current_user.get('username') if current_user else None
         )
 
         # Insert into database
@@ -341,7 +345,8 @@ def _save_xml_extraction_result(
     extractor_id: str,
     options: dict,
     repo: FileRepository,
-    storage: FileStorage
+    storage: FileStorage,
+    username: str = None
 ) -> dict:
     """
     Save XML extraction result as standalone file.
@@ -401,7 +406,8 @@ def _save_xml_extraction_result(
         version=1,  # Extractions are versioned artifacts
         is_gold_standard=False,  # Extractions are not gold standard
         label=default_label,
-        file_metadata={'extractor': extractor_id}
+        file_metadata={'extractor': extractor_id},
+        created_by=username
     )
 
     # Insert into database

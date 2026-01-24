@@ -1,25 +1,26 @@
 /**
  * Access Control plugin
- * 
- * Manages document access permissions and provides UI for changing document status.
- * Integrates with xmleditor plugin to enforce read-only state based on permissions.
+ *
+ * Manages document access permissions with three modes:
+ * - role-based: only role restrictions (gold = reviewers only)
+ * - owner-based: documents editable only by owner
+ * - granular: database-backed per-document permissions
  */
 
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
- * @import { UIPart, SlDropdown } from '../ui.js'
- * @import { StatusBar } from '../modules/panels/status-bar.js'
+ * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { UserData } from './authentication.js'
+ * @import { AccessControlModeResponse } from '../modules/api-client-v1.js'
  */
 
-import { app, services, authentication, fileselection } from '../app.js'
-import { FiledataPlugin } from '../plugins.js'
+import { app, client, authentication } from '../app.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
-import { api as xmlEditor } from './xmleditor.js'
-import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
+import { notify } from '../modules/sl-utils.js'
 import {
   userHasReviewerRole,
   userHasAnnotatorRole,
@@ -31,46 +32,43 @@ import {
   userIsAdmin
 } from '../modules/acl-utils.js'
 
-// TEI namespace constant
-const TEI_NS = 'http://www.tei-c.org/ns/1.0'
-
 /**
- * Access control statusbar navigation properties
- * @typedef {object} accessControlStatusbarPart
- * @property {HTMLElement} statusDropdown - The status dropdown widget
- * @property {HTMLElement} permissionInfo - Permission information display
- */
-
-/**
- * Access control navigation properties
- * @typedef {object} accessControlPart
- * @property {UIPart<StatusBar, accessControlStatusbarPart>} statusbar - The access control statusbar widgets
+ * Access control mode
+ * @typedef {'role-based' | 'owner-based' | 'granular'} AccessControlMode
  */
 
 /**
  * Document permissions object
  * @typedef {object} DocumentPermissions
- * @property {string} visibility - Document visibility ('public' or 'private')
- * @property {string} editability - Document editability ('editable' or 'protected')
+ * @property {string} visibility - Document visibility ('collection' or 'owner')
+ * @property {string} editability - Document editability ('collection' or 'owner')
  * @property {string|null} owner - Document owner username (null if no owner)
  * @property {boolean} can_modify - Whether current user can modify permissions
  */
 
+/**
+ * Access control configuration from backend
+ * @type {AccessControlModeResponse | null}
+ */
+let accessControlConfig = null
+
 // Status widgets for access control
-
-/** @type {SlDropdown} */
-let statusDropdownWidget;
-/** @type {StatusText} */
-let permissionInfoWidget;
-
+/** @type {StatusText | null} */
+let permissionInfoWidget = null
+/** @type {HTMLElement | null} */
+let permissionsDropdown = null
+/** @type {StatusSwitch | null} */
+let visibilitySwitch = null
+/** @type {StatusSwitch | null} */
+let editabilitySwitch = null
 
 // Current document permissions cache
 /** @type {DocumentPermissions} */
 let currentPermissions = {
-    visibility: 'public',
-    editability: 'editable',
-    owner: null,
-    can_modify: false
+  visibility: 'collection',
+  editability: 'owner',
+  owner: null,
+  can_modify: false
 }
 
 // Application state reference for internal use
@@ -96,14 +94,14 @@ const plugin = {
  * @property {() => DocumentPermissions} getDocumentPermissions - Gets current document permissions
  * @property {(user: UserData|null) => boolean} canEditDocument - Checks if user can edit document
  * @property {(user: UserData|null) => boolean} canViewDocument - Checks if user can view document
- * @property {(visibility: string, editability: string, owner?: string, description?: string) => Promise<DocumentPermissions>} updateDocumentStatus - Updates document status
+ * @property {() => AccessControlMode} getMode - Gets current access control mode
  * @property {(fileId: string) => boolean} checkCanEditFile - Checks if user can edit file
  */
 const api = {
   getDocumentPermissions: () => currentPermissions,
   canEditDocument,
   canViewDocument,
-  updateDocumentStatus,
+  getMode: () => accessControlConfig?.mode || 'role-based',
   checkCanEditFile
 }
 
@@ -112,41 +110,118 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state
+ * @param {ApplicationState} _state
  * @returns {Promise<void>}
  */
-async function install(state) {
+async function install(_state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  
-  // Create permission info widget
+
+  // Create permission info widget (shown when user cannot modify permissions)
   permissionInfoWidget = PanelUtils.createText({
     text: '',
     variant: 'neutral'
   })
-  
-  // Create status dropdown widget 
-  statusDropdownWidget = createStatusDropdown()
 
-  // Add widgets to left side of statusbar (lower priority = more to the left)
+  // Create visibility switch (for granular mode)
+  visibilitySwitch = createVisibilitySwitch()
+
+  // Create editability switch (for granular mode)
+  editabilitySwitch = createEditabilitySwitch()
+
+  // Create dropdown menu with gear button for permission controls
+  permissionsDropdown = createPermissionsDropdown()
+
+  // Add widgets to left side of statusbar
+  // Lower priority = hidden first when space is limited
   ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
-  ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
-  
+  ui.xmlEditor.statusbar.add(permissionsDropdown, 'left', 2)
+
   // Initially hide widgets until document is loaded
   hideAccessControlWidgets()
 }
 
 /**
+ * Creates the permissions dropdown with gear button
+ * @returns {HTMLElement}
+ */
+function createPermissionsDropdown() {
+  // Create the dropdown container
+  const dropdown = document.createElement('sl-dropdown')
+  dropdown.setAttribute('placement', 'top-start')
+  dropdown.setAttribute('distance', '4')
+
+  // Create the trigger button with gear icon
+  const triggerButton = document.createElement('sl-icon-button')
+  triggerButton.setAttribute('slot', 'trigger')
+  triggerButton.setAttribute('name', 'gear')
+  triggerButton.setAttribute('label', 'Document Permissions')
+  triggerButton.title = 'Document permission settings'
+  triggerButton.style.fontSize = '1rem'
+
+  // Create the menu
+  const menu = document.createElement('sl-menu')
+  menu.style.minWidth = '200px'
+  menu.style.padding = '8px'
+
+  // Create menu header
+  const header = document.createElement('div')
+  header.style.cssText = 'font-weight: 600; font-size: 0.75rem; color: var(--sl-color-neutral-500); padding: 4px 8px; text-transform: uppercase;'
+  header.textContent = 'Permissions'
+
+  // Create visibility menu item (contains the switch)
+  const visibilityItem = document.createElement('sl-menu-item')
+  visibilityItem.style.cssText = '--submenu-offset: 0;'
+  visibilityItem.appendChild(visibilitySwitch)
+
+  // Create editability menu item (contains the switch)
+  const editabilityItem = document.createElement('sl-menu-item')
+  editabilityItem.style.cssText = '--submenu-offset: 0;'
+  editabilityItem.appendChild(editabilitySwitch)
+
+  // Prevent menu from closing when clicking switches
+  menu.addEventListener('sl-select', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+
+  // Assemble the menu
+  menu.appendChild(header)
+  menu.appendChild(visibilityItem)
+  menu.appendChild(editabilityItem)
+
+  // Assemble the dropdown
+  dropdown.appendChild(triggerButton)
+  dropdown.appendChild(menu)
+
+  return dropdown
+}
+
+/**
  * Runs after all plugins are installed
- * @param {ApplicationState} state
+ * @param {ApplicationState} _state
  * @returns {Promise<void>}
  */
-async function start(state) {
+async function start(_state) {
   logger.debug(`Starting plugin "${plugin.name}"`)
+
+  // Fetch access control mode from backend
+  try {
+    accessControlConfig = await client.apiClient.filesAccessControlMode()
+    logger.info(`Access control mode: ${accessControlConfig.mode}`)
+  } catch (error) {
+    logger.error(`Failed to fetch access control mode: ${error}`)
+    // Default to role-based mode on error
+    accessControlConfig = {
+      mode: 'role-based',
+      default_visibility: 'collection',
+      default_editability: 'owner'
+    }
+  }
 }
 
 /** @type {string | null} */
-let state_xml_cache;
-let isUpdatingState = false; // Guard to prevent infinite loops 
+let state_xml_cache = null
+let isUpdatingState = false // Guard to prevent infinite loops
 
 /**
  * Called when application state changes
@@ -156,7 +231,7 @@ let isUpdatingState = false; // Guard to prevent infinite loops
 async function update(state) {
   // Store state reference for internal use
   pluginState = state
-  
+
   // Only show access control widgets when a document is loaded
   if (!state.xml) {
     hideAccessControlWidgets()
@@ -164,385 +239,281 @@ async function update(state) {
     return
   }
 
-  // disable the status dropdown when the editor is read-only
-  statusDropdownWidget.disabled = state.editorReadOnly
-
-  // nothing more to do if the xml doc hasn't changed
+  // Nothing more to do if the xml doc hasn't changed
   if (state.xml === state_xml_cache) {
+    // But update dropdown disabled state based on editorReadOnly
+    if (permissionsDropdown) {
+      const triggerButton = permissionsDropdown.querySelector('sl-icon-button')
+      if (triggerButton) triggerButton.disabled = state.editorReadOnly
+    }
     return
   }
 
   state_xml_cache = state.xml
-  logger.debug(`Access control: Updating access control for document: ${state.xml}`)  
-  await computeDocumentPermissions()
-  
-  // Update UI based on permissions
-  logger.debug("Access control: Update UI")
-  updateAccessControlUI()
-  
+  logger.debug(`Access control: Updating for document: ${state.xml}`)
+
+  try {
+    await computeDocumentPermissions()
+
+    // Update UI based on permissions and mode
+    updateAccessControlUI()
+  } catch (error) {
+    logger.error(`Access control error in update(): ${error}`)
+  }
+
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user)
 
   // Only apply access control restrictions, never relax them
   // If editor is already read-only (e.g., due to file locking), don't override it
   if (shouldBeReadOnly && !state.editorReadOnly && !isUpdatingState) {
-    // Document permissions require read-only - enforce it
-    logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
-    // Note: Defer state update to avoid circular update during reactive state cycle
+    logger.debug(`Setting editor read-only based on access control`)
     isUpdatingState = true
     setTimeout(async () => {
       try {
-        // Only update if the state still needs changing (avoid race conditions)
         if (pluginState && !pluginState.editorReadOnly) {
           await app.updateState({ editorReadOnly: true })
         }
       } finally {
         isUpdatingState = false
       }
-    }, 0);
-  } else if (!shouldBeReadOnly && state.editorReadOnly) {
-    // Document permissions allow editing, but editor is read-only
-    // This might be due to file locking or other reasons - don't override
-    logger.debug(`Editor is read-only despite document being editable (likely due to file lock)`)
+    }, 0)
   }
-  
-  // Update read-only widget context if xmleditor shows read-only status due to access control
+
+  // Update read-only widget context if showing read-only due to access control
   updateReadOnlyContext(state.editorReadOnly, shouldBeReadOnly)
 }
 
 /**
- * Creates the status dropdown widget
- * @returns {SlDropdown} The created dropdown element
+ * Creates the visibility switch widget
+ * @returns {StatusSwitch}
  */
-function createStatusDropdown() {
-  const dropdown = document.createElement('sl-dropdown')
-  dropdown.setAttribute('name', 'access-status-dropdown')
-  
-  const trigger = document.createElement('sl-button')
-  trigger.setAttribute('slot', 'trigger')
-  trigger.setAttribute('size', 'small')
-  trigger.setAttribute('variant', 'default')
-  trigger.setAttribute('caret', 'true')
-  trigger.textContent = 'Public'
-  
-  const menu = document.createElement('sl-menu')
-  
-  // Create menu items for different permission combinations
-  const permissionOptions = [
-    { value: 'public-editable', label: 'Public & Editable', visibility: 'public', editability: 'editable' },
-    { value: 'public-protected', label: 'Public & Protected', visibility: 'public', editability: 'protected' },
-    { value: 'private-editable', label: 'Private & Editable', visibility: 'private', editability: 'editable' },
-    { value: 'private-protected', label: 'Private & Protected', visibility: 'private', editability: 'protected' }
-  ]
-  
-  permissionOptions.forEach(option => {
-    const item = document.createElement('sl-menu-item')
-    item.setAttribute('value', option.value)
-    item.setAttribute('type', 'checkbox')
-    item.textContent = option.label
-    item.dataset.visibility = option.visibility
-    item.dataset.editability = option.editability
-    menu.appendChild(item)
+function createVisibilitySwitch() {
+  const switchEl = PanelUtils.createSwitch({
+    name: 'visibilitySwitch',
+    text: 'Visible',
+    checked: true, // Default: collection (checked)
+    size: 'small'
   })
-  
-  dropdown.appendChild(trigger)
-  dropdown.appendChild(menu)
-  
-  // Handle selection changes
-  dropdown.addEventListener('sl-select', handlePermissionChange)
-  
-  return dropdown
+  switchEl.title = 'Checked = visible to all users with collection access, Unchecked = visible only to document owner'
+
+  switchEl.addEventListener('widget-change', handleVisibilityChange)
+  return switchEl
 }
 
 /**
- * Handles status dropdown selection changes
+ * Creates the editability switch widget
+ * @returns {StatusSwitch}
+ */
+function createEditabilitySwitch() {
+  const switchEl = PanelUtils.createSwitch({
+    name: 'editabilitySwitch',
+    text: 'Editable',
+    checked: false, // Default: owner (unchecked)
+    size: 'small'
+  })
+  switchEl.title = 'Checked = editable by all users with collection access, Unchecked = editable only by document owner'
+
+  switchEl.addEventListener('widget-change', handleEditabilityChange)
+  return switchEl
+}
+
+/**
+ * Handles visibility switch change
  * @param {CustomEvent} event
  * @returns {Promise<void>}
  */
-async function handlePermissionChange(event) {
-  const selectedItem = event.detail.item
-  const newVisibility = selectedItem.dataset.visibility
-  const newEditability = selectedItem.dataset.editability
-  
+async function handleVisibilityChange(event) {
+  const checked = event.detail.checked
+  const newVisibility = checked ? 'collection' : 'owner'
+
   try {
-    // Determine if we need to set an owner
-    let owner = currentPermissions.owner
-    
-    // If making document private or protected, ensure current user becomes owner if no owner exists
-    if ((newVisibility === 'private' || newEditability === 'protected') && !owner) {
-      const currentUser = authentication.getUser()
-      if (currentUser) {
-        owner = currentUser.username
-        logger.debug(`Setting document owner to current user: ${owner}`)
-      }
-    }
-    
-    await updateDocumentStatus(newVisibility, newEditability, owner || undefined)
-    logger.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`)
+    await updateDocumentPermissions(newVisibility, currentPermissions.editability)
+    logger.info(`Visibility updated to: ${newVisibility}`)
   } catch (error) {
-    logger.error(error)
-    notify(`Failed to update document status: ${String(error)}`, 'danger', 'exclamation-octagon');
-    // Revert dropdown to previous state
-    updateStatusDropdownDisplay()
+    logger.error(`Failed to update visibility: ${error}`)
+    notify(`Failed to update visibility: ${String(error)}`, 'danger', 'exclamation-octagon')
+    // Revert switch
+    if (visibilitySwitch) visibilitySwitch.checked = currentPermissions.visibility === 'collection'
   }
 }
 
 /**
- * Parses document permissions from current XML DOM tree
+ * Handles editability switch change
+ * @param {CustomEvent} event
+ * @returns {Promise<void>}
+ */
+async function handleEditabilityChange(event) {
+  const checked = event.detail.checked
+  const newEditability = checked ? 'collection' : 'owner'
+
+  try {
+    await updateDocumentPermissions(currentPermissions.visibility, newEditability)
+    logger.info(`Editability updated to: ${newEditability}`)
+  } catch (error) {
+    logger.error(`Failed to update editability: ${error}`)
+    notify(`Failed to update editability: ${String(error)}`, 'danger', 'exclamation-octagon')
+    // Revert switch
+    if (editabilitySwitch) editabilitySwitch.checked = currentPermissions.editability === 'collection'
+  }
+}
+
+/**
+ * Computes document permissions based on mode
  * @returns {Promise<void>}
  */
 async function computeDocumentPermissions() {
-  try {
-    const xmlTree = xmlEditor.getXmlTree()
-    if (!xmlTree) {
-      // Use defaults if no XML tree
+  const mode = accessControlConfig?.mode || 'role-based'
+  const fileData = getFileDataById(pluginState?.xml)
+  const currentUser = authentication.getUser()
+
+  if (mode === 'role-based') {
+    // Role-based mode: no document-level permissions
+    currentPermissions = {
+      visibility: 'collection',
+      editability: 'collection',
+      owner: fileData?.created_by || null,
+      can_modify: false
+    }
+  } else if (mode === 'owner-based') {
+    // Owner-based mode: documents editable only by owner
+    const owner = fileData?.created_by || null
+    currentPermissions = {
+      visibility: 'collection',
+      editability: 'owner',
+      owner,
+      can_modify: false // No UI for owner-based mode
+    }
+  } else if (mode === 'granular') {
+    // Granular mode: fetch from database
+    if (!pluginState?.xml) {
       currentPermissions = {
-        visibility: 'public',
-        editability: 'editable', 
-        owner: null,
-        can_modify: true // Default to allowing modifications
+        visibility: accessControlConfig?.default_visibility || 'collection',
+        editability: accessControlConfig?.default_editability || 'owner',
+        owner: fileData?.created_by || null,
+        can_modify: false
       }
       return
     }
-    
-    // Parse permissions from XML DOM tree
-    const permissions = parsePermissionsFromXmlTree(xmlTree)
-    
-    // First set the permissions without can_modify
-    currentPermissions = {
-      ...permissions,
-      can_modify: true // temporary
-    }
-    
-    // Now calculate can_modify using the updated permissions
-    const currentUser = authentication.getUser()
-    currentPermissions.can_modify = canEditDocument(currentUser)
-    
-    logger.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) )
-  } catch (error) {
-    logger.error(`Error parsing document permissions: ${String(error)}`)
-    // Use defaults on error
-    currentPermissions = {
-      visibility: 'public', 
-      editability: 'editable',
-      owner: null,
-      can_modify: true
+
+    try {
+      const perms = await client.apiClient.filesPermissions(pluginState.xml)
+      const isOwner = perms.owner === currentUser?.username
+      const isReviewer = userHasReviewerRole(currentUser)
+      const isAdmin = userIsAdmin(currentUser)
+
+      currentPermissions = {
+        visibility: perms.visibility,
+        editability: perms.editability,
+        owner: perms.owner,
+        can_modify: isOwner || isReviewer || isAdmin
+      }
+    } catch (error) {
+      // API may return 400 if not in granular mode - use defaults
+      logger.debug(`Failed to fetch permissions (using defaults): ${error}`)
+      currentPermissions = {
+        visibility: accessControlConfig?.default_visibility || 'collection',
+        editability: accessControlConfig?.default_editability || 'owner',
+        owner: fileData?.created_by || null,
+        can_modify: false
+      }
     }
   }
+
+  logger.debug(`Document permissions: ${JSON.stringify(currentPermissions)}`)
 }
 
 /**
- * Parses permissions from XML DOM tree
- * @param {Document} xmlTree
- * @returns {DocumentPermissions} Permissions object
+ * Updates document permissions via API (granular mode only)
+ * @param {string} visibility - 'collection' or 'owner'
+ * @param {string} editability - 'collection' or 'owner'
+ * @returns {Promise<void>}
  */
-function parsePermissionsFromXmlTree(xmlTree) {
-  try {
-    // Find all change elements using XPath
-    const changes = /** @type {Element[]} */ (xmlEditor.getDomNodesByXpath('//tei:revisionDesc/tei:change'))
-    if (changes.length === 0) {
-      return {
-        visibility: 'public',
-        editability: 'editable',
-        owner: null,
-        can_modify: true
-      }
-    }
-    
-    // Find the last change element that contains permission labels
-    let lastPermissionChange = null
-    for (let i = changes.length - 1; i >= 0; i--) {
-      const change = changes[i]
-      const hasPermissionLabels = change.querySelector('label[type="visibility"], label[type="access"], label[type="owner"]')
-      if (hasPermissionLabels) {
-        lastPermissionChange = change
-        break
-      }
-    }
-    
-    if (!lastPermissionChange) {
-      return {
-        visibility: 'public',
-        editability: 'editable',
-        owner: null,
-        can_modify: true
-      }
-    }
-    
-    // Parse label elements from the last permission change
-    const permissionChange = lastPermissionChange
-    const visibilityLabel = permissionChange.querySelector('label[type="visibility"]')
-    const accessLabel = permissionChange.querySelector('label[type="access"]')
-    const ownerLabel = permissionChange.querySelector('label[type="owner"]')
-    
-    const visibility = visibilityLabel?.textContent?.trim() || 'public'
-    let editability = accessLabel?.textContent?.trim() || 'editable'
-    
-    // Handle legacy "private" access value
-    if (editability === 'private') {
-      editability = 'protected'
-    }
-    
-    // Parse owner from ana attribute (preferred) or fallback to text content
-    let owner = null
-    if (ownerLabel) {
-      const anaValue = ownerLabel.getAttribute('ana')
-      if (anaValue && anaValue.startsWith('#')) {
-        owner = anaValue.substring(1) // Remove # prefix
-      } else {
-        owner = ownerLabel.textContent?.trim() || null
-      }
-    }
-    
-    return {
-      visibility: visibility === 'private' ? 'private' : 'public',
-      editability: editability === 'protected' ? 'protected' : 'editable',
-      owner,
-      can_modify: true
-    }
-  } catch (error) {
-    logger.warn(`Error parsing permissions from XML tree: ${String(error)}`)
-    return {
-      visibility: 'public',
-      editability: 'editable',
-      owner: null,
-      can_modify: true
-    }
-  }
-}
+async function updateDocumentPermissions(visibility, editability) {
+  const mode = accessControlConfig?.mode || 'role-based'
 
-/**
- * Updates document status by modifying XML DOM and updating editor
- * @param {string} visibility - 'public' or 'private'
- * @param {string} editability - 'editable' or 'protected'
- * @param {string} [owner] - Optional new owner
- * @param {string} [description] - Optional change description
- * @returns {Promise<DocumentPermissions>} Updated permissions
- * @throws {Error}
- */
-async function updateDocumentStatus(visibility, editability, owner, description) {
+  if (mode !== 'granular') {
+    throw new Error('Permission modification only available in granular mode')
+  }
 
   if (!pluginState?.xml) {
-    throw new Error('No document loaded in application state')
+    throw new Error('No document loaded')
   }
-  
-  const xmlTree = xmlEditor.getXmlTree()
-  if (!xmlTree) {
-    throw new Error('No XML document loaded')
-  }
-  
-  // Find or create teiHeader
-  let teiHeader = /** @type {Element} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader'))
-  if (!teiHeader) {
-    throw new Error('No teiHeader found in document')
-  }
-  
-  // Find or create revisionDesc
-  let revisionDesc = /** @type {Element|null} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader/tei:revisionDesc'))
-  if (!revisionDesc) {
-    revisionDesc = xmlTree.createElementNS(TEI_NS, 'revisionDesc')
-    teiHeader.appendChild(revisionDesc)
-  }
-  
-  // Create new change element
-  const change = xmlTree.createElementNS(TEI_NS, 'change')
-  const timestamp = new Date().toISOString()
-  change.setAttribute('when', timestamp)
-  
-  // Add who attribute to document who made the change
-  const currentUser = authentication.getUser()
-  if (currentUser) {
-    // Ensure respStmt exists for current user
-    logger.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`)
-    ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username)
-    change.setAttribute('who', `#${currentUser.username}`)
-  }
-  
-  // Add description
-  const desc = xmlTree.createElementNS(TEI_NS, 'desc')
-  desc.textContent = description || 'Access permissions updated'
-  change.appendChild(desc)
-  
-  // Add visibility label
-  const visibilityLabel = xmlTree.createElementNS(TEI_NS, 'label')
-  visibilityLabel.setAttribute('type', 'visibility')
-  visibilityLabel.textContent = visibility
-  change.appendChild(visibilityLabel)
-  
-  // Add access label (editability)
-  const accessLabel = xmlTree.createElementNS(TEI_NS, 'label')
-  accessLabel.setAttribute('type', 'access')
-  accessLabel.textContent = editability === 'protected' ? 'protected' : 'editable'
-  change.appendChild(accessLabel)
-  
-  // Add owner label only if the document needs an owner (private or protected documents)
-  const needsOwner = visibility === 'private' || editability === 'protected'
-  if (needsOwner) {
-    const finalOwner = owner || currentPermissions.owner || currentUser?.username
-    
-    if (finalOwner) {
-      // Ensure respStmt exists for owner
-      const ownerUser = authentication.getUser() // For now, assume current user is the owner
-      if (ownerUser && finalOwner === ownerUser.username) {
-        logger.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`)
-        ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner)
-      }
-      
-      const ownerLabel = xmlTree.createElementNS(TEI_NS, 'label')
-      ownerLabel.setAttribute('type', 'owner')
-      ownerLabel.setAttribute('ana', `#${finalOwner}`)
-      
-      // Set text content to full name if available, otherwise username
-      if (ownerUser && finalOwner === ownerUser.username) {
-        ownerLabel.textContent = ownerUser.fullname || ownerUser.username
-      } else {
-        ownerLabel.textContent = finalOwner || 'Unknown' // fallback to username
-      }
-      
-      change.appendChild(ownerLabel)
-    }
-  }
-  // Note: For public & editable documents, no owner label is added
-  
-  // Add the change element to revisionDesc
-  revisionDesc.appendChild(change)
-  
-  // Pretty-print the entire TEI header for proper formatting
-  prettyPrintNode(teiHeader)
-  
-  // Update the entire TEI header in the editor to reflect formatting changes
-  await xmlEditor.updateEditorFromNode(teiHeader)
-  
-  // Save the document using services API
-  await FiledataPlugin.getInstance().saveXml(pluginState.xml)
-  
-  // Update cached permissions
-  currentPermissions.visibility = visibility
-  currentPermissions.editability = editability
-  if (owner) {
-    currentPermissions.owner = owner
-  }
-  
-  // Update UI
-  updateAccessControlUI()
-  
-  return {
+
+  const fileData = getFileDataById(pluginState?.xml)
+
+  const response = await client.apiClient.filesSetPermissions({
+    stable_id: pluginState.xml,
     visibility,
     editability,
-    owner: currentPermissions.owner,
-    can_modify: true
-  }
+    owner: currentPermissions.owner || fileData?.created_by || ''
+  })
+
+  // Update cached permissions
+  currentPermissions.visibility = response.visibility
+  currentPermissions.editability = response.editability
+  currentPermissions.owner = response.owner
+
+  // Update UI
+  updateAccessControlUI()
 }
 
 /**
- * Updates the access control UI widgets
+ * Updates the access control UI widgets based on mode
  * @returns {void}
  */
 function updateAccessControlUI() {
-  //showAccessControlWidgets() // disabled until actually implemented
-  updatePermissionInfoDisplay()
-  updateStatusDropdownDisplay()
-  updateStatusDropdownVisibility()
+  const mode = accessControlConfig?.mode || 'role-based'
+
+  if (mode === 'granular' && currentPermissions.can_modify) {
+    // Granular mode with permission to modify: show switches
+    showPermissionSwitches()
+    updateSwitchStates()
+  } else if (mode === 'granular' && !currentPermissions.can_modify) {
+    // Granular mode without permission: show info text
+    showPermissionInfo()
+    updatePermissionInfoDisplay()
+  } else if (mode === 'owner-based') {
+    // Owner-based mode: show notification if non-owner
+    hideAccessControlWidgets()
+    showOwnerBasedNotification()
+  } else {
+    // Role-based mode: hide all permission widgets
+    hideAccessControlWidgets()
+  }
+}
+
+/**
+ * Shows the permission switches (granular mode)
+ * @returns {void}
+ */
+function showPermissionSwitches() {
+  if (permissionInfoWidget) permissionInfoWidget.style.display = 'none'
+  if (permissionsDropdown) permissionsDropdown.style.display = ''
+}
+
+/**
+ * Shows permission info text (granular mode, non-modifiable)
+ * @returns {void}
+ */
+function showPermissionInfo() {
+  if (permissionInfoWidget) permissionInfoWidget.style.display = ''
+  if (permissionsDropdown) permissionsDropdown.style.display = 'none'
+}
+
+/**
+ * Updates switch states from current permissions
+ * @returns {void}
+ */
+function updateSwitchStates() {
+  if (visibilitySwitch) {
+    visibilitySwitch.checked = currentPermissions.visibility === 'collection'
+    visibilitySwitch.textContent = currentPermissions.visibility === 'collection' ? 'Visible to all' : 'Visible to owner'
+  }
+  if (editabilitySwitch) {
+    editabilitySwitch.checked = currentPermissions.editability === 'collection'
+    editabilitySwitch.textContent = currentPermissions.editability === 'collection' ? 'Editable by all' : 'Editable by owner'
+  }
 }
 
 /**
@@ -551,91 +522,42 @@ function updateAccessControlUI() {
  */
 function updatePermissionInfoDisplay() {
   if (!permissionInfoWidget) return
-  
+
   const { visibility, editability, owner } = currentPermissions
-  
+
   let infoText = ''
   let variant = 'neutral'
-  
-  if (visibility === 'private') {
-    infoText = owner ? `Private (${owner})` : 'Private'
+
+  if (visibility === 'owner') {
+    infoText = owner ? `Owner-only (${owner})` : 'Owner-only'
     variant = 'warning'
   } else {
-    infoText = 'Public'
+    infoText = 'Collection'
   }
-  
-  if (editability === 'protected') {
-    infoText += ' • Protected'
+
+  if (editability === 'owner') {
+    infoText += ' • Owner edits'
     variant = 'warning'
   }
-  
+
   permissionInfoWidget.text = infoText
   permissionInfoWidget.variant = variant
 }
 
 /**
- * Updates the status dropdown display
+ * Shows notification for owner-based mode when non-owner
  * @returns {void}
  */
-function updateStatusDropdownDisplay() {
-  if (!statusDropdownWidget) return
-  
-  const trigger = statusDropdownWidget.querySelector('sl-button')
-  const { visibility, editability } = currentPermissions
-  
-  // Set button text based on current permissions
-  let buttonText = 'Unknown'
-  if (visibility === 'public' && editability === 'editable') {
-    buttonText = 'Public'
-  } else if (visibility === 'public' && editability === 'protected') {
-    buttonText = 'Public • Protected'  
-  } else if (visibility === 'private' && editability === 'editable') {
-    buttonText = 'Private'
-  } else if (visibility === 'private' && editability === 'protected') {
-    buttonText = 'Private • Protected'
-  }
-  
-  if (trigger) {
-    trigger.textContent = buttonText
-  }
-  
-  
-  // Update selected menu item
-  const currentValue = `${visibility}-${editability}`
-  const menuItems = statusDropdownWidget.querySelectorAll('sl-menu-item')
-  menuItems.forEach(item => {
-    item.checked = item.getAttribute('value') === currentValue
-  })
-}
+function showOwnerBasedNotification() {
+  const currentUser = authentication.getUser()
+  const owner = currentPermissions.owner
 
-/**
- * Shows or hides the status dropdown based on user permissions
- * @returns {void}
- */
-function updateStatusDropdownVisibility() {
-  if (!statusDropdownWidget || !permissionInfoWidget) return
-  
-  if (currentPermissions.can_modify) {
-    // User can modify permissions - show dropdown, hide text info
-    statusDropdownWidget.style.display = ''
-    permissionInfoWidget.style.display = 'none'
-  } else {
-    // User cannot modify permissions - hide dropdown, show text info
-    statusDropdownWidget.style.display = 'none'
-    permissionInfoWidget.style.display = ''
-  }
-}
-
-/**
- * Shows access control widgets
- * @returns {void}
- */
-function showAccessControlWidgets() {
-  if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
-    ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
-  }
-  if (statusDropdownWidget && !statusDropdownWidget.isConnected) {
-    ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
+  if (owner && owner !== currentUser?.username && !userHasReviewerRole(currentUser)) {
+    notify(
+      `This document is owned by ${owner}. Create your own version to edit.`,
+      'warning',
+      'exclamation-triangle'
+    )
   }
 }
 
@@ -644,12 +566,8 @@ function showAccessControlWidgets() {
  * @returns {void}
  */
 function hideAccessControlWidgets() {
-  if (permissionInfoWidget && permissionInfoWidget.isConnected) {
-    ui.xmlEditor.statusbar.removeById(permissionInfoWidget.id)
-  }
-  if (statusDropdownWidget && statusDropdownWidget.isConnected) {
-    ui.xmlEditor.statusbar.removeById(statusDropdownWidget.id)
-  }
+  if (permissionInfoWidget) permissionInfoWidget.style.display = 'none'
+  if (permissionsDropdown) permissionsDropdown.style.display = 'none'
 }
 
 
@@ -659,8 +577,36 @@ function hideAccessControlWidgets() {
  * @returns {boolean}
  */
 function canEditDocument(user) {
+  const mode = accessControlConfig?.mode || 'role-based'
   const fileId = pluginState?.xml || undefined
-  return canEditDocumentWithPermissions(user, currentPermissions, fileId)
+
+  // Admin can always edit
+  if (userIsAdmin(user)) {
+    return true
+  }
+
+  // Check role-based file type restrictions (applies to all modes)
+  if (fileId) {
+    if (isGoldFile(fileId) && !userHasReviewerRole(user)) {
+      return false
+    }
+    if (isVersionFile(fileId) && !userHasAnnotatorRole(user) && !userHasReviewerRole(user)) {
+      return false
+    }
+  }
+
+  if (mode === 'role-based') {
+    // Role-based: file type restrictions already checked above
+    return true
+  } else if (mode === 'owner-based') {
+    // Owner-based: only owner can edit
+    return currentPermissions.owner === user?.username
+  } else if (mode === 'granular') {
+    // Granular: use permission settings
+    return canEditDocumentWithPermissions(user, currentPermissions, fileId)
+  }
+
+  return true
 }
 
 /**
@@ -679,12 +625,10 @@ function canViewDocument(user) {
  * @returns {void}
  */
 function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
-  // Only update if editor is read-only and it's due to access control
   if (!editorReadOnly || !accessControlReadOnly) {
     return
   }
-  
-  // Access the xmleditor's read-only status widget and update with context
+
   updateReadOnlyWidgetText(ui.xmlEditor.statusbar.readOnlyStatus)
 }
 
@@ -695,36 +639,28 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
   if (!readOnlyWidget) {
-    logger.debug('Read-only widget not available, skipping context update')
     return
   }
 
-  const { visibility, editability, owner } = currentPermissions
+  const mode = accessControlConfig?.mode || 'role-based'
+  const { owner } = currentPermissions
   const currentUser = authentication.getUser()
 
   let contextText = 'Read-only'
 
   // Check role-based file type restrictions
-  if (pluginState && pluginState.xml) {
+  if (pluginState?.xml) {
     if (isGoldFile(pluginState.xml) && !userHasReviewerRole(currentUser)) {
       contextText = 'Read-only (gold file - reviewer role required)'
     } else if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
       contextText = 'Read-only (version file - annotator role required)'
+    } else if (mode === 'owner-based' && owner && owner !== currentUser?.username) {
+      contextText = `Read-only (owned by ${owner})`
+    } else if (mode === 'granular' && currentPermissions.editability === 'owner' && owner !== currentUser?.username) {
+      contextText = `Read-only (owned by ${owner})`
     }
   }
-  // Determine the reason for read-only state
-  else if (editability === 'protected' && owner && owner !== currentUser?.username) {
-    // Document is protected and user is not the owner
-    contextText = `Read-only (owned by ${owner})`
-  } else if (visibility === 'private' && owner && owner !== currentUser?.username) {
-    // Document is private and user is not the owner
-    contextText = `Read-only (owned by ${owner})`
-  } else if (owner) {
-    // Default case with owner information
-    contextText = `Read-only (owned by ${owner})`
-  }
 
-  // Update the widget text
   readOnlyWidget.text = contextText
   logger.debug(`Updated read-only context: ${contextText}`)
 }

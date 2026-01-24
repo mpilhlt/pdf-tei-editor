@@ -27,6 +27,8 @@ class FileMetadata(BaseModel):
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
+    last_revision: Optional[str] = None  # Timestamp from last revision change (TEI files only)
     version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
 
@@ -45,6 +47,7 @@ class FileMetadata(BaseModel):
     deleted: bool = False
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    created_by: Optional[str] = None  # Username of user who created this file
 
     @field_validator('file_type')
     @classmethod
@@ -82,11 +85,14 @@ class FileCreate(BaseModel):
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
+    last_revision: Optional[str] = None  # Timestamp from last revision change (TEI files only)
     version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
     doc_collections: list[str] = Field(default_factory=list)
     doc_metadata: dict = Field(default_factory=dict)
     file_metadata: dict = Field(default_factory=dict)
+    created_by: Optional[str] = None  # Username of user who created this file
 
     @field_validator('file_type')
     @classmethod
@@ -110,6 +116,8 @@ class FileUpdate(BaseModel):
     filename: Optional[str] = None
     file_size: Optional[int] = None
     label: Optional[str] = None
+    status: Optional[str] = None  # Status from last revision (TEI files only)
+    last_revision: Optional[str] = None  # Timestamp from last revision change (TEI files only)
     version: Optional[int] = None
     is_gold_standard: Optional[bool] = None
     doc_collections: Optional[list[str]] = None

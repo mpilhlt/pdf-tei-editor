@@ -149,6 +149,7 @@ from .routers import (
     files_save,
     files_delete,
     files_gc,
+    files_repopulate,
     files_move,
     files_copy,
     files_locks,
@@ -156,6 +157,7 @@ from .routers import (
     files_export,
     files_import,
     files_metadata,
+    files_permissions,
     validation,
     extraction,
     sync,
@@ -182,6 +184,7 @@ api_v1.include_router(files_upload.router)
 api_v1.include_router(files_save.router)
 api_v1.include_router(files_delete.router)
 api_v1.include_router(files_gc.router)
+api_v1.include_router(files_repopulate.router)
 api_v1.include_router(files_move.router)
 api_v1.include_router(files_copy.router)
 api_v1.include_router(files_locks.router)  # Before files_serve (catch-all)
@@ -189,6 +192,7 @@ api_v1.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
 api_v1.include_router(files_export.router)  # Export endpoint
 api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(files_metadata.router)  # Metadata update endpoint
+api_v1.include_router(files_permissions.router)  # Document permissions (granular mode)
 api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
 api_v1.include_router(plugins.router)  # Plugin system endpoints

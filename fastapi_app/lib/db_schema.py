@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS files (
     label TEXT,                        -- User-assigned label (can override doc_metadata.title)
     variant TEXT,                      -- Variant identifier (TEI files only, NULL for PDF)
     -- status column added by migration 005
+    -- last_revision column added by migration 006
 
     -- Version management (TEI files only)
     version INTEGER DEFAULT 1,         -- Version number for TEI files (NULL for PDF)
@@ -48,6 +49,8 @@ CREATE TABLE IF NOT EXISTS files (
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Note: created_by column is added by migration 007
 
     -- Document-level metadata (populated only for PDF files, inherited by TEI files)
     -- NULL for TEI files - use JOIN to get from PDF when needed
@@ -79,6 +82,7 @@ CREATE_INDEXES = [
     # idx_status is created by migration 005
     "CREATE INDEX IF NOT EXISTS idx_created_at ON files(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_is_gold ON files(is_gold_standard) WHERE is_gold_standard = 1",
+    # idx_created_by is created by migration 007
 
     # Sync-related indexes
     "CREATE INDEX IF NOT EXISTS idx_sync_status ON files(sync_status) WHERE sync_status != 'synced'",
