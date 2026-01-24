@@ -73,6 +73,16 @@ export async function loadFixture(options) {
     }
   }
 
+  // Also copy to runtime/db because FastAPI module-level code runs BEFORE
+  // the lifespan function, and that code may access config.json/users.json.
+  // Without this, empty files get created before db_init can copy the real ones.
+  if (existsSync(fixtureConfig)) {
+    await cp(fixtureConfig, join(runtimePath, 'db'), { recursive: true });
+    if (verbose) {
+      logger.success('Copied config to db/');
+    }
+  }
+
   logger.success('Fixture config loaded');
 
   // Return path to fixture files for later import

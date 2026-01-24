@@ -1,8 +1,9 @@
 """
-Unit tests for migrations 005 and 006: Add status and last_revision columns.
+Unit tests for migrations 005, 006, and 007: Add status, last_revision, and created_by columns.
 
 @testCovers fastapi_app/lib/migrations/versions/m005_add_status_column.py
 @testCovers fastapi_app/lib/migrations/versions/m006_add_last_revision_column.py
+@testCovers fastapi_app/lib/migrations/versions/m007_add_created_by_column.py
 """
 
 import logging
@@ -18,10 +19,13 @@ from fastapi_app.lib.migrations.versions.m005_add_status_column import (
 from fastapi_app.lib.migrations.versions.m006_add_last_revision_column import (
     Migration006AddLastRevisionColumn,
 )
+from fastapi_app.lib.migrations.versions.m007_add_created_by_column import (
+    Migration007AddCreatedByColumn,
+)
 
 
-class TestMigrations005And006(unittest.TestCase):
-    """Test cases for migrations 005 (status) and 006 (last_revision)."""
+class TestMigrations005To007(unittest.TestCase):
+    """Test cases for migrations 005 (status), 006 (last_revision), and 007 (created_by)."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -53,13 +57,21 @@ class TestMigrations005And006(unittest.TestCase):
         manager = MigrationManager(self.db_path, self.logger)
         manager.register_migration(Migration005AddStatusColumn(self.logger))
         manager.register_migration(Migration006AddLastRevisionColumn(self.logger))
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
         manager.rollback_migration(4)
 
     def _rollback_to_version_5(self):
         """Roll back migrations to version 5 (pre-migration-006 state)."""
         manager = MigrationManager(self.db_path, self.logger)
         manager.register_migration(Migration006AddLastRevisionColumn(self.logger))
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
         manager.rollback_migration(5)
+
+    def _rollback_to_version_6(self):
+        """Roll back migrations to version 6 (pre-migration-007 state)."""
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+        manager.rollback_migration(6)
 
     def _create_test_tei_file(self, file_id: str, status: str = "draft") -> bytes:
         """Create a test TEI XML file with a specific status."""
@@ -397,6 +409,128 @@ class TestMigrations005And006(unittest.TestCase):
             cursor = conn.execute("""
                 SELECT name FROM sqlite_master
                 WHERE type='index' AND name='idx_last_revision'
+            """)
+            index = cursor.fetchone()
+            self.assertIsNone(index)
+
+    # ===== Migration 007 Tests =====
+
+    def test_migration_007_adds_created_by_column(self):
+        """Test migration 007 adds created_by column to files table."""
+        self._rollback_to_version_6()
+
+        # Verify created_by column doesn't exist
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = {row[1] for row in cursor.fetchall()}
+            self.assertNotIn("created_by", columns)
+
+        # Run migration
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+        applied = manager.run_migrations(skip_backup=True)
+
+        self.assertEqual(applied, 1)
+
+        # Verify created_by column now exists
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = {row[1] for row in cursor.fetchall()}
+            self.assertIn("created_by", columns)
+
+    def test_migration_007_creates_created_by_index(self):
+        """Test migration 007 creates index on created_by column."""
+        self._rollback_to_version_6()
+
+        # Run migration
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+        manager.run_migrations(skip_backup=True)
+
+        # Verify index exists
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='index' AND name='idx_created_by'
+            """)
+            index = cursor.fetchone()
+            self.assertIsNotNone(index)
+
+    def test_migration_007_existing_files_have_null_created_by(self):
+        """Test that existing files have NULL created_by after migration."""
+        self._rollback_to_version_6()
+
+        # Insert file without created_by
+        with sqlite3.connect(str(self.db_path)) as conn:
+            conn.execute("""
+                INSERT INTO files (id, stable_id, filename, doc_id, file_type, file_size)
+                VALUES ('test1', 'test123', 'doc1.xml', 'doc1', 'tei', 1000)
+            """)
+            conn.commit()
+
+        # Run migration
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+        manager.run_migrations(skip_backup=True)
+
+        # Verify created_by is NULL for existing file
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("SELECT created_by FROM files WHERE id = 'test1'")
+            result = cursor.fetchone()
+            self.assertIsNone(result[0])
+
+    def test_migration_007_is_idempotent(self):
+        """Test migration 007 can be run multiple times safely."""
+        self._rollback_to_version_6()
+
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+
+        # Run migration twice
+        applied1 = manager.run_migrations(skip_backup=True)
+        applied2 = manager.run_migrations(skip_backup=True)
+
+        self.assertEqual(applied1, 1)
+        self.assertEqual(applied2, 0)  # Not re-applied
+
+    def test_migration_007_skips_if_column_exists(self):
+        """Test migration 007 skips if created_by column already exists."""
+        self._rollback_to_version_6()
+
+        # Add created_by column manually
+        with sqlite3.connect(str(self.db_path)) as conn:
+            conn.execute("ALTER TABLE files ADD COLUMN created_by TEXT")
+            conn.commit()
+
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration007AddCreatedByColumn(self.logger))
+
+        applied = manager.run_migrations(skip_backup=True)
+
+        # Migration should be skipped
+        self.assertEqual(applied, 0)
+
+    def test_migration_007_downgrade_removes_created_by_column(self):
+        """Test downgrade removes created_by column and index."""
+        # Verify created_by column exists (from setUp migrations)
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = {row[1] for row in cursor.fetchall()}
+            self.assertIn("created_by", columns)
+
+        # Run downgrade
+        self._rollback_to_version_6()
+
+        # Verify created_by column is removed
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = {row[1] for row in cursor.fetchall()}
+            self.assertNotIn("created_by", columns)
+
+            # Verify index is also removed
+            cursor = conn.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='index' AND name='idx_created_by'
             """)
             index = cursor.fetchone()
             self.assertIsNone(index)

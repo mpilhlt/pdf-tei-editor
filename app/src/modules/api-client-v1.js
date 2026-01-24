@@ -1,12 +1,19 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-22T12:28:00.095Z
+ * Generated from OpenAPI schema at 2026-01-23T20:40:01.285Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
 
 // Type Definitions
+/**
+ * @typedef {Object} AccessControlModeResponse
+ * @property {string} mode
+ * @property {string} default_visibility
+ * @property {string} default_editability
+ */
+
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
@@ -183,6 +190,16 @@
  */
 
 /**
+ * @typedef {Object} DocumentPermissionsModel
+ * @property {string} stable_id
+ * @property {string} visibility
+ * @property {string} editability
+ * @property {string} owner
+ * @property {string} created_at
+ * @property {string} updated_at
+ */
+
+/**
  * @typedef {Object} ExecuteRequest
  * @property {string} endpoint
  * @property {Object<string, any>} params
@@ -267,6 +284,7 @@
  * @property {boolean=} deleted
  * @property {string=} created_at
  * @property {string=} updated_at
+ * @property {string=} created_by
  */
 
 /**
@@ -402,6 +420,14 @@
 /**
  * @typedef {Object} SaveInstructionsResponse
  * @property {string} result
+ */
+
+/**
+ * @typedef {Object} SetPermissionsRequest
+ * @property {string} stable_id
+ * @property {string} visibility
+ * @property {string} editability
+ * @property {string} owner
  */
 
 /**
@@ -1464,6 +1490,38 @@ export class ApiClientV1 {
   async filesDocId(stable_id, requestBody) {
     const endpoint = `/files/${stable_id}/doc-id`
     return this.callApi(endpoint, 'PATCH', requestBody);
+  }
+
+  /**
+   * Get current access control mode and defaults.
+   *
+   * @returns {Promise<AccessControlModeResponse>}
+   */
+  async filesAccessControlMode() {
+    const endpoint = `/files/access_control_mode`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Get permissions for an artifact (granular mode only).
+   *
+   * @param {string} stable_id
+   * @returns {Promise<DocumentPermissionsModel>}
+   */
+  async filesPermissions(stable_id) {
+    const endpoint = `/files/permissions/${stable_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Set permissions for an artifact (owner/reviewer only, granular mode only).
+   *
+   * @param {SetPermissionsRequest} requestBody
+   * @returns {Promise<DocumentPermissionsModel>}
+   */
+  async filesSetPermissions(requestBody) {
+    const endpoint = `/files/set_permissions`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**
