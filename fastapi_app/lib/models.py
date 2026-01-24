@@ -47,6 +47,7 @@ class FileMetadata(BaseModel):
     deleted: bool = False
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    created_by: Optional[str] = None  # Username of user who created this file
 
     @field_validator('file_type')
     @classmethod
@@ -91,6 +92,7 @@ class FileCreate(BaseModel):
     doc_collections: list[str] = Field(default_factory=list)
     doc_metadata: dict = Field(default_factory=dict)
     file_metadata: dict = Field(default_factory=dict)
+    created_by: Optional[str] = None  # Username of user who created this file
 
     @field_validator('file_type')
     @classmethod

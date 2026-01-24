@@ -1,231 +1,343 @@
 """
-Access Control utilities for FastAPI.
-
-Ported from server/lib/access_control.py with these changes:
-- Work with Pydantic models instead of dicts
-- Use database metadata instead of file parsing
-- Remove Flask dependencies
-- Simplified for file metadata-based access control
+Access control logic supporting three modes:
+- role-based: only role restrictions (gold = reviewers only)
+- owner-based: documents editable only by owner
+- granular: database-backed per-document permissions
 """
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Optional, Dict, Any
 import logging
+
+from .config_utils import get_config
+from .acl_utils import (
+    user_has_reviewer_role,
+    user_has_annotator_role,
+    is_gold_file,
+    is_version_file,
+    user_is_admin,
+    get_access_control_mode
+)
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class DocumentPermissions:
-    """Represents the access permissions for a document."""
-    visibility: str  # 'public' or 'private'
-    editability: str  # 'editable' or 'protected'
-    owner: Optional[str]  # username of the owner
-    status_values: List[str]  # raw status values from XML
-    change_timestamp: Optional[str]  # when permissions were last changed
-
-
-class AccessControlChecker:
-    """Checks user access permissions against document permissions."""
-
-    @staticmethod
-    def check_document_access(
-        permissions: DocumentPermissions,
-        user: Optional[Dict],
-        required_access: str = 'read'
-    ) -> bool:
-        """
-        Check if user has required access to document.
-
-        Args:
-            permissions: Document permissions
-            user: User dict with username and roles, or None for anonymous
-            required_access: 'read' or 'write'
-
-        Returns:
-            True if access allowed, False otherwise
-        """
-        # logger.debug(
-        #     f"ACCESS CONTROL: checking access for user={user}, "
-        #     f"permissions={permissions}, required_access={required_access}"
-        # )
-
-        if not user:
-            # Anonymous users can only read public documents
-            result = permissions.visibility == 'public' and required_access == 'read'
-            return result
-
-        username = user.get('username')
-        # logger.debug(f"ACCESS CONTROL: user={username}, roles={user.get('roles', [])}")
-
-        # Check visibility permissions
-        if permissions.visibility == 'private':
-            # Private documents only accessible by owner
-            if permissions.owner != username:
-                # logger.debug(
-                #    f"ACCESS CONTROL: private document, owner={permissions.owner}, "
-                #    f"user={username}, access denied"
-                # )
-                return False
-
-        # Check write permissions
-        if required_access == 'write':
-            if permissions.editability == 'protected':
-                # Protected documents only writable by owner
-                if permissions.owner != username:
-                    # logger.debug(
-                    #    f"ACCESS CONTROL: protected document, owner={permissions.owner}, "
-                    #    f"user={username}, write access denied"
-                    # )
-                    return False
-
-        # logger.debug(
-        #    f"ACCESS CONTROL: allowing access - visibility={permissions.visibility}, "
-        #    f"editability={permissions.editability}, owner={permissions.owner}"
-        # )
-        return True
-
-    @staticmethod
-    def can_modify_permissions(permissions: DocumentPermissions, user: Optional[Dict]) -> bool:
-        """
-        Check if user can modify document permissions.
-        Only document owners can modify permissions.
-
-        Args:
-            permissions: Current document permissions
-            user: User dict or None
-
-        Returns:
-            True if user can modify permissions
-        """
-        if not user:
-            return False
-
-        # Document owners can modify permissions
-        username = user.get('username')
-        return permissions.owner == username
-
-
-def get_document_permissions_from_metadata(metadata: Dict) -> DocumentPermissions:
+def can_view_document(
+    stable_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    permissions_db=None  # PermissionsDB instance, required for granular mode
+) -> bool:
     """
-    Get permissions for a document from cached metadata.
+    Check if user can view document.
+
+    Assumes user already has collection access.
 
     Args:
-        metadata: File metadata dict (from FileMetadata.file_metadata or doc_metadata)
-
-    Returns:
-        DocumentPermissions object
+        stable_id: Artifact stable ID
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
     """
-    access_control_data = metadata.get('access_control', {})
+    mode = get_access_control_mode()
 
-    if not access_control_data:
-        # No access control metadata - return defaults
-        return DocumentPermissions('public', 'editable', None, [], None)
+    # Reviewers and admins can always view
+    if user_has_reviewer_role(user) or user_is_admin(user):
+        return True
 
-    return DocumentPermissions(
-        visibility=access_control_data.get('visibility', 'public'),
-        editability=access_control_data.get('editability', 'editable'),
-        owner=access_control_data.get('owner'),
-        status_values=access_control_data.get('status_values', []),
-        change_timestamp=metadata.get('last_update')
+    if mode == 'role-based':
+        # Everyone with collection access can view
+        return True
+
+    elif mode == 'owner-based':
+        # Everyone with collection access can view
+        return True
+
+    elif mode == 'granular':
+        if permissions_db is None:
+            raise ValueError("permissions_db required for granular mode")
+        config = get_config()
+
+        from .permissions_db import get_document_permissions
+
+        default_visibility = config.get('access-control.default-visibility', default='collection')
+        default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+
+        perms = get_document_permissions(
+            stable_id,
+            permissions_db,
+            default_visibility=default_visibility,
+            default_owner=default_owner
+        )
+
+        if perms.visibility == 'collection':
+            return True
+        elif perms.visibility == 'owner':
+            return perms.owner == user.get('username') if user else False
+
+    return True  # Default: allow view
+
+
+def can_edit_document(
+    stable_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    permissions_db=None  # PermissionsDB instance, required for granular mode
+) -> bool:
+    """
+    Check if user can edit document.
+
+    Assumes user already has collection access.
+
+    Args:
+        stable_id: Artifact stable ID
+        file_metadata: File metadata object with created_by and is_gold_standard attributes
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
+    """
+    mode = get_access_control_mode()
+
+    if mode == 'role-based':
+        # Reviewers and admins can always edit in role-based mode
+        if user_has_reviewer_role(user) or user_is_admin(user):
+            return True
+
+        # Role-based restrictions for file types
+        if is_gold_file(file_metadata):
+            return user_has_reviewer_role(user)
+        if is_version_file(file_metadata):
+            return user_has_annotator_role(user) or user_has_reviewer_role(user)
+        return True
+
+    elif mode == 'owner-based':
+        # Admins can always edit (they have ultimate authority)
+        if user_is_admin(user):
+            return True
+
+        owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+        username = user.get('username') if user else None
+
+        # If file has no owner, allow reviewers to manage it
+        if not owner:
+            return user_has_reviewer_role(user)
+
+        # Otherwise only owner can edit
+        return owner == username
+
+    elif mode == 'granular':
+        if permissions_db is None:
+            raise ValueError("permissions_db required for granular mode")
+        config = get_config()
+
+        from .permissions_db import get_document_permissions
+
+        default_editability = config.get('access-control.default-editability', default='owner')
+        default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+
+        perms = get_document_permissions(
+            stable_id,
+            permissions_db,
+            default_editability=default_editability,
+            default_owner=default_owner
+        )
+
+        if perms.editability == 'collection':
+            # Reviewers and admins can edit in collection mode
+            if user_has_reviewer_role(user) or user_is_admin(user):
+                return True
+            # Still apply role-based restrictions for file types
+            if is_gold_file(file_metadata):
+                return user_has_reviewer_role(user)
+            return True
+        elif perms.editability == 'owner':
+            # Only owner can edit (admins can always edit as they have ultimate authority)
+            if user_is_admin(user):
+                return True
+            username = user.get('username') if user else None
+            return perms.owner == username if user else False
+
+    return False
+
+
+def can_delete_document(
+    stable_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    permissions_db=None  # PermissionsDB instance, required for granular mode
+) -> bool:
+    """
+    Check if user can delete document.
+
+    Deletion rules:
+    - Reviewers and admins can always delete
+    - In role-based and owner-based modes: only owner can delete (besides reviewers)
+    - Documents without owner: only reviewers can delete
+    - In granular mode: follows editability rules
+
+    Args:
+        stable_id: Artifact stable ID
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
+    """
+    # Reviewers and admins can always delete
+    if user_has_reviewer_role(user) or user_is_admin(user):
+        return True
+
+    mode = get_access_control_mode()
+
+    if mode in ('role-based', 'owner-based'):
+        # Only owner can delete (reviewers already handled above)
+        # Documents without owner can only be deleted by reviewers
+        owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+        if not owner:
+            return False  # No owner = only reviewers can delete
+        return owner == user.get('username') if user else False
+
+    elif mode == 'granular':
+        # Granular mode: follows editability rules
+        return can_edit_document(stable_id, file_metadata, user, permissions_db)
+
+    return False
+
+
+def can_modify_permissions(
+    stable_id: str,
+    file_metadata: Any,
+    user: Optional[Dict],
+    permissions_db=None  # PermissionsDB instance, required for granular mode
+) -> bool:
+    """
+    Check if user can modify document permissions.
+
+    Only available in granular mode. Owner and reviewers can modify permissions.
+
+    Args:
+        stable_id: Artifact stable ID
+        file_metadata: File metadata object with created_by attribute
+        user: Current user dict
+        permissions_db: PermissionsDB instance (required for granular mode)
+    """
+    if not user:
+        return False
+
+    mode = get_access_control_mode()
+
+    if mode != 'granular':
+        return False  # Permission modification only in granular mode
+
+    # Reviewers and admins can always modify permissions
+    if user_has_reviewer_role(user) or user_is_admin(user):
+        return True
+
+    # Get current permissions to check ownership
+    if permissions_db is None:
+        raise ValueError("permissions_db required for granular mode")
+
+    from .permissions_db import get_document_permissions
+
+    default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
+
+    perms = get_document_permissions(
+        stable_id,
+        permissions_db,
+        default_owner=default_owner
     )
+
+    # Owner can modify permissions
+    return perms.owner == user.get('username')
+
+
+def can_promote_demote(user: Optional[Dict]) -> bool:
+    """
+    Check if user can promote/demote documents (gold standard status).
+
+    Only reviewers and admins can promote/demote.
+
+    Args:
+        user: Current user dict
+    """
+    return user_has_reviewer_role(user) or user_is_admin(user)
 
 
 def check_file_access(file_metadata: Any, user: Optional[Dict], operation: str = 'read') -> bool:
     """
     Check if user has access to a file.
 
+    Backwards-compatible function that uses the new mode-aware access control.
+    Gets permissions_db internally if in granular mode.
+
     Args:
-        file_metadata: FileMetadata Pydantic model
+        file_metadata: FileMetadata Pydantic model with stable_id, created_by, is_gold_standard
         user: User dict with username and roles, or None
-        operation: 'read', 'write', or 'edit'
+        operation: 'read', 'write', 'edit', or 'delete'
 
     Returns:
         True if access allowed
     """
-    # Map operation to access type
-    required_access = 'write' if operation in ['write', 'edit'] else 'read'
+    # Get stable_id from file metadata
+    stable_id = file_metadata.stable_id if hasattr(file_metadata, 'stable_id') else None
 
-    # Get permissions from metadata
-    metadata_dict = file_metadata.file_metadata or {}
-    if hasattr(file_metadata, 'doc_metadata') and file_metadata.doc_metadata:
-        # Also check doc_metadata for access control
-        metadata_dict = {**metadata_dict, **(file_metadata.doc_metadata or {})}
+    if not stable_id:
+        # No stable_id means we can't check permissions properly, default to role-based
+        logger.warning("check_file_access called without stable_id, defaulting to allow")
+        return True
 
-    permissions = get_document_permissions_from_metadata(metadata_dict)
+    # Get permissions_db if in granular mode
+    mode = get_access_control_mode()
 
-    return AccessControlChecker.check_document_access(permissions, user, required_access)
+    permissions_db = None
+    if mode == 'granular':
+        from .acl_utils import _get_permissions_db
+        permissions_db = _get_permissions_db()
+
+    # Map operation to appropriate check function
+    if operation == 'read':
+        return can_view_document(stable_id, file_metadata, user, permissions_db)
+    elif operation in ('write', 'edit'):
+        return can_edit_document(stable_id, file_metadata, user, permissions_db)
+    elif operation == 'delete':
+        return can_delete_document(stable_id, file_metadata, user, permissions_db)
+    else:
+        logger.warning(f"Unknown operation '{operation}' in check_file_access, defaulting to read")
+        return can_view_document(stable_id, file_metadata, user, permissions_db)
 
 
-def filter_files_by_access(files: List[Any], user: Optional[Dict]) -> List[Any]:
-    """
-    Filter list of FileMetadata objects based on user access.
-
-    Args:
-        files: List of FileMetadata Pydantic models
-        user: User dict or None
-
-    Returns:
-        Filtered list containing only accessible files
-    """
-    return [f for f in files if check_file_access(f, user, 'read')]
-
-
+# Legacy compatibility - DocumentAccessFilter for files_list.py
 class DocumentAccessFilter:
     """Filters document lists based on user access permissions."""
 
     @staticmethod
-    def filter_files_by_access(documents: List[Any], user: Optional[Dict]) -> List[Any]:
+    def filter_files_by_access(documents, user: Optional[Dict]):
         """
-        Filter document list (DocumentGroup objects) based on user access.
+        Filter document list based on user access.
 
         Args:
-            documents: List of DocumentGroup Pydantic models
+            documents: List of document objects
             user: User dict or None
 
         Returns:
             Filtered list containing only accessible documents
         """
+        mode = get_access_control_mode()
+
+        permissions_db = None
+        if mode == 'granular':
+            from .acl_utils import _get_permissions_db
+            permissions_db = _get_permissions_db()
+
         filtered_documents = []
 
         for doc in documents:
-            # Get doc metadata for permissions
-            doc_metadata = doc.doc_metadata or {}
+            # Get stable_id for permission check
+            stable_id = doc.stable_id if hasattr(doc, 'stable_id') else None
 
-            # Filter artifacts
-            accessible_artifacts = []
+            if not stable_id:
+                # No stable_id, include by default
+                filtered_documents.append(doc)
+                continue
 
-            # Check source file access
-            source_accessible = True
-            if doc.source:
-                source_accessible = DocumentAccessFilter._can_access_file(doc.source, doc_metadata, user)
-
-            # Filter artifacts
-            for artifact in doc.artifacts:
-                if DocumentAccessFilter._can_access_file(artifact, doc_metadata, user):
-                    accessible_artifacts.append(artifact)
-
-            # Only include document if user has access to source or at least one artifact
-            if source_accessible or accessible_artifacts:
-                # Create a copy with filtered files
-                doc_copy = doc.model_copy(deep=True)
-                doc_copy.artifacts = accessible_artifacts
-                # If source is not accessible, set it to None
-                if not source_accessible:
-                    doc_copy.source = None
-                filtered_documents.append(doc_copy)
+            # Check view permission
+            if can_view_document(stable_id, doc, user, permissions_db):
+                filtered_documents.append(doc)
 
         return filtered_documents
-
-    @staticmethod
-    def _can_access_file(file_item: Any, doc_metadata: Dict, user: Optional[Dict]) -> bool:
-        """Check if user can access a specific file using metadata."""
-        # Combine file metadata and doc metadata
-        file_metadata_dict = file_item.doc_metadata if hasattr(file_item, 'doc_metadata') else doc_metadata
-
-        if not file_metadata_dict:
-            # No metadata - default to allow access
-            return True
-
-        permissions = get_document_permissions_from_metadata(file_metadata_dict)
-        return AccessControlChecker.check_document_access(permissions, user, 'read')

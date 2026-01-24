@@ -255,6 +255,112 @@ async function loginAsUser(username, password, baseUrl = null) {
   return session.sessionId;
 }
 
+/**
+ * Try to acquire a lock on a file
+ * @param {string} sessionId - Session ID for authentication
+ * @param {string} fileId - File stable_id to lock
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<Response>} Fetch response object (use .status to check success)
+ */
+async function tryAcquireLock(sessionId, fileId, baseUrl = null) {
+  return await authenticatedRequest(
+    sessionId,
+    '/files/acquire_lock',
+    'POST',
+    { file_id: fileId },
+    baseUrl
+  );
+}
+
+/**
+ * Acquire a lock on a file (throws on failure)
+ * @param {string} sessionId - Session ID for authentication
+ * @param {string} fileId - File stable_id to lock
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<void>}
+ */
+async function acquireLock(sessionId, fileId, baseUrl = null) {
+  const response = await tryAcquireLock(sessionId, fileId, baseUrl);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(`Failed to acquire lock: ${response.status} - ${errorData.detail || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Release a lock on a file
+ * @param {string} sessionId - Session ID for authentication
+ * @param {string} fileId - File stable_id to unlock
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<void>}
+ */
+async function releaseLock(sessionId, fileId, baseUrl = null) {
+  await authenticatedApiCall(
+    sessionId,
+    '/files/release_lock',
+    'POST',
+    { file_id: fileId },
+    baseUrl
+  );
+}
+
+/**
+ * Check if a file is locked
+ * @param {string} sessionId - Session ID for authentication
+ * @param {string} fileId - File stable_id to check
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{is_locked: boolean, locked_by: string|null}>}
+ */
+async function checkLock(sessionId, fileId, baseUrl = null) {
+  return await authenticatedApiCall(
+    sessionId,
+    '/files/check_lock',
+    'POST',
+    { file_id: fileId },
+    baseUrl
+  );
+}
+
+// ============================================================================
+// Role-based login helpers (using standard fixture users)
+// ============================================================================
+
+/**
+ * Login as admin user
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{sessionId: string, user: object}>}
+ */
+async function loginAsAdmin(baseUrl = null) {
+  return await login('admin', 'admin', baseUrl);
+}
+
+/**
+ * Login as reviewer user
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{sessionId: string, user: object}>}
+ */
+async function loginAsReviewer(baseUrl = null) {
+  return await login('reviewer', 'reviewer', baseUrl);
+}
+
+/**
+ * Login as annotator user
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{sessionId: string, user: object}>}
+ */
+async function loginAsAnnotator(baseUrl = null) {
+  return await login('annotator', 'annotator', baseUrl);
+}
+
+/**
+ * Login as basic user (no special roles)
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{sessionId: string, user: object}>}
+ */
+async function loginAsBasicUser(baseUrl = null) {
+  return await login('user', 'user', baseUrl);
+}
+
 export {
   hashPassword,
   login,
@@ -267,5 +373,13 @@ export {
   createTestUser,
   deleteTestUser,
   loginAsUser,
+  tryAcquireLock,
+  acquireLock,
+  releaseLock,
+  checkLock,
+  loginAsAdmin,
+  loginAsReviewer,
+  loginAsAnnotator,
+  loginAsBasicUser,
   API_BASE
 };

@@ -42,6 +42,7 @@ from ..lib.tei_utils import serialize_tei_with_formatted_header, update_fileref_
 from ..lib.sse_service import SSEService
 from ..lib.sessions import SessionManager
 from ..lib.sse_utils import broadcast_to_other_sessions
+from ..lib.acl_utils import set_default_permissions_for_new_file
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -495,12 +496,16 @@ async def save_file(
                 doc_collections=doc_collections,
                 doc_metadata={},
                 file_metadata={},
-                file_size=file_size
+                file_size=file_size,
+                created_by=user.get('username')  # Track file creator for access control
             ))
 
         # Now acquire lock using stable_id
             if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
+
+            # Set default permissions for new file (granular mode only)
+            set_default_permissions_for_new_file(created_file.stable_id, user.get('username'))
 
             # Notify other sessions about new version
             broadcast_to_other_sessions(
@@ -577,12 +582,16 @@ async def save_file(
                 doc_collections=doc_collections,
                 doc_metadata={},
                 file_metadata={},
-                file_size=file_size
+                file_size=file_size,
+                created_by=user.get('username')  # Track file creator for access control
             ))
 
         # Now acquire lock using stable_id
             if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
+
+            # Set default permissions for new file (granular mode only)
+            set_default_permissions_for_new_file(created_file.stable_id, user.get('username'))
 
         # Update PDF metadata from TEI (for new gold standard)
             if pdf_file and tei_metadata:

@@ -180,6 +180,15 @@ async function load({ xml, pdf }) {
               'warning',
               'exclamation-triangle'
             );
+          } else if (error instanceof client.ApiError && error.statusCode === 403) {
+            // Permission denied - load in read-only mode
+            logger.debug(`No edit permission for file ${xml}, loading in read-only mode`);
+            file_is_locked = true
+            notify(
+              'You do not have permission to edit this document. Create your own version to make changes.',
+              'warning',
+              'lock'
+            );
           } else {
             const errorMessage = String(error);
             dialog.error(errorMessage)
