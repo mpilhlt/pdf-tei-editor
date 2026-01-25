@@ -322,6 +322,54 @@ def escape_html(text: str) -> str:
     )
 
 
+def validate_javascript_content(content: str, filename: str) -> tuple[bool, list[str]]:
+    """
+    Validate JavaScript content for dangerous patterns.
+
+    Checks for patterns that could introduce security risks:
+    - Network access (fetch, XMLHttpRequest, WebSocket)
+    - Dynamic code execution (eval, Function constructor)
+    - Dynamic imports
+    - Storage access (cookies, localStorage, sessionStorage, indexedDB)
+
+    Args:
+        content: JavaScript source code
+        filename: Name of the file (for error messages)
+
+    Returns:
+        Tuple of (is_valid, list of warning messages)
+
+    Example:
+        >>> valid, warnings = validate_javascript_content(code, "my-extension.js")
+        >>> if not valid:
+        ...     for warning in warnings:
+        ...         logger.warning(warning)
+    """
+    warnings = []
+
+    # Patterns that indicate potential security issues
+    dangerous_patterns = [
+        (r'\bfetch\s*\(', 'Network access via fetch()'),
+        (r'\bXMLHttpRequest\b', 'Network access via XMLHttpRequest'),
+        (r'\bWebSocket\b', 'WebSocket connection'),
+        (r'\beval\s*\(', 'Dynamic code execution via eval()'),
+        (r'\bnew\s+Function\s*\(', 'Dynamic code execution via Function constructor'),
+        (r'\bimport\s*\(', 'Dynamic import'),
+        (r'\bwindow\s*\.\s*open\s*\(', 'Opening new windows'),
+        (r'\blocation\s*\.\s*href\s*=', 'Navigation/redirect'),
+        (r'\bdocument\s*\.\s*cookie\b', 'Cookie access'),
+        (r'\blocalStorage\b', 'localStorage access'),
+        (r'\bsessionStorage\b', 'sessionStorage access'),
+        (r'\bindexedDB\b', 'IndexedDB access'),
+    ]
+
+    for pattern, description in dangerous_patterns:
+        if re.search(pattern, content):
+            warnings.append(f"{filename}: {description} detected")
+
+    return (len(warnings) == 0, warnings)
+
+
 def generate_datatable_page(
     title: str,
     headers: list[str],

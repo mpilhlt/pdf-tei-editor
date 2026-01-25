@@ -1,5 +1,5 @@
 """
-Custom routes for the sample analyzer plugin.
+Custom routes for the test plugin.
 
 This demonstrates how plugins can define their own API routes
 beyond the generic /api/plugins/{id}/execute endpoint.
@@ -8,7 +8,7 @@ beyond the generic /api/plugins/{id}/execute endpoint.
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/plugins/sample-analyzer", tags=["sample-analyzer"])
+router = APIRouter(prefix="/api/plugins/test-plugin", tags=["test-plugin"])
 
 
 class AnalyzeRequest(BaseModel):
@@ -59,7 +59,7 @@ async def get_status() -> dict:
         Plugin status information
     """
     return {
-        "plugin": "sample-analyzer",
+        "plugin": "test-plugin",
         "status": "active",
         "version": "1.0.0",
     }

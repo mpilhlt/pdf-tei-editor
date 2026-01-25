@@ -3,7 +3,7 @@ Unit tests for extraction functionality
 
 Tests that extractors set the correct fileref (doc_id) in extracted TEI.
 
-@testCovers fastapi_app/plugins/sample_analyzer/extractor.py
+@testCovers fastapi_app/plugins/test_plugin/extractor.py
 @testCovers fastapi_app/plugins/grobid/extractor.py
 @testCovers fastapi_app/plugins/llamore/extractor.py
 """
@@ -17,7 +17,7 @@ from lxml import etree
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.plugins.sample_analyzer.extractor import MockExtractor
+from fastapi_app.plugins.test_plugin.extractor import MockExtractor
 
 
 class TestExtractionFileref(unittest.TestCase):

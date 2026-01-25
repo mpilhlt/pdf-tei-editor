@@ -291,6 +291,12 @@ function generateClientCode(schema, timestamp) {
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!['get', 'post', 'put', 'delete', 'patch'].includes(method)) continue;
 
+      // Skip endpoints with file extensions in path (e.g., /extensions.js)
+      if (/\.\w+$/.test(path)) {
+        console.log(`  Skipping file-extension endpoint: ${method.toUpperCase()} ${path}`);
+        continue;
+      }
+
       // Skip file upload endpoints (multipart/form-data)
       const requestBodyContent = operation.requestBody?.content;
       if (requestBodyContent && requestBodyContent['multipart/form-data']) {
