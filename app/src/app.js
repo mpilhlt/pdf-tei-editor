@@ -24,6 +24,10 @@ import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
 import { createTestLogger } from '../../tests/e2e/tests/helpers/test-logging.js'
 
+// frontend extension system
+import { loadExtensionsFromServer } from './modules/frontend-extension-registry.js'
+import { initializeSandbox } from './modules/frontend-extension-sandbox.js'
+
 //
 // Application bootstrapping
 //
@@ -44,6 +48,15 @@ export { app }
 
 // Register plugins
 app.registerPlugins(plugins)
+
+// Initialize frontend extension sandbox with state getter and invoke function
+initializeSandbox(
+  () => app.getCurrentState(),
+  (endpoint, args, options) => app.pluginManager.invoke(endpoint, args, options)
+)
+
+// Load and register frontend extensions from backend plugins
+await loadExtensionsFromServer(app.pluginManager)
 
 // Create plugin API exports after plugin registration
 export const authentication = AuthenticationPlugin.getInstance()

@@ -19,7 +19,7 @@ test('GET /api/v1/plugins - list plugins without authentication', async () => {
 
   // Without auth, should only see plugins with no required roles or empty required_roles
   // Sample analyzer requires 'user' role, so it should not appear
-  const samplePlugin = data.plugins.find(p => p.id === 'sample-analyzer');
+  const samplePlugin = data.plugins.find(p => p.id === 'test-plugin');
   assert.strictEqual(samplePlugin, undefined);
 });
 
@@ -50,10 +50,10 @@ test('GET /api/v1/plugins - list plugins with user role', async (t) => {
   const data = await response.json();
   assert.ok(Array.isArray(data.plugins));
 
-  // With 'user' role, should see sample-analyzer
-  const samplePlugin = data.plugins.find(p => p.id === 'sample-analyzer');
-  assert.ok(samplePlugin, 'Should find sample-analyzer plugin');
-  assert.strictEqual(samplePlugin.name, 'Sample Text Analyzer');
+  // With 'user' role, should see test-plugin
+  const samplePlugin = data.plugins.find(p => p.id === 'test-plugin');
+  assert.ok(samplePlugin, 'Should find test-plugin plugin');
+  assert.strictEqual(samplePlugin.name, 'Test Plugin');
   assert.strictEqual(samplePlugin.category, 'test');
 });
 

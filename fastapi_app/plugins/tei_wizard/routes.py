@@ -5,12 +5,16 @@ Provides the /api/plugins/tei-wizard/enhancements.js endpoint that returns
 a bundled JavaScript file containing all registered enhancements.
 """
 
+import logging
 import re
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
 from fastapi_app.lib.plugin_manager import PluginManager
+from fastapi_app.lib.plugin_tools import validate_javascript_content
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/plugins/tei-wizard", tags=["tei-wizard"])
 
@@ -88,6 +92,18 @@ async def get_enhancements_bundle():
     for js_file, plugin_id in tei_wizard.get_enhancement_files():
         try:
             content = js_file.read_text()
+
+            # Validate content for dangerous patterns
+            is_valid, warnings = validate_javascript_content(content, js_file.name)
+            if not is_valid:
+                for warning in warnings:
+                    logger.warning(f"Enhancement validation: {warning}")
+                bundle_parts.append(
+                    f"// Skipped {js_file.name} from {plugin_id}: "
+                    f"validation failed ({len(warnings)} warning(s))\n"
+                )
+                continue
+
             transformed = transform_to_registration(content, js_file.name, plugin_id)
             bundle_parts.append(transformed)
         except Exception as e:

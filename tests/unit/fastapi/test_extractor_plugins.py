@@ -19,8 +19,8 @@ from fastapi_app.plugins.llamore.plugin import LLamorePlugin
 from fastapi_app.plugins.llamore.extractor import LLamoreExtractor
 from fastapi_app.plugins.kisski.plugin import KisskiPlugin
 from fastapi_app.plugins.kisski.extractor import KisskiExtractor
-from fastapi_app.plugins.sample_analyzer.plugin import SampleAnalyzerPlugin
-from fastapi_app.plugins.sample_analyzer.extractor import MockExtractor
+from fastapi_app.plugins.test_plugin.plugin import TestPlugin
+from fastapi_app.plugins.test_plugin.extractor import MockExtractor
 
 
 class TestGrobidPluginRegistration(unittest.TestCase):
@@ -153,7 +153,7 @@ class TestKisskiPluginRegistration(unittest.TestCase):
 
 
 class TestMockExtractorRegistration(unittest.TestCase):
-    """Test MockExtractor registration via SampleAnalyzerPlugin."""
+    """Test MockExtractor registration via TestPlugin."""
 
     def setUp(self):
         """Reset registry before each test."""
@@ -166,7 +166,7 @@ class TestMockExtractorRegistration(unittest.TestCase):
     @patch.dict('os.environ', {'FASTAPI_APPLICATION_MODE': 'testing'})
     def test_mock_extractor_registered_in_testing_mode(self):
         """Test that MockExtractor is registered when in testing mode."""
-        plugin = SampleAnalyzerPlugin()
+        plugin = TestPlugin()
         context = PluginContext()
 
         # Run initialization
@@ -182,7 +182,7 @@ class TestMockExtractorRegistration(unittest.TestCase):
     @patch.dict('os.environ', {'FASTAPI_APPLICATION_MODE': 'production'})
     def test_mock_extractor_not_registered_in_production_mode(self):
         """Test that MockExtractor is NOT registered in production mode."""
-        plugin = SampleAnalyzerPlugin()
+        plugin = TestPlugin()
         context = PluginContext()
 
         # Run initialization

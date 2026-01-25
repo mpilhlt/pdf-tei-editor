@@ -802,6 +802,31 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 
 **`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use).
 
+## Frontend Extensions
+
+Backend plugins can register JavaScript files that extend frontend functionality. These extensions integrate with the application's PluginManager lifecycle and have access to a controlled sandbox API.
+
+See [Frontend Extensions](../development/frontend-extensions.md) for detailed documentation.
+
+Quick reference:
+
+- Register extensions via `FrontendExtensionRegistry.register_extension(path, plugin_id)`
+- Extensions integrate with PluginManager lifecycle (`install`, `start`, `onStateUpdate`)
+- Use sandbox for controlled API access (`ui`, `dialog`, `notify`, `invoke`, etc.)
+
+**Example registration in plugin initialize():**
+
+```python
+from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+from pathlib import Path
+
+async def initialize(self, context: PluginContext) -> None:
+    registry = FrontendExtensionRegistry.get_instance()
+    extension_file = Path(__file__).parent / "extensions" / "my-extension.js"
+    if extension_file.exists():
+        registry.register_extension(extension_file, self.metadata["id"])
+```
+
 ## Notes
 
 - **Directory naming**: Use underscores (e.g., `my_plugin`) not hyphens (e.g., `my-plugin`) in directory names to avoid Python import issues
