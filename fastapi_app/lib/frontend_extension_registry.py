@@ -38,7 +38,7 @@ class FrontendExtensionRegistry:
 
         existing = [f.name for f, _ in self._extension_files]
         if file_path.name in existing:
-            logger.warning(
+            logger.debug(
                 f"Extension {file_path.name} already registered, "
                 f"replacing with version from {plugin_id}"
             )
