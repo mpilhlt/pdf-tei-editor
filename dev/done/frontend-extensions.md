@@ -5,6 +5,7 @@ Issue: Backend plugins should be able to register JavaScript files that extend f
 ## Overview
 
 Backend plugins can register JavaScript "frontend extensions" that integrate with the application's PluginManager. These extensions:
+
 - Participate in the standard plugin lifecycle (`install`, `start`, `onStateUpdate`)
 - Can invoke endpoints on other plugins via the PluginManager
 - Access application APIs through a controlled sandbox
@@ -125,16 +126,76 @@ const extensionPlugin = {
 
 ## Implementation Plan
 
-### Phase 1: Move plugins.py to routers/
+### Phase 1: Add JavaScript Sanitization Utility
+
+Add a utility function to `fastapi_app/lib/plugin_tools.py` that validates JavaScript content for dangerous patterns (network access, eval, etc.). This function will be used by both the TEI Wizard enhancements and frontend extensions to enforce security requirements.
+
+**Add to `fastapi_app/lib/plugin_tools.py`:**
+
+```python
+def validate_javascript_content(content: str, filename: str) -> tuple[bool, list[str]]:
+    """
+    Validate JavaScript content for dangerous patterns.
+
+    Checks for patterns that could introduce security risks:
+    - Network access (fetch, XMLHttpRequest, WebSocket)
+    - Dynamic code execution (eval, Function constructor)
+    - Dynamic imports
+    - Global object manipulation
+
+    Args:
+        content: JavaScript source code
+        filename: Name of the file (for error messages)
+
+    Returns:
+        Tuple of (is_valid, list of warning messages)
+
+    Example:
+        >>> valid, warnings = validate_javascript_content(code, "my-extension.js")
+        >>> if not valid:
+        ...     for warning in warnings:
+        ...         logger.warning(warning)
+    """
+    warnings = []
+
+    # Patterns that indicate potential security issues
+    dangerous_patterns = [
+        (r'\bfetch\s*\(', 'Network access via fetch()'),
+        (r'\bXMLHttpRequest\b', 'Network access via XMLHttpRequest'),
+        (r'\bWebSocket\b', 'WebSocket connection'),
+        (r'\beval\s*\(', 'Dynamic code execution via eval()'),
+        (r'\bnew\s+Function\s*\(', 'Dynamic code execution via Function constructor'),
+        (r'\bimport\s*\(', 'Dynamic import'),
+        (r'\bwindow\s*\.\s*open\s*\(', 'Opening new windows'),
+        (r'\blocation\s*\.\s*href\s*=', 'Navigation/redirect'),
+        (r'\bdocument\s*\.\s*cookie\b', 'Cookie access'),
+        (r'\blocalStorage\b', 'localStorage access'),
+        (r'\bsessionStorage\b', 'sessionStorage access'),
+        (r'\bindexedDB\b', 'IndexedDB access'),
+    ]
+
+    for pattern, description in dangerous_patterns:
+        if re.search(pattern, content):
+            warnings.append(f"{filename}: {description} detected")
+
+    return (len(warnings) == 0, warnings)
+```
+
+**Update TEI Wizard to use this function:**
+
+In `fastapi_app/plugins/tei_wizard/routes.py`, add validation before transformation.
+
+### Phase 2: Move plugins.py to routers/
 
 Move `fastapi_app/routes/plugins.py` to `fastapi_app/routers/plugins.py`.
 
 **Files:**
+
 - Move `fastapi_app/routes/plugins.py` → `fastapi_app/routers/plugins.py`
 - Update `fastapi_app/main.py` import
 - Delete empty `fastapi_app/routes/` directory
 
-### Phase 2: Create Backend Extension Registry
+### Phase 3: Create Backend Extension Registry
 
 Create `fastapi_app/lib/frontend_extension_registry.py`:
 
@@ -200,7 +261,7 @@ class FrontendExtensionRegistry:
         self._extension_files.clear()
 ```
 
-### Phase 3: Add Extension Bundle Route
+### Phase 4: Add Extension Bundle Route
 
 Add to `fastapi_app/routers/plugins.py`:
 
@@ -285,7 +346,7 @@ async def get_extensions_bundle():
     return PlainTextResponse(content=bundle, media_type="application/javascript")
 ```
 
-### Phase 4: Create Frontend Extension Registry Module
+### Phase 5: Create Frontend Extension Registry Module
 
 Create `app/src/modules/frontend-extension-registry.js`:
 
@@ -354,7 +415,7 @@ window.registerFrontendExtension = registerFrontendExtension;
 export { registerFrontendExtension, getExtensions, clearExtensions };
 ```
 
-### Phase 5: Create Frontend Extension Sandbox
+### Phase 6: Create Frontend Extension Sandbox
 
 Create `app/src/modules/frontend-extension-sandbox.js`:
 
@@ -420,7 +481,7 @@ export function getSandbox() {
 }
 ```
 
-### Phase 6: Create Extension Plugin Wrapper
+### Phase 7: Create Extension Plugin Wrapper
 
 Create `app/src/modules/frontend-extension-wrapper.js`:
 
@@ -483,7 +544,7 @@ export function getWrappedExtensions() {
 }
 ```
 
-### Phase 7: Update Bootstrap to Load Extensions
+### Phase 8: Update Bootstrap to Load Extensions
 
 Modify `app/web/bootstrap.js`:
 
@@ -524,7 +585,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 })
 ```
 
-### Phase 8: Update Application to Register Extensions
+### Phase 9: Update Application to Register Extensions
 
 In `app/src/app.js`, after PluginManager setup but before `invoke('install')`:
 
@@ -558,20 +619,22 @@ for (const extensionPlugin of extensions) {
 await app.pluginManager.invoke('install', [state], { mode: 'sequential' });
 ```
 
-### Phase 9: Rename sample_analyzer to test_plugin
+### Phase 10: Rename sample_analyzer to test_plugin
 
 Rename `fastapi_app/plugins/sample_analyzer` → `fastapi_app/plugins/test_plugin`:
 
 **Update plugin.py:**
+
 - Class name: `TestPlugin`
 - Metadata id: `"test-plugin"`
 - Metadata name: `"Test Plugin"`
 - Keep `is_available()` returning `True` only in testing mode
 
-**Update __init__.py:**
+**Update **init**.py:**
+
 - Update imports
 
-### Phase 10: Add Test Extension to test_plugin
+### Phase 11: Add Test Extension to test_plugin
 
 Create `fastapi_app/plugins/test_plugin/extensions/hello-world.js`:
 
@@ -637,7 +700,7 @@ async def initialize(self, context: PluginContext) -> None:
         registry.register_extension(extension_file, self.metadata["id"])
 ```
 
-### Phase 11: Write E2E Test
+### Phase 12: Write E2E Test
 
 Create `tests/e2e/tests/frontend-extension.spec.js`:
 
@@ -702,7 +765,7 @@ test.describe('Frontend Extension System', () => {
 });
 ```
 
-### Phase 12: Add Documentation
+### Phase 13: Add Documentation
 
 **Add to `docs/code-assistant/backend-plugins.md`:**
 
@@ -720,6 +783,7 @@ Quick reference:
 **Create `docs/development/frontend-extensions.md`:**
 
 Full documentation covering:
+
 - Architecture overview
 - Extension file format
 - Sandbox API reference
@@ -741,6 +805,8 @@ Full documentation covering:
 
 ## Files to Modify
 
+- `fastapi_app/lib/plugin_tools.py` - Add JavaScript sanitization utility
+- `fastapi_app/plugins/tei_wizard/routes.py` - Add validation using new sanitization utility
 - `fastapi_app/routes/plugins.py` → `fastapi_app/routers/plugins.py` (move + add route)
 - `fastapi_app/main.py` - Update import path
 - `app/web/bootstrap.js` - Load extension registry and bundle

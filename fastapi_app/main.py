@@ -141,8 +141,8 @@ app.add_middleware(
 
 # Import API routers
 from .api import auth, config
-from .routes import plugins
 from .routers import (
+    plugins,
     files_list,
     files_serve,
     files_upload,

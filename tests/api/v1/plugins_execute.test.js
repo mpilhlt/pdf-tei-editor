@@ -22,8 +22,8 @@ test('POST /api/v1/plugins/{id}/execute - execute sample plugin', async (t) => {
 
   const sessionId = await loginAsUser(username, password);
 
-  // Execute sample-analyzer plugin
-  const response = await fetch(`${API_BASE}/api/v1/plugins/sample-analyzer/execute`, {
+  // Execute test-plugin plugin
+  const response = await fetch(`${API_BASE}/api/v1/plugins/test-plugin/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -60,7 +60,7 @@ test('POST /api/v1/plugins/{id}/execute - execute info endpoint', async (t) => {
   const sessionId = await loginAsUser(username, password);
 
   // Execute info endpoint
-  const response = await fetch(`${API_BASE}/api/v1/plugins/sample-analyzer/execute`, {
+  const response = await fetch(`${API_BASE}/api/v1/plugins/test-plugin/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -123,7 +123,7 @@ test('POST /api/v1/plugins/{id}/execute - nonexistent endpoint', async (t) => {
 
   const sessionId = await loginAsUser(username, password);
 
-  const response = await fetch(`${API_BASE}/api/v1/plugins/sample-analyzer/execute`, {
+  const response = await fetch(`${API_BASE}/api/v1/plugins/test-plugin/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -143,8 +143,8 @@ test('POST /api/v1/plugins/{id}/execute - nonexistent endpoint', async (t) => {
 });
 
 test('POST /api/v1/plugins/{id}/execute - without authentication', async () => {
-  // Try to execute plugin without auth (sample-analyzer requires 'user' role)
-  const response = await fetch(`${API_BASE}/api/v1/plugins/sample-analyzer/execute`, {
+  // Try to execute plugin without auth (test-plugin requires 'user' role)
+  const response = await fetch(`${API_BASE}/api/v1/plugins/test-plugin/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -172,7 +172,7 @@ test('POST /api/v1/plugins/{id}/execute - invalid request body', async (t) => {
   const sessionId = await loginAsUser(username, password);
 
   // Missing required fields
-  const response = await fetch(`${API_BASE}/api/v1/plugins/sample-analyzer/execute`, {
+  const response = await fetch(`${API_BASE}/api/v1/plugins/test-plugin/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
