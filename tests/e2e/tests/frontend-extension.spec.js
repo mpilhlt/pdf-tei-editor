@@ -3,7 +3,6 @@
  *
  * @testCovers app/src/modules/frontend-extension-registry.js
  * @testCovers app/src/modules/frontend-extension-sandbox.js
- * @testCovers app/src/modules/frontend-extension-wrapper.js
  * @testCovers fastapi_app/lib/frontend_extension_registry.py
  * @testCovers fastapi_app/routers/plugins.py
  * @testCovers fastapi_app/plugins/test_plugin/extensions/hello-world.js
@@ -43,22 +42,21 @@ test.describe('Frontend Extension System', () => {
     const message = dialog.locator('[name="message"]');
     await expect(message).toContainText('Hello World');
 
-    // Close dialog
-    await dialog.locator('[name="closeBtn"]').click();
+    // Close dialog - use first() to handle Shoelace shadow DOM duplicates
+    await dialog.locator('[name="closeBtn"]').first().click();
   });
 
   test('Extension can invoke other plugin endpoints via sandbox', async ({ page }) => {
     // Wait for extensions to load
     await page.waitForTimeout(1000);
 
-    // Test that extensions can use sandbox.invoke() via PluginManager
-    const result = await page.evaluate(async () => {
+    // Test that extensions can use sandbox.invoke() via app.invokePluginEndpoint
+    await page.evaluate(async () => {
       const app = /** @type {any} */(window).app;
-      if (!app?.pluginManager) return null;
+      if (!app) throw new Error('No app');
 
       // Invoke the custom endpoint from the hello-world extension
-      const results = await app.pluginManager.invoke('greet', ['Custom greeting from test!']);
-      return results;
+      await app.invokePluginEndpoint('greet', ['Custom greeting from test!']);
     });
 
     // Verify the invoke worked (dialog should have shown)

@@ -56,7 +56,7 @@ initializeSandbox(
 )
 
 // Load and register frontend extensions from backend plugins
-await loadExtensionsFromServer(app.pluginManager)
+await loadExtensionsFromServer(pluginManager)
 
 // Create plugin API exports after plugin registration
 export const authentication = AuthenticationPlugin.getInstance()

@@ -17,7 +17,7 @@ export function install(state, sandbox) {
   const button = document.createElement('sl-button');
   button.variant = 'text';
   button.size = 'small';
-  button.innerHTML = '<sl-icon name="emoji-smile"></sl-icon>';
+  button.innerHTML = '<sl-icon name="info-circle"></sl-icon>';
   button.title = 'Hello World Test';
   button.dataset.testId = 'hello-world-toolbar-btn';
 

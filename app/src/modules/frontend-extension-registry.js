@@ -5,6 +5,8 @@
  * application's PluginManager lifecycle.
  */
 
+import { getSandbox } from './frontend-extension-sandbox.js';
+
 /**
  * @import { FrontendExtensionSandbox } from './frontend-extension-sandbox.js'
  */
@@ -61,6 +63,46 @@ function clearExtensions() {
 }
 
 /**
+ * Convert a frontend extension to a PluginManager-compatible plugin object.
+ * @param {FrontendExtensionDef} extension
+ * @returns {Object} Plugin object for PluginManager
+ */
+function wrapExtensionAsPlugin(extension) {
+  const sandbox = getSandbox();
+
+  // Standard lifecycle methods that need sandbox injection
+  const lifecycleMethods = ['install', 'start', 'onStateUpdate'];
+
+  const plugin = {
+    name: extension.name,
+    deps: extension.deps || [],
+  };
+
+  // Wrap lifecycle methods to inject sandbox as last argument
+  if (extension.install) {
+    plugin.install = (state) => extension.install(state, sandbox);
+  }
+
+  if (extension.start) {
+    plugin.start = () => extension.start(sandbox);
+  }
+
+  if (extension.onStateUpdate) {
+    plugin.onStateUpdate = (changedKeys, state) =>
+      extension.onStateUpdate(changedKeys, state, sandbox);
+  }
+
+  // Include custom endpoints with sandbox injection
+  for (const [key, value] of Object.entries(extension)) {
+    if (typeof value === 'function' && !lifecycleMethods.includes(key) && key !== 'name') {
+      plugin[key] = (...args) => value(...args, sandbox);
+    }
+  }
+
+  return plugin;
+}
+
+/**
  * Load frontend extensions from the server and register them with the PluginManager.
  * Fetches the extensions bundle, executes it to register extensions via
  * window.registerFrontendExtension, then wraps and registers them as plugins.
@@ -69,9 +111,6 @@ function clearExtensions() {
  * @returns {Promise<number>} Number of extensions registered
  */
 async function loadExtensionsFromServer(pluginManager) {
-  // Import wrapper dynamically to avoid circular dependencies
-  const { getWrappedExtensions } = await import('./frontend-extension-wrapper.js');
-
   try {
     const response = await fetch('/api/v1/plugins/extensions.js');
     if (!response.ok) {
@@ -87,17 +126,18 @@ async function loadExtensionsFromServer(pluginManager) {
     document.head.appendChild(scriptEl);
     document.head.removeChild(scriptEl);
 
-    // Register wrapped extensions with PluginManager
-    const extensions = getWrappedExtensions();
+    // Get registered extensions and wrap them as plugins
+    const rawExtensions = getExtensions();
     let registered = 0;
 
-    for (const extensionPlugin of extensions) {
+    for (const extension of rawExtensions) {
       try {
+        const extensionPlugin = wrapExtensionAsPlugin(extension);
         pluginManager.register(extensionPlugin);
         console.log(`Registered frontend extension: ${extensionPlugin.name}`);
         registered++;
       } catch (error) {
-        console.error(`Failed to register extension ${extensionPlugin.name}:`, error);
+        console.error(`Failed to register extension ${extension.name}:`, error);
       }
     }
 

@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-25T13:49:00.940Z
+ * Generated from OpenAPI schema at 2026-01-25T16:57:30.771Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1724,17 +1724,6 @@ export class ApiClientV1 {
   async pluginsExecute(plugin_id, requestBody) {
     const endpoint = `/plugins/${plugin_id}/execute`
     return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Return concatenated JavaScript of all registered frontend extensions.
-   * Each extension self-registers via window.registerFrontendExtension().
-   *
-   * @returns {Promise<void>}
-   */
-  async pluginsExtensions.js() {
-    const endpoint = `/plugins/extensions.js`
-    return this.callApi(endpoint);
   }
 
   /**
