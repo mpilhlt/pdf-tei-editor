@@ -195,9 +195,9 @@ class UserAccountPlugin extends Plugin {
       email
     };
 
-    // Add password hash if password was provided
+    // Add password if provided (server will hash it)
     if (password) {
-      updateData.passwd_hash = await this._hashPassword(password);
+      updateData.password = password;
     }
 
     try {

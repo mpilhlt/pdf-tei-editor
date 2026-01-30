@@ -46,7 +46,7 @@ class UsersListResponse(BaseModel):
 class CreateUserRequest(BaseModel):
     """Request model for creating a new user."""
     username: str = Field(..., description="Unique username")
-    passwd_hash: str = Field(..., description="User password (will be hashed)")
+    password: str = Field(..., description="User password (will be hashed server-side)")
     fullname: Optional[str] = Field(default="", description="User's full name")
     email: Optional[str] = Field(default="", description="User's email address")
     roles: Optional[List[str]] = Field(default=None, description="List of user roles")
@@ -57,7 +57,7 @@ class UpdateUserRequest(BaseModel):
     """Request model for updating a user."""
     fullname: Optional[str] = Field(None, description="User's full name")
     email: Optional[str] = Field(None, description="User's email address")
-    passwd_hash: Optional[str] = Field(None, description="New password (will be hashed)")
+    password: Optional[str] = Field(None, description="New password (will be hashed server-side)")
     roles: Optional[List[str]] = Field(None, description="List of user roles")
     groups: Optional[List[str]] = Field(None, description="List of groups")
 
@@ -66,7 +66,7 @@ class UpdateProfileRequest(BaseModel):
     """Request model for updating own user profile."""
     fullname: Optional[str] = Field(None, description="User's full name")
     email: Optional[str] = Field(None, description="User's email address")
-    passwd_hash: Optional[str] = Field(None, description="New password (will be hashed)")
+    password: Optional[str] = Field(None, description="New password (will be hashed server-side)")
 
 
 def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
@@ -194,7 +194,7 @@ def create_user_endpoint(
         # Create user dict
         new_user = create_user(
             username=body.username,
-            password=body.passwd_hash,  # Will be hashed by create_user
+            password=body.password,  # Will be hashed by create_user
             fullname=body.fullname or "",
             email=body.email or "",
             roles=body.roles,
@@ -253,8 +253,8 @@ def update_user_endpoint(
             user['fullname'] = body.fullname
         if body.email is not None:
             user['email'] = body.email
-        if body.passwd_hash is not None:
-            user['passwd_hash'] = hash_password(body.passwd_hash)
+        if body.password is not None:
+            user['passwd_hash'] = hash_password(body.password)
         if body.roles is not None:
             user['roles'] = body.roles
         if body.groups is not None:
@@ -313,8 +313,8 @@ def update_own_profile(
             user['fullname'] = body.fullname
         if body.email is not None:
             user['email'] = body.email
-        if body.passwd_hash is not None:
-            user['passwd_hash'] = hash_password(body.passwd_hash)
+        if body.password is not None:
+            user['passwd_hash'] = hash_password(body.password)
 
         # Save to file
         save_entity_data(settings.db_dir, 'users', users_data)
