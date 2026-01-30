@@ -697,23 +697,23 @@ async function configSet(baseUrl, sessionId, key, jsonValue) {
  */
 async function diagnosticAccessCreate(baseUrl, sessionId) {
   const diagnosticUsers = [
-    { username: 'reviewer', role: 'reviewer' },
-    { username: 'annotator', role: 'annotator' },
+    { username: 'reviewer', roles: ['reviewer', 'annotator', 'user'] },
+    { username: 'annotator', roles: ['annotator', 'user'] }
   ];
 
-  for (const { username, role } of diagnosticUsers) {
+  for (const { username, roles } of diagnosticUsers) {
     try {
       const userData = {
         username,
         password: username,  // Password same as username, server will hash it
         fullname: username.charAt(0).toUpperCase() + username.slice(1),
         email: '',
-        roles: [role],
+        roles,
         groups: ['default'],
       };
 
       await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/users', userData);
-      console.log(`Created user '${username}' with role '${role}'.`);
+      console.log(`Created user '${username}' with roles '${roles.join(', ')}'.`);
     } catch (error) {
       if (error.message.includes('already exists')) {
         console.log(`User '${username}' already exists.`);
