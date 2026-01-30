@@ -13,7 +13,11 @@ from lxml import etree
 from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
 from fastapi_app.lib.doi_utils import fetch_doi_metadata
-from fastapi_app.plugins.grobid.config import get_supported_variants
+from fastapi_app.plugins.grobid.config import (
+    get_annotation_guides,
+    get_form_options,
+    get_navigation_xpath
+)
 from fastapi_app.lib.tei_utils import (
     create_tei_header,
     create_edition_stmt,
@@ -36,51 +40,9 @@ class GrobidTrainingExtractor(BaseExtractor):
             "description": "Create training data for GROBID reference extraction using remote GROBID server",
             "input": ["pdf"],
             "output": ["tei-document"],
-            "options": {
-                "doi": {
-                    "type": "string",
-                    "label": "DOI",
-                    "description": "DOI of the document for metadata enrichment",
-                    "required": False
-                },
-                "variant_id": {
-                    "type": "string",
-                    "label": "Variant identifier",
-                    "description": "Variant identifier for the training data type",
-                    "required": False,
-                    "options": get_supported_variants()
-                },
-                "flavor": {
-                    "type": "string",
-                    "label": "GROBID processing flavor",
-                    "description": "Processing flavor that determines how GROBID analyzes the document structure",
-                    "required": False,
-                    "options": [
-                        "default",
-                        "article/dh-law-footnotes"
-                    ]
-                }
-            },
-            "navigation_xpath": {
-                "grobid.training.segmentation": [
-                    {
-                        "value": "//tei:listBibl",
-                        "label": "<listBibl>"
-                    }
-                ],
-                "grobid.training.references.referenceSegmenter": [
-                    {
-                        "value": "//tei:bibl",
-                        "label": "<bibl>"
-                    }
-                ],
-                "grobid.training.references": [
-                    {
-                        "value": "//tei:bibl",
-                        "label": "<bibl>"
-                    }
-                ]
-            }
+            "options": get_form_options(),
+            "navigation_xpath": get_navigation_xpath(),
+            "annotationGuides": get_annotation_guides()
         }
 
     @classmethod

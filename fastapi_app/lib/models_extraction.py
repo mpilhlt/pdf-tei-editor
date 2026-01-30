@@ -8,6 +8,22 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
+class AnnotationGuideInfo(BaseModel):
+    """Information about an annotation guide for a variant."""
+    variant_id: str = Field(
+        ...,
+        description="The variant identifier this guide applies to"
+    )
+    type: str = Field(
+        ...,
+        description="The content type: 'html' or 'markdown'"
+    )
+    url: str = Field(
+        ...,
+        description="The URL to fetch the guide from"
+    )
+
+
 class ExtractorInfo(BaseModel):
     """Information about an available extractor."""
     id: str = Field(
@@ -37,6 +53,14 @@ class ExtractorInfo(BaseModel):
     options: Optional[Dict[str, Any]] = Field(
         None,
         description="Configuration options supported by the extractor"
+    )
+    navigation_xpath: Optional[Dict[str, Any]] = Field(
+        None,
+        description="XPath expressions for navigation, keyed by variant_id"
+    )
+    annotationGuides: Optional[List[AnnotationGuideInfo]] = Field(
+        None,
+        description="Annotation guide URLs for each variant"
     )
 
 
