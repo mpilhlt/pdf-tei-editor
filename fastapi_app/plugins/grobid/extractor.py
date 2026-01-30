@@ -1,22 +1,25 @@
 """
-GROBID-based training data extraction engine.
+GROBID-based extraction engine supporting multiple API endpoints.
 """
 
 import os
-import zipfile
 import datetime
 import re
-import time
 from typing import Dict, Any, Optional
 from lxml import etree
 
-from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
 from fastapi_app.lib.doi_utils import fetch_doi_metadata
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
     get_navigation_xpath
+)
+from fastapi_app.plugins.grobid.handlers import (
+    GrobidHandler,
+    TrainingHandler,
+    FulltextHandler,
+    ReferencesHandler,
 )
 from fastapi_app.lib.tei_utils import (
     create_tei_header,
@@ -29,15 +32,36 @@ from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing
 
 
 class GrobidTrainingExtractor(BaseExtractor):
-    """GROBID-based training data extraction from PDF files."""
+    """GROBID-based extraction from PDF files supporting multiple API endpoints."""
+
+    def __init__(self):
+        """Initialize handlers for different GROBID API endpoints."""
+        self._handlers: dict[str, GrobidHandler] = {
+            "grobid.training": TrainingHandler(),
+            "grobid.service.fulltext": FulltextHandler(),
+            "grobid.service.references": ReferencesHandler(),
+        }
+
+    def _get_handler(self, variant_id: str) -> GrobidHandler:
+        """Get the appropriate handler for a variant ID."""
+        # Check for exact match first (for service variants)
+        if variant_id in self._handlers:
+            return self._handlers[variant_id]
+
+        # Check for prefix match (for training variants)
+        for prefix, handler in self._handlers.items():
+            if variant_id.startswith(prefix):
+                return handler
+
+        raise ValueError(f"No handler found for variant: {variant_id}")
 
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
-        """Return information about the GROBID training extractor."""
+        """Return information about the GROBID extractor."""
         return {
             "id": "grobid-training",
-            "name": "GROBID Training Data",
-            "description": "Create training data for GROBID reference extraction using remote GROBID server",
+            "name": "GROBID Extraction",
+            "description": "Extract TEI from PDF using remote GROBID server (training data or full documents)",
             "input": ["pdf"],
             "output": ["tei-document"],
             "options": get_form_options(),
@@ -54,12 +78,12 @@ class GrobidTrainingExtractor(BaseExtractor):
     def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                 options: Optional[Dict[str, Any]] = None) -> str:
         """
-        Extract training data from PDF using GROBID.
+        Extract TEI from PDF using GROBID.
 
         Args:
             pdf_path: Path to the PDF file
             xml_content: Not used by this extractor
-            options: Extraction options (doi)
+            options: Extraction options (doi, variant_id, flavor)
 
         Returns:
             Complete TEI document as XML string
@@ -68,10 +92,10 @@ class GrobidTrainingExtractor(BaseExtractor):
         # xml_content parameter required by interface but not used by this extractor
         _ = xml_content
         if not pdf_path:
-            raise ValueError("PDF path is required for GROBID training extraction")
+            raise ValueError("PDF path is required for GROBID extraction")
 
         if not self.is_available():
-            raise RuntimeError("GROBID training extractor is not available - check GROBID_SERVER_URL environment variable")
+            raise RuntimeError("GROBID extractor is not available - check GROBID_SERVER_URL environment variable")
 
         if options is None:
             options = {}
@@ -79,7 +103,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Get options for flavor and variant_id using first value from options as default
         info = self.get_info()
         default_flavor = info["options"]["flavor"]["options"][0]  # "default"
-        default_variant_id = info["options"]["variant_id"]["options"][0]  # "grobid.training.fulltext"
+        default_variant_id = info["options"]["variant_id"]["options"][0]  # first variant
 
         flavor = options.get("flavor", default_flavor)
         variant_id = options.get("variant_id")
@@ -92,24 +116,25 @@ class GrobidTrainingExtractor(BaseExtractor):
             raise ValueError("No Grobid server URL")
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
 
-        # Create training data via GROBID API
-        training_tei_content = self._create_training_data(pdf_path, grobid_server_url, variant_id, flavor)
+        # Get the appropriate handler and fetch TEI content
+        handler = self._get_handler(variant_id)
+        raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
 
         # Log raw GROBID response for debugging
-        log_extraction_response("grobid", pdf_path, training_tei_content, ".raw.xml")
+        log_extraction_response("grobid", pdf_path, raw_tei_content, ".raw.xml")
 
         # Clean invalid XML attributes before parsing
-        training_tei_content = self._clean_invalid_xml_attributes(training_tei_content)
+        raw_tei_content = self._clean_invalid_xml_attributes(raw_tei_content)
 
         # Log cleaned content for debugging
-        log_extraction_response("grobid", pdf_path, training_tei_content, ".cleaned.xml")
+        log_extraction_response("grobid", pdf_path, raw_tei_content, ".cleaned.xml")
 
         # Parse the GROBID output
         try:
-            grobid_doc = etree.fromstring(training_tei_content.encode('utf-8'))
+            grobid_doc = etree.fromstring(raw_tei_content.encode('utf-8'))
         except etree.XMLSyntaxError as e:
             # Log the XML that failed to parse
-            log_xml_parsing_error("grobid", pdf_path, training_tei_content, str(e))
+            log_xml_parsing_error("grobid", pdf_path, raw_tei_content, str(e))
 
             # Create a minimal document structure with error info instead of failing
             # We'll use string manipulation to ensure proper CDATA formatting with unescaped XML
@@ -119,7 +144,7 @@ class GrobidTrainingExtractor(BaseExtractor):
   <text>
     <note type="error-message">{escaped_error}</note>
     <note type="invalid-xml"><![CDATA[
-{training_tei_content}
+{raw_tei_content}
 ]]></note>
   </text>
 </TEI>'''
@@ -271,7 +296,7 @@ class GrobidTrainingExtractor(BaseExtractor):
 
         # Replace CDATA placeholder with actual CDATA section containing unescaped XML
         if "CDATA_PLACEHOLDER_FOR_INVALID_XML" in result_xml:
-            cdata_content = f"<![CDATA[\n{training_tei_content}\n]]>"
+            cdata_content = f"<![CDATA[\n{raw_tei_content}\n]]>"
             result_xml = result_xml.replace("CDATA_PLACEHOLDER_FOR_INVALID_XML", cdata_content)
 
         return result_xml
@@ -294,99 +319,3 @@ class GrobidTrainingExtractor(BaseExtractor):
         except Exception as e:
             print(f"Warning: Could not fetch GROBID version: {e}")
             return "unknown", "unknown"
-
-    def _fetch_training_package(self, pdf_path: str, grobid_server_url: str, flavor: str) -> tuple[str, list[str]]:
-        """
-        Fetch training data package from GROBID and extract to temp directory.
-
-        Args:
-            pdf_path: Path to the PDF file
-            grobid_server_url: GROBID server URL
-            flavor: Processing flavor
-
-        Returns:
-            Tuple of (temp_dir path, list of extracted filenames)
-        """
-        import logging
-        from urllib.parse import urlparse
-        from requests.exceptions import ConnectionError, RequestException  # type: ignore[import-untyped]
-
-        logger = logging.getLogger(__name__)
-        logger.info(f"Fetching training package from {pdf_path} via GROBID")
-
-        # Create session with retry logic
-        session = get_retry_session(retries=5, backoff_factor=2.0)
-
-        # Create project temp directory for processing
-        settings = get_settings()
-        temp_base = settings.tmp_dir / "grobid"
-        temp_base.mkdir(parents=True, exist_ok=True)
-
-        timestamp = int(time.time() * 1000)
-        temp_dir = temp_base / f"{timestamp}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
-        # Call GROBID createTraining API
-        url = f"{grobid_server_url}/api/createTraining"
-
-        try:
-            with open(pdf_path, 'rb') as pdf_file:
-                files = {
-                    'input': pdf_file,
-                    'flavor': ('', flavor)
-                }
-
-                response = session.post(url, files=files, timeout=300)  # 5 minute timeout
-                response.raise_for_status()
-        except (ConnectionError, RequestException) as e:
-            # Log full error for debugging
-            logger.error(f"GROBID connection failed: {e}", exc_info=True)
-
-            # Extract hostname for user-friendly message
-            parsed_url = urlparse(grobid_server_url)
-            hostname = parsed_url.netloc or parsed_url.path
-
-            # Raise user-friendly error
-            raise RuntimeError(f"Cannot connect to {hostname}")
-
-        # Save ZIP file
-        zip_path = temp_dir / "training.zip"
-        with open(zip_path, 'wb') as f:
-            f.write(response.content)
-
-        # Extract ZIP file
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-
-        # Get list of extracted files (excluding the zip itself)
-        extracted_files = [f for f in os.listdir(temp_dir) if f != "training.zip"]
-
-        return str(temp_dir), extracted_files
-
-    def _create_training_data(self, pdf_path: str, grobid_server_url: str, variant_id: str, flavor: str) -> str:
-        """Create training data using GROBID createTraining API with retry logic."""
-        import shutil
-
-        settings = get_settings()
-        temp_dir, extracted_files = self._fetch_training_package(pdf_path, grobid_server_url, flavor)
-
-        try:
-            # Find the file that corresponds to the variant
-            training_file = None
-            suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
-            for filename in extracted_files:
-                if filename.endswith(suffix):
-                    training_file = os.path.join(temp_dir, filename)
-                    break
-
-            if not training_file:
-                raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
-
-            # Read the training file content
-            with open(training_file, 'r', encoding='utf-8') as f:
-                return f.read()
-
-        finally:
-            # Clean up temp directory in production mode
-            if settings.application_mode == "production":
-                shutil.rmtree(temp_dir, ignore_errors=True)

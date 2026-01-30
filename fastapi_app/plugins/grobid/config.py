@@ -1,11 +1,14 @@
 """GROBID plugin configuration."""
 
-# Supported training data variants
-# These correspond to GROBID training model types
+# Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
+    # Training variants (use /api/createTraining endpoint)
     "grobid.training.segmentation",
     "grobid.training.references.referenceSegmenter",
-    "grobid.training.references"
+    "grobid.training.references",
+    # Service variants (use direct API endpoints)
+    "grobid.service.fulltext",
+    "grobid.service.references",
 ]
 
 # Processing flavors
@@ -53,6 +56,22 @@ NAVIGATION_XPATH = {
         }
     ],
     "grobid.training.references": [
+        {
+            "value": "//tei:bibl",
+            "label": "<bibl>"
+        }
+    ],
+    "grobid.service.fulltext": [
+        {
+            "value": "//tei:div",
+            "label": "<div>"
+        },
+        {
+            "value": "//tei:bibl",
+            "label": "<bibl>"
+        }
+    ],
+    "grobid.service.references": [
         {
             "value": "//tei:bibl",
             "label": "<bibl>"
