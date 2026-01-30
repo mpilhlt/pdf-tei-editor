@@ -80,11 +80,11 @@ const entitySchemas = {
         placeholder: 'user@example.com'
       },
       {
-        name: 'passwd_hash',
+        name: 'password',
         type: 'password',
         label: 'Password',
         placeholder: 'Leave empty to keep current password',
-        helpText: 'Password will be hashed before storage'
+        helpText: 'Password will be hashed server-side'
       },
       {
         name: 'roles',

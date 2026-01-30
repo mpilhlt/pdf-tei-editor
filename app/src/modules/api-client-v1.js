@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-25T16:57:30.771Z
+ * Generated from OpenAPI schema at 2026-01-30T11:37:53.872Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -163,7 +163,7 @@
 /**
  * @typedef {Object} CreateUserRequest
  * @property {string} username - Unique username
- * @property {string} passwd_hash - User password (will be hashed)
+ * @property {string} password - User password (will be hashed server-side)
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
  * @property {Array<string>=} roles - List of user roles
@@ -497,7 +497,7 @@
  * @typedef {Object} UpdateProfileRequest
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
- * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {string=} password - New password (will be hashed server-side)
  */
 
 /**
@@ -510,7 +510,7 @@
  * @typedef {Object} UpdateUserRequest
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
- * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {string=} password - New password (will be hashed server-side)
  * @property {Array<string>=} roles - List of user roles
  * @property {Array<string>=} groups - List of groups
  */
