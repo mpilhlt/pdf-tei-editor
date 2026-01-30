@@ -11,12 +11,21 @@
  */
 import ui from '../ui.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
-import { dialog, logger, helpPlugin } from '../app.js'
+import { dialog, logger, helpPlugin, client } from '../app.js'
+import { extraction } from '../plugins.js'
 import {
   createMarkdownRenderer,
   fetchMarkdown,
   renderMarkdown
 } from '../modules/markdown-utils.js'
+
+/**
+ * Annotation guide information from extractor plugins
+ * @typedef {object} AnnotationGuideInfo
+ * @property {string} variant_id - The variant identifier
+ * @property {"html" | "markdown"} type - The content type
+ * @property {string} url - The URL to fetch the guide from
+ */
 
 /**
  * plugin API
@@ -32,7 +41,7 @@ const api = {
  */
 const plugin = {
   name: "annotation-guide",
-  deps: ['help'],
+  deps: ['help', 'extraction'],
   install,
   onStateUpdate
 }
@@ -48,6 +57,7 @@ export default plugin
  * Annotation Guide Drawer
  * @typedef {object} annotationGuideDrawerPart
  * @property {HTMLDivElement} content
+ * @property {SlButton} openInNewWindowBtn
  * @property {SlButton} closeBtn
  */
 
@@ -58,21 +68,22 @@ export default plugin
 let md
 
 /**
- * Static mapping from variant values to annotation guide URLs
- * TODO: Replace with dynamic system
- * @type {Map<string, string>}
+ * Annotation guides collected from all extractors
+ * @type {AnnotationGuideInfo[]}
  */
-const variantGuideUrls = new Map([
-  ['grobid.training.segmentation', 'https://pad.gwdg.de/s/1Oti-hJDb/download#segmentation'],
-  ['grobid.training.references', 'https://pad.gwdg.de/s/1Oti-hJDb/download#reference-segmenter'],
-  ['llamore-default', 'https://pad.gwdg.de/s/LSqaEtZyT/download']
-])
+let annotationGuides = []
 
 /**
  * Current state reference (updated via onStateUpdate)
  * @type {ApplicationState | null}
  */
 let currentState = null
+
+/**
+ * Current guide URL (for opening in new window)
+ * @type {string | null}
+ */
+let currentGuideUrl = null
 
 // Register template
 await registerTemplate('annotation-guide-drawer', 'annotation-guide-drawer.html')
@@ -89,6 +100,7 @@ async function install(state) {
 
   // Set up drawer event listeners
   ui.annotationGuideDrawer.closeBtn.addEventListener('click', () => ui.annotationGuideDrawer.hide())
+  ui.annotationGuideDrawer.openInNewWindowBtn.addEventListener('click', openInNewWindow)
 
   // Register topic with help plugin
   helpPlugin.registerTopic(
@@ -120,10 +132,34 @@ async function onStateUpdate(_changedKeys, state) {
 async function open() {
   ui.annotationGuideDrawer.show()
 
+  // Collect annotation guides from all extractors (lazy load)
+  if (annotationGuides.length === 0) {
+    let extractors = extraction.extractorInfo()
+    // Fallback to direct API call if extractors not yet loaded
+    if (!extractors) {
+      extractors = await client.getExtractorList()
+    }
+    if (extractors) {
+      annotationGuides = extractors.flatMap(e => e.annotationGuides || [])
+    }
+  }
+
   // Load guide for current variant from state
   const variant = currentState?.variant
   if (variant) {
     await load(variant)
+  } else {
+    // No variant - hide the button and show message
+    ui.annotationGuideDrawer.openInNewWindowBtn.hidden = true
+    ui.annotationGuideDrawer.content.innerHTML = `
+      <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
+        <sl-icon name="info-circle" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
+        <p>No document loaded.</p>
+        <p style="margin-top: 1rem; font-size: 0.875rem;">
+          Load a document to view its annotation guide.
+        </p>
+      </div>
+    `
   }
 }
 
@@ -135,11 +171,19 @@ async function load(variant) {
   // Clear existing content
   ui.annotationGuideDrawer.content.innerHTML = ""
 
-  // Check if guide URL exists for this variant
-  const guideUrl = variantGuideUrls.get(variant)
+  // Find guides for this variant
+  const variantGuides = annotationGuides.filter(g => g.variant_id === variant)
+  const markdownGuide = variantGuides.find(g => g.type === 'markdown')
+  const htmlGuide = variantGuides.find(g => g.type === 'html')
 
-  if (!guideUrl) {
-    // Display message when no guide is available
+  // Store HTML URL for opening in new window
+  currentGuideUrl = htmlGuide?.url || null
+
+  // Show/hide the "Open in new window" button based on HTML availability
+  ui.annotationGuideDrawer.openInNewWindowBtn.hidden = !htmlGuide
+
+  // No guides available for this variant
+  if (!markdownGuide && !htmlGuide) {
     ui.annotationGuideDrawer.content.innerHTML = `
       <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
         <sl-icon name="info-circle" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
@@ -152,10 +196,24 @@ async function load(variant) {
     return
   }
 
-  // Split URL and anchor
+  // Only HTML available (no markdown) - show link to external page
+  if (!markdownGuide && htmlGuide) {
+    ui.annotationGuideDrawer.content.innerHTML = `
+      <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
+        <sl-icon name="box-arrow-up-right" style="font-size: 2rem; margin-bottom: 1rem;"></sl-icon>
+        <p>The annotation guide for this variant is available as an external page.</p>
+        <p style="margin-top: 1rem;">
+          <a href="${htmlGuide.url}" target="_blank" rel="noopener">Open Annotation Guide</a>
+        </p>
+      </div>
+    `
+    return
+  }
+
+  // Markdown available - fetch and render
+  const guideUrl = markdownGuide.url
   const [fetchUrl, anchor] = guideUrl.split('#')
 
-  // Fetch and render markdown
   try {
     logger.debug(`Loading annotation guide from: ${fetchUrl}`)
     const markdown = await fetchMarkdown(fetchUrl, true)
@@ -191,6 +249,15 @@ async function load(variant) {
         <p style="margin-top: 1rem; font-size: 0.875rem;">${error.message}</p>
       </div>
     `
+  }
+}
+
+/**
+ * Opens the current annotation guide in a new browser window
+ */
+function openInNewWindow() {
+  if (currentGuideUrl) {
+    window.open(currentGuideUrl, '_blank')
   }
 }
 

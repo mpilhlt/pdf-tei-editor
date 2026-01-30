@@ -16,6 +16,11 @@ from fastapi_app.lib.tei_utils import (
     serialize_tei_with_formatted_header
 )
 from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing_error
+from fastapi_app.plugins.llamore.config import (
+    get_annotation_guides,
+    get_form_options,
+    get_navigation_xpath
+)
 import datetime
 
 # Try to import LLamore dependencies
@@ -44,49 +49,9 @@ class LLamoreExtractor(BaseExtractor):
             "description": "Extract bibliographic references from PDF using LLamore library with Gemini AI",
             "input": ["pdf"],
             "output": ["tei-document"],
-            "options": {
-                "doi": {
-                    "type": "string",
-                    "label": "DOI",
-                    "description": "DOI of the document for metadata enrichment",
-                    "required": False
-                },
-                "instructions": {
-                    "type": "string",
-                    "label": "Instructions",
-                    "description": "Additional instructions for the extraction process",
-                    "required": False
-                },
-                "variant_id": {
-                    "type": "string",
-                    "label": "Variant identifier",
-                    "description": "Variant identifier for the LLamore extraction",
-                    "required": False,
-                    "options": [
-                        "llamore-default"
-                    ]
-                }
-            },
-            "navigation_xpath": {
-                "llamore-default": [
-                    {
-                        "value": "//tei:biblStruct",
-                        "label": "<biblStruct>"
-                    },
-                    {
-                        "value": "//tei:biblStruct[@status='verified']",
-                        "label": "Verified <biblStruct>"
-                    },
-                    {
-                        "value": "//tei:biblStruct[not(@status='verified')]",
-                        "label": "Unverified <biblStruct>"
-                    },
-                    {
-                        "value": "//tei:biblStruct[@status='unresolved']",
-                        "label": "Unresolved <biblStruct>"
-                    }
-                ]
-            }
+            "options": get_form_options(),
+            "navigation_xpath": get_navigation_xpath(),
+            "annotationGuides": get_annotation_guides()
         }
 
     @classmethod

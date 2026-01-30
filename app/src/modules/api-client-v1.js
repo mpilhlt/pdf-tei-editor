@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-30T12:48:54.105Z
+ * Generated from OpenAPI schema at 2026-01-30T15:50:58.529Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -17,6 +17,13 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} AnnotationGuideInfo
+ * @property {string} variant_id - The variant identifier this guide applies to
+ * @property {string} type - The content type: 'html' or 'markdown'
+ * @property {string} url - The URL to fetch the guide from
  */
 
 /**
@@ -235,6 +242,8 @@
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
  * @property {Object<string, any>=} options - Configuration options supported by the extractor
+ * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
+ * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  */
 
 /**
