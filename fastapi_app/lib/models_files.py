@@ -29,6 +29,7 @@ class FileItemModel(BaseModel):
     file_size: int
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[str] = None           # Username of user who created this file
 
     class Config:
         from_attributes = True
@@ -41,6 +42,7 @@ class ArtifactModel(FileItemModel):
     is_gold_standard: bool                     # True for gold standards
     is_locked: bool                            # Lock status
     access_control: Optional[Dict[str, Any]] = None  # Access control rules or null
+    created_by: Optional[str] = None           # Username of user who created this file
 
 
 class DocumentGroupModel(BaseModel):
