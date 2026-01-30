@@ -367,17 +367,20 @@ async function computeDocumentPermissions() {
   const fileData = getFileDataById(pluginState?.xml)
   const currentUser = authentication.getUser()
 
+  // fileData is a LookupItem: {type, item, file, label}
+  // The actual file/artifact data with created_by is in fileData.item
+  const owner = fileData?.item?.created_by || null
+
   if (mode === 'role-based') {
     // Role-based mode: no document-level permissions
     currentPermissions = {
       visibility: 'collection',
       editability: 'collection',
-      owner: fileData?.created_by || null,
+      owner,
       can_modify: false
     }
   } else if (mode === 'owner-based') {
     // Owner-based mode: documents editable only by owner
-    const owner = fileData?.created_by || null
     currentPermissions = {
       visibility: 'collection',
       editability: 'owner',
@@ -390,7 +393,7 @@ async function computeDocumentPermissions() {
       currentPermissions = {
         visibility: accessControlConfig?.default_visibility || 'collection',
         editability: accessControlConfig?.default_editability || 'owner',
-        owner: fileData?.created_by || null,
+        owner,
         can_modify: false
       }
       return
@@ -414,7 +417,7 @@ async function computeDocumentPermissions() {
       currentPermissions = {
         visibility: accessControlConfig?.default_visibility || 'collection',
         editability: accessControlConfig?.default_editability || 'owner',
-        owner: fileData?.created_by || null,
+        owner,
         can_modify: false
       }
     }
@@ -552,12 +555,25 @@ function showOwnerBasedNotification() {
   const currentUser = authentication.getUser()
   const owner = currentPermissions.owner
 
-  if (owner && owner !== currentUser?.username && !userHasReviewerRole(currentUser)) {
-    notify(
-      `This document is owned by ${owner}. Create your own version to edit.`,
-      'warning',
-      'exclamation-triangle'
-    )
+  // In owner-based mode, only the owner can edit (even reviewers can't edit, only delete/replace)
+  // Show notification if current user is not the owner
+  const isOwner = owner && owner === currentUser?.username
+
+  if (!isOwner) {
+    if (owner) {
+      notify(
+        `This document is owned by ${owner}. Create your own version to edit.`,
+        'warning',
+        'exclamation-triangle'
+      )
+    } else {
+      // No owner (legacy file created before owner tracking)
+      notify(
+        `This document has no owner and is read-only. Create your own version to edit.`,
+        'warning',
+        'exclamation-triangle'
+      )
+    }
   }
 }
 
