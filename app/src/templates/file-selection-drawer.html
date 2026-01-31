@@ -46,9 +46,15 @@
         </sl-button>
       </sl-tooltip>
       <sl-tooltip content="Export selected collections">
-        <sl-button name="exportButton" variant="primary" size="small" disabled>
-          <sl-icon name="download"></sl-icon>
-        </sl-button>
+        <sl-dropdown name="exportDropdown" placement="bottom-end">
+          <sl-button name="exportButton" variant="primary" size="small" slot="trigger" caret disabled>
+            <sl-icon name="download"></sl-icon>
+          </sl-button>
+          <sl-menu name="exportMenu">
+            <sl-menu-item name="exportDefault">Export Gold XML</sl-menu-item>
+            <sl-menu-item name="exportWithVersions">Export all XML</sl-menu-item>
+          </sl-menu>
+        </sl-dropdown>
       </sl-tooltip>
       <sl-tooltip content="Delete selected collection">
         <sl-button name="deleteButton" variant="danger" size="small" disabled>

@@ -5,7 +5,7 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem, SlCheckbox, UIPart } from '../ui.js'
+ * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem, SlCheckbox, SlDropdown, SlMenu, SlMenuItem, UIPart } from '../ui.js'
  * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
@@ -20,6 +20,18 @@
  */
 
 /**
+ * @typedef {object} exportMenuPart
+ * @property {SlMenuItem} exportDefault
+ * @property {SlMenuItem} exportWithVersions
+ */
+
+/**
+ * @typedef {object} exportDropdownPart
+ * @property {SlButton} exportButton
+ * @property {UIPart<SlMenu, exportMenuPart>} exportMenu
+ */
+
+/**
  * The file drawer
  * @typedef {object} fileDrawerPart
  * @property {SlSelect} variantSelect
@@ -28,7 +40,7 @@
  * @property {SlTree} fileTree
  * @property {SlButton} importButton
  * @property {HTMLInputElement} importFileInput
- * @property {SlButton} exportButton
+ * @property {UIPart<SlDropdown, exportDropdownPart>} exportDropdown
  * @property {SlButton} deleteButton
  * @property {SlButton} newCollectionButton
  * @property {SlButton} closeDrawer
@@ -181,10 +193,15 @@ async function install(state) {
     onSelectAllChange();
   });
 
-  // Handle export button
-  ui.fileDrawer.exportButton.addEventListener('click', () => {
-    if (currentState) {
-      handleExport(currentState);
+  // Handle export menu selection
+  ui.fileDrawer.exportDropdown.exportMenu.addEventListener('sl-select', async (event) => {
+    if (!currentState) return;
+    // @ts-ignore - detail.item exists on SlMenu sl-select events
+    const item = event.detail.item;
+    if (item.getAttribute('name') === 'exportDefault') {
+      await handleExport(currentState, false);
+    } else if (item.getAttribute('name') === 'exportWithVersions') {
+      await handleExport(currentState, true);
     }
   });
 
@@ -296,18 +313,18 @@ function updateButtonVisibility(state) {
 
   // Show buttons only if user has reviewer role or higher
   const importButton = ui.fileDrawer.importButton;
-  const exportButton = ui.fileDrawer.exportButton;
+  const exportDropdown = ui.fileDrawer.exportDropdown;
   const deleteButton = ui.fileDrawer.deleteButton;
   const newCollectionButton = ui.fileDrawer.newCollectionButton;
 
   if (hasReviewerRole) {
     importButton.style.display = '';
-    exportButton.style.display = '';
+    exportDropdown.style.display = '';
     deleteButton.style.display = '';
     newCollectionButton.style.display = '';
   } else {
     importButton.style.display = 'none';
-    exportButton.style.display = 'none';
+    exportDropdown.style.display = 'none';
     deleteButton.style.display = 'none';
     newCollectionButton.style.display = 'none';
   }
@@ -750,7 +767,7 @@ function onSelectAllChange() {
  * Updates the export and delete button enabled/disabled state based on selected collections
  */
 function updateExportButtonState() {
-  const exportButton = ui.fileDrawer.exportButton;
+  const exportButton = ui.fileDrawer.exportDropdown.exportButton;
   const deleteButton = ui.fileDrawer.deleteButton;
 
   const hasSelection = selectedCollections.size > 0;
@@ -761,10 +778,11 @@ function updateExportButtonState() {
 }
 
 /**
- * Handles export button click
+ * Handles export menu selection
  * @param {ApplicationState} state
+ * @param {boolean} includeVersions - Whether to include version files
  */
-function handleExport(state) {
+async function handleExport(state, includeVersions = false) {
   if (selectedCollections.size === 0) return;
   if (!state.sessionId) {
     logger.error("Cannot export: no session ID available");
@@ -773,7 +791,7 @@ function handleExport(state) {
 
   const collections = Array.from(selectedCollections).join(',');
 
-  // Build URL with collections and optional variant filter
+  // Build base URL params
   const params = new URLSearchParams({
     sessionId: state.sessionId,
     collections: collections
@@ -786,17 +804,84 @@ function handleExport(state) {
     params.append('variants', selectedVariant);
   }
 
-  const url = `/api/v1/export?${params.toString()}`;
+  // Add include_versions parameter if requested
+  if (includeVersions) {
+    params.append('include_versions', 'true');
+  }
 
-  logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}`);
+  logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}${includeVersions ? ' (with versions)' : ''}`);
 
-  // Trigger download using a temporary anchor element to avoid page navigation
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'export.zip';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  // Disable export button during operation
+  const exportButton = ui.fileDrawer.exportDropdown.exportButton;
+  exportButton.disabled = true;
+  exportButton.loading = true;
+
+  try {
+    // Step 1: Get export stats (without download)
+    const statsUrl = `/api/v1/export?${params.toString()}`;
+    const statsResponse = await fetch(statsUrl);
+
+    if (!statsResponse.ok) {
+      let errorMessage = `Export failed: ${statsResponse.statusText}`;
+      try {
+        const errorData = await statsResponse.json();
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+      throw new Error(errorMessage);
+    }
+
+    const stats = await statsResponse.json();
+
+    // Check if there are files to export
+    if (!stats.files_exported || stats.files_exported <= 0) {
+      notify("No files to export. The selected collections may be empty or contain no matching files.", "warning", "exclamation-triangle");
+      return;
+    }
+
+    // Step 2: Download the actual ZIP file
+    params.append('download', 'true');
+    const downloadUrl = `/api/v1/export?${params.toString()}`;
+    const downloadResponse = await fetch(downloadUrl);
+
+    if (!downloadResponse.ok) {
+      let errorMessage = `Download failed: ${downloadResponse.statusText}`;
+      try {
+        const errorData = await downloadResponse.json();
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Create blob from response and trigger download
+    const blob = await downloadResponse.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = 'export.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+
+    // Show success notification with stats
+    notify(`Exported ${stats.files_exported} files successfully`, "success", "check-circle");
+    logger.info(`Export completed: ${stats.files_exported} files exported`);
+  } catch (error) {
+    logger.error("Export failed: " + String(error));
+    notify(error.message || "Export failed", "danger", "exclamation-octagon");
+  } finally {
+    // Re-enable export button
+    exportButton.disabled = selectedCollections.size === 0;
+    exportButton.loading = false;
+  }
 }
 
 /**
