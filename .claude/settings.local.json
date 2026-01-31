@@ -45,7 +45,10 @@
       "Bash(git rev-parse:*)",
       "Bash(git checkout:*)",
       "Bash(xargs -I {} sh -c 'unzip -l \"\"{}\"\" 2>/dev/null | head -20')",
-      "Bash(xargs -I {} sh -c 'unzip -l \"\"{}\"\" 2>/dev/null')"
+      "Bash(xargs -I {} sh -c 'unzip -l \"\"{}\"\" 2>/dev/null')",
+      "Bash(node tests/e2e-runner.js:*)",
+      "Bash(node bin/manage-remote.js:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

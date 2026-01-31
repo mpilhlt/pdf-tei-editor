@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-23T20:40:01.285Z
+ * Generated from OpenAPI schema at 2026-01-31T14:08:20.571Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -20,6 +20,13 @@
  */
 
 /**
+ * @typedef {Object} AnnotationGuideInfo
+ * @property {string} variant_id - The variant identifier this guide applies to
+ * @property {string} type - The content type: 'html' or 'markdown'
+ * @property {string} url - The URL to fetch the guide from
+ */
+
+/**
  * @typedef {Object} ArtifactModel
  * @property {string} id
  * @property {string} filename
@@ -28,6 +35,7 @@
  * @property {number} file_size
  * @property {string} created_at
  * @property {string} updated_at
+ * @property {string=} created_by
  * @property {string=} variant
  * @property {number=} version
  * @property {boolean} is_gold_standard
@@ -163,7 +171,7 @@
 /**
  * @typedef {Object} CreateUserRequest
  * @property {string} username - Unique username
- * @property {string} passwd_hash - User password (will be hashed)
+ * @property {string} password - User password (will be hashed server-side)
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
  * @property {Array<string>=} roles - List of user roles
@@ -234,6 +242,8 @@
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
  * @property {Object<string, any>=} options - Configuration options supported by the extractor
+ * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
+ * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  */
 
 /**
@@ -254,6 +264,7 @@
  * @property {number} file_size
  * @property {string} created_at
  * @property {string} updated_at
+ * @property {string=} created_by
  */
 
 /**
@@ -497,7 +508,7 @@
  * @typedef {Object} UpdateProfileRequest
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
- * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {string=} password - New password (will be hashed server-side)
  */
 
 /**
@@ -510,7 +521,7 @@
  * @typedef {Object} UpdateUserRequest
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
- * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {string=} password - New password (will be hashed server-side)
  * @property {Array<string>=} roles - List of user roles
  * @property {Array<string>=} groups - List of groups
  */
@@ -1375,7 +1386,10 @@ export class ApiClientV1 {
   }
 
   /**
-   * Export files as a downloadable zip archive.
+   * Export files as a downloadable zip archive or return export statistics.
+   * Two-step export process:
+   * 1. Call without download=true to get stats (files_exported count)
+   * 2. If files_exported > 0, call with download=true to get the ZIP
    * Requires valid session authentication. Exports files filtered by:
    * - Collections: If specified, only those collections (filtered by user access)
    * - Variants: Optional variant filtering with glob pattern support
@@ -1385,18 +1399,20 @@ export class ApiClientV1 {
    * variants: Comma-separated variant names (optional)
    * include_versions: Include versioned TEI files (default: False)
    * group_by: Directory grouping: "type", "collection", or "variant"
+   * download: If true, return ZIP file; if false, return stats JSON
    * db: Database manager (injected)
    * repo: File repository (injected)
    * storage: File storage (injected)
    * current_user: Current user dict (injected)
    * Returns:
-   * FileResponse with zip archive for download
+   * FileResponse with zip archive (download=true) or JSONResponse with stats
    *
    * @param {Object=} params - Query parameters
    * @param {(string | null)=} params.collections
    * @param {(string | null)=} params.variants
    * @param {boolean=} params.include_versions
    * @param {string=} params.group_by
+   * @param {boolean=} params.download
    * @returns {Promise<any>}
    */
   async export(params) {

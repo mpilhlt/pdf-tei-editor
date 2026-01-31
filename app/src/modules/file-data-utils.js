@@ -31,6 +31,7 @@
  * @property {number} file_size - File size in bytes
  * @property {string} created_at - ISO timestamp
  * @property {string} updated_at - ISO timestamp
+ * @property {string|null} created_by - Username of user who created this file
  */
 
 /**
@@ -40,7 +41,8 @@
  *   version: number|null,
  *   is_gold_standard: boolean,
  *   is_locked: boolean,
- *   access_control: object|null
+ *   access_control: object|null,
+ *   created_by: string|null
  * }} Artifact
  */
 

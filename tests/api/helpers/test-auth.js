@@ -191,8 +191,7 @@ async function createTestUser(username, password, roles = ['user'], baseUrl = nu
   // Login as admin to create users
   const adminSession = await createAdminSession(baseUrl);
 
-  // Create the user - Note: passwd_hash is misleading, the API expects plain password
-  // which will be hashed by the create_user function
+  // Create the user - server will hash the password
   const response = await fetch(`${apiBase}/users`, {
     method: 'POST',
     headers: {
@@ -201,7 +200,7 @@ async function createTestUser(username, password, roles = ['user'], baseUrl = nu
     },
     body: JSON.stringify({
       username,
-      passwd_hash: password,  // API will hash this
+      password,  // Server will hash this
       roles,
       fullname: `Test User ${username}`,
       email: `${username}@test.local`

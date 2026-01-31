@@ -1,13 +1,14 @@
 """
-Sample analyzer plugin for testing the plugin system.
+Test plugin for testing the plugin system.
 
 This plugin demonstrates the basic plugin structure and provides
 a simple text analysis endpoint. Also registers the MockExtractor
-for testing extraction functionality.
+for testing extraction functionality, and frontend extensions.
 """
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
@@ -17,18 +18,18 @@ from .extractor import MockExtractor
 logger = logging.getLogger(__name__)
 
 
-class SampleAnalyzerPlugin(Plugin):
+class TestPlugin(Plugin):
     """
-    Sample analyzer plugin that performs basic text analysis.
+    Test plugin that performs basic text analysis and demonstrates frontend extensions.
     """
 
     @property
     def metadata(self) -> dict[str, Any]:
         """Return plugin metadata."""
         return {
-            "id": "sample-analyzer",
-            "name": "Sample Text Analyzer",
-            "description": "Analyzes text and returns basic statistics",
+            "id": "test-plugin",
+            "name": "Test Plugin",
+            "description": "Test plugin with text analysis and frontend extensions",
             "version": "1.0.0",
             "category": "test",
             "required_roles": ["user"],  # Requires user role
@@ -57,18 +58,29 @@ class SampleAnalyzerPlugin(Plugin):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Sample analyzer available only in development and testing modes."""
+        """Test plugin available only in testing mode."""
         app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
         return app_mode in ("testing")
 
     async def initialize(self, context: PluginContext) -> None:
-        """Initialize plugin and register MockExtractor in testing mode."""
+        """Initialize plugin, register MockExtractor and frontend extensions."""
         # Register MockExtractor for testing
         if MockExtractor.is_available():
             registry = ExtractorRegistry.get_instance()
             registry.register(MockExtractor)
             logger.info("MockExtractor registered for testing")
-        logger.info("Sample analyzer plugin initialized")
+
+        # Register frontend extension
+        from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+
+        fe_registry = FrontendExtensionRegistry.get_instance()
+        extension_dir = Path(__file__).parent / "extensions"
+
+        extension_file = extension_dir / "hello-world.js"
+        if extension_file.exists():
+            fe_registry.register_extension(extension_file, self.metadata["id"])
+
+        logger.info("Test plugin initialized")
 
     async def cleanup(self) -> None:
         """Cleanup plugin and unregister MockExtractor."""
@@ -77,7 +89,7 @@ class SampleAnalyzerPlugin(Plugin):
             registry = ExtractorRegistry.get_instance()
             registry.unregister("mock-extractor")
             logger.info("MockExtractor unregistered")
-        logger.info("Sample analyzer plugin cleaned up")
+        logger.info("Test plugin cleaned up")
 
     async def execute(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
         """
@@ -168,5 +180,5 @@ class SampleAnalyzerPlugin(Plugin):
         return {
             "plugin": self.metadata["name"],
             "version": self.metadata["version"],
-            "message": "Sample analyzer ready to analyze text",
+            "message": "Test plugin ready",
         }

@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED: This script is deprecated and will be removed in a future version.
+Use `manage-remote.js` instead, which works with both local and remote instances
+via the HTTP API.
+
+    node bin/manage-remote.js <command> <subcommand> [options]
+
+Or via npm:
+
+    npm run manage-remote -- <command> <subcommand> [options]
+"""
 import argparse
 import json
 import sys
 from pathlib import Path
 import getpass
+import warnings
 
 def setup_imports():
     """Setup imports for the utility modules."""
@@ -488,6 +500,10 @@ def clear_caches(args):
     print(message)
 
 if __name__ == '__main__':
+    # Print deprecation warning
+    print("\033[33mDEPRECATION WARNING: manage.py is deprecated and will be removed in a future version.\033[0m", file=sys.stderr)
+    print("\033[33mUse 'npm run manage-remote' or 'node bin/manage-remote.js' instead.\033[0m\n", file=sys.stderr)
+
     parser = argparse.ArgumentParser(
         description="A command-line tool to manage the PDF-TEI-Editor application.",
         epilog="Use 'manage.py <command> --help' for more information on a specific command.",

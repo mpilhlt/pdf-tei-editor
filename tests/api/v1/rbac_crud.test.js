@@ -20,7 +20,7 @@ const entitySchemas = {
     idField: 'username',
     createPayload: {
       username: 'test-user-crud',
-      passwd_hash: 'testpassword123',
+      password: 'testpassword123',
       fullname: 'Test User CRUD',
       email: 'test-crud@example.com',
       roles: ['user'],
@@ -355,7 +355,7 @@ test('user - Password is hashed on create', async () => {
 
   const payload = {
     username: 'password-test-user',
-    passwd_hash: 'plaintext-password',
+    password: 'plaintext-password',
     fullname: 'Password Test',
     roles: ['user']
   };

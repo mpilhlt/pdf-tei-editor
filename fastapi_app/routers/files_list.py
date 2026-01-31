@@ -220,7 +220,8 @@ def _build_file_item(file_metadata) -> FileItemModel:
         label=label,
         file_size=file_metadata.file_size or 0,
         created_at=file_metadata.created_at,
-        updated_at=file_metadata.updated_at
+        updated_at=file_metadata.updated_at,
+        created_by=file_metadata.created_by  # Owner for access control
     )
 
 
@@ -259,7 +260,8 @@ def _build_artifact(file_metadata) -> ArtifactModel:
         version=file_metadata.version,
         is_gold_standard=file_metadata.is_gold_standard,
         is_locked=False,  # Will be updated later
-        access_control=None  # Will be updated later if needed
+        access_control=None,  # Will be updated later if needed
+        created_by=file_metadata.created_by  # Owner for access control
     )
 
     # Store content hash as private attribute for internal use (e.g., locking)

@@ -15,13 +15,28 @@ import { isDoi, extractDoi } from '../modules/utils.js';
 import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 
+// Current state for use in event handlers
+/** @type {ApplicationState} */
+let currentState;
+
+
+/**
+ * @typedef {object} ExtractorInfo
+ * 
+ */
+
+// List of extractor information
+/** @type {ExtractorInfo} */
+let extractors;
+
 /**
  * plugin API
  */
 const api = {
   extractFromCurrentPDF,
   extractFromNewPdf,
-  extractFromPDF
+  extractFromPDF,
+  extractorInfo : () => extractors
 }
 
 /**
@@ -37,9 +52,8 @@ const plugin = {
 export { api, plugin }
 export default plugin
 
-// Current state for use in event handlers
-/** @type {ApplicationState} */
-let currentState;
+
+
 
 //
 // UI
@@ -374,7 +388,11 @@ async function promptForExtractionOptions(options={}) {
   // Get extractors and store for dynamic options
   let availableExtractors = []
   try {
-    const extractors = await client.getExtractorList()
+    // Lazy load extractors if not already loaded
+    if (!extractors) {
+      extractors = await client.getExtractorList()
+    }
+
     // Show extractors based on available content
     availableExtractors = extractors.filter(extractor => {
       // Show PDF extractors if we have a PDF
