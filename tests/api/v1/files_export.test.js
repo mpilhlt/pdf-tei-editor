@@ -25,8 +25,25 @@ describe('File Export API', () => {
     assert.strictEqual(response.status, 401, 'Should return 401 without session');
   });
 
-  test('GET /api/v1/export - should export all files as zip', async () => {
+  test('GET /api/v1/export - should return stats as JSON by default', async () => {
     const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}`, {
+      method: 'GET'
+    });
+
+    assert.strictEqual(response.status, 200, 'Should return 200 OK');
+    assert.ok(response.headers.get('content-type').includes('application/json'), 'Should return JSON');
+
+    const stats = await response.json();
+    assert.ok('files_exported' in stats, 'Should have files_exported field');
+    assert.ok('files_skipped' in stats, 'Should have files_skipped field');
+    assert.ok('files_scanned' in stats, 'Should have files_scanned field');
+    assert.ok('errors' in stats, 'Should have errors field');
+
+    console.log(`Stats: ${stats.files_exported} files to export`);
+  });
+
+  test('GET /api/v1/export - should export all files as zip with download=true', async () => {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&download=true`, {
       method: 'GET'
     });
 
@@ -47,7 +64,7 @@ describe('File Export API', () => {
   test.skip('GET /api/v1/export - should filter by collection', async () => {
     // TEMPORARILY DISABLED: Test isolation issue - passes when run alone, fails in full suite
     // See dev/todo/re-enable-export-test.md for details
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&collections=default`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&collections=default&download=true`, {
       method: 'GET'
     });
 
@@ -66,7 +83,7 @@ describe('File Export API', () => {
   });
 
   test('GET /api/v1/export - should support group_by parameter', async () => {
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type&download=true`, {
       method: 'GET'
     });
 
@@ -84,7 +101,7 @@ describe('File Export API', () => {
   });
 
   test('GET /api/v1/export - should reject invalid group_by', async () => {
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=invalid`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=invalid&download=true`, {
       method: 'GET'
     });
 
@@ -92,7 +109,7 @@ describe('File Export API', () => {
   });
 
   test('GET /api/v1/export - should only export PDFs with matching gold TEI files', async () => {
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type&download=true`, {
       method: 'GET'
     });
 
@@ -143,7 +160,7 @@ describe('File Export API', () => {
     const testVariant = 'grobid';
     console.log(`Testing variant filter with: ${testVariant}`);
 
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&variants=${testVariant}&group_by=type`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&variants=${testVariant}&group_by=type&download=true`, {
       method: 'GET'
     });
 
@@ -208,7 +225,7 @@ describe('File Export API', () => {
   });
 
   test('GET /api/v1/export - should only export gold TEI files by default', async () => {
-    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type`, {
+    const response = await fetch(`${API_BASE}/export?sessionId=${sessionId}&group_by=type&download=true`, {
       method: 'GET'
     });
 
