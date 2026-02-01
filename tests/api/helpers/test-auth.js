@@ -111,8 +111,9 @@ async function checkStatus(sessionId) {
  * @returns {Promise<Response>} Fetch response object
  */
 async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = null, baseUrl = null) {
-  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
-  const url = `${apiBase}${endpoint}`;
+  // If endpoint already starts with /api, don't add the /api/v1 prefix
+  const base = baseUrl || BASE_URL;
+  const url = endpoint.startsWith('/api') ? `${base}${endpoint}` : `${base}/api/v1${endpoint}`;
   const options = {
     method,
     headers: {
