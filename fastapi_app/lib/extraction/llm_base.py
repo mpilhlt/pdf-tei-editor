@@ -27,8 +27,46 @@ class LLMBaseExtractor(BaseExtractor, ABC):
 
     @abstractmethod
     def get_models(self) -> List[str]:
-        """Return list of available models for this extractor"""
+        """Return list of available model IDs for this extractor"""
         pass
+
+    def get_models_with_capabilities(self) -> List[Dict[str, Any]]:
+        """
+        Return list of models with their capabilities.
+
+        Override in subclasses to provide capability info.
+        Default implementation returns models without capability details.
+
+        Returns:
+            List of dicts with keys: id, name (optional), input (optional), output (optional)
+        """
+        return [{"id": model_id} for model_id in self.get_models()]
+
+    def get_model_capabilities(self, model: str) -> Dict[str, Any] | None:
+        """
+        Get capabilities for a specific model.
+
+        Args:
+            model: Model ID
+
+        Returns:
+            Dict with 'input' and 'output' modality lists, or None if not found
+        """
+        models = self.get_models_with_capabilities()
+        for m in models:
+            if m.get("id") == model:
+                return {
+                    "input": m.get("input", ["text"]),
+                    "output": m.get("output", ["text"]),
+                }
+        return None
+
+    def model_supports_images(self, model: str) -> bool:
+        """Check if a model supports image input."""
+        caps = self.get_model_capabilities(model)
+        if caps is None:
+            return False
+        return "image" in caps.get("input", [])
 
     @abstractmethod
     def _get_api_key_env_var(self) -> str:
