@@ -96,6 +96,10 @@ from .plugin import MyPlugin
 plugin = MyPlugin()
 ```
 
+## Service Registry
+
+Plugins can register and consume services by capability name without hard dependencies. See [Service Registry](../development/service-registry.md) for details.
+
 ## Plugin Dependencies
 
 Plugins can declare dependencies on other plugins. The plugin system loads dependencies first and provides runtime access to them.
