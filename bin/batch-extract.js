@@ -12,7 +12,7 @@
  *   --password <password>     Password for authentication (default: from .env API_PASSWORD)
  *   --base-url <url>          API base URL (default: from .env API_BASE_URL or http://localhost:8000)
  *   --collection <id>         Collection ID (default: directory basename)
- *   --extractor <id>          Extractor ID (required)
+ *   --extractor <id>          Extractor ID (required, can be specified multiple times)
  *   --option <key=value>      Extractor option (can be specified multiple times)
  *   --recursive               Recursively search directories
  *
@@ -278,7 +278,7 @@ async function batchUpload(options) {
     password: cliPassword,
     baseUrl: cliBaseUrl,
     collection: collectionArg,
-    extractor,
+    extractor: extractors,
     option: optionPairs,
     recursive,
     path: dirPath
@@ -330,7 +330,7 @@ async function batchUpload(options) {
   console.log(`Found ${files.length} PDF file(s)`);
   console.log(`Base URL: ${baseUrl}`);
   console.log(`Collection: ${collection}`);
-  console.log(`Extractor: ${extractor}`);
+  console.log(`Extractor(s): ${extractors.join(', ')}`);
   if (Object.keys(extractorOptions).length > 1) {
     console.log(`Options: ${JSON.stringify(extractorOptions, null, 2)}`);
   }
@@ -399,17 +399,19 @@ async function batchUpload(options) {
         fileExtractorOptions.doi = doi;
       }
 
-      // Show extraction progress
-      const extractProgress = createProgressBar(currentFile - 1, filesToProcess.length);
-      updateProgress(`${extractProgress} Extracting: ${fileName}${doi ? ` (DOI: ${doi})` : ''}`);
+      // Run extraction for each extractor
+      for (const extractor of extractors) {
+        const extractProgress = createProgressBar(currentFile - 1, filesToProcess.length);
+        updateProgress(`${extractProgress} Extracting (${extractor}): ${fileName}${doi ? ` (DOI: ${doi})` : ''}`);
 
-      await extractMetadata(
-        baseUrl,
-        sessionId,
-        uploadResult.filename,
-        extractor,
-        fileExtractorOptions
-      );
+        await extractMetadata(
+          baseUrl,
+          sessionId,
+          uploadResult.filename,
+          extractor,
+          fileExtractorOptions
+        );
+      }
 
       successCount++;
 
@@ -458,6 +460,9 @@ Examples:
   # Basic usage (uses directory name as collection)
   $ npm run batch-extract -- /path/to/manuscripts --extractor grobid-training
 
+  # With multiple extractors (runs each extractor on every file)
+  $ npm run batch-extract -- /path/to/pdfs --extractor grobid --extractor llamore-gemini
+
   # With explicit collection and recursive search
   $ npm run batch-extract -- /path/to/pdfs --collection my_collection --extractor mock-extractor --recursive
 
@@ -472,7 +477,9 @@ Examples:
   .option('--password <password>', 'Password for authentication (default: from .env API_PASSWORD)')
   .option('--base-url <url>', 'API base URL (default: from .env API_BASE_URL or http://localhost:8000)')
   .option('--collection <id>', 'Collection ID (default: directory basename)')
-  .requiredOption('--extractor <id>', 'Extractor ID')
+  .requiredOption('--extractor <id>', 'Extractor ID (can be specified multiple times)', (value, previous) => {
+    return previous ? [...previous, value] : [value];
+  })
   .option('--option <key=value>', 'Extractor option (repeatable)', (value, previous) => {
     return previous ? [...previous, value] : [value];
   })

@@ -1,5 +1,23 @@
 """GROBID plugin configuration."""
 
+from fastapi_app.lib.config_utils import get_config
+
+
+def get_grobid_server_url() -> str | None:
+    """
+    Get the GROBID server URL from config.
+
+    The config value is initialized from the GROBID_SERVER_URL environment
+    variable by the plugin's is_available() method.
+
+    Returns:
+        The GROBID server URL, or None if not configured.
+    """
+    config = get_config()
+    url = config.get("grobid.server.url")
+    return url if url else None
+
+
 # Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
     # Training variants (use /api/createTraining endpoint)

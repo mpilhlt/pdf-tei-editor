@@ -6,7 +6,6 @@ Provides a download endpoint for reviewers to download complete training package
 """
 
 import logging
-import shutil
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
@@ -49,8 +48,16 @@ class GrobidPlugin(Plugin):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Check if GROBID extractor is available."""
-        return GrobidTrainingExtractor.is_available()
+        """Check if GROBID server URL is configured."""
+        from fastapi_app.lib.plugin_tools import get_plugin_config
+
+        # Initialize config from env var if not set
+        url = get_plugin_config(
+            "grobid.server.url",
+            "GROBID_SERVER_URL",
+            default=""
+        )
+        return bool(url)
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the GROBID extractor and event handlers."""
@@ -84,7 +91,6 @@ class GrobidPlugin(Plugin):
         Args:
             stable_id: The stable_id of the deleted file
         """
-        from fastapi_app.config import get_settings
         from fastapi_app.lib.dependencies import get_db
         from fastapi_app.lib.file_repository import FileRepository
 
@@ -110,11 +116,9 @@ class GrobidPlugin(Plugin):
                 return
 
             # Delete cached training data for this document
-            settings = get_settings()
-            cache_path = settings.plugins_dir / "grobid" / "extractions" / doc_id
+            from fastapi_app.plugins.grobid.cache import delete_cache_for_doc
 
-            if cache_path.exists():
-                shutil.rmtree(cache_path, ignore_errors=True)
+            if delete_cache_for_doc(doc_id):
                 logger.info(f"Deleted cached GROBID training data for {doc_id}")
 
         except Exception as e:
