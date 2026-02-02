@@ -11,6 +11,9 @@ from collections import defaultdict
 from typing import Dict, Any, List, Optional, Tuple
 from lxml import etree
 
+# Import BibliographicMetadata from metadata_extraction to use as single source of truth
+from .metadata_extraction import BibliographicMetadata
+
 
 def create_tei_document() -> etree._Element:  # type: ignore[name-defined]
     """
@@ -32,7 +35,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
 
     Args:
         doi: DOI of the document
-        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages
+        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages, id
         applications: List of application info dicts with keys: ident, version, label
 
     Returns:
@@ -50,6 +53,8 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     volume = metadata.get("volume", "")
     issue = metadata.get("issue", "")
     pages = metadata.get("pages", "")
+    id = metadata.get("id", "")
+
 
     # Build TEI header
     teiHeader = etree.Element("teiHeader")
@@ -72,7 +77,14 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     etree.SubElement(availability, "licence",
                     attrib={"target": "https://creativecommons.org/licenses/by/4.0/"})
     etree.SubElement(publicationStmt, "date", type="publication").text = str(date)
-    etree.SubElement(publicationStmt, "idno", type="DOI").text = doi
+    if doi:
+        etree.SubElement(publicationStmt, "idno", type="DOI").text = doi
+    elif id:
+        id_type = id.split(":")[0] if ":" in id else ""
+        if id_type:
+            etree.SubElement(publicationStmt, "idno", type=id_type).text = id
+        else:  
+            etree.SubElement(publicationStmt, "idno").text = id
 
     # sourceDesc with formatted citation
     authors_str = ", ".join([f'{author.get("given", "")} {author.get("family", "")}' for author in authors])
@@ -248,6 +260,9 @@ def create_edition_stmt_with_fileref(
     """
     edition_stmt = create_edition_stmt(timestamp, title)
     edition = edition_stmt.find("edition")
+    if edition is None:
+        # Fallback: create edition element if not found
+        edition = etree.SubElement(edition_stmt, "edition")
     fileref_elem = etree.SubElement(edition, "idno", type="fileref")
     fileref_elem.text = file_id
     return edition_stmt
@@ -517,7 +532,7 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
     return '\n'.join(result_lines)
 
 
-def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: ignore[name-defined]
+def extract_tei_metadata(tei_root: etree._Element) -> BibliographicMetadata:  # type: ignore[name-defined]
     """
     Extract metadata from TEI document for database storage.
 
@@ -665,10 +680,24 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
 
     metadata['doc_metadata'] = doc_metadata  # type: ignore[assignment]
 
-    return metadata
+    # Convert to BibliographicMetadata type
+    bibliographic_metadata: BibliographicMetadata = {
+        'title': metadata.get('title'),
+        'authors': metadata.get('authors', []),
+        'date': metadata.get('date'),
+        'publisher': metadata.get('publisher'),
+        'journal': metadata.get('journal'),
+        'volume': metadata.get('volume'),
+        'issue': metadata.get('issue'),
+        'pages': metadata.get('pages'),
+        'doi': metadata.get('doi'),
+        'id': metadata.get('id')
+    }
+    
+    return bibliographic_metadata
 
 
-def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]:
+def build_pdf_label_from_metadata(doc_metadata: BibliographicMetadata) -> Optional[str]:
     """
     Build a human-readable label for a PDF from extracted metadata.
 
@@ -710,7 +739,7 @@ def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]
 
 def update_pdf_metadata_from_tei(
     pdf_file,
-    tei_metadata: Dict[str, Any],
+    tei_metadata: BibliographicMetadata,
     file_repo,
     logger,
     doc_collections: Optional[list] = None
@@ -735,15 +764,21 @@ def update_pdf_metadata_from_tei(
     """
     from ..lib.models import FileUpdate
 
-    # Get doc_metadata that was extracted
-    doc_metadata = tei_metadata.get('doc_metadata', {})
+    # Build doc_metadata from the extracted metadata
+    doc_metadata = {
+        'title': tei_metadata.get('title'),
+        'authors': tei_metadata.get('authors'),
+        'date': tei_metadata.get('date'),
+        'journal': tei_metadata.get('journal'),
+        'publisher': tei_metadata.get('publisher')
+    }
 
     # Build a label for the PDF from metadata
-    pdf_label = build_pdf_label_from_metadata(doc_metadata)
+    pdf_label = build_pdf_label_from_metadata(tei_metadata)
 
     # Fallback to DOI/doc_id if no label from metadata
-    if not pdf_label and tei_metadata.get('doc_id'):
-        pdf_label = tei_metadata['doc_id']
+    if not pdf_label and tei_metadata.get('doi'):
+        pdf_label = tei_metadata.get('doi')
 
     # Update PDF file with extracted metadata and collection
     # Only update if there's actual data to set (avoid overwriting with empty values)

@@ -8,9 +8,38 @@ Provides:
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, TypedDict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+
+class Author(TypedDict):
+    """Author information with given and family names."""
+    given: str
+    family: str
+
+
+class BibliographicMetadata(TypedDict, total=False):
+    """
+    Bibliographic metadata extracted from documents.
+    
+    This type represents the standardized structure for bibliographic metadata
+    that can be obtained from DOI lookup or LLM extraction services.
+    """
+    title: Optional[str]
+    authors: List[Author]
+    date: Optional[Union[str, int]]
+    publisher: Optional[str]
+    journal: Optional[str]
+    volume: Optional[str]
+    issue: Optional[str]
+    pages: Optional[str]
+    doi: Optional[str]
+    id: Optional[str]
+    # Additional fields for document ID resolution
+    doc_id: Optional[str]
+    doc_id_type: Optional[str]
+    fileref: Optional[str]
 
 # JSON schema for bibliographic metadata extraction via LLM
 BIBLIOGRAPHIC_METADATA_SCHEMA = {
@@ -37,7 +66,7 @@ BIBLIOGRAPHIC_METADATA_SCHEMA = {
         "volume": {"type": "string", "description": "Volume number"},
         "issue": {"type": "string", "description": "Issue number"},
         "pages": {"type": "string", "description": "Page range (e.g., '1-15')"},
-        "doi": {"type": "string", "description": "DOI if found in document"}
+        "id": {"type": "string", "description": "Any type of persisten identifier, preferrably DOI"}
     }
 }
 
@@ -53,7 +82,9 @@ Extract the following information if available:
 - volume: Volume number
 - issue: Issue number
 - pages: Page range
-- doi: DOI if present in the document
+- id: any kind of persistent identifier like DOI, ISBN, JSTOR, ARXIV, etc. if present. 
+  Prefix with the type of identifier in lowercase like so: "doi:10.347/1234567890" or  
+  "isbn:978-0-123456-78-9". DOIs are preferred.
 
 Critical rules:
 - Return the information as JSON matching the expected schema. 
@@ -62,7 +93,7 @@ Critical rules:
 """
 
 
-def _normalize_extracted_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_extracted_metadata(data: Dict[str, Any]) -> BibliographicMetadata:
     """
     Normalize metadata extracted by LLM to match fetch_doi_metadata() format.
 
@@ -84,8 +115,12 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 normalized_authors.append({"given": "", "family": author})
         authors = normalized_authors
+    
+    # DOI normalization
+    if 'id' in data and 'doi:' in data.get('id', ''):
+        data['doi'] = data['id'].replace('doi:', '')
 
-    return {
+    return BibliographicMetadata({
         "title": data.get("title"),
         "authors": authors,
         "date": data.get("date"),
@@ -94,7 +129,9 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
         "volume": data.get("volume"),
         "issue": data.get("issue"),
         "pages": data.get("pages"),
-    }
+        "doi": data.get("doi"),
+        "id": data.get("id")
+    })
 
 
 async def get_metadata_for_document(
@@ -102,7 +139,7 @@ async def get_metadata_for_document(
     pdf_path: str | None = None,
     text_content: str | None = None,
     stable_id: str | None = None,
-) -> Dict[str, Any]:
+) -> BibliographicMetadata:
     """
     Get bibliographic metadata, trying DOI lookup first, then extraction service.
 
@@ -130,6 +167,21 @@ async def get_metadata_for_document(
         >>> # Without DOI, using stable_id for PDF extraction
         >>> metadata = await get_metadata_for_document(stable_id="abc123")
     """
+    # Runtime validation for backward compatibility
+    # Ensure all required fields are present even if not provided by source
+    def validate_metadata(metadata: BibliographicMetadata) -> BibliographicMetadata:
+        """Ensure metadata has all required structure for backward compatibility."""
+        # Ensure authors is always a list
+        if 'authors' not in metadata or metadata['authors'] is None:
+            metadata['authors'] = []
+        
+        # Ensure other optional fields have proper types
+        for field in ['title', 'date', 'publisher', 'journal', 'volume', 'issue', 'pages', 'doi', 'id']:
+            if field not in metadata:
+                metadata[field] = None
+        
+        return metadata
+
     # 1. Try DOI lookup first if DOI provided
     if doi:
         from .doi_utils import normalize_doi, validate_doi, fetch_doi_metadata
@@ -138,7 +190,8 @@ async def get_metadata_for_document(
         if validate_doi(doi):
             try:
                 logger.debug(f"Attempting DOI metadata lookup for: {doi}")
-                return fetch_doi_metadata(doi)
+                result = fetch_doi_metadata(doi)
+                return validate_metadata(result)
             except Exception as e:
                 logger.warning(f"DOI lookup failed for {doi}: {e}")
         else:
@@ -154,23 +207,9 @@ async def get_metadata_for_document(
             if service:
                 logger.debug("Attempting metadata extraction via service")
 
-                # Get available models to find one that supports the input type
-                model = None
-                required_input = "image" if stable_id else "text"
-
-                if hasattr(service, '_extractor') and hasattr(service._extractor, 'get_models_with_capabilities'):
-                    models = service._extractor.get_models_with_capabilities()
-                    for m in models:
-                        if required_input in m.get("input", []):
-                            model = m["id"]
-                            break
-                    # Fallback to first available model
-                    if not model and models:
-                        model = models[0]["id"]
-
-                # For DummyExtractionService (testing), use a default model
-                if not model:
-                    model = "default-model"
+                # Use a default model for extraction
+                # The service will handle model selection internally
+                model = "default-model"
 
                 # Extract with individual parameters (matching actual implementation)
                 result = await service.extract(
@@ -185,7 +224,8 @@ async def get_metadata_for_document(
 
                 if result.get("success"):
                     logger.debug("Metadata extraction via service succeeded")
-                    return _normalize_extracted_metadata(result.get("data", {}))
+                    normalized = _normalize_extracted_metadata(result.get("data", {}))
+                    return validate_metadata(normalized)
                 else:
                     logger.warning(f"Metadata extraction failed: {result.get('error')}")
 
@@ -196,4 +236,16 @@ async def get_metadata_for_document(
 
     # 3. Return empty metadata if all methods fail
     logger.debug("No metadata could be obtained")
-    return {}
+    empty_metadata = BibliographicMetadata({
+        "title": None,
+        "authors": [],
+        "date": None,
+        "publisher": None,
+        "journal": None,
+        "volume": None,
+        "issue": None,
+        "pages": None,
+        "doi": None,
+        "id": None
+    })
+    return validate_metadata(empty_metadata)

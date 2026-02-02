@@ -23,13 +23,13 @@ For PDF extraction, install poppler:
 
 ```bash
 # macOS
-brew install poppler
+brew install poppler pdf2image
 
 # Linux (Debian/Ubuntu)
-apt-get install poppler-utils
+apt-get install poppler-utils pdf2image
 ```
 
-The plugin works without poppler but PDF extraction will be disabled.
+The plugin works without poppler (e.g. on Windows) but PDF extraction will be disabled.
 
 ## API Endpoints
 
