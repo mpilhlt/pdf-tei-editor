@@ -59,7 +59,17 @@ class BaseService:
 class ExtractionService(BaseService):
     """Service that provides structured data extraction."""
     
-    async def extract(self, **params: ExtractionParams) -> ExtractionResult:
+    async def extract(
+        self,
+        model: str,
+        prompt: str,
+        stable_id: str | None = None,
+        text_input: str | None = None,
+        json_schema: dict[str, Any] | None = None,
+        temperature: float = 0.1,
+        max_retries: int = 2,
+        **kwargs: Any
+    ) -> ExtractionResult:
         """Extract structured data from text or PDF."""
         raise NotImplementedError("Subclasses must implement extract method")
 

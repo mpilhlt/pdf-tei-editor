@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
-from fastapi_app.lib.doi_utils import get_metadata_for_document
+from fastapi_app.lib.metadata_extraction import get_metadata_for_document
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
