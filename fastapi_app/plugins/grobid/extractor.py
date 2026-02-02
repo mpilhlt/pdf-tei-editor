@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
-from fastapi_app.lib.doi_utils import fetch_doi_metadata
+from fastapi_app.lib.doi_utils import get_metadata_for_document
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
@@ -23,10 +23,12 @@ from fastapi_app.plugins.grobid.handlers import (
 )
 from fastapi_app.lib.tei_utils import (
     create_tei_header,
-    create_edition_stmt,
     create_revision_desc_with_status,
     create_schema_processing_instruction,
-    serialize_tei_with_formatted_header
+    serialize_tei_with_formatted_header,
+    get_file_id_from_options,
+    create_edition_stmt_with_fileref,
+    create_encoding_desc_with_extractor,
 )
 from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing_error
 
@@ -75,8 +77,8 @@ class GrobidTrainingExtractor(BaseExtractor):
         grobid_server_url = os.environ.get("GROBID_SERVER_URL", "")
         return grobid_server_url != ""
 
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Optional[Dict[str, Any]] = None) -> str:
+    async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                      options: Optional[Dict[str, Any]] = None) -> str:
         """
         Extract TEI from PDF using GROBID.
 
@@ -155,14 +157,10 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Create new TEI document with proper namespace (no schema validation)
         tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})  # type: ignore[dict-item]
 
-        # Get DOI metadata if available
+        # Get document metadata (tries DOI lookup, falls back to extraction service)
         doi = options.get("doi", "")
-        metadata = {}
-        if doi:
-            try:
-                metadata = fetch_doi_metadata(doi)
-            except Exception as e:
-                print(f"Warning: Could not fetch metadata for DOI {doi}: {e}")
+        stable_id = options.get("stable_id")
+        metadata = await get_metadata_for_document(doi=doi, pdf_path=pdf_path, stable_id=stable_id)
 
         # Create TEI header
         tei_header = create_tei_header(doi, metadata)
@@ -176,19 +174,9 @@ class GrobidTrainingExtractor(BaseExtractor):
         assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
         assert titleStmt is not None
-        edition_stmt = create_edition_stmt(timestamp, "Extraction")
 
-        # Add fileref to edition - use doc_id from options if provided, otherwise extract from PDF path
-        file_id = options.get('doc_id')
-        if not file_id:
-            pdf_name = os.path.basename(pdf_path)
-            file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
-
-        edition = edition_stmt.find("edition")
-        assert edition is not None
-        fileref_elem = etree.SubElement(edition, "idno", type="fileref")
-        fileref_elem.text = file_id
-
+        file_id = get_file_id_from_options(options, pdf_path)
+        edition_stmt = create_edition_stmt_with_fileref(timestamp, "Extraction", file_id)
         titleStmt.addnext(edition_stmt)
 
         # Replace encodingDesc with GROBID-specific version
@@ -196,38 +184,19 @@ class GrobidTrainingExtractor(BaseExtractor):
         if existing_encodingDesc is not None:
             tei_header.remove(existing_encodingDesc)
 
-        # Create encodingDesc with applications
-        encodingDesc = etree.Element("encodingDesc")
-        appInfo = etree.SubElement(encodingDesc, "appInfo")
-
-        # PDF-TEI-Editor application
-        pdf_tei_app = etree.SubElement(appInfo, "application",
-                                      version="1.0",
-                                      ident="pdf-tei-editor",
-                                      type="editor")
-        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
-        etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
-
-        # GROBID extractor application
-        grobid_app = etree.SubElement(appInfo, "application",
-                                     version=grobid_version,
-                                     ident="GROBID",
-                                     when=timestamp,
-                                     type="extractor")
-        desc = etree.SubElement(grobid_app, "desc")
-        desc.text = "GROBID - A machine learning software for extracting information from scholarly documents"
-
-        revision_label = etree.SubElement(grobid_app, "label", type="revision")
-        revision_label.text = grobid_revision
-
-        flavor_label = etree.SubElement(grobid_app, "label", type="flavor")
-        flavor_label.text = flavor
-
-        variant_label = etree.SubElement(grobid_app, "label", type="variant-id")
-        variant_label.text = variant_id
-
-        etree.SubElement(grobid_app, "ref", target="https://github.com/kermitt2/grobid")
-
+        # Create encodingDesc with PDF-TEI-Editor and GROBID applications
+        encodingDesc = create_encoding_desc_with_extractor(
+            timestamp=timestamp,
+            extractor_name="GROBID",
+            extractor_ident="GROBID",
+            extractor_version=grobid_version,
+            extractor_ref="https://github.com/kermitt2/grobid",
+            variant_id=variant_id,
+            additional_labels=[
+                ("revision", grobid_revision),
+                ("flavor", flavor),
+            ]
+        )
         tei_header.append(encodingDesc)
 
         # Replace revisionDesc with GROBID-specific version

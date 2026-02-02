@@ -6,8 +6,9 @@ No Flask or FastAPI dependencies.
 """
 
 import datetime
+import os
 from collections import defaultdict
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from lxml import etree
 
 
@@ -187,6 +188,155 @@ def create_revision_desc_with_status(timestamp: str, status: str, description: s
     desc = etree.SubElement(change, "desc")
     desc.text = description
     return revisionDesc
+
+
+# Shared extractor utilities
+# ==========================
+
+def get_file_id_from_options(options: Dict[str, Any], pdf_path: Optional[str] = None) -> str:
+    """
+    Extract file_id from options dict or derive from PDF path.
+
+    This utility consolidates the common pattern used by extractors to determine
+    the file identifier for TEI documents.
+
+    Args:
+        options: Options dict that may contain 'doc_id' key
+        pdf_path: Optional path to PDF file (used as fallback)
+
+    Returns:
+        File identifier string, or empty string if none found
+
+    Examples:
+        >>> get_file_id_from_options({'doc_id': '10.1234/example'})
+        '10.1234/example'
+        >>> get_file_id_from_options({}, '/path/to/document.pdf')
+        'document'
+    """
+    file_id = options.get('doc_id')
+    if not file_id and pdf_path:
+        pdf_name = os.path.basename(pdf_path)
+        file_id = os.path.splitext(pdf_name)[0]
+    return file_id or ""
+
+
+def create_edition_stmt_with_fileref(
+    timestamp: str,
+    title: str,
+    file_id: str,
+) -> etree._Element:  # type: ignore[name-defined]
+    """
+    Create an editionStmt element with date, title, and fileref idno.
+
+    Extends create_edition_stmt() by adding a fileref idno element,
+    which is a common pattern in extraction workflows.
+
+    Args:
+        timestamp: ISO timestamp string
+        title: Edition title (e.g., "Extraction")
+        file_id: File identifier to use in fileref idno
+
+    Returns:
+        editionStmt element with fileref
+
+    Examples:
+        >>> stmt = create_edition_stmt_with_fileref(
+        ...     "2024-01-15T10:30:00Z",
+        ...     "Extraction",
+        ...     "10.1234/example"
+        ... )
+    """
+    edition_stmt = create_edition_stmt(timestamp, title)
+    edition = edition_stmt.find("edition")
+    fileref_elem = etree.SubElement(edition, "idno", type="fileref")
+    fileref_elem.text = file_id
+    return edition_stmt
+
+
+def create_encoding_desc_with_extractor(
+    timestamp: str,
+    extractor_name: str,
+    extractor_ident: str,
+    extractor_version: str = "1.0",
+    extractor_ref: Optional[str] = None,
+    variant_id: Optional[str] = None,
+    additional_labels: Optional[List[Tuple[str, str]]] = None,
+) -> etree._Element:  # type: ignore[name-defined]
+    """
+    Create an encodingDesc element with PDF-TEI-Editor and extractor application info.
+
+    This is a generic version of create_encoding_desc_with_grobid() that can be
+    used by any extractor. It always includes the PDF-TEI-Editor application first,
+    followed by the extractor-specific application.
+
+    Args:
+        timestamp: ISO timestamp string
+        extractor_name: Human-readable extractor name (e.g., "GROBID", "LLamore")
+        extractor_ident: Machine identifier (e.g., "grobid", "llamore")
+        extractor_version: Version string (default: "1.0")
+        extractor_ref: Optional URL reference for the extractor
+        variant_id: Optional variant identifier
+        additional_labels: List of (type, text) tuples for extra labels on extractor app
+
+    Returns:
+        encodingDesc element
+
+    Examples:
+        >>> desc = create_encoding_desc_with_extractor(
+        ...     timestamp="2024-01-15T10:30:00Z",
+        ...     extractor_name="GROBID",
+        ...     extractor_ident="grobid",
+        ...     extractor_version="0.8.0",
+        ...     extractor_ref="https://github.com/kermitt2/grobid",
+        ...     variant_id="grobid-segmentation",
+        ...     additional_labels=[
+        ...         ("revision", "abc123"),
+        ...         ("flavor", "grobid-footnote-flavour"),
+        ...     ]
+        ... )
+    """
+    encodingDesc = etree.Element("encodingDesc")
+    appInfo = etree.SubElement(encodingDesc, "appInfo")
+
+    # PDF-TEI-Editor application (always first)
+    pdf_tei_app = etree.SubElement(
+        appInfo, "application",
+        version="1.0",
+        ident="pdf-tei-editor",
+        type="editor"
+    )
+    etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
+    etree.SubElement(
+        pdf_tei_app, "ref",
+        target="https://github.com/mpilhlt/pdf-tei-editor"
+    )
+
+    # Extractor application
+    extractor_app = etree.SubElement(
+        appInfo, "application",
+        version=extractor_version,
+        ident=extractor_ident,
+        when=timestamp,
+        type="extractor"
+    )
+    etree.SubElement(extractor_app, "label").text = extractor_name
+
+    # Add optional reference
+    if extractor_ref:
+        etree.SubElement(extractor_app, "ref", target=extractor_ref)
+
+    # Add variant-id label if provided
+    if variant_id:
+        variant_label = etree.SubElement(extractor_app, "label", type="variant-id")
+        variant_label.text = variant_id
+
+    # Add any additional labels
+    if additional_labels:
+        for label_type, label_text in additional_labels:
+            label = etree.SubElement(extractor_app, "label", type=label_type)
+            label.text = label_text
+
+    return encodingDesc
 
 
 def serialize_tei_xml(tei_doc: etree._Element) -> str:  # type: ignore[name-defined]

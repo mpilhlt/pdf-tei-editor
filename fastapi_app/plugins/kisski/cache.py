@@ -47,13 +47,18 @@ def check_pdf2image_available() -> bool:
     return _pdf2image_available
 
 
-def extract_pdf_to_images(pdf_path: str, dpi: int = 150) -> tuple[list[Path], Path]:
+def extract_pdf_to_images(
+    pdf_path: str,
+    dpi: int = 150,
+    max_pages: int = 5
+) -> tuple[list[Path], Path]:
     """
     Extract images from PDF pages to a temporary directory.
 
     Args:
         pdf_path: Path to PDF file
         dpi: Resolution for image extraction (default 150 for balance of quality/size)
+        max_pages: Maximum number of pages to extract (default 5 for metadata extraction)
 
     Returns:
         Tuple of (list of image paths, temp directory path for cleanup)
@@ -74,7 +79,13 @@ def extract_pdf_to_images(pdf_path: str, dpi: int = 150) -> tuple[list[Path], Pa
     temp_dir = Path(tempfile.mkdtemp(prefix="kisski_pdf_"))
 
     try:
-        pages = convert_from_path(pdf_path, dpi=dpi)
+        # Limit to first max_pages pages for efficiency
+        pages = convert_from_path(
+            pdf_path,
+            dpi=dpi,
+            first_page=1,
+            last_page=max_pages
+        )
     except PDFInfoNotInstalledError:
         global _pdf2image_available
         _pdf2image_available = False
@@ -91,7 +102,7 @@ def extract_pdf_to_images(pdf_path: str, dpi: int = 150) -> tuple[list[Path], Pa
         page.save(str(img_path), format="JPEG", quality=85)
         image_paths.append(img_path)
 
-    logger.debug(f"Extracted {len(pages)} images from PDF to {temp_dir}")
+    logger.debug(f"Extracted {len(pages)} images from PDF to {temp_dir} (max_pages={max_pages})")
     return image_paths, temp_dir
 
 
