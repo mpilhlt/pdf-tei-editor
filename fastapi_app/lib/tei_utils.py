@@ -9,10 +9,30 @@ import datetime
 import os
 from collections import defaultdict
 from typing import Dict, Any, List, Optional, Tuple
+from typing_extensions import TypedDict
 from lxml import etree
 
 # Import BibliographicMetadata from metadata_extraction to use as single source of truth
 from .metadata_extraction import BibliographicMetadata
+
+
+class ExtractedTeiMetadata(BibliographicMetadata, total=False):
+    """
+    Extended metadata type for TEI extraction that includes document ID resolution
+    and TEI-specific metadata fields not part of standard BibliographicMetadata.
+    """
+    # Document ID resolution fields
+    doc_id: Optional[str]
+    doc_id_type: Optional[str]
+    fileref: Optional[str]
+    # TEI-specific metadata
+    doc_metadata: Dict[str, Any]
+    variant: Optional[str]
+    is_gold_standard: bool
+    status: Optional[str]
+    last_revision: Optional[str]
+    edition_title: Optional[str]
+    label: Optional[str]
 
 
 def create_tei_document() -> etree._Element:  # type: ignore[name-defined]
@@ -532,7 +552,7 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
     return '\n'.join(result_lines)
 
 
-def extract_tei_metadata(tei_root: etree._Element) -> BibliographicMetadata:  # type: ignore[name-defined]
+def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # type: ignore[name-defined]
     """
     Extract metadata from TEI document for database storage.
 
@@ -549,7 +569,7 @@ def extract_tei_metadata(tei_root: etree._Element) -> BibliographicMetadata:  # 
         tei_root: TEI root element
 
     Returns:
-        Dictionary with extracted metadata
+        ExtractedTeiMetadata dictionary with all extracted fields
     """
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     metadata = {}
@@ -680,8 +700,9 @@ def extract_tei_metadata(tei_root: etree._Element) -> BibliographicMetadata:  # 
 
     metadata['doc_metadata'] = doc_metadata  # type: ignore[assignment]
 
-    # Convert to BibliographicMetadata type
-    bibliographic_metadata: BibliographicMetadata = {
+    # Build ExtractedTeiMetadata with all extracted fields
+    extracted_metadata: ExtractedTeiMetadata = {
+        # Core bibliographic fields
         'title': metadata.get('title'),
         'authors': metadata.get('authors', []),
         'date': metadata.get('date'),
@@ -691,10 +712,22 @@ def extract_tei_metadata(tei_root: etree._Element) -> BibliographicMetadata:  # 
         'issue': metadata.get('issue'),
         'pages': metadata.get('pages'),
         'doi': metadata.get('doi'),
-        'id': metadata.get('id')
+        'id': metadata.get('id'),
+        # Document ID resolution fields
+        'doc_id': metadata.get('doc_id'),
+        'doc_id_type': metadata.get('doc_id_type'),
+        'fileref': metadata.get('fileref'),
+        # TEI-specific metadata
+        'doc_metadata': metadata.get('doc_metadata', {}),
+        'variant': metadata.get('variant'),
+        'is_gold_standard': metadata.get('is_gold_standard', False),
+        'status': metadata.get('status'),
+        'last_revision': metadata.get('last_revision'),
+        'edition_title': metadata.get('edition_title'),
+        'label': metadata.get('label'),
     }
-    
-    return bibliographic_metadata
+
+    return extracted_metadata
 
 
 def build_pdf_label_from_metadata(doc_metadata: BibliographicMetadata) -> Optional[str]:
@@ -709,22 +742,23 @@ def build_pdf_label_from_metadata(doc_metadata: BibliographicMetadata) -> Option
     Returns:
         Formatted label string or None if no title available
     """
-    if 'title' not in doc_metadata:
+    title = doc_metadata.get('title')
+    if not title:
         return None
-
-    title = doc_metadata['title']
 
     # Extract author (first author's family name)
     author_part = ""
-    if 'authors' in doc_metadata and doc_metadata['authors']:
-        first_author = doc_metadata['authors'][0]
-        if 'family' in first_author:
+    authors = doc_metadata.get('authors')
+    if authors:
+        first_author = authors[0]
+        if first_author.get('family'):
             author_part = first_author['family']
 
     # Extract date/year
     date_part = ""
-    if 'date' in doc_metadata:
-        date_part = f"({doc_metadata['date']})"
+    date = doc_metadata.get('date')
+    if date:
+        date_part = f"({date})"
 
     # Build label with author and date first, then title
     if author_part and date_part:
@@ -739,7 +773,7 @@ def build_pdf_label_from_metadata(doc_metadata: BibliographicMetadata) -> Option
 
 def update_pdf_metadata_from_tei(
     pdf_file,
-    tei_metadata: BibliographicMetadata,
+    tei_metadata: ExtractedTeiMetadata,
     file_repo,
     logger,
     doc_collections: Optional[list] = None
@@ -754,7 +788,7 @@ def update_pdf_metadata_from_tei(
 
     Args:
         pdf_file: PDF file object from FileRepository
-        tei_metadata: Metadata dict from extract_tei_metadata()
+        tei_metadata: Metadata dict from extract_tei_metadata() or manual construction.
         file_repo: FileRepository instance
         logger: Logger instance
         doc_collections: Optional collection list to sync to PDF
@@ -764,25 +798,33 @@ def update_pdf_metadata_from_tei(
     """
     from ..lib.models import FileUpdate
 
-    # Build doc_metadata from the extracted metadata
+    # WORKAROUND: Support both nested doc_metadata format and top-level keys format
+    # TODO: Standardize on a single format (ExtractedTeiMetadata) across all callers
+    # Nested format: {'doc_metadata': {'title': ..., 'authors': ...}}
+    # Top-level format: {'title': ..., 'authors': ..., 'doc_metadata': {...}}
+    nested_doc_metadata = tei_metadata.get('doc_metadata', {})
+
     doc_metadata = {
-        'title': tei_metadata.get('title'),
-        'authors': tei_metadata.get('authors'),
-        'date': tei_metadata.get('date'),
-        'journal': tei_metadata.get('journal'),
-        'publisher': tei_metadata.get('publisher')
+        'title': nested_doc_metadata.get('title') or tei_metadata.get('title'),
+        'authors': nested_doc_metadata.get('authors') or tei_metadata.get('authors'),
+        'date': nested_doc_metadata.get('date') or tei_metadata.get('date'),
+        'journal': nested_doc_metadata.get('journal') or tei_metadata.get('journal'),
+        'publisher': nested_doc_metadata.get('publisher') or tei_metadata.get('publisher')
     }
 
-    # Build a label for the PDF from metadata
-    pdf_label = build_pdf_label_from_metadata(tei_metadata)
+    # Clean up None values for has_metadata check
+    doc_metadata_clean = {k: v for k, v in doc_metadata.items() if v is not None}
+
+    # Build a label for the PDF from the extracted doc_metadata
+    pdf_label = build_pdf_label_from_metadata(doc_metadata)
 
     # Fallback to DOI/doc_id if no label from metadata
-    if not pdf_label and tei_metadata.get('doi'):
-        pdf_label = tei_metadata.get('doi')
+    if not pdf_label:
+        pdf_label = tei_metadata.get('doi') or tei_metadata.get('doc_id')
 
     # Update PDF file with extracted metadata and collection
     # Only update if there's actual data to set (avoid overwriting with empty values)
-    has_metadata = bool(doc_metadata)  # Only update if dict is non-empty
+    has_metadata = bool(doc_metadata_clean)
     has_updates = has_metadata or pdf_label or doc_collections
 
     if has_updates:
