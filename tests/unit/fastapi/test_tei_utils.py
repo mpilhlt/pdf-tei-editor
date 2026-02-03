@@ -237,6 +237,62 @@ class TestCreateSchemaProcessingInstruction(unittest.TestCase):
         self.assertIn('type="application/xml"', result)
 
 
+class TestGetFileIdFromOptions(unittest.TestCase):
+    """Test get_file_id_from_options function."""
+
+    def test_encodes_doi_slash(self):
+        """Test that a DOI slash is encoded to double underscore."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({'doc_id': '10.1234/example'})
+        self.assertEqual(result, '10.1234__example')
+
+    def test_encodes_special_characters(self):
+        """Test that filesystem-unsafe characters are encoded."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({'doc_id': '10.1234/test:file'})
+        self.assertEqual(result, '10.1234__test$3A$file')
+
+    def test_does_not_double_encode(self):
+        """Test that an already-encoded doc_id is returned unchanged."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({'doc_id': '10.1234__example'})
+        self.assertEqual(result, '10.1234__example')
+
+    def test_simple_doc_id_unchanged(self):
+        """Test that a doc_id without special characters is unchanged."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({'doc_id': 'my-document'})
+        self.assertEqual(result, 'my-document')
+
+    def test_fallback_to_pdf_path(self):
+        """Test fallback to PDF basename when no doc_id."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({}, '/path/to/document.pdf')
+        self.assertEqual(result, 'document')
+
+    def test_empty_options_no_pdf(self):
+        """Test returns empty string when no doc_id and no pdf_path."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options({})
+        self.assertEqual(result, '')
+
+    def test_doc_id_takes_precedence_over_pdf_path(self):
+        """Test that doc_id is used even when pdf_path is provided."""
+        from fastapi_app.lib.tei_utils import get_file_id_from_options
+
+        result = get_file_id_from_options(
+            {'doc_id': '10.1234/example'},
+            '/path/to/other.pdf'
+        )
+        self.assertEqual(result, '10.1234__example')
+
+
 class TestExtractChangeSignatures(unittest.TestCase):
     """Test extract_change_signatures function."""
 

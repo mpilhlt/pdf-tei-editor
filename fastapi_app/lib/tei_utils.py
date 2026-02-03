@@ -12,7 +12,6 @@ from typing import Dict, Any, List, Optional, Tuple
 from typing_extensions import TypedDict
 from lxml import etree
 
-# Import BibliographicMetadata from metadata_extraction to use as single source of truth
 from .metadata_extraction import BibliographicMetadata
 
 
@@ -230,22 +229,28 @@ def get_file_id_from_options(options: Dict[str, Any], pdf_path: Optional[str] = 
     Extract file_id from options dict or derive from PDF path.
 
     This utility consolidates the common pattern used by extractors to determine
-    the file identifier for TEI documents.
+    the file identifier for TEI documents. Doc IDs from options are encoded for
+    filesystem safety via encode_filename() (e.g., DOI slashes become __).
+    PDF-path-derived IDs are already filesystem-safe and are returned as-is.
 
     Args:
         options: Options dict that may contain 'doc_id' key
         pdf_path: Optional path to PDF file (used as fallback)
 
     Returns:
-        File identifier string, or empty string if none found
+        Filesystem-safe file identifier string, or empty string if none found
 
     Examples:
         >>> get_file_id_from_options({'doc_id': '10.1234/example'})
-        '10.1234/example'
+        '10.1234__example'
         >>> get_file_id_from_options({}, '/path/to/document.pdf')
         'document'
     """
+    from .doi_utils import encode_filename, is_filename_encoded
+
     file_id = options.get('doc_id')
+    if file_id and not is_filename_encoded(file_id):
+        file_id = encode_filename(file_id)
     if not file_id and pdf_path:
         pdf_name = os.path.basename(pdf_path)
         file_id = os.path.splitext(pdf_name)[0]
