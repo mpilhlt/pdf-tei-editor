@@ -72,7 +72,7 @@ def list_available_extractors(
 
 
 @router.post("", response_model=ExtractResponse)
-def extract_metadata(
+async def extract_metadata(
     request: ExtractRequest,
     http_request: Request,
     repo: FileRepository = Depends(get_file_repository),
@@ -183,13 +183,14 @@ def extract_metadata(
             pdf_path = str(file_path)
 
         # Perform extraction
-        # Pass doc_id and base_url through options so extractors can set the correct fileref and URLs
+        # Pass doc_id, stable_id, and base_url through options so extractors can set the correct fileref and URLs
         extraction_options = {**(request.options or {})}
         extraction_options['doc_id'] = file_metadata.doc_id
+        extraction_options['stable_id'] = file_metadata.stable_id
         extraction_options['base_url'] = str(http_request.base_url).rstrip('/')
 
         try:
-            tei_xml = extractor.extract(
+            tei_xml = await extractor.extract(
                 pdf_path=pdf_path,
                 xml_content=xml_content,
                 options=extraction_options

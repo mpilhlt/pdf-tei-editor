@@ -9,10 +9,20 @@ from typing import Dict, List, Any, Optional, Type, TypeVar, TypedDict, NotRequi
 
 
 # Type definitions for extraction services
+ModelCapabilityFilter = dict[str, list[str]]
+"""Filter for selecting models by capability.
+
+Each key maps to a modality axis (e.g. "input", "output") and its value
+lists the required modalities for that axis.  Example: {"input": ["image"]}
+selects models that support image input.
+"""
+
+
 class ExtractionParams(TypedDict):
     """Parameters for extraction services."""
-    model: str
     prompt: str
+    model: NotRequired[str | None]
+    model_capabilities: NotRequired[ModelCapabilityFilter | None]
     stable_id: NotRequired[str | None]
     text_input: NotRequired[str | None]
     json_schema: NotRequired[dict[str, Any] | None]
@@ -59,8 +69,24 @@ class BaseService:
 class ExtractionService(BaseService):
     """Service that provides structured data extraction."""
     
-    async def extract(self, **params: ExtractionParams) -> ExtractionResult:
-        """Extract structured data from text or PDF."""
+    async def extract(
+        self,
+        prompt: str,
+        model: str | None = None,
+        model_capabilities: ModelCapabilityFilter | None = None,
+        stable_id: str | None = None,
+        text_input: str | None = None,
+        json_schema: dict[str, Any] | None = None,
+        temperature: float = 0.1,
+        max_retries: int = 2,
+        **kwargs: Any
+    ) -> ExtractionResult:
+        """Extract structured data from text or PDF.
+
+        Either *model* (exact ID) or *model_capabilities* (filter) must be
+        provided.  When *model_capabilities* is given the service selects an
+        appropriate model automatically.
+        """
         raise NotImplementedError("Subclasses must implement extract method")
 
 
