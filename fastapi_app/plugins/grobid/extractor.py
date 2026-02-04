@@ -13,6 +13,7 @@ from fastapi_app.lib.metadata_extraction import get_metadata_for_document
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
+    get_grobid_server_url,
     get_navigation_xpath
 )
 from fastapi_app.plugins.grobid.handlers import (
@@ -61,7 +62,7 @@ class GrobidTrainingExtractor(BaseExtractor):
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the GROBID extractor."""
         return {
-            "id": "grobid-training",
+            "id": "grobid",
             "name": "GROBID Extraction",
             "description": "Extract TEI from PDF using remote GROBID server (training data or full documents)",
             "input": ["pdf"],
@@ -74,8 +75,7 @@ class GrobidTrainingExtractor(BaseExtractor):
     @classmethod
     def is_available(cls) -> bool:
         """Check if GROBID server URL is configured."""
-        grobid_server_url = os.environ.get("GROBID_SERVER_URL", "")
-        return grobid_server_url != ""
+        return get_grobid_server_url() is not None
 
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Optional[Dict[str, Any]] = None) -> str:
@@ -97,7 +97,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             raise ValueError("PDF path is required for GROBID extraction")
 
         if not self.is_available():
-            raise RuntimeError("GROBID extractor is not available - check GROBID_SERVER_URL environment variable")
+            raise RuntimeError("GROBID extractor is not available - configure grobid.server.url or GROBID_SERVER_URL")
 
         if options is None:
             options = {}
@@ -113,14 +113,69 @@ class GrobidTrainingExtractor(BaseExtractor):
             variant_id = default_variant_id
 
         # Get GROBID server info
-        grobid_server_url = os.environ.get("GROBID_SERVER_URL")
+        grobid_server_url = get_grobid_server_url()
         if grobid_server_url is None:
-            raise ValueError("No Grobid server URL")
+            raise ValueError("GROBID server URL not configured")
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
 
-        # Get the appropriate handler and fetch TEI content
+        # Get the appropriate handler
         handler = self._get_handler(variant_id)
-        raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
+
+        # Check if this is a training variant (should use cache)
+        is_training_variant = variant_id.startswith("grobid.training.")
+
+        if is_training_variant:
+            from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
+
+            # Get doc_id from options or PDF filename
+            doc_id = options.get('doc_id')
+            if not doc_id:
+                pdf_name = os.path.basename(pdf_path)
+                doc_id = os.path.splitext(pdf_name)[0]
+
+            # Check cache
+            cached_data = check_cache(doc_id, grobid_revision)
+
+            if cached_data:
+                # Use cached data - find the specific variant file
+                temp_dir = cached_data["temp_dir"]
+                suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
+
+                raw_tei_content = None
+                for filename in cached_data["files"]:
+                    if filename.endswith(suffix):
+                        with open(os.path.join(temp_dir, filename), 'r', encoding='utf-8') as f:
+                            raw_tei_content = f.read()
+                        break
+
+                if raw_tei_content is None:
+                    # Variant not in cache, fetch fresh
+                    raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
+            else:
+                # Cache miss - fetch and cache
+                from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
+                training_handler: TrainingHandler = handler  # type: ignore[assignment]
+                temp_dir, extracted_files = training_handler._fetch_training_package(
+                    pdf_path, grobid_server_url, flavor
+                )
+
+                # Cache the training data
+                cache_training_data(doc_id, grobid_revision, temp_dir, extracted_files)
+
+                # Find and read the specific variant file
+                suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
+                raw_tei_content = None
+                for filename in extracted_files:
+                    if filename.endswith(suffix):
+                        with open(os.path.join(temp_dir, filename), 'r', encoding='utf-8') as f:
+                            raw_tei_content = f.read()
+                        break
+
+                if raw_tei_content is None:
+                    raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
+        else:
+            # Non-training variants (fulltext, references) - no caching
+            raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
 
         # Log raw GROBID response for debugging
         log_extraction_response("grobid", pdf_path, raw_tei_content, ".raw.xml")
