@@ -143,7 +143,7 @@ fastapi_app/plugins/
 
        async def cleanup(self) -> None:
            registry = ExtractorRegistry.get_instance()
-           registry.unregister("grobid-training")
+           registry.unregister("grobid")
    ```
 
 4. Create `__init__.py`:
