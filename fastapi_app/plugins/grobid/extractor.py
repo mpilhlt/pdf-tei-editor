@@ -62,7 +62,7 @@ class GrobidTrainingExtractor(BaseExtractor):
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the GROBID extractor."""
         return {
-            "id": "grobid-training",
+            "id": "grobid",
             "name": "GROBID Extraction",
             "description": "Extract TEI from PDF using remote GROBID server (training data or full documents)",
             "input": ["pdf"],

@@ -47,7 +47,7 @@ class TestGrobidPluginRegistration(unittest.TestCase):
         extractors = registry.list_extractors(available_only=False)
 
         extractor_ids = [e['id'] for e in extractors]
-        self.assertIn('grobid-training', extractor_ids)
+        self.assertIn('grobid', extractor_ids)
 
     def test_grobid_plugin_unregisters_extractor(self):
         """Test that GrobidPlugin unregisters extractor on cleanup."""
@@ -63,7 +63,7 @@ class TestGrobidPluginRegistration(unittest.TestCase):
         extractors = registry.list_extractors(available_only=False)
 
         extractor_ids = [e['id'] for e in extractors]
-        self.assertNotIn('grobid-training', extractor_ids)
+        self.assertNotIn('grobid', extractor_ids)
 
 
 class TestLLamorePluginRegistration(unittest.TestCase):

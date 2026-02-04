@@ -73,7 +73,7 @@ class GrobidPlugin(Plugin):
     async def cleanup(self) -> None:
         """Unregister the GROBID extractor and event handlers."""
         registry = ExtractorRegistry.get_instance()
-        registry.unregister("grobid-training")
+        registry.unregister("grobid")
 
         # Unregister event handler
         event_bus = get_event_bus()
