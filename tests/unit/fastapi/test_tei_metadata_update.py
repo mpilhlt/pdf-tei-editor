@@ -253,6 +253,7 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
                         <publisher>Academic Press</publisher>
                         <date type="publication">2023</date>
                         <idno type="DOI">10.1234/ml.dh.2023</idno>
+                        <ptr target="https://example.com/article/ml.dh.2023"/>
                     </publicationStmt>
                     <sourceDesc>
                         <bibl>
@@ -306,6 +307,34 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
         self.assertEqual(file_update.doc_metadata['title'], 'Machine Learning in Digital Humanities')
         self.assertEqual(file_update.doc_metadata['publisher'], 'Academic Press')
         self.assertEqual(file_update.doc_metadata['journal'], 'Digital Humanities Quarterly')
+
+        # Verify url round-trips: extracted metadata → doc_metadata → FileUpdate
+        self.assertEqual(tei_metadata.get('url'), 'https://example.com/article/ml.dh.2023')
+        self.assertEqual(tei_metadata['doc_metadata']['url'], 'https://example.com/article/ml.dh.2023')
+        self.assertEqual(file_update.doc_metadata['url'], 'https://example.com/article/ml.dh.2023')
+
+    def test_url_included_in_doc_metadata(self):
+        """url from tei_metadata flows through to FileUpdate.doc_metadata."""
+        mock_pdf = Mock()
+        mock_pdf.id = "pdf_url_test"
+        mock_repo = Mock()
+        mock_log = Mock()
+
+        tei_metadata = {
+            'doc_metadata': {
+                'title': 'Test Article',
+                'url': 'https://www.jstor.org/stable/12345'
+            }
+        }
+
+        result = update_pdf_metadata_from_tei(
+            mock_pdf, tei_metadata, mock_repo, mock_log
+        )
+
+        self.assertTrue(result)
+        call_args = mock_repo.update_file.call_args
+        file_update = call_args[0][1]
+        self.assertEqual(file_update.doc_metadata['url'], 'https://www.jstor.org/stable/12345')
 
 
 if __name__ == '__main__':

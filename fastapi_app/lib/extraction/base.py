@@ -38,8 +38,8 @@ class BaseExtractor(ABC):
         pass
 
     @abstractmethod
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Dict[str, Any] = None) -> str:
+    async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                      options: Dict[str, Any] = None) -> str:
         """
         Perform the extraction.
 

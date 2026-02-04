@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Optional, NotRequired
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
-from fastapi_app.lib.service_registry import ExtractionService, ExtractionParams, ExtractionResult, get_service_registry
+from fastapi_app.lib.service_registry import ExtractionService, ExtractionResult, get_service_registry
 from .extractor import MockExtractor
 
 logger = logging.getLogger(__name__)
@@ -21,43 +21,71 @@ logger = logging.getLogger(__name__)
 
 class DummyExtractionService(ExtractionService):
     """Dummy extraction service for testing service registry pattern."""
-    
+
     def __init__(self):
         super().__init__(
             service_id="dummy-extractor",
             service_name="Dummy Extractor",
             capabilities=["structured-data-extraction"]
         )
-    
-    async def extract(self, **params: ExtractionParams) -> ExtractionResult:
+
+    async def extract(
+        self,
+        model: str,
+        prompt: str,
+        stable_id: Optional[str] = None,
+        text_input: Optional[str] = None,
+        json_schema: Optional[Dict[str, Any]] = None,
+        temperature: float = 0.1,
+        max_retries: int = 2,
+        **kwargs: Any,
+    ) -> ExtractionResult:
         """Simulate extraction with dummy data."""
-        import json
-        
-        # Create dummy structured data based on the prompt
-        dummy_data = {
-            "extracted_text": params.get("text_input") or "No text provided",
-            "model_used": params["model"],
-            "prompt": params["prompt"],
-            "temperature": params.get("temperature", 0.1),
-            "timestamp": "2024-01-01T00:00:00Z",
-            "dummy_field": "This is test data from the dummy service"
-        }
-        
-        # If JSON schema provided, try to validate (basic check)
-        if params.get("json_schema"):
-            try:
-                # Basic validation - just check if required fields are present
-                required_fields = params["json_schema"].get("required", [])
-                for field in required_fields:
-                    if field not in dummy_data:
-                        dummy_data[field] = f"Missing field: {field}"
-            except Exception:
-                pass
-        
+        # Check if this is a bibliographic metadata extraction request
+        if "bibliographic metadata" in prompt.lower() or (
+            json_schema and "authors" in json_schema.get("properties", {})
+        ):
+            # Return mock bibliographic metadata
+            dummy_data = {
+                "title": "Mock Document Title for Testing",
+                "authors": [
+                    {"given": "John", "family": "Doe"},
+                    {"given": "Jane", "family": "Smith"},
+                ],
+                "date": 2024,
+                "publisher": "Mock Publisher",
+                "journal": "Journal of Mock Research",
+                "volume": "42",
+                "issue": "3",
+                "pages": "123-145",
+                "doi": "10.1234/mock.doi.5678"
+            }
+        else:
+            # Create generic dummy structured data based on the prompt
+            dummy_data = {
+                "extracted_text": text_input or "No text provided",
+                "model_used": model,
+                "prompt": prompt,
+                "temperature": temperature,
+                "timestamp": "2024-01-01T00:00:00Z",
+                "dummy_field": "This is test data from the dummy service"
+            }
+
+            # If JSON schema provided, try to validate (basic check)
+            if json_schema:
+                try:
+                    # Basic validation - just check if required fields are present
+                    required_fields = json_schema.get("required", [])
+                    for field in required_fields:
+                        if field not in dummy_data:
+                            dummy_data[field] = f"Missing field: {field}"
+                except Exception:
+                    pass
+
         return ExtractionResult(
             success=True,
             data=dummy_data,
-            model=params["model"], # type: ignore
+            model=model,
             extractor="dummy-extractor",
             retries=0
         )
