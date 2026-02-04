@@ -2,13 +2,15 @@
 Debug utilities for extraction logging
 """
 
+import logging
 import os
 import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.config_utils import get_config
+
+logger = logging.getLogger(__name__)
 
 
 def create_debug_log_dir(extractor_name: Optional[str] = None) -> Path:
@@ -40,7 +42,7 @@ def log_extraction_response(
     error: Optional[str] = None
 ) -> Optional[Path]:
     """
-    Log extraction response content to a debug file (development mode only).
+    Log extraction response content to a debug file (only when DEBUG logging enabled).
 
     Args:
         extractor_name: Name of the extractor (e.g., "grobid", "llamore")
@@ -50,10 +52,9 @@ def log_extraction_response(
         error: Optional error message to include
 
     Returns:
-        Path to the created log file, or None if not in development mode
+        Path to the created log file, or None if DEBUG logging not enabled
     """
-    config = get_config()
-    if config.get("application.mode", "development") != "development":
+    if not logger.isEnabledFor(logging.DEBUG):
         return None
 
     log_dir = create_debug_log_dir(extractor_name)
@@ -86,7 +87,7 @@ def log_extraction_response(
         write_comment(f, "="*70 + "\n\n", prefix, suffix)
         f.write(response_content)
     
-    print(f"DEBUG: Logged {extractor_name} response to {log_file_path}")
+    logger.debug(f"Logged {extractor_name} response to {log_file_path}")
     return log_file_path
 
 
@@ -97,7 +98,7 @@ def log_xml_parsing_error(
     error_message: str
 ) -> Optional[Path]:
     """
-    Log XML content that failed to parse (development mode only).
+    Log XML content that failed to parse (only when DEBUG logging enabled).
 
     Args:
         extractor_name: Name of the extractor
@@ -106,7 +107,7 @@ def log_xml_parsing_error(
         error_message: The parsing error message
 
     Returns:
-        Path to the created log file, or None if not in development mode
+        Path to the created log file, or None if DEBUG logging not enabled
     """
     return log_extraction_response(
         extractor_name=extractor_name,

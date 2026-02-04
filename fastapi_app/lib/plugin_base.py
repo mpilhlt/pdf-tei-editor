@@ -6,7 +6,11 @@ that plugins receive for interacting with the application.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Type, TypeVar
+from fastapi_app.lib.service_registry import BaseService, get_service_registry
+
+# Type variable for generic service retrieval
+S = TypeVar('S', bound=BaseService)
 
 
 class PluginContext:
@@ -61,6 +65,20 @@ class PluginContext:
         if not self._registry or not self._plugin_id:
             return None
         return self._registry.get_dependency(self._plugin_id, dependency_id)
+
+    def get_service(self, capability: str, service_type: Type[S]) -> S | None:
+        """
+        Get a service by capability with type safety.
+
+        Args:
+            capability: The capability to look for
+            service_type: The expected service type for type safety
+
+        Returns:
+            Service instance or None if no service provides this capability
+        """
+        service_registry = get_service_registry()
+        return service_registry.get_service(capability, service_type)
 
 
 class Plugin(ABC):

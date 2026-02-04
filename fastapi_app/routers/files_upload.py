@@ -107,7 +107,7 @@ async def upload_file(
         # Fallback based on content (if libmagic available)
         if MAGIC_AVAILABLE:
             try:
-                mime_type = magic.from_buffer(content, mime=True)
+                mime_type = magic.from_buffer(content, mime=True) # type: ignore
                 if mime_type == 'application/pdf':
                     file_type = 'pdf'
                 else:
@@ -145,14 +145,16 @@ async def upload_file(
 
             return UploadResponse(
                 type=file_type,
-                filename=updated_file.stable_id
+                filename=updated_file.stable_id, # deprecated
+                stable_id=updated_file.stable_id
             )
         else:
             # File exists and is not deleted
             logger.info(f"File already exists in database: {file_hash[:16]}...")
             return UploadResponse(
                 type=file_type,
-                filename=existing_file.stable_id
+                filename=existing_file.stable_id, # deprecated
+                stable_id=existing_file.stable_id
             )
 
     # Extract a label from the original filename
@@ -195,7 +197,8 @@ async def upload_file(
 
         return UploadResponse(
             type=file_type,
-            filename=created_file.stable_id
+            filename=created_file.stable_id, # deprecated
+            stable_id=created_file.stable_id
         )
     except Exception as e:
         logger.error(f"Error inserting file metadata: {e}")
@@ -206,7 +209,8 @@ async def upload_file(
             logger.info(f"File exists after race condition: {file_hash[:16]}...")
             return UploadResponse(
                 type=file_type,
-                filename=existing_file.stable_id
+                filename=existing_file.stable_id, # deprecated
+                stable_id=existing_file.stable_id
             )
         # If we still can't find it, this is an actual error
         raise HTTPException(
@@ -229,7 +233,7 @@ def _is_allowed_mime_type(filename: str, file_content: bytes) -> bool:
     # Check content-based MIME type (if libmagic available)
     if MAGIC_AVAILABLE:
         try:
-            mime_type_by_content = magic.from_buffer(file_content, mime=True)
+            mime_type_by_content = magic.from_buffer(file_content, mime=True) # type: ignore
             if mime_type_by_content in ALLOWED_MIME_TYPES:
                 return True
         except Exception as e:
