@@ -6,7 +6,7 @@ import asyncio
 import logging
 from functools import partial
 from typing import Any, Dict, Optional
-from fastapi_app.lib.service_registry import ExtractionService, ExtractionResult
+from fastapi_app.lib.service_registry import ExtractionService, ExtractionResult, ModelCapabilityFilter
 from .extractor import KisskiExtractor
 
 logger = logging.getLogger(__name__)
@@ -23,10 +23,35 @@ class KisskiService(ExtractionService):
         )
         self._extractor = KisskiExtractor()
 
+    def _select_model(self, capabilities: ModelCapabilityFilter | None = None) -> str | None:
+        """
+        Select a model that satisfies the given capability requirements.
+
+        Args:
+            capabilities: Filter specifying required modalities per axis,
+                e.g. {"input": ["image"]}.  None means any model is acceptable.
+
+        Returns:
+            Model ID of the first matching model, or None if none qualify.
+        """
+        models = self._extractor.get_models_with_capabilities()
+        for m in models:
+            if capabilities:
+                matched = True
+                for axis, required_caps in capabilities.items():
+                    if not all(cap in m.get(axis, []) for cap in required_caps):
+                        matched = False
+                        break
+                if not matched:
+                    continue
+            return m.get("id")
+        return None
+
     async def extract(
         self,
-        model: str,
         prompt: str,
+        model: str | None = None,
+        model_capabilities: ModelCapabilityFilter | None = None,
         stable_id: Optional[str] = None,
         text_input: Optional[str] = None,
         json_schema: Optional[Dict[str, Any]] = None,
@@ -37,9 +62,14 @@ class KisskiService(ExtractionService):
         """
         Extract structured data using KISSKI with full type safety.
 
+        Either *model* (exact ID) or *model_capabilities* (filter) must be
+        provided.  When *model_capabilities* is given the service selects an
+        appropriate model automatically.
+
         Args:
-            model: Model ID to use
             prompt: Extraction prompt
+            model: Exact model ID to use (optional if model_capabilities given)
+            model_capabilities: Capability filter for automatic model selection
             stable_id: PDF file stable_id (optional)
             text_input: Plain text to extract from (optional)
             json_schema: JSON schema for validation (optional)
@@ -53,6 +83,20 @@ class KisskiService(ExtractionService):
         pdf_path = None
         if stable_id:
             pdf_path = self._resolve_stable_id_to_path(stable_id)
+
+        # Select model from capabilities filter when no exact model given
+        if not model:
+            resolved = self._select_model(model_capabilities)
+            if resolved is None:
+                return ExtractionResult({
+                    "success": False,
+                    "data": {},
+                    "model": "",
+                    "extractor": "kisski-extractor",
+                    "retries": 0,
+                })
+            logger.debug(f"Auto-selected model: {resolved}")
+            model = resolved
 
         # Run sync extractor in thread pool to avoid blocking event loop
         result = await asyncio.to_thread(

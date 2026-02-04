@@ -9,7 +9,9 @@ from pathlib import Path
 from lxml import etree
 from fastapi_app.lib.tei_utils import (
     serialize_tei_with_formatted_header,
-    create_schema_processing_instruction
+    create_schema_processing_instruction,
+    create_tei_header,
+    extract_tei_metadata
 )
 
 
@@ -448,6 +450,124 @@ class TestBuildVersionAncestryChains(unittest.TestCase):
 
         chains = build_version_ancestry_chains([])
         self.assertEqual(len(chains), 0)
+
+
+class TestCreateTeiHeaderUrl(unittest.TestCase):
+    """Test url field handling in create_tei_header."""
+
+    def _find_idno(self, header, id_type):
+        """Find an idno element by type attribute in the header."""
+        pub_stmt = header.find("fileDesc/publicationStmt")
+        for idno in pub_stmt.findall("idno"):
+            if idno.get("type") == id_type:
+                return idno
+        return None
+
+    def _find_ptr(self, header):
+        """Find the ptr element in publicationStmt."""
+        pub_stmt = header.find("fileDesc/publicationStmt")
+        return pub_stmt.find("ptr")
+
+    def test_url_written_to_publication_stmt(self):
+        """url in metadata produces <ptr target="..."/> in publicationStmt."""
+        header = create_tei_header(metadata={"url": "https://www.jstor.org/stable/44290231"})
+        ptr = self._find_ptr(header)
+        self.assertIsNotNone(ptr)
+        self.assertEqual(ptr.get("target"), "https://www.jstor.org/stable/44290231")
+
+    def test_url_and_doi_coexist(self):
+        """DOI idno and ptr are siblings, not mutually exclusive."""
+        header = create_tei_header(
+            doi="10.5771/2699-1284-2024-3-149",
+            metadata={"url": "https://doi.org/10.5771/2699-1284-2024-3-149"}
+        )
+        doi_idno = self._find_idno(header, "DOI")
+        ptr = self._find_ptr(header)
+        self.assertIsNotNone(doi_idno, "DOI idno should be present")
+        self.assertIsNotNone(ptr, "ptr should be present alongside DOI")
+        self.assertEqual(doi_idno.text, "10.5771/2699-1284-2024-3-149")
+        self.assertEqual(ptr.get("target"), "https://doi.org/10.5771/2699-1284-2024-3-149")
+
+    def test_url_and_generic_id_coexist(self):
+        """Generic id idno and ptr are siblings."""
+        header = create_tei_header(metadata={
+            "id": "jstor:44290231",
+            "url": "https://www.jstor.org/stable/44290231"
+        })
+        jstor_idno = self._find_idno(header, "jstor")
+        ptr = self._find_ptr(header)
+        self.assertIsNotNone(jstor_idno)
+        self.assertEqual(jstor_idno.text, "44290231")
+        self.assertIsNotNone(ptr)
+        self.assertEqual(ptr.get("target"), "https://www.jstor.org/stable/44290231")
+
+    def test_url_absent_produces_no_ptr(self):
+        """No url in metadata means no <ptr> element."""
+        header = create_tei_header(doi="10.1234/test", metadata={"title": "Test"})
+        ptr = self._find_ptr(header)
+        self.assertIsNone(ptr)
+
+    def test_url_empty_string_produces_no_ptr(self):
+        """Empty string url is treated as absent."""
+        header = create_tei_header(metadata={"url": ""})
+        ptr = self._find_ptr(header)
+        self.assertIsNone(ptr)
+
+
+class TestExtractTeiMetadataUrl(unittest.TestCase):
+    """Test url extraction in extract_tei_metadata."""
+
+    def _make_tei(self, pub_stmt_extra=""):
+        """Build a minimal TEI XML string with optional extra content in publicationStmt."""
+        return f"""
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+            <teiHeader>
+                <fileDesc>
+                    <titleStmt>
+                        <title level="a">Test</title>
+                    </titleStmt>
+                    <publicationStmt>
+                        <publisher>Test Publisher</publisher>
+                        <date type="publication">2024</date>
+                        {pub_stmt_extra}
+                    </publicationStmt>
+                    <sourceDesc><bibl>Test</bibl></sourceDesc>
+                </fileDesc>
+            </teiHeader>
+        </TEI>
+        """
+
+    def test_extracts_url_from_publication_stmt(self):
+        """extract_tei_metadata reads <ptr target="..."/> into url and doc_metadata."""
+        tei_xml = self._make_tei(
+            '<ptr target="https://www.jstor.org/stable/44290231"/>'
+        )
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        result = extract_tei_metadata(root)
+
+        self.assertEqual(result.get('url'), "https://www.jstor.org/stable/44290231")
+        self.assertEqual(result['doc_metadata']['url'], "https://www.jstor.org/stable/44290231")
+
+    def test_url_absent_returns_no_url_key(self):
+        """No <ptr> means url is absent from result."""
+        tei_xml = self._make_tei('<idno type="DOI">10.1234/test</idno>')
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        result = extract_tei_metadata(root)
+
+        self.assertIsNone(result.get('url'))
+        self.assertNotIn('url', result.get('doc_metadata', {}))
+
+    def test_url_round_trips_with_doi(self):
+        """Both DOI and url are extracted independently."""
+        tei_xml = self._make_tei(
+            '<idno type="DOI">10.1234/test</idno>\n'
+            '                        <ptr target="https://example.com/article/1"/>'
+        )
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        result = extract_tei_metadata(root)
+
+        self.assertEqual(result.get('url'), "https://example.com/article/1")
+        self.assertEqual(result['doc_metadata']['url'], "https://example.com/article/1")
 
 
 if __name__ == '__main__':

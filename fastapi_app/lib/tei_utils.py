@@ -73,6 +73,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     issue = metadata.get("issue", "")
     pages = metadata.get("pages", "")
     id = metadata.get("id", "")
+    url = metadata.get("url", "")
 
 
     # Build TEI header
@@ -101,13 +102,32 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     elif id:
         id_type = id.split(":")[0] if ":" in id else ""
         if id_type:
-            etree.SubElement(publicationStmt, "idno", type=id_type).text = id
-        else:  
+            # Strip the prefix from the value so the type attribute carries it
+            id_value = id[len(id_type) + 1:]
+            etree.SubElement(publicationStmt, "idno", type=id_type).text = id_value
+        else:
             etree.SubElement(publicationStmt, "idno").text = id
+    if url:
+        etree.SubElement(publicationStmt, "ptr", target=url)
 
     # sourceDesc with formatted citation
     authors_str = ", ".join([f'{author.get("given", "")} {author.get("family", "")}' for author in authors])
-    citation = f"{authors_str}. ({date}). {title}. {journal}, {volume}({issue}), {pages}. DOI: {doi}"
+    # Build citation parts, omitting fields that are None or empty
+    citation_parts = [f"{authors_str}. ({date}). {title}."]
+    if journal:
+        vol_issue = journal
+        if volume:
+            vol_issue += f", {volume}"
+            if issue:
+                vol_issue += f"({issue})"
+        if pages:
+            vol_issue += f", {pages}"
+        citation_parts.append(f"{vol_issue}.")
+    if doi:
+        citation_parts.append(f"DOI: {doi}")
+    elif id:
+        citation_parts.append(f"{id}")
+    citation = " ".join(citation_parts)
     sourceDesc = etree.SubElement(fileDesc, "sourceDesc")
     etree.SubElement(sourceDesc, "bibl").text = citation
 
@@ -642,6 +662,11 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     if publisher_elem is not None and publisher_elem.text:
         metadata['publisher'] = publisher_elem.text.strip()
 
+    # Extract stable/access URL
+    ptr_elem = tei_root.find('.//tei:publicationStmt/tei:ptr', ns)
+    if ptr_elem is not None and ptr_elem.get('target'):
+        metadata['url'] = ptr_elem.get('target').strip()
+
     # Extract variant from any extractor application metadata (GROBID, llamore, etc.)
     # Search for any application with a variant-id label
     variant_label = tei_root.find('.//tei:application[@type="extractor"]/tei:label[@type="variant-id"]', ns)
@@ -702,6 +727,8 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
         doc_metadata['journal'] = metadata['journal']
     if 'publisher' in metadata:
         doc_metadata['publisher'] = metadata['publisher']
+    if 'url' in metadata:
+        doc_metadata['url'] = metadata['url']
 
     metadata['doc_metadata'] = doc_metadata  # type: ignore[assignment]
 
@@ -718,6 +745,7 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
         'pages': metadata.get('pages'),
         'doi': metadata.get('doi'),
         'id': metadata.get('id'),
+        'url': metadata.get('url'),
         # Document ID resolution fields
         'doc_id': metadata.get('doc_id'),
         'doc_id_type': metadata.get('doc_id_type'),
@@ -814,7 +842,8 @@ def update_pdf_metadata_from_tei(
         'authors': nested_doc_metadata.get('authors') or tei_metadata.get('authors'),
         'date': nested_doc_metadata.get('date') or tei_metadata.get('date'),
         'journal': nested_doc_metadata.get('journal') or tei_metadata.get('journal'),
-        'publisher': nested_doc_metadata.get('publisher') or tei_metadata.get('publisher')
+        'publisher': nested_doc_metadata.get('publisher') or tei_metadata.get('publisher'),
+        'url': nested_doc_metadata.get('url') or tei_metadata.get('url')
     }
 
     # Clean up None values for has_metadata check

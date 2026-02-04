@@ -36,6 +36,7 @@ class BibliographicMetadata(TypedDict, total=False):
     pages: Optional[str]
     doi: Optional[str]
     id: Optional[str]
+    url: Optional[str]
     # Additional fields for document ID resolution
     doc_id: Optional[str]
     doc_id_type: Optional[str]
@@ -66,7 +67,8 @@ BIBLIOGRAPHIC_METADATA_SCHEMA = {
         "volume": {"type": "string", "description": "Volume number"},
         "issue": {"type": "string", "description": "Issue number"},
         "pages": {"type": "string", "description": "Page range (e.g., '1-15')"},
-        "id": {"type": "string", "description": "Any type of persisten identifier, preferrably DOI"}
+        "id": {"type": "string", "description": "Any type of persisten identifier, preferrably DOI"},
+        "url": {"type": "string", "description": "A stable or persistent URL for accessing the document, if present in the document"}
     }
 }
 
@@ -82,14 +84,17 @@ Extract the following information if available:
 - volume: Volume number
 - issue: Issue number
 - pages: Page range
-- id: any kind of persistent identifier like DOI, ISBN, JSTOR, ARXIV, etc. if present. 
-  Prefix with the type of identifier in lowercase like so: "doi:10.347/1234567890" or  
-  "isbn:978-0-123456-78-9". DOIs are preferred.
+- id: any kind of persistent identifier like DOI, ISBN, JSTOR, ARXIV, etc. if present.
+  Prefix with the type of identifier in lowercase like so: "doi:10.1234/example.2024" or
+  "isbn:978-0-123456-78-9" or "jstor:44290231".
+  ONLY return a DOI if you can read one verbatim in the document. Do NOT guess or fabricate a DOI.
+- url: A stable or persistent URL for accessing the document, if one is visible in the document.
+  Only return a URL you can read verbatim. Do NOT guess or fabricate a URL.
 
 Critical rules:
 - Return the information as JSON matching the expected schema. 
 - Only include fields where you can find the information.
-- If author names are in all-caps, return them properly capitalized
+- If author names or the title are in all-caps, return them properly capitalized
 """
 
 
@@ -116,9 +121,16 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> BibliographicMetadata
                 normalized_authors.append({"given": "", "family": author})
         authors = normalized_authors
     
-    # DOI normalization
+    # DOI normalization: only promote to 'doi' if the value actually validates as a DOI
     if 'id' in data and 'doi:' in data.get('id', ''):
-        data['doi'] = data['id'].replace('doi:', '')
+        from .doi_utils import validate_doi
+        candidate_doi = data['id'].replace('doi:', '')
+        if validate_doi(candidate_doi):
+            data['doi'] = candidate_doi
+        else:
+            # Not a real DOI — drop the invalid doi: prefix so it isn't misused downstream
+            logger.warning(f"LLM returned invalid DOI, dropping: {data['id']}")
+            data['id'] = None
 
     return BibliographicMetadata({
         "title": data.get("title"),
@@ -130,7 +142,8 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> BibliographicMetadata
         "issue": data.get("issue"),
         "pages": data.get("pages"),
         "doi": data.get("doi"),
-        "id": data.get("id")
+        "id": data.get("id"),
+        "url": data.get("url")
     })
 
 
@@ -176,7 +189,7 @@ async def get_metadata_for_document(
             metadata['authors'] = []
         
         # Ensure other optional fields have proper types
-        for field in ['title', 'date', 'publisher', 'journal', 'volume', 'issue', 'pages', 'doi', 'id']:
+        for field in ['title', 'date', 'publisher', 'journal', 'volume', 'issue', 'pages', 'doi', 'id', 'url']:
             if field not in metadata:
                 metadata[field] = None
         
@@ -207,16 +220,11 @@ async def get_metadata_for_document(
             if service:
                 logger.debug("Attempting metadata extraction via service")
 
-                # Use a default model for extraction
-                # The service will handle model selection internally
-                model = "default-model"
-
-                # Extract with individual parameters (matching actual implementation)
                 result = await service.extract(
-                    model=model,
                     prompt=BIBLIOGRAPHIC_METADATA_PROMPT,
                     stable_id=stable_id,
                     text_input=text_content,
+                    model_capabilities={"input": ["image"]} if stable_id else None,
                     json_schema=BIBLIOGRAPHIC_METADATA_SCHEMA,
                     temperature=0.1,
                     max_retries=2
@@ -246,6 +254,7 @@ async def get_metadata_for_document(
         "issue": None,
         "pages": None,
         "doi": None,
-        "id": None
+        "id": None,
+        "url": None
     })
     return validate_metadata(empty_metadata)
