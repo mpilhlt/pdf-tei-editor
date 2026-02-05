@@ -89,6 +89,16 @@ sl-select::part(form-control-label) {
   color: var(--sl-color-gray-500)
 }
 
+/* Loading state for file selection selectboxes */
+sl-select.loading::part(combobox) {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+sl-select.loading::part(form-control-label) {
+  opacity: 0.6;
+}
+
 
 #editors {
   flex-grow: 1;
