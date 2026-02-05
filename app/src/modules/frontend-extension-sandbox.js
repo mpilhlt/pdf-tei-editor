@@ -75,10 +75,8 @@ async function fetchText(url) {
  * @param {XslStylesheetRegistration} options - Stylesheet registration options
  */
 function registerXslStylesheet(options) {
-  console.log('DEBUG sandbox.registerXslStylesheet() called with:', { label: options?.label, xmlns: options?.xmlns });
   try {
     const xslViewer = XslViewerPlugin.getInstance();
-    console.log('DEBUG sandbox.registerXslStylesheet(): Got XslViewerPlugin instance');
     xslViewer.register(options);
   } catch (error) {
     console.warn('XslViewerPlugin not available:', error.message);

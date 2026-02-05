@@ -137,11 +137,11 @@ async function install(state) {
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
     select.addEventListener('sl-show', () => {
-      select.closest('#toolbar')?.classList.add('dropdown-open');
+      select.closest('tool-bar')?.classList.add('dropdown-open');
     });
 
     select.addEventListener('sl-hide', () => {
-      select.closest('#toolbar')?.classList.remove('dropdown-open');
+      select.closest('tool-bar')?.classList.remove('dropdown-open');
     });
   }
 }

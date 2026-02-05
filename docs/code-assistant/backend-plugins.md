@@ -33,10 +33,15 @@ fastapi_app/plugins/my_plugin/
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
 ├── my-script.js       # Optional: frontend JavaScript
+├── html/              # Optional: static files (auto-mounted)
+│   ├── styles.css
+│   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
     └── script.test.js # JavaScript unit tests (if applicable)
 ```
+
+**Static Files**: Files in the `html/` subdirectory are automatically served at `/api/plugins/{plugin_id}/static/`. Use this for XSLT, CSS, JS assets instead of custom routes. See [Static File Serving](../development/plugin-system-backend.md#static-file-serving).
 
 **Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
 

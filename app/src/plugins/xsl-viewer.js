@@ -82,8 +82,6 @@ export class XslViewerPlugin extends Plugin {
    * @param {XslStylesheetRegistration} options
    */
   register(options) {
-    console.log('DEBUG XslViewerPlugin.register() called with:', { label: options?.label, xmlns: options?.xmlns, hasXslDoc: !!options?.xslDoc });
-
     if (!options.label || !options.xmlns || !options.xslDoc) {
       console.error('XslViewerPlugin: Invalid registration - missing label, xmlns, or xslDoc');
       return;
@@ -102,13 +100,9 @@ export class XslViewerPlugin extends Plugin {
 
     if (existing >= 0) {
       registeredStylesheets[existing] = options;
-      console.log(`DEBUG XslViewerPlugin: Updated stylesheet "${options.label}"`);
     } else {
       registeredStylesheets.push(options);
-      console.log(`DEBUG XslViewerPlugin: Registered stylesheet "${options.label}" for ${options.xmlns}`);
     }
-
-    console.log('DEBUG XslViewerPlugin: Total registered stylesheets:', registeredStylesheets.length);
 
     this.updateMenu();
     this.updateButtonState();
@@ -127,7 +121,6 @@ export class XslViewerPlugin extends Plugin {
    * @param {ApplicationState} initialState
    */
   async install(initialState) {
-    console.log('DEBUG XslViewerPlugin.install() called');
     await super.install(initialState);
 
     // Add overlay to xmlEditor container
@@ -159,8 +152,6 @@ export class XslViewerPlugin extends Plugin {
     }
 
     updateUi();
-
-    console.log('DEBUG XslViewerPlugin: UI elements added, button:', xslViewerBtn);
 
     // Setup event handlers
     const closeBtn = /** @type {SlIconButton} */ (overlayElement.querySelector('[data-name="closeBtn"]'));
@@ -196,24 +187,15 @@ export class XslViewerPlugin extends Plugin {
 
     // Menu selection handler
     xslViewerMenu.addEventListener('sl-select', (event) => {
-      console.log('DEBUG sl-select event fired:', event);
       const item = /** @type {SlMenuItem} */ (event.detail.item);
-      console.log('DEBUG menu item:', item, 'dataset:', item?.dataset);
       const label = item.dataset.label;
-      console.log('DEBUG label:', label);
       if (label) {
         this.applyStylesheet(label);
       }
     });
 
-    // Debug: also try click handler
-    xslViewerMenu.addEventListener('click', (event) => {
-      console.log('DEBUG click event on menu:', event.target);
-    });
-
     // Initialize menu with empty state
     this.updateMenu();
-    console.log('DEBUG XslViewerPlugin.install() completed');
   }
 
   /**
@@ -240,7 +222,6 @@ export class XslViewerPlugin extends Plugin {
       item.dataset.label = stylesheet.label;
       item.disabled = !currentXmlns || stylesheet.xmlns !== currentXmlns;
       xslViewerMenu.appendChild(item);
-      console.log('DEBUG updateMenu: added item', { label: stylesheet.label, disabled: item.disabled, item });
     });
   }
 
@@ -249,22 +230,12 @@ export class XslViewerPlugin extends Plugin {
    */
   updateButtonState() {
     if (!xslViewerBtn) {
-      console.log('DEBUG XslViewerPlugin.updateButtonState(): button not found');
       return;
     }
 
     const hasStylesheets = registeredStylesheets.length > 0;
-    const currentXmlns = this.getCurrentDocumentXmlns();
     const hasMatchingXmlns = this.hasMatchingStylesheet();
     const shouldBeDisabled = !hasStylesheets || !hasMatchingXmlns;
-
-    console.log('DEBUG XslViewerPlugin.updateButtonState():', {
-      hasStylesheets,
-      currentXmlns,
-      hasMatchingXmlns,
-      registeredNamespaces: registeredStylesheets.map(s => s.xmlns),
-      shouldBeDisabled
-    });
 
     xslViewerBtn.disabled = shouldBeDisabled;
   }
@@ -296,8 +267,6 @@ export class XslViewerPlugin extends Plugin {
    * @param {string} label
    */
   applyStylesheet(label) {
-    console.log('DEBUG applyStylesheet() called with label:', label);
-    console.log('DEBUG registered stylesheets:', registeredStylesheets.map(s => s.label));
     const stylesheet = registeredStylesheets.find(s => s.label === label);
     if (!stylesheet) {
       notify('Stylesheet not found', 'danger', 'exclamation-octagon');

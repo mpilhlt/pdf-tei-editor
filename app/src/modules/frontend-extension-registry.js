@@ -111,7 +111,6 @@ function wrapExtensionAsPlugin(extension) {
  * @returns {Promise<number>} Number of extensions registered
  */
 async function loadExtensionsFromServer(pluginManager) {
-  console.log('DEBUG loadExtensionsFromServer() called');
   try {
     const response = await fetch('/api/v1/plugins/extensions.js');
     if (!response.ok) {
@@ -120,7 +119,6 @@ async function loadExtensionsFromServer(pluginManager) {
     }
 
     const script = await response.text();
-    console.log('DEBUG loadExtensionsFromServer: fetched script, length:', script.length);
 
     // Execute the script to register extensions via window.registerFrontendExtension
     const scriptEl = document.createElement('script');
@@ -130,14 +128,12 @@ async function loadExtensionsFromServer(pluginManager) {
 
     // Get registered extensions and wrap them as plugins
     const rawExtensions = getExtensions();
-    console.log('DEBUG loadExtensionsFromServer: raw extensions:', rawExtensions.map(e => ({ name: e.name, deps: e.deps })));
     let registered = 0;
 
     for (const extension of rawExtensions) {
       try {
         const extensionPlugin = wrapExtensionAsPlugin(extension);
         pluginManager.register(extensionPlugin);
-        console.log(`DEBUG Registered frontend extension: ${extensionPlugin.name} with deps:`, extensionPlugin.deps);
         registered++;
       } catch (error) {
         console.error(`Failed to register extension ${extension.name}:`, error);

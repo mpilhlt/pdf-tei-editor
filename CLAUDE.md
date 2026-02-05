@@ -387,6 +387,24 @@ When implementing a new feature, follow this workflow:
 
 See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
 
+## Backend Plugin Static Files
+
+Plugins can serve static files (CSS, JS, XSLT) by placing them in an `html/` subdirectory:
+
+- Put files in: `fastapi_app/plugins/{plugin_id}/html/`
+- Files are automatically served at: `/api/plugins/{plugin_id}/static/`
+
+**Example:**
+
+```text
+fastapi_app/plugins/grobid/html/bibl-struct.xslt
+→ Served at: /api/plugins/grobid/static/bibl-struct.xslt
+```
+
+Use this instead of custom routes for static assets like XSLT stylesheets, CSS, or JavaScript files.
+
+See [docs/development/plugin-system-backend.md](docs/development/plugin-system-backend.md#static-file-serving) for details.
+
 ## Completion documents and summaries
 
 - When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.
