@@ -198,9 +198,12 @@ export class XMLEditor extends EventEmitter {
       this.startAutocomplete(tagData);
     }
     // editor view
+    // Explicitly set root to document to ensure proper style injection
+    // when editor is inside slotted content of web components (like sl-split-panel)
     this.#view = new EditorView({
       state: EditorState.create({ doc: "", extensions }),
-      parent: editorDiv
+      parent: editorDiv,
+      root: document
     });
 
     // indentation and tab size
