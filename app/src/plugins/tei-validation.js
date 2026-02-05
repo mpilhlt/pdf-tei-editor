@@ -146,7 +146,9 @@ async function lintSource(view) {
       try {
         validationErrors = await client.validateXml(xml);
       } catch (error) {
-        return reject(error);
+        // Log as warning (not error) for recoverable issues like schema download failures
+        logger.warn(`Validation request failed: ${error.message}`);
+        return resolve([]);
       }
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`)
       // check if document has changed in the meantime

@@ -208,14 +208,20 @@ async function install(state) {
       await handler()
     });
 
-    // this works around a problem with the z-index of the select dropdown being bound 
+    // this works around a problem with the z-index of the select dropdown being bound
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
+    // Uses reference counting to handle direct switching between selectboxes
     select.addEventListener('sl-show', () => {
+      openDropdownCount++;
       select.closest('tool-bar')?.classList.add('dropdown-open');
     });
 
     select.addEventListener('sl-hide', () => {
-      select.closest('tool-bar')?.classList.remove('dropdown-open');
+      openDropdownCount--;
+      if (openDropdownCount <= 0) {
+        openDropdownCount = 0;
+        select.closest('tool-bar')?.classList.remove('dropdown-open');
+      }
     });
   }
 }
@@ -315,6 +321,7 @@ let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
 let isPopulatingSelectboxes = false
 let isFileLoading = false
+let openDropdownCount = 0
 
 /**
  * Populates the collection filter selectbox
