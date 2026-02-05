@@ -183,7 +183,7 @@ async def download_training_package(
                             sse_service, session_id_value,
                             "Download cancelled", "warning"
                         )
-                        progress.hide()
+                        progress.hide() # type:ignore
                         cancellation_token.cleanup()
                         raise HTTPException(status_code=499, detail="Download cancelled by user")
 
@@ -237,7 +237,7 @@ async def download_training_package(
                         try:
                             # Run blocking GROBID fetch in thread pool to allow SSE events
                             temp_dir, extracted_files = await asyncio.to_thread(
-                                extractor._fetch_training_package,
+                                extractor._fetch_training_package, # type:ignore
                                 str(pdf_path), grobid_server_url, flavor
                             )
                             # Cache the training data

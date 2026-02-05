@@ -134,7 +134,6 @@ async function loadExtensionsFromServer(pluginManager) {
       try {
         const extensionPlugin = wrapExtensionAsPlugin(extension);
         pluginManager.register(extensionPlugin);
-        console.log(`Registered frontend extension: ${extensionPlugin.name}`);
         registered++;
       } catch (error) {
         console.error(`Failed to register extension ${extension.name}:`, error);

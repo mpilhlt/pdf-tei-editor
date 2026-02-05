@@ -61,15 +61,17 @@ import { notify } from '../modules/sl-utils.js'
 import { FiledataPlugin } from '../plugins.js'
 
 /**
- * Creates a label for a document with optional lock icon
+ * Creates a label for a document with optional lock icon and variant suffix
  * @param {string} label - The document label
  * @param {boolean} [isLocked] - Whether the document is locked
- * @returns {string} HTML string with label and optional lock icon
+ * @param {string} [variantId] - Optional variant ID to append in brackets
+ * @returns {string} HTML string with label, optional variant suffix, and optional lock icon
  */
-function createDocumentLabel(label, isLocked) {
+function createDocumentLabel(label, isLocked, variantId) {
+  const displayLabel = variantId ? `${label} [${variantId}]` : label;
   return isLocked === true
-    ? `<span>${label}</span> <sl-icon name="file-lock2"></sl-icon>`
-    : `<span>${label}</span>`;
+    ? `<span>${displayLabel}</span> <sl-icon name="file-lock2"></sl-icon>`
+    : `<span>${displayLabel}</span>`;
 }
 
 /**
@@ -527,13 +529,15 @@ async function populateFileTree(state) {
         goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
 
         goldToShow.forEach(gold => {
+          // Show variant suffix when filter is "all" (empty string)
+          const variantSuffix = (!state.variant || state.variant === "") ? gold.variant : undefined;
           const goldItem = document.createElement('sl-tree-item');
           goldItem.className = 'gold-item';
           goldItem.dataset.type = 'gold';
           goldItem.dataset.hash = gold.id;
           goldItem.dataset.pdfHash = file.source?.id || '';
           goldItem.dataset.collection = file.collections[0];
-          goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+          goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
           goldSection.appendChild(goldItem);
         });
         pdfItem.appendChild(goldSection);
@@ -548,13 +552,15 @@ async function populateFileTree(state) {
         versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
         
         versionsToShow.forEach(version => {
+          // Show variant suffix when filter is "all" (empty string)
+          const variantSuffix = (!state.variant || state.variant === "") ? version.variant : undefined;
           const versionItem = document.createElement('sl-tree-item');
           versionItem.className = 'version-item';
           versionItem.dataset.type = 'version';
           versionItem.dataset.hash = version.id;
           versionItem.dataset.pdfHash = file.source?.id || '';
           versionItem.dataset.collection = file.collections[0];
-          versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked);
+          versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
           versionsSection.appendChild(versionItem);
         });
         pdfItem.appendChild(versionsSection);

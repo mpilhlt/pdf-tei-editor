@@ -276,6 +276,7 @@ The smart-test-runner automatically uses the correct approach:
 - **Tooltip wrappers don't need names** - SlTooltip components are wrappers and don't need `name` attributes. Only the element inside (like a button) needs a name
 - **Programmatic checkbox changes don't fire events** - Setting `checkbox.checked` programmatically does NOT trigger `sl-change` events in Shoelace components. Must manually update state when programmatically changing checkbox states
 - **Shoelace dialog button clicks require delay** - ALWAYS add `await page.waitForTimeout(500)` before clicking buttons in Shoelace dialogs. Shoelace dialogs use Shadow DOM and animations, and clicking too quickly results in the click being ignored. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for the pattern
+- **Shoelace dropdown z-index in toolbars** - When adding `sl-dropdown` to toolbars, the dropdown menu may appear behind other content due to z-index stacking contexts. Fix: (1) Add `sl-show`/`sl-hide` event listeners to toggle `dropdown-open` class on the parent `tool-bar` element, (2) CSS rule `tool-bar.dropdown-open { z-index: var(--sl-z-index-dropdown) !important; }` overrides the base `z-index: 0` rule.
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
 - **E2E tests: use client.apiClient, not fetch()** - In `page.evaluate()`, NEVER use manual `fetch()` calls to API endpoints. Always use `window.client.apiClient` which provides typed methods for all endpoints. Check `app/src/modules/api-client-v1.js` for available methods (auto-generated from OpenAPI schema). See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md#using-api-client-in-browser-context-e2e-tests)
 - **User notifications** - Use `notify(message, variant, icon)` from `app/src/modules/sl-utils.js` for toast notifications. Variants: "primary", "success", "warning", "danger". Common icons: "check-circle", "exclamation-triangle", "exclamation-octagon", "info-circle"
@@ -385,6 +386,24 @@ When implementing a new feature, follow this workflow:
 - `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
 
 See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
+
+## Backend Plugin Static Files
+
+Plugins can serve static files (CSS, JS, XSLT) by placing them in an `html/` subdirectory:
+
+- Put files in: `fastapi_app/plugins/{plugin_id}/html/`
+- Files are automatically served at: `/api/plugins/{plugin_id}/static/`
+
+**Example:**
+
+```text
+fastapi_app/plugins/grobid/html/bibl-struct.xslt
+→ Served at: /api/plugins/grobid/static/bibl-struct.xslt
+```
+
+Use this instead of custom routes for static assets like XSLT stylesheets, CSS, or JavaScript files.
+
+See [docs/development/plugin-system-backend.md](docs/development/plugin-system-backend.md#static-file-serving) for details.
 
 ## Completion documents and summaries
 

@@ -284,8 +284,10 @@ export class PDFJSViewer {
         this.pdfViewer.setDocument(this.pdfDoc);
         this.linkService.setDocument(this.pdfDoc);
 
-        // Render custom thumbnails after document is loaded
-        await this._renderThumbnails();
+        // Render custom thumbnails in background (don't block load completion)
+        this._renderThumbnails().catch(error => {
+          console.warn("Failed to render thumbnails:", error);
+        });
 
         this.isLoadedFlag = true;
         resolve(true);

@@ -53,9 +53,23 @@ h3 {
   height: 55px;
 }
 
-#toolbar.dropdown-open {
-  z-index: var(--sl-z-index-dropdown);
+/* z-index issues */
+tool-bar {
+  z-index: calc(var(--sl-z-index-dropdown)-1) !important;
 }
+
+tool-bar.dropdown-open {
+  z-index: var(--sl-z-index-dropdown) !important;
+}
+
+div[name = "xmlEditor"] tool-bar sl-button {
+  max-height: 19px;
+}
+
+div[name = "xmlEditor"] tool-bar sl-button::part(label) {
+  line-height: 19px;
+}
+
 
 /* special styling of the toolbar to align the labels of the selectboxes and button groups */
 #toolbar sl-button-group[label]:before {
@@ -80,6 +94,16 @@ h3 {
 sl-select::part(form-control-label) {
   font-size: smaller;
   color: var(--sl-color-gray-500)
+}
+
+/* Loading state for file selection selectboxes */
+sl-select.loading::part(combobox) {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+sl-select.loading::part(form-control-label) {
+  opacity: 0.6;
 }
 
 
@@ -291,9 +315,7 @@ sl-menu[name="pluginsMenu"] small {
   letter-spacing: 0.5px;
 }
 
-#pdf-toolbar, #xml-toolbar {
-  z-index: 0 !important;
-}
+
 
 /* CodeMirror Merge View - Neutral Color Scheme */
 
