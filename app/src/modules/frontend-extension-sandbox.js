@@ -9,8 +9,12 @@
  * This sandbox provides direct API access for extensions running in the main window.
  */
 
+/**
+ * @import { XslStylesheetRegistration } from '../plugins/xsl-viewer.js'
+ */
+
 import ui from '../ui.js';
-import { dialog as dialogApi, services, client } from '../plugins.js';
+import { dialog as dialogApi, services, client, XslViewerPlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
 
 /**
@@ -22,6 +26,8 @@ import { notify } from './sl-utils.js';
  * @property {function(string, any, Object): Promise<any>} invoke - Invoke PluginManager endpoint
  * @property {Object} services - Application services (load, showMergeView)
  * @property {Object} api - API client for backend calls
+ * @property {function(string): Promise<string>} fetchText - Fetch text content from URL
+ * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
  */
 
 /** @type {function(): Object} */
@@ -42,6 +48,44 @@ export function initializeSandbox(stateFn, invokeFunction) {
 }
 
 /**
+ * Fetch text content from a URL with session authentication.
+ * @param {string} url - URL to fetch (can be absolute or relative)
+ * @returns {Promise<string>} Text content
+ */
+async function fetchText(url) {
+  const state = getStateFn();
+  const sessionId = state.sessionId || '';
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'X-Session-ID': sessionId
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.text();
+}
+
+/**
+ * Register an XSL stylesheet with the XslViewerPlugin.
+ * @param {XslStylesheetRegistration} options - Stylesheet registration options
+ */
+function registerXslStylesheet(options) {
+  console.log('DEBUG sandbox.registerXslStylesheet() called with:', { label: options?.label, xmlns: options?.xmlns });
+  try {
+    const xslViewer = XslViewerPlugin.getInstance();
+    console.log('DEBUG sandbox.registerXslStylesheet(): Got XslViewerPlugin instance');
+    xslViewer.register(options);
+  } catch (error) {
+    console.warn('XslViewerPlugin not available:', error.message);
+  }
+}
+
+/**
  * Get the sandbox instance for extensions.
  * @returns {FrontendExtensionSandbox}
  */
@@ -56,6 +100,8 @@ export function getSandbox() {
       load: services.load,
       showMergeView: services.showMergeView
     },
-    api: client.apiClient
+    api: client.apiClient,
+    fetchText,
+    registerXslStylesheet
   };
 }

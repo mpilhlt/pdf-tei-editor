@@ -53,8 +53,8 @@ h3 {
   height: 55px;
 }
 
-#toolbar.dropdown-open {
-  z-index: var(--sl-z-index-dropdown);
+tool-bar.dropdown-open {
+  z-index: var(--sl-z-index-dropdown) !important;
 }
 
 /* special styling of the toolbar to align the labels of the selectboxes and button groups */
@@ -292,7 +292,7 @@ sl-menu[name="pluginsMenu"] small {
 }
 
 #pdf-toolbar, #xml-toolbar {
-  z-index: 0 !important;
+  z-index: 0;
 }
 
 /* CodeMirror Merge View - Neutral Color Scheme */
