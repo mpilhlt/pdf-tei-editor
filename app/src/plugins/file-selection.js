@@ -38,6 +38,9 @@ const plugin = {
   install,
   state: {
     update
+  },
+  filedata: {
+    loading: onFiledataLoading
   }
 }
 
@@ -63,15 +66,88 @@ let currentState;
 //
 
 /**
- * Creates a label for a document with optional lock icon
+ * Creates a label for a document with optional lock icon and variant suffix
  * @param {string} label - The document label
  * @param {boolean} [isLocked] - Whether the document is locked
- * @returns {string} HTML string with label and optional lock icon
+ * @param {string} [variantId] - Optional variant ID to append in brackets
+ * @returns {string} HTML string with label, optional variant suffix, and optional lock icon
  */
-function createDocumentLabel(label, isLocked) {
+function createDocumentLabel(label, isLocked, variantId) {
+  const displayLabel = variantId ? `${label} [${variantId}]` : label;
   return isLocked === true
-    ? `${label}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
-    : label;
+    ? `${displayLabel}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
+    : displayLabel;
+}
+
+/**
+ * Updates the selected values of the file selectboxes based on current state
+ * @param {ApplicationState} state
+ */
+function updateSelectboxValues(state) {
+  isUpdatingProgrammatically = true;
+  try {
+    // For XML-only files where pdf is null, find the correct source identifier
+    let sourceValue = state.pdf || "";
+    if (!state.pdf && state.xml && state.fileData) {
+      // Find the file that contains this XML and get its identifier
+      const xmlFile = state.fileData.find(file =>
+        file.artifacts && file.artifacts.some(a => a.id === state.xml)
+      );
+      if (xmlFile) {
+        // For XML-only files, the source identifier is the XML id itself
+        if (!xmlFile.source) {
+          sourceValue = state.xml;
+        }
+      }
+    }
+
+    ui.toolbar.pdf.value = sourceValue;
+    ui.toolbar.xml.value = state.xml || "";
+    ui.toolbar.diff.value = state.diff || "";
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
+}
+
+/**
+ * Sets the loading state on all file selection selectboxes
+ * @param {boolean} isLoading - Whether data is being loaded
+ */
+function setSelectboxLoadingState(isLoading) {
+  const selectboxes = [
+    ui.toolbar.pdf,
+    ui.toolbar.xml,
+    ui.toolbar.diff,
+    ui.toolbar.variant,
+    ui.toolbar.collection
+  ];
+
+  for (const select of selectboxes) {
+    if (isLoading) {
+      select.disabled = true;
+      select.classList.add('loading');
+    } else {
+      select.disabled = false;
+      select.classList.remove('loading');
+    }
+  }
+}
+
+/**
+ * Endpoint handler for filedata.loading - called when file loading starts/ends
+ * @param {boolean} isLoading - Whether loading is in progress
+ */
+async function onFiledataLoading(isLoading) {
+  isFileLoading = isLoading;
+  setSelectboxLoadingState(isLoading);
+
+  if (!isLoading) {
+    // Loading complete - repopulate selectboxes with actual data
+    if (currentState && currentState.fileData) {
+      await populateSelectboxes(currentState);
+      updateSelectboxValues(currentState);
+    }
+  }
 }
 
 // API
@@ -132,14 +208,20 @@ async function install(state) {
       await handler()
     });
 
-    // this works around a problem with the z-index of the select dropdown being bound 
+    // this works around a problem with the z-index of the select dropdown being bound
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
+    // Uses reference counting to handle direct switching between selectboxes
     select.addEventListener('sl-show', () => {
-      select.closest('#toolbar')?.classList.add('dropdown-open');
+      openDropdownCount++;
+      select.closest('tool-bar')?.classList.add('dropdown-open');
     });
 
     select.addEventListener('sl-hide', () => {
-      select.closest('#toolbar')?.classList.remove('dropdown-open');
+      openDropdownCount--;
+      if (openDropdownCount <= 0) {
+        openDropdownCount = 0;
+        select.closest('tool-bar')?.classList.remove('dropdown-open');
+      }
     });
   }
 }
@@ -176,31 +258,8 @@ async function update(state) {
       }
     }
 
-    // Always update selected values (with guard to prevent triggering events)
-
-    isUpdatingProgrammatically = true;
-    try {
-      // For XML-only files where pdf is null, find the correct source identifier
-      let sourceValue = state.pdf || "";
-      if (!state.pdf && state.xml && state.fileData) {
-        // Find the file that contains this XML and get its identifier
-        const xmlFile = state.fileData.find(file =>
-          file.artifacts && file.artifacts.some(a => a.id === state.xml)
-        );
-        if (xmlFile) {
-          // For XML-only files, the source identifier is the XML id itself
-          if (!xmlFile.source) {
-            sourceValue = state.xml;
-          }
-        }
-      }
-
-      ui.toolbar.pdf.value = sourceValue;
-      ui.toolbar.xml.value = state.xml || ""
-      ui.toolbar.diff.value = state.diff || ""
-    } finally {
-      isUpdatingProgrammatically = false;
-    }
+    // Always update selected values
+    updateSelectboxValues(state);
   } finally {
     // Clear flag after update cycle completes
     isInStateUpdateCycle = false;
@@ -261,6 +320,8 @@ let collections
 let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
 let isPopulatingSelectboxes = false
+let isFileLoading = false
+let openDropdownCount = 0
 
 /**
  * Populates the collection filter selectbox
@@ -369,6 +430,12 @@ async function populateVariantSelectbox(state) {
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
+  // Skip population during file loading - the loading indicator should remain visible
+  if (isFileLoading) {
+    logger.debug("Ignoring populateSelectboxes request - file loading in progress");
+    return;
+  }
+
   // Prevent concurrent population
   if (isPopulatingSelectboxes) {
     logger.debug("Ignoring populateSelectboxes request - already in progress");
@@ -381,6 +448,9 @@ async function populateSelectboxes(state) {
 
   isPopulatingSelectboxes = true;
   logger.debug("Populating selectboxes")
+
+  // Disable selectboxes and show loading state before clearing/repopulating
+  setSelectboxLoadingState(true);
 
   try {
     // Populate variant selectbox first
@@ -520,19 +590,21 @@ async function populateSelectboxes(state) {
             await createHtmlElements(`<small>Gold</small>`, ui.toolbar.diff);
 
             goldToShow.forEach((gold) => {
+              // Show variant suffix when filter is "all" (empty string)
+              const variantSuffix = (!variant || variant === "") ? gold.variant : undefined;
               // xml
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
               ui.toolbar.diff.appendChild(option)
             });
 
@@ -553,19 +625,21 @@ async function populateSelectboxes(state) {
             versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
 
             versionsToShow.forEach((version) => {
+              // Show variant suffix when filter is "all" (empty string)
+              const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
               // xml
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
               ui.toolbar.diff.appendChild(option)
             });
           }
@@ -576,6 +650,8 @@ async function populateSelectboxes(state) {
   }
   } finally {
     isPopulatingSelectboxes = false;
+    // Re-enable selectboxes after population is complete
+    setSelectboxLoadingState(false);
   }
 }
 

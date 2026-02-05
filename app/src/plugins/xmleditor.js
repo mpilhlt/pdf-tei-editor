@@ -7,9 +7,10 @@
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
- * @import { UIPart } from '../ui.js'
+ * @import { UIPart, SlDropdown, SlMenu, SlIconButton } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
+ * @import { xslViewerOverlayPart } from './xsl-viewer.js'
  */
 
 import ui, {updateUi} from '../ui.js'
@@ -54,6 +55,9 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} acceptAllBtn - Accept all changes button
  * @property {StatusButton} validateBtn - Validate XML button
  * @property {StatusButton} teiWizardBtn - TEI Wizard button (added by tei-wizard plugin)
+ * @property {SlDropdown} xslViewerDropdown - XSL viewer dropdown (added by xsl-viewer plugin)
+ * @property {StatusButton} xslViewerBtn - XSL viewer button (added by xsl-viewer plugin)
+ * @property {SlMenu} xslViewerMenu - XSL viewer menu (added by xsl-viewer plugin)
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
  */
@@ -72,6 +76,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
  * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
+ * @property {UIPart<HTMLDivElement, xslViewerOverlayPart>} xslViewerOverlay - XSL transformation overlay (added by xsl-viewer plugin)
  */
 
 /**

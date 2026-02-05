@@ -35,10 +35,44 @@ fastapi_app/plugins/my_plugin/
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
 ├── my-script.js       # Optional: frontend JavaScript
+├── html/              # Optional: static files (auto-mounted)
+│   ├── styles.css
+│   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
     └── script.test.js # JavaScript unit tests (if applicable)
 ```
+
+### Static File Serving
+
+Plugins can serve static files (CSS, JS, XSLT, images) by placing them in an `html/` subdirectory. The `PluginManager` automatically mounts this directory during plugin discovery.
+
+**Pattern:**
+
+- Put files in: `fastapi_app/plugins/{plugin_id}/html/`
+- Files are served at: `/api/plugins/{plugin_id}/static/`
+
+**Example:**
+
+```text
+fastapi_app/plugins/grobid/html/bibl-struct.xslt
+→ Served at: /api/plugins/grobid/static/bibl-struct.xslt
+```
+
+**Use cases:**
+
+- XSLT stylesheets for XML transformations
+- CSS/JS assets for plugin HTML pages
+- Static templates or data files
+
+**Frontend access:**
+
+```javascript
+// In frontend extension
+const xsltString = await sandbox.fetchText('/api/plugins/grobid/static/bibl-struct.xslt');
+```
+
+**Implementation:** See `PluginManager._try_mount_plugin_static_files()` in [plugin_manager.py](../../fastapi_app/lib/plugin_manager.py).
 
 **Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
 

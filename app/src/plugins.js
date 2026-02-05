@@ -18,6 +18,7 @@ import HelpPlugin from './plugins/help.js'
 import LoggerPlugin from './plugins/logger.js'
 import { logLevel} from './plugins/logger.js'
 import UserAccountPlugin from './plugins/user-account.js'
+import XslViewerPlugin from './plugins/xsl-viewer.js'
 
 // object-based plugins
 import { plugin as configPlugin, api as config } from './plugins/config.js'
@@ -77,6 +78,7 @@ const plugins = [
   // Other plugins
   pdfViewerPlugin,
   xmlEditorPlugin,
+  XslViewerPlugin,
   teiToolsPlugin,
   fileselectionPlugin,
   fileSelectionDrawerPlugin,
@@ -132,5 +134,5 @@ export {
   progress
 }
 
-// Export FiledataPlugin class for getInstance() access
-export { FiledataPlugin };
+// Export Plugin classes for getInstance() access
+export { FiledataPlugin, XslViewerPlugin };

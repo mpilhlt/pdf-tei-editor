@@ -1,0 +1,48 @@
+<div name="xslViewerOverlay" class="xsl-viewer-overlay" style="display: none;">
+  <style>
+    /* Ensure parent has position for absolute overlay */
+    #xml-editor {
+      position: relative;
+    }
+    .xsl-viewer-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--sl-color-neutral-0);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .xsl-viewer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--sl-color-neutral-200);
+      background: var(--sl-color-neutral-50);
+    }
+    .xsl-viewer-header span {
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+    .xsl-viewer-header-buttons {
+      display: flex;
+      gap: 4px;
+    }
+    .xsl-viewer-content {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+    }
+  </style>
+  <div class="xsl-viewer-header">
+    <span name="overlayTitle">XSL Transformation</span>
+    <div class="xsl-viewer-header-buttons">
+      <sl-icon-button data-name="copyBtn" name="clipboard" library="default" title="Copy to clipboard"></sl-icon-button>
+      <sl-icon-button data-name="closeBtn" name="x-lg" library="default" title="Close"></sl-icon-button>
+    </div>
+  </div>
+  <div name="content" class="xsl-viewer-content"></div>
+</div>
