@@ -17,7 +17,7 @@
         </style>
       </head>
       <body>
-        <h2>Bibliographic References</h2>
+        <h2><xsl:value-of select="//tei:title" /></h2>
         <p class="count">
           <xsl:value-of select="count(//tei:biblStruct)"/> references found
         </p>

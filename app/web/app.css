@@ -62,6 +62,13 @@ tool-bar.dropdown-open {
   z-index: var(--sl-z-index-dropdown) !important;
 }
 
+div[name = "xmlEditor"] tool-bar sl-button {
+  max-height: 19px;
+}
+
+div[name = "xmlEditor"] tool-bar sl-button::part(label) {
+  line-height: 19px;
+}
 
 
 /* special styling of the toolbar to align the labels of the selectboxes and button groups */
