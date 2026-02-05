@@ -14,6 +14,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Type alias for bibliographic metadata to avoid circular imports
+# This should match the BibliographicMetadata TypedDict in metadata_extraction.py
+BibliographicMetadata = Dict[str, Any]
+
 # DOI validation regex (from CrossRef specification)
 # Matches: 10.{4-9 digits}/{suffix with allowed characters}
 # Allowed suffix characters: A-Z 0-9 -._;()/
@@ -236,6 +240,8 @@ def normalize_doi(doi: str) -> str:
     # DOIs are case-insensitive, but conventionally lowercase
     # However, keep original case for compatibility
     return doi
+
+
 
 
 # Filesystem encoding utilities

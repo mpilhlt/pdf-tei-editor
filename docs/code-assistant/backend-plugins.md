@@ -33,10 +33,15 @@ fastapi_app/plugins/my_plugin/
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
 ├── my-script.js       # Optional: frontend JavaScript
+├── html/              # Optional: static files (auto-mounted)
+│   ├── styles.css
+│   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
     └── script.test.js # JavaScript unit tests (if applicable)
 ```
+
+**Static Files**: Files in the `html/` subdirectory are automatically served at `/api/plugins/{plugin_id}/static/`. Use this for XSLT, CSS, JS assets instead of custom routes. See [Static File Serving](../development/plugin-system-backend.md#static-file-serving).
 
 **Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
 
@@ -95,6 +100,10 @@ from .plugin import MyPlugin
 
 plugin = MyPlugin()
 ```
+
+## Service Registry
+
+Plugins can register and consume services by capability name without hard dependencies. See [Service Registry](../development/service-registry.md) for details.
 
 ## Plugin Dependencies
 
@@ -421,6 +430,29 @@ async def custom_route():
 ```
 
 This creates the endpoint at `/api/plugins/my-plugin/custom`.
+
+**Automatic Route Discovery:**
+
+Routes are automatically discovered and registered by the `PluginManager` at application startup. The discovery process:
+
+1. Searches for `routes.py` in each plugin directory
+2. Loads the module using `importlib`
+3. Looks for a `router` object in the module
+4. Registers the router with the FastAPI app via `app.include_router()`
+
+**No manual registration is required** - simply create a `routes.py` file with a `router` export and it will be automatically discovered. The router is registered at the application level (not under `api_v1`), so routes are unversioned.
+
+**Export in `__init__.py` (recommended):**
+
+For consistency with other plugins, also export the router in `__init__.py`:
+
+```python
+# __init__.py
+from .plugin import MyPlugin
+from .routes import router
+
+__all__ = ["MyPlugin", "router"]
+```
 
 **Path Requirements:**
 

@@ -11,6 +11,7 @@ This module handles:
 import re
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
+from .metadata_extraction import BibliographicMetadata
 import logging
 
 logger = logging.getLogger(__name__)
@@ -238,7 +239,7 @@ class DocIdResolver:
         logger.debug(f"Resolved PDF {pdf_path.name} -> {doc_id} (custom ID)")
         return (doc_id, 'custom')
 
-    def resolve_doc_id_for_tei(self, tei_metadata: Dict[str, Any]) -> Tuple[str, str]:
+    def resolve_doc_id_for_tei(self, tei_metadata: BibliographicMetadata) -> Tuple[str, str]:
         """
         Resolve document ID for a TEI file from its metadata.
 
@@ -253,15 +254,18 @@ class DocIdResolver:
         Returns:
             Tuple of (doc_id, doc_id_type)
         """
-        if tei_metadata.get('doc_id'):
-            return (tei_metadata['doc_id'], tei_metadata.get('doc_id_type', 'doi'))
+        doc_id = tei_metadata.get('doc_id')
+        if doc_id:
+            doc_id_type = tei_metadata.get('doc_id_type', 'doi') or 'doi'
+            return (doc_id, doc_id_type)
 
-        if tei_metadata.get('fileref'):
-            return (tei_metadata['fileref'], 'fileref')
+        fileref = tei_metadata.get('fileref')
+        if fileref:
+            return (fileref, 'fileref')
 
         # This shouldn't happen as extract_tei_metadata should always set doc_id
-        # but include for safety
-        return (None, 'custom')
+        # but include for safety - use empty string instead of None
+        return ("", 'custom')
 
     def find_matching_teis(
         self,

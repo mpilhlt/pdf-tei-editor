@@ -12,10 +12,12 @@ Technical architecture documentation for **backend plugins** in the PDF-TEI Edit
 ## Architecture
 
 Backend plugins are Python modules discovered at runtime from:
+
 - `fastapi_app/plugins/<plugin_id>/`
 - Paths in `FASTAPI_PLUGIN_PATHS` environment variable (colon-separated)
 
 Each plugin:
+
 - Inherits from `fastapi_app.lib.plugin_base.Plugin`
 - Defines metadata (id, name, description, category, version, required_roles)
 - Implements endpoints as async methods
@@ -33,10 +35,44 @@ fastapi_app/plugins/my_plugin/
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
 ├── my-script.js       # Optional: frontend JavaScript
+├── html/              # Optional: static files (auto-mounted)
+│   ├── styles.css
+│   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
     └── script.test.js # JavaScript unit tests (if applicable)
 ```
+
+### Static File Serving
+
+Plugins can serve static files (CSS, JS, XSLT, images) by placing them in an `html/` subdirectory. The `PluginManager` automatically mounts this directory during plugin discovery.
+
+**Pattern:**
+
+- Put files in: `fastapi_app/plugins/{plugin_id}/html/`
+- Files are served at: `/api/plugins/{plugin_id}/static/`
+
+**Example:**
+
+```text
+fastapi_app/plugins/grobid/html/bibl-struct.xslt
+→ Served at: /api/plugins/grobid/static/bibl-struct.xslt
+```
+
+**Use cases:**
+
+- XSLT stylesheets for XML transformations
+- CSS/JS assets for plugin HTML pages
+- Static templates or data files
+
+**Frontend access:**
+
+```javascript
+// In frontend extension
+const xsltString = await sandbox.fetchText('/api/plugins/grobid/static/bibl-struct.xslt');
+```
+
+**Implementation:** See `PluginManager._try_mount_plugin_static_files()` in [plugin_manager.py](../../fastapi_app/lib/plugin_manager.py).
 
 **Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
 
@@ -237,6 +273,25 @@ def is_available(cls) -> bool:
 
 **Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
 
+## Service Registry
+
+Plugins can register and consume services by capability name, enabling loose coupling between plugins. Instead of depending on a specific plugin, consumers request services by what they do (e.g., `"structured-data-extraction"`).
+
+```python
+# Register a service during initialization
+from fastapi_app.lib.service_registry import get_service_registry
+
+service_registry = get_service_registry()
+service_registry.register_service(MyExtractionService())
+
+# Consume a service by capability
+service = context.get_service("structured-data-extraction", ExtractionService)
+if service:
+    result = await service.extract(model="model-id", prompt="Extract data", ...)
+```
+
+See [Service Registry](service-registry.md) for complete documentation.
+
 ## Role-Based Access
 
 - `required_roles: ["admin"]` - Only admin users
@@ -354,6 +409,7 @@ async def analyze(self, context, params: dict) -> dict:
 - `POST /api/v1/plugins/{plugin_id}/execute` - Execute endpoint
 
 Request body:
+
 ```json
 {
   "endpoint": "execute",
@@ -446,6 +502,7 @@ async def execute(self, context, params: dict) -> dict:
 ```
 
 **When to use:**
+
 - Short text results (a few paragraphs)
 - Simple lists or small tables
 - Quick status messages or summaries
@@ -473,6 +530,7 @@ async def execute(self, context, params: dict) -> dict:
 ```
 
 **When to use:**
+
 - Large tables with sorting/filtering (e.g., DataTables)
 - Content requiring external JavaScript libraries
 - Complex visualizations or charts
@@ -480,6 +538,7 @@ async def execute(self, context, params: dict) -> dict:
 - Any content needing custom CSS or extensive styling
 
 **Benefits:**
+
 - Proper script execution (iframe loads scripts naturally)
 - Better performance (libraries load once)
 - "Open in new window" button for full-screen viewing
@@ -531,7 +590,7 @@ async def view_results(
     return HTMLResponse(content=html)
 ```
 
-2. **Return the URL** from your plugin endpoint:
+1. **Return the URL** from your plugin endpoint:
 
 ```python
 async def execute(self, context, params: dict) -> dict:
@@ -773,6 +832,7 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 - [Plugin System Overview](plugin-system.md) - Overview of frontend and backend plugin systems
 - [Frontend Plugin System](plugin-system-frontend.md) - Frontend plugin architecture
 - [Backend Plugin Development Guide](../code-assistant/backend-plugins.md) - Practical guide for creating backend plugins
+- [Service Registry](service-registry.md) - Plugin-to-plugin communication via capability-based services
 - [Architecture Overview](architecture.md) - Complete system architecture
 - [Access Control](access-control.md) - RBAC implementation
 - [API Reference](api-reference.md) - FastAPI endpoint documentation

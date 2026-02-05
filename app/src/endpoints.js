@@ -95,7 +95,9 @@ const endpoints = {
   filedata: {
     /** (options:{refresh:Boolean}) => {Promise<ApplicationState>} */
     reload: "filedata.reload",
-    saveXml: "filedata.saveXml"
+    saveXml: "filedata.saveXml",
+    /** (loading: boolean) => void - Signal that file/filedata is being loaded */
+    loading: "filedata.loading"
   }
 }
 

@@ -10,7 +10,7 @@
 import { app, endpoints as ep, services } from '../app.js'
 import ui from '../ui.js'
 import {
-  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, sse
+  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, sse, pluginManager
 } from '../app.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -132,14 +132,18 @@ async function shutdown() {
  */
 async function load({ xml, pdf }) {
 
+  // Signal loading state to disable selectboxes
+  await pluginManager.invoke(ep.filedata.loading, true);
+
+  try {
   // use application state instead of
-  const currentState = app.getCurrentState() 
+  const currentState = app.getCurrentState()
   const stateChanges = {}
 
   const promises = []
   let file_is_locked = false
 
-  // PDF 
+  // PDF
   if (pdf) {
     await app.updateState({ pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
@@ -274,6 +278,10 @@ async function load({ xml, pdf }) {
 
   // notify plugins
   await app.updateState(stateChanges)
+  } finally {
+    // Clear loading state
+    await pluginManager.invoke(ep.filedata.loading, false);
+  }
 }
 
 async function startAutocomplete() {

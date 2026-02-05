@@ -6,13 +6,11 @@ Provides download endpoint for GROBID training data packages.
 
 import asyncio
 import io
-import json
 import logging
 import os
 import shutil
 import zipfile
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -25,7 +23,8 @@ from fastapi_app.lib.dependencies import (
     get_sse_service,
 )
 from fastapi_app.lib.sse_utils import ProgressBar, send_notification
-from fastapi_app.plugins.grobid.config import get_supported_variants
+from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
+from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_supported_variants
 
 logger = logging.getLogger(__name__)
 
@@ -144,11 +143,16 @@ async def download_training_package(
             raise HTTPException(status_code=404, detail="No PDF files in collection")
 
         # Get GROBID server URL
-        grobid_server_url = os.environ.get("GROBID_SERVER_URL")
+        grobid_server_url = get_grobid_server_url()
         if not grobid_server_url:
             raise HTTPException(status_code=503, detail="GROBID server not configured")
 
         supported_variants = get_supported_variants()
+
+        # Get GROBID version info for cache key
+        from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+        extractor = GrobidTrainingExtractor()
+        _, grobid_revision = extractor._get_grobid_version(grobid_server_url)
 
         # Set up progress tracking with cancellation (only if progress is enabled)
         progress = None
@@ -179,7 +183,7 @@ async def download_training_package(
                             sse_service, session_id_value,
                             "Download cancelled", "warning"
                         )
-                        progress.hide()
+                        progress.hide() # type:ignore
                         cancellation_token.cleanup()
                         raise HTTPException(status_code=499, detail="Download cancelled by user")
 
@@ -223,14 +227,8 @@ async def download_training_package(
                     else:
                         variants_to_process = supported_variants
 
-                    # Fetch training package from GROBID
-                    from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
-
-                    extractor = GrobidTrainingExtractor()
-
                     # Check cache first
-                    cache_dir = settings.plugins_dir / "grobid" / "extractions"
-                    cached_data = _check_cache(cache_dir, doc_id, force_refresh)
+                    cached_data = check_cache(doc_id, grobid_revision, force_refresh)
 
                     if cached_data:
                         temp_dir = cached_data["temp_dir"]
@@ -239,11 +237,11 @@ async def download_training_package(
                         try:
                             # Run blocking GROBID fetch in thread pool to allow SSE events
                             temp_dir, extracted_files = await asyncio.to_thread(
-                                extractor._fetch_training_package,
+                                extractor._fetch_training_package, # type:ignore
                                 str(pdf_path), grobid_server_url, flavor
                             )
                             # Cache the training data
-                            _cache_training_data(cache_dir, doc_id, temp_dir, extracted_files)
+                            cache_training_data(doc_id, grobid_revision, temp_dir, extracted_files)
                         except Exception as e:
                             logger.warning(f"Failed to fetch training data for {doc_id}: {e}")
                             documents_skipped += 1
@@ -377,70 +375,3 @@ async def download_training_package(
     except Exception as e:
         logger.error(f"Failed to generate GROBID training package: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def _check_cache(cache_dir: Path, doc_id: str, force_refresh: bool) -> dict | None:
-    """
-    Check if cached training data exists for a document.
-
-    Args:
-        cache_dir: Cache directory path
-        doc_id: Document ID
-        force_refresh: If True, ignore cache
-
-    Returns:
-        Dict with temp_dir and files if cache hit, None otherwise
-    """
-    if force_refresh:
-        return None
-
-    cache_path = cache_dir / doc_id
-    if not cache_path.exists():
-        return None
-
-    # Check for cached ZIP
-    zip_path = cache_path / "training.zip"
-    if not zip_path.exists():
-        return None
-
-    # Extract to temp location and return
-    import tempfile
-    temp_dir = tempfile.mkdtemp(prefix=f"grobid_cache_{doc_id}_")
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(temp_dir)
-
-    files = [f for f in os.listdir(temp_dir) if f != "training.zip"]
-    return {"temp_dir": temp_dir, "files": files}
-
-
-def _cache_training_data(cache_dir: Path, doc_id: str, temp_dir: str, files: list[str]) -> None:
-    """
-    Cache training data for a document.
-
-    Args:
-        cache_dir: Cache directory path
-        doc_id: Document ID
-        temp_dir: Temp directory with training files
-        files: List of files in temp_dir
-    """
-    cache_path = cache_dir / doc_id
-    cache_path.mkdir(parents=True, exist_ok=True)
-
-    # Create ZIP of training files
-    zip_path = cache_path / "training.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for filename in files:
-            src_path = os.path.join(temp_dir, filename)
-            if os.path.exists(src_path):
-                zf.write(src_path, filename)
-
-    # Save metadata
-    metadata = {
-        "doc_id": doc_id,
-        "files": files,
-        "cached_at": datetime.now().isoformat()
-    }
-    metadata_path = cache_path / "metadata.json"
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2)

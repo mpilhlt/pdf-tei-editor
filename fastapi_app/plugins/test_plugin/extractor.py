@@ -12,7 +12,10 @@ from fastapi_app.lib.tei_utils import (
     create_tei_document,
     create_tei_header,
     create_revision_desc_with_status,
-    serialize_tei_with_formatted_header
+    serialize_tei_with_formatted_header,
+    get_file_id_from_options,
+    create_edition_stmt_with_fileref,
+    create_encoding_desc_with_extractor,
 )
 
 
@@ -61,8 +64,8 @@ class MockExtractor(BaseExtractor):
         app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
         return app_mode == "testing"
 
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Optional[Dict[str, Any]] = None) -> str:
+    async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                      options: Optional[Dict[str, Any]] = None) -> str:
         """
         Mock extraction that returns a simple TEI document.
 
@@ -90,62 +93,35 @@ class MockExtractor(BaseExtractor):
 
         # Add editionStmt with fileref
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        # Use doc_id from options if provided (preferred), otherwise derive from PDF path
-        file_id = options.get('doc_id')
+        file_id = get_file_id_from_options(options, pdf_path)
         if not file_id:
-            if pdf_path:
-                file_name = os.path.basename(pdf_path)
-                file_id = os.path.splitext(file_name)[0]  # Remove extension
-            else:
-                file_id = f"mock-extracted-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            file_id = f"mock-extracted-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         fileDesc = tei_header.find("fileDesc")
         assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
         assert titleStmt is not None
 
-        # Create editionStmt
-        editionStmt = etree.Element("editionStmt")
-        edition = etree.SubElement(editionStmt, "edition")
-        date_elem = etree.SubElement(edition, "date", when=timestamp)
-        date_elem.text = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
-        title_elem = etree.SubElement(edition, "title")
-        title_elem.text = "Mock extraction for testing"
-        fileref_elem = etree.SubElement(edition, "idno", type="fileref")
-        fileref_elem.text = file_id
-
-        titleStmt.addnext(editionStmt)
+        edition_stmt = create_edition_stmt_with_fileref(timestamp, "Mock extraction for testing", file_id)
+        titleStmt.addnext(edition_stmt)
 
         # Create encodingDesc with applications
         existing_encodingDesc = tei_header.find("encodingDesc")
         if existing_encodingDesc is not None:
             tei_header.remove(existing_encodingDesc)
 
-        encodingDesc = etree.Element("encodingDesc")
-        appInfo = etree.SubElement(encodingDesc, "appInfo")
-
-        # PDF-TEI-Editor application
-        pdf_tei_app = etree.SubElement(appInfo, "application",
-                                      version="1.0",
-                                      ident="pdf-tei-editor",
-                                      type="editor")
-        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
-        etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
-
-        # Mock extractor application
-        mock_app = etree.SubElement(appInfo, "application",
-                                   version="1.0",
-                                   ident="mock-extractor",
-                                   when=timestamp,
-                                   type="extractor")
         # Get variant_id from options
         info = self.get_info()
         default_variant_id = info["options"]["variant_id"]["options"][0]  # "mock-default"
         variant_id = options.get("variant_id", default_variant_id)
 
-        variant_label = etree.SubElement(mock_app, "label", type="variant-id")
-        variant_label.text = variant_id
-
+        encodingDesc = create_encoding_desc_with_extractor(
+            timestamp=timestamp,
+            extractor_name="Mock Extractor",
+            extractor_ident="mock-extractor",
+            extractor_version="1.0",
+            variant_id=variant_id,
+        )
         tei_header.append(encodingDesc)
 
         # Replace revisionDesc with mock-specific version

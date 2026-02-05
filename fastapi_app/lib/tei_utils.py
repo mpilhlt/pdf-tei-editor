@@ -6,9 +6,32 @@ No Flask or FastAPI dependencies.
 """
 
 import datetime
+import os
 from collections import defaultdict
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
+from typing_extensions import TypedDict
 from lxml import etree
+
+from .metadata_extraction import BibliographicMetadata
+
+
+class ExtractedTeiMetadata(BibliographicMetadata, total=False):
+    """
+    Extended metadata type for TEI extraction that includes document ID resolution
+    and TEI-specific metadata fields not part of standard BibliographicMetadata.
+    """
+    # Document ID resolution fields
+    doc_id: Optional[str]
+    doc_id_type: Optional[str]
+    fileref: Optional[str]
+    # TEI-specific metadata
+    doc_metadata: Dict[str, Any]
+    variant: Optional[str]
+    is_gold_standard: bool
+    status: Optional[str]
+    last_revision: Optional[str]
+    edition_title: Optional[str]
+    label: Optional[str]
 
 
 def create_tei_document() -> etree._Element:  # type: ignore[name-defined]
@@ -31,7 +54,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
 
     Args:
         doi: DOI of the document
-        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages
+        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages, id
         applications: List of application info dicts with keys: ident, version, label
 
     Returns:
@@ -49,6 +72,9 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     volume = metadata.get("volume", "")
     issue = metadata.get("issue", "")
     pages = metadata.get("pages", "")
+    id = metadata.get("id", "")
+    url = metadata.get("url", "")
+
 
     # Build TEI header
     teiHeader = etree.Element("teiHeader")
@@ -71,11 +97,37 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     etree.SubElement(availability, "licence",
                     attrib={"target": "https://creativecommons.org/licenses/by/4.0/"})
     etree.SubElement(publicationStmt, "date", type="publication").text = str(date)
-    etree.SubElement(publicationStmt, "idno", type="DOI").text = doi
+    if doi:
+        etree.SubElement(publicationStmt, "idno", type="DOI").text = doi
+    elif id:
+        id_type = id.split(":")[0] if ":" in id else ""
+        if id_type:
+            # Strip the prefix from the value so the type attribute carries it
+            id_value = id[len(id_type) + 1:]
+            etree.SubElement(publicationStmt, "idno", type=id_type).text = id_value
+        else:
+            etree.SubElement(publicationStmt, "idno").text = id
+    if url:
+        etree.SubElement(publicationStmt, "ptr", target=url)
 
     # sourceDesc with formatted citation
     authors_str = ", ".join([f'{author.get("given", "")} {author.get("family", "")}' for author in authors])
-    citation = f"{authors_str}. ({date}). {title}. {journal}, {volume}({issue}), {pages}. DOI: {doi}"
+    # Build citation parts, omitting fields that are None or empty
+    citation_parts = [f"{authors_str}. ({date}). {title}."]
+    if journal:
+        vol_issue = journal
+        if volume:
+            vol_issue += f", {volume}"
+            if issue:
+                vol_issue += f"({issue})"
+        if pages:
+            vol_issue += f", {pages}"
+        citation_parts.append(f"{vol_issue}.")
+    if doi:
+        citation_parts.append(f"DOI: {doi}")
+    elif id:
+        citation_parts.append(f"{id}")
+    citation = " ".join(citation_parts)
     sourceDesc = etree.SubElement(fileDesc, "sourceDesc")
     etree.SubElement(sourceDesc, "bibl").text = citation
 
@@ -187,6 +239,164 @@ def create_revision_desc_with_status(timestamp: str, status: str, description: s
     desc = etree.SubElement(change, "desc")
     desc.text = description
     return revisionDesc
+
+
+# Shared extractor utilities
+# ==========================
+
+def get_file_id_from_options(options: Dict[str, Any], pdf_path: Optional[str] = None) -> str:
+    """
+    Extract file_id from options dict or derive from PDF path.
+
+    This utility consolidates the common pattern used by extractors to determine
+    the file identifier for TEI documents. Doc IDs from options are encoded for
+    filesystem safety via encode_filename() (e.g., DOI slashes become __).
+    PDF-path-derived IDs are already filesystem-safe and are returned as-is.
+
+    Args:
+        options: Options dict that may contain 'doc_id' key
+        pdf_path: Optional path to PDF file (used as fallback)
+
+    Returns:
+        Filesystem-safe file identifier string, or empty string if none found
+
+    Examples:
+        >>> get_file_id_from_options({'doc_id': '10.1234/example'})
+        '10.1234__example'
+        >>> get_file_id_from_options({}, '/path/to/document.pdf')
+        'document'
+    """
+    from .doi_utils import encode_filename, is_filename_encoded
+
+    file_id = options.get('doc_id')
+    if file_id and not is_filename_encoded(file_id):
+        file_id = encode_filename(file_id)
+    if not file_id and pdf_path:
+        pdf_name = os.path.basename(pdf_path)
+        file_id = os.path.splitext(pdf_name)[0]
+    return file_id or ""
+
+
+def create_edition_stmt_with_fileref(
+    timestamp: str,
+    title: str,
+    file_id: str,
+) -> etree._Element:  # type: ignore[name-defined]
+    """
+    Create an editionStmt element with date, title, and fileref idno.
+
+    Extends create_edition_stmt() by adding a fileref idno element,
+    which is a common pattern in extraction workflows.
+
+    Args:
+        timestamp: ISO timestamp string
+        title: Edition title (e.g., "Extraction")
+        file_id: File identifier to use in fileref idno
+
+    Returns:
+        editionStmt element with fileref
+
+    Examples:
+        >>> stmt = create_edition_stmt_with_fileref(
+        ...     "2024-01-15T10:30:00Z",
+        ...     "Extraction",
+        ...     "10.1234/example"
+        ... )
+    """
+    edition_stmt = create_edition_stmt(timestamp, title)
+    edition = edition_stmt.find("edition")
+    if edition is None:
+        # Fallback: create edition element if not found
+        edition = etree.SubElement(edition_stmt, "edition")
+    fileref_elem = etree.SubElement(edition, "idno", type="fileref")
+    fileref_elem.text = file_id
+    return edition_stmt
+
+
+def create_encoding_desc_with_extractor(
+    timestamp: str,
+    extractor_name: str,
+    extractor_ident: str,
+    extractor_version: str = "1.0",
+    extractor_ref: Optional[str] = None,
+    variant_id: Optional[str] = None,
+    additional_labels: Optional[List[Tuple[str, str]]] = None,
+) -> etree._Element:  # type: ignore[name-defined]
+    """
+    Create an encodingDesc element with PDF-TEI-Editor and extractor application info.
+
+    This is a generic version of create_encoding_desc_with_grobid() that can be
+    used by any extractor. It always includes the PDF-TEI-Editor application first,
+    followed by the extractor-specific application.
+
+    Args:
+        timestamp: ISO timestamp string
+        extractor_name: Human-readable extractor name (e.g., "GROBID", "LLamore")
+        extractor_ident: Machine identifier (e.g., "grobid", "llamore")
+        extractor_version: Version string (default: "1.0")
+        extractor_ref: Optional URL reference for the extractor
+        variant_id: Optional variant identifier
+        additional_labels: List of (type, text) tuples for extra labels on extractor app
+
+    Returns:
+        encodingDesc element
+
+    Examples:
+        >>> desc = create_encoding_desc_with_extractor(
+        ...     timestamp="2024-01-15T10:30:00Z",
+        ...     extractor_name="GROBID",
+        ...     extractor_ident="grobid",
+        ...     extractor_version="0.8.0",
+        ...     extractor_ref="https://github.com/kermitt2/grobid",
+        ...     variant_id="grobid-segmentation",
+        ...     additional_labels=[
+        ...         ("revision", "abc123"),
+        ...         ("flavor", "grobid-footnote-flavour"),
+        ...     ]
+        ... )
+    """
+    encodingDesc = etree.Element("encodingDesc")
+    appInfo = etree.SubElement(encodingDesc, "appInfo")
+
+    # PDF-TEI-Editor application (always first)
+    pdf_tei_app = etree.SubElement(
+        appInfo, "application",
+        version="1.0",
+        ident="pdf-tei-editor",
+        type="editor"
+    )
+    etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
+    etree.SubElement(
+        pdf_tei_app, "ref",
+        target="https://github.com/mpilhlt/pdf-tei-editor"
+    )
+
+    # Extractor application
+    extractor_app = etree.SubElement(
+        appInfo, "application",
+        version=extractor_version,
+        ident=extractor_ident,
+        when=timestamp,
+        type="extractor"
+    )
+    etree.SubElement(extractor_app, "label").text = extractor_name
+
+    # Add optional reference
+    if extractor_ref:
+        etree.SubElement(extractor_app, "ref", target=extractor_ref)
+
+    # Add variant-id label if provided
+    if variant_id:
+        variant_label = etree.SubElement(extractor_app, "label", type="variant-id")
+        variant_label.text = variant_id
+
+    # Add any additional labels
+    if additional_labels:
+        for label_type, label_text in additional_labels:
+            label = etree.SubElement(extractor_app, "label", type=label_type)
+            label.text = label_text
+
+    return encodingDesc
 
 
 def serialize_tei_xml(tei_doc: etree._Element) -> str:  # type: ignore[name-defined]
@@ -367,7 +577,7 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
     return '\n'.join(result_lines)
 
 
-def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: ignore[name-defined]
+def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # type: ignore[name-defined]
     """
     Extract metadata from TEI document for database storage.
 
@@ -384,7 +594,7 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
         tei_root: TEI root element
 
     Returns:
-        Dictionary with extracted metadata
+        ExtractedTeiMetadata dictionary with all extracted fields
     """
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     metadata = {}
@@ -452,6 +662,11 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
     if publisher_elem is not None and publisher_elem.text:
         metadata['publisher'] = publisher_elem.text.strip()
 
+    # Extract stable/access URL
+    ptr_elem = tei_root.find('.//tei:publicationStmt/tei:ptr', ns)
+    if ptr_elem is not None and ptr_elem.get('target'):
+        metadata['url'] = ptr_elem.get('target').strip()
+
     # Extract variant from any extractor application metadata (GROBID, llamore, etc.)
     # Search for any application with a variant-id label
     variant_label = tei_root.find('.//tei:application[@type="extractor"]/tei:label[@type="variant-id"]', ns)
@@ -512,13 +727,43 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
         doc_metadata['journal'] = metadata['journal']
     if 'publisher' in metadata:
         doc_metadata['publisher'] = metadata['publisher']
+    if 'url' in metadata:
+        doc_metadata['url'] = metadata['url']
 
     metadata['doc_metadata'] = doc_metadata  # type: ignore[assignment]
 
-    return metadata
+    # Build ExtractedTeiMetadata with all extracted fields
+    extracted_metadata: ExtractedTeiMetadata = {
+        # Core bibliographic fields
+        'title': metadata.get('title'),
+        'authors': metadata.get('authors', []),
+        'date': metadata.get('date'),
+        'publisher': metadata.get('publisher'),
+        'journal': metadata.get('journal'),
+        'volume': metadata.get('volume'),
+        'issue': metadata.get('issue'),
+        'pages': metadata.get('pages'),
+        'doi': metadata.get('doi'),
+        'id': metadata.get('id'),
+        'url': metadata.get('url'),
+        # Document ID resolution fields
+        'doc_id': metadata.get('doc_id'),
+        'doc_id_type': metadata.get('doc_id_type'),
+        'fileref': metadata.get('fileref'),
+        # TEI-specific metadata
+        'doc_metadata': metadata.get('doc_metadata', {}),
+        'variant': metadata.get('variant'),
+        'is_gold_standard': metadata.get('is_gold_standard', False),
+        'status': metadata.get('status'),
+        'last_revision': metadata.get('last_revision'),
+        'edition_title': metadata.get('edition_title'),
+        'label': metadata.get('label'),
+    }
+
+    return extracted_metadata
 
 
-def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]:
+def build_pdf_label_from_metadata(doc_metadata: BibliographicMetadata) -> Optional[str]:
     """
     Build a human-readable label for a PDF from extracted metadata.
 
@@ -530,22 +775,23 @@ def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]
     Returns:
         Formatted label string or None if no title available
     """
-    if 'title' not in doc_metadata:
+    title = doc_metadata.get('title')
+    if not title:
         return None
-
-    title = doc_metadata['title']
 
     # Extract author (first author's family name)
     author_part = ""
-    if 'authors' in doc_metadata and doc_metadata['authors']:
-        first_author = doc_metadata['authors'][0]
-        if 'family' in first_author:
+    authors = doc_metadata.get('authors')
+    if authors:
+        first_author = authors[0]
+        if first_author.get('family'):
             author_part = first_author['family']
 
     # Extract date/year
     date_part = ""
-    if 'date' in doc_metadata:
-        date_part = f"({doc_metadata['date']})"
+    date = doc_metadata.get('date')
+    if date:
+        date_part = f"({date})"
 
     # Build label with author and date first, then title
     if author_part and date_part:
@@ -560,7 +806,7 @@ def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]
 
 def update_pdf_metadata_from_tei(
     pdf_file,
-    tei_metadata: Dict[str, Any],
+    tei_metadata: ExtractedTeiMetadata,
     file_repo,
     logger,
     doc_collections: Optional[list] = None
@@ -575,7 +821,7 @@ def update_pdf_metadata_from_tei(
 
     Args:
         pdf_file: PDF file object from FileRepository
-        tei_metadata: Metadata dict from extract_tei_metadata()
+        tei_metadata: Metadata dict from extract_tei_metadata() or manual construction.
         file_repo: FileRepository instance
         logger: Logger instance
         doc_collections: Optional collection list to sync to PDF
@@ -585,19 +831,34 @@ def update_pdf_metadata_from_tei(
     """
     from ..lib.models import FileUpdate
 
-    # Get doc_metadata that was extracted
-    doc_metadata = tei_metadata.get('doc_metadata', {})
+    # WORKAROUND: Support both nested doc_metadata format and top-level keys format
+    # TODO: Standardize on a single format (ExtractedTeiMetadata) across all callers
+    # Nested format: {'doc_metadata': {'title': ..., 'authors': ...}}
+    # Top-level format: {'title': ..., 'authors': ..., 'doc_metadata': {...}}
+    nested_doc_metadata = tei_metadata.get('doc_metadata', {})
 
-    # Build a label for the PDF from metadata
+    doc_metadata = {
+        'title': nested_doc_metadata.get('title') or tei_metadata.get('title'),
+        'authors': nested_doc_metadata.get('authors') or tei_metadata.get('authors'),
+        'date': nested_doc_metadata.get('date') or tei_metadata.get('date'),
+        'journal': nested_doc_metadata.get('journal') or tei_metadata.get('journal'),
+        'publisher': nested_doc_metadata.get('publisher') or tei_metadata.get('publisher'),
+        'url': nested_doc_metadata.get('url') or tei_metadata.get('url')
+    }
+
+    # Clean up None values for has_metadata check
+    doc_metadata_clean = {k: v for k, v in doc_metadata.items() if v is not None}
+
+    # Build a label for the PDF from the extracted doc_metadata
     pdf_label = build_pdf_label_from_metadata(doc_metadata)
 
     # Fallback to DOI/doc_id if no label from metadata
-    if not pdf_label and tei_metadata.get('doc_id'):
-        pdf_label = tei_metadata['doc_id']
+    if not pdf_label:
+        pdf_label = tei_metadata.get('doi') or tei_metadata.get('doc_id')
 
     # Update PDF file with extracted metadata and collection
     # Only update if there's actual data to set (avoid overwriting with empty values)
-    has_metadata = bool(doc_metadata)  # Only update if dict is non-empty
+    has_metadata = bool(doc_metadata_clean)
     has_updates = has_metadata or pdf_label or doc_collections
 
     if has_updates:

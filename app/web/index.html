@@ -20,20 +20,20 @@
   <body>
     <div id="container">
       <tool-bar id="toolbar" name="toolbar" smart-overflow="off"></tool-bar>
-      <div id="editors">
-        <div id="pdf-viewer" name="pdfViewer">
+      <sl-split-panel id="editors" position="50">
+        <div slot="start" id="pdf-viewer" name="pdfViewer">
           <status-bar id="pdf-headerbar" name="headerbar"></status-bar>
           <tool-bar id="pdf-toolbar" name="toolbar"></tool-bar>
           <!-- PDF viewer container will be inserted here  -->
           <status-bar id="pdf-statusbar" name="statusbar"></status-bar>
         </div>
-        <div id="xml-editor" name="xmlEditor">
+        <div slot="end" id="xml-editor" name="xmlEditor">
           <status-bar id="xml-headerbar" name="headerbar"></status-bar>
           <tool-bar id="xml-toolbar" name="toolbar"></tool-bar>
           <div id="codemirror-container"></div>
           <status-bar id="xml-statusbar" name="statusbar"></status-bar>
         </div>
-      </div>
+      </sl-split-panel>
     </div>
   </body>
 </html>

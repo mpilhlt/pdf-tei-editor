@@ -115,7 +115,8 @@ class FileListResponse(BaseModel):
 class UploadResponse(BaseModel):
     """Response for POST /api/files/upload"""
     type: str           # 'pdf' or 'xml'
-    filename: str
+    filename: str       # Deprecated: use stable_id instead
+    stable_id: str      # The stable id of the file in the metadata databae
 
 
 class SaveFileRequest(BaseModel):

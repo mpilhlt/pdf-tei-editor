@@ -9,10 +9,11 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
-from fastapi_app.lib.doi_utils import fetch_doi_metadata
+from fastapi_app.lib.metadata_extraction import get_metadata_for_document
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
+    get_grobid_server_url,
     get_navigation_xpath
 )
 from fastapi_app.plugins.grobid.handlers import (
@@ -23,10 +24,12 @@ from fastapi_app.plugins.grobid.handlers import (
 )
 from fastapi_app.lib.tei_utils import (
     create_tei_header,
-    create_edition_stmt,
     create_revision_desc_with_status,
     create_schema_processing_instruction,
-    serialize_tei_with_formatted_header
+    serialize_tei_with_formatted_header,
+    get_file_id_from_options,
+    create_edition_stmt_with_fileref,
+    create_encoding_desc_with_extractor,
 )
 from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing_error
 
@@ -59,7 +62,7 @@ class GrobidTrainingExtractor(BaseExtractor):
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the GROBID extractor."""
         return {
-            "id": "grobid-training",
+            "id": "grobid",
             "name": "GROBID Extraction",
             "description": "Extract TEI from PDF using remote GROBID server (training data or full documents)",
             "input": ["pdf"],
@@ -72,11 +75,10 @@ class GrobidTrainingExtractor(BaseExtractor):
     @classmethod
     def is_available(cls) -> bool:
         """Check if GROBID server URL is configured."""
-        grobid_server_url = os.environ.get("GROBID_SERVER_URL", "")
-        return grobid_server_url != ""
+        return get_grobid_server_url() is not None
 
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Optional[Dict[str, Any]] = None) -> str:
+    async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                      options: Optional[Dict[str, Any]] = None) -> str:
         """
         Extract TEI from PDF using GROBID.
 
@@ -95,7 +97,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             raise ValueError("PDF path is required for GROBID extraction")
 
         if not self.is_available():
-            raise RuntimeError("GROBID extractor is not available - check GROBID_SERVER_URL environment variable")
+            raise RuntimeError("GROBID extractor is not available - configure grobid.server.url or GROBID_SERVER_URL")
 
         if options is None:
             options = {}
@@ -111,14 +113,69 @@ class GrobidTrainingExtractor(BaseExtractor):
             variant_id = default_variant_id
 
         # Get GROBID server info
-        grobid_server_url = os.environ.get("GROBID_SERVER_URL")
+        grobid_server_url = get_grobid_server_url()
         if grobid_server_url is None:
-            raise ValueError("No Grobid server URL")
+            raise ValueError("GROBID server URL not configured")
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
 
-        # Get the appropriate handler and fetch TEI content
+        # Get the appropriate handler
         handler = self._get_handler(variant_id)
-        raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
+
+        # Check if this is a training variant (should use cache)
+        is_training_variant = variant_id.startswith("grobid.training.")
+
+        if is_training_variant:
+            from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
+
+            # Get doc_id from options or PDF filename
+            doc_id = options.get('doc_id')
+            if not doc_id:
+                pdf_name = os.path.basename(pdf_path)
+                doc_id = os.path.splitext(pdf_name)[0]
+
+            # Check cache
+            cached_data = check_cache(doc_id, grobid_revision)
+
+            if cached_data:
+                # Use cached data - find the specific variant file
+                temp_dir = cached_data["temp_dir"]
+                suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
+
+                raw_tei_content = None
+                for filename in cached_data["files"]:
+                    if filename.endswith(suffix):
+                        with open(os.path.join(temp_dir, filename), 'r', encoding='utf-8') as f:
+                            raw_tei_content = f.read()
+                        break
+
+                if raw_tei_content is None:
+                    # Variant not in cache, fetch fresh
+                    raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
+            else:
+                # Cache miss - fetch and cache
+                from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
+                training_handler: TrainingHandler = handler  # type: ignore[assignment]
+                temp_dir, extracted_files = training_handler._fetch_training_package(
+                    pdf_path, grobid_server_url, flavor
+                )
+
+                # Cache the training data
+                cache_training_data(doc_id, grobid_revision, temp_dir, extracted_files)
+
+                # Find and read the specific variant file
+                suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
+                raw_tei_content = None
+                for filename in extracted_files:
+                    if filename.endswith(suffix):
+                        with open(os.path.join(temp_dir, filename), 'r', encoding='utf-8') as f:
+                            raw_tei_content = f.read()
+                        break
+
+                if raw_tei_content is None:
+                    raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
+        else:
+            # Non-training variants (fulltext, references) - no caching
+            raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
 
         # Log raw GROBID response for debugging
         log_extraction_response("grobid", pdf_path, raw_tei_content, ".raw.xml")
@@ -155,14 +212,10 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Create new TEI document with proper namespace (no schema validation)
         tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})  # type: ignore[dict-item]
 
-        # Get DOI metadata if available
+        # Get document metadata (tries DOI lookup, falls back to extraction service)
         doi = options.get("doi", "")
-        metadata = {}
-        if doi:
-            try:
-                metadata = fetch_doi_metadata(doi)
-            except Exception as e:
-                print(f"Warning: Could not fetch metadata for DOI {doi}: {e}")
+        stable_id = options.get("stable_id")
+        metadata = await get_metadata_for_document(doi=doi, pdf_path=pdf_path, stable_id=stable_id)
 
         # Create TEI header
         tei_header = create_tei_header(doi, metadata)
@@ -176,19 +229,9 @@ class GrobidTrainingExtractor(BaseExtractor):
         assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
         assert titleStmt is not None
-        edition_stmt = create_edition_stmt(timestamp, "Extraction")
 
-        # Add fileref to edition - use doc_id from options if provided, otherwise extract from PDF path
-        file_id = options.get('doc_id')
-        if not file_id:
-            pdf_name = os.path.basename(pdf_path)
-            file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
-
-        edition = edition_stmt.find("edition")
-        assert edition is not None
-        fileref_elem = etree.SubElement(edition, "idno", type="fileref")
-        fileref_elem.text = file_id
-
+        file_id = get_file_id_from_options(options, pdf_path)
+        edition_stmt = create_edition_stmt_with_fileref(timestamp, "Extraction", file_id)
         titleStmt.addnext(edition_stmt)
 
         # Replace encodingDesc with GROBID-specific version
@@ -196,38 +239,19 @@ class GrobidTrainingExtractor(BaseExtractor):
         if existing_encodingDesc is not None:
             tei_header.remove(existing_encodingDesc)
 
-        # Create encodingDesc with applications
-        encodingDesc = etree.Element("encodingDesc")
-        appInfo = etree.SubElement(encodingDesc, "appInfo")
-
-        # PDF-TEI-Editor application
-        pdf_tei_app = etree.SubElement(appInfo, "application",
-                                      version="1.0",
-                                      ident="pdf-tei-editor",
-                                      type="editor")
-        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
-        etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
-
-        # GROBID extractor application
-        grobid_app = etree.SubElement(appInfo, "application",
-                                     version=grobid_version,
-                                     ident="GROBID",
-                                     when=timestamp,
-                                     type="extractor")
-        desc = etree.SubElement(grobid_app, "desc")
-        desc.text = "GROBID - A machine learning software for extracting information from scholarly documents"
-
-        revision_label = etree.SubElement(grobid_app, "label", type="revision")
-        revision_label.text = grobid_revision
-
-        flavor_label = etree.SubElement(grobid_app, "label", type="flavor")
-        flavor_label.text = flavor
-
-        variant_label = etree.SubElement(grobid_app, "label", type="variant-id")
-        variant_label.text = variant_id
-
-        etree.SubElement(grobid_app, "ref", target="https://github.com/kermitt2/grobid")
-
+        # Create encodingDesc with PDF-TEI-Editor and GROBID applications
+        encodingDesc = create_encoding_desc_with_extractor(
+            timestamp=timestamp,
+            extractor_name="GROBID",
+            extractor_ident="GROBID",
+            extractor_version=grobid_version,
+            extractor_ref="https://github.com/kermitt2/grobid",
+            variant_id=variant_id,
+            additional_labels=[
+                ("revision", grobid_revision),
+                ("flavor", flavor),
+            ]
+        )
         tei_header.append(encodingDesc)
 
         # Replace revisionDesc with GROBID-specific version

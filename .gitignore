@@ -52,3 +52,6 @@ nul
 
 # IDE
 .idea
+
+/deploy
+/.local
