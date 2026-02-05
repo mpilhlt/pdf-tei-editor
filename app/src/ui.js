@@ -31,6 +31,7 @@ import SlProgressBar from '@shoelace-style/shoelace/dist/components/progress-bar
 import SlDrawer from '@shoelace-style/shoelace/dist/components/drawer/drawer.js';
 import SlTree from '@shoelace-style/shoelace/dist/components/tree/tree.js';
 import SlTreeItem from '@shoelace-style/shoelace/dist/components/tree-item/tree-item.js';
+import SlSplitPanel from '@shoelace-style/shoelace/dist/components/split-panel/split-panel.js';
 
 // Import panels components early so web components are defined
 import './modules/panels/index.js';
@@ -117,7 +118,7 @@ export {
   updateUi, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer,
-  SlTree, SlTreeItem, SlIconButton, SlProgressBar
+  SlTree, SlTreeItem, SlIconButton, SlProgressBar, SlSplitPanel
 }
 export default ui;
 
