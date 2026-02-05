@@ -63,15 +63,17 @@ let currentState;
 //
 
 /**
- * Creates a label for a document with optional lock icon
+ * Creates a label for a document with optional lock icon and variant suffix
  * @param {string} label - The document label
  * @param {boolean} [isLocked] - Whether the document is locked
- * @returns {string} HTML string with label and optional lock icon
+ * @param {string} [variantId] - Optional variant ID to append in brackets
+ * @returns {string} HTML string with label, optional variant suffix, and optional lock icon
  */
-function createDocumentLabel(label, isLocked) {
+function createDocumentLabel(label, isLocked, variantId) {
+  const displayLabel = variantId ? `${label} [${variantId}]` : label;
   return isLocked === true
-    ? `${label}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
-    : label;
+    ? `${displayLabel}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
+    : displayLabel;
 }
 
 // API
@@ -520,19 +522,21 @@ async function populateSelectboxes(state) {
             await createHtmlElements(`<small>Gold</small>`, ui.toolbar.diff);
 
             goldToShow.forEach((gold) => {
+              // Show variant suffix when filter is "all" (empty string)
+              const variantSuffix = (!variant || variant === "") ? gold.variant : undefined;
               // xml
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
               ui.toolbar.diff.appendChild(option)
             });
 
@@ -553,19 +557,21 @@ async function populateSelectboxes(state) {
             versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
 
             versionsToShow.forEach((version) => {
+              // Show variant suffix when filter is "all" (empty string)
+              const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
               // xml
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.id;  // Use stable ID
-              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
               ui.toolbar.diff.appendChild(option)
             });
           }
