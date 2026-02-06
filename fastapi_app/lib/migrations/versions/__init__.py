@@ -14,6 +14,7 @@ from .m004_encode_pdf_doc_ids import Migration004EncodePdfDocIds
 from .m005_add_status_column import Migration005AddStatusColumn
 from .m006_add_last_revision_column import Migration006AddLastRevisionColumn
 from .m007_add_created_by_column import Migration007AddCreatedByColumn
+from .m008_change_primary_key import Migration008ChangePrimaryKey
 
 # Migrations by target database
 LOCKS_MIGRATIONS = [
@@ -27,6 +28,7 @@ METADATA_MIGRATIONS = [
     Migration005AddStatusColumn,
     Migration006AddLastRevisionColumn,
     Migration007AddCreatedByColumn,
+    Migration008ChangePrimaryKey,
 ]
 
 # Permissions database migrations (for future schema changes)
@@ -42,6 +44,7 @@ ALL_MIGRATIONS = [
     Migration005AddStatusColumn,
     Migration006AddLastRevisionColumn,
     Migration007AddCreatedByColumn,
+    Migration008ChangePrimaryKey,
 ]
 
 __all__ = ["ALL_MIGRATIONS", "LOCKS_MIGRATIONS", "METADATA_MIGRATIONS", "PERMISSIONS_MIGRATIONS"]

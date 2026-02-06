@@ -342,3 +342,29 @@ if existing:
 - File repository: `fastapi_app/lib/file_repository.py`
 - Storage management: `fastapi_app/lib/file_storage.py`
 - Reference counting: `fastapi_app/lib/storage_references.py`
+
+## Implementation Summary
+
+Implementation completed. Changes:
+
+1. **Migration script**: [m008_change_primary_key.py](fastapi_app/lib/migrations/versions/m008_change_primary_key.py)
+   - Recreates files table with `stable_id` as PRIMARY KEY
+   - `id` (content hash) becomes NOT NULL with index for lookups
+   - Creates backup before migration, verifies row counts
+
+2. **Schema update**: [db_schema.py](fastapi_app/lib/db_schema.py)
+   - Column order changed: `stable_id` first, `id` second
+   - Replaced `idx_stable_id` with `idx_content_hash`
+   - Schema version bumped to 3.0.0
+
+3. **FileRepository helpers**: [file_repository.py](fastapi_app/lib/file_repository.py)
+   - `get_file_by_content_and_doc()`: Find file by content hash for specific doc/variant
+   - `get_files_by_content_hash()`: Find all files with a given content hash
+
+4. **Local sync plugin**: [plugin.py](fastapi_app/plugins/local_sync/plugin.py)
+   - Changed duplicate detection to use `get_file_by_content_and_doc()` instead of `get_file_by_id()`
+   - Prevents incorrect skipping when different documents share content
+
+5. **Migration tests**: [test_migration_008.py](fastapi_app/lib/migrations/tests/test_migration_008.py)
+   - Tests for PRIMARY KEY change, data preservation, duplicate content support
+   - Tests for downgrade behavior (fails with duplicates, succeeds without)
