@@ -60,7 +60,8 @@ class FileImporter:
         skip_collection_dirs: Optional[List[str]] = None,
         gold_dir_name: Optional[str] = None,
         gold_pattern: Optional[str] = None,
-        version_pattern: Optional[str] = None
+        version_pattern: Optional[str] = None,
+        on_collection_created: Optional[callable] = None
     ):
         """
         Args:
@@ -125,6 +126,9 @@ class FileImporter:
         else:
             # Default: match .vN. pattern (.v1., .v2., etc.)
             self.version_pattern = re.compile(r'\.v\d+\.')
+
+        # Callback when a collection is created (for granting user access)
+        self.on_collection_created = on_collection_created
 
         self.stats: ImportStats = {
             'files_scanned': 0,
@@ -457,6 +461,9 @@ class FileImporter:
                     )
                     if success:
                         logger.info(f"Auto-created collection: {default_collection}")
+                        # Notify callback so user can be granted access
+                        if self.on_collection_created:
+                            self.on_collection_created(default_collection)
                     else:
                         logger.warning(f"Failed to create collection '{default_collection}': {message}")
             except Exception as e:
@@ -486,20 +493,20 @@ class FileImporter:
         content = pdf_path.read_bytes()
         file_hash = generate_file_hash(content)
 
-        # Check if already exists
-        existing = self.repo.get_file_by_id(file_hash)
-        if existing:
-            logger.debug(f"PDF already exists: {file_hash[:8]}")
-            self.stats['files_skipped'] += 1
-            return file_hash
+        # Check if content already exists in storage (for deduplication)
+        content_exists = self.storage.file_exists(file_hash, 'pdf')
 
         if self.dry_run:
             logger.info(f"[DRY RUN] Would import PDF: {pdf_path}")
             return file_hash
 
-        # Save to storage
-        saved_hash, storage_path = self.storage.save_file(content, 'pdf')
-        assert saved_hash == file_hash
+        # Save to storage (deduplication happens at storage level)
+        # Note: increment_ref=False because insert_file handles reference counting
+        if not content_exists:
+            saved_hash, storage_path = self.storage.save_file(content, 'pdf', increment_ref=False)
+            assert saved_hash == file_hash
+        else:
+            logger.debug(f"Content already in storage, creating new database entry: {file_hash[:8]}")
 
         # Create metadata
         file_create = FileCreate(
@@ -537,18 +544,7 @@ class FileImporter:
         content = tei_path.read_bytes()
         file_hash = generate_file_hash(content)
 
-        # Check if already exists
-        existing = self.repo.get_file_by_id(file_hash)
-        if existing:
-            logger.debug(f"TEI already exists: {file_hash[:8]}")
-            self.stats['files_skipped'] += 1
-            return
-
-        if self.dry_run:
-            logger.info(f"[DRY RUN] Would import TEI: {tei_path}")
-            return
-
-        # Parse TEI metadata
+        # Parse TEI metadata first (needed to determine doc_id and variant for duplicate check)
         try:
             tree = etree.parse(str(tei_path))
             metadata = extract_tei_metadata(tree.getroot())
@@ -565,6 +561,13 @@ class FileImporter:
 
         # Extract variant from TEI metadata
         variant = metadata.get('variant')
+
+        # Check if content already exists in storage (for deduplication)
+        content_exists = self.storage.file_exists(file_hash, 'tei')
+
+        if self.dry_run:
+            logger.info(f"[DRY RUN] Would import TEI: {tei_path}")
+            return
 
         # Determine if this is a gold standard file
         # Default: gold = file without .vN. version marker in filename
@@ -606,9 +609,13 @@ class FileImporter:
         # Assign next version number (0 for first, 1 for second, etc.)
         version = len(same_variant_files)
 
-        # Save to storage
-        saved_hash, storage_path = self.storage.save_file(content, 'tei')
-        assert saved_hash == file_hash
+        # Save to storage (deduplication happens at storage level)
+        # Note: increment_ref=False because insert_file handles reference counting
+        if not content_exists:
+            saved_hash, storage_path = self.storage.save_file(content, 'tei', increment_ref=False)
+            assert saved_hash == file_hash
+        else:
+            logger.debug(f"Content already in storage, creating new database entry: {file_hash[:8]}")
 
         # Create metadata
         # Prefer edition_title over label for display, with fallbacks
