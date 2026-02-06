@@ -25,6 +25,12 @@ async def lifespan(app: FastAPI):
 
     # Setup logging
     setup_logging(settings.log_level, settings.log_categories)
+
+    # Install SSE log handler for real-time log streaming
+    from .lib.dependencies import get_sse_service
+    from .lib.logging_utils import install_sse_log_handler
+    install_sse_log_handler(get_sse_service())
+
     logger.info(f"Starting PDF-TEI Editor API")
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
