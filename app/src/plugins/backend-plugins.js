@@ -82,6 +82,11 @@ export class BackendPluginsPlugin extends Plugin {
 
     // Setup close button handler
     ui.pluginResultDialog.closeBtn.addEventListener('click', () => ui.pluginResultDialog.hide());
+
+    // Clean up SSE subscriptions when dialog is hidden
+    ui.pluginResultDialog.addEventListener('sl-hide', () => {
+      this.pluginSandbox._cleanupSSESubscriptions();
+    });
   }
 
   async start() {

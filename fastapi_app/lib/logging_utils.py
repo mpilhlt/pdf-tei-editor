@@ -1,12 +1,18 @@
 """
 Logging utilities for FastAPI application.
 
-Provides category-based logging filtering
+Provides category-based logging filtering and SSE log handler management.
 """
 
 import logging
 import sys
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .sse_log_handler import SSELogHandler
+    from .sse_service import SSEService
+
+_sse_log_handler: Optional["SSELogHandler"] = None
 
 
 class CategoryFilter(logging.Filter):
@@ -72,3 +78,32 @@ def get_logger(name: str) -> logging.Logger:
         Logger instance
     """
     return logging.getLogger(name)
+
+
+def install_sse_log_handler(sse_service: "SSEService") -> "SSELogHandler":
+    """
+    Install SSE log handler on the root logger.
+
+    Called once during application startup (lifespan).
+
+    Args:
+        sse_service: SSEService singleton instance
+
+    Returns:
+        The installed SSELogHandler instance
+    """
+    global _sse_log_handler
+    if _sse_log_handler is not None:
+        return _sse_log_handler
+
+    from .sse_log_handler import SSELogHandler
+
+    handler = SSELogHandler(sse_service)
+    logging.getLogger().addHandler(handler)
+    _sse_log_handler = handler
+    return handler
+
+
+def get_sse_log_handler() -> Optional["SSELogHandler"]:
+    """Get the installed SSE log handler, or None if not installed."""
+    return _sse_log_handler

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Log Viewer</title>
+    <script src="/api/v1/plugins/sandbox-client.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #controls {
+            position: sticky;
+            top: 0;
+            background: #2d2d2d;
+            padding: 8px 12px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 1;
+        }
+        #log-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .log-entry {
+            padding: 2px 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            border-bottom: 1px solid #2a2a2a;
+            line-height: 1.4;
+        }
+        .log-entry:hover { background: #2a2a2a; }
+        .level-DEBUG { color: #888; }
+        .level-INFO { color: #d4d4d4; }
+        .level-WARNING { color: #e5a84b; }
+        .level-ERROR { color: #f44747; }
+        .level-CRITICAL { color: #f44747; font-weight: bold; }
+        .timestamp { color: #6a9955; }
+        .logger-name { color: #569cd6; }
+        .level-badge {
+            display: inline-block;
+            min-width: 70px;
+        }
+        button, select {
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border: 1px solid #555;
+            padding: 4px 12px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        button:hover { background: #4c4c4c; }
+        label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+        }
+        #status {
+            margin-left: auto;
+            font-size: 11px;
+            color: #888;
+        }
+        #count {
+            font-size: 11px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="clearBtn">Clear</button>
+        <label>Level:
+            <select id="levelFilter">
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO" selected>INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+            </select>
+        </label>
+        <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+        <label><input type="checkbox" id="pauseBtn"> Pause</label>
+        <span id="status">Connecting...</span>
+        <span id="count">0 entries</span>
+    </div>
+    <div id="log-container"></div>
+
+    <script>
+        const LEVELS = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 };
+        const container = document.getElementById('log-container');
+        const statusEl = document.getElementById('status');
+        const countEl = document.getElementById('count');
+        const levelFilter = document.getElementById('levelFilter');
+        const autoScrollCb = document.getElementById('autoScroll');
+        const pauseCb = document.getElementById('pauseBtn');
+
+        let entryCount = 0;
+        let paused = false;
+        let pendingEntries = [];
+        const MAX_ENTRIES = 5000;
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text || '';
+            return d.innerHTML;
+        }
+
+        function appendEntry(data) {
+            const minLevel = LEVELS[levelFilter.value] || 0;
+            const entryLevel = LEVELS[data.level] || 0;
+            if (entryLevel < minLevel) return;
+
+            const div = document.createElement('div');
+            div.className = 'log-entry level-' + data.level;
+            div.innerHTML =
+                '<span class="timestamp">' + escapeHtml(data.timestamp) + '</span> '
+                + '<span class="level-badge level-' + data.level + '">[' + (data.level || '').padEnd(8) + ']</span> '
+                + '<span class="logger-name">' + escapeHtml(data.logger) + '</span> - '
+                + escapeHtml(data.message);
+            container.appendChild(div);
+
+            entryCount++;
+            countEl.textContent = entryCount + ' entries';
+
+            while (container.children.length > MAX_ENTRIES) {
+                container.removeChild(container.firstChild);
+            }
+
+            if (autoScrollCb.checked) {
+                div.scrollIntoView({ block: 'end' });
+            }
+        }
+
+        function onLogEntry(data) {
+            if (paused) {
+                pendingEntries.push(data);
+                return;
+            }
+            appendEntry(data);
+        }
+
+        async function init() {
+            try {
+                // Subscribe this session to log events on the backend
+                const sessionId = new URLSearchParams(location.search).get('session_id');
+                await fetch('/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(sessionId), {
+                    method: 'POST'
+                });
+
+                // Subscribe to SSE event forwarding via sandbox
+                await sandbox.subscribeSSE('logEntry', onLogEntry);
+
+                statusEl.textContent = 'Connected';
+                statusEl.style.color = '#6a9955';
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44747';
+            }
+        }
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            container.innerHTML = '';
+            entryCount = 0;
+            countEl.textContent = '0 entries';
+        });
+
+        pauseCb.addEventListener('change', (e) => {
+            paused = e.target.checked;
+            if (!paused) {
+                pendingEntries.forEach(appendEntry);
+                pendingEntries = [];
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>

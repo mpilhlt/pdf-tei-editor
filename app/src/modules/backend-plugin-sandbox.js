@@ -5,7 +5,7 @@
  * Available as `window.pluginSandbox` when plugin HTML content is displayed.
  */
 
-import { services } from '../plugins.js';
+import { services, sse as sseApi } from '../plugins.js';
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
 import { findCorrespondingSource } from '../modules/file-data-utils.js';
 
@@ -29,6 +29,9 @@ export class PluginSandbox {
   constructor(context, dialog) {
     this.context = context;
     this.dialog = dialog;
+
+    /** @type {Map<string, {eventType: string, listener: Function, source: WindowProxy|null}>} */
+    this._sseSubscriptions = new Map();
 
     // Set up message listener for iframe/popup window commands
     this.messageHandler = this._createMessageHandler();
@@ -91,6 +94,11 @@ export class PluginSandbox {
         }
 
         const result = await this[method](...args);
+
+        // For subscribeSSE, store the source window so we can forward events
+        if (method === 'subscribeSSE' && result && this._sseSubscriptions.has(result)) {
+          this._sseSubscriptions.get(result).source = event.source;
+        }
 
         // Send response back to iframe or popup
         event.source.postMessage({
@@ -167,6 +175,66 @@ export class PluginSandbox {
   async openDocumentAtLine(stableId, lineNumber, column = 0) {
     await xmlEditorOpenDocumentAtLine(stableId, lineNumber, column);
     this.closeDialog();
+  }
+
+  /**
+   * Subscribe to SSE events and forward them to the requesting iframe/popup
+   * @param {string} eventType - SSE event type to subscribe to
+   * @returns {string} Subscription ID for unsubscribing
+   */
+  subscribeSSE(eventType) {
+    const subscriptionId = `sse_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const listener = (event) => {
+      const sub = this._sseSubscriptions.get(subscriptionId);
+      if (!sub || !sub.source) return;
+      try {
+        sub.source.postMessage({
+          type: 'SSE_EVENT',
+          eventType,
+          data: event.data,
+          subscriptionId
+        }, '*');
+      } catch {
+        // Source window closed, clean up
+        this.unsubscribeSSE(subscriptionId);
+      }
+    };
+
+    sseApi.addEventListener(eventType, listener);
+    this._sseSubscriptions.set(subscriptionId, { eventType, listener, source: null });
+
+    return subscriptionId;
+  }
+
+  /**
+   * Unsubscribe from SSE events
+   * @param {string} subscriptionId - Subscription ID from subscribeSSE
+   */
+  unsubscribeSSE(subscriptionId) {
+    const sub = this._sseSubscriptions.get(subscriptionId);
+    if (sub) {
+      sseApi.removeEventListener(sub.eventType, sub.listener);
+      this._sseSubscriptions.delete(subscriptionId);
+    }
+  }
+
+  /**
+   * Remove all active SSE subscriptions (called when dialog is hidden)
+   * @private
+   */
+  _cleanupSSESubscriptions() {
+    for (const [id] of this._sseSubscriptions) {
+      this.unsubscribeSSE(id);
+    }
+  }
+
+  /**
+   * Clean up all resources (message handler, SSE subscriptions)
+   */
+  destroy() {
+    this._cleanupSSESubscriptions();
+    window.removeEventListener('message', this.messageHandler);
   }
 
   /**
