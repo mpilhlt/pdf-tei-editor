@@ -124,17 +124,26 @@ def get_host_and_port() -> Tuple[str, int]:
 
 def setup_log_directory(project_root: Path) -> Path:
     """
-    Create log directory and return path to log file.
+    Create log directory and return path to server log file.
+
+    This returns the path for uvicorn/server logs (access logs, startup messages).
+    Application logs are written separately by the Python logging FileHandler.
+
+    The log directory can be configured via the LOG_DIR environment variable.
 
     Args:
         project_root: Root directory of the project
 
     Returns:
-        Path to the log file
+        Path to the server log file
     """
-    log_dir = project_root / "log"
-    log_dir.mkdir(exist_ok=True)
-    return log_dir / "fastapi-server.log"
+    log_dir_env = os.environ.get("LOG_DIR")
+    if log_dir_env:
+        log_dir = Path(log_dir_env)
+    else:
+        log_dir = project_root / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "server.log"
 
 
 def print_server_running_message(host: str, port: int, pid: Optional[int] = None) -> None:

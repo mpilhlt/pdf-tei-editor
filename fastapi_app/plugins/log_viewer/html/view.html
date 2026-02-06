@@ -108,6 +108,7 @@
         let entryCount = 0;
         let paused = false;
         let pendingEntries = [];
+        let currentSessionId = null;
         const MAX_ENTRIES = 5000;
 
         function escapeHtml(text) {
@@ -150,11 +151,46 @@
             appendEntry(data);
         }
 
+        async function loadRecentLogs(sessionId) {
+            try {
+                const response = await fetch('/api/plugins/log-viewer/recent?session_id=' + encodeURIComponent(sessionId));
+                if (!response.ok) {
+                    throw new Error('Failed to load recent logs: ' + response.status);
+                }
+                const data = await response.json();
+                if (data.entries && data.entries.length > 0) {
+                    data.entries.forEach(appendEntry);
+                }
+            } catch (e) {
+                console.error('Error loading recent logs:', e);
+            }
+        }
+
+        async function setLogLevel(level) {
+            if (!currentSessionId) return;
+            try {
+                const response = await fetch(
+                    '/api/plugins/log-viewer/level?level=' + encodeURIComponent(level) +
+                    '&session_id=' + encodeURIComponent(currentSessionId),
+                    { method: 'POST' }
+                );
+                if (!response.ok) {
+                    console.error('Failed to set log level:', response.status);
+                }
+            } catch (e) {
+                console.error('Error setting log level:', e);
+            }
+        }
+
         async function init() {
             try {
+                currentSessionId = new URLSearchParams(location.search).get('session_id');
+
+                // Load recent log entries first
+                await loadRecentLogs(currentSessionId);
+
                 // Subscribe this session to log events on the backend
-                const sessionId = new URLSearchParams(location.search).get('session_id');
-                await fetch('/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(sessionId), {
+                await fetch('/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(currentSessionId), {
                     method: 'POST'
                 });
 
@@ -181,6 +217,10 @@
                 pendingEntries.forEach(appendEntry);
                 pendingEntries = [];
             }
+        });
+
+        levelFilter.addEventListener('change', (e) => {
+            setLogLevel(e.target.value);
         });
 
         init();
