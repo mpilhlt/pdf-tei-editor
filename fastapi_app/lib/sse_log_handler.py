@@ -16,11 +16,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .sse_service import SSEService
 
-# Logger names whose records are never forwarded via SSE to prevent feedback loops
+# Logger names whose records are never forwarded via SSE to prevent feedback loops.
+# SSEService logs while holding its own lock, so forwarding those records
+# through this handler would risk deadlocks and infinite recursion.
 _SUPPRESSED_LOGGERS = frozenset((
     "fastapi_app.lib.sse_service",
     "fastapi_app.lib.sse_log_handler",
     "fastapi_app.lib.sse_utils",
+    "fastapi_app.lib.dependencies",
     "uvicorn.access",
 ))
 
