@@ -39,6 +39,8 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
         log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_categories: List of category prefixes to log (empty = all)
     """
+    from pathlib import Path
+
     if log_categories is None:
         log_categories = []
 
@@ -49,22 +51,37 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
     # Remove existing handlers
     root_logger.handlers.clear()
 
-    # Create console handler with formatter
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(getattr(logging, log_level.upper()))
-
-    # Format: timestamp - level - name - message
+    # Format: timestamp [level] name - message
     formatter = logging.Formatter(
-        fmt='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+        fmt='%(asctime)s.%(msecs)03d [%(levelname)-8s] %(name)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    handler.setFormatter(formatter)
+
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, log_level.upper()))
+    console_handler.setFormatter(formatter)
 
     # Add category filter if specified
     if log_categories:
-        handler.addFilter(CategoryFilter(log_categories))
+        console_handler.addFilter(CategoryFilter(log_categories))
 
-    root_logger.addHandler(handler)
+    root_logger.addHandler(console_handler)
+
+    # Create file handler for application logs
+    from fastapi_app.config import get_settings
+    settings = get_settings()
+    log_file = settings.app_log_file
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(getattr(logging, log_level.upper()))
+    file_handler.setFormatter(formatter)
+
+    if log_categories:
+        file_handler.addFilter(CategoryFilter(log_categories))
+
+    root_logger.addHandler(file_handler)
 
 
 def get_logger(name: str) -> logging.Logger:
