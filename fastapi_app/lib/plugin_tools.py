@@ -260,6 +260,43 @@ def generate_sandbox_client_script() -> str:
   window.sandbox = {{{methods_js}
   }};
 
+  // SSE event forwarding support
+  (function() {{
+    const sseCallbacks = {{}};
+
+    // Listen for forwarded SSE events from parent
+    window.addEventListener('message', (event) => {{
+      if (!event.data || event.data.type !== 'SSE_EVENT') return;
+      const {{ subscriptionId, data }} = event.data;
+      const cbs = sseCallbacks[subscriptionId];
+      if (cbs) {{
+        cbs.forEach(cb => {{
+          try {{ cb(JSON.parse(data)); }} catch {{ cb(data); }}
+        }});
+      }}
+    }});
+
+    // Override subscribeSSE to accept a callback parameter
+    const origSubscribe = window.sandbox.subscribeSSE;
+    if (origSubscribe) {{
+      window.sandbox.subscribeSSE = async function(eventType, callback) {{
+        const subId = await origSubscribe.call(window.sandbox, eventType);
+        if (!sseCallbacks[subId]) sseCallbacks[subId] = [];
+        sseCallbacks[subId].push(callback);
+        return subId;
+      }};
+    }}
+
+    // Override unsubscribeSSE to clean up local callbacks
+    const origUnsubscribe = window.sandbox.unsubscribeSSE;
+    if (origUnsubscribe) {{
+      window.sandbox.unsubscribeSSE = async function(subscriptionId) {{
+        delete sseCallbacks[subscriptionId];
+        return origUnsubscribe.call(window.sandbox, subscriptionId);
+      }};
+    }}
+  }})();
+
   console.log('SandboxClient: Connected to parent window');
 }})();
 """.strip()
