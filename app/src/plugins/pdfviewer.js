@@ -268,8 +268,7 @@ async function install(state) {
 
   autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
   statusBar.add(autoSearchSwitchWidget, 'left', 10)
-  // TODO: Autosearch is not working, hide until fixed
-  autoSearchSwitchWidget.style.display = 'none'
+
 
   // Capture Ctrl/Cmd+S to trigger PDF download instead of browser save
   const pdfViewerContainer = document.getElementById('pdf-viewer')

@@ -136,6 +136,12 @@ export class PDFJSViewer {
     this._dragStartY = 0;
     this._scrollStartX = 0;
     this._scrollStartY = 0;
+
+    // Current highlight state for re-rendering on zoom
+    /** @type {string[]|null} */
+    this._highlightTerms = null;
+    /** @type {number|null} */
+    this._highlightPageNumber = null;
   }
 
   show() {
@@ -234,6 +240,20 @@ export class PDFJSViewer {
           this.eventBus.on('pagesinit', () => {
             // Use page-width instead of page-fit for better text layer alignment
             this.pdfViewer.currentScaleValue = 'page-width';
+          });
+
+          // Re-highlight when scale changes (zoom in/out)
+          this.eventBus.on('scalechanging', () => {
+            // Debounce: wait for scale change to settle, then re-highlight
+            if (this._scaleChangeTimeout) {
+              clearTimeout(this._scaleChangeTimeout);
+            }
+            this._scaleChangeTimeout = setTimeout(() => {
+              if (this._highlightTerms && this._highlightPageNumber) {
+                // Re-highlight without scrolling (user is already looking at the area)
+                this._highlightTermsInTextLayer(this._highlightTerms, this._highlightPageNumber, 5, false);
+              }
+            }, 100);
           });
 
           // Initialize cursor mode (text selection by default)
@@ -531,6 +551,8 @@ export class PDFJSViewer {
     await this.close();
     this.bestMatches = [];
     this.matchIndex = 0;
+    this._highlightTerms = null;
+    this._highlightPageNumber = null;
   }
 
   /**
@@ -570,6 +592,8 @@ export class PDFJSViewer {
 
     console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
 
+    // Note: Don't call _clearHighlights() here - it interferes with the find controller
+
     const defaultOptions = {
       phraseSearch: false,
       caseSensitive: false,
@@ -590,6 +614,11 @@ export class PDFJSViewer {
 
     if (bestMatches.length > 0) {
       await this.scrollToBestMatch(0);
+
+      // Use custom highlighting for multi-term search on the best match page only
+      // PDF.js findController only works for single phrase search
+      const pageNumber = bestMatches[0].page;
+      this._highlightTermsInTextLayer(query, pageNumber);
     }
 
     return [];
@@ -751,6 +780,318 @@ export class PDFJSViewer {
       match.positions = cluster;
       return match;
     }).filter(match => match.positions.length > 0);
+  }
+
+  /**
+   * Clears any existing cluster highlight overlays
+   * @param {boolean} clearState - Also clear the highlight state (default: false)
+   * @private
+   */
+  _clearClusterHighlights(clearState = false) {
+    const highlights = this.viewer.querySelectorAll('.cluster-highlight');
+    highlights.forEach(highlight => highlight.remove());
+    if (clearState) {
+      this._highlightTerms = null;
+      this._highlightPageNumber = null;
+    }
+  }
+
+  /**
+   * Finds all spans in the text layer that contain any of the search terms
+   * @param {HTMLElement} textLayer - The text layer element
+   * @param {string[]} terms - Array of search terms
+   * @returns {Array<{span: HTMLElement, rect: DOMRect, matchCount: number}>}
+   * @private
+   */
+  _findMatchingSpans(textLayer, terms) {
+    // Filter out terms that are too short or too generic
+    // - Keep terms with 4+ characters
+    // - Keep 4-digit numbers (years like 1927)
+    // - Filter out short numbers (page refs like "5", "65") as they match everywhere
+    const filteredTerms = terms.filter(term => {
+      if (/^\d+$/.test(term)) {
+        // For pure numbers, only keep 4-digit years
+        return term.length === 4;
+      }
+      // For text, require at least 4 characters
+      return term.length >= 4;
+    });
+
+    if (filteredTerms.length === 0) {
+      console.warn('No valid search terms after filtering');
+      return [];
+    }
+
+    console.log('DEBUG: Filtered terms:', filteredTerms);
+
+    const escapedTerms = filteredTerms.map(term =>
+      term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    );
+    const regex = new RegExp(`(${escapedTerms.join('|')})`, 'gi');
+    const textLayerRect = textLayer.getBoundingClientRect();
+    const matches = [];
+
+    const spans = textLayer.querySelectorAll('span');
+    spans.forEach(span => {
+      const text = span.textContent || '';
+      const spanMatches = text.match(regex);
+      if (spanMatches && spanMatches.length > 0) {
+        const spanRect = span.getBoundingClientRect();
+        // Convert to coordinates relative to text layer
+        matches.push({
+          span,
+          text: text.substring(0, 50), // For debugging
+          matched: spanMatches,
+          rect: {
+            left: spanRect.left - textLayerRect.left,
+            top: spanRect.top - textLayerRect.top,
+            right: spanRect.right - textLayerRect.left,
+            bottom: spanRect.bottom - textLayerRect.top,
+            width: spanRect.width,
+            height: spanRect.height
+          },
+          matchCount: spanMatches.length
+        });
+      }
+    });
+
+    // Debug: log matched spans
+    console.log('DEBUG: Matched spans:', matches.map(m => ({ text: m.text, matched: m.matched, y: Math.round(m.rect.top) })));
+
+    return matches;
+  }
+
+  /**
+   * Clusters matching spans by spatial proximity using union-find
+   * Uses separate horizontal and vertical thresholds since text flows horizontally
+   * @param {Array<{span: HTMLElement, rect: Object, matchCount: number}>} matchingSpans
+   * @param {number} verticalThreshold - Max vertical distance (pixels) - very tight for same/adjacent lines
+   * @param {number} horizontalThreshold - Max horizontal distance (pixels) - tight for nearby text
+   * @returns {Array<Array<{span: HTMLElement, rect: Object, matchCount: number}>>} - Array of clusters
+   * @private
+   */
+  _clusterSpansByProximity(matchingSpans, verticalThreshold = 14, horizontalThreshold = 60) {
+    if (matchingSpans.length === 0) return [];
+
+    // Calculate center points for each span
+    const centers = matchingSpans.map(m => ({
+      x: m.rect.left + m.rect.width / 2,
+      y: m.rect.top + m.rect.height / 2
+    }));
+
+    // Union-Find data structure
+    const parent = matchingSpans.map((_, i) => i);
+    const rank = matchingSpans.map(() => 0);
+
+    const find = (i) => {
+      if (parent[i] !== i) {
+        parent[i] = find(parent[i]);
+      }
+      return parent[i];
+    };
+
+    const union = (i, j) => {
+      const pi = find(i);
+      const pj = find(j);
+      if (pi === pj) return;
+      if (rank[pi] < rank[pj]) {
+        parent[pi] = pj;
+      } else if (rank[pi] > rank[pj]) {
+        parent[pj] = pi;
+      } else {
+        parent[pj] = pi;
+        rank[pi]++;
+      }
+    };
+
+    // Build clusters by connecting nearby spans
+    // Two spans are neighbors if within BOTH vertical and horizontal thresholds
+    for (let i = 0; i < matchingSpans.length; i++) {
+      for (let j = i + 1; j < matchingSpans.length; j++) {
+        const dx = Math.abs(centers[i].x - centers[j].x);
+        const dy = Math.abs(centers[i].y - centers[j].y);
+        // Must be close in both dimensions
+        if (dy <= verticalThreshold && dx <= horizontalThreshold) {
+          union(i, j);
+        }
+      }
+    }
+
+    // Group spans by their root parent
+    const clusterMap = new Map();
+    for (let i = 0; i < matchingSpans.length; i++) {
+      const root = find(i);
+      if (!clusterMap.has(root)) {
+        clusterMap.set(root, []);
+      }
+      clusterMap.get(root).push(matchingSpans[i]);
+    }
+
+    // Convert to array and sort by match density (matches per area)
+    const clusters = Array.from(clusterMap.values());
+    clusters.sort((a, b) => {
+      // Calculate bounding box area for each cluster
+      const getArea = (cluster) => {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const item of cluster) {
+          minX = Math.min(minX, item.rect.left);
+          minY = Math.min(minY, item.rect.top);
+          maxX = Math.max(maxX, item.rect.right);
+          maxY = Math.max(maxY, item.rect.bottom);
+        }
+        return (maxX - minX) * (maxY - minY);
+      };
+      const countA = a.reduce((sum, m) => sum + m.matchCount, 0);
+      const countB = b.reduce((sum, m) => sum + m.matchCount, 0);
+      const densityA = countA / Math.max(1, getArea(a));
+      const densityB = countB / Math.max(1, getArea(b));
+      // Prefer higher density, then more matches
+      if (Math.abs(densityA - densityB) > 0.0001) {
+        return densityB - densityA;
+      }
+      return countB - countA;
+    });
+
+    return clusters;
+  }
+
+  /**
+   * Creates a highlight overlay for a cluster of spans
+   * @param {HTMLElement} textLayer - The text layer element
+   * @param {Array<{span: HTMLElement, rect: Object, matchCount: number}>} cluster - The cluster to highlight
+   * @param {boolean} scrollIntoView - Whether to scroll the highlight into view (default: true)
+   * @private
+   */
+  _createClusterHighlight(textLayer, cluster, scrollIntoView = true) {
+    if (cluster.length === 0) return;
+
+    // Calculate bounding box for the cluster
+    let minLeft = Infinity, minTop = Infinity;
+    let maxRight = -Infinity, maxBottom = -Infinity;
+
+    for (const item of cluster) {
+      minLeft = Math.min(minLeft, item.rect.left);
+      minTop = Math.min(minTop, item.rect.top);
+      maxRight = Math.max(maxRight, item.rect.right);
+      maxBottom = Math.max(maxBottom, item.rect.bottom);
+    }
+
+    // Add padding
+    const padding = 5;
+    minLeft = Math.max(0, minLeft - padding);
+    minTop = Math.max(0, minTop - padding);
+    maxRight += padding;
+    maxBottom += padding;
+
+    // Create highlight overlay
+    const highlight = document.createElement('div');
+    highlight.className = 'cluster-highlight';
+    highlight.style.left = `${minLeft}px`;
+    highlight.style.top = `${minTop}px`;
+    highlight.style.width = `${maxRight - minLeft}px`;
+    highlight.style.height = `${maxBottom - minTop}px`;
+
+    textLayer.appendChild(highlight);
+
+    // Scroll the highlight into view (unless disabled, e.g., during zoom re-render)
+    if (scrollIntoView) {
+      highlight.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+  }
+
+  /**
+   * Highlights search terms by finding the densest spatial cluster on the page
+   * and drawing a bounding box around it
+   * @param {string[]} terms - Array of search terms to highlight
+   * @param {number} pageNumber - The page number to highlight (1-based)
+   * @param {number} minClusterSize - Minimum number of matching spans required (default: 5)
+   * @param {boolean} scrollIntoView - Whether to scroll the highlight into view (default: true)
+   * @private
+   */
+  _highlightTermsInTextLayer(terms, pageNumber, minClusterSize = 5, scrollIntoView = true) {
+    // Clear previous highlights
+    this._clearClusterHighlights();
+
+    // Store state for re-highlighting on zoom change
+    this._highlightTerms = terms;
+    this._highlightPageNumber = pageNumber;
+
+    if (!terms || terms.length === 0) return;
+
+    // Find the specific page's text layer
+    const page = this.viewer.querySelector(`.page[data-page-number="${pageNumber}"]`);
+    if (!page) {
+      console.warn(`Page ${pageNumber} not found in viewer`);
+      return;
+    }
+
+    const textLayer = page.querySelector('.textLayer');
+    if (!textLayer) {
+      console.warn(`Text layer not found for page ${pageNumber}`);
+      return;
+    }
+
+    // Find all spans containing search terms
+    const matchingSpans = this._findMatchingSpans(textLayer, terms);
+    if (matchingSpans.length === 0) {
+      console.log(`No matching spans found on page ${pageNumber}`);
+      return;
+    }
+
+    // Cluster spans by spatial proximity (tight thresholds for compact citations)
+    const clusters = this._clusterSpansByProximity(matchingSpans);
+
+    // Helper to calculate cluster bounding box dimensions
+    const getClusterBounds = (cluster) => {
+      let minY = Infinity, maxY = -Infinity;
+      let minX = Infinity, maxX = -Infinity;
+      for (const item of cluster) {
+        minY = Math.min(minY, item.rect.top);
+        maxY = Math.max(maxY, item.rect.bottom);
+        minX = Math.min(minX, item.rect.left);
+        maxX = Math.max(maxX, item.rect.right);
+      }
+      return { height: maxY - minY, width: maxX - minX };
+    };
+
+    // Filter clusters: must have minClusterSize spans and reasonable bounding box
+    // Citations typically don't span more than ~70px vertically (3-4 lines)
+    const maxHeight = 70;
+    const validClusters = clusters.filter(c => {
+      if (c.length < minClusterSize) return false;
+      const bounds = getClusterBounds(c);
+      return bounds.height <= maxHeight;
+    });
+
+    if (validClusters.length === 0) {
+      // Fall back: try clusters that are too tall but still reasonably sized
+      const fallbackClusters = clusters.filter(c => {
+        if (c.length < 3) return false;
+        const bounds = getClusterBounds(c);
+        return bounds.height <= maxHeight * 1.5; // Allow 50% more height for fallback
+      });
+
+      if (fallbackClusters.length > 0) {
+        const fallback = fallbackClusters[0];
+        console.log(`Using fallback cluster with ${fallback.length} spans`);
+        this._createClusterHighlight(textLayer, fallback, scrollIntoView);
+      } else if (clusters.length > 0 && clusters[0].length >= 3) {
+        console.log(`No compact cluster found, using best available with ${clusters[0].length} spans`);
+        this._createClusterHighlight(textLayer, clusters[0], scrollIntoView);
+      } else {
+        console.log(`No suitable cluster found on page ${pageNumber}`);
+      }
+      return;
+    }
+
+    // Use the best valid cluster (already sorted by density)
+    const bestCluster = validClusters[0];
+    const totalMatches = bestCluster.reduce((sum, m) => sum + m.matchCount, 0);
+    const bounds = getClusterBounds(bestCluster);
+    console.log(`Highlighting cluster: ${bestCluster.length} spans, ${totalMatches} matches, ${Math.round(bounds.height)}px height on page ${pageNumber}`);
+    console.log('DEBUG: Cluster contents:', bestCluster.map(m => ({ text: m.text, matched: m.matched })));
+
+    this._createClusterHighlight(textLayer, bestCluster, scrollIntoView);
   }
 
   /**

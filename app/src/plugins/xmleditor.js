@@ -7,14 +7,16 @@
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
+ * @import { StatusDropdown } from '../modules/panels/widgets/status-dropdown.js'
  * @import { UIPart, SlDropdown, SlMenu, SlIconButton } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
  * @import { xslViewerOverlayPart } from './xsl-viewer.js'
+ * @import { UserData } from './authentication.js'
  */
 
 import ui, {updateUi} from '../ui.js'
-import { endpoints as app, validation, logger, testLog, services } from '../app.js'
+import { app, validation, logger, testLog, services } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -25,6 +27,7 @@ import FiledataPlugin from './filedata.js'
 import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
+import { client } from '../plugins.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -60,12 +63,17 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {SlMenu} xslViewerMenu - XSL viewer menu (added by xsl-viewer plugin)
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
+ * @property {StatusButton} revisionHistoryBtn - Revision history button (added by tei-tools plugin)
  */
 
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
  * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
+ * @property {StatusButton} prevNodeBtn - Previous node navigation button
+ * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
+ * @property {StatusButton} nextNodeBtn - Next node navigation button
+ * @property {StatusText} nodeCounterWidget - Node counter display (index/size)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -104,6 +112,29 @@ let cursorPositionWidget;
 
 /** @type {StatusText} */
 let indentationStatusWidget;
+
+// Node navigation widgets
+/** @type {StatusButton} */
+let prevNodeBtn;
+
+/** @type {StatusDropdown} */
+let xpathDropdown;
+
+/** @type {StatusButton} */
+let nextNodeBtn;
+
+/** @type {StatusText} */
+let nodeCounterWidget;
+
+// State for node navigation
+/** @type {string|null} */
+let currentVariant = null;
+
+/** @type {object[]|null} */
+let cachedExtractors = null;
+
+/** @type {UserData|null} */
+let currentUser = null;
 
 /**
  * Get line wrapping preference from localStorage
@@ -335,6 +366,57 @@ async function install(state) {
     })
   }
 
+  // Create node navigation widgets for statusbar center section
+  prevNodeBtn = PanelUtils.createButton({
+    icon: 'chevron-left',
+    tooltip: 'Previous node',
+    name: 'prevNodeBtn'
+  })
+
+  xpathDropdown = PanelUtils.createDropdown({
+    placeholder: 'Select XPath...',
+    name: 'xpathDropdown'
+  })
+
+  nextNodeBtn = PanelUtils.createButton({
+    icon: 'chevron-right',
+    tooltip: 'Next node',
+    name: 'nextNodeBtn'
+  })
+
+  nodeCounterWidget = PanelUtils.createText({
+    text: '(0/0)',
+    name: 'nodeCounterWidget'
+  })
+
+  // Add navigation widgets to statusbar center section
+  ui.xmlEditor.statusbar.add(prevNodeBtn, 'center', 0)
+  ui.xmlEditor.statusbar.add(xpathDropdown, 'center', 0)
+  ui.xmlEditor.statusbar.add(nextNodeBtn, 'center', 0)
+  ui.xmlEditor.statusbar.add(nodeCounterWidget, 'center', 0)
+
+  // Update UI to register navigation widgets
+  updateUi()
+
+  // Initially hide navigation widgets
+  setNavigationWidgetsVisible(false)
+
+  // XPath dropdown change handler - navigate to first node when selecting xpath
+  xpathDropdown.addEventListener('widget-change', async (evt) => {
+    // Ignore events during initial setup before app is ready
+    if (!app.updateState) return
+    const customEvt = /** @type {CustomEvent} */ (evt)
+    const baseXpath = customEvt.detail.value
+    // Append [1] to navigate to the first node
+    await app.updateState({ xpath: baseXpath ? `${baseXpath}[1]` : '' })
+  })
+
+  // Navigation button handlers
+  prevNodeBtn.addEventListener('widget-click', () => changeNodeIndex(currentState, -1))
+  nextNodeBtn.addEventListener('widget-click', () => changeNodeIndex(currentState, +1))
+
+  // Counter click handler (allow direct index input)
+  nodeCounterWidget.addEventListener('click', onClickSelectionIndex)
 }
 
 /**
@@ -424,6 +506,53 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
 
+  // Cache extractor list when user changes
+  let extractorsJustCached = false
+  if (currentUser !== state.user && state.user !== null) {
+    const previousUser = currentUser
+    currentUser = state.user
+
+    if (!cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
+      try {
+        cachedExtractors = await client.getExtractorList()
+        extractorsJustCached = true
+        logger.debug('Cached extractor list for node navigation')
+      } catch (error) {
+        logger.warn('Failed to load extractor list: ' + String(error))
+        cachedExtractors = []
+      }
+    }
+  }
+
+  // Check if variant has changed, repopulate xpath dropdown
+  if (currentVariant !== state.variant || extractorsJustCached) {
+    currentVariant = state.variant
+    await populateXpathDropdown(state)
+  }
+
+  // Update navigation widget visibility based on dropdown content and document load state
+  const hasNavigationPaths = xpathDropdown.items && xpathDropdown.items.length > 0
+    && !xpathDropdown.items[0].disabled
+  setNavigationWidgetsVisible(hasNavigationPaths && Boolean(state.xml))
+
+  // Update xpath selection and counter
+  if (state.xpath) {
+    let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
+    const nonIndexedPath = pathBeforePredicates + nonIndexPredicates
+
+    // Set dropdown selection
+    const optionValues = xpathDropdown.items?.map(item => item.value) || []
+    const foundAtIndex = optionValues.indexOf(nonIndexedPath)
+    if (foundAtIndex >= 0) {
+      xpathDropdown.selected = nonIndexedPath
+    } else {
+      xpathDropdown.selected = ''
+    }
+
+    // Update counter
+    xmlEditor.whenReady().then(() => updateNodeCounter(nonIndexedPath, index))
+  }
+
   // Keep line wrapping switch always visible but disable when no document
   ui.xmlEditor.statusbar.lineWrappingSwitch.disabled = !state.xml
 
@@ -498,8 +627,12 @@ async function update(state) {
     const { index, pathBeforePredicates } = parseXPath(state.xpath)
     // select the node by index
     try {
-      const size = xmlEditor.countDomNodesByXpath(state.xpath)
-      if (size > 0 && (index !== xmlEditor.currentIndex)) {
+      // Count nodes matching the base xpath (without index)
+      const size = xmlEditor.countDomNodesByXpath(pathBeforePredicates)
+      // Navigate if: there are matching nodes AND (path changed OR index changed)
+      const pathChanged = xmlEditor.parentPath !== pathBeforePredicates
+      const indexChanged = index !== xmlEditor.currentIndex
+      if (size > 0 && (pathChanged || indexChanged)) {
         xmlEditor.parentPath = pathBeforePredicates
         xmlEditor.selectByIndex(index || 1)
       }
@@ -525,7 +658,7 @@ async function onSelectionChange(state) {
   const cursorParts = parseXPath(cursorXpath)
   const stateParts = parseXPath(state.xpath)
 
-  const normativeXpath = ui.floatingPanel.xpath.value
+  const normativeXpath = xpathDropdown.selected
   const index = cursorParts.index
 
   // todo: use isXPathsubset()
@@ -633,6 +766,115 @@ function updateIndentationStatus(indentUnit) {
   }
 
   indentationStatusWidget.text = displayText
+}
+
+/**
+ * Sets the visibility of navigation widgets
+ * @param {boolean} visible - Whether to show the widgets
+ */
+function setNavigationWidgetsVisible(visible) {
+  const display = visible ? 'inline-flex' : 'none'
+  prevNodeBtn.style.display = display
+  xpathDropdown.style.display = display
+  nextNodeBtn.style.display = display
+  nodeCounterWidget.style.display = display
+}
+
+/**
+ * Given an xpath and an index, displays the index and the number of occurrences
+ * @param {string} xpath The xpath that will be counted
+ * @param {number|null} index The index or null if the result set is empty
+ */
+function updateNodeCounter(xpath, index) {
+  let size
+  try {
+    size = xmlEditor.countDomNodesByXpath(xpath)
+  } catch (e) {
+    logger.warn('Cannot update counter: ' + String(e))
+    size = 0
+  }
+  index = index || 1
+  nodeCounterWidget.text = `(${size > 0 ? index : 0}/${size})`
+  nextNodeBtn.disabled = prevNodeBtn.disabled = size < 2
+}
+
+/**
+ * Navigate to previous/next node
+ * @param {ApplicationState} state
+ * @param {number} delta
+ */
+async function changeNodeIndex(state, delta) {
+  if (isNaN(delta)) {
+    throw new TypeError("Second argument must be a number")
+  }
+  if (!state?.xpath) return
+
+  let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
+  const normativeXpath = pathBeforePredicates + nonIndexPredicates
+  const size = xmlEditor.countDomNodesByXpath(normativeXpath)
+  if (size < 2) return
+  if (index === null) index = 1
+  index += delta
+  if (index < 1) index = size
+  if (index > size) index = 1
+  const xpath = normativeXpath + `[${index}]`
+  await app.updateState({ xpath })
+}
+
+/**
+ * Called when the user clicks on the counter to enter the node index
+ */
+function onClickSelectionIndex() {
+  const index = prompt('Enter node index')
+  if (!index) return
+  try {
+    xmlEditor.selectByIndex(parseInt(index))
+  } catch (error) {
+    logger.warn('Failed to select by index: ' + String(error))
+  }
+}
+
+/**
+ * Populates the xpath dropdown based on the current variant
+ * @param {ApplicationState} state
+ */
+async function populateXpathDropdown(state) {
+  const variantId = state.variant
+
+  if (!variantId) {
+    xpathDropdown.setItems([{ value: '', text: 'No variant selected', disabled: true }])
+    return
+  }
+
+  if (!cachedExtractors) {
+    xpathDropdown.setItems([{ value: '', text: 'Error loading navigation paths', disabled: true }])
+    return
+  }
+
+  // Find the extractor that contains this variant
+  let navigationXpathList = null
+  for (const extractor of cachedExtractors) {
+    const navigationXpath = extractor.navigation_xpath?.[variantId]
+    if (navigationXpath) {
+      navigationXpathList = navigationXpath
+      break
+    }
+  }
+
+  if (!navigationXpathList) {
+    xpathDropdown.setItems([{ value: '', text: `No navigation paths for variant: ${variantId}`, disabled: true }])
+    return
+  }
+
+  // Populate dropdown with options (skip null values)
+  const items = navigationXpathList
+    .filter(item => item.value !== null)
+    .map(item => ({
+      value: item.value,
+      text: item.label
+    }))
+
+  xpathDropdown.setItems(items)
 }
 
 /**

@@ -35,7 +35,6 @@ import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from 
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
 import { plugin as documentActionsPlugin, api as documentActions } from './plugins/document-actions.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
 import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
@@ -86,7 +85,6 @@ const plugins = [
   servicesPlugin,
   syncPlugin,
   extractionPlugin,
-  floatingPanelPlugin,
   promptEditorPlugin,
   teiWizardPlugin,
   validationPlugin,
@@ -124,7 +122,6 @@ export {
   extraction,
   documentActions,
   services,
-  floatingPanel, 
   promptEditor,
   appInfo,
   annotationGuide,
