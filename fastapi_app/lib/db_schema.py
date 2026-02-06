@@ -16,8 +16,8 @@ from typing import Optional
 # Main files table
 CREATE_FILES_TABLE = """
 CREATE TABLE IF NOT EXISTS files (
-    id TEXT PRIMARY KEY,               -- Content hash (SHA-256) - physical file identifier
-    stable_id TEXT UNIQUE NOT NULL,    -- Stable short ID for URLs (6+ chars, never changes)
+    stable_id TEXT PRIMARY KEY,        -- Stable short ID for URLs (6+ chars, never changes)
+    id TEXT NOT NULL,                  -- Content hash (SHA-256) - physical file identifier (can be shared)
     filename TEXT NOT NULL,            -- Stored filename: {hash}{extension}
 
     -- Document identifier (groups related files: PDF + TEI versions)
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS sync_metadata (
 # All indexes for efficient queries
 CREATE_INDEXES = [
     # Core indexes
-    "CREATE INDEX IF NOT EXISTS idx_stable_id ON files(stable_id)",
+    "CREATE INDEX IF NOT EXISTS idx_content_hash ON files(id)",  # Content hash lookups
     "CREATE INDEX IF NOT EXISTS idx_doc_id ON files(doc_id)",
     "CREATE INDEX IF NOT EXISTS idx_doc_id_type ON files(doc_id, file_type)",
     "CREATE INDEX IF NOT EXISTS idx_file_type ON files(file_type)",
@@ -176,5 +176,6 @@ def get_schema_version() -> str:
     Version history:
         1.0.0 - Initial schema with content-hash based IDs
         2.0.0 - Added stable_id field for permanent short IDs
+        3.0.0 - Changed PRIMARY KEY from id (content hash) to stable_id
     """
-    return "2.0.0"
+    return "3.0.0"
