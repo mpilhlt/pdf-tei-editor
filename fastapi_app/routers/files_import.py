@@ -27,6 +27,7 @@ from ..lib.dependencies import (
     require_authenticated_user
 )
 from ..lib.user_utils import get_user_collections
+from ..lib.collection_utils import grant_user_collection_access
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
 
@@ -109,6 +110,15 @@ async def import_files(
 
         logger.info(f"Saved uploaded file to: {temp_zip} ({len(contents)} bytes)")
 
+        # Create callback to grant user access to newly created collections
+        username = current_user.get('username', '')
+
+        def on_collection_created(collection_id: str):
+            if username:
+                grant_user_collection_access(
+                    settings.db_dir, username, collection_id, logger=logger
+                )
+
         # Create zip importer
         zip_importer = FileZipImporter(db, storage, repo, dry_run=False)
 
@@ -117,7 +127,8 @@ async def import_files(
             zip_path=temp_zip,
             collection=collection,
             recursive_collections=recursive_collections,
-            skip_dirs=['pdf', 'tei', 'versions', 'version'] if recursive_collections else None
+            skip_dirs=['pdf', 'tei', 'versions', 'version'] if recursive_collections else None,
+            on_collection_created=on_collection_created
         )
 
         logger.info(
