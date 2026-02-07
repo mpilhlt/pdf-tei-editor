@@ -143,7 +143,6 @@ for year in $years; do
 
   # Upload and extract 
   npm run batch-extract -- \
-    --extractor grobid \
     --extractor llamore-gemini \
     --option variant_id=llamore-default \ 
     --collection "$year" \
