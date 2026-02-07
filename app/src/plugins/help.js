@@ -1,5 +1,5 @@
 import { Plugin } from '../modules/plugin-base.js';
-import { registerTemplate, createFromTemplate, updateUi } from '../ui.js';
+import ui, { registerTemplate, createFromTemplate, updateUi } from '../ui.js';
 
 /**
  * @typedef HelpTopic
@@ -53,8 +53,7 @@ class HelpPlugin extends Plugin {
     await super.install(state);
 
     await registerTemplate('help-widget', 'help-widget.html');
-    const editorsContainer = document.getElementById('editors');
-    createFromTemplate('help-widget', editorsContainer);
+    createFromTemplate('help-widget', document.body);
     updateUi();
 
     // Initially hidden (no topics yet)
