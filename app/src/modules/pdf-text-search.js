@@ -1,15 +1,70 @@
 /**
  * PDF Text Search Module
  *
- * Provides text localization in PDF text layers using span-to-term matching.
- * Uses a reverse matching approach: instead of searching for terms in text,
- * scores each text layer span against the search terms and clusters high-scoring
- * spans spatially to find the best match location.
+ * Locates bibliographic references and footnotes within PDF text layers.
+ * Given a set of search terms (extracted from a TEI XML node), finds and
+ * highlights the corresponding region in the rendered PDF page.
  *
- * This handles:
- * - Hyphenated words split across lines (e.g., "Gian-" + "na" -> "Gianna")
+ * ## Algorithm overview
+ *
+ * ### 1. Term preparation (`buildTermLookups`)
+ * Normalizes search terms to lowercase and builds three lookup structures:
+ * - `termSet`: Set of exact terms for O(1) lookup.
+ * - `prefixSet`: All prefixes (length 2..n-1) of each term, for matching
+ *   spans that end with a hyphen (e.g., "Gian-" matches prefix of "Gianna").
+ * - `containmentRegex`: Pre-compiled alternation regex of terms with 3+ chars,
+ *   used to detect terms embedded inside longer span text.
+ *
+ * ### 2. Span scoring (`scoreSpan`)
+ * Each `<span>` in the PDF.js text layer is scored against the lookups:
+ * - Exact match: 10 (6+ chars), 6 (4-5 chars), 3 (2-3 chars), 2 (1 char).
+ * - Prefix match: 7 (span text is prefix of a term — hyphenation case).
+ * - Containment: 5 (a 3+ char term appears inside the span text).
+ * - Suffix match: 3 (span text is suffix of a term, for line continuations).
+ * Short-term scores are reduced to limit false positives from common words.
+ *
+ * ### 3. Noise filtering (`findMatchingSpans`, `calculateSpanNoise`)
+ * Multi-word spans with score > 0 are checked for noise ratio: the fraction
+ * of words (after punctuation removal) that don't match any search term.
+ * Spans exceeding `maxNoiseRatio` (default 0.7, stricter 0.6 for non-anchor
+ * searches) are rejected. Single-word spans that scored > 0 are always kept.
+ *
+ * ### 4a. Footnote tracing path (`traceFootnoteFromAnchor`)
+ * When an `anchorTerm` (footnote number) is provided, this path is tried first.
+ * - Finds anchor candidates: spans starting with `"<number><space/letter>"`, or
+ *   standalone number spans followed by a content span (handles PDF.js splitting
+ *   the footnote number into its own span).
+ * - For each candidate, traces forward in reading order (same line → next line),
+ *   respecting column alignment (`lineHeight * 3` threshold) and line gaps
+ *   (`lineHeight * 2`). Stops when hitting a different footnote number.
+ * - Scores each trace by: `uniqueTermsMatched * 20 + spanScoreSum - noisePenalty`.
+ *   Noise penalty only applies when term coverage < 30%.
+ * - Returns the highest-scoring trace.
+ *
+ * ### 4b. General clustering path (`findBestCluster` → `clusterSpansByProximity`)
+ * Used when no anchor term is set, or when tracing yields no result.
+ * - Groups scored spans into spatial clusters using union-find: two spans are
+ *   merged if their centers are within `verticalThreshold` (4× line height)
+ *   AND `horizontalThreshold` (60× avg char width with anchor, 25× without).
+ * - Post-processing splits clusters at column gaps (120px center distance).
+ * - Clusters are ranked by: (1) unique term coverage, (2) density-adjusted score
+ *   (score / area, with width penalty for clusters > 200px), (3) reading order.
+ * - When `anchorTerm` is set, clusters must contain a span starting with the
+ *   anchor followed by content, falling back to exact anchor presence.
+ * - Size/height/width constraints filter candidates, with progressive relaxation:
+ *   strict → relaxed height (1.5×) → reduced minClusterSize (60%, min 2).
+ *
+ * ### 5. Coordinate handling
+ * Span positions are converted from viewport (post-CSS-transform) coordinates
+ * to text-layer-relative coordinates by subtracting the text layer origin and
+ * dividing by the CSS transform scale factor.
+ *
+ * ## Handles
+ * - Hyphenated words split across lines (e.g., "Gian-" + "na" → "Gianna")
  * - OCR fragmentation (words split into multiple spans)
- * - Complex multi-column layouts
+ * - Multi-column layouts (column-gap splitting, width constraints)
+ * - Standalone footnote numbers separated from content by whitespace spans
+ * - Footnote boundary detection (stops at next footnote number)
  */
 
 /**
