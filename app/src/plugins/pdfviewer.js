@@ -259,10 +259,11 @@ async function install(state) {
 
   // Add autosearch switch to statusbar
   const statusBar = ui.pdfViewer.statusbar
+  const savedAutoSearch = sessionStorage.getItem('pdfviewer.autosearch') === 'true'
   const autoSearchSwitchWidget = PanelUtils.createSwitch({
     text: 'Autosearch',
-    helpText: 'off',
-    checked: false,
+    helpText: savedAutoSearch ? 'on' : 'off',
+    checked: savedAutoSearch,
     name: 'searchSwitch'
   })
 
@@ -470,11 +471,12 @@ async function onAutoSearchSwitchChange(evt) {
   const checked = customEvt.detail.checked
   const autoSearchSwitch = customEvt.detail.widget
 
-  // Update help text
+  // Update help text and persist state
   if (autoSearchSwitch) {
     const newHelpText = checked ? 'on' : 'off'
     autoSearchSwitch.setAttribute('help-text', newHelpText)
   }
+  sessionStorage.setItem('pdfviewer.autosearch', String(checked))
 
   logger.info(`Auto search is: ${checked}`)
   if (checked && xmlEditor.selectedNode) {

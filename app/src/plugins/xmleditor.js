@@ -154,6 +154,28 @@ function setLineWrappingPreference(enabled) {
 }
 
 /**
+ * Get saved xpath preference for a variant from localStorage
+ * @param {string} variantId - The variant ID
+ * @returns {string|null} Saved xpath or null
+ */
+function getXpathPreference(variantId) {
+  return localStorage.getItem(`xmleditor.xpath.${variantId}`)
+}
+
+/**
+ * Set xpath preference for a variant in localStorage
+ * @param {string} variantId - The variant ID
+ * @param {string} xpath - The xpath to save (base path without index)
+ */
+function setXpathPreference(variantId, xpath) {
+  if (xpath) {
+    localStorage.setItem(`xmleditor.xpath.${variantId}`, xpath)
+  } else {
+    localStorage.removeItem(`xmleditor.xpath.${variantId}`)
+  }
+}
+
+/**
  * component plugin
  */
 const plugin = {
@@ -334,13 +356,28 @@ async function install(state) {
 
   // Note: editorXmlWellFormed handler moved to start() function
 
-  // Restore line wrapping after XML is loaded
+  // Restore line wrapping and xpath after XML is loaded
   xmlEditor.on("editorAfterLoad", () => {
     testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
     xmlEditor.whenReady().then(() => {
       // Apply user's line wrapping preference after XML is loaded
       xmlEditor.setLineWrapping(getLineWrappingPreference())
+
+      // Restore xpath from localStorage if not already set
+      // Use setTimeout to defer state update outside the state propagation cycle
+      setTimeout(() => {
+        if (!currentState?.xpath && currentState?.variant) {
+          const savedXpath = getXpathPreference(currentState.variant)
+          const items = xpathDropdown.items || []
+          const savedXpathInItems = savedXpath && items.some(item => item.value === savedXpath)
+          console.log('DEBUG editorAfterLoad restore:', { savedXpath, savedXpathInItems, stateXpath: currentState?.xpath })
+          if (savedXpathInItems) {
+            console.log('DEBUG editorAfterLoad: Restoring xpath:', `${savedXpath}[1]`)
+            app.updateState({ xpath: `${savedXpath}[1]` })
+          }
+        }
+      }, 0)
     })
   })
 
@@ -407,6 +444,11 @@ async function install(state) {
     if (!app.updateState) return
     const customEvt = /** @type {CustomEvent} */ (evt)
     const baseXpath = customEvt.detail.value
+    // Save preference for current variant
+    if (currentVariant) {
+      console.log('DEBUG: Saving xpath preference:', { variant: currentVariant, xpath: baseXpath })
+      setXpathPreference(currentVariant, baseXpath)
+    }
     // Append [1] to navigate to the first node
     await app.updateState({ xpath: baseXpath ? `${baseXpath}[1]` : '' })
   })
@@ -525,6 +567,12 @@ async function update(state) {
   }
 
   // Check if variant has changed, repopulate xpath dropdown
+  console.log('DEBUG update(): variant check', {
+    currentVariant,
+    stateVariant: state.variant,
+    extractorsJustCached,
+    willPopulate: currentVariant !== state.variant || extractorsJustCached
+  })
   if (currentVariant !== state.variant || extractorsJustCached) {
     currentVariant = state.variant
     await populateXpathDropdown(state)
@@ -552,6 +600,7 @@ async function update(state) {
     // Update counter
     xmlEditor.whenReady().then(() => updateNodeCounter(nonIndexedPath, index))
   }
+  // Note: xpath restoration from localStorage is handled in editorAfterLoad event
 
   // Keep line wrapping switch always visible but disable when no document
   ui.xmlEditor.statusbar.lineWrappingSwitch.disabled = !state.xml
@@ -807,12 +856,20 @@ async function changeNodeIndex(state, delta) {
   if (isNaN(delta)) {
     throw new TypeError("Second argument must be a number")
   }
-  if (!state?.xpath) return
+  console.log('DEBUG changeNodeIndex:', { stateXpath: state?.xpath, delta })
+  if (!state?.xpath) {
+    console.log('DEBUG changeNodeIndex: returning early - no state.xpath')
+    return
+  }
 
   let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
   const normativeXpath = pathBeforePredicates + nonIndexPredicates
   const size = xmlEditor.countDomNodesByXpath(normativeXpath)
-  if (size < 2) return
+  console.log('DEBUG changeNodeIndex:', { normativeXpath, size, index })
+  if (size < 2) {
+    console.log('DEBUG changeNodeIndex: returning early - size < 2')
+    return
+  }
   if (index === null) index = 1
   index += delta
   if (index < 1) index = size
@@ -875,6 +932,7 @@ async function populateXpathDropdown(state) {
     }))
 
   xpathDropdown.setItems(items)
+  // Restoration of saved xpath preference is handled in update() when editor is ready
 }
 
 /**
