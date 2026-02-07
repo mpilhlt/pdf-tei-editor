@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     libmagic-dev \
     ca-certificates \
     gnupg \
+    poppler-utils \
     # Clean up package cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
