@@ -252,7 +252,7 @@ export class PDFJSViewer {
               requestAnimationFrame(() => {
                 this._highlightTermsInTextLayer(
                   this._highlightTerms, this._highlightPageNumber,
-                  this._highlightMinClusterSize, false
+                  this._highlightMinClusterSize, false, this._highlightAnchorTerm
                 );
               });
             }
@@ -582,9 +582,13 @@ export class PDFJSViewer {
    * Finds the best matching page and highlights the densest cluster of matching spans.
    *
    * @param {Array<string>|string} query - The search terms, either as a string or an array of strings.
+   * @param {Object} [options={}] - Search options
+   * @param {string|null} [options.anchorTerm=null] - Required term that must be in the cluster (e.g., footnote number)
    * @returns {Promise<void>}
    */
-  async search(query) {
+  async search(query, options = {}) {
+    const { anchorTerm = null } = options;
+
     if (!query || query.length === 0) {
       console.warn("No search terms provided.");
       return;
@@ -603,10 +607,9 @@ export class PDFJSViewer {
       query = [query];
     }
 
-    console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
-
     // Score all pages using span-level matching (consistent with highlight clustering)
-    const pageScores = await this._scoreAllPages(query);
+    // If anchorTerm is set, only consider pages that have an exact match for it
+    const pageScores = await this._scoreAllPages(query, anchorTerm);
 
     // Select best pages by score
     const bestMatches = this._getBestMatches(query, pageScores);
@@ -615,11 +618,25 @@ export class PDFJSViewer {
     this.bestMatches = bestMatches;
 
     if (bestMatches.length > 0) {
-      await this.scrollToBestMatch(0);
-
       const pageNumber = bestMatches[0].page;
       this._lastMatchPage = pageNumber;
-      this._highlightTermsInTextLayer(query, pageNumber);
+
+      // Set highlight state before navigation - the textlayerrendered event handler
+      // will apply highlights when the text layer is ready
+      this._highlightTerms = query;
+      this._highlightPageNumber = pageNumber;
+      this._highlightMinClusterSize = Math.max(2, Math.min(query.length, 5));
+      this._highlightAnchorTerm = anchorTerm;
+
+      await this.scrollToBestMatch(0);
+
+      // If text layer already exists (cached page), apply highlights directly.
+      // Otherwise, textlayerrendered event handler will do it.
+      const page = this.viewer.querySelector(`.page[data-page-number="${pageNumber}"]`);
+      const textLayer = page?.querySelector('.textLayer');
+      if (textLayer) {
+        this._highlightTermsInTextLayer(query, pageNumber, null, true, anchorTerm);
+      }
     }
   }
 
@@ -628,11 +645,13 @@ export class PDFJSViewer {
    * Uses the same scoring logic as the span-level highlight clustering
    * for consistent page selection.
    * @param {string[]} query - Array of search terms
-   * @returns {Promise<Array<{page: number, matchCount: number, totalScore: number}>>}
+   * @param {string|null} [anchorTerm=null] - If set, only include pages with exact match for this term
+   * @returns {Promise<Array<{page: number, matchCount: number, totalScore: number, hasAnchor: boolean}>>}
    * @private
    */
-  async _scoreAllPages(query) {
+  async _scoreAllPages(query, anchorTerm = null) {
     const lookups = pdfTextSearch.buildTermLookups(query);
+    const anchorLower = anchorTerm?.toLowerCase();
     const pageScores = [];
 
     for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
@@ -641,19 +660,55 @@ export class PDFJSViewer {
 
       let matchCount = 0;
       let totalScore = 0;
+      let hasAnchor = false;
 
-      for (const item of textContent.items) {
+      const items = textContent.items;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         const score = pdfTextSearch.scoreSpan(item.str, lookups);
         if (score > 0) {
           matchCount++;
           totalScore += score;
         }
+        // Check for anchor: span starts with the anchor FOLLOWED BY content (not just the number alone)
+        // This avoids matching superscript footnote references like "4" - we want "4 Vgl..." or "4Die..."
+        if (anchorLower && !hasAnchor) {
+          const text = item.str.toLowerCase().trim();
+          // Pattern 1: anchor followed by space+text in same span (e.g., "2 Dazu etwa:")
+          // Pattern 2: anchor followed by letter in same span (e.g., "2Dazu")
+          hasAnchor = text.startsWith(anchorLower + ' ') ||
+                      (text.startsWith(anchorLower) && text.length > anchorLower.length && /[a-z]/i.test(text[anchorLower.length]));
+
+          // Pattern 3: standalone anchor number, with next non-whitespace item starting with letter
+          // This handles PDFs that render "2" and "Dazu etwa:" as separate spans (with whitespace items between)
+          if (!hasAnchor && text === anchorLower) {
+            // Find the next non-whitespace item (check up to 5 items ahead)
+            for (let j = i + 1; j < Math.min(i + 5, items.length); j++) {
+              const nextText = items[j].str.trim();
+              if (nextText.length > 0) {
+                if (/^[a-z]/i.test(nextText)) {
+                  hasAnchor = true;
+                }
+                break; // Stop at first non-whitespace item
+              }
+            }
+          }
+        }
       }
 
-      pageScores.push({ page: pageNum, matchCount, totalScore });
+      pageScores.push({ page: pageNum, matchCount, totalScore, hasAnchor });
     }
 
-    return pageScores;
+    // If anchorTerm is set, filter to only pages that have a span starting with the anchor
+    let filteredScores = pageScores;
+    if (anchorTerm) {
+      const pagesWithAnchor = pageScores.filter(p => p.hasAnchor);
+      if (pagesWithAnchor.length > 0) {
+        filteredScores = pagesWithAnchor;
+      }
+    }
+
+    return filteredScores;
   }
 
   /**
@@ -814,9 +869,10 @@ export class PDFJSViewer {
    * @param {number} pageNumber - The page number to highlight (1-based)
    * @param {number|null} [minClusterSize=null] - Minimum spans required (null = auto-calculate from term count)
    * @param {boolean} [scrollIntoView=true] - Whether to scroll the highlight into view
+   * @param {string|null} [anchorTerm=null] - Required term that must be in the cluster
    * @private
    */
-  _highlightTermsInTextLayer(terms, pageNumber, minClusterSize = null, scrollIntoView = true) {
+  _highlightTermsInTextLayer(terms, pageNumber, minClusterSize = null, scrollIntoView = true, anchorTerm = null) {
     // Clear previous highlights
     this._clearClusterHighlights();
 
@@ -827,6 +883,7 @@ export class PDFJSViewer {
     this._highlightTerms = terms;
     this._highlightPageNumber = pageNumber;
     this._highlightMinClusterSize = effectiveMinClusterSize;
+    this._highlightAnchorTerm = anchorTerm;
 
     if (!terms || terms.length === 0) return;
 
@@ -844,10 +901,9 @@ export class PDFJSViewer {
     }
 
     // Use the pdf-text-search module to find the best cluster
-    const cluster = pdfTextSearch.findBestCluster(textLayer, terms, { minClusterSize: effectiveMinClusterSize });
+    const cluster = pdfTextSearch.findBestCluster(textLayer, terms, { minClusterSize: effectiveMinClusterSize, anchorTerm });
 
     if (!cluster) {
-      console.log(`No suitable cluster found on page ${pageNumber}`);
       return;
     }
 

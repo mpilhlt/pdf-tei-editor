@@ -428,16 +428,24 @@ async function searchNodeContentsInPdf(node) {
   // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
 
-  // add footnote number
-  if (node.hasAttribute("source")) {
-    const source = node.getAttribute("source")
-    if (source?.slice(0, 2) === "fn") {
-      searchTerms.unshift(source.slice(2))
+  // add footnote number as required anchor term
+  // Check the node and its ancestors for a source attribute (handles clicks on child elements)
+  let anchorTerm = null;
+  let sourceNode = node;
+  while (sourceNode && sourceNode.nodeType === Node.ELEMENT_NODE) {
+    if (sourceNode.hasAttribute("source")) {
+      const source = sourceNode.getAttribute("source");
+      if (source?.slice(0, 2) === "fn") {
+        anchorTerm = source.slice(2);
+        searchTerms.unshift(anchorTerm);
+        break;
+      }
     }
+    sourceNode = sourceNode.parentElement;
   }
 
-  // start search
-  await pdfViewer.search(searchTerms);
+  // start search - if anchorTerm is set, clusters must contain it
+  await pdfViewer.search(searchTerms, { anchorTerm });
 }
 
 /**

@@ -371,9 +371,7 @@ async function install(state) {
           const savedXpath = getXpathPreference(currentState.variant)
           const items = xpathDropdown.items || []
           const savedXpathInItems = savedXpath && items.some(item => item.value === savedXpath)
-          console.log('DEBUG editorAfterLoad restore:', { savedXpath, savedXpathInItems, stateXpath: currentState?.xpath })
           if (savedXpathInItems) {
-            console.log('DEBUG editorAfterLoad: Restoring xpath:', `${savedXpath}[1]`)
             app.updateState({ xpath: `${savedXpath}[1]` })
           }
         }
@@ -446,7 +444,6 @@ async function install(state) {
     const baseXpath = customEvt.detail.value
     // Save preference for current variant
     if (currentVariant) {
-      console.log('DEBUG: Saving xpath preference:', { variant: currentVariant, xpath: baseXpath })
       setXpathPreference(currentVariant, baseXpath)
     }
     // Append [1] to navigate to the first node
@@ -567,12 +564,6 @@ async function update(state) {
   }
 
   // Check if variant has changed, repopulate xpath dropdown
-  console.log('DEBUG update(): variant check', {
-    currentVariant,
-    stateVariant: state.variant,
-    extractorsJustCached,
-    willPopulate: currentVariant !== state.variant || extractorsJustCached
-  })
   if (currentVariant !== state.variant || extractorsJustCached) {
     currentVariant = state.variant
     await populateXpathDropdown(state)
@@ -856,18 +847,14 @@ async function changeNodeIndex(state, delta) {
   if (isNaN(delta)) {
     throw new TypeError("Second argument must be a number")
   }
-  console.log('DEBUG changeNodeIndex:', { stateXpath: state?.xpath, delta })
   if (!state?.xpath) {
-    console.log('DEBUG changeNodeIndex: returning early - no state.xpath')
     return
   }
 
   let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
   const normativeXpath = pathBeforePredicates + nonIndexPredicates
   const size = xmlEditor.countDomNodesByXpath(normativeXpath)
-  console.log('DEBUG changeNodeIndex:', { normativeXpath, size, index })
   if (size < 2) {
-    console.log('DEBUG changeNodeIndex: returning early - size < 2')
     return
   }
   if (index === null) index = 1
