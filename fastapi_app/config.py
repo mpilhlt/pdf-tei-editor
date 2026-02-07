@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     DATA_ROOT: str = "data"  # Parent directory containing files/ and db/ subdirectories
     CONFIG_DIR: str = ""  # Optional: override default config location (for tests)
     UPLOAD_DIR: str = ""
+    LOG_DIR: str = ""  # Optional: override default log directory (default: project_root/log)
 
     # Features
     WEBDAV_ENABLED: bool = False
@@ -145,6 +146,24 @@ class Settings(BaseSettings):
     def plugins_dir(self) -> Path:
         """Plugin data directory - always data_root/plugins"""
         return self.data_root / "plugins"
+
+    @property
+    def log_dir(self) -> Path:
+        """Directory for log files. Configurable via LOG_DIR env var."""
+        if self.LOG_DIR:
+            return Path(self.LOG_DIR)
+        project_root = Path(__file__).parent.parent
+        return project_root / "log"
+
+    @property
+    def app_log_file(self) -> Path:
+        """Path to the application log file (application-level logs)."""
+        return self.log_dir / "app.log"
+
+    @property
+    def server_log_file(self) -> Path:
+        """Path to the server log file (uvicorn access/infrastructure logs)."""
+        return self.log_dir / "server.log"
 
 @lru_cache
 def get_settings() -> Settings:

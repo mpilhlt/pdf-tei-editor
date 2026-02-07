@@ -35,6 +35,10 @@ export async function start(sandbox) {
         url: '/api/plugins/grobid/static/biblstruct-to-table.xslt'
       },
       {
+        label: 'CSV',
+        url: '/api/plugins/grobid/static/biblstruct-to-csv.xslt'
+      },       
+      {
         label: 'RIS',
         url: '/api/plugins/grobid/static/biblstruct-to-ris.xslt'
       }    

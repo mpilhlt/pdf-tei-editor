@@ -420,29 +420,32 @@ async function uploadXml(state) {
 async function searchNodeContentsInPdf(node) {
 
   let searchTerms = getNodeText(node)
-    // split all node text along whitespace and hypen/dash characters
-    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
-    // Search terms must be more than three characters or consist of digits. This is to remove
-    // the most common "stop words" which would litter the search results with false positives.
-    // This incorrectly removes hyphenated word parts but the alternative would be to  have to
-    // deal with language-specific stop words
-    .filter(term => term.match(/\d+/) ? true : term.length > 3);
+    // Split on whitespace only; keep hyphenated compounds intact since the
+    // span-level scorer handles prefix/suffix matching for line-break hyphens
+    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/\s+/u)), [])
+    .filter(term => term.length > 0);
 
   // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
 
-  // add footnote
-  if (node.hasAttribute("source")) {
-    const source = node.getAttribute("source")
-    // get footnote number
-    if (source?.slice(0, 2) === "fn") {
-      // remove the doi prefix
-      searchTerms.unshift(source.slice(2) + " ")
+  // add footnote number as required anchor term
+  // Check the node and its ancestors for a source attribute (handles clicks on child elements)
+  let anchorTerm = null;
+  let sourceNode = node;
+  while (sourceNode && sourceNode.nodeType === Node.ELEMENT_NODE) {
+    if (sourceNode.hasAttribute("source")) {
+      const source = sourceNode.getAttribute("source");
+      if (source?.slice(0, 2) === "fn") {
+        anchorTerm = source.slice(2);
+        searchTerms.unshift(anchorTerm);
+        break;
+      }
     }
+    sourceNode = sourceNode.parentElement;
   }
 
-  // start search
-  await pdfViewer.search(searchTerms);
+  // start search - if anchorTerm is set, clusters must contain it
+  await pdfViewer.search(searchTerms, { anchorTerm });
 }
 
 /**

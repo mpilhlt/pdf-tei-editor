@@ -174,6 +174,20 @@ window.registerFrontendExtension({{
 }})();"""
 
 
+@router.get("/sandbox-client.js", response_class=PlainTextResponse)
+async def get_sandbox_client_script():
+    """
+    Return the auto-generated sandbox client JavaScript.
+
+    Static plugin HTML pages can load this via:
+        <script src="/api/v1/plugins/sandbox-client.js"></script>
+    """
+    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+
+    script = generate_sandbox_client_script()
+    return PlainTextResponse(content=script, media_type="application/javascript")
+
+
 @router.get("/extensions.js", response_class=PlainTextResponse)
 async def get_extensions_bundle():
     """

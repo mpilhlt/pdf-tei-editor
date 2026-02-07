@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -315,12 +315,20 @@ class PluginRegistry:
         """
         Initialize all registered plugins.
 
+        Creates a per-plugin context with plugin_id and registry so that
+        plugins can access their declared dependencies during initialization.
+
         Args:
-            context: Plugin context to pass to initialize() hooks
+            context: Base plugin context (provides app reference)
         """
         for plugin_id, plugin in self._plugins.items():
             try:
-                await plugin.initialize(context)
+                plugin_context = PluginContext(
+                    app=context.app,
+                    plugin_id=plugin_id,
+                    registry=self,
+                )
+                await plugin.initialize(plugin_context)
                 metadata = self._plugin_metadata.get(plugin_id, {})
                 logger.info(f"Initialized plugin: {plugin_id} ({metadata.get('name', 'unknown')})")
             except Exception as e:

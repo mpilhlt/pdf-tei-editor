@@ -389,6 +389,82 @@ class FileRepository:
             rows = cursor.fetchall()
             return {row['stable_id'] for row in rows}
 
+    def get_file_by_content_and_doc(
+        self,
+        content_hash: str,
+        doc_id: str,
+        variant: Optional[str] = None,
+        include_deleted: bool = False
+    ) -> Optional[FileMetadata]:
+        """
+        Get file by content hash for a specific document and variant.
+
+        This is used to check if a version with identical content already exists
+        for the same document, without matching files from different documents.
+
+        Args:
+            content_hash: SHA-256 content hash
+            doc_id: Document identifier
+            variant: Optional variant (None matches files without variant)
+            include_deleted: If True, include soft-deleted files
+
+        Returns:
+            FileMetadata model or None if not found
+        """
+        deleted_filter = "" if include_deleted else "AND deleted = 0"
+
+        if variant is None:
+            variant_filter = "AND (variant IS NULL OR variant = '')"
+            params = (content_hash, doc_id)
+        else:
+            variant_filter = "AND variant = ?"
+            params = (content_hash, doc_id, variant)
+
+        query = f"""
+            SELECT * FROM files
+            WHERE id = ?
+              AND doc_id = ?
+              {variant_filter}
+              {deleted_filter}
+        """
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+            if row:
+                return self._row_to_model(row)
+            return None
+
+    def get_files_by_content_hash(
+        self,
+        content_hash: str,
+        include_deleted: bool = False
+    ) -> List[FileMetadata]:
+        """
+        Get all files with a given content hash.
+
+        After migration 008, multiple files can share the same content hash.
+        Use this method when you need to find all files referencing the same content.
+
+        Args:
+            content_hash: SHA-256 content hash
+            include_deleted: If True, include soft-deleted files
+
+        Returns:
+            List of FileMetadata models (empty list if none found)
+        """
+        deleted_filter = "" if include_deleted else "AND deleted = 0"
+        query = f"SELECT * FROM files WHERE id = ? {deleted_filter}"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (content_hash,))
+            rows = cursor.fetchall()
+
+            return [self._row_to_model(row) for row in rows]
+
     def delete_file(self, file_id: str) -> None:
         """
         Soft delete a file (sets deleted = 1).

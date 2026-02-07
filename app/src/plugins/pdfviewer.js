@@ -11,6 +11,13 @@ import ui, { updateUi } from '../ui.js'
 import { app, logger, services, xmlEditor, hasStateChanged } from '../app.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { SessionStorage } from '../modules/session-storage.js'
+
+// Session storage for persisting viewer state per PDF
+const storage = new SessionStorage('pdfviewer')
+
+// Flag to prevent saving state during restoration
+let isRestoringState = false
 
 //
 // UI Parts
@@ -259,17 +266,17 @@ async function install(state) {
 
   // Add autosearch switch to statusbar
   const statusBar = ui.pdfViewer.statusbar
+  const savedAutoSearch = storage.getGlobal('autosearch', false)
   const autoSearchSwitchWidget = PanelUtils.createSwitch({
     text: 'Autosearch',
-    helpText: 'off',
-    checked: false,
+    helpText: savedAutoSearch ? 'on' : 'off',
+    checked: savedAutoSearch,
     name: 'searchSwitch'
   })
 
   autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
   statusBar.add(autoSearchSwitchWidget, 'left', 10)
-  // TODO: Autosearch is not working, hide until fixed
-  autoSearchSwitchWidget.style.display = 'none'
+
 
   // Capture Ctrl/Cmd+S to trigger PDF download instead of browser save
   const pdfViewerContainer = document.getElementById('pdf-viewer')
@@ -283,17 +290,64 @@ async function install(state) {
     })
   }
 
-  // Listen to PDF viewer events to update controls
+  // Listen to PDF viewer events to update controls and persist state
   pdfViewer.eventBus.on('pagechanging', (evt) => {
     updatePageInfo(evt.pageNumber, pdfViewer.pdfDoc?.numPages || 0)
+    // Persist page number (skip during restoration)
+    if (!isRestoringState) {
+      const pdfId = app.getCurrentState().pdf
+      if (pdfId) {
+        storage.setValue(pdfId, 'page', evt.pageNumber)
+      }
+    }
   })
 
   pdfViewer.eventBus.on('scalechanging', (evt) => {
     updateZoomInfo(evt.scale)
+    // Persist zoom level (skip during restoration)
+    if (!isRestoringState) {
+      const pdfId = app.getCurrentState().pdf
+      if (pdfId) {
+        storage.setValue(pdfId, 'zoom', evt.scale)
+      }
+    }
+  })
+
+  // Listen to scroll events to persist scroll position
+  const viewerContainer = pdfViewer.pdfViewerContainer
+  if (viewerContainer) {
+    let scrollTimeout = null
+    viewerContainer.addEventListener('scroll', () => {
+      // Debounce scroll persistence (skip during restoration)
+      if (isRestoringState) return
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        const pdfId = app.getCurrentState().pdf
+        if (pdfId) {
+          storage.setState(pdfId, {
+            scrollX: viewerContainer.scrollLeft,
+            scrollY: viewerContainer.scrollTop
+          })
+        }
+      }, 250)
+    })
+  }
+
+  // Track when pages are loaded for state restoration
+  pdfViewer.eventBus.on('pagesloaded', () => {
+    pdfViewer._pagesLoaded = true
   })
 
   // Update UI to register named elements
   updateUi()
+
+  // Restore cursor tool mode (hand vs text selection)
+  if (storage.getGlobal('handTool', false)) {
+    pdfViewer.setHandToolMode()
+    // Update button variants to match
+    ui.pdfViewer.toolbar.textSelectBtn.setAttribute('variant', 'default')
+    ui.pdfViewer.toolbar.handToolBtn.setAttribute('variant', 'primary')
+  }
 }
 
 /**
@@ -302,6 +356,9 @@ async function install(state) {
  */
 async function update(state) {
   if (hasStateChanged(state, 'pdf')) {
+    // Reset pages loaded flag for new PDF
+    pdfViewer._pagesLoaded = false
+
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
       try {
@@ -309,9 +366,12 @@ async function update(state) {
       } catch (error) {
         logger.warn("Error clearing PDF viewer:" + String(error));
       }
+    } else {
+      // PDF changed - restore state once pages are loaded
+      waitForPagesLoaded().then(() => restoreViewerState(state.pdf))
     }
   }
-  
+
   // Update title and filename widgets
   if (state.pdf) {
     filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || ''
@@ -328,6 +388,30 @@ async function update(state) {
     titleWidget.tooltip = '';
     filenameWidget.text = '';
   }
+}
+
+/**
+ * Waits for the PDF pages to be loaded
+ * @returns {Promise<void>}
+ */
+function waitForPagesLoaded() {
+  return new Promise(resolve => {
+    if (pdfViewer._pagesLoaded) {
+      resolve()
+      return
+    }
+    const checkInterval = setInterval(() => {
+      if (pdfViewer._pagesLoaded) {
+        clearInterval(checkInterval)
+        resolve()
+      }
+    }, 50)
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      clearInterval(checkInterval)
+      resolve()
+    }, 5000)
+  })
 }
 
 /**
@@ -379,6 +463,7 @@ function onSelectTextTool() {
   if (!pdfViewer.isHandTool()) return; // Already in text selection mode
 
   pdfViewer.setTextSelectMode();
+  storage.setGlobal('handTool', false)
 
   // Update button variants
   const textSelectBtn = ui.pdfViewer.toolbar.textSelectBtn;
@@ -395,6 +480,7 @@ function onSelectHandTool() {
   if (pdfViewer.isHandTool()) return; // Already in hand tool mode
 
   pdfViewer.setHandToolMode();
+  storage.setGlobal('handTool', true)
 
   // Update button variants
   const textSelectBtn = ui.pdfViewer.toolbar.textSelectBtn;
@@ -471,14 +557,53 @@ async function onAutoSearchSwitchChange(evt) {
   const checked = customEvt.detail.checked
   const autoSearchSwitch = customEvt.detail.widget
 
-  // Update help text
+  // Update help text and persist state
   if (autoSearchSwitch) {
     const newHelpText = checked ? 'on' : 'off'
     autoSearchSwitch.setAttribute('help-text', newHelpText)
   }
+  storage.setGlobal('autosearch', checked)
 
   logger.info(`Auto search is: ${checked}`)
   if (checked && xmlEditor.selectedNode) {
     await services.searchNodeContentsInPdf(xmlEditor.selectedNode)
+  }
+}
+
+/**
+ * Restores the saved viewer state for a PDF
+ * @param {string} pdfId - The PDF stable_id
+ */
+async function restoreViewerState(pdfId) {
+  const state = storage.getState(pdfId)
+  if (!state || Object.keys(state).length === 0) return
+
+  isRestoringState = true
+
+  try {
+    // Restore zoom first (affects scroll calculations)
+    if (state.zoom !== undefined) {
+      await pdfViewer.setZoom(state.zoom)
+    }
+
+    // Restore page
+    if (state.page !== undefined) {
+      await pdfViewer.goToPage(state.page)
+    }
+
+    // Restore scroll position after a short delay for rendering
+    if (state.scrollX !== undefined || state.scrollY !== undefined) {
+      await new Promise(resolve => setTimeout(resolve, 150))
+      const container = pdfViewer.pdfViewerContainer
+      if (container) {
+        if (state.scrollX !== undefined) container.scrollLeft = state.scrollX
+        if (state.scrollY !== undefined) container.scrollTop = state.scrollY
+      }
+    }
+  } finally {
+    // Clear flag after a delay to allow events to settle
+    setTimeout(() => {
+      isRestoringState = false
+    }, 300)
   }
 }

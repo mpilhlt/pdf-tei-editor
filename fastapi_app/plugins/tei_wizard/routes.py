@@ -54,6 +54,7 @@ def transform_to_registration(content: str, filename: str, plugin_id: str) -> st
 
     # Remove 'export' keywords from named exports
     content = re.sub(r"^export\s+const\s+", "const ", content, flags=re.MULTILINE)
+    content = re.sub(r"^export\s+async\s+function\s+", "async function ", content, flags=re.MULTILINE)
     content = re.sub(r"^export\s+function\s+", "function ", content, flags=re.MULTILINE)
 
     # Remove any 'export default' statements

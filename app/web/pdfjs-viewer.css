@@ -96,8 +96,6 @@
   right: 0;
   bottom: 0;
   overflow: auto;
-  /* Ensure proper box-sizing for text layer alignment */
-  box-sizing: border-box;
 }
 
 .pdfViewer {
@@ -112,16 +110,17 @@
   /* Don't override position, z-index, or dimensions - let PDF.js handle all positioning */
 }
 
-/* Ensure text layer positioning is not affected by our styles */
-.pdfViewer .page .textLayer {
-  /* Manual scaling adjustment to compensate for misalignment */
-  /* Controlled by TEXT_LAYER_SCALE_ADJUSTMENT constant in pdfviewer.js */
-  transform-origin: 0 0;
-  transform: scale(var(--text-layer-scale, 1.0));
-}
-
-.pdfViewer .page .canvasWrapper {
-  /* Let PDF.js handle canvas wrapper positioning - don't override */
+/* Text layer alignment fix
+ * PDF.js text layer calculations assume content-box sizing.
+ * Global box-sizing: border-box (from app.css) causes misalignment.
+ * Reset to content-box for all PDF.js elements.
+ * See: https://github.com/mozilla/pdf.js/issues/14176
+ */
+.pdfViewerContainer,
+.pdfViewerContainer *,
+.pdfViewerContainer *::before,
+.pdfViewerContainer *::after {
+  box-sizing: content-box;
 }
 
 /* Cursor tool modes */
@@ -161,4 +160,47 @@
 
 .pdfViewerContainer.text-select-mode .textLayer {
   pointer-events: auto;
+}
+
+/* PDF.js Find Controller highlight styles */
+.textLayer .highlight {
+  background-color: rgba(255, 255, 0, 0.4);
+  border-radius: 2px;
+}
+
+.textLayer .highlight.selected {
+  background-color: rgba(255, 150, 0, 0.6);
+}
+
+.textLayer .highlight.appended {
+  position: initial;
+}
+
+.textLayer .highlight.begin {
+  border-radius: 2px 0 0 2px;
+}
+
+.textLayer .highlight.end {
+  border-radius: 0 2px 2px 0;
+}
+
+.textLayer .highlight.middle {
+  border-radius: 0;
+}
+
+/* Individual span highlight for matched terms */
+.textLayer .span-highlight {
+  position: absolute;
+  background-color: rgba(255, 255, 0, 0.35);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Cluster boundary (dashed outline around matched span group) */
+.textLayer .cluster-highlight {
+  position: absolute;
+  background-color: transparent;
+  border: 1.5px dashed rgba(255, 150, 0, 0.6);
+  border-radius: 4px;
+  pointer-events: none;
 }

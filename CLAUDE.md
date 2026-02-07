@@ -209,6 +209,49 @@ timeout = config.get('session.timeout', default=3600)
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
 
+### Logging Configuration
+
+**Log Files:**
+
+The application writes to two separate log files:
+
+- `log/app.log` - Application-level logs (Python logging, consistent format)
+- `log/server.log` - Uvicorn server logs (access logs, startup messages)
+
+**Log Directory Configuration:**
+
+The log directory can be configured via the `LOG_DIR` environment variable:
+
+```bash
+# In .env.fastapi or environment
+LOG_DIR=/var/log/pdf-tei-editor
+```
+
+Default: `project_root/log`
+
+**Log Format:**
+
+Application logs use the format:
+
+```text
+2026-02-06 21:06:30.036 [INFO    ] logger.name - message
+```
+
+**Accessing Log Paths in Code:**
+
+```python
+from fastapi_app.config import get_settings
+
+settings = get_settings()
+app_log = settings.app_log_file      # Path to app.log
+server_log = settings.server_log_file  # Path to server.log
+log_dir = settings.log_dir            # Log directory
+```
+
+**Log Viewer Plugin:**
+
+The log viewer plugin (`fastapi_app/plugins/log_viewer/`) provides real-time log viewing for admins. It reads from `app_log_file` and streams new entries via SSE.
+
 ### Test Filtering: --grep Behavior
 
 **CRITICAL for debugging tests efficiently:**

@@ -18,7 +18,8 @@ from ..lib.collection_utils import (
     add_collection,
     find_collection,
     remove_collection,
-    set_collection_property
+    set_collection_property,
+    grant_user_collection_access
 )
 from ..lib.dependencies import get_current_user, get_file_repository
 from ..lib.file_repository import FileRepository
@@ -205,9 +206,6 @@ def create_collection_rest(
     Raises:
         HTTPException: 400 if validation fails or collection exists
     """
-    from fastapi_app.lib.group_utils import find_group, add_collection_to_group
-    from fastapi_app.lib.data_utils import load_entity_data
-
     settings = get_settings()
 
     # Validate collection ID format
@@ -227,40 +225,14 @@ def create_collection_rest(
         )
 
         if success:
-            username = current_user.get('username')
+            username = current_user.get('username', '')
             logger.info(f"Collection '{collection.id}' created by user '{username}'")
 
-            # Add collection to user's personal group (create group if it doesn't exist)
-            from fastapi_app.lib.group_utils import add_group
-            from fastapi_app.lib.user_utils import add_group_to_user
-
-            groups_data = load_entity_data(settings.db_dir, 'groups')
-            user_group_id = username  # Personal group has same ID as username
-            user_group = find_group(user_group_id, groups_data)
-
-            # Create personal group if it doesn't exist
-            if not user_group:
-                group_success, group_message = add_group(
-                    settings.db_dir,
-                    user_group_id,
-                    f"{username}'s collections",
-                    f"Personal collections for {username}"
+            # Grant user access to the new collection
+            if username:
+                grant_user_collection_access(
+                    settings.db_dir, username, collection.id, logger=logger
                 )
-                if group_success:
-                    logger.info(f"Created personal group '{user_group_id}' for user '{username}'")
-                    # Add user to their personal group
-                    add_group_to_user(settings.db_dir, username, user_group_id)
-                else:
-                    logger.warning(f"Failed to create personal group for '{username}': {group_message}")
-
-            # Add collection to user's personal group
-            add_success, add_message = add_collection_to_group(
-                settings.db_dir, user_group_id, collection.id
-            )
-            if add_success:
-                logger.info(f"Collection '{collection.id}' added to user group '{user_group_id}'")
-            else:
-                logger.warning(f"Failed to add collection '{collection.id}' to user group: {add_message}")
 
             return collection
         else:

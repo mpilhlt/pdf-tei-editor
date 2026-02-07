@@ -33,19 +33,7 @@ NAVIGATION_XPATH = {
     "llamore-default": [
         {
             "value": "//tei:biblStruct",
-            "label": "<biblStruct>"
-        },
-        {
-            "value": "//tei:biblStruct[@status='verified']",
-            "label": "Verified <biblStruct>"
-        },
-        {
-            "value": "//tei:biblStruct[not(@status='verified')]",
-            "label": "Unverified <biblStruct>"
-        },
-        {
-            "value": "//tei:biblStruct[@status='unresolved']",
-            "label": "Unresolved <biblStruct>"
+            "label": "&lt;biblStruct&gt;"
         }
     ]
 }

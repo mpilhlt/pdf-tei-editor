@@ -516,8 +516,8 @@ class LocalSyncPlugin(Plugin):
         content_hash = hashlib.sha256(content).hexdigest()
         logger.debug(f"Content hash: {content_hash[:16]}")
 
-        # Check if this exact content already exists as a version
-        existing_file = file_repo.get_file_by_id(content_hash)
+        # Check if this exact content already exists as a version for this document/variant
+        existing_file = file_repo.get_file_by_content_and_doc(content_hash, doc.doc_id, doc.variant)
         if existing_file and not existing_file.is_gold_standard:
             logger.info(f"Version with this content already exists (stable_id: {existing_file.stable_id}), skipping creation")
             return existing_file

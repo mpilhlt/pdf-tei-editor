@@ -130,6 +130,63 @@ def add_collection(db_dir: Path, collection_id: str, name: str, description: str
     return True, f"Collection '{collection_id}' added successfully."
 
 
+def grant_user_collection_access(
+    db_dir: Path,
+    username: str,
+    collection_id: str,
+    logger=None
+) -> tuple[bool, str]:
+    """
+    Grant a user access to a collection by adding it to their personal group.
+
+    Creates the user's personal group if it doesn't exist, then adds
+    the collection to that group.
+
+    Args:
+        db_dir: Path to the db directory
+        username: The username
+        collection_id: The collection ID to grant access to
+        logger: Optional logger for debug output
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    from .group_utils import find_group, add_group, add_collection_to_group
+    from .user_utils import add_group_to_user
+
+    groups_data = load_entity_data(db_dir, 'groups')
+    user_group_id = username  # Personal group has same ID as username
+    user_group = find_group(user_group_id, groups_data)
+
+    # Create personal group if it doesn't exist
+    if not user_group:
+        group_success, group_message = add_group(
+            db_dir,
+            user_group_id,
+            f"{username}'s collections",
+            f"Personal collections for {username}"
+        )
+        if group_success:
+            if logger:
+                logger.info(f"Created personal group '{user_group_id}' for user '{username}'")
+            add_group_to_user(db_dir, username, user_group_id)
+        else:
+            return False, f"Failed to create personal group: {group_message}"
+
+    # Add collection to user's personal group
+    add_success, add_message = add_collection_to_group(
+        db_dir, user_group_id, collection_id
+    )
+
+    if add_success:
+        if logger:
+            logger.info(f"Collection '{collection_id}' added to user group '{user_group_id}'")
+        return True, f"User '{username}' granted access to collection '{collection_id}'"
+    else:
+        # Not an error - might already have access (e.g., wildcard)
+        return False, add_message
+
+
 def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str, dict]:
     """Removes a collection from the collections.json file and cleans up file metadata.
 

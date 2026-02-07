@@ -17,14 +17,14 @@ const api = {
    * @param {(event: MessageEvent) => void} listener
    */
   addEventListener: (type, listener) => {
+    // Always store in persistent registry so listeners survive reconnections
+    if (!registeredListeners[type]) {
+      registeredListeners[type] = []
+    }
+    registeredListeners[type].push(listener)
+    // Also add to current eventSource if connected
     if (eventSource) {
       eventSource.addEventListener(type, listener)
-    } else {
-      // Queue listeners for when connection is established
-      if (!queuedListeners[type]) {
-        queuedListeners[type] = []
-      }
-      queuedListeners[type].push(listener)
     }
   },
   /**
@@ -32,6 +32,14 @@ const api = {
    * @param {(event: MessageEvent) => void} listener
    */
   removeEventListener: (type, listener) => {
+    // Remove from persistent registry
+    if (registeredListeners[type]) {
+      registeredListeners[type] = registeredListeners[type].filter(l => l !== listener)
+      if (registeredListeners[type].length === 0) {
+        delete registeredListeners[type]
+      }
+    }
+    // Remove from current eventSource
     if (eventSource) {
       eventSource.removeEventListener(type, listener)
     }
@@ -83,7 +91,7 @@ let eventSource = null;
 let cachedSessionId = null;
 
 /** @type {Record<string, ((event: MessageEvent) => void)[]>} */
-let queuedListeners = {};
+let registeredListeners = {};
 
 /** @type {ReturnType<typeof setTimeout> | null} */
 let reconnectTimeout = null;
@@ -165,9 +173,9 @@ function establishConnection(sessionId) {
     }
   };
 
-  // Add any queued listeners
-  Object.keys(queuedListeners).forEach(type => {
-    queuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
+  // Re-add all registered listeners to the new EventSource
+  Object.keys(registeredListeners).forEach(type => {
+    registeredListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
       eventSource?.addEventListener(type, listener);
     });
   });
@@ -209,17 +217,6 @@ function establishConnection(sessionId) {
       reconnectAttempts = 0;
     }
   };
-
-  // Clear queued listeners after adding them (but keep the reference for new connections)
-  const currentQueuedListeners = { ...queuedListeners };
-  queuedListeners = {};
-  
-  // Re-add listeners for reconnections
-  Object.keys(currentQueuedListeners).forEach(type => {
-    currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      api.addEventListener(type, listener);
-    });
-  });
 
   // Standard message channels
   eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {

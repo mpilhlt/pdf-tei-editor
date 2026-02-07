@@ -180,14 +180,22 @@ async function runTeiWizard() {
   // Get config map for enhancements
   const configMap = config.toMap();
 
-  // Sequentially apply each enhancement
+  // Sequentially apply each enhancement (supports both sync and async execute)
   for (const enhancement of selectedEnhancements) {
     try {
       console.log(`- Applying: ${enhancement.name}`);
-      teiDoc = enhancement.execute(teiDoc, currentState, configMap);
+      const result = enhancement.execute(teiDoc, currentState, configMap);
+      if (result instanceof Promise) {
+        ui.spinner.show(`Applying: ${enhancement.name}`);
+        teiDoc = await result;
+        ui.spinner.hide();
+      } else {
+        teiDoc = result;
+      }
     } catch (error) {
+      ui.spinner.hide();
       console.error(`Error during enhancement "${enhancement.name}":`, error);
-      // Optionally, stop the process or notify the user
+      notify(`Enhancement "${enhancement.name}" failed: ${error.message}`, "danger");
       return;
     }
   }
@@ -205,11 +213,6 @@ async function runTeiWizard() {
 
   // Display the result in the merge view
   xmlEditor.showMergeView(xmlstring);
-
-  // enable diff navigation buttons
-  ui.floatingPanel.diffNavigation
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = false);
 
   notify(`${selectedEnhancements.length} TEI enhancements applied successfully.`, "success");
 }
