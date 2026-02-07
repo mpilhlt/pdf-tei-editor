@@ -386,7 +386,7 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
 
     # Patterns that indicate potential security issues
     dangerous_patterns = [
-        (r'\bfetch\s*\(', 'Network access via fetch()'),
+        (r'\bfetch\s*\(\s*(?![\'"`]/api/)', 'Network access via fetch() to external URLs'),
         (r'\bXMLHttpRequest\b', 'Network access via XMLHttpRequest'),
         (r'\bWebSocket\b', 'WebSocket connection'),
         (r'\beval\s*\(', 'Dynamic code execution via eval()'),
