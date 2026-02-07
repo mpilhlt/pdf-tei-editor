@@ -55,15 +55,15 @@ export function buildTermLookups(terms) {
   // Normalize all terms
   const normalizedTerms = terms
     .map(t => t.toLowerCase().trim())
-    .filter(t => t.length >= 3);
+    .filter(t => t.length > 0);
 
   const termSet = new Set(normalizedTerms);
 
   // Build prefix set for hyphenation matching
-  // e.g., for "gianna", generate prefixes: "gia", "gian", "giann"
+  // e.g., for "gianna", generate prefixes: "gi", "gia", "gian", "giann"
   const prefixSet = new Set();
   for (const term of normalizedTerms) {
-    for (let i = 3; i < term.length; i++) {
+    for (let i = 2; i < term.length; i++) {
       prefixSet.add(term.substring(0, i));
     }
   }
@@ -107,7 +107,7 @@ export function scoreSpan(spanText, lookups) {
 
   // Prefix match: span is start of a term - hyphenation case (score 7)
   // e.g., span "gian" matches prefix of term "gianna"
-  if (text.length >= 3 && prefixSet.has(text)) return 7;
+  if (text.length >= 2 && prefixSet.has(text)) return 7;
 
   // Containment: term fully contained in span (score 5)
   // e.g., span "dr.gianna" contains term "gianna"
@@ -360,17 +360,18 @@ export function findBestCluster(textLayer, terms, options = {}) {
     return validClusters[0]; // Best valid cluster (already sorted by score)
   }
 
-  // Fallback: try clusters with relaxed height constraint
-  const fallbackClusters = clusters.filter(c =>
-    c.spans.length >= 3 && c.bounds.height <= maxHeight * 1.5
+  // Fallback: relax height to 1.5x, keep minClusterSize
+  const relaxedHeightClusters = clusters.filter(c =>
+    c.spans.length >= minClusterSize && c.bounds.height <= maxHeight * 1.5
   );
 
-  if (fallbackClusters.length > 0) {
-    return fallbackClusters[0];
+  if (relaxedHeightClusters.length > 0) {
+    return relaxedHeightClusters[0];
   }
 
-  // Last resort: return best cluster if it has at least 3 spans
-  if (clusters.length > 0 && clusters[0].spans.length >= 3) {
+  // Last resort: reduce minClusterSize to 60% (minimum 2)
+  const absoluteMin = Math.max(2, Math.floor(minClusterSize * 0.6));
+  if (clusters.length > 0 && clusters[0].spans.length >= absoluteMin) {
     return clusters[0];
   }
 

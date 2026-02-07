@@ -16,8 +16,8 @@ import * as pdfTextSearch from './pdf-text-search.js';
 export class PDFJSViewer {
 
   /**
-   * An array of {page, positions, matchIndexes} objects with the best matches to the last search()
-   * @type {Array<{page: number, positions: number[], matchIndexes: number[]}>}
+   * An array of best matching pages from the last search(), sorted by score
+   * @type {Array<{page: number, matchCount: number, totalScore: number}>}
    */
   bestMatches = [];
 
@@ -136,6 +136,8 @@ export class PDFJSViewer {
     this._highlightTerms = null;
     /** @type {number|null} */
     this._highlightPageNumber = null;
+    /** @type {number|null} */
+    this._highlightMinClusterSize = null;
 
     // Track last successful match page for efficient searching
     /** @type {number} */
@@ -244,8 +246,15 @@ export class PDFJSViewer {
             const pageNumber = evt.pageNumber;
             // Only re-highlight if this is the page we had highlights on
             if (this._highlightTerms && this._highlightPageNumber === pageNumber) {
-              // Re-highlight without scrolling (user is already looking at the area)
-              this._highlightTermsInTextLayer(this._highlightTerms, this._highlightPageNumber, 5, false);
+              // Clear old highlights immediately to avoid stale visuals
+              this._clearClusterHighlights();
+              // Wait for layout to stabilize before re-computing positions
+              requestAnimationFrame(() => {
+                this._highlightTermsInTextLayer(
+                  this._highlightTerms, this._highlightPageNumber,
+                  this._highlightMinClusterSize, false
+                );
+              });
             }
           });
 
@@ -565,23 +574,20 @@ export class PDFJSViewer {
     this.matchIndex = 0;
     this._highlightTerms = null;
     this._highlightPageNumber = null;
+    this._highlightMinClusterSize = null;
   }
 
   /**
-   * Searches for a string within the PDF document.
+   * Searches for terms within the PDF document using span-level scoring.
+   * Finds the best matching page and highlights the densest cluster of matching spans.
    *
    * @param {Array<string>|string} query - The search terms, either as a string or an array of strings.
-   * @param {object} [options={}] - Search options
-   * @param {boolean} [options.phraseSearch=false] - Whether to search for exact phrases
-   * @param {boolean} [options.caseSensitive=false] - Whether the search is case sensitive
-   * @param {boolean} [options.entireWord=true] - Whether to match entire words only
-   * @param {boolean} [options.highlightAll=true] - Whether to highlight all matches
-   * @returns {Promise<Array<{pageIndex: number, matchIndex: number}>>} - Array of match locations
+   * @returns {Promise<void>}
    */
-  async search(query, options = {}) {
+  async search(query) {
     if (!query || query.length === 0) {
       console.warn("No search terms provided.");
-      return [];
+      return;
     }
 
     if (!this.isLoadedFlag) {
@@ -597,29 +603,13 @@ export class PDFJSViewer {
       query = [query];
     }
 
-    if (query.length > 20) {
-      console.warn("Query too big, reducing to 20 entries");
-      query = query.slice(0, 20);
-    }
-
     console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
 
-    // Note: Don't call _clearHighlights() here - it interferes with the find controller
+    // Score all pages using span-level matching (consistent with highlight clustering)
+    const pageScores = await this._scoreAllPages(query);
 
-    const defaultOptions = {
-      phraseSearch: false,
-      caseSensitive: false,
-      entireWord: true,
-      highlightAll: true
-    };
-
-    options = Object.assign(defaultOptions, options);
-
-    // Extract text from all pages and search
-    const pageMatches = await this._searchAllPages(query, options);
-
-    // Calculate best matches using density clustering
-    const bestMatches = this._getBestMatches(query, pageMatches);
+    // Select best pages by score
+    const bestMatches = this._getBestMatches(query, pageScores);
     console.log(`Found ${bestMatches.length} best matches.`);
 
     this.bestMatches = bestMatches;
@@ -627,89 +617,43 @@ export class PDFJSViewer {
     if (bestMatches.length > 0) {
       await this.scrollToBestMatch(0);
 
-      // Use custom highlighting for multi-term search on the best match page only
-      // PDF.js findController only works for single phrase search
       const pageNumber = bestMatches[0].page;
       this._lastMatchPage = pageNumber;
       this._highlightTermsInTextLayer(query, pageNumber);
     }
-
-    return [];
   }
 
   /**
-   * Searches all pages for the given query terms
+   * Scores all pages by matching text content items against search terms.
+   * Uses the same scoring logic as the span-level highlight clustering
+   * for consistent page selection.
    * @param {string[]} query - Array of search terms
-   * @param {object} options - Search options
-   * @returns {Promise<number[][]>} - Array of arrays, where each inner array contains match positions for a page
+   * @returns {Promise<Array<{page: number, matchCount: number, totalScore: number}>>}
    * @private
    */
-  async _searchAllPages(query, options) {
-    const pageMatches = [];
+  async _scoreAllPages(query) {
+    const lookups = pdfTextSearch.buildTermLookups(query);
+    const pageScores = [];
 
     for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
-      const textContent = await this._getPageText(pageNum);
-      const matches = this._findMatchesInText(textContent, query, options);
-      pageMatches.push(matches);
-    }
+      const page = await this.pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
 
-    return pageMatches;
-  }
+      let matchCount = 0;
+      let totalScore = 0;
 
-  /**
-   * Gets text content for a page
-   * @param {number} pageNum - Page number (1-based)
-   * @returns {Promise<string>} - Page text content
-   * @private
-   */
-  async _getPageText(pageNum) {
-    const page = await this.pdfDoc.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const text = textContent.items.map(item => item.str).join(' ');
-    return text;
-  }
-
-  /**
-   * Finds matches in text content
-   * @param {string} text - Text to search in
-   * @param {string[]} query - Search terms
-   * @param {object} options - Search options
-   * @returns {number[]} - Array of match positions (character offsets)
-   * @private
-   */
-  _findMatchesInText(text, query, options) {
-    const matches = [];
-
-    for (const term of query) {
-      let searchText = text;
-      let searchTerm = term;
-
-      if (!options.caseSensitive) {
-        searchText = text.toLowerCase();
-        searchTerm = term.toLowerCase();
-      }
-
-      let index = 0;
-      while ((index = searchText.indexOf(searchTerm, index)) !== -1) {
-        // Check for whole word match if required
-        if (options.entireWord) {
-          const before = index > 0 ? searchText[index - 1] : ' ';
-          const after = index + searchTerm.length < searchText.length
-            ? searchText[index + searchTerm.length]
-            : ' ';
-
-          if (/\w/.test(before) || /\w/.test(after)) {
-            index++;
-            continue;
-          }
+      for (const item of textContent.items) {
+        const score = pdfTextSearch.scoreSpan(item.str, lookups);
+        if (score > 0) {
+          matchCount++;
+          totalScore += score;
         }
-
-        matches.push(index);
-        index += searchTerm.length;
       }
+
+      pageScores.push({ page: pageNum, matchCount, totalScore });
     }
 
-    return matches.sort((a, b) => a - b);
+    return pageScores;
   }
 
   /**
@@ -737,62 +681,25 @@ export class PDFJSViewer {
   }
 
   /**
-   * Selects the best matches from search results by comparing
-   * the density of clustered search terms.
+   * Selects the best matching pages from page scores.
    * @param {string[]} searchTerms - The query search terms
-   * @param {number[][]} pageMatches - Array of match positions per page
-   * @returns {Array<{page: number, positions: number[], matchIndexes: number[]}>} - Array of best match objects
+   * @param {Array<{page: number, matchCount: number, totalScore: number}>} pageScores - Scores per page
+   * @returns {Array<{page: number, matchCount: number, totalScore: number}>} - Best pages sorted by score
    * @private
    */
-  _getBestMatches(searchTerms, pageMatches) {
-    const minNumMatches = Math.max(Math.round(searchTerms.length * 0.8), 3);
+  _getBestMatches(searchTerms, pageScores) {
+    const minMatchCount = Math.max(2, Math.round(searchTerms.length * 0.5));
 
-    const candidates = pageMatches.map((positions, idx) => ({
-      page: idx + 1,
-      positions
-    }));
+    const candidates = pageScores
+      .filter(ps => ps.matchCount >= minMatchCount)
+      .sort((a, b) => b.totalScore - a.totalScore);
 
-    const bestMatches = candidates.filter(match => match.positions.length >= minNumMatches);
-
-    if (bestMatches.length === 0) {
+    if (candidates.length === 0) {
       console.warn("No best match found.");
-      console.log({ pageMatches, minNumMatches, candidates });
       return [];
     }
 
-    /**
-     * Returns the cluster of values which are most densely spread
-     * @param {number[]} arr - Array of numbers
-     * @param {number} windowSize - Size of the sliding window
-     * @returns {number[]} - The densest cluster
-     */
-    function findDensestCluster(arr, windowSize) {
-      let minDiff = Infinity;
-      let minCluster = [];
-      for (let i = 0; i <= arr.length - windowSize; i++) {
-        const _window = arr.slice(i, i + windowSize);
-        const diff = _window[_window.length - 1] - _window[0];
-        if (diff < minDiff) {
-          minDiff = diff;
-          minCluster = _window;
-        }
-      }
-      return minCluster;
-    }
-
-    bestMatches.sort((a, b) => {
-      return (
-        findDensestCluster(b.positions, minNumMatches).length -
-        findDensestCluster(a.positions, minNumMatches).length
-      );
-    });
-
-    return bestMatches.map(match => {
-      const cluster = findDensestCluster(match.positions, minNumMatches);
-      match.matchIndexes = cluster.map(position => match.positions.indexOf(position));
-      match.positions = cluster;
-      return match;
-    }).filter(match => match.positions.length > 0);
+    return candidates.slice(0, 5);
   }
 
   /**
@@ -801,20 +708,13 @@ export class PDFJSViewer {
    * @private
    */
   _clearClusterHighlights(clearState = false) {
-    const highlights = this.viewer.querySelectorAll('.cluster-highlight');
+    const highlights = this.viewer.querySelectorAll('.cluster-highlight, .span-highlight');
     highlights.forEach(highlight => highlight.remove());
-
-    // Clear debug styles from matched spans
-    const debugSpans = this.viewer.querySelectorAll('.debug-matched-span');
-    debugSpans.forEach(span => {
-      span.style.outline = '';
-      span.style.backgroundColor = '';
-      span.classList.remove('debug-matched-span');
-    });
 
     if (clearState) {
       this._highlightTerms = null;
       this._highlightPageNumber = null;
+      this._highlightMinClusterSize = null;
     }
   }
 
@@ -854,7 +754,8 @@ export class PDFJSViewer {
   }
 
   /**
-   * Creates a highlight overlay for a cluster of spans
+   * Creates highlight overlays for each matched span in a cluster,
+   * plus a dashed boundary around the entire cluster.
    * @param {HTMLElement} textLayer - The text layer element
    * @param {Array<{span: HTMLElement, rect: Object, score: number}>} cluster - The cluster to highlight
    * @param {boolean} scrollIntoView - Whether to scroll the highlight into view (default: true)
@@ -863,14 +764,24 @@ export class PDFJSViewer {
   _createClusterHighlight(textLayer, cluster, scrollIntoView = true) {
     if (cluster.length === 0) return;
 
-    // DEBUG: Highlight each matched span with a red border
-    for (const item of cluster) {
-      item.span.style.outline = '2px solid red';
-      item.span.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
-      item.span.classList.add('debug-matched-span');
+    // Calculate vertical offset to compensate for text layer misalignment
+    let verticalOffset = this.highlightVerticalOffset;
+    if (verticalOffset === 'auto') {
+      verticalOffset = this._calculateLineHeight(textLayer);
     }
 
-    // Calculate bounding box for the cluster
+    // Highlight each matched span individually
+    for (const item of cluster) {
+      const spanHL = document.createElement('div');
+      spanHL.className = 'span-highlight';
+      spanHL.style.left = `${item.rect.left}px`;
+      spanHL.style.top = `${item.rect.top + verticalOffset}px`;
+      spanHL.style.width = `${item.rect.width}px`;
+      spanHL.style.height = `${item.rect.height}px`;
+      textLayer.appendChild(spanHL);
+    }
+
+    // Calculate cluster bounding box
     let minLeft = Infinity, minTop = Infinity;
     let maxRight = -Infinity, maxBottom = -Infinity;
 
@@ -881,35 +792,17 @@ export class PDFJSViewer {
       maxBottom = Math.max(maxBottom, item.rect.bottom);
     }
 
-    // Add padding
-    const padding = 5;
-    minLeft = Math.max(0, minLeft - padding);
-    minTop = Math.max(0, minTop - padding);
-    maxRight += padding;
-    maxBottom += padding;
+    const padding = 3;
+    const boundary = document.createElement('div');
+    boundary.className = 'cluster-highlight';
+    boundary.style.left = `${minLeft - padding}px`;
+    boundary.style.top = `${minTop - padding + verticalOffset}px`;
+    boundary.style.width = `${maxRight - minLeft + padding * 2}px`;
+    boundary.style.height = `${maxBottom - minTop + padding * 2}px`;
+    textLayer.appendChild(boundary);
 
-    // Calculate vertical offset to compensate for text layer misalignment
-    let verticalOffset = this.highlightVerticalOffset;
-    if (verticalOffset === 'auto') {
-      // Auto-calculate: use one line height as offset (common misalignment pattern)
-      verticalOffset = this._calculateLineHeight(textLayer);
-    }
-    minTop += verticalOffset;
-    maxBottom += verticalOffset;
-
-    // Create highlight overlay
-    const highlight = document.createElement('div');
-    highlight.className = 'cluster-highlight';
-    highlight.style.left = `${minLeft}px`;
-    highlight.style.top = `${minTop}px`;
-    highlight.style.width = `${maxRight - minLeft}px`;
-    highlight.style.height = `${maxBottom - minTop}px`;
-
-    textLayer.appendChild(highlight);
-
-    // Scroll the highlight into view (unless disabled, e.g., during zoom re-render)
     if (scrollIntoView) {
-      highlight.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      boundary.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     }
   }
 
@@ -919,17 +812,21 @@ export class PDFJSViewer {
    * for span-to-term matching which handles hyphenation and OCR fragmentation.
    * @param {string[]} terms - Array of search terms to highlight
    * @param {number} pageNumber - The page number to highlight (1-based)
-   * @param {number} minClusterSize - Minimum number of matching spans required (default: 5)
-   * @param {boolean} scrollIntoView - Whether to scroll the highlight into view (default: true)
+   * @param {number|null} [minClusterSize=null] - Minimum spans required (null = auto-calculate from term count)
+   * @param {boolean} [scrollIntoView=true] - Whether to scroll the highlight into view
    * @private
    */
-  _highlightTermsInTextLayer(terms, pageNumber, minClusterSize = 5, scrollIntoView = true) {
+  _highlightTermsInTextLayer(terms, pageNumber, minClusterSize = null, scrollIntoView = true) {
     // Clear previous highlights
     this._clearClusterHighlights();
+
+    // Auto-calculate minClusterSize based on number of search terms
+    const effectiveMinClusterSize = minClusterSize ?? Math.max(2, Math.min(terms?.length || 2, 5));
 
     // Store state for re-highlighting on zoom change
     this._highlightTerms = terms;
     this._highlightPageNumber = pageNumber;
+    this._highlightMinClusterSize = effectiveMinClusterSize;
 
     if (!terms || terms.length === 0) return;
 
@@ -947,7 +844,7 @@ export class PDFJSViewer {
     }
 
     // Use the pdf-text-search module to find the best cluster
-    const cluster = pdfTextSearch.findBestCluster(textLayer, terms, { minClusterSize });
+    const cluster = pdfTextSearch.findBestCluster(textLayer, terms, { minClusterSize: effectiveMinClusterSize });
 
     if (!cluster) {
       console.log(`No suitable cluster found on page ${pageNumber}`);

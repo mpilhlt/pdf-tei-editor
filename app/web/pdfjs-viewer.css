@@ -188,12 +188,19 @@
   border-radius: 0;
 }
 
-/* Cluster bounding box highlight for multi-term search */
+/* Individual span highlight for matched terms */
+.textLayer .span-highlight {
+  position: absolute;
+  background-color: rgba(255, 255, 0, 0.35);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Cluster boundary (dashed outline around matched span group) */
 .textLayer .cluster-highlight {
   position: absolute;
-  background-color: rgba(255, 255, 0, 0.2);
-  border: 2px solid rgba(255, 180, 0, 0.8);
+  background-color: transparent;
+  border: 1.5px dashed rgba(255, 150, 0, 0.6);
   border-radius: 4px;
   pointer-events: none;
-  box-shadow: 0 0 8px rgba(255, 200, 0, 0.4);
 }
