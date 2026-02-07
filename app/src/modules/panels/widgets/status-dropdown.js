@@ -12,6 +12,7 @@ class StatusDropdown extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this.items = [];
+    this._ready = false;  // Only handle events after fully initialized
     this.render();
   }
 
@@ -22,10 +23,15 @@ class StatusDropdown extends HTMLElement {
       customElements.whenDefined('sl-menu'),
       customElements.whenDefined('sl-menu-item')
     ]);
-    
+
     this.parseItems();
     this.render();
     this.setupEventListeners();
+
+    // Mark as ready after a delay to avoid initial Shoelace events
+    setTimeout(() => {
+      this._ready = true;
+    }, 100);
   }
 
   attributeChangedCallback() {
@@ -46,12 +52,15 @@ class StatusDropdown extends HTMLElement {
   }
 
   setupEventListeners() {
-    const dropdown = this.shadowRoot?.querySelector('sl-dropdown');
-    if (dropdown) {
-      dropdown.addEventListener('sl-select', (e) => {
-        this.selectItem(e.detail.item.value);
-      });
-    }
+    // Use click event on menu items instead of sl-select to avoid Shoelace timing issues
+    this.shadowRoot.addEventListener('click', (e) => {
+      if (!this._ready) return;
+
+      const menuItem = e.target.closest('sl-menu-item');
+      if (menuItem && !menuItem.disabled) {
+        this.selectItem(menuItem.value);
+      }
+    });
   }
 
   disconnectedCallback() {

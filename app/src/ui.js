@@ -1,7 +1,7 @@
 /**
  * The UI of the application as a typed object structure, which can then be traversed.
  * In this structure, each named DOM element encapsulates all named descencdent elements.
- * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel`, etc. The structure
+ * This allows to access the elements via `ui.toolbar.pdf`, `ui.pdfViewer`, etc. The structure
  * is created by `createNavigableElement()`, which is called on the document
  * body at the end of this file. The JSDoc structure is used to document the UI elements and their
  * properties and allow autocompletion in IDEs that support JSDoc.
@@ -42,7 +42,6 @@ import './modules/panels/index.js';
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
- * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {newVersionDialogPart, newRevisionChangeDialogPart, editMetadataDialogPart} from './plugins/document-actions.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
@@ -73,7 +72,6 @@ import './modules/panels/index.js';
  * The top-level UI parts
  * @typedef {object} namedElementsTree
  * @property {UIPart<ToolBar, toolbarPart>} toolbar - The main toolbar
- * @property {UIPart<HTMLDivElement, floatingPanelPart>} floatingPanel - The floating panel with navigation buttons
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes

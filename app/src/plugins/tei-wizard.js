@@ -206,10 +206,5 @@ async function runTeiWizard() {
   // Display the result in the merge view
   xmlEditor.showMergeView(xmlstring);
 
-  // enable diff navigation buttons
-  ui.floatingPanel.diffNavigation
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = false);
-
   notify(`${selectedEnhancements.length} TEI enhancements applied successfully.`, "success");
 }
