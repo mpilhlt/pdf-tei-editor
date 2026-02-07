@@ -64,35 +64,35 @@ NAVIGATION_XPATH = {
     "grobid.training.segmentation": [
         {
             "value": "//tei:listBibl",
-            "label": "<listBibl>"
+            "label": "&lt;listBibl&gt;"
         }
     ],
     "grobid.training.references.referenceSegmenter": [
         {
             "value": "//tei:bibl",
-            "label": "<bibl>"
+            "label": "&lt;bibl&gt;"
         }
     ],
     "grobid.training.references": [
         {
             "value": "//tei:bibl",
-            "label": "<bibl>"
+            "label": "&lt;bibl&gt;"
         }
     ],
     "grobid.service.fulltext": [
         {
             "value": "//tei:div",
-            "label": "<div>"
+            "label": "&lt;div&gt;"
         },
         {
             "value": "//tei:bibl",
-            "label": "<bibl>"
+            "label": "&lt;bibl&gt;"
         }
     ],
     "grobid.service.references": [
         {
             "value": "//tei:bibl",
-            "label": "<bibl>"
+            "label": "&lt;bibl&gt;"
         }
     ]
 }

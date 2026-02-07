@@ -142,7 +142,7 @@ async function start() {
       })
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
-      const xpath = UrlHash.get("xpath") || ui.floatingPanel.xpath.value
+      const xpath = UrlHash.get("xpath") || ''
 
       // update the UI
       const newState = await app.updateState({ xpath })

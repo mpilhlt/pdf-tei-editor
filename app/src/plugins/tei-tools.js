@@ -22,6 +22,7 @@
 import ui, { updateUi } from '../ui.js'
 import { logger } from '../app.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { api as xmlEditor } from './xmleditor.js'
 
 // Register templates
@@ -86,6 +87,15 @@ async function install(state) {
     }
   })
 
+  // Create revision history button and add to XML editor toolbar (right side)
+  const revisionHistoryBtn = PanelUtils.createButton({
+    icon: 'clock-history',
+    tooltip: 'Show revision history',
+    name: 'revisionHistoryBtn'
+  })
+  revisionHistoryBtn.style.display = 'none'
+  ui.xmlEditor.toolbar.add(revisionHistoryBtn, 1) // Priority 1 = rightmost
+
   // Create revision history drawer
   createFromTemplate('tei-revision-history-drawer', document.body)
 
@@ -117,7 +127,7 @@ async function start(state) {
   })
 
   // Revision history button
-  ui.xmlEditor.statusbar.revisionHistoryBtn.addEventListener('widget-click', () => {
+  ui.xmlEditor.toolbar.revisionHistoryBtn.addEventListener('widget-click', () => {
     showRevisionHistory()
   })
 
@@ -142,7 +152,7 @@ async function onStateUpdate(changedKeys, state) {
 
   // Hide revision history button when no document
   if (!hasDocument) {
-    ui.xmlEditor.statusbar.revisionHistoryBtn.style.display = 'none'
+    ui.xmlEditor.toolbar.revisionHistoryBtn.style.display = 'none'
   }
 }
 
@@ -182,7 +192,7 @@ function updateTeiHeaderToggle() {
  * Updates the revision history button visibility
  */
 function updateRevisionHistoryButton() {
-  const revisionHistoryBtn = ui.xmlEditor.statusbar.revisionHistoryBtn
+  const revisionHistoryBtn = ui.xmlEditor.toolbar.revisionHistoryBtn
 
   // Check if document has a revisionDesc
   const hasRevisionDesc = !!xmlEditor.getDomNodeByXpath("//tei:revisionDesc")
@@ -203,8 +213,9 @@ function toggleTeiHeaderVisibility(show) {
 
   try {
     if (show) {
-      // Unfold the teiHeader
+      // Unfold the teiHeader and scroll it into view
       xmlEditor.unfoldByXpath('//tei:teiHeader')
+      xmlEditor.selectByXpath('//tei:teiHeader')
       teiHeaderVisible = true
       logger.debug('Unfolded teiHeader')
     } else {
