@@ -381,10 +381,6 @@ def create_encoding_desc_with_extractor(
     )
     etree.SubElement(extractor_app, "label").text = extractor_name
 
-    # Add optional reference
-    if extractor_ref:
-        etree.SubElement(extractor_app, "ref", target=extractor_ref)
-
     # Add variant-id label if provided
     if variant_id:
         variant_label = etree.SubElement(extractor_app, "label", type="variant-id")
@@ -395,6 +391,10 @@ def create_encoding_desc_with_extractor(
         for label_type, label_text in additional_labels:
             label = etree.SubElement(extractor_app, "label", type=label_type)
             label.text = label_text
+            
+    # Add optional reference at the end
+    if extractor_ref:
+        etree.SubElement(extractor_app, "ref", target=extractor_ref)            
 
     return encodingDesc
 
