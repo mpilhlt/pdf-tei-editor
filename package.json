@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.31.1",
+    "version": "0.32.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -54,7 +54,7 @@
         "docs:backend:json": "uv run python bin/generate-python-api-json.py",
         "docs:serve": "python -m http.server -d docs/api 8080",
         "docs:clean": "rm -rf docs/api/frontend docs/api/backend docs/api/*.json",
-        "git:branch:prune" : "git fetch -p && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D"
+        "git:branch:prune": "git fetch -p && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",
