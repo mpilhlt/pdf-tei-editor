@@ -188,6 +188,41 @@ npm run manage-remote -- config set app.name '"My App"'
 npm run manage-remote -- config set session.timeout 3600
 ```
 
+## Maintenance Mode
+
+```bash
+npm run manage-remote -- maintenance <subcommand>
+```
+
+Requires admin privileges. Broadcasts commands to all connected browser clients via SSE.
+
+| Command | Description |
+|---------|-------------|
+| `maintenance on [--message <text>]` | Show a blocking spinner on all clients (default: "System maintenance in progress, please wait...") |
+| `maintenance off [--message <text>]` | Remove the spinner and resume normal operation. If `--message` is given, show it in an info dialog |
+| `maintenance reload` | Force all clients to reload the page |
+
+When maintenance mode is active, the heartbeat mechanism is paused and the UI is blocked.
+
+### Examples
+
+```bash
+# Block all clients with default message
+npm run manage-remote -- maintenance on
+
+# Block all clients with custom message
+npm run manage-remote -- maintenance on --message "Upgrading to v2.0, back in 5 minutes"
+
+# Unblock after maintenance is done
+npm run manage-remote -- maintenance off
+
+# Unblock with a message shown in an info dialog
+npm run manage-remote -- maintenance off --message "Maintenance complete. Please check your work."
+
+# Force all clients to reload (e.g. after deploying a frontend update)
+npm run manage-remote -- maintenance reload
+```
+
 ## Diagnostic Commands
 
 ```bash

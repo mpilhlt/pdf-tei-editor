@@ -36,6 +36,7 @@
  * @property {FileListItem[]|null} fileData - The file data loaded from the server
  * @property {CollectionInfo[]|null} collections - The list of accessible collections
  * @property {boolean} hasInternet - Whether the backend has internet access
+ * @property {boolean} maintenanceMode - Whether the application is in maintenance mode (UI blocked by admin)
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  * @property {ApplicationState|null} previousState - Links to the previous state object
  */
@@ -60,6 +61,7 @@ const initialState = {
   collections: null,
   offline: false,
   hasInternet: false,
+  maintenanceMode: false,
   ext: {},
   previousState: null
 }

@@ -21,6 +21,7 @@
  *   role        List roles
  *   config      Manage configuration
  *   diagnostic  Diagnostic utilities
+ *   maintenance Maintenance mode controls (spinner, reload)
  */
 
 import { Command } from 'commander';
@@ -745,6 +746,35 @@ async function diagnosticAccessRemove(baseUrl, sessionId) {
 }
 
 // ============================================================================
+// Maintenance Commands
+// ============================================================================
+
+/**
+ * Enable maintenance mode on all connected clients
+ */
+async function maintenanceOn(baseUrl, sessionId, message = 'System maintenance in progress, please wait...') {
+  await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/maintenance/on', { message });
+  console.log('Maintenance mode enabled.');
+}
+
+/**
+ * Disable maintenance mode on all connected clients
+ */
+async function maintenanceOff(baseUrl, sessionId, message) {
+  const body = message ? { message } : {};
+  await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/maintenance/off', body);
+  console.log('Maintenance mode disabled.');
+}
+
+/**
+ * Force all connected clients to reload
+ */
+async function maintenanceReload(baseUrl, sessionId) {
+  await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/maintenance/reload');
+  console.log('Reload signal sent to all clients.');
+}
+
+// ============================================================================
 // CLI Setup
 // ============================================================================
 
@@ -1029,6 +1059,36 @@ accessCmd
   .description("Remove diagnostic users 'reviewer' and 'annotator'")
   .action(async () => {
     await runAuthenticated(getGlobalOptions(), diagnosticAccessRemove);
+  });
+
+// --- Maintenance Commands ---
+const maintenanceCmd = program.command('maintenance').description('Maintenance mode controls');
+
+maintenanceCmd
+  .command('on')
+  .description('Enable maintenance mode (show blocking spinner on all clients)')
+  .option('--message <text>', 'Message to display', 'System maintenance in progress, please wait...')
+  .action(async (cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
+      maintenanceOn(baseUrl, sessionId, cmdOptions.message)
+    );
+  });
+
+maintenanceCmd
+  .command('off')
+  .description('Disable maintenance mode (remove spinner on all clients)')
+  .option('--message <text>', 'Message to display in an info dialog after disabling')
+  .action(async (cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
+      maintenanceOff(baseUrl, sessionId, cmdOptions.message)
+    );
+  });
+
+maintenanceCmd
+  .command('reload')
+  .description('Force all clients to reload the page')
+  .action(async () => {
+    await runAuthenticated(getGlobalOptions(), maintenanceReload);
   });
 
 // Parse and execute
