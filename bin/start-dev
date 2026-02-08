@@ -60,12 +60,14 @@ if __name__ == '__main__':
     print_server_starting_message(host, port, log_file, mode="development", auto_reload=not disable_reload)
 
     # Build uvicorn command
+    log_config = str(project_root / 'fastapi_app' / 'log_config.json')
     cmd = [
         'uv', 'run', 'uvicorn',
         'run_fastapi:app',
         '--host', host,
         '--port', str(port),
         '--log-level', 'info',
+        '--log-config', log_config,
         '--timeout-graceful-shutdown', '1',  # Force reload after 1 second if connections don't close
         '--reload-delay', '0.25'  # Debounce rapid file changes
     ]
