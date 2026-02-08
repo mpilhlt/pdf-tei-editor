@@ -21,7 +21,7 @@
  *   role        List roles
  *   config      Manage configuration
  *   diagnostic  Diagnostic utilities
- *   maintenance Maintenance mode controls (spinner, reload)
+ *   maintenance Maintenance mode controls (spinner, reload, repopulate)
  */
 
 import { Command } from 'commander';
@@ -774,6 +774,39 @@ async function maintenanceReload(baseUrl, sessionId) {
   console.log('Reload signal sent to all clients.');
 }
 
+/**
+ * Repopulate database fields from TEI documents
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ * @param {string[]} fields - Fields to repopulate (empty = all)
+ */
+async function maintenanceRepopulate(baseUrl, sessionId, fields) {
+  console.log(`Fields: ${fields.length > 0 ? fields.join(', ') : 'all'}`);
+  console.log('\nRepopulating fields from TEI documents...');
+
+  const requestBody = fields.length > 0 ? { fields } : {};
+
+  const result = await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/files/repopulate', requestBody);
+
+  console.log('\n=== Results ===');
+
+  for (const fieldResult of result.results) {
+    console.log(`\n${fieldResult.field}:`);
+    console.log(`  Total files: ${fieldResult.total}`);
+    console.log(`  Updated: ${fieldResult.updated}`);
+    console.log(`  Skipped (no value): ${fieldResult.skipped}`);
+    console.log(`  Errors: ${fieldResult.errors}`);
+  }
+
+  console.log(`\n=== Summary ===`);
+  console.log(`Success: ${result.success ? 'Yes' : 'No'}`);
+  console.log(`Message: ${result.message}`);
+
+  if (!result.success) {
+    process.exit(1);
+  }
+}
+
 // ============================================================================
 // CLI Setup
 // ============================================================================
@@ -1089,6 +1122,25 @@ maintenanceCmd
   .description('Force all clients to reload the page')
   .action(async () => {
     await runAuthenticated(getGlobalOptions(), maintenanceReload);
+  });
+
+maintenanceCmd
+  .command('repopulate [fields...]')
+  .description('Re-extract fields from TEI documents')
+  .addHelpText('after', `
+Available fields:
+  status          Revision status from revisionDesc/change/@status
+  last_revision   Timestamp from revisionDesc/change/@when
+
+Examples:
+  $ npm run manage-remote -- maintenance repopulate
+  $ npm run manage-remote -- maintenance repopulate status
+  $ npm run manage-remote -- maintenance repopulate status last_revision
+`)
+  .action(async (fields) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
+      maintenanceRepopulate(baseUrl, sessionId, fields)
+    );
   });
 
 // Parse and execute

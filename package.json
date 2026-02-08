@@ -19,7 +19,6 @@
         "export": "uv run python bin/export_files.py",
         "batch-extract": "node bin/batch-extract.js",
         "manage-remote": "node bin/manage-remote.js",
-        "maintenance": "node bin/maintenance.js",
         "start": "uv run python bin/start-prod",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
