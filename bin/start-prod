@@ -51,6 +51,7 @@ if __name__ == '__main__':
     # Build uvicorn command for production
     # On Linux/Mac, use venv python directly for better performance
     # On Windows, use uv run (required for proper activation)
+    log_config = str(project_root / 'fastapi_app' / 'log_config.json')
     if sys.platform == 'win32':
         # Windows: use uv run with UV_NO_SYNC to prevent hanging
         os.environ['UV_NO_SYNC'] = '1'
@@ -60,6 +61,7 @@ if __name__ == '__main__':
             '--host', host,
             '--port', str(port),
             '--log-level', 'info',
+            '--log-config', log_config,
             '--timeout-graceful-shutdown', '5',
             '--workers', '4'
         ]
@@ -72,6 +74,7 @@ if __name__ == '__main__':
             '--host', host,
             '--port', str(port),
             '--log-level', 'info',
+            '--log-config', log_config,
             '--timeout-graceful-shutdown', '5',
             '--workers', '4'
         ]
