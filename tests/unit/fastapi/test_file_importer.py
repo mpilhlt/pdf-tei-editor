@@ -207,10 +207,10 @@ startxref
         importer = FileImporter(self.db, self.storage, self.repo)
         stats = importer.import_directory(self.import_dir)
 
-        # Verify file has empty collections
+        # Verify file defaults to _inbox collection
         files = self.repo.list_files()
         self.assertEqual(len(files), 1)
-        self.assertEqual(files[0].doc_collections, [])
+        self.assertEqual(files[0].doc_collections, ["_inbox"])
 
     def test_recursive_scanning(self):
         """Test recursive directory scanning."""
@@ -293,7 +293,7 @@ startxref
 
         self.assertEqual(doc1.doc_collections, ["corpus1"])
         self.assertEqual(doc2.doc_collections, ["corpus2"])
-        self.assertEqual(root.doc_collections, [])  # Root has no collection
+        self.assertEqual(root.doc_collections, ["_inbox"])  # Root defaults to _inbox
 
     def test_recursive_collections_with_skip_dirs(self):
         """Test recursive collections with organizational directories."""
@@ -351,33 +351,29 @@ startxref
         self.assertEqual(doc2_pdf.doc_collections, ["corpus2"])
 
     def test_recursive_collections_overrides_collection_param(self):
-        """Test that recursive_collections overrides collection parameter."""
+        """Test that recursive_collections takes precedence over collection parameter."""
         # Create structure
         (self.import_dir / "corpus1").mkdir()
         self.create_test_pdf(self.import_dir / "corpus1" / "doc1.pdf")
 
-        # Import with both parameters (suppress expected warning)
+        # Import with both parameters - recursive_collections takes precedence,
+        # collection serves as fallback for files without a path-derived collection
         importer = FileImporter(
             self.db, self.storage, self.repo,
             skip_collection_dirs=['pdf', 'tei']
         )
 
-        # Suppress the warning for this specific test case
-        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
-            stats = importer.import_directory(
-                self.import_dir,
-                collection="ignored_collection",  # Should be ignored
-                recursive=True,
-                recursive_collections=True
-            )
+        stats = importer.import_directory(
+            self.import_dir,
+            collection="fallback_collection",
+            recursive=True,
+            recursive_collections=True
+        )
 
-        # Verify the expected warning was logged
-        self.assertTrue(any('Both --collection and --recursive-collections' in msg for msg in cm.output))
-
-        # Verify collection is from directory, not parameter
+        # Verify collection is from directory, not the fallback parameter
         files = self.repo.list_files()
         self.assertEqual(len(files), 1)
-        self.assertEqual(files[0].doc_collections, ["corpus1"])  # Not "ignored_collection"
+        self.assertEqual(files[0].doc_collections, ["corpus1"])
 
     def test_custom_skip_dirs(self):
         """Test custom skip directories configuration."""

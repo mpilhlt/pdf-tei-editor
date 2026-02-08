@@ -105,15 +105,20 @@ class FileZipImporter:
             logger.info(f"Zip archive extracted successfully")
 
             # Find the root directory to import from
-            # ZIP may have a single root directory (e.g., "export/") or files at root
-            # When using recursive_collections, don't descend into single root folder
-            # so that folder becomes a collection name
-            import_root = self._find_import_root(
-                self.temp_dir,
-                keep_single_root=recursive_collections
-            )
+            import_root, single_root_name = self._find_import_root(self.temp_dir)
 
             logger.info(f"Import root directory: {import_root}")
+
+            # When recursive_collections is enabled and a single root directory
+            # was descended into, use its name as the default collection for files
+            # that don't have a collection derived from subdirectory names.
+            effective_collection = collection
+            if recursive_collections and single_root_name and not collection:
+                effective_collection = single_root_name
+                logger.info(
+                    f"Using single root directory name '{single_root_name}' "
+                    f"as default collection"
+                )
 
             # Create FileImporter with specified parameters
             importer = FileImporter(
@@ -131,7 +136,7 @@ class FileZipImporter:
             # Import the extracted files
             stats = importer.import_directory(
                 directory=import_root,
-                collection=collection,
+                collection=effective_collection,
                 recursive=True,  # Always scan subdirectories in zip
                 recursive_collections=recursive_collections
             )
@@ -149,23 +154,19 @@ class FileZipImporter:
             self.cleanup()
             raise RuntimeError(f"Import from zip failed: {e}")
 
-    def _find_import_root(self, extract_dir: Path, keep_single_root: bool = False) -> Path:
+    def _find_import_root(self, extract_dir: Path) -> tuple[Path, Optional[str]]:
         """
         Find the root directory to import from.
 
         Handles cases:
-        1. Zip with single root directory containing only subdirs → descend into it
-        2. Zip with single root directory containing files → keep it as collection
-           (when keep_single_root=True, this makes the folder name a collection)
-        3. Zip with files at root → use extract_dir
+        1. Zip with single root directory → descend into it, return its name
+        2. Zip with files at root → use extract_dir
 
         Args:
             extract_dir: Directory where zip was extracted
-            keep_single_root: If True and single root has files directly,
-                keep it so the folder name becomes a collection.
 
         Returns:
-            Path to import root directory
+            Tuple of (import root path, single root directory name or None)
 
         Raises:
             ValueError: If directory structure is invalid
@@ -179,26 +180,15 @@ class FileZipImporter:
         if not children:
             raise ValueError("Zip archive is empty")
 
-        # If there's exactly one directory at root
+        # If there's exactly one directory at root, descend into it
         if len(children) == 1 and children[0].is_dir():
             potential_root = children[0]
-
-            # Check if root contains files directly (not just subdirectories)
-            root_children = list(potential_root.iterdir())
-            has_direct_files = any(c.is_file() and c.suffix in ['.pdf', '.xml'] for c in root_children)
-
-            if keep_single_root and has_direct_files:
-                # Root folder contains files directly - use it as collection name
-                logger.info(f"Keeping single root directory '{potential_root.name}' as collection (contains files)")
-                return extract_dir
-            else:
-                # Root is just a wrapper (only contains subdirs) - descend into it
-                logger.info(f"Found single root directory: {potential_root.name}")
-                return potential_root
+            logger.info(f"Found single root directory: {potential_root.name}")
+            return potential_root, potential_root.name
 
         # Otherwise, use extract_dir as root
         logger.info("Files at zip root, using extract directory as import root")
-        return extract_dir
+        return extract_dir, None
 
     def cleanup(self):
         """
