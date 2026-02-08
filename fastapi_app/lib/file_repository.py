@@ -1160,6 +1160,121 @@ class FileRepository:
 
             return [self._row_to_model(row) for row in rows]
 
+    def sync_tei_collections_with_pdf(self) -> int:
+        """
+        Sync doc_collections on TEI files to match their parent PDF.
+
+        TEI files should inherit doc_collections from their PDF. This method
+        finds TEI files where doc_collections differs from the parent PDF and
+        updates them. Does not modify sync_status or timestamps since this is
+        a metadata correction, not a content change.
+
+        Returns:
+            Number of TEI files updated
+        """
+        query = """
+            UPDATE files
+            SET doc_collections = (
+                SELECT pdf.doc_collections
+                FROM files pdf
+                WHERE pdf.doc_id = files.doc_id
+                    AND pdf.file_type = 'pdf'
+                    AND pdf.deleted = 0
+                ORDER BY pdf.created_at DESC
+                LIMIT 1
+            )
+            WHERE file_type = 'tei'
+                AND deleted = 0
+                AND doc_collections IS NOT NULL
+                AND doc_collections != '[]'
+                AND EXISTS (
+                    SELECT 1 FROM files pdf
+                    WHERE pdf.doc_id = files.doc_id
+                        AND pdf.file_type = 'pdf'
+                        AND pdf.deleted = 0
+                        AND pdf.doc_collections != files.doc_collections
+                )
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            count = cursor.rowcount
+
+            if self.logger and count > 0:
+                self.logger.info(
+                    f"Synced doc_collections for {count} TEI file(s) "
+                    f"to match their parent PDF"
+                )
+
+            return count
+
+    def assign_inbox_to_collectionless_files(self) -> int:
+        """
+        Assign '_inbox' collection to files that have no collection.
+
+        Finds non-deleted files with NULL, empty string, or empty JSON array
+        doc_collections and sets them to '["_inbox"]'.
+
+        Returns:
+            Number of files updated
+        """
+        query = """
+            UPDATE files
+            SET doc_collections = '["_inbox"]'
+            WHERE deleted = 0
+                AND (
+                    doc_collections IS NULL
+                    OR doc_collections = ''
+                    OR doc_collections = '[]'
+                )
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            count = cursor.rowcount
+
+            if self.logger and count > 0:
+                self.logger.info(
+                    f"Assigned '_inbox' collection to {count} file(s) "
+                    f"with empty doc_collections"
+                )
+
+            return count
+
+    def remove_duplicate_entries(self) -> int:
+        """
+        Remove duplicate database entries for the same file content.
+
+        A duplicate is defined as multiple rows sharing the same (id, doc_id,
+        file_type) combination. For each group of duplicates, the oldest entry
+        (earliest created_at) is kept and the rest are deleted.
+
+        Returns:
+            Number of duplicate entries removed
+        """
+        query = """
+            DELETE FROM files
+            WHERE rowid NOT IN (
+                SELECT MIN(rowid)
+                FROM files
+                GROUP BY id, doc_id, file_type
+            )
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            count = cursor.rowcount
+
+            if self.logger and count > 0:
+                self.logger.info(
+                    f"Removed {count} duplicate database entries"
+                )
+
+            return count
+
     def permanently_delete_file(self, file_id: str) -> None:
         """
         Permanently delete a file record from the database.

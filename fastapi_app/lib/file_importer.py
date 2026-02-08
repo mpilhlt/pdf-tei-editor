@@ -160,13 +160,6 @@ class FileImporter:
         """
         logger.info(f"Starting import from {directory}")
 
-        if recursive_collections and collection:
-            logger.warning(
-                f"Both --collection and --recursive-collections specified. "
-                f"Ignoring --collection, using subdirectory names instead."
-            )
-            collection = None
-
         # Scan directory for files
         files = self._scan_directory(directory, recursive)
 
@@ -182,9 +175,16 @@ class FileImporter:
                     file_collection = self._get_collection_from_path(
                         doc_files, directory
                     )
+                    # Fall back to explicit collection if path didn't yield one
+                    if not file_collection:
+                        file_collection = collection
                 else:
                     # Use provided collection
                     file_collection = collection
+
+                # Ensure files always have a collection
+                if not file_collection:
+                    file_collection = "_inbox"
 
                 self._import_document(doc_id, doc_files, file_collection)
             except Exception as e:
@@ -487,44 +487,74 @@ class FileImporter:
         doc_id: str,
         collection: Optional[str]
     ) -> Optional[str]:
-        """Import a PDF file, returns file hash"""
+        """Import a PDF file, returns file hash.
+
+        Idempotent: if a PDF for this doc_id already exists with the same
+        content, it is skipped. If the content differs, the existing entry
+        is updated with the new content hash (the old physical file will be
+        cleaned up on the next garbage collection).
+        """
 
         # Read file content
         content = pdf_path.read_bytes()
         file_hash = generate_file_hash(content)
 
-        # Check if content already exists in storage (for deduplication)
-        content_exists = self.storage.file_exists(file_hash, 'pdf')
-
         if self.dry_run:
             logger.info(f"[DRY RUN] Would import PDF: {pdf_path}")
             return file_hash
 
-        # Save to storage (deduplication happens at storage level)
-        # Note: increment_ref=False because insert_file handles reference counting
-        if not content_exists:
+        # Check for existing PDF with this doc_id
+        existing_files = self.repo.get_files_by_doc_id(doc_id)
+        existing_pdf = next(
+            (f for f in existing_files if f.file_type == 'pdf' and not f.deleted),
+            None
+        )
+
+        if existing_pdf:
+            if existing_pdf.id == file_hash:
+                # Identical content — skip, but ensure collection is assigned
+                self._ensure_file_in_collection(existing_pdf, collection)
+                logger.info(f"Skipping PDF (already exists): {pdf_path.name} -> {file_hash[:8]}")
+                self.stats['files_skipped'] += 1
+                return file_hash
+            else:
+                # Different content — update the existing entry with new hash
+                logger.info(
+                    f"Updating PDF (content changed): {pdf_path.name} "
+                    f"{existing_pdf.id[:8]} -> {file_hash[:8]}"
+                )
+                # Ensure new content is in storage
+                if not self.storage.file_exists(file_hash, 'pdf'):
+                    self.storage.save_file(content, 'pdf', increment_ref=False)
+
+                self.repo.update_file(existing_pdf.id, FileUpdate(
+                    id=file_hash,
+                    filename=pdf_path.name,
+                    file_size=len(content),
+                ))
+                self.stats['files_updated'] += 1
+                return file_hash
+
+        # New PDF — save to storage and create database entry
+        if not self.storage.file_exists(file_hash, 'pdf'):
             saved_hash, storage_path = self.storage.save_file(content, 'pdf', increment_ref=False)
             assert saved_hash == file_hash
-        else:
-            logger.debug(f"Content already in storage, creating new database entry: {file_hash[:8]}")
 
-        # Create metadata
         file_create = FileCreate(
             id=file_hash,
-            filename=pdf_path.name,  # Preserve original filename
+            filename=pdf_path.name,
             doc_id=doc_id,
-            doc_id_type='custom',  # Can be refined by TEI metadata
+            doc_id_type='custom',
             file_type='pdf',
             file_size=len(content),
             doc_collections=[collection] if collection else [],
-            doc_metadata={},  # Will be populated from TEI
+            doc_metadata={},
             file_metadata={
                 'original_path': str(pdf_path),
                 'imported_at': datetime.now().isoformat()
             }
         )
 
-        # Insert into database
         self.repo.insert_file(file_create)
         self.stats['files_imported'] += 1
 
@@ -538,7 +568,12 @@ class FileImporter:
         pdf_file_id: Optional[str],
         collection: Optional[str] = None
     ) -> None:
-        """Import a TEI/XML file"""
+        """Import a TEI/XML file.
+
+        Idempotent: if a TEI with the same content hash already exists for
+        this doc_id, the import is skipped. Different content creates a new
+        version entry.
+        """
 
         # Read file content
         content = tei_path.read_bytes()
@@ -562,12 +597,25 @@ class FileImporter:
         # Extract variant from TEI metadata
         variant = metadata.get('variant')
 
-        # Check if content already exists in storage (for deduplication)
-        content_exists = self.storage.file_exists(file_hash, 'tei')
-
         if self.dry_run:
             logger.info(f"[DRY RUN] Would import TEI: {tei_path}")
             return
+
+        # Check if a TEI with the same content hash already exists for this doc_id
+        existing_files = self.repo.get_files_by_doc_id(doc_id)
+        existing_tei = next(
+            (f for f in existing_files if f.id == file_hash and f.file_type == 'tei'),
+            None
+        )
+        if existing_tei:
+            # Ensure collection is assigned even when skipping
+            self._ensure_file_in_collection(existing_tei, collection)
+            logger.info(f"Skipping TEI (already exists): {tei_path.name} -> {file_hash[:8]}")
+            self.stats['files_skipped'] += 1
+            return
+
+        # Check if content already exists in storage (for deduplication)
+        content_exists = self.storage.file_exists(file_hash, 'tei')
 
         # Determine if this is a gold standard file
         # Default: gold = file without .vN. version marker in filename
@@ -751,3 +799,15 @@ class FileImporter:
         ))
 
         logger.debug(f"Updated PDF metadata and label for {doc_id}: {pdf_label}")
+
+    def _ensure_file_in_collection(self, file_meta, collection: Optional[str]) -> None:
+        """Add collection to a file's doc_collections if not already present."""
+        if not collection:
+            return
+        current = file_meta.doc_collections or []
+        if collection not in current:
+            updated = current + [collection]
+            self.repo.update_file(file_meta.id, FileUpdate(doc_collections=updated))
+            logger.info(
+                f"Added collection '{collection}' to existing file {file_meta.id[:8]}"
+            )

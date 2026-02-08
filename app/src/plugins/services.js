@@ -66,6 +66,26 @@ async function install(state) {
   // enable save button on dirty editor
   xmlEditor.on("editorReady",() => {ui.toolbar.documentActions.saveRevision.disabled = false});
 
+  // Listen for maintenance mode events
+  sse.addEventListener('maintenanceOn', async (event) => {
+    const data = JSON.parse(event.data);
+    await app.updateState({ maintenanceMode: true });
+    ui.spinner.show(data.message || '');
+  });
+
+  sse.addEventListener('maintenanceOff', async (event) => {
+    ui.spinner.hide();
+    await app.updateState({ maintenanceMode: false });
+    const data = JSON.parse(event.data);
+    if (data.message) {
+      dialog.info(data.message);
+    }
+  });
+
+  sse.addEventListener('maintenanceReload', () => {
+    window.location.reload();
+  });
+
   // Listen for lock release events to attempt acquiring locks for read-only documents
   sse.addEventListener('lockReleased', async (event) => {
     const data = JSON.parse(event.data);

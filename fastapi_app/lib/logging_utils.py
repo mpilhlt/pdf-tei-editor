@@ -83,6 +83,14 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
 
     root_logger.addHandler(file_handler)
 
+    # Reconfigure uvicorn loggers to use the same format.
+    # This ensures consistency even when uvicorn is started without --log-config
+    # (e.g., in tests or programmatic usage).
+    for uvicorn_logger_name in ['uvicorn', 'uvicorn.error', 'uvicorn.access']:
+        uvicorn_logger = logging.getLogger(uvicorn_logger_name)
+        for handler in uvicorn_logger.handlers:
+            handler.setFormatter(formatter)
+
 
 def get_logger(name: str) -> logging.Logger:
     """

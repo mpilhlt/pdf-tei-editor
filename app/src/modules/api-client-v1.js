@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-02-01T18:33:23.863Z
+ * Generated from OpenAPI schema at 2026-02-08T18:30:17.787Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -350,6 +350,16 @@
 /**
  * @typedef {Object} LogoutResponse
  * @property {string} status
+ */
+
+/**
+ * @typedef {Object} MaintenanceOffRequest
+ * @property {string=} message
+ */
+
+/**
+ * @typedef {Object} MaintenanceOnRequest
+ * @property {string=} message
  */
 
 /**
@@ -1725,6 +1735,38 @@ export class ApiClientV1 {
   async sseTestProgress(requestBody) {
     const endpoint = `/sse/test/progress`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Enable maintenance mode: show a blocking spinner on all clients.
+   *
+   * @param {MaintenanceOnRequest} requestBody
+   * @returns {Promise<any>}
+   */
+  async maintenanceOn(requestBody) {
+    const endpoint = `/maintenance/on`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Disable maintenance mode: remove the blocking spinner on all clients.
+   *
+   * @param {MaintenanceOffRequest} requestBody
+   * @returns {Promise<any>}
+   */
+  async maintenanceOff(requestBody) {
+    const endpoint = `/maintenance/off`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Force all clients to reload the page.
+   *
+   * @returns {Promise<any>}
+   */
+  async maintenanceReload() {
+    const endpoint = `/maintenance/reload`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

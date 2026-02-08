@@ -153,7 +153,8 @@ class FileExporter:
 
                 # Determine output paths based on grouping
                 output_paths = self._get_output_paths(
-                    target_path, file_meta, file_collections, filename, group_by
+                    target_path, file_meta, file_collections, filename, group_by,
+                    requested_collections=collections
                 )
 
                 # Export to all paths (handles multi-collection duplication)
@@ -514,7 +515,8 @@ class FileExporter:
         file_meta: FileMetadata,
         file_collections: List[str],
         filename: str,
-        group_by: str
+        group_by: str,
+        requested_collections: Optional[List[str]] = None
     ) -> List[Path]:
         """
         Determine output path(s) based on grouping strategy.
@@ -527,6 +529,7 @@ class FileExporter:
             file_collections: Resolved collections for this file
             filename: Constructed filename
             group_by: Grouping strategy
+            requested_collections: Original collection filter from the export request
 
         Returns:
             List of output paths (usually one, multiple for multi-collection with group_by="collection")
@@ -550,6 +553,17 @@ class FileExporter:
 
             # Use resolved collections (inherited from PDF for TEI files)
             collections = file_collections if file_collections else ["uncategorized"]
+
+            # When a collection filter is active, only place files under
+            # requested collections. This prevents files with stale/mismatched
+            # doc_collections from creating unexpected collection directories.
+            if requested_collections:
+                filtered = [c for c in collections if c in requested_collections]
+                if not filtered:
+                    # File was included via doc_id linkage but its own collections
+                    # don't overlap with the request — use requested collections
+                    filtered = requested_collections
+                collections = filtered
 
             for collection in collections:
                 # Determine subdirectory based on file type and gold status

@@ -92,6 +92,7 @@ function start(state, timeoutSeconds = 60) {
     
     const filePath = String(ui.toolbar.xml.value);
     const reasonsToSkip = {
+      "Maintenance mode is active": currentState.maintenanceMode,
       "No user is logged in": currentState.user === null,
       "No file path specified": !filePath
     };
