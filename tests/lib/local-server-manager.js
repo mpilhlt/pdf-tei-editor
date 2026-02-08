@@ -379,11 +379,11 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
 
       for (const line of logContent.split('\n')) {
         const lowerLine = line.toLowerCase();
+        // Match log level markers like [ERROR ] not logger names like uvicorn.error
         if (
-          (lowerLine.includes('error') ||
-            lowerLine.includes('exception') ||
-            lowerLine.includes('failed')) &&
-          !lowerLine.includes('INFO')
+          lowerLine.includes('[error') ||
+          lowerLine.includes('exception') ||
+          lowerLine.includes('traceback')
         ) {
           errorLines.push(line);
         }
