@@ -221,6 +221,40 @@ def garbage_collect_files(
     else:
         logger.info("No orphaned files found")
 
+    # Remove duplicate database entries (same content + doc_id + file_type)
+    logger.info("Checking for duplicate database entries...")
+    try:
+        dedup_count = repo.remove_duplicate_entries()
+        if dedup_count > 0:
+            logger.info(f"Removed {dedup_count} duplicate database entries")
+            purged_count += dedup_count
+        else:
+            logger.info("No duplicate database entries found")
+    except Exception as e:
+        logger.error(f"Failed to remove duplicate entries: {e}")
+
+    # Sync TEI doc_collections with their parent PDF
+    logger.info("Syncing TEI doc_collections with parent PDFs...")
+    try:
+        synced_count = repo.sync_tei_collections_with_pdf()
+        if synced_count > 0:
+            logger.info(f"Synced doc_collections for {synced_count} TEI file(s)")
+        else:
+            logger.info("All TEI doc_collections already match their parent PDFs")
+    except Exception as e:
+        logger.error(f"Failed to sync TEI collections: {e}")
+
+    # Assign _inbox to files with empty doc_collections
+    logger.info("Checking for files with no collection...")
+    try:
+        inbox_count = repo.assign_inbox_to_collectionless_files()
+        if inbox_count > 0:
+            logger.info(f"Assigned '_inbox' collection to {inbox_count} file(s)")
+        else:
+            logger.info("All files have a collection assigned")
+    except Exception as e:
+        logger.error(f"Failed to assign _inbox to collectionless files: {e}")
+
     # Clean up orphaned XML files (XML files with no corresponding PDF)
     logger.info("Scanning for orphaned XML files (XML with no PDF)...")
     orphaned_xml_files = repo.get_orphaned_xml_files()
