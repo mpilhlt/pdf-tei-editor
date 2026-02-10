@@ -194,13 +194,23 @@
                     method: 'POST'
                 });
 
+                // Verify sandbox is available before subscribing
+                if (typeof window.sandbox === 'undefined' || typeof window.sandbox.subscribeSSE !== 'function') {
+                    throw new Error(
+                        'Sandbox connection not available. '
+                        + 'Please reopen the log viewer from the plugin menu. '
+                        + '(If the problem persists, try reloading the application.)'
+                    );
+                }
+
                 // Subscribe to SSE event forwarding via sandbox
                 await sandbox.subscribeSSE('logEntry', onLogEntry);
 
                 statusEl.textContent = 'Connected';
                 statusEl.style.color = '#6a9955';
             } catch (e) {
-                statusEl.textContent = 'Error: ' + e.message;
+                console.error('Log viewer initialization failed:', e);
+                statusEl.textContent = 'Connection failed. Reopen log viewer from the plugin menu.';
                 statusEl.style.color = '#f44747';
             }
         }

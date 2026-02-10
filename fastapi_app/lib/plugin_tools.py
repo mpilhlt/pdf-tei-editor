@@ -2,9 +2,12 @@
 Utility functions for backend plugins 
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def get_plugin_config(
@@ -173,6 +176,9 @@ def generate_sandbox_client_script() -> str:
     """
     # Extract available methods
     methods = _extract_sandbox_methods()
+    if not methods:
+        logger.warning("No sandbox methods extracted from PluginSandbox class. "
+                       "Sandbox client will have no methods available.")
 
     # Generate method wrappers
     method_code = []
@@ -199,7 +205,12 @@ def generate_sandbox_client_script() -> str:
   const parentWindow = window.parent !== window ? window.parent : window.opener;
 
   if (!parentWindow) {{
-    console.warn('SandboxClient: No parent window found');
+    console.warn('SandboxClient: No parent window found. Page must be opened from within the application.');
+    // Create stub sandbox so callers get a descriptive error instead of "undefined"
+    const notAvailable = (method) => () => {{
+      throw new Error('Sandbox not available: this page must be opened from within the application (no parent window).');
+    }};
+    window.sandbox = new Proxy({{}}, {{ get: (_, prop) => notAvailable(prop) }});
     return;
   }}
 
@@ -285,6 +296,8 @@ def generate_sandbox_client_script() -> str:
         sseCallbacks[subId].push(callback);
         return subId;
       }};
+    }} else {{
+      console.error('SandboxClient: subscribeSSE method not available. Sandbox methods may not have been generated correctly.');
     }}
 
     // Override unsubscribeSSE to clean up local callbacks
