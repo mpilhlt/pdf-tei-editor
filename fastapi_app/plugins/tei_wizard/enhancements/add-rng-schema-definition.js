@@ -10,7 +10,7 @@ export const name = "Add RNG Schema Definition";
 /**
  * Description shown in the UI
  */
-export const description = "Replaces any existing schema declarations with an RNG schema processing instruction using the configured schema base URL and current variant.";
+export const description = "Replaces any existing schema declarations with an RNG schema processing instruction. Reads the schema URL from the document header (ref with .rng target), falling back to config + variant.";
 
 /**
  * Removes existing schema declarations and adds RNG schema processing instruction.
@@ -30,20 +30,37 @@ export function execute(xmlDoc, currentState, configMap) {
     throw new Error(`Invalid parameter: Expected document, got ${xmlDoc}`);
   }
 
-  // Get schema base URL from config
-  const schemaBaseUrl = configMap.get('schema.base-url');
-  if (!schemaBaseUrl) {
-    throw new Error('Configuration value "schema.base-url" is not defined');
+  // Try to get schema URL from document header: //application[@type="extractor"]/ref[ends-with(@target,'.rng')]
+  const TEI_NS = 'http://www.tei-c.org/ns/1.0';
+  let schemaUrl = null;
+  const applications = xmlDoc.getElementsByTagNameNS(TEI_NS, 'application');
+  for (let i = 0; i < applications.length; i++) {
+    const app = applications[i];
+    if (app.getAttribute('type') === 'extractor') {
+      const refs = app.getElementsByTagNameNS(TEI_NS, 'ref');
+      for (let j = 0; j < refs.length; j++) {
+        const target = refs[j].getAttribute('target') || '';
+        if (target.endsWith('.rng')) {
+          schemaUrl = target;
+          break;
+        }
+      }
+      if (schemaUrl) break;
+    }
   }
 
-  // Get variant from state
-  const variantId = currentState.variant;
-  if (!variantId) {
-    throw new Error('State variable "variant" is not defined');
+  // Fallback: build from config + variant (for older documents without .rng ref)
+  if (!schemaUrl) {
+    const schemaBaseUrl = configMap.get('schema.base-url');
+    const variantId = currentState.variant;
+    if (schemaBaseUrl && variantId) {
+      schemaUrl = `${schemaBaseUrl}/${variantId}.rng`;
+    }
   }
 
-  // Build the schema URL
-  const schemaUrl = `${schemaBaseUrl}/${variantId}.rng`;
+  if (!schemaUrl) {
+    throw new Error('Could not determine schema URL from document header or configuration');
+  }
 
   // Remove existing <?xml-model ?> processing instructions
   const processingInstructions = Array.from(xmlDoc.childNodes).filter(

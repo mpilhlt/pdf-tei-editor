@@ -318,9 +318,9 @@ def create_encoding_desc_with_extractor(
     extractor_name: str,
     extractor_ident: str,
     extractor_version: str = "1.0",
-    extractor_ref: Optional[str] = None,
     variant_id: Optional[str] = None,
     additional_labels: Optional[List[Tuple[str, str]]] = None,
+    refs: Optional[List[str]] = None,
 ) -> etree._Element:  # type: ignore[name-defined]
     """
     Create an encodingDesc element with PDF-TEI-Editor and extractor application info.
@@ -334,9 +334,9 @@ def create_encoding_desc_with_extractor(
         extractor_name: Human-readable extractor name (e.g., "GROBID", "LLamore")
         extractor_ident: Machine identifier (e.g., "grobid", "llamore")
         extractor_version: Version string (default: "1.0")
-        extractor_ref: Optional URL reference for the extractor
         variant_id: Optional variant identifier
         additional_labels: List of (type, text) tuples for extra labels on extractor app
+        refs: List of target URLs for ref elements on extractor app.
 
     Returns:
         encodingDesc element
@@ -347,11 +347,14 @@ def create_encoding_desc_with_extractor(
         ...     extractor_name="GROBID",
         ...     extractor_ident="grobid",
         ...     extractor_version="0.8.0",
-        ...     extractor_ref="https://github.com/kermitt2/grobid",
         ...     variant_id="grobid-segmentation",
         ...     additional_labels=[
         ...         ("revision", "abc123"),
         ...         ("flavor", "grobid-footnote-flavour"),
+        ...     ],
+        ...     refs=[
+        ...         "https://github.com/kermitt2/grobid",
+        ...         "https://example.com/schema/grobid-segmentation.rng",
         ...     ]
         ... )
     """
@@ -392,9 +395,10 @@ def create_encoding_desc_with_extractor(
             label = etree.SubElement(extractor_app, "label", type=label_type)
             label.text = label_text
             
-    # Add optional reference at the end
-    if extractor_ref:
-        etree.SubElement(extractor_app, "ref", target=extractor_ref)            
+    # Add ref elements
+    if refs:
+        for ref_target in refs:
+            etree.SubElement(extractor_app, "ref", target=ref_target)
 
     return encodingDesc
 

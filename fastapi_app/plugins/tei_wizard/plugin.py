@@ -42,16 +42,9 @@ class TeiWizardPlugin(Plugin):
         plugin_dir = Path(__file__).parent
         enhancements_dir = plugin_dir / "enhancements"
 
-        # Explicitly register each default enhancement
-        default_enhancements = [
-            "add-rng-schema-definition.js",
-            "pretty-print-xml.js",
-            # "remove-blank-lines.js",  # Disabled - needs more testing
-        ]
-
-        for filename in default_enhancements:
-            file_path = enhancements_dir / filename
-            if file_path.exists():
+        # Auto-discover all .js enhancement files
+        if enhancements_dir.is_dir():
+            for file_path in sorted(enhancements_dir.glob("*.js")):
                 self.register_enhancement(file_path, "tei-wizard")
 
     def register_enhancement(self, file_path: Path, plugin_id: str) -> None:

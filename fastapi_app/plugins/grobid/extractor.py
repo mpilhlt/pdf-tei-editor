@@ -14,7 +14,8 @@ from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
     get_grobid_server_url,
-    get_navigation_xpath
+    get_navigation_xpath,
+    get_schema_url,
 )
 from fastapi_app.plugins.grobid.handlers import (
     GrobidHandler,
@@ -240,17 +241,21 @@ class GrobidTrainingExtractor(BaseExtractor):
             tei_header.remove(existing_encodingDesc)
 
         # Create encodingDesc with PDF-TEI-Editor and GROBID applications
+        schema_url = get_schema_url(variant_id)
         encodingDesc = create_encoding_desc_with_extractor(
             timestamp=timestamp,
             extractor_name="GROBID",
             extractor_ident="GROBID",
             extractor_version=grobid_version,
-            extractor_ref="https://github.com/kermitt2/grobid",
             variant_id=variant_id,
             additional_labels=[
                 ("revision", grobid_revision),
                 ("flavor", flavor),
-            ]
+            ],
+            refs=[
+                "https://github.com/grobidOrg/grobid",
+                schema_url,
+            ],
         )
         tei_header.append(encodingDesc)
 
@@ -311,7 +316,6 @@ class GrobidTrainingExtractor(BaseExtractor):
 
         # Create processing instruction for schema validation
         processing_instructions = []
-        schema_url = f'https://mpilhlt.github.io/grobid-footnote-flavour/schema/{variant_id}.rng'
         schema_pi = create_schema_processing_instruction(schema_url)
         processing_instructions.append(schema_pi)
 

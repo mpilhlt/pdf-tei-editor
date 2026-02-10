@@ -22,7 +22,8 @@ from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing
 from fastapi_app.plugins.llamore.config import (
     get_annotation_guides,
     get_form_options,
-    get_navigation_xpath
+    get_navigation_xpath,
+    get_schema_url,
 )
 import datetime
 
@@ -122,16 +123,20 @@ class LLamoreExtractor(BaseExtractor):
         default_variant_id = info["options"]["variant_id"]["options"][0]  # "llamore-default"
         variant_id = options.get("variant_id", default_variant_id)
 
+        schema_url = get_schema_url(variant_id)
         encodingDesc = create_encoding_desc_with_extractor(
             timestamp=timestamp,
             extractor_name="LLamore",
             extractor_ident="llamore",
             extractor_version="1.0",
-            extractor_ref="https://github.com/mpilhlt/llamore",
             variant_id=variant_id,
             additional_labels=[
                 ("prompter", "LineByLinePrompter"),
-            ]
+            ],
+            refs=[
+                "https://github.com/mpilhlt/llamore",
+                schema_url,
+            ],
         )
         tei_header.append(encodingDesc)
 
@@ -160,7 +165,6 @@ class LLamoreExtractor(BaseExtractor):
 
         # Create processing instruction for schema validation
         processing_instructions = []
-        schema_url = 'https://mpilhlt.github.io/llamore/schema/llamore.rng'
         schema_pi = create_schema_processing_instruction(schema_url)
         processing_instructions.append(schema_pi)
 

@@ -1,5 +1,13 @@
 """LLamore plugin configuration."""
 
+SCHEMA_BASE_URL = "https://mpilhlt.github.io/llamore/schema"
+
+
+def get_schema_url(variant_id: str = "llamore-default") -> str:
+    """Get RNG schema URL for a LLamore variant."""
+    return f"{SCHEMA_BASE_URL}/{variant_id}.rng"
+
+
 # Supported variants
 SUPPORTED_VARIANTS = [
     "llamore-default",
