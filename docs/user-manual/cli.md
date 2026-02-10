@@ -364,12 +364,12 @@ npm run batch-extract -- <directory> --extractor <id> [options]
 | `--recursive` | Search subdirectories |
 | `--option <key=value>` | Extractor option (repeatable) |
 
-### maintenance repopulate
+### manage-remote maintenance repopulate
 
 Re-extracts fields from TEI documents and updates the database.
 
 ```bash
-npm run maintenance -- repopulate [fields...]
+npm run manage-remote -- maintenance repopulate [fields...]
 ```
 
 Available fields: `status`, `last_revision`

@@ -3,6 +3,14 @@
 from fastapi_app.lib.config_utils import get_config
 
 
+SCHEMA_BASE_URL = "https://mpilhlt.github.io/grobid-footnote-flavour/schema"
+
+
+def get_schema_url(variant_id: str) -> str:
+    """Get RNG schema URL for a GROBID variant."""
+    return f"{SCHEMA_BASE_URL}/{variant_id}.rng"
+
+
 def get_grobid_server_url() -> str | None:
     """
     Get the GROBID server URL from config.

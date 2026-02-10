@@ -23,6 +23,8 @@
  * @typedef {object} exportMenuPart
  * @property {SlMenuItem} exportDefault
  * @property {SlMenuItem} exportWithVersions
+ * @property {SlMenuItem} exportTeiOnly
+ * @property {SlMenuItem} exportTeiAllVersions
  */
 
 /**
@@ -200,10 +202,15 @@ async function install(state) {
     if (!currentState) return;
     // @ts-ignore - detail.item exists on SlMenu sl-select events
     const item = event.detail.item;
-    if (item.getAttribute('name') === 'exportDefault') {
-      await handleExport(currentState, false);
-    } else if (item.getAttribute('name') === 'exportWithVersions') {
-      await handleExport(currentState, true);
+    const name = item.getAttribute('name');
+    if (name === 'exportDefault') {
+      await handleExport(currentState, { includeVersions: false, teiOnly: false });
+    } else if (name === 'exportWithVersions') {
+      await handleExport(currentState, { includeVersions: true, teiOnly: false });
+    } else if (name === 'exportTeiOnly') {
+      await handleExport(currentState, { includeVersions: false, teiOnly: true });
+    } else if (name === 'exportTeiAllVersions') {
+      await handleExport(currentState, { includeVersions: true, teiOnly: true });
     }
   });
 
@@ -786,9 +793,9 @@ function updateExportButtonState() {
 /**
  * Handles export menu selection
  * @param {ApplicationState} state
- * @param {boolean} includeVersions - Whether to include version files
+ * @param {{includeVersions?: boolean, teiOnly?: boolean}} options
  */
-async function handleExport(state, includeVersions = false) {
+async function handleExport(state, { includeVersions = false, teiOnly = false } = {}) {
   if (selectedCollections.size === 0) return;
   if (!state.sessionId) {
     logger.error("Cannot export: no session ID available");
@@ -810,12 +817,15 @@ async function handleExport(state, includeVersions = false) {
     params.append('variants', selectedVariant);
   }
 
-  // Add include_versions parameter if requested
   if (includeVersions) {
     params.append('include_versions', 'true');
   }
 
-  logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}${includeVersions ? ' (with versions)' : ''}`);
+  if (teiOnly) {
+    params.append('tei_only', 'true');
+  }
+
+  logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}${includeVersions ? ' (with versions)' : ''}${teiOnly ? ' (TEI only)' : ''}`);
 
   // Disable export button during operation
   const exportButton = ui.fileDrawer.exportDropdown.exportButton;

@@ -110,10 +110,7 @@ async def lifespan(app: FastAPI):
         # Non-fatal - continue without plugins
 
     # Log startup complete
-    logger.info("=" * 80)
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
-    logger.info(f"API docs available at: http://{settings.HOST}:{settings.PORT}/docs")
-    logger.info("=" * 80)
 
     yield
 

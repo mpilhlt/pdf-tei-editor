@@ -570,5 +570,66 @@ class TestExtractTeiMetadataUrl(unittest.TestCase):
         self.assertEqual(result['doc_metadata']['url'], "https://example.com/article/1")
 
 
+class TestCreateEncodingDescWithExtractor(unittest.TestCase):
+    """Test create_encoding_desc_with_extractor function."""
+
+    def _get_extractor_app(self, encoding_desc):
+        """Find the extractor application element."""
+        app_info = encoding_desc.find("appInfo")
+        for app in app_info.findall("application"):
+            if app.get("type") == "extractor":
+                return app
+        return None
+
+    def test_single_ref(self):
+        """Test that a single ref element is created with target only."""
+        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+
+        result = create_encoding_desc_with_extractor(
+            timestamp="2024-01-15T10:30:00Z",
+            extractor_name="Test",
+            extractor_ident="test",
+            refs=["https://example.com/schema/test.rng"],
+        )
+        app = self._get_extractor_app(result)
+        refs = app.findall("ref")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].get("target"), "https://example.com/schema/test.rng")
+        self.assertIsNone(refs[0].get("subtype"))
+        self.assertIsNone(refs[0].get("type"))
+
+    def test_multiple_refs(self):
+        """Test that multiple refs are added in order."""
+        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+
+        result = create_encoding_desc_with_extractor(
+            timestamp="2024-01-15T10:30:00Z",
+            extractor_name="Test",
+            extractor_ident="test",
+            refs=[
+                "https://github.com/example/repo",
+                "https://example.com/schema/test.rng",
+            ],
+        )
+        app = self._get_extractor_app(result)
+        refs = app.findall("ref")
+        self.assertEqual(len(refs), 2)
+        self.assertEqual(refs[0].get("target"), "https://github.com/example/repo")
+        self.assertEqual(refs[1].get("target"), "https://example.com/schema/test.rng")
+
+    def test_no_refs(self):
+        """Test that no ref elements are created when refs is None."""
+        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+
+        result = create_encoding_desc_with_extractor(
+            timestamp="2024-01-15T10:30:00Z",
+            extractor_name="Test",
+            extractor_ident="test",
+        )
+        app = self._get_extractor_app(result)
+        refs = app.findall("ref")
+        self.assertEqual(len(refs), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
