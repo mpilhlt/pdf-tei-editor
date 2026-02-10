@@ -228,22 +228,26 @@ class FileExporter:
             if variants:
                 gold_files = self._filter_by_variants(gold_files, variants)
 
-            # Only include PDFs that have matching gold TEI files
-            doc_ids_with_gold_tei = {f.doc_id for f in gold_files}
-            filtered_pdfs = [pdf for pdf in collection_pdfs if pdf.doc_id in doc_ids_with_gold_tei]
-
-            all_files.extend(filtered_pdfs)
-            all_files.extend(gold_files)
-
-            # If include_versions, get non-gold files
+            # When include_versions is set, also gather non-gold files so that
+            # _ensure_gold_files can promote one to pseudo-gold when no gold exists.
             if include_versions:
                 non_gold_files = [
                     f for f in all_tei_files
-                    if not f.is_gold_standard and f.doc_id in doc_ids_with_gold_tei
+                    if not f.is_gold_standard and f.doc_id in doc_ids
                 ]
                 if variants:
                     non_gold_files = self._filter_by_variants(non_gold_files, variants)
-                all_files.extend(non_gold_files)
+            else:
+                non_gold_files = []
+
+            # Build doc_id set from all matching TEI files (gold + non-gold)
+            # so that documents with only non-gold files are not excluded
+            doc_ids_with_tei = {f.doc_id for f in gold_files} | {f.doc_id for f in non_gold_files}
+            filtered_pdfs = [pdf for pdf in collection_pdfs if pdf.doc_id in doc_ids_with_tei]
+
+            all_files.extend(filtered_pdfs)
+            all_files.extend(gold_files)
+            all_files.extend(non_gold_files)
         else:
             # No collection filter - get all files
             # Get all TEI files first to determine which PDFs to include
@@ -259,23 +263,27 @@ class FileExporter:
             if variants:
                 gold_files = self._filter_by_variants(gold_files, variants)
 
-            # Only include PDFs that have matching gold TEI files
-            doc_ids_with_gold_tei = {f.doc_id for f in gold_files}
-            pdfs = self.repo.list_files(file_type='pdf', include_deleted=False)
-            filtered_pdfs = [pdf for pdf in pdfs if pdf.doc_id in doc_ids_with_gold_tei]
-
-            all_files.extend(filtered_pdfs)
-            all_files.extend(gold_files)
-
-            # If include_versions, get non-gold files (is_gold_standard=0)
+            # When include_versions is set, also gather non-gold files so that
+            # _ensure_gold_files can promote one to pseudo-gold when no gold exists.
             if include_versions:
                 non_gold_files = [
                     f for f in tei_files
-                    if not f.is_gold_standard and f.doc_id in doc_ids_with_gold_tei
+                    if not f.is_gold_standard
                 ]
                 if variants:
                     non_gold_files = self._filter_by_variants(non_gold_files, variants)
-                all_files.extend(non_gold_files)
+            else:
+                non_gold_files = []
+
+            # Build doc_id set from all matching TEI files (gold + non-gold)
+            # so that documents with only non-gold files are not excluded
+            doc_ids_with_tei = {f.doc_id for f in gold_files} | {f.doc_id for f in non_gold_files}
+            pdfs = self.repo.list_files(file_type='pdf', include_deleted=False)
+            filtered_pdfs = [pdf for pdf in pdfs if pdf.doc_id in doc_ids_with_tei]
+
+            all_files.extend(filtered_pdfs)
+            all_files.extend(gold_files)
+            all_files.extend(non_gold_files)
 
         # Handle inconsistent state: ensure each (doc_id, variant) has a "gold" file
         # If no gold exists, promote the most recent non-gold file to act as gold for export
