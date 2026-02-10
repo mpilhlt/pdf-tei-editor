@@ -60,7 +60,8 @@ class FileZipExporter:
         regex: Optional[str] = None,
         include_versions: bool = False,
         group_by: str = "collection",
-        filename_transforms: Optional[List[str]] = None
+        filename_transforms: Optional[List[str]] = None,
+        tei_only: bool = False
     ) -> Path:
         """
         Export files to a zip archive.
@@ -72,6 +73,7 @@ class FileZipExporter:
             include_versions: If True, export versioned TEI files
             group_by: Grouping strategy: "type", "collection", or "variant"
             filename_transforms: List of sed-style transform patterns
+            tei_only: If True, export only TEI files (no PDFs)
 
         Returns:
             Path to created zip file in temporary directory
@@ -98,7 +100,8 @@ class FileZipExporter:
                 regex=regex,
                 include_versions=include_versions,
                 group_by=group_by,
-                filename_transforms=filename_transforms
+                filename_transforms=filename_transforms,
+                tei_only=tei_only
             )
 
             logger.info(

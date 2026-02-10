@@ -44,6 +44,7 @@ def export_files(
     collections: Optional[str] = Query(None, description="Comma-separated list of collections to export"),
     variants: Optional[str] = Query(None, description="Comma-separated list of variants to export (supports glob patterns)"),
     include_versions: bool = Query(False, description="Include versioned TEI files"),
+    tei_only: bool = Query(False, description="Export only TEI files, omit PDFs"),
     group_by: str = Query("collection", description="Grouping strategy: type, collection, or variant"),
     download: bool = Query(False, description="If true, download ZIP; if false, return stats as JSON"),
     db: DatabaseManager = Depends(get_db),
@@ -146,7 +147,8 @@ def export_files(
                     collections=final_collections,
                     variants=variants_list,
                     include_versions=include_versions,
-                    group_by=group_by
+                    group_by=group_by,
+                    tei_only=tei_only
                 )
                 logger.info(
                     f"Export stats: {stats['files_exported']} files would be exported "
@@ -176,7 +178,8 @@ def export_files(
             collections=final_collections,
             variants=variants_list,
             include_versions=include_versions,
-            group_by=group_by
+            group_by=group_by,
+            tei_only=tei_only
         )
 
         logger.info(f"Export completed: {zip_path} ({zip_path.stat().st_size} bytes)")
