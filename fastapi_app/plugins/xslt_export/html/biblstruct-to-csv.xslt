@@ -50,8 +50,7 @@
                 <xsl:choose>
                     <xsl:when test="descendant::tei:title[@level='j']">Journal</xsl:when>
                     <xsl:when
-                        test="descendant::tei:title[@level='m'] and descendant::tei:title[@level='a']">
-                        Chapter</xsl:when>
+                        test="descendant::tei:title[@level='m'] and descendant::tei:title[@level='a']">Chapter</xsl:when>
                     <xsl:otherwise>Book</xsl:otherwise>
                 </xsl:choose>
             </xsl:with-param>
