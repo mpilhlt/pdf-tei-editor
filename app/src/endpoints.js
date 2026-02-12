@@ -56,13 +56,13 @@ const endpoints = {
     update: "state.update",
     
     /**
-     * Internal state update for Plugin class instances (new system)
+     * Internal state update for Plugin class instances
      * Function signature: (state: ApplicationState) => void
      */
     updateInternal: "updateInternalState",
     
     /**
-     * State change notification for Plugin class instances (new system)
+     * State change notification for Plugin class instances 
      * Function signature: (changedKeys: string[], state: ApplicationState) => void
      */
     onStateUpdate: "onStateUpdate",
