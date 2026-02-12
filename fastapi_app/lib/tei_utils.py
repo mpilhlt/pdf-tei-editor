@@ -131,6 +131,71 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     sourceDesc = etree.SubElement(fileDesc, "sourceDesc")
     etree.SubElement(sourceDesc, "bibl").text = citation
 
+    # Add structured biblStruct alongside bibl
+    # Only add if we have substantial metadata (check original metadata dict, not defaults)
+    if metadata.get("title") or metadata.get("journal") or metadata.get("authors"):
+        biblStruct = etree.SubElement(sourceDesc, "biblStruct")
+
+        # Analytic section (article-level metadata)
+        if title or authors:
+            analytic = etree.SubElement(biblStruct, "analytic")
+            if title:
+                etree.SubElement(analytic, "title", level="a").text = title
+
+            # Add authors to analytic section
+            for author in authors:
+                author_elem = etree.SubElement(analytic, "author")
+                persName = etree.SubElement(author_elem, "persName")
+                if author.get("given"):
+                    etree.SubElement(persName, "forename").text = author["given"]
+                if author.get("family"):
+                    etree.SubElement(persName, "surname").text = author["family"]
+
+        # Monograph section (journal-level metadata)
+        if journal or publisher or date or volume or issue or pages:
+            monogr = etree.SubElement(biblStruct, "monogr")
+
+            if journal:
+                etree.SubElement(monogr, "title", level="j").text = journal
+
+            # Imprint section (publication details)
+            imprint = etree.SubElement(monogr, "imprint")
+
+            if volume:
+                etree.SubElement(imprint, "biblScope", unit="volume").text = volume
+
+            if issue:
+                etree.SubElement(imprint, "biblScope", unit="issue").text = issue
+
+            if pages:
+                # Parse page range if in "1-10" format
+                page_parts = pages.split("-") if "-" in pages else [pages]
+                attribs = {"unit": "page"}
+                if len(page_parts) == 2:
+                    attribs["from"] = page_parts[0].strip()
+                    attribs["to"] = page_parts[1].strip()
+                etree.SubElement(imprint, "biblScope", **attribs).text = pages
+
+            if date:
+                etree.SubElement(imprint, "date", when=str(date)).text = str(date)
+
+            if publisher:
+                etree.SubElement(imprint, "publisher").text = publisher
+
+        # Add identifiers and URLs at biblStruct level
+        if doi:
+            etree.SubElement(biblStruct, "idno", type="DOI").text = doi
+        elif id:
+            id_type = id.split(":")[0] if ":" in id else ""
+            if id_type:
+                id_value = id[len(id_type) + 1:]
+                etree.SubElement(biblStruct, "idno", type=id_type).text = id_value
+            else:
+                etree.SubElement(biblStruct, "idno").text = id
+
+        if url:
+            etree.SubElement(biblStruct, "ptr", target=url)
+
     # encodingDesc
     encodingDesc = etree.SubElement(teiHeader, 'encodingDesc')
     appInfo = etree.SubElement(encodingDesc, 'appInfo')
@@ -657,12 +722,30 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     if date_elem is not None and date_elem.text:
         metadata['date'] = date_elem.text.strip()
 
-    # Extract journal/publisher info
-    journal_elem = tei_root.find('.//tei:sourceDesc//tei:title[@level="j"]', ns)
+    # Extract journal/publisher info - try biblStruct first, fallback to bibl
+    journal_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:title[@level="j"]', ns)
     if journal_elem is not None and journal_elem.text:
         metadata['journal'] = journal_elem.text.strip()
 
-    publisher_elem = tei_root.find('.//tei:publicationStmt/tei:publisher', ns)
+    # Extract volume from biblStruct
+    volume_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:imprint/tei:biblScope[@unit="volume"]', ns)
+    if volume_elem is not None and volume_elem.text:
+        metadata['volume'] = volume_elem.text.strip()
+
+    # Extract issue from biblStruct
+    issue_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:imprint/tei:biblScope[@unit="issue"]', ns)
+    if issue_elem is not None and issue_elem.text:
+        metadata['issue'] = issue_elem.text.strip()
+
+    # Extract pages from biblStruct
+    pages_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:imprint/tei:biblScope[@unit="page"]', ns)
+    if pages_elem is not None and pages_elem.text:
+        metadata['pages'] = pages_elem.text.strip()
+
+    # Extract publisher from biblStruct or publicationStmt
+    publisher_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:imprint/tei:publisher', ns)
+    if publisher_elem is None:
+        publisher_elem = tei_root.find('.//tei:publicationStmt/tei:publisher', ns)
     if publisher_elem is not None and publisher_elem.text:
         metadata['publisher'] = publisher_elem.text.strip()
 
@@ -729,6 +812,12 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
         doc_metadata['date'] = metadata['date']
     if 'journal' in metadata:
         doc_metadata['journal'] = metadata['journal']
+    if 'volume' in metadata:
+        doc_metadata['volume'] = metadata['volume']
+    if 'issue' in metadata:
+        doc_metadata['issue'] = metadata['issue']
+    if 'pages' in metadata:
+        doc_metadata['pages'] = metadata['pages']
     if 'publisher' in metadata:
         doc_metadata['publisher'] = metadata['publisher']
     if 'url' in metadata:

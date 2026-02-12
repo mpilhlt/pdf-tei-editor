@@ -631,5 +631,227 @@ class TestCreateEncodingDescWithExtractor(unittest.TestCase):
         self.assertEqual(len(refs), 0)
 
 
+class TestBiblStructCreation(unittest.TestCase):
+    """Test biblStruct creation in create_tei_header."""
+
+    def test_creates_biblstruct_with_complete_metadata(self):
+        """Test that biblStruct is created with all journal metadata fields."""
+        metadata = {
+            "title": "Test Article",
+            "authors": [
+                {"given": "John", "family": "Doe"},
+                {"given": "Jane", "family": "Smith"}
+            ],
+            "date": "2024",
+            "publisher": "Test Publisher",
+            "journal": "Test Journal",
+            "volume": "123",
+            "issue": "4",
+            "pages": "1-15",
+            "url": "https://example.com/article"
+        }
+
+        header = create_tei_header(doi="10.1234/test", metadata=metadata)
+
+        # Verify biblStruct exists (no namespace - create_tei_header creates elements without namespace)
+        sourceDesc = header.find(".//sourceDesc")
+        self.assertIsNotNone(sourceDesc)
+        biblStruct = sourceDesc.find("biblStruct")
+        self.assertIsNotNone(biblStruct, "biblStruct should be created")
+
+        # Verify analytic section
+        analytic = biblStruct.find("analytic")
+        title_elem = analytic.find('title[@level="a"]')
+        self.assertIsNotNone(title_elem)
+        self.assertEqual(title_elem.text, "Test Article")
+
+        authors = analytic.findall('author')
+        self.assertEqual(len(authors), 2)
+
+        # Verify monograph section
+        monogr = biblStruct.find("monogr")
+        journal_elem = monogr.find('title[@level="j"]')
+        self.assertIsNotNone(journal_elem)
+        self.assertEqual(journal_elem.text, "Test Journal")
+
+        # Verify imprint details
+        imprint = monogr.find("imprint")
+        volume_elem = imprint.find('biblScope[@unit="volume"]')
+        self.assertEqual(volume_elem.text, "123")
+
+        issue_elem = imprint.find('biblScope[@unit="issue"]')
+        self.assertEqual(issue_elem.text, "4")
+
+        pages_elem = imprint.find('biblScope[@unit="page"]')
+        self.assertEqual(pages_elem.text, "1-15")
+        self.assertEqual(pages_elem.get("from"), "1")
+        self.assertEqual(pages_elem.get("to"), "15")
+
+        date_elem = imprint.find('date')
+        self.assertEqual(date_elem.text, "2024")
+        self.assertEqual(date_elem.get("when"), "2024")
+
+        publisher_elem = imprint.find('publisher')
+        self.assertEqual(publisher_elem.text, "Test Publisher")
+
+        # Verify identifiers
+        doi_elem = biblStruct.find('idno[@type="DOI"]')
+        self.assertEqual(doi_elem.text, "10.1234/test")
+
+        ptr_elem = biblStruct.find('ptr')
+        self.assertEqual(ptr_elem.get("target"), "https://example.com/article")
+
+    def test_biblstruct_with_partial_metadata(self):
+        """Test biblStruct creation with missing volume/issue."""
+        metadata = {
+            "title": "Test Article",
+            "journal": "Test Journal",
+            "date": "2024",
+            "pages": "42"  # Single page, no range
+        }
+
+        header = create_tei_header(metadata=metadata)
+
+        sourceDesc = header.find(".//sourceDesc")
+        biblStruct = sourceDesc.find("biblStruct")
+        self.assertIsNotNone(biblStruct)
+
+        # Journal should be present
+        monogr = biblStruct.find("monogr")
+        journal_elem = monogr.find('title[@level="j"]')
+        self.assertEqual(journal_elem.text, "Test Journal")
+
+        # Volume/issue should be absent
+        imprint = monogr.find("imprint")
+        volume_elem = imprint.find('biblScope[@unit="volume"]')
+        self.assertIsNone(volume_elem)
+
+        issue_elem = imprint.find('biblScope[@unit="issue"]')
+        self.assertIsNone(issue_elem)
+
+        # Single page without from/to
+        pages_elem = imprint.find('biblScope[@unit="page"]')
+        self.assertEqual(pages_elem.text, "42")
+        self.assertIsNone(pages_elem.get("from"))
+
+    def test_preserves_existing_bibl_citation(self):
+        """Test that existing bibl citation is preserved alongside biblStruct."""
+        metadata = {
+            "title": "Test",
+            "authors": [{"given": "John", "family": "Doe"}],
+            "date": "2024",
+            "journal": "Test Journal"
+        }
+
+        header = create_tei_header(doi="10.1234/test", metadata=metadata)
+
+        sourceDesc = header.find(".//sourceDesc")
+
+        # Both bibl and biblStruct should exist
+        bibl = sourceDesc.find("bibl")
+        self.assertIsNotNone(bibl, "Legacy bibl should be preserved")
+        self.assertIn("Doe", bibl.text)
+
+        biblStruct = sourceDesc.find("biblStruct")
+        self.assertIsNotNone(biblStruct, "New biblStruct should be created")
+
+    def test_no_biblstruct_without_metadata(self):
+        """Test that biblStruct is not created if no relevant metadata exists."""
+        metadata = {}
+
+        header = create_tei_header(metadata=metadata)
+
+        sourceDesc = header.find(".//sourceDesc")
+        biblStruct = sourceDesc.find("biblStruct")
+        self.assertIsNone(biblStruct, "No biblStruct should be created without metadata")
+
+
+class TestExtractBiblStructMetadata(unittest.TestCase):
+    """Test extraction of journal metadata from biblStruct."""
+
+    def test_extract_journal_from_biblstruct(self):
+        """Test extraction of journal, volume, issue, pages from biblStruct."""
+        tei_xml = """
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+            <teiHeader>
+                <fileDesc>
+                    <titleStmt>
+                        <title level="a">Test Article</title>
+                    </titleStmt>
+                    <publicationStmt>
+                        <date type="publication">2024</date>
+                    </publicationStmt>
+                    <sourceDesc>
+                        <biblStruct>
+                            <monogr>
+                                <title level="j">Test Journal</title>
+                                <imprint>
+                                    <biblScope unit="volume">123</biblScope>
+                                    <biblScope unit="issue">4</biblScope>
+                                    <biblScope unit="page" from="1" to="15">1-15</biblScope>
+                                    <publisher>Test Publisher</publisher>
+                                </imprint>
+                            </monogr>
+                        </biblStruct>
+                    </sourceDesc>
+                </fileDesc>
+            </teiHeader>
+        </TEI>
+        """
+
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        metadata = extract_tei_metadata(root)
+
+        self.assertEqual(metadata['journal'], "Test Journal")
+        self.assertEqual(metadata['volume'], "123")
+        self.assertEqual(metadata['issue'], "4")
+        self.assertEqual(metadata['pages'], "1-15")
+        self.assertEqual(metadata['publisher'], "Test Publisher")
+
+    def test_round_trip_metadata(self):
+        """Test that metadata survives create → extract round trip."""
+        from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
+
+        original_metadata = {
+            "title": "Round Trip Test",
+            "authors": [{"given": "Alice", "family": "Test"}],
+            "date": "2024",
+            "journal": "Test Journal",
+            "volume": "99",
+            "issue": "2",
+            "pages": "10-20",
+            "publisher": "Test Pub"
+        }
+
+        # Create TEI header
+        header = create_tei_header(doi="10.1234/roundtrip", metadata=original_metadata)
+
+        # Build minimal TEI document
+        tei = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
+        tei.append(header)
+
+        # Serialize and re-parse (mimics production flow where TEI is saved and loaded)
+        xml_string = serialize_tei_with_formatted_header(tei)
+        # Add XML declaration for proper parsing
+        xml_with_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_string
+        tei_reparsed = etree.fromstring(xml_with_declaration.encode('utf-8'))
+
+        # Extract metadata back
+        extracted = extract_tei_metadata(tei_reparsed)
+
+        # Verify journal metadata survived
+        self.assertEqual(extracted['journal'], original_metadata['journal'])
+        self.assertEqual(extracted['volume'], original_metadata['volume'])
+        self.assertEqual(extracted['issue'], original_metadata['issue'])
+        self.assertEqual(extracted['pages'], original_metadata['pages'])
+        self.assertEqual(extracted['publisher'], original_metadata['publisher'])
+
+        # Verify it's in doc_metadata for database storage
+        self.assertEqual(extracted['doc_metadata']['journal'], original_metadata['journal'])
+        self.assertEqual(extracted['doc_metadata']['volume'], original_metadata['volume'])
+        self.assertEqual(extracted['doc_metadata']['issue'], original_metadata['issue'])
+        self.assertEqual(extracted['doc_metadata']['pages'], original_metadata['pages'])
+
+
 if __name__ == '__main__':
     unittest.main()
