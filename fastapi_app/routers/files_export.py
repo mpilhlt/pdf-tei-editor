@@ -13,9 +13,10 @@ Key features:
 
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 import tempfile
+import json
 
 from ..lib.database import DatabaseManager
 from ..lib.file_repository import FileRepository
@@ -47,6 +48,7 @@ def export_files(
     tei_only: bool = Query(False, description="Export only TEI files, omit PDFs"),
     group_by: str = Query("collection", description="Grouping strategy: type, collection, or variant"),
     download: bool = Query(False, description="If true, download ZIP; if false, return stats as JSON"),
+    additional_formats: Optional[str] = Query(None, description="JSON array of additional export formats [{'id': str, 'url': str}]"),
     db: DatabaseManager = Depends(get_db),
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
@@ -70,6 +72,7 @@ def export_files(
         include_versions: Include versioned TEI files (default: False)
         group_by: Directory grouping: "type", "collection", or "variant"
         download: If true, return ZIP file; if false, return stats JSON
+        additional_formats: JSON array of additional export formats [{'id': str, 'url': str}]
         db: Database manager (injected)
         repo: File repository (injected)
         storage: File storage (injected)
@@ -134,6 +137,16 @@ def export_files(
     if variants:
         variants_list = [v.strip() for v in variants.split(',') if v.strip()]
 
+    # Parse additional export formats
+    additional_formats_list: List[Dict[str, str]] = []
+    if additional_formats:
+        try:
+            additional_formats_list = json.loads(additional_formats)
+            logger.info(f"Additional export formats: {[f['id'] for f in additional_formats_list]}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse additional_formats: {e}")
+            raise HTTPException(status_code=400, detail="Invalid additional_formats JSON")
+
     # If not downloading, just return stats using dry_run mode
     if not download:
         try:
@@ -179,7 +192,8 @@ def export_files(
             variants=variants_list,
             include_versions=include_versions,
             group_by=group_by,
-            tei_only=tei_only
+            tei_only=tei_only,
+            additional_formats=additional_formats_list
         )
 
         logger.info(f"Export completed: {zip_path} ({zip_path.stat().st_size} bytes)")

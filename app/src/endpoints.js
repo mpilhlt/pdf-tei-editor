@@ -98,6 +98,13 @@ const endpoints = {
     saveXml: "filedata.saveXml",
     /** (loading: boolean) => void - Signal that file/filedata is being loaded */
     loading: "filedata.loading"
+  },
+  export_formats: {
+    /**
+     * Get additional export formats from plugins
+     * Function signature: () => Array<{id: string, label: string, url: string}>
+     */
+    formats: "export_formats"
   }
 }
 

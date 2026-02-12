@@ -7,6 +7,27 @@ export const name = "tei-xslt-viewer";
 export const description = "Provides XSLT transformations for TEI documents";
 export const deps = ['xsl-viewer'];
 
+// Export endpoint functions directly on the extension object
+// These will be exposed to the plugin manager's endpoint system
+export const export_formats = () => [
+  {
+    id: 'csv',
+    label: 'CSV (biblstruct)',
+    url: '/api/plugins/xslt_export/static/html/biblstruct-to-csv.xslt',
+    output: 'html',
+    stripTags: true,
+    ext: 'csv'
+  },
+  {
+    id: 'ris',
+    label: 'RIS (biblstruct)',
+    url: '/api/plugins/xslt_export/static/html/biblstruct-to-ris.xslt',
+    output: 'html',
+    stripTags: true,
+    ext: 'ris'
+  }
+];
+
 const TEI_NAMESPACE = "http://www.tei-c.org/ns/1.0";
 
 /**

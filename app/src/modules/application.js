@@ -306,6 +306,14 @@ export class Application {
     const result = await this.#pluginManager.invoke(endpoint, args, options);
     return result
   }
+
+  /**
+   * Get the plugin manager for direct access (use with caution)
+   * @returns {PluginManager}
+   */
+  getPluginManager() {
+    return this.#pluginManager;
+  }
 }
 
 export default Application;

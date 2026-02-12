@@ -14,7 +14,7 @@
     <xsl:template match="/">
         <html>
             <body>
-                <pre>type,authors,title,journal_book,year,volume,issue,pages,publisher,place</pre> 
+                <pre>type,authors,title,journal_book,year,volume,issue,pages,publisher,place<xsl:text>&#10;</xsl:text></pre>
                 <pre><xsl:apply-templates select="//tei:biblStruct" /></pre>
             </body>
         </html>
