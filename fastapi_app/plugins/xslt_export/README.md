@@ -74,6 +74,164 @@ export const export_formats = () => [
 
 3. The format will automatically appear in the export menu when the drawer is opened
 
+## Writing XSLT for XML Output with Viewer Formatting
+
+When creating XSLT stylesheets that generate XML output for display in the xsl-viewer plugin, use this pattern to enable proper formatting and syntax highlighting:
+
+### HTML Wrapper Pattern
+
+Create an XSLT that outputs HTML with the XML content embedded for display:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:tei="http://www.tei-c.org/ns/1.0"
+    exclude-result-prefixes="tei">
+
+  <xsl:output method="html" indent="no" encoding="UTF-8"/>
+
+  <!-- Root template - wrap in HTML -->
+  <xsl:template match="/">
+    <html>
+      <head>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+          }
+          .xml-output {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0;
+            margin: 0;
+          }
+          pre {
+            margin: 0;
+            padding: 16px;
+            overflow-x: auto;
+          }
+          code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+          }
+          h2 {
+            margin: 0 0 16px 0;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            font-size: 16px;
+            font-weight: 600;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="xml-output">
+          <h2>XML Output</h2>
+          <pre><code class="language-xml xsl-xml-target"></code></pre>
+        </div>
+
+        <!-- Store XML in hidden div with xsl-xml-source class -->
+        <div class="xsl-xml-source" style="display: none;">
+          <xsl:apply-templates select="//tei:TEI" mode="generate-xml"/>
+        </div>
+      </body>
+    </html>
+  </xsl:template>
+
+  <!-- Generate your XML structure -->
+  <xsl:template match="tei:TEI" mode="generate-xml">
+    <root xmlns="http://example.org/schema">
+      <element>
+        <xsl:value-of select=".//tei:title"/>
+      </element>
+    </root>
+  </xsl:template>
+
+</xsl:stylesheet>
+```
+
+### Key Components
+
+1. **Display Target** - Code block where formatted XML will appear:
+
+   ```html
+   <code class="language-xml xsl-xml-target"></code>
+   ```
+
+   - `language-xml` class enables highlight.js syntax highlighting
+   - `xsl-xml-target` class marks this as the display target
+
+2. **XML Source** - Hidden div containing the actual XML elements:
+
+   ```html
+   <div class="xsl-xml-source" style="display: none;">
+     <xsl:apply-templates select="//tei:TEI" mode="generate-xml"/>
+   </div>
+   ```
+
+   - `xsl-xml-source` class marks this as the source container
+   - Generate XML elements here using XSLT templates
+
+3. **Automatic Processing** - The xsl-viewer plugin JavaScript automatically:
+   - Finds matching pairs of `.xsl-xml-source` and `.xsl-xml-target`
+   - Clones the XML elements from the source
+   - Applies pretty-printing with proper indentation
+   - Serializes to string
+   - Removes XHTML namespace artifacts (see below)
+   - Displays in the target with syntax highlighting
+
+### Multiple XML Outputs
+
+You can have multiple XML outputs in the same document by using multiple source/target pairs:
+
+```html
+<div class="xml-output">
+  <h2>Metadata XML</h2>
+  <pre><code class="language-xml xsl-xml-target"></code></pre>
+</div>
+<div class="xsl-xml-source" style="display: none;">
+  <!-- First XML content -->
+</div>
+
+<div class="xml-output">
+  <h2>Citation XML</h2>
+  <pre><code class="language-xml xsl-xml-target"></code></pre>
+</div>
+<div class="xsl-xml-source" style="display: none;">
+  <!-- Second XML content -->
+</div>
+```
+
+The JavaScript matches sources to targets by index order.
+
+### Namespace Handling
+
+When generating XML elements in HTML output mode, XSLT assigns them the XHTML namespace by default. This causes namespace prefix pollution (e.g., `<a0:element>`) when serialized. The xsl-viewer JavaScript automatically strips these artifacts:
+
+- Removes `xmlns:a0="http://www.w3.org/1999/xhtml"` declarations
+- Removes `a0:` prefixes from element tags
+
+This means you can write clean XSLT without worrying about namespace issues:
+
+```xml
+<doi_batch version="5.4.0" xmlns="http://www.crossref.org/schema/5.4.0">
+  <head>
+    <doi_batch_id>12345</doi_batch_id>
+  </head>
+</doi_batch>
+```
+
+The output will be clean XML with your intended namespace, properly formatted and syntax highlighted.
+
+### Example: CrossRef XML Viewer
+
+See `html/tei-to-crossref-html.xslt` for a complete working example that generates CrossRef XML from TEI documents using this pattern.
+
 ## XSLT Viewer Registration (Legacy)
 
 The extension also registers XSLT stylesheets with the `xsl-viewer` plugin for in-app preview:

@@ -388,8 +388,8 @@ class FileZipExporter:
 
         # The static URL maps to the plugin's html/ directory
         # So if URL is /api/plugins/xslt_export/static/biblstruct-to-csv.xslt
-        # The path should be: .../plugins/xslt_export/biblstruct-to-csv.xslt
-        standard_path = app_plugins_dir / plugin_id / relative_path
+        # The path should be: .../plugins/xslt_export/html/biblstruct-to-csv.xslt
+        standard_path = app_plugins_dir / plugin_id / 'html' / relative_path
         logger.debug(f"Checking standard path: {standard_path} (exists: {standard_path.exists()})")
 
         if standard_path.exists():

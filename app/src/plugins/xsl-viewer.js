@@ -15,6 +15,7 @@ import ui, { updateUi } from '../ui.js';
 import { api as xmlEditor } from './xmleditor.js';
 import { notify } from '../modules/sl-utils.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import { prettyPrintNode } from '../modules/tei-utils.js';
 
 // Register templates at module level
 await registerTemplate('xsl-viewer-button', 'xsl-viewer-button.html');
@@ -280,17 +281,44 @@ export class XslViewerPlugin extends Plugin {
     }
 
     try {
+      console.log('Applying stylesheet:', label);
+      console.log('Stylesheet document:', stylesheet.xslDoc);
+      console.log('Source XML document:', xmlTree);
+
       const xsltProcessor = new XSLTProcessor();
       xsltProcessor.importStylesheet(stylesheet.xslDoc);
 
       const resultDoc = xsltProcessor.transformToDocument(xmlTree);
+
+      // Check for transformation errors in the result document
+      if (!resultDoc) {
+        throw new Error('Transformation returned null document');
+      }
+
+      // Check for parsererror in result (common in Firefox)
+      const parseError = resultDoc.querySelector('parsererror');
+      if (parseError) {
+        console.error('XSLT Parse Error:', parseError.textContent);
+        throw new Error(`XSLT Parse Error: ${parseError.textContent}`);
+      }
+
+      // Check for transformation-error (common in Chrome)
+      const transformError = resultDoc.querySelector('transformiix\\:result, transform-error');
+      if (transformError) {
+        console.error('XSLT Transformation Error:', transformError.textContent);
+        throw new Error(`XSLT Transformation Error: ${transformError.textContent}`);
+      }
+
+      console.log('Transformation successful, result:', resultDoc);
 
       // Display result in overlay
       this.showOverlay(stylesheet.label, resultDoc);
 
     } catch (error) {
       console.error('XSL transformation failed:', error);
-      notify(`Transformation failed: ${error.message}`, 'danger', 'exclamation-octagon');
+      console.error('Error stack:', error.stack);
+      console.error('Stylesheet that failed:', stylesheet);
+      notify(`Transformation failed: ${error.message || 'Unknown error'}`, 'danger', 'exclamation-octagon');
     }
   }
 
@@ -313,6 +341,45 @@ export class XslViewerPlugin extends Plugin {
     if (resultDoc.body) {
       // HTML result - copy the body content
       content.innerHTML = resultDoc.body.innerHTML;
+
+      // Check if there are XML elements that need serialization
+      // This pattern allows XSLT to generate XML structures that get serialized for display
+      const xmlSources = content.querySelectorAll('.xsl-xml-source');
+      const xmlTargets = content.querySelectorAll('.xsl-xml-target');
+
+      if (xmlSources.length > 0 && xmlTargets.length > 0) {
+        const serializer = new XMLSerializer();
+
+        // Match each source with its corresponding target (by index)
+        for (let i = 0; i < Math.min(xmlSources.length, xmlTargets.length); i++) {
+          const xmlSource = xmlSources[i];
+          const xmlTarget = xmlTargets[i];
+
+          if (xmlSource.firstElementChild) {
+            // Clone the element to avoid modifying the original
+            const xmlElement = xmlSource.firstElementChild.cloneNode(true);
+            // Apply pretty-printing
+            prettyPrintNode(xmlElement);
+            // Serialize to string
+            let xmlString = serializer.serializeToString(xmlElement);
+            // Remove XHTML namespace artifacts that appear when generating XML in HTML output mode
+            // Remove namespace prefix declarations like xmlns:a0="http://www.w3.org/1999/xhtml"
+            xmlString = xmlString.replace(/\s+xmlns:a\d+="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '');
+            // Remove prefixes from element tags like <a0:element> -> <element>
+            xmlString = xmlString.replace(/<(\/?)a\d+:/g, '<$1');
+            xmlTarget.textContent = xmlString;
+          }
+        }
+      }
+
+      // Manually execute any scripts (innerHTML doesn't execute them)
+      // Specifically for highlight.js
+      if (typeof hljs !== 'undefined') {
+        // Wait a tick for DOM to settle
+        setTimeout(() => {
+          hljs.highlightAll();
+        }, 0);
+      }
     } else if (resultDoc.documentElement) {
       // XML or other result - serialize and display as preformatted text
       const serializer = new XMLSerializer();
