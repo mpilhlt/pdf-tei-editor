@@ -7,6 +7,27 @@ export const name = "tei-xslt-viewer";
 export const description = "Provides XSLT transformations for TEI documents";
 export const deps = ['xsl-viewer'];
 
+// Export endpoint functions directly on the extension object
+// These will be exposed to the plugin manager's endpoint system
+export const export_formats = () => [
+  {
+    id: 'csv',
+    label: 'CSV (biblstruct)',
+    url: '/api/plugins/xslt_export/static/html/biblstruct-to-csv.xslt',
+    output: 'html',
+    stripTags: true,
+    ext: 'csv'
+  },
+  {
+    id: 'ris',
+    label: 'RIS (biblstruct)',
+    url: '/api/plugins/xslt_export/static/html/biblstruct-to-ris.xslt',
+    output: 'html',
+    stripTags: true,
+    ext: 'ris'
+  }
+];
+
 const TEI_NAMESPACE = "http://www.tei-c.org/ns/1.0";
 
 /**
@@ -28,24 +49,24 @@ export async function start(sandbox) {
     const transformations = [
       {
         label: 'Reference list',
-        url: '/api/plugins/grobid/static/biblstruct-to-html.xslt'
+        url: '/api/plugins/xslt-export/static/biblstruct-to-html.xslt'
       },
       {
         label: 'Tabular data',
-        url: '/api/plugins/grobid/static/biblstruct-to-table.xslt'
+        url: '/api/plugins/xslt-export/static/biblstruct-to-table.xslt'
       },
       {
         label: 'CSV',
-        url: '/api/plugins/grobid/static/biblstruct-to-csv.xslt'
+        url: '/api/plugins/xslt-export/static/biblstruct-to-csv.xslt'
       },       
       {
         label: 'RIS',
-        url: '/api/plugins/grobid/static/biblstruct-to-ris.xslt'
+        url: '/api/plugins/xslt-export/static/biblstruct-to-ris.xslt'
       }    
     ]
 
     for (let t of transformations ) {
-      // Fetch XSLT from grobid plugin static files
+      // Fetch XSLT from xslt-export plugin static files
       const xsltString = await sandbox.fetchText(t.url);
       const xslDoc = parseXslt(xsltString);
 

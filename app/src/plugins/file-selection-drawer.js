@@ -25,6 +25,14 @@
  * @property {SlMenuItem} exportWithVersions
  * @property {SlMenuItem} exportTeiOnly
  * @property {SlMenuItem} exportTeiAllVersions
+ * @property {HTMLDivElement} exportFormatCheckboxes
+ */
+
+/**
+ * @typedef {object} ExportFormatInfo
+ * @property {string} id - Format identifier
+ * @property {string} label - Display label for the format
+ * @property {string} url - URL to the XSLT stylesheet
  */
 
 /**
@@ -110,6 +118,8 @@ let currentState;
 let isUpdatingProgrammatically = false;
 /** @type {Set<string>} */
 let selectedCollections = new Set();
+/** @type {ExportFormatInfo[]} */
+let availableExportFormats = [];
 
 //
 // Implementation
@@ -252,11 +262,103 @@ async function open() {
   logger.debug("Opening file selection drawer");
   ui.fileDrawer?.show();
   
+  // Fetch and populate export formats
+  await fetchExportFormats();
+  populateExportFormats();
+  
   // Update tree if needed when opening
   if (needsTreeUpdate && currentState?.fileData) {
     await populateFileTree(currentState);
     needsTreeUpdate = false;
   }
+}
+
+/**
+ * Fetches available export formats from plugins using the no-call flag
+ */
+async function fetchExportFormats() {
+  try {
+    const pluginManager = app.getPluginManager();
+    const results = await pluginManager.invoke('export_formats', []);
+    // Flatten the array of arrays into a single array
+    const allFormats = [];
+    for (const result of results) {
+      if (result && Array.isArray(result)) {
+        allFormats.push(...result);
+      } else {
+        allFormats.push(result);
+      }
+    }
+    
+    availableExportFormats = allFormats;
+    logger.debug(`Fetched ${availableExportFormats.length} export formats`);
+  } catch (error) {
+    logger.warn(`Failed to fetch export formats: ${error}`);
+    availableExportFormats = [];
+  }
+}
+
+/**
+ * Populates the export format checkboxes in the export menu
+ */
+function populateExportFormats() {
+  const container = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatCheckboxes"]');
+  const divider = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatsDivider"]');
+  
+  if (!container) return;
+  
+  // Clear existing checkboxes (keep the title)
+  const title = container.querySelector('div');
+  container.innerHTML = '';
+  if (title) {
+    container.appendChild(title);
+  }
+  
+  // Show/hide based on whether we have formats
+  if (availableExportFormats.length === 0) {
+    container.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+    return;
+  }
+  
+  // Show the container and divider
+  container.style.display = 'block';
+  if (divider) divider.style.display = 'block';
+  
+  // Add checkbox for each format
+  availableExportFormats.forEach(format => {
+    const div = document.createElement('div');
+    let html = `<sl-checkbox size="small" value="${format.id}">${format.label}</sl-checkbox>`;
+    div.innerHTML = html;
+    container.appendChild(div);
+    
+    // Stop click propagation to prevent menu closing
+    div.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  });
+}
+
+/**
+ * Gets the checked export formats with their URLs
+ * @returns {Array<{id: string, url: string}>}
+ */
+function getCheckedExportFormats() {
+  const container = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatCheckboxes"]');
+  if (!container) return [];
+  
+  const checked = container.querySelectorAll('sl-checkbox[checked]');
+  const results = [];
+  
+  checked.forEach(checkbox => {
+    const formatId = checkbox.value;
+    const format = availableExportFormats.find(f => f.id === formatId);
+    if (format) {
+      results.push(format);
+    }
+  });
+  
+  return results;
 }
 
 /**
@@ -823,6 +925,14 @@ async function handleExport(state, { includeVersions = false, teiOnly = false } 
 
   if (teiOnly) {
     params.append('tei_only', 'true');
+  }
+
+  // Get checked additional export formats (id and url pairs)
+  const checkedFormats = getCheckedExportFormats();
+  if (checkedFormats.length > 0) {
+    // Pass as JSON array: [{"id":"csv","url":"/api/plugins/xslt_export/static/html/biblstruct-to-csv.xslt"},...]
+    params.append('additional_formats', JSON.stringify(checkedFormats));
+    logger.debug(`Additional export formats: ${checkedFormats.map(f => f.id).join(', ')}`);
   }
 
   logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}${includeVersions ? ' (with versions)' : ''}${teiOnly ? ' (TEI only)' : ''}`);

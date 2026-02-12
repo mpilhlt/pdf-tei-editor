@@ -329,7 +329,7 @@ The smart-test-runner automatically uses the correct approach:
 - When asked to create a github issue or other github mainenance issues, use the `gh` tool and ask the user to install it if it is not available
 - **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
 
-## Planning documents, todo documents, github issues
+## Planning documents, todo documents, github issues, documentation
 
 ### Standard Feature Implementation Workflow
 
@@ -352,106 +352,23 @@ When implementing a new feature, follow this workflow:
 - Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.
 - When migrating code to a new state, do not mention the legacy state unless absolutely necessary (for example, when code is concerns with migration of data) and there is no need to discuss the improvements provided by the new solution. This also applies to writing in-code documentation and comments.
 
-## Commit messages and contributing best practices
+### Commit messages and contributing best practices
 
 - When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
 - This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
 - Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
 
-## Backend Plugin Output Pattern
-
-**IMPORTANT: When creating backend plugins that generate HTML or CSV output, ALWAYS use custom routes instead of returning content directly from plugin endpoints.**
-
-### Pattern for HTML/CSV Output
-
-1. **Plugin endpoint returns URLs** (not HTML/CSV content):
-
-   ```python
-   async def analyze(self, context, params: dict) -> dict:
-       """Return URLs pointing to custom routes."""
-       pdf_id = params.get("pdf")
-       variant = params.get("variant")
-
-       view_url = f"/api/plugins/my-plugin/view?pdf={pdf_id}&variant={variant}"
-       export_url = f"/api/plugins/my-plugin/export?pdf={pdf_id}&variant={variant}"
-
-       return {
-           "outputUrl": view_url,    # For HTML view
-           "exportUrl": export_url,  # For CSV export
-           "pdf": pdf_id,
-           "variant": variant
-       }
-   ```
-
-2. **Custom routes generate content** (in `routes.py`):
-
-   ```python
-   @router.get("/view", response_class=HTMLResponse)
-   async def view_history(
-       pdf: str = Query(...),
-       variant: str = Query("all"),
-       session_id: str | None = Query(None),
-       x_session_id: str | None = Header(None, alias="X-Session-ID"),
-       session_manager=Depends(get_session_manager),
-       auth_manager=Depends(get_auth_manager),
-   ):
-       """Generate HTML page with results."""
-       # Authenticate user
-       # Process data
-       # Generate HTML using generate_datatable_page() or custom template
-       return HTMLResponse(content=html)
-
-   @router.get("/export")
-   async def export_csv(
-       pdf: str = Query(...),
-       variant: str = Query("all")
-   ):
-       """Generate CSV export."""
-       # Process data
-       # Generate CSV
-       return StreamingResponse(
-           iter([csv_content]),
-           media_type="text/csv",
-           headers={"Content-Disposition": f"attachment; filename=export.csv"}
-       )
-   ```
-
-### Why This Pattern
-
-- **Proper authentication**: Routes can use FastAPI's dependency injection for session validation
-- **Better script execution**: HTML pages in iframes load JavaScript naturally
-- **Separation of concerns**: Plugin coordinates, route generates
-- **Reusable utilities**: Use `generate_datatable_page()` from `fastapi_app.lib.plugin_tools`
-
-### Reference Examples
-
-- `fastapi_app/plugins/edit_history/` - Collection-based edit history with DataTables
-- `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
 
 See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
 
-## Backend Plugin Static Files
-
-Plugins can serve static files (CSS, JS, XSLT) by placing them in an `html/` subdirectory:
-
-- Put files in: `fastapi_app/plugins/{plugin_id}/html/`
-- Files are automatically served at: `/api/plugins/{plugin_id}/static/`
-
-**Example:**
-
-```text
-fastapi_app/plugins/grobid/html/bibl-struct.xslt
-→ Served at: /api/plugins/grobid/static/bibl-struct.xslt
-```
-
-Use this instead of custom routes for static assets like XSLT stylesheets, CSS, or JavaScript files.
-
-See [docs/development/plugin-system-backend.md](docs/development/plugin-system-backend.md#static-file-serving) for details.
-
-## Completion documents and summaries
+### Completion documents and summaries
 
 - When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.
 - Omit statistical information on the number of changed lines, methods etc. or lists of code changes. Just summarize what the new code does and provide examples if the usage is different from before, so that you can update existing documentation.
 - The summary should be concise and only include information relevant to understanding the implementation. Omit discussion of advantages, alternatives, or motivational language.
 - If there were any significant challenges or deviations from the original plan, briefly mention them in a factual manner.
 - The goal is to provide a clear understanding of what was implemented without unnecessary detail.
+
+### Missing or incorrect documentation
+
+**IMPORTANT** If during a session you notice that information that the user gives you is missing or outdated in the documentation, suggest to update it.

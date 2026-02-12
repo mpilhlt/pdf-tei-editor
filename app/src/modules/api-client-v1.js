@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-02-10T13:36:19.983Z
+ * Generated from OpenAPI schema at 2026-02-12T12:36:52.900Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1433,6 +1433,7 @@ export class ApiClientV1 {
    * include_versions: Include versioned TEI files (default: False)
    * group_by: Directory grouping: "type", "collection", or "variant"
    * download: If true, return ZIP file; if false, return stats JSON
+   * additional_formats: JSON array of additional export formats [{'id': str, 'url': str}]
    * db: Database manager (injected)
    * repo: File repository (injected)
    * storage: File storage (injected)
@@ -1447,6 +1448,7 @@ export class ApiClientV1 {
    * @param {boolean=} params.tei_only
    * @param {string=} params.group_by
    * @param {boolean=} params.download
+   * @param {(string | null)=} params.additional_formats
    * @returns {Promise<any>}
    */
   async export(params) {

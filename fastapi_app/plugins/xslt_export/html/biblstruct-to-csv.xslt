@@ -14,7 +14,7 @@
     <xsl:template match="/">
         <html>
             <body>
-                <pre>type,authors,title,journal_book,year,volume,issue,pages,publisher,place</pre> 
+                <pre>type,authors,title,journal_book,year,volume,issue,pages,publisher,place<xsl:text>&#10;</xsl:text></pre>
                 <pre><xsl:apply-templates select="//tei:biblStruct" /></pre>
             </body>
         </html>
@@ -50,8 +50,7 @@
                 <xsl:choose>
                     <xsl:when test="descendant::tei:title[@level='j']">Journal</xsl:when>
                     <xsl:when
-                        test="descendant::tei:title[@level='m'] and descendant::tei:title[@level='a']">
-                        Chapter</xsl:when>
+                        test="descendant::tei:title[@level='m'] and descendant::tei:title[@level='a']">Chapter</xsl:when>
                     <xsl:otherwise>Book</xsl:otherwise>
                 </xsl:choose>
             </xsl:with-param>
