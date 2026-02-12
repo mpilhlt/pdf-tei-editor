@@ -650,11 +650,19 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     """
     Extract metadata from TEI document for database storage.
 
+    Extraction strategy:
+    - Prioritizes //sourceDesc/biblStruct for bibliographic metadata
+    - Falls back to legacy locations (titleStmt, publicationStmt) if biblStruct missing
+
     Extracts:
     - DOI or fileref as doc_id
-    - Title
-    - Authors
-    - Date
+    - Title (from biblStruct/analytic or titleStmt)
+    - Authors (from biblStruct/analytic or titleStmt)
+    - Date (from biblStruct/monogr/imprint or publicationStmt)
+    - Journal, volume, issue, pages (from biblStruct/monogr)
+    - Publisher (from biblStruct/monogr/imprint or publicationStmt)
+    - DOI (from biblStruct or publicationStmt)
+    - URL (from biblStruct/ptr or publicationStmt/ptr)
     - Variant (from application metadata)
     - Gold standard status
     - Labels
@@ -692,14 +700,17 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     if fileref_elem is not None and fileref_elem.text:
         metadata['fileref'] = fileref_elem.text.strip()
 
-    # Extract title
-    title_elem = tei_root.find('.//tei:titleStmt/tei:title[@level="a"]', ns)
+    # Extract title - try biblStruct first, fallback to titleStmt
+    title_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:analytic/tei:title[@level="a"]', ns)
+    if title_elem is None or not title_elem.text:
+        # Fallback to legacy location
+        title_elem = tei_root.find('.//tei:titleStmt/tei:title[@level="a"]', ns)
     if title_elem is not None and title_elem.text:
         metadata['title'] = title_elem.text.strip()
 
-    # Extract authors
+    # Extract authors - try biblStruct first, fallback to titleStmt
     authors = []
-    for author_elem in tei_root.findall('.//tei:titleStmt/tei:author', ns):
+    for author_elem in tei_root.findall('.//tei:sourceDesc/tei:biblStruct/tei:analytic/tei:author', ns):
         persName = author_elem.find('tei:persName', ns)
         if persName is not None:
             given_elem = persName.find('tei:forename', ns)
@@ -714,11 +725,31 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
             if author:
                 authors.append(author)
 
+    # Fallback to legacy location if no authors found in biblStruct
+    if not authors:
+        for author_elem in tei_root.findall('.//tei:titleStmt/tei:author', ns):
+            persName = author_elem.find('tei:persName', ns)
+            if persName is not None:
+                given_elem = persName.find('tei:forename', ns)
+                family_elem = persName.find('tei:surname', ns)
+
+                author = {}
+                if given_elem is not None and given_elem.text:
+                    author['given'] = given_elem.text.strip()
+                if family_elem is not None and family_elem.text:
+                    author['family'] = family_elem.text.strip()
+
+                if author:
+                    authors.append(author)
+
     if authors:
         metadata['authors'] = authors  # type: ignore[assignment]
 
-    # Extract publication date
-    date_elem = tei_root.find('.//tei:publicationStmt/tei:date[@type="publication"]', ns)
+    # Extract publication date - try biblStruct first, fallback to publicationStmt
+    date_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:monogr/tei:imprint/tei:date', ns)
+    if date_elem is None or not date_elem.text:
+        # Fallback to legacy location
+        date_elem = tei_root.find('.//tei:publicationStmt/tei:date[@type="publication"]', ns)
     if date_elem is not None and date_elem.text:
         metadata['date'] = date_elem.text.strip()
 
@@ -749,8 +780,19 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     if publisher_elem is not None and publisher_elem.text:
         metadata['publisher'] = publisher_elem.text.strip()
 
-    # Extract stable/access URL
-    ptr_elem = tei_root.find('.//tei:publicationStmt/tei:ptr', ns)
+    # Extract DOI - try biblStruct first, then publicationStmt
+    doi_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:idno[@type="DOI"]', ns)
+    if doi_elem is None or not doi_elem.text:
+        # Fallback to publicationStmt
+        doi_elem = tei_root.find('.//tei:publicationStmt/tei:idno[@type="DOI"]', ns)
+    if doi_elem is not None and doi_elem.text:
+        metadata['doi'] = doi_elem.text.strip()
+
+    # Extract stable/access URL - try biblStruct first, fallback to publicationStmt
+    ptr_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:ptr', ns)
+    if ptr_elem is None or not ptr_elem.get('target'):
+        # Fallback to legacy location
+        ptr_elem = tei_root.find('.//tei:publicationStmt/tei:ptr', ns)
     if ptr_elem is not None and ptr_elem.get('target'):
         metadata['url'] = ptr_elem.get('target').strip()
 
@@ -820,6 +862,8 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
         doc_metadata['pages'] = metadata['pages']
     if 'publisher' in metadata:
         doc_metadata['publisher'] = metadata['publisher']
+    if 'doi' in metadata:
+        doc_metadata['doi'] = metadata['doi']
     if 'url' in metadata:
         doc_metadata['url'] = metadata['url']
 

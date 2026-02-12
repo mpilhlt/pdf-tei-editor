@@ -87,15 +87,5 @@ if [ -f /app/docker/import-demo-data.sh ]; then
     /app/docker/import-demo-data.sh
 fi
 
-# Run TEI biblStruct migration if script exists
-if [ -f /app/bin/migrate-tei-biblstruct.py ]; then
-    echo "Checking for TEI files to migrate..."
-    if .venv/bin/python bin/migrate-tei-biblstruct.py 2>&1 | grep -q "Files migrated: [1-9]"; then
-        echo "TEI migration completed successfully"
-    else
-        echo "No TEI files needed migration (already up-to-date)"
-    fi
-fi
-
 # Start the PDF TEI Editor application bound to all interfaces for Docker
 exec .venv/bin/python bin/start-prod 0.0.0.0 $PORT

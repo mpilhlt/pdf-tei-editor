@@ -853,5 +853,191 @@ class TestExtractBiblStructMetadata(unittest.TestCase):
         self.assertEqual(extracted['doc_metadata']['pages'], original_metadata['pages'])
 
 
+class TestBiblStructPriorityExtraction(unittest.TestCase):
+    """Test that biblStruct is prioritized over legacy locations for metadata extraction."""
+
+    def test_extract_complete_metadata_from_biblstruct(self):
+        """Test extraction of title, authors, date, DOI, URL from biblStruct."""
+        tei_xml = """
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+            <teiHeader>
+                <fileDesc>
+                    <titleStmt>
+                        <title level="a">Legacy Title</title>
+                        <author>
+                            <persName>
+                                <forename>Legacy</forename>
+                                <surname>Author</surname>
+                            </persName>
+                        </author>
+                    </titleStmt>
+                    <publicationStmt>
+                        <date type="publication">1999</date>
+                        <idno type="DOI">10.1111/legacy.doi</idno>
+                        <ptr target="https://legacy.example.com"/>
+                    </publicationStmt>
+                    <sourceDesc>
+                        <biblStruct>
+                            <analytic>
+                                <title level="a">BiblStruct Title</title>
+                                <author>
+                                    <persName>
+                                        <forename>Jane</forename>
+                                        <surname>Smith</surname>
+                                    </persName>
+                                </author>
+                                <author>
+                                    <persName>
+                                        <forename>John</forename>
+                                        <surname>Doe</surname>
+                                    </persName>
+                                </author>
+                            </analytic>
+                            <monogr>
+                                <title level="j">Test Journal</title>
+                                <imprint>
+                                    <biblScope unit="volume">42</biblScope>
+                                    <biblScope unit="issue">3</biblScope>
+                                    <biblScope unit="page" from="100" to="150">100-150</biblScope>
+                                    <date when="2024">2024</date>
+                                    <publisher>Test Publisher</publisher>
+                                </imprint>
+                            </monogr>
+                            <idno type="DOI">10.1234/biblstruct.doi</idno>
+                            <ptr target="https://biblstruct.example.com"/>
+                        </biblStruct>
+                    </sourceDesc>
+                </fileDesc>
+            </teiHeader>
+        </TEI>
+        """
+
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        metadata = extract_tei_metadata(root)
+
+        # Verify biblStruct values are used, not legacy values
+        self.assertEqual(metadata['title'], "BiblStruct Title")
+        self.assertEqual(len(metadata['authors']), 2)
+        self.assertEqual(metadata['authors'][0]['given'], "Jane")
+        self.assertEqual(metadata['authors'][0]['family'], "Smith")
+        self.assertEqual(metadata['authors'][1]['given'], "John")
+        self.assertEqual(metadata['authors'][1]['family'], "Doe")
+        self.assertEqual(metadata['date'], "2024")
+        self.assertEqual(metadata['doi'], "10.1234/biblstruct.doi")
+        self.assertEqual(metadata['url'], "https://biblstruct.example.com")
+
+        # Verify journal metadata
+        self.assertEqual(metadata['journal'], "Test Journal")
+        self.assertEqual(metadata['volume'], "42")
+        self.assertEqual(metadata['issue'], "3")
+        self.assertEqual(metadata['pages'], "100-150")
+        self.assertEqual(metadata['publisher'], "Test Publisher")
+
+    def test_fallback_to_legacy_when_biblstruct_missing(self):
+        """Test fallback to titleStmt/publicationStmt when biblStruct is missing."""
+        tei_xml = """
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+            <teiHeader>
+                <fileDesc>
+                    <titleStmt>
+                        <title level="a">Legacy Title</title>
+                        <author>
+                            <persName>
+                                <forename>Legacy</forename>
+                                <surname>Author</surname>
+                            </persName>
+                        </author>
+                    </titleStmt>
+                    <publicationStmt>
+                        <date type="publication">1999</date>
+                        <idno type="DOI">10.1111/legacy.doi</idno>
+                        <publisher>Legacy Publisher</publisher>
+                        <ptr target="https://legacy.example.com"/>
+                    </publicationStmt>
+                    <sourceDesc>
+                        <bibl>Legacy citation</bibl>
+                    </sourceDesc>
+                </fileDesc>
+            </teiHeader>
+        </TEI>
+        """
+
+        root = etree.fromstring(tei_xml.encode('utf-8'))
+        metadata = extract_tei_metadata(root)
+
+        # Verify legacy values are used when biblStruct is missing
+        self.assertEqual(metadata['title'], "Legacy Title")
+        self.assertEqual(len(metadata['authors']), 1)
+        self.assertEqual(metadata['authors'][0]['given'], "Legacy")
+        self.assertEqual(metadata['authors'][0]['family'], "Author")
+        self.assertEqual(metadata['date'], "1999")
+        self.assertEqual(metadata['doi'], "10.1111/legacy.doi")
+        self.assertEqual(metadata['publisher'], "Legacy Publisher")
+        self.assertEqual(metadata['url'], "https://legacy.example.com")
+
+    def test_round_trip_with_complete_metadata(self):
+        """Test round-trip with complete metadata including DOI and URL."""
+        from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
+
+        original_metadata = {
+            "title": "Complete Test Article",
+            "authors": [
+                {"given": "Alice", "family": "Test"},
+                {"given": "Bob", "family": "Example"}
+            ],
+            "date": "2024",
+            "journal": "Test Journal",
+            "volume": "99",
+            "issue": "2",
+            "pages": "10-20",
+            "publisher": "Test Publisher",
+            "url": "https://example.com/article"
+        }
+
+        # Create TEI header
+        header = create_tei_header(doi="10.1234/complete.test", metadata=original_metadata)
+
+        # Build minimal TEI document
+        tei = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
+        tei.append(header)
+
+        # Serialize and re-parse
+        xml_string = serialize_tei_with_formatted_header(tei)
+        xml_with_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_string
+        tei_reparsed = etree.fromstring(xml_with_declaration.encode('utf-8'))
+
+        # Extract metadata back
+        extracted = extract_tei_metadata(tei_reparsed)
+
+        # Verify all metadata fields survived
+        self.assertEqual(extracted['title'], original_metadata['title'])
+        self.assertEqual(len(extracted['authors']), 2)
+        self.assertEqual(extracted['authors'][0]['given'], "Alice")
+        self.assertEqual(extracted['authors'][0]['family'], "Test")
+        self.assertEqual(extracted['authors'][1]['given'], "Bob")
+        self.assertEqual(extracted['authors'][1]['family'], "Example")
+        self.assertEqual(extracted['date'], original_metadata['date'])
+        self.assertEqual(extracted['journal'], original_metadata['journal'])
+        self.assertEqual(extracted['volume'], original_metadata['volume'])
+        self.assertEqual(extracted['issue'], original_metadata['issue'])
+        self.assertEqual(extracted['pages'], original_metadata['pages'])
+        self.assertEqual(extracted['publisher'], original_metadata['publisher'])
+        self.assertEqual(extracted['doi'], "10.1234/complete.test")
+        self.assertEqual(extracted['url'], original_metadata['url'])
+
+        # Verify doc_metadata includes all fields
+        doc_meta = extracted['doc_metadata']
+        self.assertEqual(doc_meta['title'], original_metadata['title'])
+        self.assertEqual(len(doc_meta['authors']), 2)
+        self.assertEqual(doc_meta['date'], original_metadata['date'])
+        self.assertEqual(doc_meta['journal'], original_metadata['journal'])
+        self.assertEqual(doc_meta['volume'], original_metadata['volume'])
+        self.assertEqual(doc_meta['issue'], original_metadata['issue'])
+        self.assertEqual(doc_meta['pages'], original_metadata['pages'])
+        self.assertEqual(doc_meta['publisher'], original_metadata['publisher'])
+        self.assertEqual(doc_meta['doi'], "10.1234/complete.test")
+        self.assertEqual(doc_meta['url'], original_metadata['url'])
+
+
 if __name__ == '__main__':
     unittest.main()
