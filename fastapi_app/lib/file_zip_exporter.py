@@ -372,7 +372,7 @@ class FileZipExporter:
 
         # Extract the plugin path from the URL
         # URL format: /api/plugins/{plugin_id}/static/{path}
-        # The {path} is relative to the plugin's html/ directory
+        # The {path} is relative to the plugin's static/ directory
         match = re.match(r'^/api/plugins/([^/]+)/static/(.+)$', url)
         if not match:
             logger.debug(f"URL does not match plugin pattern: {url}")
@@ -386,20 +386,20 @@ class FileZipExporter:
         app_plugins_dir = Path(__file__).parent.parent.parent / 'fastapi_app' / 'plugins'
         logger.debug(f"App plugins directory: {app_plugins_dir}")
 
-        # The static URL maps to the plugin's html/ directory
+        # The static URL maps to the plugin's static/ directory
         # So if URL is /api/plugins/xslt_export/static/biblstruct-to-csv.xslt
-        # The path should be: .../plugins/xslt_export/html/biblstruct-to-csv.xslt
-        standard_path = app_plugins_dir / plugin_id / 'html' / relative_path
-        logger.debug(f"Checking standard path: {standard_path} (exists: {standard_path.exists()})")
+        # The path should be: .../plugins/xslt_export/static/biblstruct-to-csv.xslt
+        static_path = app_plugins_dir / plugin_id / 'static' / relative_path
+        logger.debug(f"Checking standard path: {static_path} (exists: {static_path.exists()})")
 
-        if standard_path.exists():
-            return standard_path
+        if static_path.exists():
+            return static_path
 
         # Also check FASTAPI_PLUGIN_PATHS environment variable
         plugin_paths_env = getattr(settings, 'fastapi_plugin_paths', None)
         if plugin_paths_env:
             for base_path in plugin_paths_env.split(':'):
-                alt_path = Path(base_path) / plugin_id / relative_path
+                alt_path = Path(base_path) / plugin_id / 'static' / relative_path
                 logger.debug(f"Checking alt path: {alt_path} (exists: {alt_path.exists()})")
                 if alt_path.exists():
                     return alt_path
