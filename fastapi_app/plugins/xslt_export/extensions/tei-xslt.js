@@ -13,7 +13,7 @@ export const export_formats = () => [
   {
     id: 'csv',
     label: 'CSV (biblstruct)',
-    url: '/api/plugins/xslt_export/static/html/biblstruct-to-csv.xslt',
+    url: '/api/plugins/xslt_export/static/biblstruct-to-csv.xslt',
     output: 'html',
     stripTags: true,
     ext: 'csv'
@@ -21,10 +21,18 @@ export const export_formats = () => [
   {
     id: 'ris',
     label: 'RIS (biblstruct)',
-    url: '/api/plugins/xslt_export/static/html/biblstruct-to-ris.xslt',
+    url: '/api/plugins/xslt_export/static/biblstruct-to-ris.xslt',
     output: 'html',
     stripTags: true,
     ext: 'ris'
+  },
+  {
+    id: 'crossref',
+    label: 'CrossRef XML',
+    url: '/api/plugins/xslt_export/static/tei-to-crossref.xslt',
+    output: 'xml',
+    stripTags: false,
+    ext: 'xml'
   }
 ];
 
@@ -58,11 +66,15 @@ export async function start(sandbox) {
       {
         label: 'CSV',
         url: '/api/plugins/xslt-export/static/biblstruct-to-csv.xslt'
-      },       
+      },
       {
         label: 'RIS',
         url: '/api/plugins/xslt-export/static/biblstruct-to-ris.xslt'
-      }    
+      },
+      {
+        label: 'CrossRef XML',
+        url: '/api/plugins/xslt-export/static/tei-to-crossref-html.xslt'
+      }
     ]
 
     for (let t of transformations ) {
