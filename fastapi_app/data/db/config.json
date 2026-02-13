@@ -1,0 +1,12 @@
+{
+  "plugin.local-sync.enabled": true,
+  "plugin.local-sync.enabled.type": "boolean",
+  "plugin.local-sync.repo.path": "/Volumes/Data-SSD/Code/grobid-footnote-flavour/batches",
+  "plugin.local-sync.repo.path.type": "string",
+  "plugin.local-sync.backup": false,
+  "plugin.local-sync.backup.type": "boolean",
+  "plugin.local-sync.repo.include": "2_corrected",
+  "plugin.local-sync.repo.include.type": "string",
+  "grobid.server.url": "https://lfoppiano-grobid-dev-footnotes.hf.space",
+  "grobid.server.url.type": "string"
+}
