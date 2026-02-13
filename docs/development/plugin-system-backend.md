@@ -694,6 +694,109 @@ async def execute_operation(
 
 **See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
 
+### 4. Options-then-Execute Pattern (for user-configured operations)
+
+Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure options before execution. Unlike the Preview-then-Execute pattern (which uses a fixed `executeUrl`), this pattern lets the iframe itself build the next URL dynamically based on form input.
+
+**When to use:**
+
+- Operations with user-configurable parameters (mode selection, checkboxes, etc.)
+- Multi-step workflows where the next URL depends on user choices
+- Any case where the execute URL cannot be determined at plugin endpoint time
+
+**User flow:**
+
+1. Plugin endpoint returns `outputUrl` pointing to an options form route
+2. Frontend loads options form in iframe
+3. User configures options and clicks "Start"
+4. Form JavaScript calls `sandbox.navigateIframe(url)` with the built URL
+5. Sandbox injects `session_id` and navigates the iframe to the execution route
+6. Execution route runs and displays results in the same iframe
+
+**How `navigateIframe` works:**
+
+The `navigateIframe(url)` method on the `PluginSandbox` class ([backend-plugin-sandbox.js](../../app/src/modules/backend-plugin-sandbox.js)):
+
+1. Finds the iframe in the plugin result dialog
+2. Constructs a full URL from the relative path
+3. Injects the current `session_id` from application state (matching the pattern used by `displayResultInIframe` and `configureExecuteButton`)
+4. Sets `iframe.src` to navigate
+
+Since `PluginSandbox` methods are auto-discovered by `_extract_sandbox_methods()` in [plugin_tools.py](../../fastapi_app/lib/plugin_tools.py), the method is automatically available as `sandbox.navigateIframe()` in any iframe that includes the sandbox client script.
+
+**Implementation pattern:**
+
+**Step 1 — Plugin endpoint** returns the options form URL:
+
+```python
+async def update(self, context, params: dict) -> dict:
+    return {"outputUrl": "/api/plugins/my-plugin/options"}
+```
+
+**Step 2 — Options route** serves an HTML form with the sandbox client:
+
+```python
+from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+
+@router.get("/options", response_class=HTMLResponse)
+async def options_form(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    # Authenticate user...
+    sandbox_script = generate_sandbox_client_script()
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <script>{sandbox_script}</script>
+</head>
+<body>
+    <label><input type="radio" name="mode" value="a" checked> Mode A</label>
+    <label><input type="radio" name="mode" value="b"> Mode B</label>
+    <label><input type="checkbox" id="force" checked> Force overwrite</label>
+
+    <button onclick="startExecution()">Start</button>
+    <button onclick="sandbox.closeDialog()">Cancel</button>
+
+    <script>
+        function startExecution() {{
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const force = document.getElementById('force').checked;
+            const params = new URLSearchParams({{ mode, force }});
+            sandbox.navigateIframe('/api/plugins/my-plugin/execute?' + params);
+        }}
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+```
+
+**Step 3 — Execute route** receives the user-chosen parameters and runs the operation:
+
+```python
+@router.get("/execute", response_class=HTMLResponse)
+async def execute_operation(
+    mode: str = Query("a"),
+    force: bool = Query(False),
+    # ... auth params
+):
+    # Run operation with user-selected options
+    # Return HTML results page
+    return HTMLResponse(content=results_html)
+```
+
+**Key points:**
+
+- The options form must include the sandbox client script (`generate_sandbox_client_script()`) so `sandbox.navigateIframe()` is available
+- `session_id` is automatically injected by `navigateIframe` — the form JavaScript only needs to build the path and query parameters
+- The "Cancel" button can call `sandbox.closeDialog()` to dismiss the dialog
+- Each page in the chain is a full page load in the iframe, so the sandbox client reconnects on each navigation
+
+**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+
 ## Interactive HTML Content
 
 Both response formats support interactive elements through the **Plugin Sandbox** interface.
@@ -712,6 +815,9 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 
 // Close the result dialog
 pluginSandbox.closeDialog();
+
+// Navigate the iframe to a new URL (session_id injected automatically)
+sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async
 await pluginSandbox.openDocument('stable-id');

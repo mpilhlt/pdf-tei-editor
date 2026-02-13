@@ -132,6 +132,14 @@ def parse_crossref_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
     date_parts = issued_data.get("date-parts", [[]])
     date = date_parts[0][0] if date_parts and date_parts[0] else None
 
+    # Extract ISSN (take first one if multiple)
+    issn_list = message.get("ISSN", [])
+    issn = issn_list[0] if issn_list else None
+
+    # Extract ISBN (take first one if multiple)
+    isbn_list = message.get("ISBN", [])
+    isbn = isbn_list[0] if isbn_list else None
+
     return {
         "title": title,
         "authors": authors,
@@ -141,6 +149,10 @@ def parse_crossref_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
         "volume": message.get("volume"),
         "issue": message.get("issue"),
         "pages": message.get("page"),
+        "doi": message.get("DOI"),
+        "issn": issn,
+        "isbn": isbn,
+        "url": message.get("URL"),
     }
 
 
@@ -182,6 +194,22 @@ def parse_datacite_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
     if attributes.get("container"):
         journal = attributes["container"].get("title")
 
+    # Extract DOI from the data object
+    doi_value = data.get("data", {}).get("id")
+
+    # Extract related identifiers (ISSN, ISBN)
+    issn = None
+    isbn = None
+    related_identifiers = attributes.get("relatedIdentifiers", [])
+    for identifier in related_identifiers:
+        if identifier.get("relatedIdentifierType") == "ISSN" and not issn:
+            issn = identifier.get("relatedIdentifier")
+        elif identifier.get("relatedIdentifierType") == "ISBN" and not isbn:
+            isbn = identifier.get("relatedIdentifier")
+
+    # Extract URL
+    url = attributes.get("url")
+
     return {
         "title": title,
         "authors": authors,
@@ -191,6 +219,10 @@ def parse_datacite_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
         "volume": attributes.get("volume", ""),
         "issue": attributes.get("issue", ""),
         "pages": attributes.get("page"),
+        "doi": doi_value,
+        "issn": issn,
+        "isbn": isbn,
+        "url": url,
     }
 
 

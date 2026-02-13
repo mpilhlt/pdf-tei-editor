@@ -67,12 +67,6 @@ const createTeiXmlWithMetadata = (docId, variant = null) => {
     <fileDesc>
       <titleStmt>
         <title level="a">Machine Learning in Digital Humanities</title>
-        <author>
-          <persName>
-            <forename>Jane</forename>
-            <surname>Smith</surname>
-          </persName>
-        </author>
       </titleStmt>
       <editionStmt>
         <edition>
@@ -86,9 +80,24 @@ const createTeiXmlWithMetadata = (docId, variant = null) => {
         <idno type="DOI">10.1234/ml.dh.2023</idno>
       </publicationStmt>
       <sourceDesc>
-        <bibl>
-          <title level="j">Digital Humanities Quarterly</title>
-        </bibl>
+        <biblStruct>
+          <analytic>
+            <title level="a">Machine Learning in Digital Humanities</title>
+            <author>
+              <persName>
+                <forename>Jane</forename>
+                <surname>Smith</surname>
+              </persName>
+            </author>
+          </analytic>
+          <monogr>
+            <title level="j">Digital Humanities Quarterly</title>
+            <imprint>
+              <publisher>Academic Press</publisher>
+              <date when="2023">2023</date>
+            </imprint>
+          </monogr>
+        </biblStruct>
       </sourceDesc>
     </fileDesc>
     <encodingDesc>

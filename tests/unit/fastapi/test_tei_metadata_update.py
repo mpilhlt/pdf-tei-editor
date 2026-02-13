@@ -235,12 +235,6 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
                 <fileDesc>
                     <titleStmt>
                         <title level="a">Machine Learning in Digital Humanities</title>
-                        <author>
-                            <persName>
-                                <forename>Jane</forename>
-                                <surname>Smith</surname>
-                            </persName>
-                        </author>
                     </titleStmt>
                     <editionStmt>
                     <edition>
@@ -248,7 +242,7 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
                         <title>Extraction</title>
                         <idno type="fileref">10.1234__ml.dh.2023</idno>
                     </edition>
-                    </editionStmt>                    
+                    </editionStmt>
                     <publicationStmt>
                         <publisher>Academic Press</publisher>
                         <date type="publication">2023</date>
@@ -256,9 +250,24 @@ class TestExtractTeiMetadataIntegration(unittest.TestCase):
                         <ptr target="https://example.com/article/ml.dh.2023"/>
                     </publicationStmt>
                     <sourceDesc>
-                        <bibl>
-                            <title level="j">Digital Humanities Quarterly</title>
-                        </bibl>
+                        <biblStruct>
+                            <analytic>
+                                <title level="a">Machine Learning in Digital Humanities</title>
+                                <author>
+                                    <persName>
+                                        <forename>Jane</forename>
+                                        <surname>Smith</surname>
+                                    </persName>
+                                </author>
+                            </analytic>
+                            <monogr>
+                                <title level="j">Digital Humanities Quarterly</title>
+                                <imprint>
+                                    <publisher>Academic Press</publisher>
+                                    <date when="2023">2023</date>
+                                </imprint>
+                            </monogr>
+                        </biblStruct>
                     </sourceDesc>
                 </fileDesc>
                 <encodingDesc>

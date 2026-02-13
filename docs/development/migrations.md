@@ -462,6 +462,50 @@ with sqlite3.connect("data/db/locks.db") as conn:
    - Monitor application for issues
    - Keep rollback plan ready
 
+## Data Migrations vs. Schema Migrations
+
+This document describes **database schema migrations** - versioned changes to database structure (tables, columns, indexes).
+
+**Data migrations** are different - they update file contents or data format without changing database schema. Data migrations:
+
+- Live in `bin/` directory (not `fastapi_app/lib/migrations/versions/`)
+- Run manually via command line (not automatically on startup)
+- Update file contents in content-addressed storage
+- Don't use the `Migration` base class or `MigrationManager`
+- May change content hashes, requiring database record updates to point to new hashes
+
+### Available Data Migrations
+
+**TEI biblStruct Migration** (`bin/migrate-tei-biblstruct.py`)
+
+Retrofits existing TEI documents with structured `biblStruct` elements in `sourceDesc` for machine-parsable journal metadata.
+
+```bash
+# Test on limited dataset
+uv run python bin/migrate-tei-biblstruct.py --dry-run --limit 10
+
+# Run full migration
+uv run python bin/migrate-tei-biblstruct.py
+
+# Force overwrite existing biblStruct (regenerate from metadata)
+uv run python bin/migrate-tei-biblstruct.py --force
+
+# Verbose logging
+uv run python bin/migrate-tei-biblstruct.py -v
+```
+
+Features:
+
+- Idempotent - safe to run multiple times (skips already-migrated files)
+- Force mode (`--force`) - overwrites existing biblStruct elements with regenerated versions
+- Extracts metadata from existing teiHeader elements
+- Updates content-addressed storage with new file hashes
+- Preserves all file metadata (stable_id, label, collections)
+- Dry-run mode for testing
+- Detailed progress logging
+
+See implementation plan at `.claude/plans/generic-drifting-origami.md` for technical details.
+
 ## Future Enhancements
 
 Potential improvements to the migration system:
