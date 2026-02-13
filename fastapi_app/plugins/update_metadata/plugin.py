@@ -40,32 +40,16 @@ class UpdateMetadataPlugin(Plugin):
 
     async def update(self, context, params: dict) -> dict:
         """
-        Execute metadata update and return URL to progress page.
+        Show metadata update options form.
 
         Args:
             context: Plugin context (user, app, etc.)
             params: Parameters from frontend
 
         Returns:
-            Dict with outputUrl pointing to the update execution route
+            Dict with outputUrl pointing to the options form route
         """
-        # Build URL to custom route
-        force = params.get("force", True)
-        limit = params.get("limit", None)
-
-        # Build query parameters
-        query_params = []
-        if force:
-            query_params.append("force=true")
-        if limit:
-            query_params.append(f"limit={limit}")
-
-        query_string = "&".join(query_params) if query_params else ""
-        update_url = f"/api/plugins/update-metadata/execute"
-        if query_string:
-            update_url += f"?{query_string}"
-
         return {
-            "outputUrl": update_url,
-            "message": "Metadata update started - this may take several minutes"
+            "outputUrl": "/api/plugins/update-metadata/options",
+            "message": "Configure metadata update options"
         }

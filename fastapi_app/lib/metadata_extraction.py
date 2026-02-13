@@ -160,6 +160,7 @@ async def get_metadata_for_document(
     pdf_path: str | None = None,
     text_content: str | None = None,
     stable_id: str | None = None,
+    use_extraction: bool = True,
 ) -> BibliographicMetadata:
     """
     Get bibliographic metadata, trying DOI lookup first, then extraction service.
@@ -174,6 +175,8 @@ async def get_metadata_for_document(
         pdf_path: Path to PDF file (optional) - kept for signature compatibility
         text_content: Text content (optional) - used for LLM extraction fallback
         stable_id: File stable_id (optional) - used for PDF lookup via extraction service
+        use_extraction: If False, skip LLM extraction fallback (only use DOI lookup).
+                        Defaults to True for backward compatibility.
 
     Returns:
         Metadata dict with keys: title, authors, date, publisher, journal, etc.
@@ -218,8 +221,8 @@ async def get_metadata_for_document(
         else:
             logger.warning(f"Invalid DOI format, skipping lookup: {doi}")
 
-    # 2. Fallback to extraction service if stable_id or text_content is available
-    if stable_id or text_content:
+    # 2. Fallback to extraction service if enabled and stable_id or text_content is available
+    if use_extraction and (stable_id or text_content):
         try:
             from fastapi_app.lib.service_registry import get_service_registry
 

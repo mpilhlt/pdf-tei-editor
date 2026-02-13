@@ -266,6 +266,7 @@ async def update_tei_metadata(
     file_storage: FileStorage,
     limit: int | None = None,
     force: bool = False,
+    extraction_fallback: bool = True,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     cancellation_check: Optional[Callable[[], bool]] = None
 ) -> dict:
@@ -283,6 +284,8 @@ async def update_tei_metadata(
         file_storage: FileStorage instance for file operations
         limit: Maximum number of PDFs to process (for testing)
         force: If True, overwrite existing biblStruct elements
+        extraction_fallback: If True, use LLM extraction when DOI lookup fails.
+                             If False, skip documents without a DOI.
         progress_callback: Optional callback(current, total, label) for progress updates
         cancellation_check: Optional callback() -> bool to check if operation should be cancelled
 
@@ -391,13 +394,20 @@ async def update_tei_metadata(
             if not doi:
                 logger.debug(f"  DOI: not found")
 
+            # Skip documents without DOI when extraction fallback is disabled
+            if not doi and not extraction_fallback:
+                logger.debug(f"  No DOI found and extraction fallback disabled - skipping")
+                pdfs_skipped += 1
+                continue
+
             # Get complete metadata (DOI lookup or LLM extraction)
             extraction_method = "DOI lookup" if doi else "LLM extraction"
             logger.debug(f"  Attempting {extraction_method}...")
             try:
                 metadata = await get_metadata_for_document(
                     doi=doi,
-                    stable_id=pdf_stable_id if not doi else None  # Use PDF stable_id for LLM
+                    stable_id=pdf_stable_id if not doi else None,  # Use PDF stable_id for LLM
+                    use_extraction=extraction_fallback
                 )
                 logger.debug(f"  Metadata returned: {metadata}")
             except Exception as e:

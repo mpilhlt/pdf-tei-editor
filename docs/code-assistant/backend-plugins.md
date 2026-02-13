@@ -784,6 +784,30 @@ async def execute_operation(
 
 **See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
 
+### 4. Options-then-Execute Pattern (for user-configured operations)
+
+Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure options in a form before execution starts. Unlike Preview-then-Execute (which uses a fixed `executeUrl`), this pattern lets the iframe build the next URL dynamically based on form input.
+
+**User flow:**
+
+1. Plugin endpoint returns `outputUrl` pointing to an options form route
+2. Frontend loads form in iframe
+3. User configures options, clicks "Start"
+4. Form JS calls `sandbox.navigateIframe('/api/plugins/.../execute?params...')`
+5. Sandbox injects `session_id` and navigates iframe to execution route
+6. Execution route runs and displays results
+
+**Key requirements:**
+
+- Options form must include `generate_sandbox_client_script()` so `sandbox.navigateIframe()` is available
+- `session_id` is injected automatically — form JS only builds the path and query parameters
+- "Cancel" button can call `sandbox.closeDialog()`
+- Each page in the chain is a full page load; the sandbox client reconnects on each navigation
+
+For detailed implementation pattern with code examples, see [Options-then-Execute Pattern](../development/plugin-system-backend.md#4-options-then-execute-pattern-for-user-configured-operations).
+
+**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+
 ## Interactive HTML Content
 
 Both response formats support interactive elements through the **Plugin Sandbox** interface.
@@ -802,6 +826,9 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 
 // Close the result dialog
 pluginSandbox.closeDialog();
+
+// Navigate the iframe to a new URL (session_id injected automatically)
+sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async
 await pluginSandbox.openDocument('stable-id');
