@@ -276,5 +276,251 @@ export async function execute(xmlDoc, currentState, configMap) {
     }
   }
 
+  // --- sourceDesc/biblStruct (canonical structured metadata) ---
+  // Only create biblStruct if we have substantial metadata
+  const hasSubstantialMetadata = meta.title || meta.journal || (meta.authors && meta.authors.length > 0);
+  if (hasSubstantialMetadata) {
+    const sourceDesc = findTei(fileDesc, "sourceDesc") || fileDesc.appendChild(createTei(xmlDoc, "sourceDesc"));
+    let biblStruct = findTei(sourceDesc, "biblStruct");
+    if (!biblStruct) {
+      biblStruct = sourceDesc.appendChild(createTei(xmlDoc, "biblStruct"));
+    }
+
+    // Build analytic section (article-level metadata: title, authors)
+    if (meta.title || (meta.authors && meta.authors.length > 0)) {
+      let analytic = findTei(biblStruct, "analytic");
+      if (!analytic) {
+        analytic = biblStruct.insertBefore(createTei(xmlDoc, "analytic"), biblStruct.firstChild);
+      }
+
+      // Title
+      if (meta.title) {
+        let titleElem = findTeiByAttr(analytic, "title", "level", "a");
+        if (!titleElem) {
+          titleElem = analytic.insertBefore(createTei(xmlDoc, "title", { level: "a" }), analytic.firstChild);
+        }
+        if (!textOf(titleElem)) {
+          titleElem.textContent = meta.title;
+        }
+      }
+
+      // Authors
+      if (meta.authors && meta.authors.length > 0) {
+        const existingAuthors = analytic.getElementsByTagNameNS(TEI_NS, "author");
+        if (existingAuthors.length === 0) {
+          for (const author of meta.authors) {
+            const authorElem = createTei(xmlDoc, "author");
+            const persName = createTei(xmlDoc, "persName");
+            if (author.given) {
+              const forename = createTei(xmlDoc, "forename");
+              forename.textContent = author.given;
+              persName.appendChild(forename);
+            }
+            if (author.family) {
+              const surname = createTei(xmlDoc, "surname");
+              surname.textContent = author.family;
+              persName.appendChild(surname);
+            }
+            authorElem.appendChild(persName);
+            analytic.appendChild(authorElem);
+          }
+        }
+      }
+
+      // Add DOI to analytic section if present
+      if (doi) {
+        let doiElem = findTeiByAttr(analytic, "idno", "type", "DOI");
+        if (!doiElem) {
+          doiElem = analytic.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
+      }
+    }
+
+    // Build monograph section (journal-level metadata)
+    const hasMonogrData = meta.journal || meta.publisher || meta.date || meta.volume || meta.issue || meta.pages;
+    if (hasMonogrData) {
+      let monogr = findTei(biblStruct, "monogr");
+      if (!monogr) {
+        monogr = biblStruct.appendChild(createTei(xmlDoc, "monogr"));
+      }
+
+      // Journal title
+      if (meta.journal) {
+        let journalElem = findTeiByAttr(monogr, "title", "level", "j");
+        if (!journalElem) {
+          journalElem = monogr.insertBefore(createTei(xmlDoc, "title", { level: "j" }), monogr.firstChild);
+        }
+        if (!textOf(journalElem)) {
+          journalElem.textContent = meta.journal;
+        }
+      }
+
+      // Add ISSN/ISBN before imprint section
+      if (meta.issn) {
+        let issnElem = findTeiByAttr(monogr, "idno", "type", "ISSN");
+        if (!issnElem) {
+          // Insert before imprint if it exists, otherwise append
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            issnElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "ISSN" }), imprint);
+          } else {
+            issnElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "ISSN" }));
+          }
+        }
+        if (!textOf(issnElem)) {
+          issnElem.textContent = meta.issn;
+        }
+      }
+
+      if (meta.isbn) {
+        let isbnElem = findTeiByAttr(monogr, "idno", "type", "ISBN");
+        if (!isbnElem) {
+          // Insert before imprint if it exists, otherwise append
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            isbnElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "ISBN" }), imprint);
+          } else {
+            isbnElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "ISBN" }));
+          }
+        }
+        if (!textOf(isbnElem)) {
+          isbnElem.textContent = meta.isbn;
+        }
+      }
+
+      // Imprint section (publication details)
+      let imprint = findTei(monogr, "imprint");
+      if (!imprint) {
+        imprint = monogr.appendChild(createTei(xmlDoc, "imprint"));
+      }
+
+      // Volume
+      if (meta.volume) {
+        let volumeElem = findTeiByAttr(imprint, "biblScope", "unit", "volume");
+        if (!volumeElem) {
+          volumeElem = imprint.appendChild(createTei(xmlDoc, "biblScope", { unit: "volume" }));
+        }
+        if (!textOf(volumeElem)) {
+          volumeElem.textContent = meta.volume;
+        }
+      }
+
+      // Issue
+      if (meta.issue) {
+        let issueElem = findTeiByAttr(imprint, "biblScope", "unit", "issue");
+        if (!issueElem) {
+          issueElem = imprint.appendChild(createTei(xmlDoc, "biblScope", { unit: "issue" }));
+        }
+        if (!textOf(issueElem)) {
+          issueElem.textContent = meta.issue;
+        }
+      }
+
+      // Pages
+      if (meta.pages) {
+        let pagesElem = findTeiByAttr(imprint, "biblScope", "unit", "page");
+        if (!pagesElem) {
+          const attrs = { unit: "page" };
+          // Parse page range if in "1-10" format
+          if (meta.pages.includes("-")) {
+            const parts = meta.pages.split("-");
+            if (parts.length === 2) {
+              attrs.from = parts[0].trim();
+              attrs.to = parts[1].trim();
+            }
+          }
+          pagesElem = imprint.appendChild(createTei(xmlDoc, "biblScope", attrs));
+        }
+        if (!textOf(pagesElem)) {
+          pagesElem.textContent = meta.pages;
+        }
+      }
+
+      // Date
+      if (meta.date) {
+        let dateElem = findTei(imprint, "date");
+        if (!dateElem) {
+          dateElem = imprint.appendChild(createTei(xmlDoc, "date", { when: String(meta.date) }));
+        }
+        if (!textOf(dateElem)) {
+          dateElem.textContent = String(meta.date);
+        }
+      }
+
+      // Publisher
+      if (meta.publisher) {
+        let publisherElem = findTei(imprint, "publisher");
+        if (!publisherElem) {
+          publisherElem = imprint.appendChild(createTei(xmlDoc, "publisher"));
+        }
+        if (!textOf(publisherElem)) {
+          publisherElem.textContent = meta.publisher;
+        }
+      }
+    }
+
+    // Add identifiers and URLs
+    // DOI is already added to analytic section if it exists
+    // Only add DOI to biblStruct level if no analytic section
+    const analytic = findTei(biblStruct, "analytic");
+    if (doi && !analytic) {
+      // For documents without analytic section, add DOI to monogr or biblStruct
+      const monogr = findTei(biblStruct, "monogr");
+      if (monogr) {
+        // Add to monogr section (before imprint)
+        let doiElem = findTeiByAttr(monogr, "idno", "type", "DOI");
+        if (!doiElem) {
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            doiElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "DOI" }), imprint);
+          } else {
+            doiElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+          }
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
+      } else {
+        // Add to biblStruct level
+        let doiElem = findTeiByAttr(biblStruct, "idno", "type", "DOI");
+        if (!doiElem) {
+          doiElem = biblStruct.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
+      }
+    } else if (id) {
+      // Check if any idno already exists in biblStruct
+      const existingIdnos = biblStruct.getElementsByTagNameNS(TEI_NS, "idno");
+      if (existingIdnos.length === 0) {
+        const idType = id.includes(":") ? id.split(":")[0] : "";
+        if (idType) {
+          const idValue = id.substring(idType.length + 1);
+          const idnoElem = createTei(xmlDoc, "idno", { type: idType });
+          idnoElem.textContent = idValue;
+          biblStruct.appendChild(idnoElem);
+        } else {
+          const idnoElem = createTei(xmlDoc, "idno");
+          idnoElem.textContent = id;
+          biblStruct.appendChild(idnoElem);
+        }
+      }
+    }
+
+    // URL
+    if (meta.url) {
+      let ptrElem = findTei(biblStruct, "ptr");
+      if (!ptrElem) {
+        ptrElem = biblStruct.appendChild(createTei(xmlDoc, "ptr", { target: meta.url }));
+      } else if (!ptrElem.getAttribute("target")) {
+        ptrElem.setAttribute("target", meta.url);
+      }
+    }
+  }
+
   return xmlDoc;
 }

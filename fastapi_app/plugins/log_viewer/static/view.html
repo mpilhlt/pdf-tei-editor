@@ -182,17 +182,49 @@
             }
         }
 
+        function updateStatus(state, detail) {
+            if (state === 'connected') {
+                statusEl.textContent = 'Connected';
+                statusEl.style.color = '#6a9955';
+            } else if (state === 'reconnecting') {
+                statusEl.textContent = 'Reconnecting...';
+                statusEl.style.color = '#e5a84b';
+            } else if (state === 'error') {
+                statusEl.textContent = detail || 'Connection failed';
+                statusEl.style.color = '#f44747';
+            }
+        }
+
+        async function subscribeBackend() {
+            try {
+                const response = await fetch(
+                    '/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(currentSessionId),
+                    { method: 'POST' }
+                );
+                if (!response.ok) {
+                    console.error('Backend subscribe failed:', response.status);
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.error('Backend subscribe error:', e);
+                return false;
+            }
+        }
+
+        function onSSEConnected(_data) {
+            // SSE stream was (re-)established — re-subscribe to the backend
+            console.log('Log viewer: SSE reconnected, re-subscribing to backend');
+            subscribeBackend();
+            updateStatus('connected');
+        }
+
         async function init() {
             try {
                 currentSessionId = new URLSearchParams(location.search).get('session_id');
 
                 // Load recent log entries first
                 await loadRecentLogs(currentSessionId);
-
-                // Subscribe this session to log events on the backend
-                await fetch('/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(currentSessionId), {
-                    method: 'POST'
-                });
 
                 // Verify sandbox is available before subscribing
                 if (typeof window.sandbox === 'undefined' || typeof window.sandbox.subscribeSSE !== 'function') {
@@ -203,15 +235,28 @@
                     );
                 }
 
-                // Subscribe to SSE event forwarding via sandbox
+                // Subscribe to SSE event forwarding FIRST so the listener is
+                // ready before the backend starts sending events
                 await sandbox.subscribeSSE('logEntry', onLogEntry);
 
-                statusEl.textContent = 'Connected';
-                statusEl.style.color = '#6a9955';
+                // Listen for SSE reconnection events to re-subscribe on the backend
+                await sandbox.subscribeSSE('connected', onSSEConnected);
+
+                // NOW subscribe on the backend (events start flowing, listener already active)
+                await subscribeBackend();
+
+                updateStatus('connected');
+
+                // Periodic re-subscription as a safety net (idempotent)
+                setInterval(() => {
+                    if (currentSessionId) {
+                        subscribeBackend();
+                    }
+                }, 60000);
+
             } catch (e) {
                 console.error('Log viewer initialization failed:', e);
-                statusEl.textContent = 'Connection failed. Reopen log viewer from the plugin menu.';
-                statusEl.style.color = '#f44747';
+                updateStatus('error', 'Connection failed. Reopen log viewer from the plugin menu.');
             }
         }
 

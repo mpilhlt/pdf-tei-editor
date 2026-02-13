@@ -76,7 +76,7 @@ class PluginManager:
     def register_plugin_routes(self, app: FastAPI) -> None:
         """
         Register custom routes from plugins that have a routes.py file.
-        Also mounts static file directories for plugins with an 'html' subdirectory.
+        Also mounts static file directories for plugins with a 'static' subdirectory.
 
         Args:
             app: FastAPI application instance
@@ -143,7 +143,7 @@ class PluginManager:
 
     def _try_mount_plugin_static_files(self, app: FastAPI, plugin_id: str) -> None:
         """
-        Try to mount static files from plugin's html directory.
+        Try to mount static files from plugin's static directory.
 
         Args:
             app: FastAPI application instance
@@ -157,15 +157,15 @@ class PluginManager:
         for base_dir in plugin_dirs:
             for dir_name in dir_names:
                 plugin_dir = base_dir / dir_name
-                html_dir = plugin_dir / "html"
+                static_dir = plugin_dir / "static"
 
-                if html_dir.exists() and html_dir.is_dir():
+                if static_dir.exists() and static_dir.is_dir():
                     try:
                         # Mount at /api/plugins/{plugin_id}/static/
                         mount_path = f"/api/plugins/{plugin_id}/static"
                         app.mount(
                             mount_path,
-                            StaticFiles(directory=str(html_dir)),
+                            StaticFiles(directory=str(static_dir)),
                             name=f"plugin_{plugin_id}_static"
                         )
                         logger.info(f"Mounted static files for plugin {plugin_id} at {mount_path}")

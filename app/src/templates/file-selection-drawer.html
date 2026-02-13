@@ -46,7 +46,7 @@
         </sl-button>
       </sl-tooltip>
       <sl-tooltip content="Export selected collections">
-        <sl-dropdown name="exportDropdown" placement="bottom-end">
+        <sl-dropdown name="exportDropdown" placement="bottom-start">
           <sl-button name="exportButton" variant="primary" size="small" slot="trigger" caret disabled>
             <sl-icon name="download"></sl-icon>
           </sl-button>
@@ -56,6 +56,11 @@
             <sl-divider></sl-divider>
             <sl-menu-item name="exportTeiOnly">Export Gold XML only</sl-menu-item>
             <sl-menu-item name="exportTeiAllVersions">Export all XML only</sl-menu-item>
+            <sl-divider name="exportFormatsDivider" style="display: none;"></sl-divider>
+            <div name="exportFormatCheckboxes" style="display: none; padding: 0.5rem;">
+              <div>Additional Formats</div>
+              <!-- Checkboxes will be injected here dynamically -->
+            </div>
           </sl-menu>
         </sl-dropdown>
       </sl-tooltip>

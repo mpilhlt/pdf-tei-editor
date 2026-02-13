@@ -12,10 +12,12 @@ Practical guide for creating **backend plugins** in the PDF-TEI Editor.
 ## Architecture
 
 Backend plugins are Python modules discovered at runtime from:
+
 - `fastapi_app/plugins/<plugin_id>/`
 - Paths in `FASTAPI_PLUGIN_PATHS` environment variable (colon-separated)
 
 Each plugin:
+
 - Inherits from `fastapi_app.lib.plugin_base.Plugin`
 - Defines metadata (id, name, description, category, version, required_roles)
 - Implements endpoints as async methods
@@ -32,9 +34,11 @@ fastapi_app/plugins/my_plugin/
 ├── __init__.py
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
-├── my-script.js       # Optional: frontend JavaScript
+├── extensions/        # Optional: frontend extensions to be registered
+│   ├── my-script.js   
 ├── html/              # Optional: static files (auto-mounted)
 │   ├── styles.css
+│   ├── scripts.js
 │   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
@@ -401,12 +405,78 @@ async def analyze(self, context, params: dict) -> dict:
     return {"error": "No XML document open"}
 ```
 
+## Backend Plugin Output Pattern
+
+**IMPORTANT: When creating backend plugins that generate HTML or CSV output, ALWAYS use custom routes instead of returning content directly from plugin endpoints except when generating simple messages such a report on a completed task.**
+
+### Pattern for HTML/CSV Output
+
+1. **Plugin endpoint returns URLs** (not HTML/CSV content):
+
+   ```python
+   async def analyze(self, context, params: dict) -> dict:
+       """Return URLs pointing to custom routes."""
+       pdf_id = params.get("pdf")
+       variant = params.get("variant")
+
+       view_url = f"/api/plugins/my-plugin/view?pdf={pdf_id}&variant={variant}"
+       export_url = f"/api/plugins/my-plugin/export?pdf={pdf_id}&variant={variant}"
+
+       return {
+           "outputUrl": view_url,    # For HTML view
+           "exportUrl": export_url,  # For CSV export
+           "pdf": pdf_id,
+           "variant": variant
+       }
+   ```
+
+2. **Custom routes generate content** (in `routes.py`):
+
+   ```python
+   @router.get("/view", response_class=HTMLResponse)
+   async def view_history(
+       pdf: str = Query(...),
+       variant: str = Query("all"),
+       session_id: str | None = Query(None),
+       x_session_id: str | None = Header(None, alias="X-Session-ID"),
+       session_manager=Depends(get_session_manager),
+       auth_manager=Depends(get_auth_manager),
+   ):
+       """Generate HTML page with results."""
+       # Authenticate user
+       # Process data
+       # Generate HTML using generate_datatable_page() or custom template
+       return HTMLResponse(content=html)
+
+   @router.get("/export")
+   async def export_csv(
+       pdf: str = Query(...),
+       variant: str = Query("all")
+   ):
+       """Generate CSV export."""
+       # Process data
+       # Generate CSV
+       return StreamingResponse(
+           iter([csv_content]),
+           media_type="text/csv",
+           headers={"Content-Disposition": f"attachment; filename=export.csv"}
+       )
+   ```
+
+### Reference Examples
+
+- `fastapi_app/plugins/edit_history/` - Collection-based edit history with DataTables
+- `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
+
+
+
 ## API Endpoints
 
 - `GET /api/v1/plugins` - List plugins (filtered by user roles)
 - `POST /api/v1/plugins/{plugin_id}/execute` - Execute endpoint
 
 Request body:
+
 ```json
 {
   "endpoint": "execute",
@@ -522,6 +592,7 @@ async def execute(self, context, params: dict) -> dict:
 ```
 
 **When to use:**
+
 - Short text results (a few paragraphs)
 - Simple lists or small tables
 - Quick status messages or summaries
@@ -549,6 +620,7 @@ async def execute(self, context, params: dict) -> dict:
 ```
 
 **When to use:**
+
 - Large tables with sorting/filtering (e.g., DataTables)
 - Content requiring external JavaScript libraries
 - Complex visualizations or charts
@@ -556,6 +628,7 @@ async def execute(self, context, params: dict) -> dict:
 - Any content needing custom CSS or extensive styling
 
 **Benefits:**
+
 - Proper script execution (iframe loads scripts naturally)
 - Better performance (libraries load once)
 - "Open in new window" button for full-screen viewing
@@ -607,7 +680,7 @@ async def view_results(
     return HTMLResponse(content=html)
 ```
 
-2. **Return the URL** from your plugin endpoint:
+1. **Return the URL** from your plugin endpoint:
 
 ```python
 async def execute(self, context, params: dict) -> dict:
@@ -711,6 +784,30 @@ async def execute_operation(
 
 **See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
 
+### 4. Options-then-Execute Pattern (for user-configured operations)
+
+Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure options in a form before execution starts. Unlike Preview-then-Execute (which uses a fixed `executeUrl`), this pattern lets the iframe build the next URL dynamically based on form input.
+
+**User flow:**
+
+1. Plugin endpoint returns `outputUrl` pointing to an options form route
+2. Frontend loads form in iframe
+3. User configures options, clicks "Start"
+4. Form JS calls `sandbox.navigateIframe('/api/plugins/.../execute?params...')`
+5. Sandbox injects `session_id` and navigates iframe to execution route
+6. Execution route runs and displays results
+
+**Key requirements:**
+
+- Options form must include `generate_sandbox_client_script()` so `sandbox.navigateIframe()` is available
+- `session_id` is injected automatically — form JS only builds the path and query parameters
+- "Cancel" button can call `sandbox.closeDialog()`
+- Each page in the chain is a full page load; the sandbox client reconnects on each navigation
+
+For detailed implementation pattern with code examples, see [Options-then-Execute Pattern](../development/plugin-system-backend.md#4-options-then-execute-pattern-for-user-configured-operations).
+
+**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+
 ## Interactive HTML Content
 
 Both response formats support interactive elements through the **Plugin Sandbox** interface.
@@ -729,6 +826,9 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 
 // Close the result dialog
 pluginSandbox.closeDialog();
+
+// Navigate the iframe to a new URL (session_id injected automatically)
+sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async
 await pluginSandbox.openDocument('stable-id');

@@ -97,8 +97,9 @@ let registeredListeners = {};
 let reconnectTimeout = null;
 
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
+const MAX_RECONNECT_DELAY = 30000; // Cap at 30 seconds
 
 let appStarted = false; // Track if app startup is complete
 
@@ -201,7 +202,7 @@ function establishConnection(sessionId) {
 
     // Attempt reconnection if we haven't exceeded the limit
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
+      const delay = Math.min(RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
       reconnectAttempts++;
       
       logger.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);

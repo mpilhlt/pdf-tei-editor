@@ -133,6 +133,23 @@ export class PluginSandbox {
   }
 
   /**
+   * Navigate the plugin iframe to a new URL with automatic session_id injection
+   * @param {string} url - Relative or absolute URL to navigate to
+   */
+  navigateIframe(url) {
+    const iframe = this.dialog.content.querySelector('iframe');
+    if (!iframe) {
+      throw new Error('No iframe found in dialog');
+    }
+    const targetUrl = new URL(url, window.location.origin);
+    const state = this.context.getCurrentState();
+    if (!targetUrl.searchParams.has('session_id') && state?.sessionId) {
+      targetUrl.searchParams.set('session_id', state.sessionId);
+    }
+    iframe.src = targetUrl.toString();
+  }
+
+  /**
    * Open a document by updating xml and pdf state and closing dialog
    * @param {string} stableId - Document stable ID (typically a TEI file)
    *

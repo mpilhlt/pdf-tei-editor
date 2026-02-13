@@ -56,13 +56,13 @@ const endpoints = {
     update: "state.update",
     
     /**
-     * Internal state update for Plugin class instances (new system)
+     * Internal state update for Plugin class instances
      * Function signature: (state: ApplicationState) => void
      */
     updateInternal: "updateInternalState",
     
     /**
-     * State change notification for Plugin class instances (new system)
+     * State change notification for Plugin class instances 
      * Function signature: (changedKeys: string[], state: ApplicationState) => void
      */
     onStateUpdate: "onStateUpdate",
@@ -98,6 +98,13 @@ const endpoints = {
     saveXml: "filedata.saveXml",
     /** (loading: boolean) => void - Signal that file/filedata is being loaded */
     loading: "filedata.loading"
+  },
+  export_formats: {
+    /**
+     * Get additional export formats from plugins
+     * Function signature: () => Array<{id: string, label: string, url: string}>
+     */
+    formats: "export_formats"
   }
 }
 

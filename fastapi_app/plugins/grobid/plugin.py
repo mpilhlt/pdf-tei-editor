@@ -60,24 +60,13 @@ class GrobidPlugin(Plugin):
         return bool(url)
 
     async def initialize(self, context: PluginContext) -> None:
-        """Register the GROBID extractor, event handlers, and frontend extensions."""
-        from pathlib import Path
-
+        """Register the GROBID extractor and event handlers."""
         registry = ExtractorRegistry.get_instance()
         registry.register(GrobidTrainingExtractor)
 
         # Register event handler for file deletion cache cleanup
         event_bus = get_event_bus()
         event_bus.on("file.deleted", self._on_file_deleted)
-
-        # Register frontend extension
-        from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
-
-        fe_registry = FrontendExtensionRegistry.get_instance()
-        extension_file = Path(__file__).parent / "extensions" / "tei-xslt.js"
-        if extension_file.exists():
-            fe_registry.register_extension(extension_file, self.metadata["id"])
-            logger.info("Registered TEI XSLT frontend extension")
 
         logger.info("GROBID extractor plugin initialized")
 
