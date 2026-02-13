@@ -326,6 +326,17 @@ export async function execute(xmlDoc, currentState, configMap) {
           }
         }
       }
+
+      // Add DOI to analytic section if present
+      if (doi) {
+        let doiElem = findTeiByAttr(analytic, "idno", "type", "DOI");
+        if (!doiElem) {
+          doiElem = analytic.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
+      }
     }
 
     // Build monograph section (journal-level metadata)
@@ -344,6 +355,39 @@ export async function execute(xmlDoc, currentState, configMap) {
         }
         if (!textOf(journalElem)) {
           journalElem.textContent = meta.journal;
+        }
+      }
+
+      // Add ISSN/ISBN before imprint section
+      if (meta.issn) {
+        let issnElem = findTeiByAttr(monogr, "idno", "type", "ISSN");
+        if (!issnElem) {
+          // Insert before imprint if it exists, otherwise append
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            issnElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "ISSN" }), imprint);
+          } else {
+            issnElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "ISSN" }));
+          }
+        }
+        if (!textOf(issnElem)) {
+          issnElem.textContent = meta.issn;
+        }
+      }
+
+      if (meta.isbn) {
+        let isbnElem = findTeiByAttr(monogr, "idno", "type", "ISBN");
+        if (!isbnElem) {
+          // Insert before imprint if it exists, otherwise append
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            isbnElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "ISBN" }), imprint);
+          } else {
+            isbnElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "ISBN" }));
+          }
+        }
+        if (!textOf(isbnElem)) {
+          isbnElem.textContent = meta.isbn;
         }
       }
 
@@ -418,14 +462,36 @@ export async function execute(xmlDoc, currentState, configMap) {
       }
     }
 
-    // Add identifiers and URLs at biblStruct level
-    if (doi) {
-      let doiElem = findTeiByAttr(biblStruct, "idno", "type", "DOI");
-      if (!doiElem) {
-        doiElem = biblStruct.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
-      }
-      if (!textOf(doiElem)) {
-        doiElem.textContent = doi;
+    // Add identifiers and URLs
+    // DOI is already added to analytic section if it exists
+    // Only add DOI to biblStruct level if no analytic section
+    const analytic = findTei(biblStruct, "analytic");
+    if (doi && !analytic) {
+      // For documents without analytic section, add DOI to monogr or biblStruct
+      const monogr = findTei(biblStruct, "monogr");
+      if (monogr) {
+        // Add to monogr section (before imprint)
+        let doiElem = findTeiByAttr(monogr, "idno", "type", "DOI");
+        if (!doiElem) {
+          const imprint = findTei(monogr, "imprint");
+          if (imprint) {
+            doiElem = monogr.insertBefore(createTei(xmlDoc, "idno", { type: "DOI" }), imprint);
+          } else {
+            doiElem = monogr.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+          }
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
+      } else {
+        // Add to biblStruct level
+        let doiElem = findTeiByAttr(biblStruct, "idno", "type", "DOI");
+        if (!doiElem) {
+          doiElem = biblStruct.appendChild(createTei(xmlDoc, "idno", { type: "DOI" }));
+        }
+        if (!textOf(doiElem)) {
+          doiElem.textContent = doi;
+        }
       }
     } else if (id) {
       // Check if any idno already exists in biblStruct

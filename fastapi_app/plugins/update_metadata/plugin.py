@@ -50,7 +50,7 @@ class UpdateMetadataPlugin(Plugin):
             Dict with outputUrl pointing to the update execution route
         """
         # Build URL to custom route
-        force = params.get("force", False)
+        force = params.get("force", True)
         limit = params.get("limit", None)
 
         # Build query parameters

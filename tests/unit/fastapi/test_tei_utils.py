@@ -934,7 +934,7 @@ class TestBiblStructPriorityExtraction(unittest.TestCase):
         self.assertEqual(metadata['publisher'], "Test Publisher")
 
     def test_fallback_to_legacy_when_biblstruct_missing(self):
-        """Test fallback to titleStmt/publicationStmt when biblStruct is missing."""
+        """Test fallback to titleStmt/publicationStmt when biblStruct is missing (authors not extracted)."""
         tei_xml = """
         <TEI xmlns="http://www.tei-c.org/ns/1.0">
             <teiHeader>
@@ -967,9 +967,8 @@ class TestBiblStructPriorityExtraction(unittest.TestCase):
 
         # Verify legacy values are used when biblStruct is missing
         self.assertEqual(metadata['title'], "Legacy Title")
-        self.assertEqual(len(metadata['authors']), 1)
-        self.assertEqual(metadata['authors'][0]['given'], "Legacy")
-        self.assertEqual(metadata['authors'][0]['family'], "Author")
+        # Authors are NOT extracted when biblStruct is missing (biblStruct is canonical source)
+        self.assertEqual(metadata.get('authors'), [])
         self.assertEqual(metadata['date'], "1999")
         self.assertEqual(metadata['doi'], "10.1111/legacy.doi")
         self.assertEqual(metadata['publisher'], "Legacy Publisher")

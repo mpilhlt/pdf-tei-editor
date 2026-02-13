@@ -64,7 +64,7 @@ def extract_doi_from_tei(tei_root: etree._Element) -> str | None:
     return None
 
 
-def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
+def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> tuple[bool, str]:
     """
     Update or create biblStruct in TEI document with complete metadata.
 
@@ -73,7 +73,7 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
         metadata: Complete metadata dict from get_metadata_for_document()
 
     Returns:
-        True if biblStruct was updated/created, False if no metadata available
+        Tuple of (success, reason): (True, "updated") if successful, (False, reason) if failed
     """
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
 
@@ -85,12 +85,12 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
     )
 
     if not has_content:
-        return False
+        return (False, "no metadata (missing title, journal, and authors)")
 
     # Find or create sourceDesc
     file_desc = tei_root.find('.//tei:fileDesc', ns)
     if file_desc is None:
-        return False
+        return (False, "missing TEI fileDesc element")
 
     source_desc = file_desc.find('.//tei:sourceDesc', ns)
     if source_desc is None:
@@ -104,10 +104,18 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
     # Build new biblStruct
     biblStruct = etree.SubElement(source_desc, "{http://www.tei-c.org/ns/1.0}biblStruct")
 
+    # Add status attribute with update timestamp
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    biblStruct.set("status", f"last-updated:{timestamp}")
+
     # Analytic section (article-level metadata)
     title = metadata.get('title')
     authors = metadata.get('authors', [])
+    # Check for both lowercase and uppercase DOI keys
+    doi = metadata.get('doi') or metadata.get('DOI')
 
+    analytic = None
     if title or authors:
         analytic = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}analytic")
 
@@ -127,6 +135,12 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
                 surname = etree.SubElement(persName, "{http://www.tei-c.org/ns/1.0}surname")
                 surname.text = author["family"]
 
+        # Add DOI to analytic section if present
+        if doi:
+            idno_elem = etree.SubElement(analytic, "{http://www.tei-c.org/ns/1.0}idno")
+            idno_elem.set("type", "DOI")
+            idno_elem.text = doi
+
     # Monograph section (journal-level metadata)
     journal = metadata.get('journal')
     volume = metadata.get('volume')
@@ -134,14 +148,29 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
     pages = metadata.get('pages')
     date = metadata.get('date')
     publisher = metadata.get('publisher')
+    # Check for both lowercase and uppercase keys
+    issn = metadata.get('issn') or metadata.get('ISSN')
+    isbn = metadata.get('isbn') or metadata.get('ISBN')
 
-    if journal or publisher or date or volume or issue or pages:
+    monogr = None
+    if journal or publisher or date or volume or issue or pages or issn or isbn:
         monogr = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}monogr")
 
         if journal:
             journal_elem = etree.SubElement(monogr, "{http://www.tei-c.org/ns/1.0}title")
             journal_elem.set("level", "j")
             journal_elem.text = journal
+
+        # Add ISSN/ISBN before imprint section
+        if issn:
+            issn_elem = etree.SubElement(monogr, "{http://www.tei-c.org/ns/1.0}idno")
+            issn_elem.set("type", "ISSN")
+            issn_elem.text = issn
+
+        if isbn:
+            isbn_elem = etree.SubElement(monogr, "{http://www.tei-c.org/ns/1.0}idno")
+            isbn_elem.set("type", "ISBN")
+            isbn_elem.text = isbn
 
         # Imprint section
         imprint = etree.SubElement(monogr, "{http://www.tei-c.org/ns/1.0}imprint")
@@ -176,16 +205,27 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
             pub_elem = etree.SubElement(imprint, "{http://www.tei-c.org/ns/1.0}publisher")
             pub_elem.text = publisher
 
-    # Add identifiers and URLs at biblStruct level
-    doi = metadata.get('doi')
-    id_value = metadata.get('id')
-    url = metadata.get('url')
+    # Add identifiers and URLs
+    # DOI is already added to analytic section if it exists
+    # If no analytic but DOI exists, add to monogr or biblStruct level
+    if doi and analytic is None:
+        if monogr is not None:
+            # Add DOI to monogr section (after title, before imprint which was already added)
+            # Need to insert it before imprint
+            imprint_index = list(monogr).index(monogr.find('./{http://www.tei-c.org/ns/1.0}imprint'))
+            doi_elem = etree.Element("{http://www.tei-c.org/ns/1.0}idno")
+            doi_elem.set("type", "DOI")
+            doi_elem.text = doi
+            monogr.insert(imprint_index, doi_elem)
+        else:
+            # Add to biblStruct level
+            idno = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}idno")
+            idno.set("type", "DOI")
+            idno.text = doi
 
-    if doi:
-        idno = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}idno")
-        idno.set("type", "DOI")
-        idno.text = doi
-    elif id_value:
+    # Other identifiers
+    id_value = metadata.get('id')
+    if id_value:
         idno = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}idno")
         if ":" in id_value:
             id_type = id_value.split(":")[0]
@@ -194,6 +234,8 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
         else:
             idno.text = id_value
 
+    # URL
+    url = metadata.get('url')
     if url:
         ptr = etree.SubElement(biblStruct, "{http://www.tei-c.org/ns/1.0}ptr")
         ptr.set("target", url)
@@ -208,7 +250,15 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> bool:
         except AttributeError:
             pass
 
-    return True
+    # Remove redundant author elements from titleStmt (authors are now in biblStruct)
+    title_stmt = file_desc.find('.//tei:titleStmt', ns)
+    if title_stmt is not None:
+        # Find all author elements in titleStmt
+        author_elems = title_stmt.findall('tei:author', ns)
+        for author_elem in author_elems:
+            title_stmt.remove(author_elem)
+
+    return (True, "updated")
 
 
 async def update_tei_metadata(
@@ -386,13 +436,19 @@ async def update_tei_metadata(
                     # Parse TEI
                     tei_root = etree.fromstring(tei_content)
 
+                    # Check if this is actually a TEI document
+                    root_tag = str(tei_root.tag)
+                    if 'TEI' not in root_tag and 'tei' not in root_tag:
+                        logger.debug(f"    Skipped TEI {tei_stable_id} - not a TEI document (root: {root_tag.split('}')[-1]})")
+                        continue
+
                     # Extract processing instructions
                     processing_instructions = extract_processing_instructions(tei_content.decode('utf-8'))
 
                     # Update biblStruct
-                    updated = update_biblstruct_in_tei(tei_root, metadata)
+                    updated, reason = update_biblstruct_in_tei(tei_root, metadata)
                     if not updated:
-                        logger.debug(f"    Skipped TEI {tei_stable_id} - insufficient metadata")
+                        logger.debug(f"    Skipped TEI {tei_stable_id} - {reason}")
                         continue
 
                     # Serialize updated TEI

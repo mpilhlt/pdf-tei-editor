@@ -22,7 +22,7 @@ class Author(TypedDict):
 class BibliographicMetadata(TypedDict, total=False):
     """
     Bibliographic metadata extracted from documents.
-    
+
     This type represents the standardized structure for bibliographic metadata
     that can be obtained from DOI lookup or LLM extraction services.
     """
@@ -35,6 +35,8 @@ class BibliographicMetadata(TypedDict, total=False):
     issue: Optional[str]
     pages: Optional[str]
     doi: Optional[str]
+    issn: Optional[str]
+    isbn: Optional[str]
     id: Optional[str]
     url: Optional[str]
     # Additional fields for document ID resolution
@@ -67,6 +69,8 @@ BIBLIOGRAPHIC_METADATA_SCHEMA = {
         "volume": {"type": "string", "description": "Volume number"},
         "issue": {"type": "string", "description": "Issue number"},
         "pages": {"type": "string", "description": "Page range (e.g., '1-15')"},
+        "issn": {"type": "string", "description": "ISSN (International Standard Serial Number) for journals"},
+        "isbn": {"type": "string", "description": "ISBN (International Standard Book Number) for books"},
         "id": {"type": "string", "description": "Any type of persisten identifier, preferrably DOI"},
         "url": {"type": "string", "description": "A stable or persistent URL for accessing the document, if present in the document"}
     }
@@ -84,6 +88,8 @@ Extract the following information if available:
 - volume: Volume number
 - issue: Issue number
 - pages: Page range
+- issn: ISSN (International Standard Serial Number) for journals, if present
+- isbn: ISBN (International Standard Book Number) for books, if present
 - id: any kind of persistent identifier like DOI, ISBN, JSTOR, ARXIV, etc. if present.
   Prefix with the type of identifier in lowercase like so: "doi:10.1234/example.2024" or
   "isbn:978-0-123456-78-9" or "jstor:44290231".
@@ -92,7 +98,7 @@ Extract the following information if available:
   Only return a URL you can read verbatim. Do NOT guess or fabricate a URL.
 
 Critical rules:
-- Return the information as JSON matching the expected schema. 
+- Return the information as JSON matching the expected schema.
 - Only include fields where you can find the information.
 - If author names or the title are in all-caps, return them properly capitalized
 """
@@ -142,6 +148,8 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> BibliographicMetadata
         "issue": data.get("issue"),
         "pages": data.get("pages"),
         "doi": data.get("doi"),
+        "issn": data.get("issn"),
+        "isbn": data.get("isbn"),
         "id": data.get("id"),
         "url": data.get("url")
     })

@@ -3,18 +3,6 @@
   <fileDesc>
     <titleStmt>
       <title level="a">Urheberrecht und Zugang in einer digitalen Welt – Urheberrechtliche Fragestellungen des Zugangs für Gedächtnisinstitutionen und die Digital Humanities –</title>
-      <author>
-        <persName>
-          <forename>Katharina de la</forename>
-          <surname>Durantaye</surname>
-        </persName>
-      </author>
-      <author>
-        <persName>
-          <forename>Benjamin</forename>
-          <surname>Raue</surname>
-        </persName>
-      </author>
       <respStmt>
         <persName xml:id="cboulanger">Christian Boulanger</persName>
         <resp>Annotator</resp>
@@ -52,9 +40,11 @@
               <surname>Raue</surname>
             </persName>
           </author>
+          <idno type="DOI">10.5771/2699-1284-2020-1-83</idno>
         </analytic>
         <monogr>
           <title level="j">RuZ - Recht und Zugang</title>
+          <idno type="ISSN">2699-1284</idno>
           <imprint>
             <biblScope unit="volume">1</biblScope>
             <biblScope unit="issue">1</biblScope>
@@ -63,7 +53,6 @@
             <publisher>Nomos Verlag</publisher>
           </imprint>
         </monogr>
-        <idno type="DOI">10.5771/2699-1284-2020-1-83</idno>
         <ptr target="https://doi.org/10.5771/2699-1284-2020-1-83"/>
       </biblStruct>
     </sourceDesc>
