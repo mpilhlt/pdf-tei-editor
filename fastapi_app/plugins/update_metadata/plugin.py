@@ -5,7 +5,7 @@ Provides functionality to update all TEI documents with complete bibliographic m
 from DOI lookup using CrossRef/DataCite APIs.
 """
 
-from typing import Any
+from typing import Any, Callable
 from fastapi_app.lib.plugin_base import Plugin
 
 
@@ -32,7 +32,7 @@ class UpdateMetadataPlugin(Plugin):
             ]
         }
 
-    def get_endpoints(self) -> dict[str, callable]:
+    def get_endpoints(self) -> dict[str, Callable]:
         """Return plugin endpoints."""
         return {
             "update": self.update
