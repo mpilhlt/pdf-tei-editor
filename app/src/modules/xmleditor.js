@@ -47,9 +47,10 @@ import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
-import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror_utils.js';
-import { $$ } from './browser-utils.js';
+import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
+import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
+
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -161,6 +162,7 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+  #xmlTagSyncCompartment = new Compartment()
 
 
   /**
@@ -182,6 +184,7 @@ export class XMLEditor extends EventEmitter {
     const extensions = [
       basicSetup,
       xml(),
+      this.#xmlTagSyncCompartment.of(xmlTagSync),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
@@ -1296,11 +1299,17 @@ export class XMLEditor extends EventEmitter {
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
       await this.emit("editorXmlNotWellFormed", [diagnostic])
       this.#xmlTree = null;
+      this.#view.dispatch({
+        effects: this.#xmlTagSyncCompartment.reconfigure([])
+      });
       return false;
     }
     console.log("Document was updated and is well-formed.")
     await this.emit("editorXmlWellFormed", null)
     this.#xmlTree = doc;
+    this.#view.dispatch({
+      effects: this.#xmlTagSyncCompartment.reconfigure(xmlTagSync)
+    });
 
     // Track processing instructions for better synchronization
     this.#processingInstructions = this.detectProcessingInstructions();

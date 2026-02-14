@@ -15,7 +15,7 @@ import {
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { resolveDeduplicated } from '../modules/codemirror_utils.js'
+import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
 import { encodeXmlEntities } from '../modules/tei-utils.js'
 
