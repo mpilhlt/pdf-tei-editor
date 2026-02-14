@@ -148,6 +148,11 @@ class Settings(BaseSettings):
         return self.data_root / "plugins"
 
     @property
+    def schema_cache_dir(self) -> Path:
+        """Schema cache directory - always data_root/schema/cache"""
+        return self.data_root / "schema" / "cache"
+
+    @property
     def log_dir(self) -> Path:
         """Directory for log files. Configurable via LOG_DIR env var."""
         if self.LOG_DIR:

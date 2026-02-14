@@ -242,8 +242,10 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
         Tuple of (cache_dir, cache_file, filename)
     """
     schema_location_parts = schema_location.split("/")[2:-1]
+    # Replace filesystem-incompatible characters (e.g. colon in "localhost:8000")
+    schema_location_parts = [re.sub(r'[<>:"|?*]', '_', part) for part in schema_location_parts]
     schema_cache_dir = cache_root / Path(*schema_location_parts)
-    schema_file_name = os.path.basename(schema_location)
+    schema_file_name = re.sub(r'[<>:"|?*]', '_', os.path.basename(schema_location))
     schema_cache_file = schema_cache_dir / schema_file_name
     return schema_cache_dir, schema_cache_file, schema_file_name
 
@@ -293,7 +295,8 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
         List of error dictionaries with keys: message, line, column, severity (optional)
     """
     if cache_root is None:
-        cache_root = Path('schema/cache')
+        from fastapi_app.config import get_settings
+        cache_root = get_settings().schema_cache_dir
 
     parser = etree.XMLParser()
     errors = []

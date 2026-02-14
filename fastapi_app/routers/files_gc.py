@@ -312,7 +312,7 @@ def garbage_collect_files(
     # Clean up schema cache
     logger.info("Cleaning up schema cache...")
     settings = get_settings()
-    schema_cache_dir = settings.data_root / "schema" / "cache"
+    schema_cache_dir = settings.schema_cache_dir
     schema_cache_deleted = 0
 
     if schema_cache_dir.exists() and schema_cache_dir.is_dir():

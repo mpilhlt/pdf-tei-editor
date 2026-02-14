@@ -47,11 +47,8 @@ def validate_xml(
         List of validation errors. Empty list if validation passed.
     """
     try:
-        # Determine cache root - use data_root/schema/cache
-        cache_root = settings.data_root / "schema" / "cache"
-
         # Perform validation using framework-agnostic library
-        errors = validate(request.xml_string, cache_root=cache_root)
+        errors = validate(request.xml_string, cache_root=settings.schema_cache_dir)
 
         # Convert to Pydantic models
         error_models = [
@@ -133,8 +130,7 @@ def generate_autocomplete_data(
         )
 
         # Get cache information
-        cache_root = settings.data_root / "schema" / "cache"
-        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
+        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, settings.schema_cache_dir)
         autocomplete_cache_file = schema_cache_dir / 'codemirror-autocomplete.json'
 
         # Check if autocomplete data is already cached
