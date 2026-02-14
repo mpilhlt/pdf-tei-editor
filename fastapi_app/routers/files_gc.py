@@ -106,14 +106,9 @@ def garbage_collect_files(
     )
 
     if not deleted_files:
-        logger.info("No files to garbage collect")
-        return GarbageCollectResponse(
-            purged_count=0,
-            files_deleted=0,
-            storage_freed=0
-        )
-
-    logger.info(f"Found {len(deleted_files)} files eligible for garbage collection")
+        logger.info("No soft-deleted files to garbage collect")
+    else:
+        logger.info(f"Found {len(deleted_files)} files eligible for garbage collection")
 
     # Track statistics
     purged_count = 0
