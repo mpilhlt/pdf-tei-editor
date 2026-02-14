@@ -132,3 +132,44 @@ Run with: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/log_
 - `fastapi_app/lib/plugin_tools.py` — extended sandbox client script with SSE forwarding
 - `fastapi_app/routers/plugins.py` — added `/sandbox-client.js` endpoint
 - `fastapi_app/plugins/log_viewer/` — new plugin (plugin.py, routes.py, __init__.py, html/view.html, README.md)
+
+## Log file shwoing "No SSE queue"
+
+This is an example for the entries that are added to the log file after a log window has been opened. The warnings might be relevant, showing the SSE session ids.
+
+```text
+2026-02-14 18:15:08.018 [DEBUG   ] fastapi_app.routers.files_locks - [LOCK] Session 7207abf6... attempting to release lock for file nu7byx...
+2026-02-14 18:15:08.018 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.018", "level": 
+2026-02-14 18:15:08.020 [INFO    ] fastapi_app.routers.files_locks - [LOCK] Session 7207abf6... released lock for file nu7byx...
+2026-02-14 18:15:08.021 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.020", "level": 
+2026-02-14 18:15:08.023 [WARNING ] fastapi_app.lib.dependencies - No SSE queue for client: 3d808b10-3d31-4657-9c00-08aea7d56e6e
+2026-02-14 18:15:08.023 [WARNING ] fastapi_app.lib.dependencies - No SSE queue for client: e203838b-9fa2-4a31-bee7-21981f70bad8
+2026-02-14 18:15:08.023 [DEBUG   ] fastapi_app.routers.files_locks - Broadcast lockReleased to 2 sessions (excluded session 7207abf6...): {'stable_id': 'nu7byx'}
+2026-02-14 18:15:08.023 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.023", "level": 
+2026-02-14 18:15:08.034 [DEBUG   ] fastapi_app.routers.files_locks - [LOCK API] Session 7207abf6... requesting lock for z98jj9
+2026-02-14 18:15:08.035 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.034", "level": 
+2026-02-14 18:15:08.036 [DEBUG   ] fastapi_app.routers.files_locks - [LOCK] Session 7207abf6... attempting to acquire lock for file z98jj9...
+2026-02-14 18:15:08.036 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.036", "level": 
+2026-02-14 18:15:08.037 [DEBUG   ] fastapi_app.routers.files_locks - [LOCK] No existing lock found for file z98jj9...
+2026-02-14 18:15:08.037 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.037", "level": 
+2026-02-14 18:15:08.038 [INFO    ] fastapi_app.routers.files_locks - [LOCK] Session 7207abf6... acquired NEW lock for file z98jj9...
+2026-02-14 18:15:08.038 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.038", "level": 
+2026-02-14 18:15:08.039 [INFO    ] fastapi_app.routers.files_locks - [LOCK API] Session 7207abf6... successfully acquired lock for file z98jj9...
+2026-02-14 18:15:08.039 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.039", "level": 
+2026-02-14 18:15:08.039 [WARNING ] fastapi_app.lib.dependencies - No SSE queue for client: 3d808b10-3d31-4657-9c00-08aea7d56e6e
+2026-02-14 18:15:08.039 [WARNING ] fastapi_app.lib.dependencies - No SSE queue for client: e203838b-9fa2-4a31-bee7-21981f70bad8
+2026-02-14 18:15:08.039 [DEBUG   ] fastapi_app.routers.files_locks - Broadcast fileDataChanged to 2 sessions (excluded session 7207abf6...): {'reason': 'lock_acquired', 'stable_id': 'z98jj9', 'locked_by': 'cboulanger'}
+2026-02-14 18:15:08.039 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.039", "level": 
+2026-02-14 18:15:08.083 [DEBUG   ] fastapi_app.routers.files_serve - Serving file: z98jj9
+2026-02-14 18:15:08.083 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.083", "level": 
+2026-02-14 18:15:08.084 [INFO    ] fastapi_app.routers.files_serve - Serving file z98jj9... (tei)
+2026-02-14 18:15:08.084 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:08.084", "level": 
+2026-02-14 18:15:09.163 [DEBUG   ] fastapi_app.routers.validation - Generating autocomplete data for namespace http://www.tei-c.org/ns/1.0 with relaxng schema at http://127.0.0.1:3000/docs/schema/grobid.training.segmentation.rng
+2026-02-14 18:15:09.164 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:09.163", "level": 
+2026-02-14 18:15:09.164 [DEBUG   ] fastapi_app.routers.validation - Using cached schema at data/schema/cache/127.0.0.1_3000/docs/schema/grobid.training.segmentation.rng
+2026-02-14 18:15:09.164 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:09.164", "level": 
+2026-02-14 18:15:09.167 [DEBUG   ] fastapi_app.routers.validation - Generating autocomplete data from RelaxNG schema: data/schema/cache/127.0.0.1_3000/docs/schema/grobid.training.segmentation.rng
+2026-02-14 18:15:09.167 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:09.167", "level": 
+2026-02-14 18:15:09.179 [DEBUG   ] fastapi_app.routers.validation - Cached autocomplete data to data/schema/cache/127.0.0.1_3000/docs/schema/codemirror-autocomplete.json
+2026-02-14 18:15:09.179 [DEBUG   ] fastapi_app.lib.dependencies - Sent SSE logEntry to 7207abf6-963f-4603-8948-52c3810fde91: {"timestamp": "2026-02-14 18:15:09.179", "level": 
+```
