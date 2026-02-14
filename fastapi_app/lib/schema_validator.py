@@ -276,6 +276,8 @@ def download_schema_file(
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
     except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            logger.info(f"Schema not found at {schema_location}")
         raise ValidationError(f"Failed to download schema from {schema_location} - check the URL: {e}")
     except Exception as e:
         raise ValidationError(f"Failed to download schema: {str(e)}")

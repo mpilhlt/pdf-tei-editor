@@ -93,7 +93,7 @@ class SSEService:
         with self.lock:
             if client_id not in self.message_queues:
                 if self.logger:
-                    self.logger.warning(f"No SSE queue for client: {client_id}")
+                    self.logger.debug(f"No SSE queue for client: {client_id}")
                 return False
 
             try:

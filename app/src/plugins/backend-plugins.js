@@ -83,9 +83,13 @@ export class BackendPluginsPlugin extends Plugin {
     // Setup close button handler
     ui.pluginResultDialog.closeBtn.addEventListener('click', () => ui.pluginResultDialog.hide());
 
-    // Clean up SSE subscriptions when dialog is hidden
+    // Clean up SSE subscriptions when dialog is hidden — only for the iframe,
+    // not for popup windows that may still be using their subscriptions
     ui.pluginResultDialog.addEventListener('sl-hide', () => {
-      this.pluginSandbox._cleanupSSESubscriptions();
+      const iframe = ui.pluginResultDialog.content?.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
+      }
     });
   }
 
