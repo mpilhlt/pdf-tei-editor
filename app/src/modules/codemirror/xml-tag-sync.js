@@ -58,7 +58,7 @@ function findMatchingTagNameNode(parentNode, element, isOpenTag) {
  */
 function resolveTagName(tree, pos) {
   for (const bias of [1, -1]) {
-    let node = tree.resolveInner(pos, bias);
+    let node = tree.resolveInner(pos, /** @type {1 | -1} */ (bias));
     while (node && node.name !== "TagName" && node.parent) {
       node = node.parent;
     }
