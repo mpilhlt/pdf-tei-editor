@@ -35,6 +35,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
 
+    # Check for pending data restore (from backup-restore plugin)
+    project_root = Path(__file__).parent.parent
+    data_restore_dir = project_root / "data_restore"
+    data_was_restored = False
+    if data_restore_dir.exists() and data_restore_dir.is_dir():
+        from .lib.data_restore import apply_pending_restore
+        data_was_restored = apply_pending_restore(
+            project_root, settings.data_root, logger
+        )
+
     # Initialize database directory from config defaults FIRST
     # This copies JSON files from config/ to db/ if they don't exist
     # and merges missing config values into db/config.json
@@ -111,6 +121,28 @@ async def lifespan(app: FastAPI):
 
     # Log startup complete
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
+
+    # If data was restored, broadcast maintenance-off and reload to reconnecting clients
+    if data_was_restored:
+        from .lib.sse_utils import broadcast_to_all_sessions
+        from .lib.dependencies import get_session_manager
+        sse_svc = get_sse_service()
+        sess_mgr = get_session_manager()
+        broadcast_to_all_sessions(
+            sse_service=sse_svc,
+            session_manager=sess_mgr,
+            event_type="maintenanceOff",
+            data={},
+            logger=logger,
+        )
+        broadcast_to_all_sessions(
+            sse_service=sse_svc,
+            session_manager=sess_mgr,
+            event_type="maintenanceReload",
+            data={},
+            logger=logger,
+        )
+        logger.info("Broadcast maintenanceOff + maintenanceReload after data restore")
 
     yield
 

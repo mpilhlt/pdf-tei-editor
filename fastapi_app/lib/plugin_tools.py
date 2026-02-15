@@ -351,6 +351,48 @@ def wrap_html_with_sandbox_client(html_content: str) -> str:
 </html>"""
 
 
+def load_plugin_html(
+    caller_file: str,
+    template_name: str,
+    inject_sandbox: bool = True,
+) -> str:
+    """
+    Load an HTML template from a plugin's ``html/`` directory.
+
+    The template is a plain ``.html`` file (no special placeholder syntax
+    needed).  If *inject_sandbox* is True, the sandbox client script is
+    injected into the ``<head>`` via :func:`wrap_html_with_sandbox_client`.
+
+    Args:
+        caller_file: ``__file__`` of the calling module – used to locate the
+            plugin's ``html/`` directory (sibling of the calling file).
+        template_name: File name inside ``html/`` (e.g. ``"view.html"``).
+        inject_sandbox: Inject the sandbox client script (default True).
+
+    Returns:
+        HTML string ready to be returned as ``HTMLResponse``.
+
+    Example::
+
+        from fastapi_app.lib.plugin_tools import load_plugin_html
+
+        @router.get("/view", response_class=HTMLResponse)
+        async def view(...):
+            html = load_plugin_html(__file__, "view.html")
+            return HTMLResponse(content=html)
+    """
+    plugin_dir = Path(caller_file).resolve().parent
+    template_path = plugin_dir / "html" / template_name
+    if not template_path.exists():
+        raise FileNotFoundError(
+            f"Plugin HTML template not found: {template_path}"
+        )
+    html = template_path.read_text(encoding="utf-8")
+    if inject_sandbox:
+        html = wrap_html_with_sandbox_client(html)
+    return html
+
+
 def escape_html(text: str) -> str:
     """
     Escape HTML special characters.

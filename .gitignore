@@ -27,8 +27,8 @@ app/web/pdfjs
 log/
 
 # Application runtime data (unified structure)
-data/db/
-data/files/
+data/
+data_*/
 
 # Test runtime data (ephemeral, gitignored)
 tests/api/runtime/db/
