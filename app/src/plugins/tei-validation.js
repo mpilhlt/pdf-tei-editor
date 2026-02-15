@@ -320,7 +320,8 @@ function removeDiagnosticsInChangedRanges(update) {
   const diagnostics = []
   // @ts-ignore
   // update.changedRanges is not in the documentation but exists in the object
-  const changedRangeValues = Object.values(update.changedRanges[0]) 
+  if (!update.changedRanges || update.changedRanges.length === 0) return;
+  const changedRangeValues = Object.values(update.changedRanges[0])
   const minRange = Math.min(...changedRangeValues)
   const maxRange = Math.max(...changedRangeValues)
   forEachDiagnostic(viewState, (d) => {

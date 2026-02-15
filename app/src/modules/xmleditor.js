@@ -1218,7 +1218,7 @@ export class XMLEditor extends EventEmitter {
       this.emit("editorReady", null);
 
       // Emit delayed update event with a small timeout for the DOM to be ready
-      setTimeout(() => this.emit("editorUpdateDelayed", /** @type {any} */(null)), 100);
+      setTimeout(() => this.emit("editorUpdateDelayed", update), 100);
     }
   }
 
