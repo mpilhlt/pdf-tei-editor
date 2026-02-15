@@ -42,20 +42,24 @@ import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectCh
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
-import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
+import { syntaxTree, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
-import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror/codemirror-utils.js';
+import { selectionChangeListener, isExtension } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
+import {
+  xmlDomSync, xmlDomSyncField, xmlTree, syntaxToDomMap, domToSyntaxMap,
+  xmlSyncProcessingInstructions, requestSyncEffect
+} from "./codemirror/xml-dom-sync.js";
 
 
 /**
- * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
+ * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML
  * tree in sync as far as possible, and provides linting and diffing.
- * 
+ *
  * @fires XMLEditor#selectionChanged - Fired when editor selection changes
  * @fires XMLEditor#editorReady - Fired when editor is ready for interaction
  * @fires XMLEditor#editorUpdate - Fired when editor content changes
@@ -89,29 +93,12 @@ export class XMLEditor extends EventEmitter {
 
   #documentVersion = 0 // internal counter to track changes in the document
 
-  #editorContent = '' // a cache of the raw text content of the editor
-
-  /** @type {Map<number, Node> | null} */
-  #syntaxToDom = null; // Maps syntax tree nodes to DOM nodes
-
-  /** @type {Map<Node, number> | null} */
-  #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
-
-  /** @type {Document | null} */
-  #xmlTree = null; // the xml document tree or null if xml text is invalid
-
-  /** @type {Tree | null} */
-  #syntaxTree = null // the lezer syntax tree
-
-  /** @type {ProcessingInstructionData[]} */
-  #processingInstructions = [] // processing instructions found in the document
-
   /** @type {boolean} */
   #isReady = false
 
-  /** 
+  /**
    * Promise that resolves when the editor is ready and the XML document is loaded
-   * @type {Promise<void> | null} 
+   * @type {Promise<void> | null}
    */
   #readyPromise = null
 
@@ -126,7 +113,7 @@ export class XMLEditor extends EventEmitter {
    * true if the editor is read-only
    * @type {boolean}
    */
-  #editorIsReadOnly = false 
+  #editorIsReadOnly = false
 
   /**
    * The original XML document, when in merge view mode
@@ -163,6 +150,7 @@ export class XMLEditor extends EventEmitter {
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
   #xmlTagSyncCompartment = new Compartment()
+  #xmlDomSyncCompartment = new Compartment()
 
 
   /**
@@ -185,6 +173,7 @@ export class XMLEditor extends EventEmitter {
       basicSetup,
       xml(),
       this.#xmlTagSyncCompartment.of(xmlTagSync),
+      this.#xmlDomSyncCompartment.of(xmlDomSync({ debounceMs: 1000 })),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
@@ -195,6 +184,8 @@ export class XMLEditor extends EventEmitter {
       this.#tabSizeCompartment.of([]),
       this.#indentationCompartment.of([]),
       this.#readOnlyCompartment.of([]),
+      // Update listener that observes xmlDomSyncField transitions for event emission
+      EditorView.updateListener.of(update => this.#onSyncStateChange(update)),
     ];
 
     if (tagData) {
@@ -234,7 +225,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Type-safe event listener registration with autocompletion support
-   * @template {keyof XMLEditorEventMap} K  
+   * @template {keyof XMLEditorEventMap} K
    * @param {K} event - Event name
    * @param {(data: XMLEditorEventMap[K], signal?: AbortSignal) => void | Promise<void>} listener - Event handler
    * @returns {number} Listener ID for removal
@@ -245,7 +236,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Type-safe one-time event listener registration with autocompletion support
-   * @template {keyof XMLEditorEventMap} K  
+   * @template {keyof XMLEditorEventMap} K
    * @param {K} event - Event name
    * @param {(data: XMLEditorEventMap[K], signal?: AbortSignal) => void | Promise<void>} listener - Event handler
    * @returns {number} Listener ID for removal
@@ -281,7 +272,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Add one or more linter extensions to the editor
-   * @param {Extension} extension 
+   * @param {Extension} extension
    */
   addLinter(extension) {
     if (!isExtension(extension)) {
@@ -296,7 +287,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Adds an update listener
-   * @param {(update:ViewUpdate) => void} listener 
+   * @param {(update:ViewUpdate) => void} listener
    */
   addUpdateListener(listener) {
     if (typeof listener != "function") {
@@ -338,9 +329,9 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
-   * @param {Boolean} value 
+   * @param {Boolean} value
    */
-  async setReadOnly(value) { 
+  async setReadOnly(value) {
     this.#editorIsReadOnly = Boolean(value)
     this.#view.dispatch({
       effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
@@ -350,14 +341,14 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
-   * @returns {boolean} 
+   * @returns {boolean}
    */
-  isReadOnly() {  
+  isReadOnly() {
     return this.#editorIsReadOnly
   }
 
   /**
-   * Returns the current state of the editor. If false await the promise returned from 
+   * Returns the current state of the editor. If false await the promise returned from
    * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
    */
@@ -383,49 +374,49 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Loads XML, either from a string or from a given path. 
+   * Loads XML, either from a string or from a given path.
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
-   * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready. 
+   * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready.
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
-    // this created the isReadyPromise
+    // this creates the isReadyPromise
     this.#markAsNotReady()
 
-    // fetch xml if path 
-    //console.warn("Loading XML")
+    // fetch xml if path
     const xml = await this.#fetchXml(xmlPathOrString);
 
-    
+
     // inform listeners about the xml
     await this.emit("editorBeforeLoad", xml)
-    
-    // display xml in editor, this triggers the update handlers
+
+    // display xml in editor and trigger immediate sync (bypassing debounce)
     // use addToHistory: false to prevent undo from going back before document load (fixes #221)
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0),
-      annotations: Transaction.addToHistory.of(false)
+      annotations: Transaction.addToHistory.of(false),
+      effects: requestSyncEffect()
     });
     this.#documentVersion = 0;
     await this.isReadyPromise();
-    
+
     // Mark as clean AFTER the editor is ready and all update handlers have run
     // This prevents auto-save from being triggered during initial load
     this.#editorIsDirty = false;
-    
+
     // Emit after load event
     await this.emit("editorAfterLoad", null);
   }
 
   /**
-   * Marks the editor as clean, i.e. no changes are pending. 
+   * Marks the editor as clean, i.e. no changes are pending.
    */
   markAsClean() {
     this.#editorIsDirty = false;
   }
-  
+
   /**
    * Clears the editor content completely
    */
@@ -654,7 +645,7 @@ export class XMLEditor extends EventEmitter {
    * @returns {string} - The current XML content.
    */
   getEditorContent() {
-    return this.#editorContent;
+    return this.#view.state.doc.toString();
   }
 
   /**
@@ -662,7 +653,7 @@ export class XMLEditor extends EventEmitter {
    * @returns {Document|null} - The XML document tree.
    */
   getXmlTree() {
-    return this.#xmlTree;
+    return xmlTree(this.#view);
   }
 
   /**
@@ -670,46 +661,33 @@ export class XMLEditor extends EventEmitter {
    * @returns {ProcessingInstructionData[]} Array of processing instruction objects
    */
   getProcessingInstructions() {
-    return this.#processingInstructions;
+    return xmlSyncProcessingInstructions(this.#view);
   }
 
   /**
-   * Detects processing instructions in the loaded XML document
+   * Detects processing instructions in the loaded XML document.
+   * Delegates to the xml-dom-sync extension's accessor.
    * @returns {ProcessingInstructionData[]} Array of processing instruction objects
    */
   detectProcessingInstructions() {
-    if (!this.#xmlTree) return [];
-    /** @type {ProcessingInstructionData[]} */
-    const processingInstructions = [];
-    for (let i = 0; i < this.#xmlTree.childNodes.length; i++) {
-      const node = this.#xmlTree.childNodes[i];
-      if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {        
-        const piNode = /** @type {ProcessingInstruction} */ (node);
-        processingInstructions.push({
-          target: piNode.target,
-          data: piNode.data,
-          position: i,
-          fullText: `<?${piNode.target}${piNode.data ? ' ' + piNode.data : ''}?>`
-        });
-      }
-    }
-    return processingInstructions;
+    return xmlSyncProcessingInstructions(this.#view);
   }
 
   /**
    * Returns the string representation of the XML tree, if one exists
-   * @returns {string} 
+   * @returns {string}
    */
   getXML() {
-    if (!this.#xmlTree) {
+    const tree = xmlTree(this.#view);
+    if (!tree) {
       return ''
     }
-    return this.#serialize(this.#xmlTree, false);
+    return this.#serialize(tree, false);
   }
 
   /**
    * Toggles line wrapping on and off
-   * @param {boolean} value 
+   * @param {boolean} value
    */
   setLineWrapping(value) {
     this.#view.dispatch({
@@ -747,7 +725,6 @@ export class XMLEditor extends EventEmitter {
   async updateNodeFromEditor(element) {
     const { to, from } = this.getSyntaxNodeFromDomNode(element)
     element.outerHTML = this.#view.state.doc.sliceString(from, to)
-    this.#updateMaps()
   }
 
   /**
@@ -755,17 +732,17 @@ export class XMLEditor extends EventEmitter {
    * @returns {Tree | null}
    */
   getSyntaxTree() {
-    return this.#syntaxTree;
+    return syntaxTree(this.#view.state);
   }
 
   /**
    * Given a XML DOM node, return its position in the editor
    * @param {Node} domNode The node in the XML DOM
-   * @returns {number | null | undefined} The position in the editor content corresponding to the node,
-   * null if uninitialized or undefined if the node is not connected to the editor content
+   * @returns {number | undefined} The position in the editor content corresponding to the node,
+   * or undefined if the node is not connected to the editor content
    */
   getDomNodePosition(domNode) {
-    return this.#domToSyntax?.get(domNode)
+    return domToSyntaxMap(this.#view).get(domNode)
   }
 
   /**
@@ -792,7 +769,7 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Returns the syntax node at the given position, or its next Element or Document ancestor if the 
+   * Returns the syntax node at the given position, or its next Element or Document ancestor if the
    * findParentElement parameter is true (default).
    * @param {number} pos The cursor position in the document
    * @param {boolean} findParentElement If true, find the next ancestor which is an Element or Document Node
@@ -820,9 +797,7 @@ export class XMLEditor extends EventEmitter {
    * @returns {Node}
    */
   getDomNodeAt(pos) {
-    if (!this.#syntaxToDom) {
-      this.#updateMaps()
-    }
+    const stMap = syntaxToDomMap(this.#view);
     let syntaxNode = this.getSyntaxNodeAt(pos);
     // find the element parent if necessary
     while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
@@ -830,7 +805,7 @@ export class XMLEditor extends EventEmitter {
       if (!parent) break;
       syntaxNode = parent;
     }
-    const domNode = syntaxNode && this.#syntaxToDom?.get(syntaxNode.from);
+    const domNode = syntaxNode && stMap.get(syntaxNode.from);
     if (!domNode) {
       throw new Error(`No DOM node found at position ${pos}`);
     }
@@ -839,19 +814,20 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Returns the DOM nodes that matches the given XPath expression.
-   * @param {string} xpath 
+   * @param {string} xpath
    * @returns {Element[]} An array of matching node snapshots.
    * @throws {Error} If the XML tree is not loaded
    */
   getDomNodesByXpath(xpath) {
-    if (!this.#xmlTree) {
+    const tree = xmlTree(this.#view);
+    if (!tree) {
       throw new Error("XML tree is not loaded.");
     }
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
-    
-    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+
+    const xpathResult = tree.evaluate(xpath, tree, this.namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
     const result = []
     let node;
     while ((node = xpathResult.iterateNext())) {
@@ -862,58 +838,57 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Returns the DOM nodes that matches the given XPath expression.
-   * @param {string} xpath 
+   * @param {string} xpath
    * @returns {Number} An array of matching node snapshots.
    * @throws {Error} If the XML tree is not loaded
    */
   countDomNodesByXpath(xpath) {
-    if (!this.#xmlTree) {
+    const tree = xmlTree(this.#view);
+    if (!tree) {
       throw new Error("XML tree is not loaded.");
     }
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
     xpath = `count(${xpath})`
-    
-    return this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
+
+    return tree.evaluate(xpath, tree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
   }
 
   /**
    * Returns the first DOM node that matches the given XPath expression.
-   * @param {string} xpath 
+   * @param {string} xpath
    * @returns {Node|null} The first matching DOM node.
    * @throws {Error} If the XML tree is not loaded or if no nodes match the XPath expression.
    */
   getDomNodeByXpath(xpath) {
-    if (!this.#xmlTree) {
+    const tree = xmlTree(this.#view);
+    if (!tree) {
       throw new Error("XML tree is not loaded.");
     }
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
-    
-    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+
+    const xpathResult = tree.evaluate(xpath, tree, this.namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     const result = xpathResult.singleNodeValue;
-    //console.warn(xpath, result)
     return result
   }
 
   /**
    * Returns the first syntax node that matches the given XPath expression. Should be private?
-   * @param {string} xpath 
+   * @param {string} xpath
    * @returns {SyntaxNode} The first matching syntax node.
    * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
   getSyntaxNodeByXpath(xpath) {
-    if (!this.#domToSyntax) {
-      this.#updateMaps()
-    }
+    const dsMap = domToSyntaxMap(this.#view);
     const node = this.getDomNodeByXpath(xpath)
     if (!node) {
       throw new Error(`No XML node found for XPath: ${xpath}`);
     }
-    const pos = this.#domToSyntax?.get(node);
-    if (!pos) {
+    const pos = dsMap.get(node);
+    if (pos === undefined) {
       throw new Error(`No syntax node found for XPath: ${xpath}`);
     }
     return this.getSyntaxNodeAt(pos);
@@ -938,7 +913,7 @@ export class XMLEditor extends EventEmitter {
    * @throws {Error} If the XML tree is not loaded.
    */
   foldByXpath(xpath) {
-    if (!this.#xmlTree) {
+    if (!xmlTree(this.#view)) {
       throw new Error("XML tree is not loaded.");
     }
     if (!xpath) {
@@ -979,7 +954,7 @@ export class XMLEditor extends EventEmitter {
    * @throws {Error} If the XML tree is not loaded.
    */
   unfoldByXpath(xpath) {
-    if (!this.#xmlTree) {
+    if (!xmlTree(this.#view)) {
       throw new Error("XML tree is not loaded.");
     }
     if (!xpath) {
@@ -1035,7 +1010,7 @@ export class XMLEditor extends EventEmitter {
     if (node.nodeType === Node.ATTRIBUTE_NODE) {
       // XPaths for attributes are a bit different.  We need to find the parent
       // element first, then add the attribute name to the path.
-      
+
       /** @type {Attr} */ const attrNode = /** @type {Attr} */(/** @type {unknown} */(node))
       const ownerNode = attrNode.ownerElement;
       if (ownerNode) {
@@ -1079,29 +1054,23 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Synchronize xml document with the editor content
+   * Synchronize xml document with the editor content by triggering an immediate sync
+   * in the xml-dom-sync extension.
    * @returns {Promise<void>}
    */
   async sync() {
-    try {
-      if (await this.#updateTrees()) {
-        this.#updateMaps()
-      }
-    } catch (error) {
-      console.warn("Linking DOM and syntax tree failed:", String(error))
-    }
-
-    // once we at least tried to synchronize, we can mark the editor as ready
-    await this.emit("editorReady", null);
+    this.#markAsNotReady();
+    this.#view.dispatch({ effects: requestSyncEffect() });
+    await this.isReadyPromise();
   }
 
   //
   // private methods which are not part of the API and hide implementation details
-  // 
+  //
 
   /**
    * Marks the editor as not ready and creates the isReadyPromise if it does not
-   * already exists 
+   * already exists
    */
   #markAsNotReady() {
     this.#isReady = false
@@ -1197,12 +1166,9 @@ export class XMLEditor extends EventEmitter {
     await this.emit("selectionChanged", rangesWithNode)
   }
 
-  /** @type {ReturnType<typeof setTimeout>|null} */
-  #updateTimeout = null
-
   /**
-   * Called when the content of the editor changes, emits events
-   * @fires {}
+   * Called when the content of the editor changes, emits events.
+   * Debouncing and sync are handled by the xml-dom-sync extension.
    * @param {ViewUpdate} update Object containing data on the change
    * @returns {Promise<void>}
    */
@@ -1215,34 +1181,46 @@ export class XMLEditor extends EventEmitter {
 
     // inform the listeners
     await this.emit("editorUpdate", update)
-
-    if (this.#updateTimeout) {
-      clearTimeout(this.#updateTimeout)
-    }
-    
-    this.#updateTimeout = setTimeout(() => this.#delayedUpdateActions(update), 1000) // todo make configurable
-
   }
 
   /**
-   * Called 1 second after the last change of the editor, i.e. any action executed here are not
-   * executed while the user is typing. Syncs the Syntax and DOM trees.
-   * @param {ViewUpdate} update The update object dispatched by the view
+   * Observes xmlDomSyncField state transitions and emits corresponding events.
+   * Called by the update listener added in the constructor.
+   * @param {ViewUpdate} update
    */
-  async #delayedUpdateActions(update) {
+  #onSyncStateChange(update) {
+    const oldSync = update.startState.field(xmlDomSyncField);
+    const newSync = update.state.field(xmlDomSyncField);
 
-    // update document version
-    this.#documentVersion += 1;
+    if (oldSync === newSync) return; // no change
 
-    // sync DOM with text content and syntax tree
-    await this.sync()
+    // syncVersion changed means sync completed
+    if (newSync.syncVersion !== oldSync.syncVersion || newSync.diagnostics !== oldSync.diagnostics) {
+      this.#documentVersion++;
 
-    // inform the listeners with a small timeout for the DOM to be ready
-    //await this.emit("editorUpdateDelayed", update)
+      if (newSync.isWellFormed) {
+        console.log("Document was updated and is well-formed.");
+        this.emit("editorXmlWellFormed", null);
+        // Re-enable xmlTagSync when document becomes well-formed
+        this.#view.dispatch({
+          effects: this.#xmlTagSyncCompartment.reconfigure(xmlTagSync)
+        });
+      } else if (newSync.diagnostics.length > 0) {
+        const d = newSync.diagnostics[0];
+        console.warn(`Document was updated but is not well-formed: Line ${d.line}, column ${d.column}: ${d.message}`);
+        this.emit("editorXmlNotWellFormed", newSync.diagnostics);
+        // Disable xmlTagSync when document is not well-formed
+        this.#view.dispatch({
+          effects: this.#xmlTagSyncCompartment.reconfigure([])
+        });
+      }
 
-    setTimeout(async () => await this.emit("editorUpdateDelayed", update), 100)
+      this.emit("editorReady", null);
+
+      // Emit delayed update event with a small timeout for the DOM to be ready
+      setTimeout(() => this.emit("editorUpdateDelayed", /** @type {any} */(null)), 100);
+    }
   }
-
 
   /**
    * Given an changes object, waits for the editor to be updated and then resolves the promise
@@ -1250,98 +1228,8 @@ export class XMLEditor extends EventEmitter {
    */
   async #waitForEditorUpdate(changes) {
     const promise = new Promise(resolve => this.once("editorReady", resolve))
-    this.#view.dispatch({ changes });
+    this.#view.dispatch({ changes, effects: requestSyncEffect() });
     await promise;
-  }
-
-  /**
-   * Returns a Diagnostic object from a DomParser error node 
-   * @param {Node} errorNode The error node containing parse errors
-   * @returns {ExtendedDiagnostic}
-   * @throws {Error} if error node cannot be parsed
-   */
-  #parseErrorNode(errorNode) {
-    const severity = "error"
-    
-    const textContent = errorNode.firstChild?.textContent;
-    if (!textContent) {
-      throw new Error("Error node has no text content");
-    }
-    const [message, _, location] = textContent.split("\n")
-    const regex = /\d+/g;
-    const matches = location?.match(regex);
-    if (matches && matches.length >= 2) {
-      const line = parseInt(matches[0], 10);
-      const column = parseInt(matches[1], 10);
-      let { from, to } = this.#view.state.doc.line(line);
-      from = from + column - 1
-      /** @type {ExtendedDiagnostic} */
-      return { message, severity, line, column, from, to }
-    }
-    throw new Error(`Cannot parse line and column from error message: "${location}"`)
-  }
-
-  /**
-   * Synchronizes the syntax tree and the XML DOM
-   * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
-   */
-  async #updateTrees() {
-    this.#editorContent = this.#view.state.doc.toString();
-    if (this.#editorContent.trim() === "") {
-      this.#xmlTree = null;
-      return false;
-    }
-    const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
-    const errorNode = doc.querySelector("parsererror");
-    if (errorNode) {
-      const diagnostic = this.#parseErrorNode(errorNode)
-      
-      console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
-      await this.emit("editorXmlNotWellFormed", [diagnostic])
-      this.#xmlTree = null;
-      this.#view.dispatch({
-        effects: this.#xmlTagSyncCompartment.reconfigure([])
-      });
-      return false;
-    }
-    console.log("Document was updated and is well-formed.")
-    await this.emit("editorXmlWellFormed", null)
-    this.#xmlTree = doc;
-    this.#view.dispatch({
-      effects: this.#xmlTagSyncCompartment.reconfigure(xmlTagSync)
-    });
-
-    // Track processing instructions for better synchronization
-    this.#processingInstructions = this.detectProcessingInstructions();
-    
-    if (this.#processingInstructions.length > 0) {
-        //console.log(`Found ${this.#processingInstructions.length} processing instruction(s):`, 
-        //this.#processingInstructions.map(pi => pi.fullText));
-    }
-
-    // the syntax tree construction is async, so we need to wait for it to complete
-    if (syntaxParserRunning(this.#view)) {
-      console.log('Waiting for syntax tree to be ready...')
-      while (syntaxParserRunning(this.#view)) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-      }
-      console.log('Syntax tree is ready.')
-    }
-    this.#syntaxTree = syntaxTree(this.#view.state);
-    return true
-  }
-
-  /**
-   * Creates internal maps that link the syntax tree and the dom nodes
-   */
-  #updateMaps() {
-    if (!(this.#xmlTree && this.#syntaxTree)) {
-      throw new Error("XML or Syntax tree missing")
-    }
-    const maps = linkSyntaxTreeWithDOM(this.#view, this.#syntaxTree.topNode, this.#xmlTree);
-    const { syntaxToDom, domToSyntax } = maps;
-    this.#syntaxToDom = syntaxToDom;
-    this.#domToSyntax = domToSyntax;
   }
 
   /**
@@ -1443,4 +1331,3 @@ export class XMLEditor extends EventEmitter {
     }
   }
 }
-
