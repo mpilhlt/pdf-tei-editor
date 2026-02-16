@@ -317,10 +317,23 @@ export class PluginSandbox {
 
     window.addEventListener('message', messageHandler);
 
-    // Clean up listener when window closes
+    // Close child window and clean up when parent window closes
+    const closeChild = () => {
+      if (win && !win.closed) {
+        this._cleanupSSESubscriptions(win);
+        win.close();
+      }
+      window.removeEventListener('message', messageHandler);
+      clearInterval(checkClosed);
+    };
+    window.addEventListener('beforeunload', closeChild);
+
+    // Clean up listener when child window closes on its own
     const checkClosed = setInterval(() => {
       if (win.closed) {
+        this._cleanupSSESubscriptions(win);
         window.removeEventListener('message', messageHandler);
+        window.removeEventListener('beforeunload', closeChild);
         clearInterval(checkClosed);
       }
     }, 1000);

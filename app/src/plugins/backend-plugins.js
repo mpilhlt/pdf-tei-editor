@@ -399,7 +399,20 @@ export class BackendPluginsPlugin extends Plugin {
     updateUi();
 
     ui.pluginResultDialog.openWindowBtn.addEventListener('click', () => {
-      window.open(fullUrl, '_blank', 'width=1200,height=800');
+      const childWindow = window.open(fullUrl, '_blank', 'width=1200,height=800');
+      const closeChild = () => {
+        if (childWindow && !childWindow.closed) {
+          childWindow.close();
+        }
+      };
+      window.addEventListener('beforeunload', closeChild);
+      // Clean up iframe SSE subscriptions and remove iframe before closing dialog
+      const iframe = dialog.content.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
+      }
+      dialog.content.innerHTML = '';
+      dialog.hide();
     });
 
     this.configureExportButton(dialog, plugin, result);
