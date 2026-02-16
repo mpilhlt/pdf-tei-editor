@@ -37,7 +37,6 @@
  */
 
 /**
- * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension} from '@codemirror/state'
  * @import {ViewUpdate} from '@codemirror/view'
  * @import {Diagnostic} from '@codemirror/lint'
@@ -69,7 +68,8 @@
 
 import { StateField, StateEffect, Facet } from "@codemirror/state";
 import { EditorView, ViewPlugin } from "@codemirror/view";
-import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
+import { ensureSyntaxTree } from "@codemirror/language";
+import { linkSyntaxTreeWithDOM } from "./xml-dom-link.js";
 
 // ─── StateEffects ───────────────────────────────────────────────────────────
 
@@ -150,11 +150,16 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
     /** @type {boolean} */
     syncInProgress = false;
 
+    /** @type {boolean} */
+    destroyed = false;
+
+    /** @type {string} */
+    lastSyncedContent = '';
+
     /**
      * @param {EditorView} view
      */
     constructor(view) {
-      // Perform initial sync if there's content
       if (view.state.doc.length > 0) {
         setTimeout(() => this.performSync(view), 0);
       }
@@ -164,7 +169,6 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
      * @param {ViewUpdate} update
      */
     update(update) {
-      // Check for requestSync effect — schedule immediate sync
       for (const tr of update.transactions) {
         for (const effect of tr.effects) {
           if (effect.is(requestSync)) {
@@ -175,7 +179,6 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
         }
       }
 
-      // Debounce on document changes
       if (update.docChanged) {
         this.cancelDebounce();
         const config = update.state.facet(xmlDomSyncConfig);
@@ -189,18 +192,22 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
     /**
      * @param {EditorView} view
      */
-    async performSync(view) {
-      if (this.syncInProgress) return;
+    performSync(view) {
+      if (this.destroyed || this.syncInProgress) return;
       this.syncInProgress = true;
 
       try {
         const content = view.state.doc.toString();
+
+        // Skip if content hasn't changed since last successful sync
+        if (content === this.lastSyncedContent) return;
 
         if (content.trim() === '') {
           this.xmlTree = null;
           this.syntaxToDom = new Map();
           this.domToSyntax = new Map();
           this.processingInstructions = [];
+          this.lastSyncedContent = content;
           view.dispatch({ effects: syncFailed.of({ diagnostics: [] }) });
           return;
         }
@@ -222,15 +229,19 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
         // XML is well-formed
         this.xmlTree = doc;
 
-        // Wait for syntax parser to finish
-        if (syntaxParserRunning(view)) {
-          await waitForSyntaxParser(view);
+        // Ensure syntax tree is available (synchronous, with 5s timeout)
+        const tree = ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+        if (!tree) {
+          // Parser didn't finish in time — reschedule
+          this.debounceTimer = setTimeout(() => this.performSync(view), 500);
+          return;
         }
 
         // Build maps
-        const tree = syntaxTree(view.state);
+        const getText = (/** @type {number} */ from, /** @type {number} */ to) =>
+          view.state.doc.sliceString(from, to);
         try {
-          const maps = linkSyntaxTreeWithDOM(view, tree.topNode, doc);
+          const maps = linkSyntaxTreeWithDOM(getText, tree.topNode, doc);
           this.syntaxToDom = maps.syntaxToDom;
           this.domToSyntax = maps.domToSyntax;
         } catch (error) {
@@ -242,6 +253,7 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
         // Detect processing instructions
         this.processingInstructions = detectProcessingInstructions(doc);
 
+        this.lastSyncedContent = content;
         this.syncVersion++;
         view.dispatch({
           effects: syncSucceeded.of({ syncVersion: this.syncVersion })
@@ -260,6 +272,7 @@ const xmlDomSyncPlugin = ViewPlugin.fromClass(
 
     destroy() {
       this.cancelDebounce();
+      this.destroyed = true;
     }
   }
 );
@@ -329,6 +342,7 @@ export function xmlDomSync(config = {}) {
 
 /**
  * Parse a DOMParser error node into diagnostics.
+ * Handles error formats from Chrome, Firefox, and Safari.
  * @param {Node} errorNode The error node containing parse errors
  * @param {import("@codemirror/state").Text} doc The editor document (for line resolution)
  * @returns {ExtendedDiagnostic[]}
@@ -339,16 +353,56 @@ function parseErrorNode(errorNode, doc) {
   if (!textContent) {
     return [];
   }
-  const [message, _, location] = textContent.split("\n");
-  const regex = /\d+/g;
-  const matches = location?.match(regex);
-  if (matches && matches.length >= 2) {
-    const line = parseInt(matches[0], 10);
-    const column = parseInt(matches[1], 10);
-    let { from, to } = doc.line(line);
-    from = from + column - 1;
-    return [{ message, severity, line, column, from, to }];
+
+  // Chrome/Chromium format: "message\n...\nLine N, Column N"
+  const chromeMatch = textContent.match(/^(.+?)[\r\n].*?line\s+(\d+).*?column\s+(\d+)/is);
+  if (chromeMatch) {
+    const message = chromeMatch[1].trim();
+    const line = parseInt(chromeMatch[2], 10);
+    const column = parseInt(chromeMatch[3], 10);
+    try {
+      let { from, to } = doc.line(line);
+      from = from + column - 1;
+      return [{ message, severity, line, column, from, to }];
+    } catch {
+      return [{ message, severity, from: 0, to: 0 }];
+    }
   }
+
+  // Firefox format: error message with <sourcetext> child element,
+  // "XML Parsing Error: message\nLocation: ...\nLine Number N, Column N:"
+  const sourceText = /** @type {Element} */ (errorNode).querySelector?.('sourcetext');
+  if (sourceText) {
+    const firefoxMatch = textContent.match(/line\s*number\s*(\d+).*?column\s*(\d+)/i);
+    if (firefoxMatch) {
+      const line = parseInt(firefoxMatch[1], 10);
+      const column = parseInt(firefoxMatch[2], 10);
+      const message = textContent.split('\n')[0].replace(/^XML Parsing Error:\s*/i, '').trim();
+      try {
+        let { from, to } = doc.line(line);
+        from = from + column - 1;
+        return [{ message, severity, line, column, from, to }];
+      } catch {
+        return [{ message, severity, from: 0, to: 0 }];
+      }
+    }
+  }
+
+  // Fallback: extract any two numbers (line, column) from the text
+  const genericMatch = textContent.match(/(\d+)/g);
+  if (genericMatch && genericMatch.length >= 2) {
+    const message = textContent.split('\n')[0];
+    const line = parseInt(genericMatch[0], 10);
+    const column = parseInt(genericMatch[1], 10);
+    try {
+      let { from, to } = doc.line(line);
+      from = from + column - 1;
+      return [{ message, severity, line, column, from, to }];
+    } catch {
+      return [{ message: textContent, severity, from: 0, to: 0 }];
+    }
+  }
+
   return [{ message: textContent, severity, from: 0, to: 0 }];
 }
 
@@ -375,187 +429,5 @@ function detectProcessingInstructions(xmlDoc) {
   return result;
 }
 
-/**
- * Wait for the CodeMirror syntax parser to finish.
- * @param {EditorView} view
- * @returns {Promise<void>}
- */
-async function waitForSyntaxParser(view) {
-  console.log('Waiting for syntax tree to be ready...');
-  while (syntaxParserRunning(view)) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  console.log('Syntax tree is ready.');
-}
-
-// ─── linkSyntaxTreeWithDOM ──────────────────────────────────────────────────
-
-/**
- * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
- * parsed by DOMParser by traversing both trees recursively and storing references to each other in
- * two Maps. Enhanced to handle XML processing instructions and other non-element nodes.
- *
- * @param {EditorView} view The CodeMirror EditorView instance.
- * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
- * @param {Element|Document} domNode The (root) DOM element parsed by DOMParser.
- * @throws {Error} If the tags of the syntax tree node and the DOM node do not match.
- * @returns {{syntaxToDom: Map<number, Node>, domToSyntax: Map<Node, number> }} An object containing two Maps:
- *                  - syntaxToDom: Maps the position of syntax tree nodes to DOM nodes.
- *                  - domToSyntax: Maps DOM nodes to syntax tree nodes' positions.
- */
-function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
-  /** @type {Map<number, Node>} */
-  const syntaxToDom = new Map();
-  /** @type {Map<Node, number>} */
-  const domToSyntax = new Map();
-
-  /**
-   * @param {SyntaxNode} node
-   */
-  const getText = node => view.state.doc.sliceString(node.from, node.to);
-
-  /**
-   * Helper to find the first element node in a tree
-   * @param {SyntaxNode|Node} node Starting node
-   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
-   * @returns {SyntaxNode|Element|null} First element node found or null
-   */
-  function findFirstElement(node, isDOM = false) {
-    while (node) {
-      if (isDOM) {
-        /** @type {Node} */
-        const domNode = /** @type {Node} */ (node);
-        if (domNode.nodeType === Node.ELEMENT_NODE) return /** @type {Element} */ (domNode);
-      } else {
-        /** @type {SyntaxNode} */
-        const syntaxNode = /** @type {SyntaxNode} */ (node);
-        if (syntaxNode.name === "Element") return syntaxNode;
-      }
-      const nextNode = node.nextSibling;
-      if (!nextNode) break;
-      node = nextNode;
-    }
-    return null;
-  }
-
-  /**
-   * Collects all element children from a parent node
-   * @param {SyntaxNode|Node} parent Parent node
-   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
-   * @returns {Array<SyntaxNode|Element>} Array of element nodes
-   */
-  function collectElementChildren(parent, isDOM = false) {
-    const elements = [];
-    let child = parent.firstChild;
-
-    while (child) {
-      const element = findFirstElement(child, isDOM);
-      if (element) {
-        elements.push(element);
-        child = element.nextSibling;
-      } else {
-        break;
-      }
-    }
-    return elements;
-  }
-
-  /**
-   * @param {SyntaxNode} syntaxNode
-   * @param {Element} domNode
-   */
-  function recursiveLink(syntaxNode, domNode) {
-
-    if (!syntaxNode || !domNode) {
-      throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
-    }
-
-    // Enhanced: Find the first element in each tree, handling processing instructions
-    const syntaxElement = /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode, false));
-    const domElement = /** @type {Element|null} */ (findFirstElement(domNode, true));
-
-    // If we couldn't find matching element nodes, return empty maps
-    if (!syntaxElement || !domElement) {
-      return {
-        syntaxToDom: new Map(),
-        domToSyntax: new Map()
-      };
-    }
-
-    // Check if the found elements are valid
-    if (!syntaxElement || syntaxElement.name !== "Element") {
-      throw new Error(`Unexpected node type: ${syntaxElement?.name}. Expected "Element".`);
-    }
-
-    // make sure we have a tag name child
-    let syntaxTagNode = syntaxElement.firstChild?.firstChild?.nextSibling;
-    if (!syntaxTagNode || syntaxTagNode.name !== "TagName") {
-      const text = getText(syntaxElement);
-      if (text === "<") {
-        // hack
-        syntaxTagNode = syntaxTagNode?.nextSibling;
-      } else {
-        throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
-      }
-    }
-
-    if (!syntaxTagNode) {
-      throw new Error('Could not find TagName node after processing');
-    }
-    const syntaxTagName = getText(syntaxTagNode);
-    const domTagName = /** @type {Element} */ (domElement).tagName;
-
-    // Verify that the tag names match
-    if (syntaxTagName !== domTagName) {
-      throw new Error(`Tag mismatch: Syntax tree has ${syntaxTagName}, DOM has ${domTagName}`);
-    }
-
-    // Store references to each other - since the syntax tree is regenerated on each lookup,
-    // we need to store the unique positions of each node as reference
-    syntaxToDom.set(/** @type {SyntaxNode} */ (syntaxElement).from, domElement);
-    domToSyntax.set(domElement, /** @type {SyntaxNode} */ (syntaxElement).from);
-
-    // Enhanced: Use robust child collection and pairing
-    const syntaxChildren = collectElementChildren(syntaxElement, false);
-    const domChildren = collectElementChildren(domElement, true);
-
-    // Recursively link the children by pairs
-    const minChildren = Math.min(syntaxChildren.length, domChildren.length);
-    for (let i = 0; i < minChildren; i++) {
-      recursiveLink(/** @type {SyntaxNode} */ (syntaxChildren[i]), /** @type {Element} */ (domChildren[i]));
-    }
-
-    // Check for mismatched child counts
-    if (syntaxChildren.length > domChildren.length) {
-      const extraSyntax = syntaxChildren.slice(domChildren.length);
-      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.map(n => getText(/** @type {SyntaxNode} */ (n))).join(', ')}`);
-    }
-    if (domChildren.length > syntaxChildren.length) {
-      const extraDOM = domChildren.slice(syntaxChildren.length);
-      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => /** @type {Element} */ (n).tagName).join(', ')}`);
-    }
-    return {
-      syntaxToDom,
-      domToSyntax
-    };
-  }
-
-  if (syntaxNode.name !== "Document" || domNode.nodeType !== Node.DOCUMENT_NODE) {
-    throw new Error("Invalid arguments. The root syntax node must be the top Document node and the DOM node must be a document. Received: " +
-      `syntaxNode: ${syntaxNode.name}, domNode: ${Object.keys(Node)[domNode.nodeType - 1]}`);
-  }
-
-  // Enhanced: Find root elements, skipping processing instructions and other non-element nodes
-  const syntaxRoot = syntaxNode.firstChild ? /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode.firstChild, false)) : null;
-  const domRoot = domNode.firstChild ? /** @type {Element|null} */ (findFirstElement(domNode.firstChild, true)) : null;
-
-  if (!syntaxRoot || !domRoot) {
-    console.warn("Could not find root elements in one or both trees");
-    return {
-      syntaxToDom: new Map(),
-      domToSyntax: new Map()
-    };
-  }
-
-  return recursiveLink(syntaxRoot, domRoot);
-}
+// Re-export for consumers that import from this module
+export { linkSyntaxTreeWithDOM };
