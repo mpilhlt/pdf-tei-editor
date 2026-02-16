@@ -2,11 +2,14 @@
 GROBID-based extraction engine supporting multiple API endpoints.
 """
 
+import logging
 import os
 import datetime
 import re
 from typing import Dict, Any, Optional
 from lxml import etree
+
+logger = logging.getLogger(__name__)
 
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
 from fastapi_app.lib.metadata_extraction import get_metadata_for_document
@@ -187,9 +190,16 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Log cleaned content for debugging
         log_extraction_response("grobid", pdf_path, raw_tei_content, ".cleaned.xml")
 
-        # Parse the GROBID output
+        # Parse the GROBID output (recover=True handles missing closing tags, etc.)
         try:
-            grobid_doc = etree.fromstring(raw_tei_content.encode('utf-8'))
+            parser = etree.XMLParser(recover=True)
+            grobid_doc = etree.fromstring(raw_tei_content.encode('utf-8'), parser)
+            if parser.error_log:
+                logger.warning(
+                    "Grobid XML auto-repaired for %s: %s",
+                    pdf_path,
+                    "; ".join(str(e) for e in parser.error_log),
+                )
         except etree.XMLSyntaxError as e:
             # Log the XML that failed to parse
             log_xml_parsing_error("grobid", pdf_path, raw_tei_content, str(e))
