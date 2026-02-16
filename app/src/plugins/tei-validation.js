@@ -69,10 +69,9 @@ let modeCache;
  */
 async function update(state) {
   // if we are offline, readonly or have no xml doc,  disable validation
-  if (state.offline || state.editorReadOnly || !state.xml ) {
-    configure({ mode: "off" })
-  } else {
-    configure({ mode: "auto" })
+  const newMode = (state.offline || state.editorReadOnly || !state.xml) ? "off" : "auto"
+  if (newMode !== modeCache) {
+    configure({ mode: newMode })
   }
 } 
 

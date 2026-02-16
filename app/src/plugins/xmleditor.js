@@ -630,13 +630,14 @@ async function update(state) {
   }
 
   // update the editor read-only state
-  if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
-    xmlEditor.setReadOnly(state.editorReadOnly)
-    logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
+  const editorReadOnly = Boolean(state.editorReadOnly)
+  if (editorReadOnly !== xmlEditor.isReadOnly()) {
+    xmlEditor.setReadOnly(editorReadOnly)
+    logger.debug(`Setting editor read-only state to ${editorReadOnly}`)
   }
 
   // Update visual indicators based on state (always, to handle lock conflicts)
-  if (state.editorReadOnly) {
+  if (editorReadOnly) {
     if (!ui.xmlEditor.classList.contains("editor-readonly")) {
       ui.xmlEditor.classList.add("editor-readonly")
     }
@@ -656,7 +657,7 @@ async function update(state) {
   const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator'])
   if (isAnnotator) {
     ui.xmlEditor.toolbar.downloadBtn.disabled = !Boolean(state.xml)
-    ui.xmlEditor.toolbar.uploadBtn.disabled = state.editorReadOnly || state.offline
+    ui.xmlEditor.toolbar.uploadBtn.disabled = editorReadOnly || state.offline
   } else {
     ui.xmlEditor.toolbar.downloadBtn.disabled = true
     ui.xmlEditor.toolbar.uploadBtn.disabled = true
