@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-02-12T12:36:52.900Z
+ * Generated from OpenAPI schema at 2026-02-16T10:14:24.854Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -57,6 +57,11 @@
 /**
  * @typedef {Object} Body_import_files_api_v1_import_post
  * @property {string} file - Zip archive containing files to import
+ */
+
+/**
+ * @typedef {Object} Body_restore_backup_api_plugins_backup_restore_restore_post
+ * @property {string} file
  */
 
 /**

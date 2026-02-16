@@ -41,6 +41,7 @@ nohup.out
 
 # Data directories (exclude user data and cache)
 data/
+data_*/
 db/
 
 # Temporary and backup files

@@ -204,7 +204,7 @@ export class PluginSandbox {
 
     const listener = (event) => {
       const sub = this._sseSubscriptions.get(subscriptionId);
-      if (!sub || !sub.source) return;
+      if (!sub?.source) return;
       try {
         sub.source.postMessage({
           type: 'SSE_EVENT',
@@ -212,7 +212,7 @@ export class PluginSandbox {
           data: event.data,
           subscriptionId
         }, '*');
-      } catch {
+      } catch (err) {
         // Source window closed, clean up
         this.unsubscribeSSE(subscriptionId);
       }
@@ -237,11 +237,20 @@ export class PluginSandbox {
   }
 
   /**
-   * Remove all active SSE subscriptions (called when dialog is hidden)
+   * Remove SSE subscriptions, optionally filtered by source window.
+   * When sourceWindow is provided, only subscriptions from that window are removed.
+   * When omitted, all subscriptions are removed.
+   * @param {WindowProxy} [sourceWindow] - Only clean up subscriptions from this source
    * @private
    */
-  _cleanupSSESubscriptions() {
-    for (const [id] of this._sseSubscriptions) {
+  _cleanupSSESubscriptions(sourceWindow) {
+    const toClean = [];
+    for (const [id, sub] of this._sseSubscriptions) {
+      if (!sourceWindow || sub.source === sourceWindow) {
+        toClean.push(id);
+      }
+    }
+    for (const id of toClean) {
       this.unsubscribeSSE(id);
     }
   }
@@ -308,10 +317,23 @@ export class PluginSandbox {
 
     window.addEventListener('message', messageHandler);
 
-    // Clean up listener when window closes
+    // Close child window and clean up when parent window closes
+    const closeChild = () => {
+      if (win && !win.closed) {
+        this._cleanupSSESubscriptions(win);
+        win.close();
+      }
+      window.removeEventListener('message', messageHandler);
+      clearInterval(checkClosed);
+    };
+    window.addEventListener('beforeunload', closeChild);
+
+    // Clean up listener when child window closes on its own
     const checkClosed = setInterval(() => {
       if (win.closed) {
+        this._cleanupSSESubscriptions(win);
         window.removeEventListener('message', messageHandler);
+        window.removeEventListener('beforeunload', closeChild);
         clearInterval(checkClosed);
       }
     }, 1000);

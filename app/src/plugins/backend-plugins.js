@@ -83,9 +83,13 @@ export class BackendPluginsPlugin extends Plugin {
     // Setup close button handler
     ui.pluginResultDialog.closeBtn.addEventListener('click', () => ui.pluginResultDialog.hide());
 
-    // Clean up SSE subscriptions when dialog is hidden
+    // Clean up SSE subscriptions when dialog is hidden — only for the iframe,
+    // not for popup windows that may still be using their subscriptions
     ui.pluginResultDialog.addEventListener('sl-hide', () => {
-      this.pluginSandbox._cleanupSSESubscriptions();
+      const iframe = ui.pluginResultDialog.content?.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
+      }
     });
   }
 
@@ -395,7 +399,20 @@ export class BackendPluginsPlugin extends Plugin {
     updateUi();
 
     ui.pluginResultDialog.openWindowBtn.addEventListener('click', () => {
-      window.open(fullUrl, '_blank', 'width=1200,height=800');
+      const childWindow = window.open(fullUrl, '_blank', 'width=1200,height=800');
+      const closeChild = () => {
+        if (childWindow && !childWindow.closed) {
+          childWindow.close();
+        }
+      };
+      window.addEventListener('beforeunload', closeChild);
+      // Clean up iframe SSE subscriptions and remove iframe before closing dialog
+      const iframe = dialog.content.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
+      }
+      dialog.content.innerHTML = '';
+      dialog.hide();
     });
 
     this.configureExportButton(dialog, plugin, result);

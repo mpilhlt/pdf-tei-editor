@@ -131,4 +131,23 @@ Run with: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/log_
 - `fastapi_app/main.py` — installs SSE log handler at startup
 - `fastapi_app/lib/plugin_tools.py` — extended sandbox client script with SSE forwarding
 - `fastapi_app/routers/plugins.py` — added `/sandbox-client.js` endpoint
-- `fastapi_app/plugins/log_viewer/` — new plugin (plugin.py, routes.py, __init__.py, html/view.html, README.md)
+- `fastapi_app/plugins/log_viewer/` — new plugin (plugin.py, routes.py, `__init__`.py, html/view.html, README.md)
+
+## Fix attempt 3 (Feb 14, 2026) — dialog close kills popup SSE subscriptions
+
+### Root cause
+
+When the log viewer is opened in a popup window (window B) via `openControlledWindow`, the plugin dialog (containing the iframe) is closed. The `sl-hide` event handler called `_cleanupSSESubscriptions()` with no arguments, which removed **all** SSE subscriptions — including window B's popup subscriptions. This meant window B stopped receiving SSE events as soon as the dialog was closed.
+
+### Fix
+
+Two changes:
+
+1. **`backend-plugin-sandbox.js`**: `_cleanupSSESubscriptions(sourceWindow)` now accepts an optional `sourceWindow` parameter. When provided, only subscriptions whose `source` matches that window are removed. When omitted (e.g. in `destroy()`), all subscriptions are removed as before.
+
+2. **`backend-plugins.js`**: The `sl-hide` handler now passes `iframe.contentWindow` to `_cleanupSSESubscriptions()`, so only the iframe's subscriptions are cleaned up — popup window subscriptions are preserved.
+
+### Changes
+
+- `app/src/modules/backend-plugin-sandbox.js` — `_cleanupSSESubscriptions` accepts optional `sourceWindow` filter
+- `app/src/plugins/backend-plugins.js` — `sl-hide` passes `iframe.contentWindow` to cleanup

@@ -15,7 +15,8 @@ def clear_schema_cache(schema_cache_dir: str | Path | None = None) -> tuple[bool
         Tuple of (success, message)
     """
     if schema_cache_dir is None:
-        schema_cache_dir = Path(__file__).parent.parent.parent / "data" / "schema" / "cache"
+        from fastapi_app.config import get_settings
+        schema_cache_dir = get_settings().schema_cache_dir
     else:
         schema_cache_dir = Path(schema_cache_dir)
 

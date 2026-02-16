@@ -157,14 +157,11 @@ async function ready() {
  * @param {string} sessionId 
  */
 function establishConnection(sessionId) {
-  logger.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
-
   const url = `/api/v1/sse/subscribe?sessionId=${sessionId}`;
   eventSource = new EventSource(url);
   cachedSessionId = sessionId;
 
   eventSource.onopen = () => {
-    logger.info('SSE connection established successfully');
     reconnectAttempts = 0; // Reset reconnection attempts on successful connection
 
     // Clear any pending reconnection timeout
@@ -247,17 +244,17 @@ function cleanupConnection() {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
-  
+
   // Close the connection
   if (eventSource) {
     eventSource.close();
     eventSource = null;
   }
-  
+
   // Reset state
   cachedSessionId = null;
   reconnectAttempts = 0;
-  
+
   logger.debug('SSE connection cleaned up');
 }
 

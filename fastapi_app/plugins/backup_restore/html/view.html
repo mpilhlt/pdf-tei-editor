@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Backup &amp; Restore</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .description {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 12px;
+        }
+        button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        button.primary {
+            background: #2196F3;
+            color: white;
+        }
+        button.primary:hover {
+            background: #1976D2;
+        }
+        button.warning {
+            background: #ff9800;
+            color: white;
+        }
+        button.warning:hover {
+            background: #f57c00;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            display: block;
+        }
+        .status.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            display: block;
+        }
+        .status.success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h2>Backup &amp; Restore</h2>
+
+    <div class="section">
+        <h3>Download Backup</h3>
+        <div class="description">
+            Download the complete application data directory as a ZIP file.
+            This includes all documents, databases, and configuration.
+        </div>
+        <button class="primary" id="downloadBtn" onclick="downloadBackup()">
+            Download Backup
+        </button>
+        <div id="downloadStatus" class="status"></div>
+    </div>
+
+    <div class="section">
+        <h3>Restore from Backup</h3>
+        <div class="description">
+            Upload a previously downloaded backup ZIP file to restore the application data.
+            The server will need to restart after the restore.
+        </div>
+        <button class="warning" id="restoreBtn" onclick="selectRestoreFile()">
+            Upload &amp; Restore
+        </button>
+        <input type="file" id="restoreFile" accept=".zip" style="display:none"
+               onchange="uploadRestore(this)">
+        <div id="restoreStatus" class="status"></div>
+    </div>
+
+    <script>
+        // Extract session_id from the URL (injected by the frontend when loading outputUrl)
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+
+        function setStatus(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.className = 'status ' + type;
+            el.textContent = message;
+        }
+
+        function downloadBackup() {
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = true;
+            btn.textContent = 'Preparing...';
+            setStatus('downloadStatus', 'Preparing backup...', 'info');
+
+            // Direct browser download via a new window/tab
+            const url = '/api/plugins/backup-restore/download?session_id=' +
+                        encodeURIComponent(sessionId);
+            window.location.href = url;
+
+            // Re-enable after a delay (download starts in background)
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'Download Backup';
+                setStatus('downloadStatus', 'Download started.', 'success');
+            }, 2000);
+        }
+
+        function selectRestoreFile() {
+            document.getElementById('restoreFile').click();
+        }
+
+        async function uploadRestore(input) {
+            if (!input.files || !input.files[0]) return;
+
+            const file = input.files[0];
+            if (!file.name.endsWith('.zip')) {
+                setStatus('restoreStatus', 'Please select a .zip file.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('restoreBtn');
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+            setStatus('restoreStatus', 'Uploading ' + file.name + '...', 'info');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(
+                    '/api/plugins/backup-restore/restore?session_id=' +
+                    encodeURIComponent(sessionId),
+                    {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Session-ID': sessionId
+                        }
+                    }
+                );
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    setStatus('restoreStatus', result.message || 'Restore initiated.', 'success');
+                    // Close dialog after brief delay so user sees the message
+                    setTimeout(() => sandbox.closeDialog(), 3000);
+                } else {
+                    setStatus('restoreStatus', result.detail || 'Restore failed.', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Upload & Restore';
+                }
+            } catch (err) {
+                setStatus('restoreStatus', 'Upload failed: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Upload & Restore';
+            }
+
+            // Reset file input so the same file can be selected again
+            input.value = '';
+        }
+    </script>
+</body>
+</html>

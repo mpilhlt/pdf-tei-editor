@@ -50,7 +50,9 @@
       "Bash(node bin/manage-remote.js:*)",
       "WebFetch(domain:github.com)",
       "Bash(node --check:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "WebFetch(domain:discuss.codemirror.net)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

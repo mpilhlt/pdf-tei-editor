@@ -47,11 +47,8 @@ def validate_xml(
         List of validation errors. Empty list if validation passed.
     """
     try:
-        # Determine cache root - use data_root/schema/cache
-        cache_root = settings.data_root / "schema" / "cache"
-
         # Perform validation using framework-agnostic library
-        errors = validate(request.xml_string, cache_root=cache_root)
+        errors = validate(request.xml_string, cache_root=settings.schema_cache_dir)
 
         # Convert to Pydantic models
         error_models = [
@@ -67,7 +64,8 @@ def validate_xml(
         return ValidateResponse(errors=error_models)
 
     except ValidationError as e:
-        logger.error(f"Validation error: {e}")
+        if "404" not in str(e) and "Not Found" not in str(e):
+            logger.error(f"Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error during validation: {e}")
@@ -133,8 +131,7 @@ def generate_autocomplete_data(
         )
 
         # Get cache information
-        cache_root = settings.data_root / "schema" / "cache"
-        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
+        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, settings.schema_cache_dir)
         autocomplete_cache_file = schema_cache_dir / 'codemirror-autocomplete.json'
 
         # Check if autocomplete data is already cached
@@ -148,7 +145,12 @@ def generate_autocomplete_data(
         # Note: invalidate_cache only affects autocomplete data cache, not the schema itself
         if not schema_cache_file.is_file():
             from ..lib.schema_validator import download_schema_file
-            download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
+            try:
+                download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
+            except Exception as e:
+                if "404" in str(e) or "Not Found" in str(e):
+                    raise HTTPException(status_code=404, detail=f"Schema not found: {schema_location}")
+                raise
         else:
             logger.debug(f"Using cached schema at {schema_cache_file}")
 

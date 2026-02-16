@@ -36,7 +36,8 @@ fastapi_app/plugins/my_plugin/
 ├── routes.py          # Optional custom routes
 ├── extensions/        # Optional: frontend extensions to be registered
 │   ├── my-script.js   
-├── html/              # Optional: static files (auto-mounted)
+├── html/              # Optional: static files and HTML templates (auto-mounted)
+│   ├── view.html      # HTML templates loaded via load_plugin_html()
 │   ├── styles.css
 │   ├── scripts.js
 │   └── template.xslt
@@ -933,6 +934,21 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 ```
 
 **`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use).
+
+**`load_plugin_html()`** - Load an HTML template from the plugin's `html/` directory:
+
+```python
+from fastapi_app.lib.plugin_tools import load_plugin_html
+
+@router.get("/view", response_class=HTMLResponse)
+async def view_page(...):
+    html = load_plugin_html(__file__, "view.html")
+    return HTMLResponse(content=html)
+```
+
+This reads `html/view.html` relative to the calling plugin's directory and injects the sandbox client script automatically. Pass `inject_sandbox=False` to skip sandbox injection.
+
+**IMPORTANT**: Never inline long HTML strings in route files. Place HTML in external template files under the plugin's `html/` directory and load them with `load_plugin_html()`.
 
 ## Frontend Extensions
 
