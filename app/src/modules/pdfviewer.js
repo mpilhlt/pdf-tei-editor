@@ -222,7 +222,7 @@ export class PDFJSViewer {
             eventBus: this.eventBus,
             linkService: this.linkService,
             findController: this.findController,
-            textLayerMode: 2, // Enable text layer (0=disabled, 1=enabled, 2=enabled+enhanced)
+            textLayerMode: 1, // Enable text layer (0=disabled, 1=enabled, 2=enabled+respects PDF copy restrictions)
             annotationMode: 2, // Enable annotations (0=disabled, 1=enabled, 2=enabled+forms)
             removePageBorders: false
             // Use default zoom behavior (omit useOnlyCssZoom)
