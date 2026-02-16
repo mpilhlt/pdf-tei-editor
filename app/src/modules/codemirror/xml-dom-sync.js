@@ -4,6 +4,35 @@
  * syntax node positions and DOM nodes, tracks XML well-formedness, and detects
  * processing instructions.
  *
+ * @example
+ * import { EditorView } from "@codemirror/view";
+ * import { EditorState, Compartment } from "@codemirror/state";
+ * import { xmlDomSync, xmlDomSyncField, xmlTree, syntaxToDomMap, requestSyncEffect } from "./xml-dom-sync.js";
+ *
+ * // Add the extension (optionally via a Compartment for reconfiguration)
+ * const syncCompartment = new Compartment();
+ * const view = new EditorView({
+ *   state: EditorState.create({
+ *     doc: '<root><child/></root>',
+ *     extensions: [
+ *       syncCompartment.of(xmlDomSync({ debounceMs: 1000 })),
+ *       // Observe sync state transitions
+ *       EditorView.updateListener.of(update => {
+ *         const oldSync = update.startState.field(xmlDomSyncField);
+ *         const newSync = update.state.field(xmlDomSyncField);
+ *         if (newSync.syncVersion !== oldSync.syncVersion) {
+ *           console.log("Sync completed, well-formed:", newSync.isWellFormed);
+ *           console.log("DOM tree:", xmlTree(update.view));
+ *           console.log("Map entries:", syntaxToDomMap(update.view).size);
+ *         }
+ *       })
+ *     ]
+ *   })
+ * });
+ *
+ * // Force an immediate sync (bypasses debounce)
+ * view.dispatch({ effects: requestSyncEffect() });
+ *
  * @module xml-dom-sync
  */
 
