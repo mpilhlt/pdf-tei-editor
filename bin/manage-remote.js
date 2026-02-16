@@ -498,11 +498,20 @@ async function groupRemoveCollection(baseUrl, sessionId, groupId, collectionId) 
 /**
  * List all collections
  */
-async function collectionList(baseUrl, sessionId) {
+async function collectionList(baseUrl, sessionId, cmdOptions = {}) {
   const collections = await apiRequest(baseUrl, sessionId, 'GET', '/api/v1/collections');
 
   if (!collections || collections.length === 0) {
-    console.log('No collections found.');
+    if (!cmdOptions.idsOnly) {
+      console.log('No collections found.');
+    }
+    return;
+  }
+
+  if (cmdOptions.idsOnly) {
+    for (const collection of collections) {
+      console.log(collection.id);
+    }
     return;
   }
 
@@ -982,8 +991,11 @@ const collectionCmd = program.command('collection').description('Manage collecti
 collectionCmd
   .command('list')
   .description('List all collections')
-  .action(async () => {
-    await runAuthenticated(getGlobalOptions(), collectionList);
+  .option('--ids-only', 'Output only collection IDs, one per line')
+  .action(async (cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
+      collectionList(baseUrl, sessionId, cmdOptions)
+    );
   });
 
 collectionCmd
