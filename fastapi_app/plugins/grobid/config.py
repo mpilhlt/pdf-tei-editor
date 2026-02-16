@@ -119,7 +119,7 @@ ANNOTATION_GUIDES = [
         "url": "https://pad.gwdg.de/s/1Oti-hJDb#segmentation"
     },
     {
-        "variant_id": "grobid.training.references",
+        "variant_id": "grobid.training.references.referenceSegmenter",
         "type": "markdown",
         "url": "https://pad.gwdg.de/s/1Oti-hJDb/download#reference-segmenter"
     },

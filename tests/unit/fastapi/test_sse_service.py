@@ -103,7 +103,7 @@ class TestSSEService(unittest.TestCase):
 
         # Should return False
         self.assertFalse(result)
-        self.logger.warning.assert_called()
+        self.logger.debug.assert_called()
 
     def test_send_multiple_messages(self):
         """Test sending multiple messages."""
