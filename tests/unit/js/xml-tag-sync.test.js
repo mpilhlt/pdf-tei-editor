@@ -206,8 +206,8 @@ describe('xmlTagSync plugin', () => {
       const view = createView(initial);
       ensureParsed(view);
 
-      // Rename "outer" in "</outer>" (positions 27–32) to "div"
-      const result = applyChange(view, { from: 27, to: 32, insert: 'div' });
+      // Rename "outer" in "</outer>" (positions 28–33) to "div"
+      const result = applyChange(view, { from: 28, to: 33, insert: 'div' });
       assert.strictEqual(result, '<div><inner>text</inner></div>');
     });
 
