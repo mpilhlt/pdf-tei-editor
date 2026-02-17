@@ -468,7 +468,8 @@ async function populateSelectboxes(state) {
       return
     }
 
-  const fileData = state.fileData;
+  // make a copy that we can sort and manipulate
+  const fileData = JSON.parse(JSON.stringify(state.fileData));
 
   // Filter files by collection filter selection
   let filteredFileData = fileData;
@@ -478,7 +479,10 @@ async function populateSelectboxes(state) {
     // Show only files in the selected collection
     filteredFileData = fileData.filter(file =>
       file.collections && file.collections.includes(collectionFilter)
-    );
+    ).map(file => {
+      file.collections = [collectionFilter]
+      return file
+    })
   }
 
   // Filter files by variant selection
