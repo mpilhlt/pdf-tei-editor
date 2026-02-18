@@ -6,9 +6,12 @@ Provides a download endpoint for reviewers to download complete training package
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
+
 from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.event_bus import get_event_bus
 from .extractor import GrobidTrainingExtractor
@@ -38,6 +41,7 @@ class GrobidPlugin(Plugin):
                     "required_roles": ["reviewer"],
                 },
             ],
+            "dependencies": ["tei-wizard"],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
@@ -67,6 +71,18 @@ class GrobidPlugin(Plugin):
         # Register event handler for file deletion cache cleanup
         event_bus = get_event_bus()
         event_bus.on("file.deleted", self._on_file_deleted)
+        
+        """Register the TEI header enrichment enhancement with tei-wizard."""
+        # todo: create auto-discover reusable utility func
+        tei_wizard = context.get_dependency("tei-wizard")
+        if isinstance(tei_wizard, TeiWizardPlugin):
+            enhancement_file = Path(__file__).parent / "enhancements" / "split-bibl.js"
+            if enhancement_file.exists():
+                tei_wizard.register_enhancement(enhancement_file, self.metadata["id"])
+            else:
+                logger.warning(f"Enhancement file not found: {enhancement_file}")
+        else:
+            logger.warning("tei-wizard dependency not available")
 
         logger.info("GROBID extractor plugin initialized")
 

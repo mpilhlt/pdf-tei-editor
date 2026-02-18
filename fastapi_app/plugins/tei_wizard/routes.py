@@ -49,6 +49,14 @@ def transform_to_registration(content: str, filename: str, plugin_id: str) -> st
     Returns:
         Transformed JavaScript code
     """
+    # Remove block comments (/* ... */) - including JSDoc comments
+    # This prevents false positives from example code in comments
+    content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
+
+    # Remove single-line comments (// ...) only at start of line (with optional whitespace)
+    # This avoids matching // in URLs like http://example.com
+    content = re.sub(r"^\s*//.*$", "", content, flags=re.MULTILINE)
+
     # Remove import statements
     content = re.sub(r"^import\s+.*?;?\s*$", "", content, flags=re.MULTILINE)
 

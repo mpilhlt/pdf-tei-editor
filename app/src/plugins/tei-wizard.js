@@ -1,6 +1,7 @@
 /**
  * This plugin provides a TEI Wizard to enhance the XML document.
  * It runs a series of modular enhancements defined in the /tei-wizard/enhancements/ directory.
+ * TODO - this should be converted to a frontend extension of the backend TEI wizard plugin
  */
 
 /** 
@@ -28,7 +29,7 @@ import { getEnhancements } from '../modules/enhancement-registry.js';
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { config } from '../plugins.js';
-import { encodeXmlEntities } from '../modules/tei-utils.js';
+import { encodeXmlEntities, escapeXml } from '../modules/tei-utils.js';
 
 
 const plugin = {
@@ -89,9 +90,15 @@ function populateEnhancementList() {
 
   const enhancements = getEnhancements();
   enhancements.forEach(enhancement => {
+    // Escape XML entities for display text and attribute values to prevent HTML injection
+    // Use encodeQuotes for attributes to prevent breaking out of the attribute value
+    const escapedNameForAttr = escapeXml(enhancement.name, { encodeQuotes: true });
+    const escapedNameForText = escapeXml(enhancement.name);
+    const escapedDescription = escapeXml(enhancement.description, { encodeQuotes: true });
+    // Browser decodes entities when reading dataset, so lookup works with original name
     const checkboxHtml = `
-    <sl-tooltip content="${enhancement.description}" hoist placement="right">
-      <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
+    <sl-tooltip content="${escapedDescription}" hoist placement="right">
+      <sl-checkbox data-enhancement="${escapedNameForAttr}" size="medium">${escapedNameForText}</sl-checkbox>
     </sl-tooltip>
     <br />`;
     dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml);

@@ -523,11 +523,17 @@ async function start(state) {
   })
 
   // dis/enable diff buttons
+  const diffBtns = [
+    ui.xmlEditor.toolbar.prevDiffBtn, 
+    ui.xmlEditor.toolbar.nextDiffBtn,
+    ui.xmlEditor.toolbar.rejectAllBtn,
+    ui.xmlEditor.toolbar.acceptAllBtn
+  ];
   const enableDiffButtons = (value) => {
-    ui.xmlEditor.toolbar.prevDiffBtn.disabled = !value;
-    ui.xmlEditor.toolbar.nextDiffBtn.disabled = !value;
-    ui.xmlEditor.toolbar.rejectAllBtn.disabled = !value;
-    ui.xmlEditor.toolbar.acceptAllBtn.disabled = !value;
+    for (let btn of diffBtns) {
+      btn.disabled = !value;
+      btn.classList.toggle("xmleditor-toolbar-highlight", value);
+    }
   }
   xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
     enableDiffButtons(true)
