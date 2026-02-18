@@ -13,10 +13,14 @@ export const name = "Fix Common Extraction Issues";
 export const description = "Fixes common structural issues in PDF-to-TEI extractions: reorders application children (label before ref), adds missing title elements to monogr/analytic, adds schema ref from variant-id.";
 
 /**
+ * @import { ApplicationState } from '/app/src/state.js'; 
+ */
+
+/**
  * Fixes common structural issues in TEI documents produced by PDF extraction tools.
  *
  * @param {Document} xmlDoc - The XML DOM Document object
- * @param {Object} currentState - The current application state (unused)
+ * @param {ApplicationState} currentState - The current application state (unused)
  * @param {Map<string, any>} configMap - The application configuration map (unused)
  * @returns {Document} - The modified XML DOM Document object
  */

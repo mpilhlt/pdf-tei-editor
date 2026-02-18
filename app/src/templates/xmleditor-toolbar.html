@@ -1,12 +1,28 @@
 <!-- XML Editor toolbar widgets -->
-<status-separator variant="vertical"></status-separator>
+ <style>
+  /* Highlight diff buttons when active */
+  .xmleditor-toolbar-highlight.xmleditor-toolbar-diff-navigation {
+    background-color: hsl(230, 65%, 59%) !important;
+    color: white !important;
+  }
+  .xmleditor-toolbar-highlight.xmleditor-toolbar-diff-reject-all {
+    background-color: hsl(0, 65%, 59%) !important;
+    color: white !important;
+  }
+  .xmleditor-toolbar-highlight.xmleditor-toolbar-diff-accept-all {
+    background-color: hsl(121, 65%, 59%) !important;
+    color: white !important;
+  }
+ </style>
 <status-button
+  class="xmleditor-toolbar-diff-navigation"
   name="prevDiffBtn"
   icon="chevron-bar-up"
   tooltip="Previous diff"
   action="xml-prev-diff">
 </status-button>
 <status-button
+  class="xmleditor-toolbar-diff-navigation" 
   name="nextDiffBtn"
   icon="chevron-bar-down"
   tooltip="Next diff"
@@ -15,12 +31,14 @@
 
 <status-separator variant="vertical"></status-separator>
 <status-button
+  class="xmleditor-toolbar-diff-reject-all"
   name="rejectAllBtn"
   icon="x-circle"
   tooltip="Reject all changes"
   action="xml-reject-all">
 </status-button>
 <status-button
+  class="xmleditor-toolbar-diff-accept-all"
   name="acceptAllBtn"
   icon="check-circle"
   tooltip="Accept all changes"

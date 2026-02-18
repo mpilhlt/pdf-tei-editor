@@ -1174,6 +1174,74 @@ import { test, expect } from '../fixtures/debug-on-failure.js';
 
 This has no effect during normal test runs - it only activates when `--debug-on-failure` is used.
 
+## JSDOM Limitations for Browser-Targeted Code
+
+When testing JavaScript code designed for the browser using Node.js with JSDOM, be aware of these limitations:
+
+### XPath Namespace Support
+
+JSDOM has incomplete XPath support, particularly for namespace resolvers:
+
+```javascript
+// This works in browsers but may fail in JSDOM:
+const result = xmlDoc.evaluate(
+  "//tei:bibl",
+  xmlDoc,
+  (prefix) => prefix === "tei" ? "http://www.tei-c.org/ns/1.0" : null,
+  XPathResult.FIRST_ORDERED_NODE_TYPE,
+  null
+);
+```
+
+**Workaround:** Export helper functions that accept elements directly, bypassing XPath:
+
+```javascript
+// In the enhancement module:
+export function execute(xmlDoc, currentState, configMap) {
+  const targetNode = xmlDoc.evaluate(xpath, ...);  // Uses XPath
+  processElement(targetNode, xmlDoc);
+}
+
+export function processElement(element, xmlDoc) {
+  // Core logic - testable without XPath
+}
+
+// In tests:
+import { processElement } from './enhancement.js';
+const bibl = xmlDoc.getElementsByTagNameNS(TEI_NS, 'bibl')[0];
+processElement(bibl, xmlDoc);  // Direct element reference
+```
+
+### Other JSDOM Limitations
+
+- **No `XPathResult` constants** - Must expose via `global.XPathResult = dom.window.XPathResult`
+- **Limited `Range` and `Selection` APIs** - May not behave identically to browsers
+- **No layout engine** - Properties like `offsetWidth`, `getBoundingClientRect()` return 0
+- **Partial Web Component support** - Shadow DOM works but custom elements have limitations
+
+### JSDOM Setup Pattern
+
+```javascript
+import { JSDOM } from 'jsdom';
+
+const dom = new JSDOM();
+global.window = dom.window;
+global.document = dom.window.document;
+global.Node = dom.window.Node;
+global.Document = dom.window.Document;
+global.DOMParser = dom.window.DOMParser;
+global.XPathResult = dom.window.XPathResult;  // For XPath-using code
+```
+
+### When to Use E2E Tests Instead
+
+For code that heavily depends on browser-specific APIs, consider E2E tests with Playwright instead of Node.js unit tests:
+
+- Complex XPath expressions
+- Web Component interactions
+- Layout-dependent behavior
+- CSS styling logic
+
 ## Important Notes
 
 - **API tests run against local server** - No containers needed, faster iteration

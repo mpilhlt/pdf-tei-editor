@@ -77,7 +77,7 @@ NAVIGATION_XPATH = {
     ],
     "grobid.training.references.referenceSegmenter": [
         {
-            "value": "//tei:bibl",
+            "value": "//tei:listBibl/tei:bibl",
             "label": "&lt;bibl&gt;"
         }
     ],
