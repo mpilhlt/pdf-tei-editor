@@ -99,6 +99,11 @@ export const xmlTagSync = EditorState.transactionFilter.of((tr) => {
     const node = resolveTagName(tree, fromA);
     if (!node) return;
 
+    // Guard: the change must be contained within the TagName's span.
+    // Changes that start before or extend past the TagName are structural
+    // edits (e.g. inserting "</bibl><bibl>" near a tag boundary), not renames.
+    if (fromA < node.from || toA > node.to) return;
+
     const parentNode = node.parent;
     if (!parentNode) return;
 
@@ -121,6 +126,12 @@ export const xmlTagSync = EditorState.transactionFilter.of((tr) => {
     const newTagName = tr.state.doc.sliceString(newFrom, newTo);
     if (!newTagName.trim()) return;
 
+    // Guard: result must be a valid XML name. If the change was actually a
+    // structural insertion (e.g. autocomplete pasting "</foo><bar>"), the
+    // position mapping can produce text containing "<", ">" or "/" — never
+    // valid as a tag name.
+    if (!/^[a-zA-Z_:][\w:.-]*$/.test(newTagName)) return;
+
     // Find the counterpart tag in the old tree.
     const match = findMatchingTagNameNode(parentNode, element, isOpenTag);
     if (!match) return;
@@ -140,5 +151,7 @@ export const xmlTagSync = EditorState.transactionFilter.of((tr) => {
 
   // Return the original transaction plus the mirror changes. The second spec's
   // positions are in the document produced by the first spec (sequential mode).
-  return [tr, { changes: mirrorChanges, sequential: true }];
+  // The tagSyncAnnotation prevents the filter from re-processing the combined
+  // transaction that CodeMirror creates by re-running all filters on the result.
+  return [tr, { changes: mirrorChanges, sequential: true, annotations: tagSyncAnnotation.of(true) }];
 });
