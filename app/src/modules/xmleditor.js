@@ -41,7 +41,6 @@ import { EditorState, EditorSelection, Compartment, Transaction } from "@codemir
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
 
@@ -50,6 +49,7 @@ import { indentWithTab } from "@codemirror/commands"
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
+import { createCompletionSource } from './codemirror/autocomplete.js';
 
 
 /**
