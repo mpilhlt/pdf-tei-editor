@@ -12,15 +12,15 @@ import logging
 import re
 from lxml import etree
 
-from .file_storage import FileStorage
-from .file_repository import FileRepository
-from .database import DatabaseManager
-from .models import FileCreate, FileUpdate
-from .tei_utils import extract_tei_metadata
-from .hash_utils import generate_file_hash
-from .doc_id_resolver import DocIdResolver
-from .collection_utils import add_collection, load_entity_data
-from ..config import get_settings
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.models.models import FileCreate, FileUpdate
+from fastapi_app.lib.utils.tei_utils import extract_tei_metadata
+from fastapi_app.lib.utils.hash_utils import generate_file_hash
+from fastapi_app.lib.utils.doc_id_resolver import DocIdResolver
+from fastapi_app.lib.utils.collection_utils import add_collection, load_entity_data
+from fastapi_app.config import get_settings
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
 from lxml import etree
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
@@ -45,7 +45,7 @@ async def download_rng(
         RelaxNG schema as XML file
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.file_repository import FileRepository
+    from fastapi_app.lib.repository.file_repository import FileRepository
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -79,7 +79,7 @@ async def download_rng(
             )
 
         # Check access via collections
-        from fastapi_app.lib.user_utils import user_has_collection_access
+        from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
         user_has_access = False
         for collection_id in file_metadata.doc_collections or []:

@@ -4,7 +4,7 @@ CodeMirror autocomplete data generation from RelaxNG schemas.
 """
 
 from typing import Dict
-from .relaxng_to_codemirror import generate_autocomplete_map
+from fastapi_app.lib.utils.relaxng_to_codemirror import generate_autocomplete_map
 
 # Re-export the function
 __all__ = ['generate_autocomplete_map']

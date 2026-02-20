@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
+from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
 
 
 def find_collection(collection_id: str, collections_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -151,8 +151,8 @@ def grant_user_collection_access(
     Returns:
         Tuple of (success: bool, message: str)
     """
-    from .group_utils import find_group, add_group, add_collection_to_group
-    from .user_utils import add_group_to_user
+    from fastapi_app.lib.permissions.group_utils import find_group, add_group, add_collection_to_group
+    from fastapi_app.lib.permissions.user_utils import add_group_to_user
 
     groups_data = load_entity_data(db_dir, 'groups')
     user_group_id = username  # Personal group has same ID as username
@@ -208,9 +208,9 @@ def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str, dict
         return False, f"Collection '{collection_id}' not found.", {}
 
     # Import database utilities
-    from .file_repository import FileRepository
-    from .models import FileUpdate
-    from .dependencies import _DatabaseManagerSingleton
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.models.models import FileUpdate
+    from fastapi_app.lib.core.dependencies import _DatabaseManagerSingleton
 
     # Initialize database access
     db_path = db_dir / "metadata.db"

@@ -10,12 +10,12 @@ that occur when multiple threads try to initialize databases simultaneously.
 import sqlite3
 from pathlib import Path
 from typing import List, Tuple
-from .database import DatabaseManager
-from .locking import init_locks_db
-from .sessions import SessionManager
-from .auth import AuthManager
-from .logging_utils import get_logger
-from .dependencies import _DatabaseManagerSingleton
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.core.locking import init_locks_db
+from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.utils.logging_utils import get_logger
+from fastapi_app.lib.core.dependencies import _DatabaseManagerSingleton
 
 
 logger = get_logger(__name__)

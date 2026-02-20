@@ -10,7 +10,7 @@ After: RNG schema files are removed from database
 """
 
 import sqlite3
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration003RemoveSchemaFiles(Migration):

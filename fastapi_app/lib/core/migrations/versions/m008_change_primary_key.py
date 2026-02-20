@@ -13,7 +13,7 @@ Fixes: https://github.com/mpilhlt/pdf-tei-editor/issues/178
 """
 
 import sqlite3
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration008ChangePrimaryKey(Migration):

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from fastapi_app.plugins.annotation_history.plugin import AnnotationHistoryPlugin
-from fastapi_app.lib.plugin_base import PluginContext
+from fastapi_app.lib.plugins.plugin_base import PluginContext
 
 
 class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
@@ -396,7 +396,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         """Set up test client."""
         from fastapi import FastAPI
         from fastapi_app.plugins.annotation_history.routes import router
-        from fastapi_app.lib.dependencies import (
+        from fastapi_app.lib.core.dependencies import (
             get_auth_manager,
             get_session_manager,
             get_db,

@@ -11,7 +11,7 @@ This module handles:
 import re
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
-from .metadata_extraction import BibliographicMetadata
+from fastapi_app.lib.services.metadata_extraction import BibliographicMetadata
 import logging
 
 logger = logging.getLogger(__name__)

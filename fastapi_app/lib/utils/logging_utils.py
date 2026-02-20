@@ -9,8 +9,8 @@ import sys
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .sse_log_handler import SSELogHandler
-    from .sse_service import SSEService
+    from fastapi_app.lib.sse.sse_log_handler import SSELogHandler
+    from fastapi_app.lib.sse.sse_service import SSEService
 
 _sse_log_handler: Optional["SSELogHandler"] = None
 
@@ -121,7 +121,7 @@ def install_sse_log_handler(sse_service: "SSEService") -> "SSELogHandler":
     if _sse_log_handler is not None:
         return _sse_log_handler
 
-    from .sse_log_handler import SSELogHandler
+    from fastapi_app.lib.sse.sse_log_handler import SSELogHandler
 
     handler = SSELogHandler(sse_service)
     logging.getLogger().addHandler(handler)

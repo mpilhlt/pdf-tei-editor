@@ -8,11 +8,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_session_manager,
 )
-from fastapi_app.lib.plugin_tools import get_plugin_config
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ async def subscribe_to_logs(
     auth_manager=Depends(get_auth_manager),
 ):
     """Subscribe session to receive log events via SSE."""
-    from fastapi_app.lib.logging_utils import get_sse_log_handler
+    from fastapi_app.lib.utils.logging_utils import get_sse_log_handler
 
     _user, session_id_value = _require_admin(
         session_id, x_session_id, session_manager, auth_manager
@@ -75,7 +75,7 @@ async def unsubscribe_from_logs(
     auth_manager=Depends(get_auth_manager),
 ):
     """Unsubscribe session from log events."""
-    from fastapi_app.lib.logging_utils import get_sse_log_handler
+    from fastapi_app.lib.utils.logging_utils import get_sse_log_handler
 
     _user, session_id_value = _require_admin(
         session_id, x_session_id, session_manager, auth_manager

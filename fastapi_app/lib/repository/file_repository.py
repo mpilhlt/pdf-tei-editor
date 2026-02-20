@@ -16,9 +16,9 @@ import json
 import sqlite3
 from typing import Optional, List
 from datetime import datetime
-from .database import DatabaseManager
-from .storage_references import StorageReferenceManager
-from .models import (
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.storage.storage_references import StorageReferenceManager
+from fastapi_app.lib.models.models import (
     FileMetadata,
     FileCreate,
     FileUpdate,
@@ -197,7 +197,7 @@ class FileRepository:
 
         # Generate stable_id if not provided
         if not data.get('stable_id'):
-            from .stable_id import generate_stable_id
+            from fastapi_app.lib.utils.stable_id import generate_stable_id
             # Get all existing stable IDs to avoid collisions
             existing_ids = self._get_all_stable_ids()
             data['stable_id'] = generate_stable_id(existing_ids)
@@ -310,8 +310,8 @@ class FileRepository:
             if should_delete:
                 # Physical file should be deleted - need FileStorage for this
                 # Import here to avoid circular dependency
-                from .file_storage import FileStorage
-                from ..config import get_settings
+                from fastapi_app.lib.storage.file_storage import FileStorage
+                from fastapi_app.config import get_settings
                 settings = get_settings()
                 storage = FileStorage(settings.data_root / "files", self.db, self.logger)
                 deleted = storage.delete_file(file_id, file_type, decrement_ref=False)
@@ -509,8 +509,8 @@ class FileRepository:
 
         if should_delete:
             # Physical file should be deleted
-            from .file_storage import FileStorage
-            from ..config import get_settings
+            from fastapi_app.lib.storage.file_storage import FileStorage
+            from fastapi_app.config import get_settings
             settings = get_settings()
             storage = FileStorage(settings.data_root / "files", self.db, self.logger)
             deleted = storage.delete_file(file_id, file_metadata.file_type, decrement_ref=False)
@@ -1404,7 +1404,7 @@ class FileRepository:
         # Get all TEI files that need fileref updates
         tei_files = []
         if file_storage:
-            from ..lib.tei_utils import update_fileref_in_xml
+            from fastapi_app.lib.utils.tei_utils import update_fileref_in_xml
 
             # Query all TEI files with this doc_id
             query_tei = """

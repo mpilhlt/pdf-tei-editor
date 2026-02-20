@@ -109,8 +109,8 @@ def init_locks_db(db_dir: Path, logger: logging.Logger, force: bool = False) -> 
                 """)
 
         # Run migrations using centralized runner
-        from fastapi_app.lib.migration_runner import run_migrations_if_needed
-        from fastapi_app.lib.migrations.versions import LOCKS_MIGRATIONS
+        from fastapi_app.lib.core.migration_runner import run_migrations_if_needed
+        from fastapi_app.lib.core.migrations.versions import LOCKS_MIGRATIONS
 
         try:
             run_migrations_if_needed(

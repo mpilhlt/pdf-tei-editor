@@ -3,7 +3,7 @@ Unit tests for auth.py
 
 Self-contained tests that can be run independently.
 
-@testCovers fastapi_app/lib/auth.py
+@testCovers fastapi_app/lib/utils/auth.py
 """
 
 import gc
@@ -14,9 +14,9 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.auth import AuthManager
-from fastapi_app.lib.sessions import SessionManager
-from fastapi_app.lib.db_utils import close_all_connections
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.core.db_utils import close_all_connections
 
 
 class TestAuthManager(unittest.TestCase):

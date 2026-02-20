@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, TypedDict
 
-from .db_utils import get_connection, init_database
+from fastapi_app.lib.core.db_utils import get_connection, init_database
 
 
 class SessionDict(TypedDict):

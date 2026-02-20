@@ -10,12 +10,12 @@ Key changes from Flask:
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..lib.locking import acquire_lock
-from ..lib.file_repository import FileRepository
-from ..lib.models_files import HeartbeatRequest, HeartbeatResponse
-from ..lib.dependencies import get_session_id, get_file_repository
+from ..lib.core.locking import acquire_lock
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_files import HeartbeatRequest, HeartbeatResponse
+from ..lib.core.dependencies import get_session_id, get_file_repository
 from ..config import get_settings
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

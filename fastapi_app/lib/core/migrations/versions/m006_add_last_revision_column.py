@@ -10,7 +10,7 @@ After: last_revision column populated from revisionDesc/change[last()]/@when for
 
 import sqlite3
 from pathlib import Path
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration006AddLastRevisionColumn(Migration):
@@ -60,8 +60,8 @@ class Migration006AddLastRevisionColumn(Migration):
         Apply migration: add last_revision column and populate from TEI XML.
         """
         # Import here to avoid circular dependencies during module loading
-        from ....lib.tei_utils import extract_revision_timestamp
-        from ..utils import populate_column_from_tei_files
+        from fastapi_app.lib.utils.tei_utils import extract_revision_timestamp
+        from fastapi_app.lib.core.migrations.utils import populate_column_from_tei_files
         
         populate_column_from_tei_files(
             conn=conn,

@@ -10,7 +10,7 @@ After: Status column populated from revisionDesc/change/@status for efficient lo
 
 import sqlite3
 from pathlib import Path
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration005AddStatusColumn(Migration):
@@ -60,8 +60,8 @@ class Migration005AddStatusColumn(Migration):
         Apply migration: add status column and populate from TEI XML.
         """
         # Import here to avoid circular dependencies during module loading
-        from ....lib.tei_utils import extract_last_revision_status
-        from ..utils import populate_column_from_tei_files
+        from fastapi_app.lib.utils.tei_utils import extract_last_revision_status
+        from fastapi_app.lib.core.migrations.utils import populate_column_from_tei_files
         
         populate_column_from_tei_files(
             conn=conn,

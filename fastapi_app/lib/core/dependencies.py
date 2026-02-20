@@ -10,17 +10,17 @@ from functools import wraps
 import threading
 from pathlib import Path
 
-from ..config import get_settings
-from .database import DatabaseManager
-from .file_repository import FileRepository
-from .file_storage import FileStorage
-from .sessions import SessionManager
-from .auth import AuthManager
-from .server_utils import get_session_id_from_request
-from .logging_utils import get_logger
-from .sse_service import SSEService
-from .sync_service import SyncService
-from .event_bus import EventBus, get_event_bus
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.utils.server_utils import get_session_id_from_request
+from fastapi_app.lib.utils.logging_utils import get_logger
+from fastapi_app.lib.sse.sse_service import SSEService
+from fastapi_app.lib.services.sync_service import SyncService
+from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
 
 
 logger = get_logger(__name__)
@@ -115,7 +115,7 @@ def reset_db_manager() -> None:
     db_path = str(settings.db_dir / "metadata.db")
     _DatabaseManagerSingleton.reset_instances()
     
-    from .storage_references import StorageReferenceManager
+    from fastapi_app.lib.storage.storage_references import StorageReferenceManager
     StorageReferenceManager.reset_cache()
 
 def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository:

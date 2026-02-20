@@ -8,8 +8,8 @@ beyond the generic /api/plugins/{id}/execute endpoint.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
-from fastapi_app.lib.dependencies import get_current_user
-from fastapi_app.lib.service_registry import get_service_registry, ExtractionService, ExtractionParams, ExtractionResult
+from fastapi_app.lib.core.dependencies import get_current_user
+from fastapi_app.lib.services.service_registry import get_service_registry, ExtractionService, ExtractionParams, ExtractionResult
 
 router = APIRouter(prefix="/api/plugins/test-plugin", tags=["test-plugin"])
 

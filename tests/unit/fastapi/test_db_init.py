@@ -3,7 +3,7 @@ Unit tests for database initialization module.
 
 Tests the config/ → db/ initialization pattern.
 
-@testCovers fastapi_app/lib/db_init.py
+@testCovers fastapi_app/lib/core/db_init.py
 """
 
 import json
@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 import pytest
 
-from fastapi_app.lib.db_init import (
+from fastapi_app.lib.core.db_init import (
     initialize_db_from_config,
     clean_db_directory,
     ensure_db_initialized,

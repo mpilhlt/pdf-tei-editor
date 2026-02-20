@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions.m008_change_primary_key import (
+from fastapi_app.lib.core.migrations import MigrationManager
+from fastapi_app.lib.core.migrations.versions.m008_change_primary_key import (
     Migration008ChangePrimaryKey,
 )
 

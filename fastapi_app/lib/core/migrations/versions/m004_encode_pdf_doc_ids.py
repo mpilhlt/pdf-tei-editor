@@ -13,8 +13,8 @@ After: All doc_id values are filesystem-safe
 """
 
 import sqlite3
-from ..base import Migration
-from fastapi_app.lib.doi_utils import encode_filename, is_filename_encoded
+from fastapi_app.lib.core.migrations.base import Migration
+from fastapi_app.lib.utils.doi_utils import encode_filename, is_filename_encoded
 
 
 class Migration004EncodePdfDocIds(Migration):

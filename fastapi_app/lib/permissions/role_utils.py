@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .data_utils import get_data_file_path, load_json_file, load_entity_data
+from fastapi_app.lib.utils.data_utils import get_data_file_path, load_json_file, load_entity_data
 
 
 def get_available_roles(db_dir: Path) -> Optional[List[str]]:

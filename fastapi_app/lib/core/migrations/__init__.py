@@ -9,7 +9,7 @@ Follows best practices for safe schema evolution:
 - Idempotent migration operations
 
 Usage:
-    from fastapi_app.lib.migrations import MigrationManager
+    from fastapi_app.lib.core.migrations import MigrationManager
 
     manager = MigrationManager(db_path, logger)
     manager.run_migrations()

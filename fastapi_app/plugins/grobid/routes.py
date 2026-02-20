@@ -15,14 +15,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
     get_session_manager,
     get_sse_service,
 )
-from fastapi_app.lib.sse_utils import ProgressBar, send_notification
+from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
 from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_supported_variants
 
@@ -104,8 +104,8 @@ async def download_training_package(
         ZIP file as streaming response
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.file_repository import FileRepository
-    from fastapi_app.lib.user_utils import user_has_collection_access
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id

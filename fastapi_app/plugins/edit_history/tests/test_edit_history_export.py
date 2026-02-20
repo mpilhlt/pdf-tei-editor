@@ -21,7 +21,7 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Set up test fixtures."""
         from fastapi_app.plugins.edit_history.routes import router
-        from fastapi_app.lib.dependencies import (
+        from fastapi_app.lib.core.dependencies import (
             get_auth_manager,
             get_session_manager,
             get_db,
@@ -86,7 +86,7 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 401)
         self.assertIn("User not found", response.json()["detail"])
 
-    @patch("fastapi_app.lib.user_utils.user_has_collection_access")
+    @patch("fastapi_app.lib.permissions.user_utils.user_has_collection_access")
     @patch("fastapi_app.config.get_settings")
     def test_export_csv_no_access(self, mock_settings, mock_access):
         """Test export without collection access returns 403."""
@@ -113,8 +113,8 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
 
     @patch("fastapi_app.plugins.edit_history.routes.get_file_storage")
     @patch("fastapi_app.plugins.edit_history.routes.get_db")
-    @patch("fastapi_app.lib.file_repository.FileRepository")
-    @patch("fastapi_app.lib.user_utils.user_has_collection_access")
+    @patch("fastapi_app.lib.repository.file_repository.FileRepository")
+    @patch("fastapi_app.lib.permissions.user_utils.user_has_collection_access")
     @patch("fastapi_app.config.get_settings")
     def test_export_csv_success(self, mock_settings, mock_access, mock_repo_class, mock_get_db, mock_get_storage):
         """Test successful CSV export."""
@@ -209,8 +209,8 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
 
     @patch("fastapi_app.plugins.edit_history.routes.get_file_storage")
     @patch("fastapi_app.plugins.edit_history.routes.get_db")
-    @patch("fastapi_app.lib.file_repository.FileRepository")
-    @patch("fastapi_app.lib.user_utils.user_has_collection_access")
+    @patch("fastapi_app.lib.repository.file_repository.FileRepository")
+    @patch("fastapi_app.lib.permissions.user_utils.user_has_collection_access")
     @patch("fastapi_app.config.get_settings")
     def test_export_csv_with_variant_filter(self, mock_settings, mock_access, mock_repo_class, mock_get_db, mock_get_storage):
         """Test CSV export with variant filter."""
@@ -285,8 +285,8 @@ class TestEditHistoryExport(unittest.IsolatedAsyncioTestCase):
 
     @patch("fastapi_app.plugins.edit_history.routes.get_file_storage")
     @patch("fastapi_app.plugins.edit_history.routes.get_db")
-    @patch("fastapi_app.lib.file_repository.FileRepository")
-    @patch("fastapi_app.lib.user_utils.user_has_collection_access")
+    @patch("fastapi_app.lib.repository.file_repository.FileRepository")
+    @patch("fastapi_app.lib.permissions.user_utils.user_has_collection_access")
     @patch("fastapi_app.config.get_settings")
     def test_export_csv_no_tei_files(self, mock_settings, mock_access, mock_repo_class, mock_get_db, mock_get_storage):
         """Test CSV export with no TEI files returns empty CSV."""

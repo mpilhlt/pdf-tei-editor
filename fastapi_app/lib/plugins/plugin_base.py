@@ -7,7 +7,7 @@ that plugins receive for interacting with the application.
 
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Type, TypeVar
-from fastapi_app.lib.service_registry import BaseService, get_service_registry
+from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 
 # Type variable for generic service retrieval
 S = TypeVar('S', bound=BaseService)

@@ -10,8 +10,8 @@ Includes:
 import json
 import uuid
 from typing import Any, Optional
-from .sse_service import SSEService
-from .sessions import SessionManager, SessionDict
+from fastapi_app.lib.sse.sse_service import SSEService
+from fastapi_app.lib.core.sessions import SessionManager, SessionDict
 
 
 def send_notification(
@@ -60,8 +60,8 @@ class ProgressBar:
     Example usage:
         ```python
         from fastapi import Depends
-        from fastapi_app.lib.dependencies import get_sse_service
-        from fastapi_app.lib.sse_utils import ProgressBar
+        from fastapi_app.lib.core.dependencies import get_sse_service
+        from fastapi_app.lib.sse.sse_utils import ProgressBar
 
         @router.post("/process")
         async def process_files(

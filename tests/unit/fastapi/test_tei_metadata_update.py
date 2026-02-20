@@ -11,7 +11,7 @@ from unittest.mock import Mock, MagicMock
 from lxml import etree
 import logging
 
-from fastapi_app.lib.tei_utils import (
+from fastapi_app.lib.utils.tei_utils import (
     build_pdf_label_from_metadata,
     update_pdf_metadata_from_tei,
     extract_tei_metadata

@@ -149,7 +149,7 @@ def repopulate_column_from_tei_files(
     logger.info(f"Found {total_files} TEI file(s) to process")
 
     # Import here to avoid circular dependencies during module loading
-    from ...lib.hash_utils import get_storage_path
+    from fastapi_app.lib.utils.hash_utils import get_storage_path
 
     for file_id, file_type in tei_files:
         try:

@@ -16,12 +16,12 @@ from typing import Dict, List, Optional, Callable, Tuple, Any
 from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
-from .file_repository import FileRepository
-from .remote_metadata import RemoteMetadataManager
-from .file_storage import FileStorage
-from .sse_service import SSEService
-from .models_sync import SyncSummary, ConflictInfo
-from .hash_utils import get_file_extension
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.utils.remote_metadata import RemoteMetadataManager
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.sse.sse_service import SSEService
+from fastapi_app.lib.models.models_sync import SyncSummary, ConflictInfo
+from fastapi_app.lib.utils.hash_utils import get_file_extension
 
 
 class SyncService:
@@ -424,7 +424,7 @@ class SyncService:
                 self._download_file(remote_path, local_path)
 
                 # Insert into local database
-                from .models import FileCreate
+                from fastapi_app.lib.models.models import FileCreate
                 file_create = FileCreate(
                     id=file_id,
                     stable_id=remote_file['stable_id'],

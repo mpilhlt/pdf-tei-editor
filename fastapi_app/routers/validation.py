@@ -14,18 +14,18 @@ import json
 import logging
 
 from ..config import get_settings
-from ..lib.models_validation import (
+from ..lib.models.models_validation import (
     ValidateRequest,
     ValidateResponse,
     ValidationErrorModel,
     AutocompleteDataRequest,
     AutocompleteDataResponse
 )
-from ..lib.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
-from ..lib.autocomplete_generator import generate_autocomplete_map
+from ..lib.core.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
+from ..lib.utils.autocomplete_generator import generate_autocomplete_map
 
 # For internet connectivity check
-from ..lib.server_utils import has_internet
+from ..lib.utils.server_utils import has_internet
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])
@@ -144,7 +144,7 @@ def generate_autocomplete_data(
         # Download schema if it doesn't exist
         # Note: invalidate_cache only affects autocomplete data cache, not the schema itself
         if not schema_cache_file.is_file():
-            from ..lib.schema_validator import download_schema_file
+            from ..lib.core.schema_validator import download_schema_file
             try:
                 download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
             except Exception as e:

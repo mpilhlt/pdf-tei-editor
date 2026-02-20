@@ -9,7 +9,7 @@ import logging
 from collections import defaultdict
 from typing import Optional
 
-from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.lib.repository.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 

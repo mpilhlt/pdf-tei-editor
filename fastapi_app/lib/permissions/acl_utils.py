@@ -212,7 +212,7 @@ def get_access_control_mode() -> str:
             )
 
     # Fall back to config
-    from .config_utils import get_config
+    from fastapi_app.lib.utils.config_utils import get_config
     config = get_config()
     return config.get('access-control.mode', default='role-based')
 
@@ -225,7 +225,7 @@ def _get_permissions_db():
         PermissionsDB instance
     """
     from fastapi_app.config import get_settings
-    from .permissions_db import PermissionsDB
+    from fastapi_app.lib.repository.permissions_db import PermissionsDB
 
     settings = get_settings()
     return PermissionsDB(settings.db_dir / "permissions.db", logger)
@@ -250,8 +250,8 @@ def get_file_permissions(stable_id: str, default_owner: Optional[str] = None) ->
         return None
 
     try:
-        from .config_utils import get_config
-        from .permissions_db import get_document_permissions
+        from fastapi_app.lib.utils.config_utils import get_config
+        from fastapi_app.lib.repository.permissions_db import get_document_permissions
 
         config = get_config()
         default_visibility = config.get('access-control.default-visibility', default='collection')
@@ -300,8 +300,8 @@ def set_default_permissions_for_new_file(stable_id: str, owner: str) -> bool:
         return False
 
     try:
-        from .config_utils import get_config
-        from .permissions_db import set_document_permissions
+        from fastapi_app.lib.utils.config_utils import get_config
+        from fastapi_app.lib.repository.permissions_db import set_document_permissions
 
         config = get_config()
         default_visibility = config.get('access-control.default-visibility', default='collection')
@@ -343,7 +343,7 @@ def delete_permissions_for_file(stable_id: str) -> bool:
         return False
 
     try:
-        from .permissions_db import delete_document_permissions
+        from fastapi_app.lib.repository.permissions_db import delete_document_permissions
 
         permissions_db = _get_permissions_db()
 

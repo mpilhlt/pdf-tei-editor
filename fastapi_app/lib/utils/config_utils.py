@@ -4,7 +4,7 @@ Configuration management utilities for PDF-TEI-Editor.
 This module provides framework-agnostic configuration utilities with dependency injection.
 
 High-level API (recommended - uses settings injection):
-    from fastapi_app.lib.config_utils import get_config
+    from fastapi_app.lib.utils.config_utils import get_config
 
     config = get_config()
     value = config.get('key', default='fallback')
@@ -13,13 +13,13 @@ High-level API (recommended - uses settings injection):
     all_config = config.load()
 
 Alternative - create Config instance with custom db_dir:
-    from fastapi_app.lib.config_utils import Config
+    from fastapi_app.lib.utils.config_utils import Config
 
     custom_config = Config(custom_db_dir)
     value = custom_config.get('key')
 
 Low-level API (for advanced use):
-    from fastapi_app.lib.config_utils import get_config_value
+    from fastapi_app.lib.utils.config_utils import get_config_value
 
     get_config_value(key, db_dir, default)
     set_config_value(key, value, db_dir)
@@ -30,7 +30,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
-from .data_utils import get_data_file_path
+from fastapi_app.lib.utils.data_utils import get_data_file_path
 
 
 # Platform-specific imports for file locking
@@ -375,7 +375,7 @@ def _get_default_config() -> Config:
 
 
 # Module-level config instance for convenience
-# Usage: from fastapi_app.lib.config_utils import get_config
+# Usage: from fastapi_app.lib.utils.config_utils import get_config
 _config_instance = None
 
 

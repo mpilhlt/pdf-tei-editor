@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
+from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
 
 
 def find_group(group_id: str, groups_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -190,7 +190,7 @@ def add_collection_to_group(db_dir: Path, group_id: str, collection_id: str) -> 
     Returns:
         Tuple of (success: bool, message: str)
     """
-    from .collection_utils import validate_collection
+    from fastapi_app.lib.utils.collection_utils import validate_collection
 
     # Validate collection exists (skip validation for wildcard)
     if collection_id != '*' and not validate_collection(collection_id, db_dir):
@@ -229,7 +229,7 @@ def remove_collection_from_group(db_dir: Path, group_id: str, collection_id: str
     Returns:
         Tuple of (success: bool, message: str)
     """
-    from .collection_utils import validate_collection
+    from fastapi_app.lib.utils.collection_utils import validate_collection
 
     # Validate collection exists (skip validation for wildcard)
     if collection_id != '*' and not validate_collection(collection_id, db_dir):

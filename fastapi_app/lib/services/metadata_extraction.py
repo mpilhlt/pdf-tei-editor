@@ -129,7 +129,7 @@ def _normalize_extracted_metadata(data: Dict[str, Any]) -> BibliographicMetadata
     
     # DOI normalization: only promote to 'doi' if the value actually validates as a DOI
     if 'id' in data and 'doi:' in data.get('id', ''):
-        from .doi_utils import validate_doi
+        from fastapi_app.lib.utils.doi_utils import validate_doi
         candidate_doi = data['id'].replace('doi:', '')
         if validate_doi(candidate_doi):
             data['doi'] = candidate_doi
@@ -208,7 +208,7 @@ async def get_metadata_for_document(
 
     # 1. Try DOI lookup first if DOI provided
     if doi:
-        from .doi_utils import normalize_doi, validate_doi, fetch_doi_metadata
+        from fastapi_app.lib.utils.doi_utils import normalize_doi, validate_doi, fetch_doi_metadata
         
         doi = normalize_doi(doi)
         if validate_doi(doi):

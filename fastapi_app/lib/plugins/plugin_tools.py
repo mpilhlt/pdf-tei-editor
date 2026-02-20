@@ -39,7 +39,7 @@ def get_plugin_config(
         ...     value_type="boolean"
         ... )
     """
-    from fastapi_app.lib.config_utils import get_config
+    from fastapi_app.lib.utils.config_utils import get_config
     import os
 
     config = get_config()
@@ -95,7 +95,7 @@ def _extract_sandbox_methods() -> list[dict[str, str]]:
         ]
     """
     # Find the sandbox module file
-    sandbox_file = Path(__file__).parent.parent.parent / 'app' / 'src' / 'modules' / 'backend-plugin-sandbox.js'
+    sandbox_file = Path(__file__).parent.parent.parent.parent / 'app' / 'src' / 'modules' / 'backend-plugin-sandbox.js'
 
     if not sandbox_file.exists():
         # Fallback to empty list if file not found
@@ -159,7 +159,7 @@ def generate_sandbox_client_script() -> str:
     Usage:
         In plugin route handler:
 
-        from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+        from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
         html = f'''
         <html>
@@ -374,7 +374,7 @@ def load_plugin_html(
 
     Example::
 
-        from fastapi_app.lib.plugin_tools import load_plugin_html
+        from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 
         @router.get("/view", response_class=HTMLResponse)
         async def view(...):

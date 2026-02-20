@@ -12,8 +12,8 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from fastapi_app.lib.plugin_base import PluginContext
-from fastapi_app.lib.plugin_registry import PluginRegistry
+from fastapi_app.lib.plugins.plugin_base import PluginContext
+from fastapi_app.lib.plugins.plugin_registry import PluginRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@ Unit tests for collection-based access control.
 Tests the implementation of collection-based access control in user_utils,
 including wildcard support for users, groups, roles, and collections.
 
-@testCovers fastapi_app/lib/user_utils.py:get_user_collections
-@testCovers fastapi_app/lib/user_utils.py:user_has_collection_access
+@testCovers fastapi_app/lib/permissions/user_utils.py:get_user_collections
+@testCovers fastapi_app/lib/permissions/user_utils.py:user_has_collection_access
 """
 
 import tempfile
@@ -15,14 +15,14 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.user_utils import (
+from fastapi_app.lib.permissions.user_utils import (
     get_user_collections,
     user_has_collection_access,
     add_user
 )
-from fastapi_app.lib.group_utils import add_group, add_collection_to_group
-from fastapi_app.lib.collection_utils import add_collection
-from fastapi_app.lib.data_utils import save_entity_data
+from fastapi_app.lib.permissions.group_utils import add_group, add_collection_to_group
+from fastapi_app.lib.utils.collection_utils import add_collection
+from fastapi_app.lib.utils.data_utils import save_entity_data
 
 
 class TestCollectionAccessControl(unittest.TestCase):

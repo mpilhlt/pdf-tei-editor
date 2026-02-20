@@ -16,14 +16,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..config import get_settings
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_db,
     require_authenticated_user
 )
-from ..lib.database import DatabaseManager
-from ..lib.logging_utils import get_logger
-from ..lib.tei_utils import extract_last_revision_status, extract_revision_timestamp
-from ..lib.migrations.utils import repopulate_column_from_tei_files
+from ..lib.core.database import DatabaseManager
+from ..lib.utils.logging_utils import get_logger
+from ..lib.utils.tei_utils import extract_last_revision_status, extract_revision_timestamp
+from ..lib.core.migrations.utils import repopulate_column_from_tei_files
 
 
 logger = get_logger(__name__)

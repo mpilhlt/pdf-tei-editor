@@ -11,7 +11,7 @@ After: All TEI files have the same doc_collections as their PDF
 
 import json
 import sqlite3
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration002SyncTeiCollections(Migration):

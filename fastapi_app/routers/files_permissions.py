@@ -14,24 +14,24 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..lib.permissions_db import (
+from ..lib.repository.permissions_db import (
     PermissionsDB,
     get_document_permissions,
     set_document_permissions
 )
-from ..lib.models_permissions import (
+from ..lib.models.models_permissions import (
     DocumentPermissionsModel,
     SetPermissionsRequest,
     AccessControlModeResponse
 )
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     require_authenticated_user
 )
-from ..lib.file_repository import FileRepository
-from ..lib.config_utils import get_config
-from ..lib.logging_utils import get_logger
-from ..lib.acl_utils import (
+from ..lib.repository.file_repository import FileRepository
+from ..lib.utils.config_utils import get_config
+from ..lib.utils.logging_utils import get_logger
+from ..lib.permissions.acl_utils import (
     user_has_reviewer_role,
     user_is_admin,
     get_access_control_mode as get_mode

@@ -11,12 +11,12 @@ import logging
 import re
 import fnmatch
 
-from .file_storage import FileStorage
-from .file_repository import FileRepository
-from .database import DatabaseManager
-from .models import FileMetadata
-from .hash_utils import get_file_extension
-from .doi_utils import encode_filename
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.models.models import FileMetadata
+from fastapi_app.lib.utils.hash_utils import get_file_extension
+from fastapi_app.lib.utils.doi_utils import encode_filename
 
 logger = logging.getLogger(__name__)
 

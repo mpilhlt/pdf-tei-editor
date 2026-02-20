@@ -13,15 +13,15 @@ import logging
 from lxml import etree
 from typing import Callable, Optional
 
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.tei_utils import (
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.utils.tei_utils import (
     serialize_tei_with_formatted_header,
     extract_processing_instructions
 )
-from fastapi_app.lib.metadata_extraction import get_metadata_for_document
-from fastapi_app.lib.models import FileUpdate
-from fastapi_app.lib.doi_utils import decode_filename, validate_doi
+from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
+from fastapi_app.lib.models.models import FileUpdate
+from fastapi_app.lib.utils.doi_utils import decode_filename, validate_doi
 
 logger = logging.getLogger(__name__)
 

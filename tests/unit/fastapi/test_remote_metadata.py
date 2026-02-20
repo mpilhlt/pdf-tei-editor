@@ -10,7 +10,7 @@ Tests:
 - Version tracking
 - Transaction handling
 
-@testCovers fastapi_app/lib/remote_metadata.py
+@testCovers fastapi_app/lib/utils/remote_metadata.py
 """
 
 import unittest
@@ -21,7 +21,7 @@ from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch, mock_open
 from datetime import datetime
 
-from fastapi_app.lib.remote_metadata import RemoteMetadataManager, REMOTE_SCHEMA
+from fastapi_app.lib.utils.remote_metadata import RemoteMetadataManager, REMOTE_SCHEMA
 
 
 class MockWebdavFS:
@@ -86,7 +86,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
         gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_initialization(self, mock_webdav_class):
         """Test manager initialization."""
         mock_webdav_class.return_value = self.mock_fs
@@ -105,7 +105,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
             auth=('test_user', 'test_pass')
         )
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_download_existing_database(self, mock_webdav_class):
         """Test downloading existing metadata.db from WebDAV."""
         # Create a real test database to use as remote
@@ -149,7 +149,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
             version = cursor.fetchone()[0]
         self.assertEqual(version, '5')
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_download_creates_new_database(self, mock_webdav_class):
         """Test that download creates new database if remote doesn't exist."""
         mock_webdav_class.return_value = self.mock_fs
@@ -180,7 +180,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
             version = cursor.fetchone()[0]
             self.assertEqual(version, '1')
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_upload_database(self, mock_webdav_class):
         """Test uploading metadata.db to WebDAV."""
         mock_webdav_class.return_value = self.mock_fs
@@ -204,7 +204,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
         mock_copy.assert_called_once()
         self.logger.info.assert_called()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_connect_and_disconnect(self, mock_webdav_class):
         """Test database connection and disconnection."""
         mock_webdav_class.return_value = self.mock_fs
@@ -226,7 +226,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
         # Note: On Windows, file deletion may fail due to delayed file handle release
         # The temp file will be cleaned up by OS temp cleanup if immediate deletion fails
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_transaction_context_manager(self, mock_webdav_class):
         """Test transaction context manager."""
         mock_webdav_class.return_value = self.mock_fs
@@ -269,7 +269,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_get_all_files(self, mock_webdav_class):
         """Test retrieving all file metadata."""
         mock_webdav_class.return_value = self.mock_fs
@@ -311,7 +311,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_get_deleted_files(self, mock_webdav_class):
         """Test retrieving deleted files."""
         mock_webdav_class.return_value = self.mock_fs
@@ -348,7 +348,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_get_file_by_id(self, mock_webdav_class):
         """Test retrieving file by ID."""
         mock_webdav_class.return_value = self.mock_fs
@@ -378,7 +378,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_upsert_file(self, mock_webdav_class):
         """Test upserting file metadata."""
         mock_webdav_class.return_value = self.mock_fs
@@ -413,7 +413,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_mark_deleted(self, mock_webdav_class):
         """Test marking file as deleted."""
         mock_webdav_class.return_value = self.mock_fs
@@ -441,7 +441,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_sync_metadata_operations(self, mock_webdav_class):
         """Test sync metadata get/set operations."""
         mock_webdav_class.return_value = self.mock_fs
@@ -468,7 +468,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_version_tracking(self, mock_webdav_class):
         """Test version increment and retrieval."""
         mock_webdav_class.return_value = self.mock_fs
@@ -495,7 +495,7 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         mgr.disconnect()
 
-    @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
+    @patch('fastapi_app.lib.utils.remote_metadata.WebdavFileSystem')
     def test_not_connected_errors(self, mock_webdav_class):
         """Test that operations fail when not connected."""
         mock_webdav_class.return_value = self.mock_fs

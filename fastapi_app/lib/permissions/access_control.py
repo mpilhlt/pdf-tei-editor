@@ -8,8 +8,8 @@ Access control logic supporting three modes:
 from typing import Optional, Dict, Any
 import logging
 
-from .config_utils import get_config
-from .acl_utils import (
+from fastapi_app.lib.utils.config_utils import get_config
+from fastapi_app.lib.permissions.acl_utils import (
     user_has_reviewer_role,
     user_has_annotator_role,
     is_gold_file,
@@ -57,7 +57,7 @@ def can_view_document(
             raise ValueError("permissions_db required for granular mode")
         config = get_config()
 
-        from .permissions_db import get_document_permissions
+        from fastapi_app.lib.repository.permissions_db import get_document_permissions
 
         default_visibility = config.get('access-control.default-visibility', default='collection')
         default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
@@ -128,7 +128,7 @@ def can_edit_document(
             raise ValueError("permissions_db required for granular mode")
         config = get_config()
 
-        from .permissions_db import get_document_permissions
+        from fastapi_app.lib.repository.permissions_db import get_document_permissions
 
         default_editability = config.get('access-control.default-editability', default='owner')
         default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
@@ -233,7 +233,7 @@ def can_modify_permissions(
     if permissions_db is None:
         raise ValueError("permissions_db required for granular mode")
 
-    from .permissions_db import get_document_permissions
+    from fastapi_app.lib.repository.permissions_db import get_document_permissions
 
     default_owner = file_metadata.created_by if hasattr(file_metadata, 'created_by') else None
 

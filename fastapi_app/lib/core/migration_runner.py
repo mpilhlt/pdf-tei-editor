@@ -6,8 +6,8 @@ This eliminates the need to duplicate migration runner logic across different
 database initialization code.
 
 Usage:
-    from fastapi_app.lib.migration_runner import run_migrations_if_needed
-    from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
+    from fastapi_app.lib.core.migration_runner import run_migrations_if_needed
+    from fastapi_app.lib.core.migrations.versions import METADATA_MIGRATIONS
 
     # In your database initialization code:
     run_migrations_if_needed(
@@ -69,7 +69,7 @@ def run_migrations_if_needed(
         Number of migrations applied (0 if none needed)
 
     Example:
-        from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
+        from fastapi_app.lib.core.migrations.versions import METADATA_MIGRATIONS
 
         applied = run_migrations_if_needed(
             db_path=Path("data/db/metadata.db"),
@@ -77,7 +77,7 @@ def run_migrations_if_needed(
             logger=logger
         )
     """
-    from fastapi_app.lib.migrations import MigrationManager
+    from fastapi_app.lib.core.migrations import MigrationManager
 
     # Auto-detect test environment if skip_backup not explicitly set
     if skip_backup is None:

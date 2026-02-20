@@ -5,7 +5,7 @@ using Python's built-in asyncio for async event handling.
 
 Example:
     ```python
-    from fastapi_app.lib.event_bus import get_event_bus
+    from fastapi_app.lib.sse.event_bus import get_event_bus
 
     # Register a handler
     bus = get_event_bus()

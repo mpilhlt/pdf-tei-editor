@@ -11,8 +11,8 @@ import re
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
-from fastapi_app.lib.plugin_manager import PluginManager
-from fastapi_app.lib.plugin_tools import validate_javascript_content
+from fastapi_app.lib.plugins.plugin_manager import PluginManager
+from fastapi_app.lib.plugins.plugin_tools import validate_javascript_content
 
 logger = logging.getLogger(__name__)
 

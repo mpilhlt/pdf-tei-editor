@@ -14,7 +14,7 @@ from typing import Optional, Generator
 from dataclasses import dataclass
 import logging
 
-from . import sqlite_utils
+from fastapi_app.lib.core import sqlite_utils
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +128,8 @@ def initialize_permissions_schema(conn: sqlite3.Connection, logger=None, db_path
         # Run migrations if db_path provided
         if db_path:
             from pathlib import Path
-            from .migration_runner import run_migrations_if_needed
-            from .migrations.versions import PERMISSIONS_MIGRATIONS
+            from fastapi_app.lib.core.migration_runner import run_migrations_if_needed
+            from fastapi_app.lib.core.migrations.versions import PERMISSIONS_MIGRATIONS
 
             run_migrations_if_needed(
                 db_path=Path(db_path),

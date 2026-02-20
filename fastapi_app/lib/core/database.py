@@ -10,7 +10,7 @@ import queue
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Generator
-from .db_schema import initialize_database
+from fastapi_app.lib.core.db_schema import initialize_database
 from . import sqlite_utils
 
 

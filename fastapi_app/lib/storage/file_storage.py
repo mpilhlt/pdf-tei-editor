@@ -11,9 +11,9 @@ Provides content-addressable file storage with:
 import shutil
 from pathlib import Path
 from typing import Optional, Tuple, Dict
-from .hash_utils import generate_file_hash, get_storage_path, get_file_extension
-from .storage_references import StorageReferenceManager
-from .database import DatabaseManager
+from fastapi_app.lib.utils.hash_utils import generate_file_hash, get_storage_path, get_file_extension
+from fastapi_app.lib.storage.storage_references import StorageReferenceManager
+from fastapi_app.lib.core.database import DatabaseManager
 
 
 class FileStorage:

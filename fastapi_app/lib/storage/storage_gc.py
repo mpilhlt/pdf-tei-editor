@@ -10,9 +10,9 @@ Can be run as:
 
 from pathlib import Path
 from typing import Dict, List, Tuple
-from .storage_references import StorageReferenceManager
-from .file_storage import FileStorage
-from .logging_utils import get_logger
+from fastapi_app.lib.storage.storage_references import StorageReferenceManager
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)
@@ -215,7 +215,7 @@ def rebuild_references_from_database(db_path: Path, logger_inst=None) -> Dict[st
     if logger_inst is None:
         logger_inst = logger
 
-    from .dependencies import _DatabaseManagerSingleton
+    from fastapi_app.lib.core.dependencies import _DatabaseManagerSingleton
     db_manager = _DatabaseManagerSingleton.get_instance(str(db_path))
     ref_manager = StorageReferenceManager(db_manager, logger_inst)
     return ref_manager.rebuild_from_files_table()
@@ -242,7 +242,7 @@ def run_garbage_collection(
     if logger_inst is None:
         logger_inst = logger
 
-    from .dependencies import _DatabaseManagerSingleton
+    from fastapi_app.lib.core.dependencies import _DatabaseManagerSingleton
     db_manager = _DatabaseManagerSingleton.get_instance(str(db_path))
 
     # Create instances

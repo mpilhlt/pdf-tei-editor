@@ -11,8 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions.m002_sync_tei_collections import (
+from fastapi_app.lib.core.migrations import MigrationManager
+from fastapi_app.lib.core.migrations.versions.m002_sync_tei_collections import (
     Migration002SyncTeiCollections,
 )
 

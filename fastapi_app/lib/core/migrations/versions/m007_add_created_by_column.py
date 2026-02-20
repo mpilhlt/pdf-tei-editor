@@ -9,7 +9,7 @@ New files will have created_by set to the creating user's username.
 """
 
 import sqlite3
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration007AddCreatedByColumn(Migration):

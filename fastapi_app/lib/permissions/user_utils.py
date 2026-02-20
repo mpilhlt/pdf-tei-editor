@@ -3,8 +3,8 @@
 import hashlib
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .role_utils import validate_role
-from .data_utils import load_entity_data, save_entity_data
+from fastapi_app.lib.permissions.role_utils import validate_role
+from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
 
 
 def find_user(username: str, users_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

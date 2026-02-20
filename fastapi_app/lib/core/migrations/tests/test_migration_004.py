@@ -10,11 +10,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions.m004_encode_pdf_doc_ids import (
+from fastapi_app.lib.core.migrations import MigrationManager
+from fastapi_app.lib.core.migrations.versions.m004_encode_pdf_doc_ids import (
     Migration004EncodePdfDocIds,
 )
-from fastapi_app.lib.doi_utils import encode_filename
+from fastapi_app.lib.utils.doi_utils import encode_filename
 
 
 class TestMigration004EncodePdfDocIds(unittest.TestCase):

@@ -12,14 +12,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions.m005_add_status_column import (
+from fastapi_app.lib.core.migrations import MigrationManager
+from fastapi_app.lib.core.migrations.versions.m005_add_status_column import (
     Migration005AddStatusColumn,
 )
-from fastapi_app.lib.migrations.versions.m006_add_last_revision_column import (
+from fastapi_app.lib.core.migrations.versions.m006_add_last_revision_column import (
     Migration006AddLastRevisionColumn,
 )
-from fastapi_app.lib.migrations.versions.m007_add_created_by_column import (
+from fastapi_app.lib.core.migrations.versions.m007_add_created_by_column import (
     Migration007AddCreatedByColumn,
 )
 
@@ -42,7 +42,7 @@ class TestMigrations005To007(unittest.TestCase):
         self.logger.setLevel(logging.ERROR)  # Suppress INFO and WARNING
 
         # Initialize database with full schema and all migrations
-        from fastapi_app.lib.database import DatabaseManager
+        from fastapi_app.lib.core.database import DatabaseManager
         self.db_manager = DatabaseManager(self.db_path, self.logger)
 
     def tearDown(self):
@@ -146,7 +146,7 @@ class TestMigrations005To007(unittest.TestCase):
 
     def test_migration_populates_status_from_tei_files(self):
         """Test migration extracts status from existing TEI files."""
-        from fastapi_app.lib.file_storage import FileStorage
+        from fastapi_app.lib.storage.file_storage import FileStorage
         file_storage = FileStorage(self.files_dir, self.db_manager, logger=self.logger)
 
         # Create and save TEI files with different statuses
@@ -213,7 +213,7 @@ class TestMigrations005To007(unittest.TestCase):
   </text>
 </TEI>"""
 
-        from fastapi_app.lib.file_storage import FileStorage
+        from fastapi_app.lib.storage.file_storage import FileStorage
         file_storage = FileStorage(self.files_dir, self.db_manager, logger=self.logger)
         no_status_hash, _ = file_storage.save_file(tei_no_status, 'tei', increment_ref=False)
 
@@ -359,7 +359,7 @@ class TestMigrations005To007(unittest.TestCase):
 
     def test_migration_006_populates_last_revision_from_tei_files(self):
         """Test migration 006 extracts last_revision timestamp from TEI files."""
-        from fastapi_app.lib.file_storage import FileStorage
+        from fastapi_app.lib.storage.file_storage import FileStorage
         file_storage = FileStorage(self.files_dir, self.db_manager, logger=self.logger)
 
         # Create and save TEI file (uses the helper which includes when="2024-01-01")

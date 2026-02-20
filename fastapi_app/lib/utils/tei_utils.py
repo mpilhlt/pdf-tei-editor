@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from typing_extensions import TypedDict
 from lxml import etree
 
-from .metadata_extraction import BibliographicMetadata
+from fastapi_app.lib.services.metadata_extraction import BibliographicMetadata
 
 
 class ExtractedTeiMetadata(BibliographicMetadata, total=False):
@@ -949,7 +949,7 @@ def update_pdf_metadata_from_tei(
     Returns:
         True if update was attempted, False if no updates needed
     """
-    from ..lib.models import FileUpdate
+    from fastapi_app.lib.models import FileUpdate
 
     # WORKAROUND: Support both nested doc_metadata format and top-level keys format
     # TODO: Standardize on a single format (ExtractedTeiMetadata) across all callers

@@ -12,10 +12,10 @@ import zipfile
 import logging
 import shutil
 
-from .file_storage import FileStorage
-from .file_repository import FileRepository
-from .database import DatabaseManager
-from .file_importer import FileImporter, ImportStats
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.storage.file_importer import FileImporter, ImportStats
 
 logger = logging.getLogger(__name__)
 

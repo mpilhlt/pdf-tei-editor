@@ -9,7 +9,7 @@ After: locks identified by stable_id (file.stable_id)
 """
 
 import sqlite3
-from ..base import Migration
+from fastapi_app.lib.core.migrations.base import Migration
 
 
 class Migration001LocksFileId(Migration):

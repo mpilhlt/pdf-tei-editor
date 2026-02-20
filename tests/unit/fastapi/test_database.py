@@ -11,10 +11,10 @@ Tests:
 - Soft delete
 - File storage
 
-@testCovers fastapi_app/lib/db_schema.py
-@testCovers fastapi_app/lib/database.py
-@testCovers fastapi_app/lib/file_repository.py
-@testCovers fastapi_app/lib/file_storage.py
+@testCovers fastapi_app/lib/core/db_schema.py
+@testCovers fastapi_app/lib/core/database.py
+@testCovers fastapi_app/lib/repository/file_repository.py
+@testCovers fastapi_app/lib/storage/file_storage.py
 """
 
 import unittest
@@ -24,11 +24,11 @@ import json
 from pathlib import Path
 
 # Import modules to test
-from fastapi_app.lib.db_schema import initialize_database, get_schema_version
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.models import FileCreate, FileUpdate, SyncUpdate
+from fastapi_app.lib.core.db_schema import initialize_database, get_schema_version
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.models.models import FileCreate, FileUpdate, SyncUpdate
 
 
 class TestDatabaseSchema(unittest.TestCase):
