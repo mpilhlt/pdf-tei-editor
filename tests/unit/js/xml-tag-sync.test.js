@@ -9,7 +9,7 @@
  * @testCovers app/src/modules/codemirror/xml-tag-sync.js
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
 
@@ -45,7 +45,7 @@ if (!global.StaticRange) global.StaticRange = dom.window.StaticRange;
 const { EditorState } = await import('@codemirror/state');
 const { EditorView } = await import('@codemirror/view');
 const { xml } = await import('@codemirror/lang-xml');
-const { syntaxTree, ensureSyntaxTree } = await import('@codemirror/language');
+const { ensureSyntaxTree } = await import('@codemirror/language');
 const { xmlTagSync } = await import('../../../app/src/modules/codemirror/xml-tag-sync.js');
 
 /**
@@ -263,6 +263,20 @@ describe('xmlTagSync plugin', () => {
       // Rename "tag" (positions 1–4) to "div"
       const result = applyChange(view, { from: 1, to: 4, insert: 'div' });
       assert.strictEqual(result, '<div attr="v">text</div>');
+    });
+
+    it('should not double-apply mirror changes (regression: Chrome re-runs filter on combined transaction)', () => {
+      // When transactionFilter returns [tr, mirrorSpec], CodeMirror composes them
+      // into a new transaction and re-runs all filters. Without tagSyncAnnotation
+      // on the mirror spec, the combined transaction passes the annotation guard and
+      // the filter attempts to sync again, corrupting the document.
+      const initial = '<tag>text</tag>';
+      const view = createView(initial);
+      ensureParsed(view);
+
+      // A rename that would produce "tagtag" / "tagdivsync" artifacts if double-applied
+      const result = applyChange(view, { from: 1, to: 4, insert: 'div' });
+      assert.strictEqual(result, '<div>text</div>');
     });
   });
 });
