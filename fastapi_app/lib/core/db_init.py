@@ -189,8 +189,7 @@ def ensure_db_initialized(
     """
     # Default config path is at project root (same level as fastapi_app/)
     if config_dir is None:
-        module_dir = Path(__file__).parent.parent  # fastapi_app/
-        project_root = module_dir.parent  # project root
+        project_root = Path(__file__).parent.parent.parent.parent  # project root
         config_dir = project_root / "config"
 
     if db_dir is None:

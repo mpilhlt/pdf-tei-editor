@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-02-16T10:14:24.854Z
+ * Generated from OpenAPI schema at 2026-02-20T10:32:26.053Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -57,11 +57,6 @@
 /**
  * @typedef {Object} Body_import_files_api_v1_import_post
  * @property {string} file - Zip archive containing files to import
- */
-
-/**
- * @typedef {Object} Body_restore_backup_api_plugins_backup_restore_restore_post
- * @property {string} file
  */
 
 /**
@@ -222,6 +217,20 @@
  * @typedef {Object} ExecuteResponse
  * @property {boolean} success
  * @property {any} result
+ */
+
+/**
+ * @typedef {Object} ExtractRequest
+ * @property {string} extractor - ID of the extractor to use
+ * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
+ * @property {Object<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
+ */
+
+/**
+ * @typedef {Object} ExtractResponse
+ * @property {string=} id - Document ID (for PDF-based extractions)
+ * @property {string=} pdf - PDF file hash (if applicable)
+ * @property {string} xml - Extracted/generated XML file hash
  */
 
 /**
@@ -567,42 +576,6 @@
  * @property {number} line - Line number where error occurred
  * @property {number} column - Column number where error occurred
  * @property {string=} severity - Error severity (e.g., 'warning' for timeout messages)
- */
-
-/**
- * @typedef {Object} fastapi_app__lib__models_extraction__ExtractRequest
- * @property {string} extractor - ID of the extractor to use
- * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
- * @property {Object<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
- */
-
-/**
- * @typedef {Object} fastapi_app__lib__models_extraction__ExtractResponse
- * @property {string=} id - Document ID (for PDF-based extractions)
- * @property {string=} pdf - PDF file hash (if applicable)
- * @property {string} xml - Extracted/generated XML file hash
- */
-
-/**
- * @typedef {Object} plugin_kisski_routes__ExtractRequest
- * @property {string} model
- * @property {string} prompt
- * @property {string=} stable_id
- * @property {string=} text_input
- * @property {Object<string, any>=} json_schema
- * @property {number=} temperature
- * @property {number=} max_retries
- */
-
-/**
- * @typedef {Object} plugin_kisski_routes__ExtractResponse
- * @property {boolean} success
- * @property {Object<string, any>=} data
- * @property {string=} error
- * @property {string=} raw_response
- * @property {string} model
- * @property {string} extractor
- * @property {number=} retries
  */
 
 /**
@@ -1127,8 +1100,8 @@ export class ApiClientV1 {
    * Returns:
    * Response with PDF hash (if applicable) and extracted XML hash
    *
-   * @param {fastapi_app__lib__models_extraction__ExtractRequest} requestBody
-   * @returns {Promise<fastapi_app__lib__models_extraction__ExtractResponse>}
+   * @param {ExtractRequest} requestBody
+   * @returns {Promise<ExtractResponse>}
    */
   async extract(requestBody) {
     const endpoint = `/extract`
