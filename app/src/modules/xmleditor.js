@@ -41,7 +41,7 @@ import { EditorState, EditorSelection, Compartment, Transaction } from "@codemir
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { createCompletionSource } from './autocomplete.js';
+import { createCompletionSource } from './codemirror/autocomplete.js';
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
 
