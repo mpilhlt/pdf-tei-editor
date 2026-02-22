@@ -1258,27 +1258,42 @@ export class XMLEditor extends EventEmitter {
    * Returns a Diagnostic object from a DomParser error node 
    * @param {Node} errorNode The error node containing parse errors
    * @returns {ExtendedDiagnostic}
-   * @throws {Error} if error node cannot be parsed
+   * @throws {Error} if error node has no text content
    */
   #parseErrorNode(errorNode) {
     const severity = "error"
-    
-    const textContent = errorNode.firstChild?.textContent;
+
+    // Use full textContent to cover both Firefox (text node child) and Chrome (element children)
+    const textContent = errorNode.textContent;
     if (!textContent) {
       throw new Error("Error node has no text content");
     }
+
+    // Chrome format: "error on line X at column Y: message"
+    const chromeMatch = textContent.match(/error on line (\d+) at column (\d+):\s*(.+)/);
+    if (chromeMatch) {
+      const line = parseInt(chromeMatch[1], 10);
+      const column = parseInt(chromeMatch[2], 10);
+      const message = chromeMatch[3].trim();
+      let { from, to } = this.#view.state.doc.line(line);
+      from = from + column - 1;
+      return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to });
+    }
+
+    // Firefox format: message on first line, position info on third line with two numbers
     const [message, _, location] = textContent.split("\n")
-    const regex = /\d+/g;
-    const matches = location?.match(regex);
+    const matches = location?.match(/\d+/g);
     if (matches && matches.length >= 2) {
       const line = parseInt(matches[0], 10);
       const column = parseInt(matches[1], 10);
       let { from, to } = this.#view.state.doc.line(line);
       from = from + column - 1
-      /** @type {ExtendedDiagnostic} */
-      return { message, severity, line, column, from, to }
+      return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to })
     }
-    throw new Error(`Cannot parse line and column from error message: "${location}"`)
+
+    // Unknown browser format: still trigger invalid XML mode, but without location info
+    console.warn(`Unknown parsererror format, cannot extract line/column. Raw content: "${textContent.slice(0, 200)}"`)
+    return /** @type {ExtendedDiagnostic} */ ({ message: message || "XML parse error", severity, from: 0, to: 0 })
   }
 
   /**
