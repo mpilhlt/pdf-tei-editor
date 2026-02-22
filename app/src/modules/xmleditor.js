@@ -32,10 +32,6 @@
  * @property {string} fullText
  */
 
-/**
- * @typedef {Diagnostic & {line?: number, column?: number}} ExtendedDiagnostic
- */
-
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment, Transaction } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
@@ -46,11 +42,10 @@ import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
-import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror/codemirror-utils.js';
+import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, parseXmlError } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
-
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -1255,48 +1250,6 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Returns a Diagnostic object from a DomParser error node 
-   * @param {Node} errorNode The error node containing parse errors
-   * @returns {ExtendedDiagnostic}
-   * @throws {Error} if error node has no text content
-   */
-  #parseErrorNode(errorNode) {
-    const severity = "error"
-
-    // Use full textContent to cover both Firefox (text node child) and Chrome (element children)
-    const textContent = errorNode.textContent;
-    if (!textContent) {
-      throw new Error("Error node has no text content");
-    }
-
-    // Chrome format: "error on line X at column Y: message"
-    const chromeMatch = textContent.match(/error on line (\d+) at column (\d+):\s*(.+)/);
-    if (chromeMatch) {
-      const line = parseInt(chromeMatch[1], 10);
-      const column = parseInt(chromeMatch[2], 10);
-      const message = chromeMatch[3].trim();
-      let { from, to } = this.#view.state.doc.line(line);
-      from = from + column - 1;
-      return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to });
-    }
-
-    // Firefox format: message on first line, position info on third line with two numbers
-    const [message, _, location] = textContent.split("\n")
-    const matches = location?.match(/\d+/g);
-    if (matches && matches.length >= 2) {
-      const line = parseInt(matches[0], 10);
-      const column = parseInt(matches[1], 10);
-      let { from, to } = this.#view.state.doc.line(line);
-      from = from + column - 1
-      return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to })
-    }
-
-    // Unknown browser format: still trigger invalid XML mode, but without location info
-    console.warn(`Unknown parsererror format, cannot extract line/column. Raw content: "${textContent.slice(0, 200)}"`)
-    return /** @type {ExtendedDiagnostic} */ ({ message: message || "XML parse error", severity, from: 0, to: 0 })
-  }
-
-  /**
    * Synchronizes the syntax tree and the XML DOM
    * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
    */
@@ -1309,9 +1262,8 @@ export class XMLEditor extends EventEmitter {
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
-      const diagnostic = this.#parseErrorNode(errorNode)
-      
-      console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
+      const diagnostic = parseXmlError(errorNode, this.#view.state.doc);
+      //console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
       await this.emit("editorXmlNotWellFormed", [diagnostic])
       this.#xmlTree = null;
       this.#view.dispatch({
