@@ -114,11 +114,14 @@ class AuthenticationPlugin extends Plugin {
 
     // release lock - this really should be in xmleditor plugin but the shutdown endpoint will be called only after this
     if (this.state?.xml) {
-      await client.releaseLock(this.state?.xml)
+      try {
+        await client.releaseLock(this.state?.xml)
+      } catch (_e) {
+        // Ignore network errors during page unload
+      }
     }
-    // destroy session id
+    // Save session ID to URL hash so it can be restored on next load
     if (this.state?.sessionId) {
-      await client.logout()
       UrlHash.set('sessionId', this.state.sessionId, false);
     }
   }

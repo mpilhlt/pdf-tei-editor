@@ -186,6 +186,6 @@ function stop() {
   // Release file lock if we have one
   const filePath = ui.toolbar.xml.value;
   if (filePath) {
-    client.releaseLock(filePath);
+    client.releaseLock(filePath).catch(() => {});
   }
 }
