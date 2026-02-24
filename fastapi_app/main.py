@@ -2,9 +2,9 @@
 FastAPI main application with versioned API endpoints.
 """
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -274,10 +274,26 @@ config_data = config.load()
 is_dev_mode = config_data.get("application", {}).get("mode", "development") == "development"
 
 if is_dev_mode:
-    # Mount node_modules for importmap
+    # Serve node_modules for importmap, stripping sourceMappingURL from JS files
+    # to suppress browser source map warnings from packages with broken/missing maps.
     node_modules_root = project_root / 'node_modules'
     if node_modules_root.exists():
-        app.mount("/node_modules", StaticFiles(directory=str(node_modules_root)), name="node_modules")
+        import re
+        from starlette.responses import FileResponse
+        _sourcemap_re = re.compile(r'\n?//# sourceMappingURL=\S+', re.MULTILINE)
+        _node_modules_root_resolved = node_modules_root.resolve()
+
+        @app.get("/node_modules/{path:path}")
+        async def serve_node_modules(path: str):
+            file_path = (node_modules_root / path).resolve()
+            if not str(file_path).startswith(str(_node_modules_root_resolved)):
+                return Response(status_code=403)
+            if not file_path.exists() or not file_path.is_file():
+                return Response(status_code=404)
+            if file_path.suffix.lower() in ('.js', '.mjs', '.cjs'):
+                content = _sourcemap_re.sub('', file_path.read_text(encoding='utf-8', errors='replace'))
+                return Response(content=content, media_type='application/javascript')
+            return FileResponse(str(file_path))
 
     # Mount source files
     src_root = project_root / 'app' / 'src'

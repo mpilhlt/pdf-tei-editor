@@ -15,6 +15,19 @@ if TYPE_CHECKING:
 _sse_log_handler: Optional["SSELogHandler"] = None
 
 
+class _SuppressWindowsConnectionReset(logging.Filter):
+    """Suppress benign WinError 10054 noise from asyncio on Windows.
+
+    When Playwright (or any HTTP client) hard-closes a connection with a TCP
+    RST, Python's ProactorEventLoop logs a spurious ERROR from
+    _call_connection_lost. The error is harmless but pollutes the log file.
+    This filter drops those records without affecting any other asyncio logs.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return '_call_connection_lost' not in record.getMessage()
+
+
 class CategoryFilter(logging.Filter):
     """Filter log records by category prefix"""
 
@@ -82,6 +95,10 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
         file_handler.addFilter(CategoryFilter(log_categories))
 
     root_logger.addHandler(file_handler)
+
+    # Suppress benign WinError 10054 noise from asyncio's ProactorEventLoop.
+    if sys.platform == 'win32':
+        logging.getLogger('asyncio').addFilter(_SuppressWindowsConnectionReset())
 
     # Reconfigure uvicorn loggers to use the same format.
     # This ensures consistency even when uvicorn is started without --log-config

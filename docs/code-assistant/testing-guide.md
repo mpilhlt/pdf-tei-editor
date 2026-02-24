@@ -40,6 +40,9 @@ npm run test:e2e:debug        # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
 npm run test:e2e -- --grep "should upload"  # Filter by test name pattern
 
+# Cross-browser E2E tests (real browser engines, no login required)
+npm run test:e2e:xmleditor-browsers  # xmlTagSync tests in chromium, firefox, webkit
+
 # Container tests (runs all tests inside container)
 npm run test:container                                  # Run with cache
 npm run test:container -- --no-cache                    # Rebuild all layers
@@ -340,6 +343,42 @@ API tests use a two-phase fixture loading system:
 - **Purpose**: Test full workflows in browser
 - **Run**: `npm run test:e2e`
 - **Features**: Playwright, `window.ui` navigation, `testLog()` for state verification
+
+#### Isolated Component Harness Tests
+
+Some specs test individual components in isolation using a standalone HTML harness page rather than the full application. The harness is served by the dev server and loads only the dependencies needed for the component under test (via the importmap from `app/web/importmap.json`, rebased to absolute paths). No login, no fixture loading, no application state required.
+
+Use this approach when:
+
+- The component has browser-engine-specific behavior (e.g. Lezer parser eagerness differences between Chromium and Firefox)
+- You need to reproduce or rule out an editor bug without the overhead of the full application
+- Fast cross-browser iteration is needed
+
+**Available harnesses:**
+
+| Harness HTML | Spec | Tests |
+|---|---|---|
+| `tests/e2e/harness/xmleditor-harness.html` | `tests/e2e/tests/xmleditor-cross-browser.spec.js` | `xmlTagSync` CodeMirror extension |
+
+**Running:**
+
+```bash
+# All three browsers
+npm run test:e2e:xmleditor-browsers
+
+# Single browser for fast iteration
+node tests/e2e-runner.js tests/e2e/tests/xmleditor-cross-browser.spec.js --browser firefox
+
+# Headed to observe behaviour
+node tests/e2e-runner.js tests/e2e/tests/xmleditor-cross-browser.spec.js --browser chromium --headed
+```
+
+**Adding a new harness:**
+
+1. Create `tests/e2e/harness/<name>-harness.html` — use `xmleditor-harness.html` as the template (contains the importmap rebasing logic).
+2. Create `tests/e2e/harness/<name>-harness.js` — import the component under test, expose helpers on `window`, and emit `window.testLog('HARNESS_READY', {})` when ready.
+3. Create `tests/e2e/tests/<name>-cross-browser.spec.js` — call `setupTestConsoleCapture` + `waitForTestMessage(logs, 'HARNESS_READY')` before each test.
+4. Add an npm script in `package.json` following the `test:e2e:xmleditor-browsers` pattern.
 
 #### Container Testing
 

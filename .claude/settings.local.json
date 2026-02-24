@@ -52,7 +52,8 @@
       "Bash(node --check:*)",
       "Bash(node -e:*)",
       "WebFetch(domain:discuss.codemirror.net)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(E2E_SKIP_WEBSERVER=1 E2E_BASE_URL=http://localhost:8000 npx playwright test tests/e2e/tests/xmleditor-cross-browser.spec.js --project=chromium --reporter=list)"
     ],
     "deny": [],
     "ask": []
