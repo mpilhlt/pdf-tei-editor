@@ -278,5 +278,69 @@ describe('xmlTagSync plugin', () => {
       const result = applyChange(view, { from: 1, to: 4, insert: 'div' });
       assert.strictEqual(result, '<div>text</div>');
     });
+
+    it('should not corrupt document when structural text is inserted into content', () => {
+      const initial='<bibl>text content</bibl>';
+      const view=createView(initial);
+      ensureParsed(view);
+      const result=applyChange(view, { from: 10, to: 10, insert: '</bibl><bibl>' });
+      assert.strictEqual(result, '<bibl>text</bibl><bibl> content</bibl>');
+    });
+
+    it('should not corrupt when a replacement spans past a TagName boundary', () => {
+      const initial='<bibl>text</bibl>';
+      const view=createView(initial);
+      ensureParsed(view);
+      const result=applyChange(view, { from: 12, to: 17, insert: 'bibl><bibl>' });
+      assert.strictEqual(result, '<bibl>text</bibl><bibl>');
+    });
+
+    it('should not mirror when newTagName contains XML-invalid characters', () => {
+      const initial='<bibl>text</bibl>';
+      const view=createView(initial);
+      ensureParsed(view);
+      const result=applyChange(view, { from: 1, to: 5, insert: 'bibl><bibl' });
+      assert.strictEqual(result, '<bibl><bibl>text</bibl>');
+    });
+
+    it('should not corrupt document when a structural string is inserted in text content (regression: Chrome ">>" bug)', () => {
+      // Chrome's Lezer tree is more eagerly parsed. When "</bibl><bibl>" is inserted
+      // near a TagName boundary, resolveTagName() may return that node in Chrome
+      // (caught by bounds guard: toA > node.to) while returning null in Firefox
+      // (stale/unparsed tree). Without the guard, mapPos produces a newTagName
+      // spanning the entire inserted block, which then corrupts the open tag and
+      // leaves the original ">" orphaned at the end of the document.
+      const initial = '<bibl>content</bibl>';
+      const view = createView(initial);
+      ensureParsed(view);
+
+      // Insert "</bibl><bibl>" in the middle of text content (position 9)
+      const result = applyChange(view, { from: 9, to: 9, insert: '</bibl><bibl>' });
+      assert.strictEqual(result, '<bibl>con</bibl><bibl>tent</bibl>');
+    });
+
+    it('should not sync when a replacement extends beyond the TagName span', () => {
+      // The bounds guard (fromA < node.from || toA > node.to) prevents activation
+      // when the deleted range extends past the TagName into surrounding markup.
+      const initial = '<tag>text</tag>';
+      const view = createView(initial);
+      ensureParsed(view);
+
+      // Replace "tag>" (positions 1-5, past the TagName boundary at 4) with "div>"
+      const result = applyChange(view, { from: 1, to: 5, insert: 'div>' });
+      assert.strictEqual(result, '<div>text</tag>');
+    });
+
+    it('should not sync when computed tag name contains markup characters', () => {
+      // The XML name guard rejects any newTagName containing "<", ">" or "/",
+      // which indicates the position mapping captured surrounding markup.
+      const initial = '<tag>text</tag>';
+      const view = createView(initial);
+      ensureParsed(view);
+
+      const result = applyChange(view, { from: 1, to: 5, insert: 'div><div>' });
+      assert.strictEqual(result, '<div><div>text</tag>');
+    });
+
   });
 });

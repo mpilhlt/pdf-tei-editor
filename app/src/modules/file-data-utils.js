@@ -132,7 +132,7 @@ export function getFileDataById(id) {
   if (!id) return null;
 
   if (!idLookupIndex || idLookupIndex.size === 0) {
-    throw new Error('ID lookup index not initialized. Call createIdLookupIndex() first.');
+    return null;
   }
 
   return idLookupIndex.get(id) || null;

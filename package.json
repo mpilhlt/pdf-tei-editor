@@ -36,6 +36,7 @@
         "test:e2e:headed": "node tests/e2e-runner.js  --headed --keep-db",
         "test:e2e:debug": "node tests/e2e-runner.js  --headed --debugger --keep-db",
         "test:e2e:debug-failure": "node tests/e2e-runner.js  --debug-on-failure --keep-db",
+        "test:e2e:xmleditor-browsers": "node tests/e2e-runner.js tests/e2e/tests/xmleditor-cross-browser.spec.js --browser chromium,firefox,webkit",
         "test:e2e:container-infra": "E2E_BASE_URL=http://localhost:8000 E2E_SKIP_WEBSERVER=1 npx playwright test tests/e2e/tests/docker-infrastructure.spec.js",
         "test:container": "node bin/test-container.js",
         "container:start": "node bin/container.js start",

@@ -480,7 +480,7 @@ async function start(state) {
 
   // xml validation events - consolidated from start.js
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    console.warn("XML is not well-formed", diagnostics)
+    logger.debug("XML is not well-formed", diagnostics)
     
     // Show diagnostics either from validation plugin or manually if validation is disabled
     let view = xmlEditor.getView()
@@ -683,7 +683,7 @@ async function update(state) {
         xmlEditor.selectByIndex(index || 1)
       }
     } catch (e) {
-      console.error(e)
+      logger.error(e)
     }
   }
 }
@@ -695,7 +695,7 @@ async function update(state) {
 async function onSelectionChange(state) {
   if (!(xmlEditor.selectedXpath && state.xpath)) {
     // this usually means that the editor is not ready yet
-    //console.warn("Could not determine xpath of last selected node")
+    logger.debug("Could not determine xpath of last selected node")
     return
   }
   // update state from the xpath of the nearest selection node

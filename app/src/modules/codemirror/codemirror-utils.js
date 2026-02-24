@@ -1,6 +1,12 @@
 /**
  * @import {SyntaxNode} from '@lezer/common'
  * @import {ViewUpdate} from '@codemirror/view'
+ * @import {Text} from '@codemirror/state'
+ * @import {Diagnostic} from '@codemirror/lint'
+ */
+
+/**
+ * @typedef {Diagnostic & {line?: number, column?: number}} ExtendedDiagnostic
  */
 
 /**
@@ -313,6 +319,50 @@ export function resolveXPath(view, xpath) {
   } else {
     return null;
   }
+}
+
+/**
+ * Parses a DOMParser `parsererror` element into a diagnostic object, handling the different
+ * error formats across browsers (Chrome/Blink, Firefox/Gecko, and unknown engines).
+ * @param {Node} errorNode The parsererror DOM node returned by DOMParser
+ * @param {Text} doc The CodeMirror document, used to resolve character positions from line/column
+ * @returns {ExtendedDiagnostic}
+ * @throws {Error} if error node has no text content
+ */
+export function parseXmlError(errorNode, doc) {
+  const severity = /** @type {"error"} */ ("error")
+
+  // Use full textContent to cover both Firefox (text node child) and Chrome (element children)
+  const textContent = errorNode.textContent;
+  if (!textContent) {
+    throw new Error("Error node has no text content");
+  }
+
+  // Chrome/Blink format: "error on line X at column Y: message"
+  const chromeMatch = textContent.match(/error on line (\d+) at column (\d+):\s*(.+)/);
+  if (chromeMatch) {
+    const line = parseInt(chromeMatch[1], 10);
+    const column = parseInt(chromeMatch[2], 10);
+    const message = chromeMatch[3].trim();
+    let { from, to } = doc.line(line);
+    from = from + column - 1;
+    return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to });
+  }
+
+  // Firefox/Gecko format: message on first line, position info on third line with two numbers
+  const [message, _, location] = textContent.split("\n")
+  const matches = location?.match(/\d+/g);
+  if (matches && matches.length >= 2) {
+    const line = parseInt(matches[0], 10);
+    const column = parseInt(matches[1], 10);
+    let { from, to } = doc.line(line);
+    from = from + column - 1;
+    return /** @type {ExtendedDiagnostic} */ ({ message, severity, line, column, from, to });
+  }
+
+  // Unknown browser format: still return a diagnostic so invalid XML mode is triggered
+  console.warn(`Unknown parsererror format, cannot extract line/column. Raw content: "${textContent.slice(0, 200)}"`)
+  return /** @type {ExtendedDiagnostic} */ ({ message: message || "XML parse error", severity, from: 0, to: 0 })
 }
 
 /**

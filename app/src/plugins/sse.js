@@ -74,6 +74,7 @@ const plugin = {
   name: "sse",
   install,
   ready,
+  shutdown,
   state: {
     update
   }
@@ -102,6 +103,7 @@ const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
 const MAX_RECONNECT_DELAY = 30000; // Cap at 30 seconds
 
 let appStarted = false; // Track if app startup is complete
+let isUnloading = false; // Set during page unload to suppress reconnection
 
 export { api, plugin }
 export default plugin
@@ -112,6 +114,11 @@ export default plugin
 async function install(state){
   currentState = state
   logger.debug(`Installing plugin "${plugin.name}"`)
+  // Set the flag synchronously so onerror won't fire before the async shutdown chain runs
+  window.addEventListener('beforeunload', () => {
+    isUnloading = true;
+    cleanupConnection();
+  }, { once: true });
 }
 
 /**
@@ -179,6 +186,8 @@ function establishConnection(sessionId) {
   });
 
   eventSource.onerror = (_event) => {
+    if (isUnloading) return;
+
     const readyState = eventSource ? eventSource.readyState : 'unknown';
     const errorMsg = `EventSource failed (readyState: ${readyState})`;
 
@@ -256,5 +265,13 @@ function cleanupConnection() {
   reconnectAttempts = 0;
 
   logger.debug('SSE connection cleaned up');
+}
+
+/**
+ * Called on page unload — closes connection before onerror fires
+ */
+function shutdown() {
+  isUnloading = true;
+  cleanupConnection();
 }
 

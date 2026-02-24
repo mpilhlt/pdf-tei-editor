@@ -339,6 +339,20 @@ npm run test:changed -- --dry-run # Check which tests would run
 npm run test:changed -- --all     # Run all tests
 ```
 
+### test:e2e:xmleditor-browsers
+
+Runs the `xmlTagSync` CodeMirror extension tests in all three browser engines (Chromium, Firefox, WebKit) via Playwright. Uses an isolated harness page — no application login or state required.
+
+```bash
+npm run test:e2e:xmleditor-browsers
+
+# Single browser for faster iteration
+node tests/e2e-runner.js tests/e2e/tests/xmleditor-cross-browser.spec.js --browser firefox
+
+# Headed mode to observe behaviour
+node tests/e2e-runner.js tests/e2e/tests/xmleditor-cross-browser.spec.js --browser chromium --headed
+```
+
 ### test:container
 
 Tests that the application container builds and starts correctly.
