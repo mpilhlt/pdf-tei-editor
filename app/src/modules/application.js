@@ -25,7 +25,7 @@ export class Application {
     
     // Set up shutdown handler
     window.addEventListener('beforeunload', () => {
-      this.shutdown();
+      this.shutdown().catch(() => {});
     });
   }
 

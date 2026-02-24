@@ -26,9 +26,10 @@ let SKIP_TESTS = false;
  * @param {string} command - Command to execute
  * @param {boolean} silent - Whether to suppress output
  * @param {boolean} skipInDryRun - Skip command in dry-run mode
+ * @param {boolean} throwOnError - Throw instead of exiting on error
  * @returns {string} Command output
  */
-function exec(command, silent = false, skipInDryRun = false) {
+function exec(command, silent = false, skipInDryRun = false, throwOnError = false) {
   if (DRY_RUN && skipInDryRun) {
     console.log(`[DRY RUN] Would execute: ${command}`);
     return '';
@@ -41,8 +42,10 @@ function exec(command, silent = false, skipInDryRun = false) {
     });
     return result ? result.trim() : '';
   } catch (error) {
+    if (throwOnError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
     console.error(`Command failed: ${command}`);
-    console.error(error.message);
+    console.error(message);
     process.exit(1);
   }
 }
@@ -134,7 +137,7 @@ function release(releaseType) {
     // Get files changed since last release tag
     let changedFilesSinceLastTag;
     try {
-      const lastTag = exec('git describe --tags --abbrev=0 2>/dev/null', true);
+      const lastTag = exec('git describe --tags --abbrev=0', true, false, true);
       if (lastTag) {
         console.log(`\n🧪 Running tests for files changed since ${lastTag}...`);
         changedFilesSinceLastTag = exec(`git diff --name-only ${lastTag} HEAD`, true);

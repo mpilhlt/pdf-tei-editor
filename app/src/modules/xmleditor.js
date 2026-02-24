@@ -33,7 +33,12 @@
  */
 
 /**
- * @typedef {Diagnostic & {line?: number, column?: number}} ExtendedDiagnostic
+ * @typedef {object} Logger
+ * @property {(message: any, level?: number) => void} debug
+ * @property {(message: any) => void} log
+ * @property {(message: any) => void} info
+ * @property {(message: any) => void} warn
+ * @property {(message: any) => void} error
  */
 
 import { basicSetup } from 'codemirror';
@@ -46,11 +51,10 @@ import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
-import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror/codemirror-utils.js';
+import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, parseXmlError } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
-
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -149,6 +153,9 @@ export class XMLEditor extends EventEmitter {
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
 
+  /** @type {Logger} */
+  #logger;
+
   /** @type {Extension | null} */
   #mergeViewExt = null;
 
@@ -169,10 +176,12 @@ export class XMLEditor extends EventEmitter {
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
    * @param {Object?} tagData - Autocompletion data
+   * @param {Logger?} logger - Logger instance; falls back to console if not provided
    */
-  constructor(editorDivId, tagData) {
+  constructor(editorDivId, tagData, logger = null) {
     super();
 
+    this.#logger = logger ?? console
     this.#markAsNotReady()
 
     const editorDiv = document.getElementById(editorDivId);
@@ -285,7 +294,7 @@ export class XMLEditor extends EventEmitter {
    */
   addLinter(extension) {
     if (!isExtension(extension)) {
-      console.log(extension)
+      this.#logger.log(extension)
       throw new TypeError("Argument must have the Extension interface")
     }
     const extensions = this.#linterCompartment.get(this.#view.state) || []
@@ -947,7 +956,7 @@ export class XMLEditor extends EventEmitter {
 
     const domNodes = this.getDomNodesByXpath(xpath);
     if (domNodes.length === 0) {
-      console.debug(`No nodes found for XPath: ${xpath}`);
+      this.#logger.debug(`No nodes found for XPath: ${xpath}`);
       return;
     }
 
@@ -963,13 +972,13 @@ export class XMLEditor extends EventEmitter {
           }
         }
       } catch (error) {
-        console.warn(`Error getting syntax node for DOM node: ${String(error)}`);
+        this.#logger.warn(`Error getting syntax node for DOM node: ${String(error)}`);
       }
     }
 
     if (effects.length > 0) {
       this.#view.dispatch({ effects });
-      console.debug(`Folded content inside ${effects.length} node(s) matching XPath: ${xpath}`);
+      this.#logger.debug(`Folded content inside ${effects.length} node(s) matching XPath: ${xpath}`);
     }
   }
 
@@ -988,7 +997,7 @@ export class XMLEditor extends EventEmitter {
 
     const domNodes = this.getDomNodesByXpath(xpath);
     if (domNodes.length === 0) {
-      console.debug(`No nodes found for XPath: ${xpath}`);
+      this.#logger.debug(`No nodes found for XPath: ${xpath}`);
       return;
     }
 
@@ -1004,7 +1013,7 @@ export class XMLEditor extends EventEmitter {
           }
         }
       } catch (error) {
-        console.warn(`Error getting syntax node for DOM node: ${String(error)}`);
+        this.#logger.warn(`Error getting syntax node for DOM node: ${String(error)}`);
       }
     }
 
@@ -1088,7 +1097,7 @@ export class XMLEditor extends EventEmitter {
         this.#updateMaps()
       }
     } catch (error) {
-      console.warn("Linking DOM and syntax tree failed:", String(error))
+      this.#logger.warn(`Linking DOM and syntax tree failed: ${String(error)}`)
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
@@ -1255,33 +1264,6 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Returns a Diagnostic object from a DomParser error node 
-   * @param {Node} errorNode The error node containing parse errors
-   * @returns {ExtendedDiagnostic}
-   * @throws {Error} if error node cannot be parsed
-   */
-  #parseErrorNode(errorNode) {
-    const severity = "error"
-    
-    const textContent = errorNode.firstChild?.textContent;
-    if (!textContent) {
-      throw new Error("Error node has no text content");
-    }
-    const [message, _, location] = textContent.split("\n")
-    const regex = /\d+/g;
-    const matches = location?.match(regex);
-    if (matches && matches.length >= 2) {
-      const line = parseInt(matches[0], 10);
-      const column = parseInt(matches[1], 10);
-      let { from, to } = this.#view.state.doc.line(line);
-      from = from + column - 1
-      /** @type {ExtendedDiagnostic} */
-      return { message, severity, line, column, from, to }
-    }
-    throw new Error(`Cannot parse line and column from error message: "${location}"`)
-  }
-
-  /**
    * Synchronizes the syntax tree and the XML DOM
    * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
    */
@@ -1294,9 +1276,8 @@ export class XMLEditor extends EventEmitter {
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
-      const diagnostic = this.#parseErrorNode(errorNode)
-      
-      console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
+      const diagnostic = parseXmlError(errorNode, this.#view.state.doc);
+      this.#logger.debug(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
       await this.emit("editorXmlNotWellFormed", [diagnostic])
       this.#xmlTree = null;
       this.#view.dispatch({
@@ -1304,7 +1285,7 @@ export class XMLEditor extends EventEmitter {
       });
       return false;
     }
-    console.log("Document was updated and is well-formed.")
+    this.#logger.debug("Document was updated and is well-formed.")
     await this.emit("editorXmlWellFormed", null)
     this.#xmlTree = doc;
     this.#view.dispatch({
@@ -1321,11 +1302,11 @@ export class XMLEditor extends EventEmitter {
 
     // the syntax tree construction is async, so we need to wait for it to complete
     if (syntaxParserRunning(this.#view)) {
-      console.log('Waiting for syntax tree to be ready...')
+      this.#logger.log('Waiting for syntax tree to be ready...')
       while (syntaxParserRunning(this.#view)) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
-      console.log('Syntax tree is ready.')
+      this.#logger.log('Syntax tree is ready.')
     }
     this.#syntaxTree = syntaxTree(this.#view.state);
     return true
@@ -1387,7 +1368,7 @@ export class XMLEditor extends EventEmitter {
 
       return fallback;
     } catch (error) {
-      console.warn('Error extracting edition title:', error);
+      this.#logger.warn(`Error extracting edition title: ${error}`);
       return fallback;
     }
   }

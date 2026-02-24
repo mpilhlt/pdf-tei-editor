@@ -74,6 +74,9 @@ npm run test:e2e:headed        # Show browser UI
 npm run test:e2e:debug         # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure
 
+# Cross-browser E2E tests (real browser engines, no login required)
+npm run test:e2e:xmleditor-browsers  # xmlTagSync tests in chromium, firefox, webkit
+
 # Container Tests (runs all tests inside container, same as CI)
 npm run test:container                                  # Run with cache
 npm run test:container -- --no-cache                    # Rebuild all layers
@@ -287,6 +290,19 @@ E2E tests use Playwright to test the full application stack in a browser.
 - **Test Logging**: Structured state verification via `testLog()`
 - **Headed Mode**: Visual debugging with `--headed`
 - **Step-through Debugging**: Playwright debugger with `--debug`
+- **Isolated Harness Tests**: Component-level cross-browser tests without login or application state (see below)
+
+### Isolated Component Harness Tests
+
+Some specs test individual components in isolation using a standalone HTML harness page served by the dev server. The harness loads only the component's dependencies via the importmap — no login, no fixtures, no application state.
+
+Use when the component has browser-engine-specific behavior or when you need to reproduce an editor bug without full-application overhead.
+
+| Harness HTML | Spec | Tests |
+|---|---|---|
+| `tests/e2e/harness/xmleditor-harness.html` | `tests/e2e/tests/xmleditor-cross-browser.spec.js` | `xmlTagSync` CodeMirror extension |
+
+See the [Testing Guide](../code-assistant/testing-guide.md#isolated-component-harness-tests) for instructions on running and extending harness tests.
 
 ### Writing E2E Tests
 
