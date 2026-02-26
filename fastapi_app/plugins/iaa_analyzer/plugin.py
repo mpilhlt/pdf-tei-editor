@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from lxml import etree
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,8 @@ class IAAAnalyzerPlugin(Plugin):
 
         variant_filter = params.get("variant")
 
-        from fastapi_app.lib.dependencies import get_db, get_file_storage
-        from fastapi_app.lib.file_repository import FileRepository
+        from fastapi_app.lib.core.dependencies import get_db, get_file_storage
+        from fastapi_app.lib.repository.file_repository import FileRepository
 
         try:
             db = get_db()
@@ -189,7 +189,7 @@ class IAAAnalyzerPlugin(Plugin):
             Dictionary with title, annotator, annotator_id, and stable_id
         """
         try:
-            from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
+            from fastapi_app.lib.utils.tei_utils import extract_tei_metadata, get_annotator_name
 
             root = etree.fromstring(xml_content.encode("utf-8"))
 

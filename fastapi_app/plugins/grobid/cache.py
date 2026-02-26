@@ -12,7 +12,7 @@ def get_cache_dir() -> Path:
     """Get the cache directory for GROBID extractions."""
     from fastapi_app.config import get_settings
     settings = get_settings()
-    return settings.plugins_dir / "grobid" / "extractions"
+    return settings.plugins_data_dir / "grobid" / "extractions"
 
 
 def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict | None:

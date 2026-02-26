@@ -12,10 +12,10 @@ from typing import List
 import logging
 import asyncio
 
-from ..lib.dependencies import get_sse_service, get_session_user, require_session_id, get_session_manager
-from ..lib.sse_service import SSEService
-from ..lib.sessions import SessionManager
-from ..lib.sse_utils import broadcast_to_all_sessions
+from ..lib.core.dependencies import get_sse_service, get_session_user, require_session_id, get_session_manager
+from ..lib.sse.sse_service import SSEService
+from ..lib.core.sessions import SessionManager
+from ..lib.sse.sse_utils import broadcast_to_all_sessions
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sse", tags=["sse"])
@@ -183,7 +183,7 @@ async def progress_test(
     Note:
         Client must be subscribed to /sse/subscribe before calling this endpoint.
     """
-    from ..lib.sse_utils import ProgressBar
+    from ..lib.sse.sse_utils import ProgressBar
 
     steps = body.get("steps", 5)
     delay_ms = body.get("delay_ms", 500)

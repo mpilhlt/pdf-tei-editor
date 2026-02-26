@@ -11,15 +11,15 @@ Key changes from Flask:
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..lib.file_repository import FileRepository
-from ..lib.models_files import MoveFilesRequest, MoveFilesResponse
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_files import MoveFilesRequest, MoveFilesResponse
 from ..lib.models import FileUpdate
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     require_authenticated_user
 )
-from ..lib.access_control import check_file_access
-from ..lib.logging_utils import get_logger
+from ..lib.permissions.access_control import check_file_access
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

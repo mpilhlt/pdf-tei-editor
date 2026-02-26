@@ -3,7 +3,7 @@ Unit tests for group_utils.py
 
 Self-contained tests that can be run independently.
 
-@testCovers fastapi_app/lib/group_utils.py
+@testCovers fastapi_app/lib/permissions/group_utils.py
 """
 
 import tempfile
@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.group_utils import (
+from fastapi_app.lib.permissions.group_utils import (
     find_group,
     group_exists,
     get_available_groups,
@@ -24,8 +24,8 @@ from fastapi_app.lib.group_utils import (
     set_group_property,
     list_groups
 )
-from fastapi_app.lib.collection_utils import add_collection
-from fastapi_app.lib.data_utils import load_entity_data, save_entity_data
+from fastapi_app.lib.utils.collection_utils import add_collection
+from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
 
 
 class TestGroupUtils(unittest.TestCase):

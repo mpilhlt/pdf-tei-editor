@@ -10,7 +10,7 @@ import asyncio
 from unittest.mock import patch
 
 from fastapi_app.lib.extraction import ExtractorRegistry
-from fastapi_app.lib.plugin_base import PluginContext
+from fastapi_app.lib.plugins.plugin_base import PluginContext
 
 # Import plugins
 from fastapi_app.plugins.grobid.plugin import GrobidPlugin

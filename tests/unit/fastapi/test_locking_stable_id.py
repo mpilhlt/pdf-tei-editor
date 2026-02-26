@@ -4,8 +4,8 @@ Unit tests for locking system using stable_id.
 Tests that locks use stable_id instead of content hash,
 eliminating the need for lock transfers.
 
-@testCovers fastapi_app/lib/locking.py
-@testCovers fastapi_app/lib/migrations/versions/m001_locks_file_id.py
+@testCovers fastapi_app/lib/core/locking.py
+@testCovers fastapi_app/lib/core/migrations/versions/m001_locks_file_id.py
 """
 
 import unittest
@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-from fastapi_app.lib.locking import (
+from fastapi_app.lib.core.locking import (
     acquire_lock,
     release_lock,
     check_lock,

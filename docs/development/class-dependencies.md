@@ -17,7 +17,7 @@ FastAPI's `Depends()` creates injectable dependencies that are resolved automati
 
 ```python
 from fastapi import APIRouter, Depends
-from fastapi_app.lib.dependencies import get_db, get_file_storage
+from fastapi_app.lib.core.dependencies import get_db, get_file_storage
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ async def list_files(
 
 ## Available Dependencies
 
-All dependency functions are defined in [fastapi_app/lib/dependencies.py](../../fastapi_app/lib/dependencies.py).
+All dependency functions are defined in [fastapi_app/lib/core/dependencies.py](../../fastapi_app/lib/core/dependencies.py).
 
 ### Database Dependencies
 
@@ -51,8 +51,8 @@ Returns a configured DatabaseManager instance for metadata.db.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_db
-from fastapi_app.lib.database import DatabaseManager
+from fastapi_app.lib.core.dependencies import get_db
+from fastapi_app.lib.core.database import DatabaseManager
 
 @router.get("/example")
 async def example(db: DatabaseManager = Depends(get_db)):
@@ -71,8 +71,8 @@ Returns a FileRepository instance with injected database.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_file_repository
-from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.lib.core.dependencies import get_file_repository
+from fastapi_app.lib.repository.file_repository import FileRepository
 
 @router.get("/files")
 async def list_files(file_repo: FileRepository = Depends(get_file_repository)):
@@ -93,8 +93,8 @@ Returns a FileStorage instance for physical file access.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_file_storage
-from fastapi_app.lib.file_storage import FileStorage
+from fastapi_app.lib.core.dependencies import get_file_storage
+from fastapi_app.lib.storage.file_storage import FileStorage
 
 @router.get("/file/{file_id}")
 async def read_file(
@@ -118,8 +118,8 @@ Returns a SessionManager instance for session validation.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_session_manager
-from fastapi_app.lib.sessions import SessionManager
+from fastapi_app.lib.core.dependencies import get_session_manager
+from fastapi_app.lib.core.sessions import SessionManager
 
 @router.get("/protected")
 async def protected_route(
@@ -140,8 +140,8 @@ Returns an AuthManager instance for user authentication.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_auth_manager
-from fastapi_app.lib.auth import AuthManager
+from fastapi_app.lib.core.dependencies import get_auth_manager
+from fastapi_app.lib.utils.auth import AuthManager
 
 @router.post("/login")
 async def login(
@@ -162,7 +162,7 @@ Extracts session ID from request headers or query parameters (returns None if no
 
 ```python
 from fastapi import Request, Depends
-from fastapi_app.lib.dependencies import get_session_id
+from fastapi_app.lib.core.dependencies import get_session_id
 
 @router.get("/optional-auth")
 async def optional_auth(
@@ -188,7 +188,7 @@ Extracts session ID from request (raises 401 if not present).
 
 ```python
 from fastapi import Request, Depends
-from fastapi_app.lib.dependencies import require_session_id
+from fastapi_app.lib.core.dependencies import require_session_id
 
 @router.get("/requires-session")
 async def requires_session(
@@ -207,7 +207,7 @@ Returns authenticated user or None (does not raise errors).
 ```python
 from fastapi import Request, Depends
 from typing import Optional, Dict
-from fastapi_app.lib.dependencies import get_current_user
+from fastapi_app.lib.core.dependencies import get_current_user
 
 @router.get("/optional-user")
 async def optional_user(
@@ -234,7 +234,7 @@ Returns authenticated user (raises 401 if not authenticated).
 ```python
 from fastapi import Request, Depends
 from typing import Dict
-from fastapi_app.lib.dependencies import require_authenticated_user
+from fastapi_app.lib.core.dependencies import require_authenticated_user
 
 @router.get("/protected")
 async def protected(
@@ -261,7 +261,7 @@ Returns authenticated user with admin role (raises 403 if not admin).
 ```python
 from fastapi import Depends
 from typing import Dict
-from fastapi_app.lib.dependencies import require_admin_user
+from fastapi_app.lib.core.dependencies import require_admin_user
 
 @router.delete("/users/{username}")
 async def delete_user(
@@ -289,8 +289,8 @@ Returns singleton SSEService instance for server-sent events.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_sse_service
-from fastapi_app.lib.sse_service import SSEService
+from fastapi_app.lib.core.dependencies import get_sse_service
+from fastapi_app.lib.sse.sse_service import SSEService
 
 @router.post("/broadcast")
 async def broadcast(
@@ -312,8 +312,8 @@ Returns SyncService instance with dependencies (returns None if WebDAV not confi
 ```python
 from fastapi import Depends
 from typing import Optional
-from fastapi_app.lib.dependencies import get_sync_service
-from fastapi_app.lib.sync_service import SyncService
+from fastapi_app.lib.core.dependencies import get_sync_service
+from fastapi_app.lib.services.sync_service import SyncService
 
 @router.post("/sync")
 async def sync_files(
@@ -338,8 +338,8 @@ Returns singleton EventBus instance for decoupled component communication.
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_event_bus
-from fastapi_app.lib.event_bus import EventBus
+from fastapi_app.lib.core.dependencies import get_event_bus
+from fastapi_app.lib.sse.event_bus import EventBus
 
 @router.post("/files/{file_id}")
 async def update_file(
@@ -417,7 +417,7 @@ Dependencies can be overridden in tests using `app.dependency_overrides`:
 from unittest.mock import MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from fastapi_app.lib.dependencies import get_db, get_auth_manager
+from fastapi_app.lib.core.dependencies import get_db, get_auth_manager
 
 # Create test app
 app = FastAPI()
@@ -452,7 +452,7 @@ See [testing-guide.md](../code-assistant/testing-guide.md#python-unit-tests-with
 ```python
 from fastapi import APIRouter, Depends, Request
 from typing import Dict
-from fastapi_app.lib.dependencies import require_authenticated_user
+from fastapi_app.lib.core.dependencies import require_authenticated_user
 
 router = APIRouter()
 
@@ -472,7 +472,7 @@ async def get_profile(
 ```python
 from fastapi import APIRouter, Depends
 from typing import Dict
-from fastapi_app.lib.dependencies import require_admin_user
+from fastapi_app.lib.core.dependencies import require_admin_user
 
 router = APIRouter()
 
@@ -489,9 +489,9 @@ async def delete_user(
 
 ```python
 from fastapi import APIRouter, Depends
-from fastapi_app.lib.dependencies import get_file_repository, get_file_storage
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
+from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
 
 router = APIRouter()
 
@@ -516,9 +516,9 @@ When implementing custom authentication logic (e.g., plugin routes), use the ind
 
 ```python
 from fastapi import APIRouter, Depends, Header, Query, HTTPException
-from fastapi_app.lib.dependencies import get_auth_manager, get_session_manager
-from fastapi_app.lib.auth import AuthManager
-from fastapi_app.lib.sessions import SessionManager
+from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.core.sessions import SessionManager
 
 router = APIRouter(prefix="/api/plugins/my-plugin")
 

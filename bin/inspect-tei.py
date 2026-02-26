@@ -15,9 +15,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
 import logging
 
 logger = logging.getLogger(__name__)

@@ -65,7 +65,7 @@ Location: `data/db/` directory (gitignored)
 
 ### Initialization Pattern
 
-On server startup ([fastapi_app/lib/db_init.py](../../fastapi_app/lib/db_init.py)):
+On server startup ([fastapi_app/lib/core/db_init.py](../../fastapi_app/lib/core/db_init.py)):
 
 1. Check if `data/db/*.json` files exist
 2. If missing, copy from `config/*.json`
@@ -169,7 +169,7 @@ Enables safe deletion:
 
 ### DatabaseManager
 
-Location: [fastapi_app/lib/database.py](../../fastapi_app/lib/database.py)
+Location: [fastapi_app/lib/core/database.py](../../fastapi_app/lib/core/database.py)
 
 Provides connection management and transactions:
 
@@ -213,7 +213,7 @@ with db_manager.transaction() as conn:
 
 ### FileRepository
 
-Location: [fastapi_app/lib/file_repository.py](../../fastapi_app/lib/file_repository.py)
+Location: [fastapi_app/lib/repository/file_repository.py](../../fastapi_app/lib/repository/file_repository.py)
 
 Provides high-level CRUD operations with Pydantic models:
 
@@ -342,7 +342,7 @@ def set_sync_metadata(self, key: str, value: str) -> None:
 
 ### StorageReferenceManager
 
-Location: [fastapi_app/lib/storage_references.py](../../fastapi_app/lib/storage_references.py)
+Location: [fastapi_app/lib/storage/storage_references.py](../../fastapi_app/lib/storage/storage_references.py)
 
 Manages reference counting for safe filesystem cleanup:
 
@@ -375,7 +375,7 @@ if can_delete:
 
 ## Pydantic Models
 
-Location: [fastapi_app/lib/models.py](../../fastapi_app/lib/models.py)
+Location: [fastapi_app/lib/models/models.py](../../fastapi_app/lib/models/models.py)
 
 Type-safe models for database operations:
 
@@ -463,7 +463,7 @@ Tests use isolated temporary directories:
 ```python
 import tempfile
 from pathlib import Path
-from fastapi_app.lib.db_init import initialize_db_from_config
+from fastapi_app.lib.core.db_init import initialize_db_from_config
 
 # Create temporary database
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -561,7 +561,7 @@ npm run start:dev
 ### Schema Updates
 
 Schema changes require:
-1. Update `fastapi_app/lib/db_schema.py`
+1. Update `fastapi_app/lib/core/db_schema.py`
 2. Add migration logic in `initialize_database()`
 3. Test with clean database and existing database
 

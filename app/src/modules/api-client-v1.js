@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-02-16T10:14:24.854Z
+ * Generated from OpenAPI schema at 2026-02-26T18:49:28.308Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -570,14 +570,14 @@
  */
 
 /**
- * @typedef {Object} fastapi_app__lib__models_extraction__ExtractRequest
+ * @typedef {Object} fastapi_app__lib__models__models_extraction__ExtractRequest
  * @property {string} extractor - ID of the extractor to use
  * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
  * @property {Object<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
  */
 
 /**
- * @typedef {Object} fastapi_app__lib__models_extraction__ExtractResponse
+ * @typedef {Object} fastapi_app__lib__models__models_extraction__ExtractResponse
  * @property {string=} id - Document ID (for PDF-based extractions)
  * @property {string=} pdf - PDF file hash (if applicable)
  * @property {string} xml - Extracted/generated XML file hash
@@ -1127,8 +1127,8 @@ export class ApiClientV1 {
    * Returns:
    * Response with PDF hash (if applicable) and extracted XML hash
    *
-   * @param {fastapi_app__lib__models_extraction__ExtractRequest} requestBody
-   * @returns {Promise<fastapi_app__lib__models_extraction__ExtractResponse>}
+   * @param {fastapi_app__lib__models__models_extraction__ExtractRequest} requestBody
+   * @returns {Promise<fastapi_app__lib__models__models_extraction__ExtractResponse>}
    */
   async extract(requestBody) {
     const endpoint = `/extract`

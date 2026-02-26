@@ -16,20 +16,20 @@ from pathlib import Path
 import tempfile
 import logging
 
-from ..lib.database import DatabaseManager
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.file_zip_importer import FileZipImporter
-from ..lib.dependencies import (
+from ..lib.core.database import DatabaseManager
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.storage.file_zip_importer import FileZipImporter
+from ..lib.core.dependencies import (
     get_db,
     get_file_repository,
     get_file_storage,
     require_authenticated_user
 )
-from ..lib.user_utils import get_user_collections
-from ..lib.collection_utils import grant_user_collection_access
+from ..lib.permissions.user_utils import get_user_collections
+from ..lib.utils.collection_utils import grant_user_collection_access
 from ..config import get_settings
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/import", tags=["import"])

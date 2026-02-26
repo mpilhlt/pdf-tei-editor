@@ -11,9 +11,9 @@ import shutil
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.plugin_registry import PluginRegistry
-from fastapi_app.lib.plugin_manager import PluginManager
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_registry import PluginRegistry
+from fastapi_app.lib.plugins.plugin_manager import PluginManager
 
 
 class MockPlugin(Plugin):
@@ -291,7 +291,7 @@ class TestPluginRegistry(unittest.TestCase):
 
         plugin_file = plugin_dir / "plugin.py"
         plugin_code = '''
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 
 class TestPlugin(Plugin):
     @property
@@ -326,7 +326,7 @@ class TestPlugin(Plugin):
         plugin_file = plugin_dir / "plugin.py"
         plugin_code = '''
 import os
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 
 class UnavailablePlugin(Plugin):
     @property

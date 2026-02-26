@@ -52,7 +52,7 @@ class TestDataRestore(unittest.TestCase):
 
     def test_apply_pending_restore_swaps_directories(self):
         """Verify data_restore/ is swapped into data/ and old data is preserved."""
-        from fastapi_app.lib.data_restore import apply_pending_restore
+        from fastapi_app.lib.core.data_restore import apply_pending_restore
 
         data_dir = self.temp_dir / "data"
         data_dir.mkdir()
@@ -88,7 +88,7 @@ class TestDataRestore(unittest.TestCase):
 
     def test_apply_pending_restore_no_restore_dir(self):
         """Return False when no data_restore/ directory exists."""
-        from fastapi_app.lib.data_restore import apply_pending_restore
+        from fastapi_app.lib.core.data_restore import apply_pending_restore
 
         data_dir = self.temp_dir / "data"
         data_dir.mkdir()
@@ -99,7 +99,7 @@ class TestDataRestore(unittest.TestCase):
 
     def test_apply_pending_restore_no_existing_data(self):
         """Handle case where data/ does not exist yet."""
-        from fastapi_app.lib.data_restore import apply_pending_restore
+        from fastapi_app.lib.core.data_restore import apply_pending_restore
 
         data_dir = self.temp_dir / "data"
         restore_dir = self.temp_dir / "data_restore"

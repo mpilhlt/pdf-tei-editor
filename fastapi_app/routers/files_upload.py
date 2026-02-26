@@ -24,17 +24,17 @@ except (ImportError, OSError) as e:
     MAGIC_AVAILABLE = False
     magic = None
 
-from ..lib.file_storage import FileStorage
-from ..lib.file_repository import FileRepository
-from ..lib.models_files import UploadResponse
+from ..lib.storage.file_storage import FileStorage
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_files import UploadResponse
 from ..lib.models import FileCreate
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     get_session_id,
     get_current_user
 )
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

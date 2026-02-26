@@ -12,13 +12,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from lxml import etree
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
     get_session_manager,
 )
-from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.plugins.iaa_analyzer.diff_utils import (
     escape_html,
     find_element_line_offset,
@@ -215,7 +215,7 @@ def _generate_diff_html(
     Returns:
         HTML string with embedded diff viewer
     """
-    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+    from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
     # Escape XML for embedding in JavaScript
     xml1_original_escaped = json.dumps(xml1_original)
@@ -324,7 +324,7 @@ async def show_diff(
         HTML page with diff viewer
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.tei_utils import extract_tei_metadata
+    from fastapi_app.lib.utils.tei_utils import extract_tei_metadata
     from fastapi_app.plugins.iaa_analyzer.plugin import (
         IGNORE_ATTRIBUTES,
         IGNORE_TAGS,

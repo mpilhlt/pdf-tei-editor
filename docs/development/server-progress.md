@@ -37,8 +37,8 @@ Backend                          Frontend
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_sse_service
-from fastapi_app.lib.sse_utils import ProgressBar
+from fastapi_app.lib.core.dependencies import get_sse_service
+from fastapi_app.lib.sse.sse_utils import ProgressBar
 
 @router.post("/process")
 async def process_files(
@@ -68,7 +68,7 @@ async def process_files(
 ### Progress Bar with Cancellation
 
 ```python
-from fastapi_app.lib.sse_utils import ProgressBar, send_notification
+from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 
 # Module-level cancellation registry
 _cancellation_tokens: dict[str, bool] = {}
@@ -185,7 +185,7 @@ class ProgressBar:
 ### Sending Notifications
 
 ```python
-from fastapi_app.lib.sse_utils import send_notification
+from fastapi_app.lib.sse.sse_utils import send_notification
 
 # Variants: "info", "success", "warning", "error"
 send_notification(

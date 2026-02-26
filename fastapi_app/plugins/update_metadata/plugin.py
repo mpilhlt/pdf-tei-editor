@@ -6,7 +6,7 @@ from DOI lookup using CrossRef/DataCite APIs.
 """
 
 from typing import Any, Callable
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 
 
 class UpdateMetadataPlugin(Plugin):

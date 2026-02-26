@@ -1,6 +1,6 @@
 """GROBID plugin configuration."""
 
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 
 SCHEMA_BASE_URL = "https://mpilhlt.github.io/grobid-footnote-flavour/schema"

@@ -7,7 +7,7 @@ Real-time log viewer that streams application logs to the browser via SSE.
 import logging
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
 

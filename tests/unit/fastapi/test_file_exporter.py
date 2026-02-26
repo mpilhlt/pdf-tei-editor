@@ -12,7 +12,7 @@ Tests:
 - Filename transformations
 - Dry run mode
 
-@testCovers fastapi_app/lib/file_exporter.py
+@testCovers fastapi_app/lib/storage/file_exporter.py
 """
 
 import unittest
@@ -20,11 +20,11 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from fastapi_app.lib.file_exporter import FileExporter
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.models import FileCreate
+from fastapi_app.lib.storage.file_exporter import FileExporter
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.models.models import FileCreate
 
 
 class TestFileExporter(unittest.TestCase):

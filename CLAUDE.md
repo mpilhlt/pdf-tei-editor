@@ -11,7 +11,8 @@ This file provides guidance to code assistants when working with code in this re
 
 For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
-- **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
+- **[Frontend Architecture](docs/code-assistant/architecture-frontend.md)** - Frontend plugin system, UI components, templates
+- **[Backend Architecture](docs/code-assistant/architecture-backend.md)** - FastAPI structure, lib/ modules, import patterns
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
 - **[API Reference](docs/development/api-reference.md) - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
 - **[Class Dependencies](docs/development/class-dependencies.md)** - FastAPI dependency injection system, available dependencies
@@ -26,7 +27,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 
 ### Key Directories
 
-Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
+Read [docs/code-assistant/architecture-frontend.md](docs/code-assistant/architecture-frontend.md) for frontend and [docs/code-assistant/architecture-backend.md](docs/code-assistant/architecture-backend.md) for backend when you need to understand the system design.
 
 - `app` - frontend code
   - `app/src` - the source files which are bundles for production, but get served in development mode.
@@ -85,7 +86,7 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 
 ### Database Access
 
-- **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
+- **ALWAYS use API methods** from `fastapi_app/lib/repository/file_repository.py`, `fastapi_app/lib/core/database.py`, and related modules to read and mutate database items
 - **AVOID raw SQL queries** except in exceptional cases where no API method exists
 - **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
 - **ALWAYS pass `DatabaseManager` instances** to classes that need database access, do not pass file paths or create new `DatabaseManager` instances. This ensures connection pooling works correctly.
@@ -97,15 +98,15 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 - **ALWAYS use the migration infrastructure** when database schema changes are needed - see [docs/development/migrations.md](docs/development/migrations.md)
 - **NEVER modify the database schema directly** - create a versioned migration instead
 - Migrations provide automatic backups, rollback support, and version tracking
-- See `fastapi_app/lib/migrations/versions/m001_locks_file_id.py` for a complete example
+- See `fastapi_app/lib/core/migrations/versions/m001_locks_file_id.py` for a complete example
 - **When adding a new database**, use the centralized migration runner - see [docs/development/adding-new-databases.md](docs/development/adding-new-databases.md)
-  - Call `run_migrations_if_needed()` from `fastapi_app/lib/migration_runner.py` in your database initialization
+  - Call `run_migrations_if_needed()` from `fastapi_app/lib/core/migration_runner.py` in your database initialization
   - This ensures migrations run automatically on application startup for all databases
-- **Migration tests location** - ALWAYS place migration tests in `fastapi_app/lib/migrations/tests/` directory (not in the main test suite). These tests are for manual verification and should not run automatically in CI/CD. Name test files as `test_migration_XXX.py` where XXX is the migration number
+- **Migration tests location** - ALWAYS place migration tests in `fastapi_app/lib/core/migrations/tests/` directory (not in the main test suite). These tests are for manual verification and should not run automatically in CI/CD. Name test files as `test_migration_XXX.py` where XXX is the migration number
 
 ### TEI Document Processing
 
-- **ALWAYS use utility functions** from `fastapi_app/lib/tei_utils.py` when working with TEI XML documents
+- **ALWAYS use utility functions** from `fastapi_app/lib/utils/tei_utils.py` when working with TEI XML documents
 - **Use `extract_tei_metadata()`** to extract metadata (title, authors, DOI, variant, etc.) from TEI documents instead of manual XPath queries
 - **Use lxml** (not xml.etree) for TEI processing - it's what `tei_utils.py` uses and ensures consistency
 - **Add new utility functions** to `tei_utils.py` when you need TEI processing functionality that doesn't exist yet
@@ -119,7 +120,7 @@ When implementing authenticated routes (e.g., plugin routes), use dependency inj
 
 ```python
 from fastapi import APIRouter, Depends, Header, Query
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_session_manager,
@@ -152,10 +153,10 @@ async def my_endpoint(
 
 **Access Control Pattern for Documents/Files:**
 
-Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/user_utils.py`:
+Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/permissions/user_utils.py`:
 
 ```python
-from fastapi_app.lib.user_utils import user_has_collection_access
+from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
 # Check if user has access to a document via its collections
 file = file_repo.get_file_by_stable_id(stable_id)
@@ -174,7 +175,7 @@ if not user_has_access:
 
 - Users access documents through **collection membership**, not direct user-document links
 - Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
-- Use `get_user_collections(user, db_dir)` to get all collections a user can access (returns `None` if user has wildcard access)
+- Use `get_user_collections(user, db_dir)` from `fastapi_app.lib.permissions.user_utils` to get all collections a user can access (returns `None` if user has wildcard access)
 - Admin users and users with wildcard (`*`) in their groups have access to all collections
 - Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
 - See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
@@ -184,7 +185,7 @@ if not user_has_access:
 **ALWAYS use the high-level config API** to retrieve configuration values. Do NOT use `ConfigManager` directly.
 
 ```python
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 # Get config instance
 config = get_config()
@@ -330,6 +331,7 @@ The smart-test-runner automatically uses the correct approach:
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
 - When asked to create a github issue or other github mainenance issues, use the `gh` tool and ask the user to install it if it is not available
 - **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
+- **Use Settings for path resolution** - NEVER use `Path(__file__).parent.parent...` chains to navigate to well-known application directories. Always use the canonical properties from `get_settings()` in `fastapi_app/config.py`: `project_root_dir` (project root), `app_root_dir` (`fastapi_app/`), `plugins_code_dir` (`fastapi_app/plugins/`), `plugins_data_dir` (`data/plugins/`). Only use `Path(__file__).parent` when referencing files local to the current file's own directory (e.g., within a plugin's own subdirectory).
 
 ## Planning documents, todo documents, github issues, documentation
 
@@ -359,7 +361,6 @@ When implementing a new feature, follow this workflow:
 - When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
 - This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
 - Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
-
 
 See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
 

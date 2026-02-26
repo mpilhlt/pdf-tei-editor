@@ -14,8 +14,8 @@ from pathlib import Path
 # Add parent directory to path to import fastapi_app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi_app.lib.migrations import MigrationManager
-from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+from fastapi_app.lib.core.migrations import MigrationManager
+from fastapi_app.lib.core.migrations.versions import ALL_MIGRATIONS
 
 # Set up logging
 logging.basicConfig(

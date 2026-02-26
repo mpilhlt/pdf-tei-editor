@@ -1,18 +1,21 @@
 """
 Library module exports for PDF-TEI-Editor.
 
-Provides convenient access to commonly used utilities.
+Provides convenient access to commonly used utilities and core components.
 
-Note: The config instance is not initialized at module import time
-to avoid circular import issues when bin/manage.py is called from
-contexts where fastapi_app.config may not be in the Python path.
-
-Usage:
-    from fastapi_app.lib.config_utils import get_config
-    config = get_config()
+Modules:
+- core: Database management and migrations
+- models: Pydantic data models
+- repository: Data access layer
+- services: Business logic services
+- storage: File storage and I/O
+- permissions: Access control
+- plugins: Plugin system
+- extraction: Extraction engine framework
+- sse: Server-sent events
+- utils: Common utilities
 """
 
-# Re-export for convenience
-from .config_utils import get_config
+from .utils.config_utils import get_config
 
 __all__ = ["get_config"]

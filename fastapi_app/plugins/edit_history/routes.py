@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 from lxml import etree
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
@@ -47,8 +47,8 @@ async def view_history(
         HTML page with DataTables-powered table
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.file_repository import FileRepository
-    from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -66,7 +66,7 @@ async def view_history(
         raise HTTPException(status_code=401, detail="User not found")
 
     # Check collection access
-    from fastapi_app.lib.user_utils import user_has_collection_access
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
     if not user_has_collection_access(user, collection, settings.db_dir):
         raise HTTPException(status_code=403, detail="Access denied to collection")
 
@@ -170,9 +170,9 @@ async def export_csv(
         CSV file as streaming response
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.file_repository import FileRepository
-    from fastapi_app.lib.tei_utils import extract_tei_metadata
-    from fastapi_app.lib.user_utils import user_has_collection_access
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.utils.tei_utils import extract_tei_metadata
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -279,7 +279,7 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
         List of revision entries (one per change element)
     """
     try:
-        from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
+        from fastapi_app.lib.utils.tei_utils import extract_tei_metadata, get_annotator_name
 
         root = etree.fromstring(xml_content.encode("utf-8"))
         ns = {

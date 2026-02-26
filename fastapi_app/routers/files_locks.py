@@ -14,9 +14,9 @@ Key changes from Flask:
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..lib.locking import acquire_lock, release_lock, check_lock, get_locked_file_ids
-from ..lib.file_repository import FileRepository
-from ..lib.models_files import (
+from ..lib.core.locking import acquire_lock, release_lock, check_lock, get_locked_file_ids
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_files import (
     GetLocksResponse,
     AcquireLockRequest,
     ReleaseLockRequest,
@@ -24,19 +24,19 @@ from ..lib.models_files import (
     CheckLockRequest,
     CheckLockResponse
 )
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     get_session_id,
     get_current_user,
     get_sse_service,
     get_session_manager
 )
-from ..lib.access_control import check_file_access
+from ..lib.permissions.access_control import check_file_access
 from ..config import get_settings
-from ..lib.logging_utils import get_logger
-from ..lib.sse_service import SSEService
-from ..lib.sessions import SessionManager
-from ..lib.sse_utils import broadcast_to_other_sessions
+from ..lib.utils.logging_utils import get_logger
+from ..lib.sse.sse_service import SSEService
+from ..lib.core.sessions import SessionManager
+from ..lib.sse.sse_utils import broadcast_to_other_sessions
 
 
 logger = get_logger(__name__)

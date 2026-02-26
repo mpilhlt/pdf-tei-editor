@@ -8,15 +8,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user,
     require_admin_user,
 )
-from ..lib.file_repository import FileRepository
-from ..lib.logging_utils import get_logger
-from ..lib.user_utils import user_has_collection_access
+from ..lib.repository.file_repository import FileRepository
+from ..lib.utils.logging_utils import get_logger
+from ..lib.permissions.user_utils import user_has_collection_access
 from ..lib.models import FileMetadata
 from ..config import get_settings
 

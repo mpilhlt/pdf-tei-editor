@@ -182,7 +182,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager
+from fastapi_app.lib.core.migrations import MigrationManager
 from fastapi_app.lib.migrations.versions.mXXX_description import MigrationXXX_Description
 
 
@@ -268,7 +268,7 @@ For advanced use cases, you can run migrations programmatically using the centra
 
 ```python
 from pathlib import Path
-from fastapi_app.lib.migration_runner import run_migrations_if_needed
+from fastapi_app.lib.core.migration_runner import run_migrations_if_needed
 from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 import logging
 
@@ -288,7 +288,7 @@ Or use the MigrationManager directly for more control:
 
 ```python
 from pathlib import Path
-from fastapi_app.lib.migrations import MigrationManager
+from fastapi_app.lib.core.migrations import MigrationManager
 from fastapi_app.lib.migrations.versions import METADATA_MIGRATIONS
 import logging
 
@@ -414,7 +414,7 @@ cp data/db/locks_backup_20231219_120000.db data/db/locks.db
 To rollback a migration manually:
 
 ```python
-from fastapi_app.lib.migrations import MigrationManager
+from fastapi_app.lib.core.migrations import MigrationManager
 
 manager = MigrationManager(db_path, logger)
 # Register migrations...

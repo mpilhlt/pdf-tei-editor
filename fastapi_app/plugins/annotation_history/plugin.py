@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class AnnotationHistoryPlugin(Plugin):
         try:
             from lxml import etree
 
-            from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
+            from fastapi_app.lib.utils.tei_utils import extract_tei_metadata, get_annotator_name
 
             # Parse XML with lxml
             root = etree.fromstring(xml_content.encode("utf-8"))

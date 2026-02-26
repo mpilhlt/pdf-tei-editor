@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor
-from fastapi_app.lib.tei_utils import (
+from fastapi_app.lib.utils.tei_utils import (
     create_tei_document,
     create_tei_header,
     create_revision_desc_with_status,

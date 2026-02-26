@@ -16,7 +16,7 @@ Backend plugins can register JavaScript "frontend extensions" that integrate wit
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `FrontendExtensionRegistry` | `fastapi_app/lib/frontend_extension_registry.py` | Backend registry for extension files |
+| `FrontendExtensionRegistry` | `fastapi_app/lib/plugins/frontend_extension_registry.py` | Backend registry for extension files |
 | `frontend-extension-registry.js` | `app/src/modules/` | Frontend registry and global registration function |
 | `frontend-extension-sandbox.js` | `app/src/modules/` | Controlled API access for extensions |
 | `frontend-extension-wrapper.js` | `app/src/modules/` | Wraps extensions as PluginManager plugins |
@@ -127,7 +127,7 @@ if (state.xml) {
 In your plugin's `initialize()` method:
 
 ```python
-from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from pathlib import Path
 
 async def initialize(self, context: PluginContext) -> None:
@@ -230,7 +230,7 @@ The Frontend Extension Sandbox provides direct API access for JavaScript extensi
 
 | File | Purpose |
 | ---- | ------- |
-| `fastapi_app/lib/frontend_extension_registry.py` | Backend singleton registry for extension files |
+| `fastapi_app/lib/plugins/frontend_extension_registry.py` | Backend singleton registry for extension files |
 | `app/src/modules/frontend-extension-registry.js` | Frontend registry with `window.registerFrontendExtension()` and `loadExtensionsFromServer()` |
 | `app/src/modules/frontend-extension-sandbox.js` | Sandbox providing controlled API access for extensions |
 | `app/src/modules/frontend-extension-wrapper.js` | Wraps extensions as PluginManager-compatible plugin objects |
@@ -241,7 +241,7 @@ The Frontend Extension Sandbox provides direct API access for JavaScript extensi
 
 | File | Changes |
 | ---- | ------- |
-| `fastapi_app/lib/plugin_tools.py` | Added `validate_javascript_content()` for security validation |
+| `fastapi_app/lib/plugins/plugin_tools.py` | Added `validate_javascript_content()` for security validation |
 | `fastapi_app/routers/plugins.py` | Added `/extensions.js` endpoint with IIFE transformation |
 | `fastapi_app/plugins/tei_wizard/routes.py` | Added validation for enhancement files |
 | `app/src/app.js` | Added extension loading via `loadExtensionsFromServer()` |

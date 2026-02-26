@@ -13,15 +13,23 @@ These guides provide:
 
 ## Available Guides
 
-### [architecture.md](./architecture.md)
+### [architecture-frontend.md](./architecture-frontend.md)
 
-Core system architecture patterns including:
+Frontend architecture including:
 
-- Backend structure (FastAPI)
 - Frontend structure (ES modules, plugin system)
 - Plugin types (objects vs classes)
 - UI component system
 - Template registration
+
+### [architecture-backend.md](./architecture-backend.md)
+
+Backend architecture including:
+
+- FastAPI application structure
+- `lib/` directory organization by domain
+- Module dependency hierarchy
+- Common import patterns
 
 ### [database-connections.md](./database-connections.md)
 
@@ -84,11 +92,12 @@ FastAPI client usage patterns:
 When working on this codebase:
 
 1. **Read [coding-standards.md](./coding-standards.md) first** - Critical JSDoc requirements
-2. **Check [architecture.md](./architecture.md)** - Understand the plugin system
-3. **Reference [development-commands.md](./development-commands.md)** - Run tests and commands
-4. **Follow [plugin-development.md](./plugin-development.md)** - When creating/modifying plugins
-5. **Use [testing-guide.md](./testing-guide.md)** - When writing tests
-6. **Consult [api-client.md](./api-client.md)** - When working with backend API
+2. **Check [architecture-frontend.md](./architecture-frontend.md)** - Understand the plugin system
+3. **Check [architecture-backend.md](./architecture-backend.md)** - Understand the backend structure
+4. **Reference [development-commands.md](./development-commands.md)** - Run tests and commands
+5. **Follow [plugin-development.md](./plugin-development.md)** - When creating/modifying plugins
+6. **Use [testing-guide.md](./testing-guide.md)** - When writing tests
+7. **Consult [api-client.md](./api-client.md)** - When working with backend API
 
 ## Key Principles
 

@@ -10,8 +10,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from .config import get_settings
-from .lib.logging_utils import setup_logging, get_logger
-from .lib.database_init import initialize_all_databases
+from .lib.utils.logging_utils import setup_logging, get_logger
+from .lib.core.database_init import initialize_all_databases
 
 
 logger = get_logger(__name__)
@@ -27,8 +27,8 @@ async def lifespan(app: FastAPI):
     setup_logging(settings.log_level, settings.log_categories)
 
     # Install SSE log handler for real-time log streaming
-    from .lib.dependencies import get_sse_service
-    from .lib.logging_utils import install_sse_log_handler
+    from .lib.core.dependencies import get_sse_service
+    from .lib.utils.logging_utils import install_sse_log_handler
     install_sse_log_handler(get_sse_service())
 
     logger.info(f"Starting PDF-TEI Editor API")
@@ -36,11 +36,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"DB directory: {settings.db_dir}")
 
     # Check for pending data restore (from backup-restore plugin)
-    project_root = Path(__file__).parent.parent
+    project_root = get_settings().project_root_dir
     data_restore_dir = project_root / "data_restore"
     data_was_restored = False
     if data_restore_dir.exists() and data_restore_dir.is_dir():
-        from .lib.data_restore import apply_pending_restore
+        from .lib.core.data_restore import apply_pending_restore
         data_was_restored = apply_pending_restore(
             project_root, settings.data_root, logger
         )
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     # Initialize database directory from config defaults FIRST
     # This copies JSON files from config/ to db/ if they don't exist
     # and merges missing config values into db/config.json
-    from .lib.db_init import ensure_db_initialized
+    from .lib.core.db_init import ensure_db_initialized
     try:
         # Use custom config_dir if specified (for tests), otherwise use default
         config_dir = settings.config_dir
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
 
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
-    from .lib.config_utils import get_config
+    from .lib.utils.config_utils import get_config
     config = get_config()
     config_data = config.load()
 
@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
         raise
 
     # Initialize plugins (discovery and route registration happen at module level)
-    from .lib.plugin_manager import PluginManager
+    from .lib.plugins.plugin_manager import PluginManager
     try:
         plugin_manager = PluginManager.get_instance()
         await plugin_manager.initialize_plugins(app)
@@ -124,8 +124,8 @@ async def lifespan(app: FastAPI):
 
     # If data was restored, broadcast maintenance-off and reload to reconnecting clients
     if data_was_restored:
-        from .lib.sse_utils import broadcast_to_all_sessions
-        from .lib.dependencies import get_session_manager
+        from .lib.sse.sse_utils import broadcast_to_all_sessions
+        from .lib.core.dependencies import get_session_manager
         sse_svc = get_sse_service()
         sess_mgr = get_session_manager()
         broadcast_to_all_sessions(
@@ -247,7 +247,7 @@ app.include_router(api_v1)
 # Discover and register plugin routes at module level
 # Note: Routes MUST be registered at module level, not in lifespan, as FastAPI builds
 # its routing table before lifespan runs. Plugin initialization happens in lifespan.
-from .lib.plugin_manager import PluginManager
+from .lib.plugins.plugin_manager import PluginManager
 plugin_manager = PluginManager.get_instance()
 plugin_manager.discover_plugins()
 plugin_manager.register_plugin_routes(app)
@@ -262,13 +262,13 @@ app.include_router(api_compat)
 
 # Static file serving
 # These must be mounted AFTER API routes to avoid conflicts
-project_root = Path(__file__).parent.parent
+project_root = get_settings().project_root_dir
 web_root = project_root / 'app' / 'web'
 
 # Development mode routes (conditionally mounted)
 # In development, serve source files, node_modules, and tests
 settings = get_settings()
-from .lib.config_utils import get_config
+from .lib.utils.config_utils import get_config
 config = get_config()
 config_data = config.load()
 is_dev_mode = config_data.get("application", {}).get("mode", "development") == "development"

@@ -18,21 +18,21 @@ from pathlib import Path
 import tempfile
 import json
 
-from ..lib.database import DatabaseManager
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.file_zip_exporter import FileZipExporter
-from ..lib.file_exporter import FileExporter
-from ..lib.dependencies import (
+from ..lib.core.database import DatabaseManager
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.storage.file_zip_exporter import FileZipExporter
+from ..lib.storage.file_exporter import FileExporter
+from ..lib.core.dependencies import (
     get_db,
     get_file_repository,
     get_file_storage,
     require_authenticated_user,
     get_session_id
 )
-from ..lib.user_utils import get_user_collections
+from ..lib.permissions.user_utils import get_user_collections
 from ..config import get_settings
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

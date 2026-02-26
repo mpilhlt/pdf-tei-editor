@@ -14,10 +14,10 @@ Key changes from Flask:
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List
 
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
-from ..lib.dependencies import (
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.models.models_files import DeleteFilesRequest, DeleteFilesResponse
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user,
@@ -25,13 +25,13 @@ from ..lib.dependencies import (
     get_sse_service,
     get_session_manager
 )
-from ..lib.access_control import check_file_access
-from ..lib.logging_utils import get_logger
-from ..lib.sse_service import SSEService
-from ..lib.sessions import SessionManager
-from ..lib.sse_utils import broadcast_to_other_sessions
-from ..lib.event_bus import get_event_bus
-from ..lib.acl_utils import delete_permissions_for_file
+from ..lib.permissions.access_control import check_file_access
+from ..lib.utils.logging_utils import get_logger
+from ..lib.sse.sse_service import SSEService
+from ..lib.core.sessions import SessionManager
+from ..lib.sse.sse_utils import broadcast_to_other_sessions
+from ..lib.sse.event_bus import get_event_bus
+from ..lib.permissions.acl_utils import delete_permissions_for_file
 
 
 logger = get_logger(__name__)

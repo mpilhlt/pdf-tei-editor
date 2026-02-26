@@ -9,11 +9,11 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
 
 from fastapi_app.lib.extraction import ExtractorRegistry
-from fastapi_app.lib.event_bus import get_event_bus
+from fastapi_app.lib.sse.event_bus import get_event_bus
 from .extractor import GrobidTrainingExtractor
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class GrobidPlugin(Plugin):
     @classmethod
     def is_available(cls) -> bool:
         """Check if GROBID server URL is configured."""
-        from fastapi_app.lib.plugin_tools import get_plugin_config
+        from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
         # Initialize config from env var if not set
         url = get_plugin_config(
@@ -82,7 +82,7 @@ class GrobidPlugin(Plugin):
             else:
                 logger.warning(f"Enhancement file not found: {enhancement_file}")
         else:
-            logger.warning("tei-wizard dependency not available")
+            logger.debug("tei-wizard dependency not available")
 
         logger.info("GROBID extractor plugin initialized")
 
@@ -107,8 +107,8 @@ class GrobidPlugin(Plugin):
         Args:
             stable_id: The stable_id of the deleted file
         """
-        from fastapi_app.lib.dependencies import get_db
-        from fastapi_app.lib.file_repository import FileRepository
+        from fastapi_app.lib.core.dependencies import get_db
+        from fastapi_app.lib.repository.file_repository import FileRepository
 
         try:
             # Get file info to check if it was a PDF

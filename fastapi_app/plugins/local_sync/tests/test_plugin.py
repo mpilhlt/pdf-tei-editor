@@ -131,7 +131,7 @@ class TestLocalSyncPlugin(unittest.TestCase):
     </teiHeader>
 </TEI>"""
 
-        from fastapi_app.lib.tei_utils import extract_fileref
+        from fastapi_app.lib.utils.tei_utils import extract_fileref
 
         fileref = extract_fileref(tei_content)
         self.assertEqual(fileref, "test-doc-123")
@@ -147,7 +147,7 @@ class TestLocalSyncPlugin(unittest.TestCase):
     </teiHeader>
 </TEI>"""
 
-        from fastapi_app.lib.tei_utils import extract_fileref
+        from fastapi_app.lib.utils.tei_utils import extract_fileref
 
         fileref = extract_fileref(tei_content)
         self.assertIsNone(fileref)
@@ -164,7 +164,7 @@ class TestLocalSyncPlugin(unittest.TestCase):
     </teiHeader>
 </TEI>"""
 
-        from fastapi_app.lib.tei_utils import extract_revision_timestamp
+        from fastapi_app.lib.utils.tei_utils import extract_revision_timestamp
 
         timestamp = extract_revision_timestamp(tei_content)
         self.assertEqual(timestamp, "2025-01-08T15:30:00")
@@ -180,12 +180,12 @@ class TestLocalSyncPlugin(unittest.TestCase):
     </teiHeader>
 </TEI>"""
 
-        from fastapi_app.lib.tei_utils import extract_revision_timestamp
+        from fastapi_app.lib.utils.tei_utils import extract_revision_timestamp
 
         timestamp = extract_revision_timestamp(tei_content)
         self.assertIsNone(timestamp)
 
-    @patch('fastapi_app.lib.plugin_tools.get_plugin_config')
+    @patch('fastapi_app.lib.plugins.plugin_tools.get_plugin_config')
     def test_plugin_availability_disabled(self, mock_config):
         """Test plugin is not available when disabled."""
         from fastapi_app.plugins.local_sync.plugin import LocalSyncPlugin
@@ -200,7 +200,7 @@ class TestLocalSyncPlugin(unittest.TestCase):
 
         self.assertFalse(LocalSyncPlugin.is_available())
 
-    @patch('fastapi_app.lib.plugin_tools.get_plugin_config')
+    @patch('fastapi_app.lib.plugins.plugin_tools.get_plugin_config')
     def test_plugin_availability_no_repo_path(self, mock_config):
         """Test plugin is not available when repo path not configured."""
         from fastapi_app.plugins.local_sync.plugin import LocalSyncPlugin
@@ -217,7 +217,7 @@ class TestLocalSyncPlugin(unittest.TestCase):
 
         self.assertFalse(LocalSyncPlugin.is_available())
 
-    @patch('fastapi_app.lib.plugin_tools.get_plugin_config')
+    @patch('fastapi_app.lib.plugins.plugin_tools.get_plugin_config')
     def test_plugin_availability_enabled(self, mock_config):
         """Test plugin is available when enabled and repo path configured."""
         from fastapi_app.plugins.local_sync.plugin import LocalSyncPlugin

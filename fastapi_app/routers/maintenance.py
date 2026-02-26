@@ -10,15 +10,15 @@ from typing import Dict
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
     require_admin_user,
 )
-from ..lib.logging_utils import get_logger
-from ..lib.sessions import SessionManager
-from ..lib.sse_service import SSEService
-from ..lib.sse_utils import broadcast_to_all_sessions
+from ..lib.utils.logging_utils import get_logger
+from ..lib.core.sessions import SessionManager
+from ..lib.sse.sse_service import SSEService
+from ..lib.sse.sse_utils import broadcast_to_all_sessions
 
 logger = get_logger(__name__)
 

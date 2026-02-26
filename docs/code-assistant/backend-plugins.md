@@ -64,7 +64,7 @@ Unit tests for My Plugin.
 
 ```python
 # plugin.py
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 from typing import Any
 
 class MyPlugin(Plugin):
@@ -165,7 +165,7 @@ Plugins can define runtime availability conditions using the `is_available()` cl
 
 ```python
 import os
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 
 class MyPlugin(Plugin):
     # ... metadata and endpoints ...
@@ -212,7 +212,7 @@ Plugins often need configuration that can be set via environment variables or co
 
 ```python
 # __init__.py
-from fastapi_app.lib.plugin_tools import get_plugin_config
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
 # Initialize config values from environment variables
 get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
@@ -228,7 +228,7 @@ plugin = MyPlugin()
 
 ```python
 # plugin.py
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 class MyPlugin(Plugin):
     async def execute(self, context, params: dict) -> dict:
@@ -243,7 +243,7 @@ class MyPlugin(Plugin):
 
 ```python
 # routes.py
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 @router.get("/action")
 async def custom_action():
@@ -268,7 +268,7 @@ async def custom_action():
 @classmethod
 def is_available(cls) -> bool:
     """Only available if enabled in config."""
-    from fastapi_app.lib.plugin_tools import get_plugin_config
+    from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
     enabled = get_plugin_config(
         "plugin.my-plugin.enabled",
@@ -389,8 +389,8 @@ async def analyze(self, context, params: dict) -> dict:
 
     if xml_id:
         # Load and analyze the XML file
-        from fastapi_app.lib.dependencies import get_db, get_file_storage
-        from fastapi_app.lib.file_repository import FileRepository
+        from fastapi_app.lib.core.dependencies import get_db, get_file_storage
+        from fastapi_app.lib.repository.file_repository import FileRepository
 
         db = get_db()
         file_repo = FileRepository(db)
@@ -570,9 +570,9 @@ The `callPluginApi` method:
 
 ## Key Files
 
-- [fastapi_app/lib/plugin_base.py](../../fastapi_app/lib/plugin_base.py) - Base classes
-- [fastapi_app/lib/plugin_registry.py](../../fastapi_app/lib/plugin_registry.py) - Discovery
-- [fastapi_app/lib/plugin_manager.py](../../fastapi_app/lib/plugin_manager.py) - Lifecycle
+- [fastapi_app/lib/plugins/plugin_base.py](../../fastapi_app/lib/plugins/plugin_base.py) - Base classes
+- [fastapi_app/lib/plugins/plugin_registry.py](../../fastapi_app/lib/plugins/plugin_registry.py) - Discovery
+- [fastapi_app/lib/plugins/plugin_manager.py](../../fastapi_app/lib/plugins/plugin_manager.py) - Lifecycle
 - [fastapi_app/routes/plugins.py](../../fastapi_app/routes/plugins.py) - API routes
 - [app/src/plugins/backend-plugins.js](../../app/src/plugins/backend-plugins.js) - Frontend integration
 
@@ -642,7 +642,7 @@ async def execute(self, context, params: dict) -> dict:
 ```python
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
-from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
 
 router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 
@@ -867,7 +867,7 @@ When using `generate_datatable_page()` with `enable_sandbox_client=True`, use `s
 
 ```python
 # In your custom route
-from fastapi_app.lib.plugin_tools import escape_html
+from fastapi_app.lib.plugins.plugin_tools import escape_html
 
 doc_link = f'''<a href="#"
    onclick="sandbox.openDocument('{entry["stable_id"]}'); return false;"
@@ -906,7 +906,7 @@ The `fastapi_app.lib.plugin_tools` module provides utilities for generating plug
 **`generate_datatable_page()`** - Generate complete HTML page with sortable DataTables table:
 
 ```python
-from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
 
 html = generate_datatable_page(
     title="Results",                    # Page title
@@ -928,7 +928,7 @@ html = generate_datatable_page(
 **`escape_html()`** - Escape HTML to prevent XSS:
 
 ```python
-from fastapi_app.lib.plugin_tools import escape_html
+from fastapi_app.lib.plugins.plugin_tools import escape_html
 
 safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 ```
@@ -938,7 +938,7 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 **`load_plugin_html()`** - Load an HTML template from the plugin's `html/` directory:
 
 ```python
-from fastapi_app.lib.plugin_tools import load_plugin_html
+from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 
 @router.get("/view", response_class=HTMLResponse)
 async def view_page(...):
@@ -965,7 +965,7 @@ Quick reference:
 **Example registration in plugin initialize():**
 
 ```python
-from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from pathlib import Path
 
 async def initialize(self, context: PluginContext) -> None:

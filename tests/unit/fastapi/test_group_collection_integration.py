@@ -3,9 +3,9 @@ Unit tests for group-collection-user integration
 
 Tests the integration of groups, collections, and users.
 
-@testCovers fastapi_app/lib/group_utils.py
-@testCovers fastapi_app/lib/collection_utils.py
-@testCovers fastapi_app/lib/user_utils.py
+@testCovers fastapi_app/lib/permissions/group_utils.py
+@testCovers fastapi_app/lib/utils/collection_utils.py
+@testCovers fastapi_app/lib/permissions/user_utils.py
 """
 
 import tempfile
@@ -15,14 +15,14 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.group_utils import (
+from fastapi_app.lib.permissions.group_utils import (
     add_group,
     add_collection_to_group,
     remove_collection_from_group,
     list_groups
 )
-from fastapi_app.lib.collection_utils import add_collection
-from fastapi_app.lib.user_utils import (
+from fastapi_app.lib.utils.collection_utils import add_collection
+from fastapi_app.lib.permissions.user_utils import (
     add_user,
     add_group_to_user,
     remove_group_from_user,
