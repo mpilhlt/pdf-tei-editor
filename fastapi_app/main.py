@@ -109,6 +109,15 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing databases: {e}")
         raise
 
+    # Remove diagnostic users on startup in production mode
+    if app_mode == "production":
+        from .lib.core.dependencies import get_auth_manager
+        auth_manager = get_auth_manager()
+        for diagnostic_user in ['reviewer', 'annotator']:
+            if auth_manager.get_user_by_username(diagnostic_user):
+                auth_manager.delete_user(diagnostic_user)
+                logger.info(f"Removed diagnostic user '{diagnostic_user}' on startup")
+
     # Initialize plugins (discovery and route registration happen at module level)
     from .lib.plugins.plugin_manager import PluginManager
     try:
