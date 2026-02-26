@@ -143,7 +143,22 @@ class Settings(BaseSettings):
         return self.data_root / "tmp"
 
     @property
-    def plugins_dir(self) -> Path:
+    def project_root_dir(self) -> Path:
+        """Root directory of the project (parent of fastapi_app/)"""
+        return Path(__file__).parent.parent
+
+    @property
+    def app_root_dir(self) -> Path:
+        """Root directory of the fastapi_app package"""
+        return Path(__file__).parent
+
+    @property
+    def plugins_code_dir(self) -> Path:
+        """Built-in backend plugins directory (fastapi_app/plugins/)"""
+        return self.app_root_dir / "plugins"
+
+    @property
+    def plugins_data_dir(self) -> Path:
         """Plugin data directory - always data_root/plugins"""
         return self.data_root / "plugins"
 
@@ -157,8 +172,7 @@ class Settings(BaseSettings):
         """Directory for log files. Configurable via LOG_DIR env var."""
         if self.LOG_DIR:
             return Path(self.LOG_DIR)
-        project_root = Path(__file__).parent.parent
-        return project_root / "log"
+        return self.project_root_dir / "log"
 
     @property
     def app_log_file(self) -> Path:

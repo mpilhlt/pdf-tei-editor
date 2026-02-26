@@ -17,7 +17,7 @@ Plugins can:
 Extend `ExtractionService` (or `BaseService` for custom services):
 
 ```python
-from fastapi_app.lib.service_registry import ExtractionService, ExtractionParams, ExtractionResult
+from fastapi_app.lib.services.service_registry import ExtractionService, ExtractionParams, ExtractionResult
 
 class MyExtractionService(ExtractionService):
     def __init__(self):
@@ -41,7 +41,7 @@ class MyExtractionService(ExtractionService):
 ### 2. Register During Plugin Initialization
 
 ```python
-from fastapi_app.lib.service_registry import get_service_registry
+from fastapi_app.lib.services.service_registry import get_service_registry
 
 async def initialize(self, context: PluginContext) -> None:
     service_registry = get_service_registry()
@@ -61,7 +61,7 @@ async def cleanup(self) -> None:
 ### Via PluginContext (Recommended)
 
 ```python
-from fastapi_app.lib.service_registry import ExtractionService
+from fastapi_app.lib.services.service_registry import ExtractionService
 
 async def my_endpoint(self, context: PluginContext, params: dict) -> dict:
     service = context.get_service("structured-data-extraction", ExtractionService)
@@ -87,7 +87,7 @@ async def my_endpoint(self, context: PluginContext, params: dict) -> dict:
 ### Via Direct Registry Access
 
 ```python
-from fastapi_app.lib.service_registry import get_service_registry, ExtractionService
+from fastapi_app.lib.services.service_registry import get_service_registry, ExtractionService
 
 service_registry = get_service_registry()
 service = service_registry.get_service("structured-data-extraction", ExtractionService)

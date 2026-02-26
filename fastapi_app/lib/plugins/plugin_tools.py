@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from fastapi_app.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,7 +97,7 @@ def _extract_sandbox_methods() -> list[dict[str, str]]:
         ]
     """
     # Find the sandbox module file
-    sandbox_file = Path(__file__).parent.parent.parent.parent / 'app' / 'src' / 'modules' / 'backend-plugin-sandbox.js'
+    sandbox_file = get_settings().project_root_dir / 'app' / 'src' / 'modules' / 'backend-plugin-sandbox.js'
 
     if not sandbox_file.exists():
         # Fallback to empty list if file not found

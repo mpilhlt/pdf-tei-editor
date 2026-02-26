@@ -16,14 +16,14 @@ For programmatic use, see [Configuration Processing Architecture](#configuration
 
 Configuration values are processed through a high-level API that abstracts storage details.
 
-#### `fastapi_app/lib/config_utils.py`
+#### `fastapi_app/lib/utils/config_utils.py`
 
 Provides a `Config` class and module-level configuration instance:
 
 **High-Level API (recommended)**:
 
 ```python
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 # Get config instance (lazy initialization)
 config = get_config()
@@ -48,7 +48,7 @@ The `get_config()` function returns a module-level config instance preconfigured
 For testing or custom db_dir:
 
 ```python
-from fastapi_app.lib.config_utils import Config
+from fastapi_app.lib.utils.config_utils import Config
 from pathlib import Path
 
 custom_config = Config(Path('/custom/db/dir'))
@@ -69,7 +69,7 @@ Configuration is accessed via `get_config()`:
 
 ```python
 from fastapi import APIRouter
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 
 router = APIRouter()
 
@@ -112,7 +112,7 @@ db_dir = settings.db_dir        # Path property
 **Setting Config Values**:
 
 ```python
-from fastapi_app.lib.config_utils import get_config
+from fastapi_app.lib.utils.config_utils import get_config
 from fastapi import HTTPException
 
 @router.post("/custom-config")

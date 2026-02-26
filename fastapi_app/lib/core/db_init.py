@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Dict
 import logging
 
+from fastapi_app.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -189,8 +191,7 @@ def ensure_db_initialized(
     """
     # Default config path is at project root (same level as fastapi_app/)
     if config_dir is None:
-        project_root = Path(__file__).parent.parent.parent.parent  # project root
-        config_dir = project_root / "config"
+        config_dir = get_settings().project_root_dir / "config"
 
     if db_dir is None:
         raise ValueError("db_dir must be provided (no default available)")

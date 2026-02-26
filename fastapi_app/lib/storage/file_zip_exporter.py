@@ -13,6 +13,7 @@ import logging
 import shutil
 import re
 
+from fastapi_app.config import get_settings
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.core.database import DatabaseManager
@@ -383,7 +384,7 @@ class FileZipExporter:
         logger.debug(f"Plugin ID: {plugin_id}, Relative path: {relative_path}")
 
         # Get the app's plugins directory
-        app_plugins_dir = Path(__file__).parent.parent.parent / 'fastapi_app' / 'plugins'
+        app_plugins_dir = get_settings().plugins_code_dir
         logger.debug(f"App plugins directory: {app_plugins_dir}")
 
         # The static URL maps to the plugin's static/ directory

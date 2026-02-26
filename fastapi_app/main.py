@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"DB directory: {settings.db_dir}")
 
     # Check for pending data restore (from backup-restore plugin)
-    project_root = Path(__file__).parent.parent
+    project_root = get_settings().project_root_dir
     data_restore_dir = project_root / "data_restore"
     data_was_restored = False
     if data_restore_dir.exists() and data_restore_dir.is_dir():
@@ -262,7 +262,7 @@ app.include_router(api_compat)
 
 # Static file serving
 # These must be mounted AFTER API routes to avoid conflicts
-project_root = Path(__file__).parent.parent
+project_root = get_settings().project_root_dir
 web_root = project_root / 'app' / 'web'
 
 # Development mode routes (conditionally mounted)

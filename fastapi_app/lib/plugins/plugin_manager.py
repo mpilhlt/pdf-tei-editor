@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from fastapi_app.config import get_settings
 from fastapi_app.lib.plugins.plugin_base import PluginContext
 from fastapi_app.lib.plugins.plugin_registry import PluginRegistry
 
@@ -57,7 +58,7 @@ class PluginManager:
         plugin_dirs: list[Path] = []
 
         # Built-in plugins directory
-        builtin_dir = Path(__file__).parent.parent / "plugins"
+        builtin_dir = get_settings().plugins_code_dir
         plugin_dirs.append(builtin_dir)
 
         # Additional plugin paths from environment
@@ -183,7 +184,7 @@ class PluginManager:
         plugin_dirs: list[Path] = []
 
         # Built-in plugins
-        builtin_dir = Path(__file__).parent.parent / "plugins"
+        builtin_dir = get_settings().plugins_code_dir
         plugin_dirs.append(builtin_dir)
 
         # Additional paths from environment
