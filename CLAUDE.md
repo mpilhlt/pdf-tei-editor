@@ -2,10 +2,11 @@
 
 This file provides guidance to code assistants when working with code in this repository.
 
-## General tone
+## General rules
 
 - ALWAYS be concise. Only include information that is relevant to the implementation. Omit any kind of motivational or congratulatory language. Do NOT use vocabulary such as "excellent", "brilliant", "great", etc.
 - If you think there might be a problem with the user's idea, push back. Don't assume the user's ideas are necessarily correct. Ask if you should go with their idea, but also suggest alternatives.
+- Your effort is precious, and you know how to write shell scripts. If you identify a repetitive workflow that requires you to parse text with a low signal-to-noise ratio, take the time to write helper scripts to automate or filter what can be automated or filtered.
 
 ## Detailed Documentation
 
