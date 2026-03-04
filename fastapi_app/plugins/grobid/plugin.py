@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 class GrobidPlugin(Plugin):
     """Plugin that provides GROBID-based extraction."""
 
+    def __init__(self) -> None:
+        """Initialize plugin and register configuration keys."""
+        from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
+
+        get_plugin_config(
+            "plugin.grobid.trainer-url",
+            "GROBID_TRAINER_URL",
+            default="http://localhost:8072",
+        )
+
     @property
     def metadata(self) -> dict[str, Any]:
         """Return plugin metadata."""
@@ -40,6 +50,13 @@ class GrobidPlugin(Plugin):
                     "state_params": ["collection"],
                     "required_roles": ["reviewer"],
                 },
+                {
+                    "name": "open_trainer_dashboard",
+                    "label": "Grobid Trainer",
+                    "description": "Manage Grobid model training and evaluation",
+                    "state_params": ["collection", "variant"],
+                    "required_roles": ["admin"],
+                },
             ],
             "dependencies": ["tei-wizard"],
         }
@@ -48,6 +65,7 @@ class GrobidPlugin(Plugin):
         """Return available endpoints."""
         return {
             "download_training": self.download_training,
+            "open_trainer_dashboard": self.open_trainer_dashboard,
         }
 
     @classmethod
@@ -176,3 +194,21 @@ class GrobidPlugin(Plugin):
             "downloadUrl": download_url,
             "collection": collection,
         }
+
+    async def open_trainer_dashboard(
+        self, context: PluginContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Open the Grobid Trainer dashboard.
+
+        Args:
+            context: Plugin context
+            params: Parameters including 'collection' and 'variant' from application state
+
+        Returns:
+            outputUrl pointing to the trainer dashboard route
+        """
+        collection = params.get("collection") or ""
+        variant = params.get("variant") or ""
+        url = f"/api/plugins/grobid/trainer/dashboard?collection={collection}&variant={variant}"
+        return {"outputUrl": url}

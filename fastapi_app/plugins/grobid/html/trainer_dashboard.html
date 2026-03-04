@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grobid Trainer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; margin: 0; padding: 0.75rem; color: #222; background: #fff; }
+    h2 { font-size: 0.9rem; font-weight: 600; margin: 0; }
+    section { margin-bottom: 0.75rem; border: 1px solid #dde; border-radius: 5px; overflow: hidden; }
+    .section-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.75rem; background: #f4f4f8; border-bottom: 1px solid #dde; }
+    .section-body { padding: 0.75rem; }
+
+    /* Badge */
+    .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 3px; font-size: 0.8em; font-weight: 500; white-space: nowrap; }
+    .badge-ok      { background: #d4edda; color: #155724; }
+    .badge-fail    { background: #f8d7da; color: #721c24; }
+    .badge-running { background: #cce5ff; color: #004085; }
+    .badge-done    { background: #d4edda; color: #155724; }
+    .badge-failed  { background: #f8d7da; color: #721c24; }
+    .badge-cancelled { background: #e2e3e5; color: #383d41; }
+
+    /* Details expander */
+    details { margin-top: 0.4rem; }
+    details summary { cursor: pointer; color: #666; font-size: 0.82em; user-select: none; }
+    .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin-top: 0.4rem; font-size: 0.82em; }
+    .detail-label { color: #666; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.87em; }
+    th { text-align: left; padding: 0.3rem 0.4rem; background: #f8f8fc; border-bottom: 2px solid #dde; white-space: nowrap; }
+    td { padding: 0.3rem 0.4rem; border-bottom: 1px solid #eef; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .no-data { color: #888; font-style: italic; font-size: 0.87em; padding: 0.4rem 0; }
+
+    /* Buttons */
+    button { cursor: pointer; padding: 0.2rem 0.55rem; border: 1px solid #bbb; border-radius: 3px; background: #fff; font-size: 0.82em; line-height: 1.4; }
+    button:hover { background: #f0f0f8; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .btn-danger { border-color: #c94040; color: #c00; }
+    .btn-danger:hover { background: #fdf0f0; }
+    .btn-primary { border-color: #2970b0; background: #2970b0; color: #fff; }
+    .btn-primary:hover { background: #1e5a94; border-color: #1e5a94; }
+    .btn-sm { padding: 0.15rem 0.4rem; font-size: 0.78em; }
+    .btn-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+
+    /* Forms */
+    .field { margin-bottom: 0.6rem; }
+    .field label { display: block; font-weight: 500; margin-bottom: 0.2rem; font-size: 0.85em; }
+    select, input[type=text], input[type=number] { width: 100%; padding: 0.25rem 0.4rem; border: 1px solid #ccc; border-radius: 3px; font-size: 0.87em; background: #fff; }
+    .form-row { display: flex; gap: 0.75rem; }
+    .form-row .field { flex: 1; }
+    .radio-group { display: flex; gap: 1rem; }
+    .radio-group label { font-weight: normal; display: flex; align-items: center; gap: 0.3rem; }
+    .checkbox-label { display: flex; align-items: center; gap: 0.4rem; font-weight: normal; font-size: 0.87em; margin-top: 0.2rem; }
+
+    /* Alert */
+    .alert { padding: 0.4rem 0.65rem; border-radius: 3px; margin-top: 0.5rem; font-size: 0.85em; }
+    .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .alert-error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .alert-info    { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+
+    .hidden { display: none !important; }
+    .muted { color: #888; font-size: 0.82em; }
+    .mono { font-family: monospace; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+<script>
+  const SESSION_ID        = "{{ SESSION_ID }}";
+  const COLLECTION        = "{{ COLLECTION }}";
+  const VARIANT           = "{{ VARIANT }}";
+  const VARIANT_MODEL_MAP = {{ VARIANT_MODEL_MAP }};
+  const BASE       = "/api/plugins/grobid/trainer";
+
+  function apiFetch(path, opts = {}) {
+    const url = BASE + path + (path.includes("?") ? "&" : "?") + "session_id=" + encodeURIComponent(SESSION_ID);
+    const headers = Object.assign({ "X-Session-ID": SESSION_ID }, opts.headers || {});
+    return fetch(url, Object.assign({}, opts, { headers }));
+  }
+
+  async function apiJson(path, opts = {}) {
+    const res = await apiFetch(path, opts);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || res.statusText);
+    }
+    return res.json();
+  }
+
+  function badge(status) {
+    const cls = {
+      running: "badge-running", done: "badge-done", failed: "badge-failed", cancelled: "badge-cancelled"
+    }[status] || "badge-cancelled";
+    return `<span class="badge ${cls}">${status}</span>`;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString();
+  }
+
+  function fmtDuration(secs) {
+    if (secs == null) return "—";
+    secs = Math.round(secs);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function elapsedSince(isoStart) {
+    if (!isoStart) return null;
+    return (Date.now() - new Date(isoStart).getTime()) / 1000;
+  }
+
+  function showAlert(el, msg, type) {
+    el.className = "alert alert-" + type;
+    el.textContent = msg;
+    el.classList.remove("hidden");
+  }
+
+  // ── Section 1: Service Status ──────────────────────────────────────────────
+
+  let healthData = null;
+  let modelList  = [];
+
+  function setStatusBadge(id, ok, label) {
+    const el = document.getElementById(id);
+    el.textContent = ok ? "✓ OK" : "✗ FAIL";
+    el.className = "badge " + (ok ? "badge-ok" : "badge-fail");
+    if (label) el.title = label;
+  }
+
+  async function loadHealth() {
+    // Trainer health
+    const trainerDetail = document.getElementById("trainer-detail-content");
+    try {
+      healthData = await apiJson("/api/health");
+      setStatusBadge("trainer-status-badge", true);
+      trainerDetail.innerHTML = `
+        <div class="detail-grid">
+          <span class="detail-label">Platform:</span><span>${healthData.platform || "—"}</span>
+          <span class="detail-label">JAR built:</span><span>${healthData.jar_built ? "✓ Yes" : "✗ No — run ./gradlew :grobid-trainer:shadowJar"}</span>
+          <span class="detail-label">Models:</span><span>${(healthData.models || []).length} available</span>
+          <span class="detail-label">GROBID root:</span><span class="mono">${healthData.grobid_root || "—"}</span>
+        </div>`;
+      modelList = healthData.models || [];
+      populateModelSelects();
+    } catch (e) {
+      setStatusBadge("trainer-status-badge", false);
+      trainerDetail.innerHTML = `<span style="color:#721c24">${e.message}</span>`;
+      document.getElementById("trainer-details").open = true;
+    }
+
+    // Extraction server health
+    const extractDetail = document.getElementById("extraction-detail-content");
+    try {
+      const exHealth = await apiJson("/api/extraction-health");
+      setStatusBadge("extraction-status-badge", exHealth.ok, exHealth.detail || "");
+      extractDetail.innerHTML = exHealth.ok
+        ? `<div class="detail-grid"><span class="detail-label">Version:</span><span class="mono">${exHealth.version || "—"}</span></div>`
+        : `<span style="color:#721c24">${exHealth.detail || "Unknown error"}</span>`;
+      if (!exHealth.ok) document.getElementById("extraction-details").open = true;
+    } catch (e) {
+      setStatusBadge("extraction-status-badge", false);
+      extractDetail.innerHTML = `<span style="color:#721c24">${e.message}</span>`;
+      document.getElementById("extraction-details").open = true;
+    }
+  }
+
+  // ── Section 2: Jobs ────────────────────────────────────────────────────────
+
+  let jobsTimer = null;
+
+  function extractModelFromCmd(cmd) {
+    if (!cmd) return "—";
+    // Eval job: contains EndToEndEvaluation followed by eval_type
+    const evalMatch = cmd.match(/EndToEndEvaluation\s+(\S+)/);
+    if (evalMatch) return "eval/" + evalMatch[1];
+    // Training job: onejar.jar <mode> <model_name> -gH ...
+    const trainMatch = cmd.match(/onejar\.jar\s+\d+\s+(\S+)/);
+    if (trainMatch) return trainMatch[1];
+    return "—";
+  }
+
+  function renderJobs(jobs) {
+    const tbody = document.getElementById("jobs-tbody");
+    const noJobs = document.getElementById("no-jobs");
+    if (!jobs || jobs.length === 0) {
+      tbody.innerHTML = "";
+      noJobs.classList.remove("hidden");
+      return;
+    }
+    noJobs.classList.add("hidden");
+    tbody.innerHTML = jobs.map(j => {
+      const isRunning = j.status === "running";
+      const stopBtn = isRunning
+        ? `<button class="btn-sm btn-danger" onclick="stopJob('${j.job_id}')">Stop</button>`
+        : "";
+      return `<tr>
+        <td class="mono">${j.job_id}</td>
+        <td>${badge(j.status)}</td>
+        <td>${extractModelFromCmd(j.cmd)}</td>
+        <td>${fmtTime(j.start_time)}</td>
+        <td>${j.status === "running" ? fmtDuration(elapsedSince(j.start_time)) + " ▸" : fmtDuration(j.duration_s)}</td>
+        <td>
+          <div class="btn-row">
+            ${stopBtn}
+            <button class="btn-sm" onclick="viewLog('${j.job_id}')">View Log</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function loadJobs() {
+    try {
+      const jobs = await apiJson("/api/jobs");
+      // Fetch full details in parallel to get untruncated cmd for model extraction
+      const detailed = await Promise.all(
+        jobs.map(j => apiJson("/api/jobs/" + encodeURIComponent(j.job_id)).catch(() => j))
+      );
+      renderJobs(detailed);
+    } catch (_) { /* silent */ }
+  }
+
+  async function stopJob(jobId) {
+    if (!confirm("Stop job " + jobId + "?")) return;
+    try {
+      await apiJson("/api/jobs/" + jobId + "/stop", { method: "POST" });
+      await loadJobs();
+    } catch (e) {
+      alert("Failed to stop job: " + e.message);
+    }
+  }
+
+  function viewLog(jobId) {
+    const url = BASE + "/log/" + jobId + "?session_id=" + encodeURIComponent(SESSION_ID);
+    window.open(url, "_blank", "width=900,height=600,resizable=yes,scrollbars=yes");
+  }
+
+  // ── Section 3: Start Job ───────────────────────────────────────────────────
+
+  let flavorData = {};
+
+  async function loadFlavors() {
+    try {
+      flavorData = await apiJson("/api/flavors");
+      updateFlavorSelect();
+      updateUploadFlavorSelect();
+    } catch (_) { /* silent */ }
+  }
+
+  function populateModelSelects() {
+    const suggested = VARIANT ? (VARIANT_MODEL_MAP[VARIANT] || null) : null;
+    ["train-model", "upload-model"].forEach(id => {
+      const sel = document.getElementById(id);
+      const prev = sel.value;
+      sel.innerHTML = modelList.map(m => `<option value="${m}">${m}</option>`).join("");
+      if (prev && modelList.includes(prev)) sel.value = prev;
+      else if (suggested && modelList.includes(suggested)) sel.value = suggested;
+    });
+    updateFlavorSelect();
+    updateUploadFlavorSelect();
+  }
+
+  function updateFlavorSelect() {
+    const model  = document.getElementById("train-model").value;
+    const sel    = document.getElementById("train-flavor");
+    const flavors = flavorData[model] || [];
+    sel.innerHTML = `<option value="">— default —</option>` +
+      flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+  }
+
+  function updateUploadFlavorSelect() {
+    const model   = document.getElementById("upload-model").value;
+    const sel     = document.getElementById("upload-flavor");
+    const flavors = flavorData[model] || [];
+    sel.innerHTML = `<option value="">— default —</option>` +
+      flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+  }
+
+  function onTypeChange() {
+    const isTraining = document.getElementById("type-train").checked;
+    document.getElementById("training-opts").classList.toggle("hidden", !isTraining);
+    document.getElementById("eval-opts").classList.toggle("hidden", isTraining);
+  }
+
+  function onModeChange() {
+    const mode = parseInt(document.getElementById("train-mode").value);
+    document.getElementById("seg-ratio-field").classList.toggle("hidden", mode !== 2);
+    document.getElementById("n-folds-field").classList.toggle("hidden", mode !== 3);
+  }
+
+  async function submitJob() {
+    const result_el = document.getElementById("train-result");
+    result_el.classList.add("hidden");
+    const isTraining = document.getElementById("type-train").checked;
+    try {
+      let data;
+      if (isTraining) {
+        const mode     = parseInt(document.getElementById("train-mode").value);
+        const model    = document.getElementById("train-model").value;
+        const flavor   = document.getElementById("train-flavor").value;
+        const incr     = document.getElementById("train-incremental").checked;
+        const body     = { mode, flavor, incremental: incr };
+        if (mode === 2) body.seg_ratio = parseFloat(document.getElementById("seg-ratio").value) || 0.8;
+        if (mode === 3) body.n_folds   = parseInt(document.getElementById("n-folds").value) || 10;
+        data = await apiJson("/api/train/" + encodeURIComponent(model), {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+      } else {
+        const evalType  = document.querySelector("input[name=eval-type]:checked").value;
+        const p2t       = document.getElementById("eval-p2t").value.trim();
+        const run       = document.getElementById("eval-run").checked;
+        const fileRatio = parseFloat(document.getElementById("eval-file-ratio").value) || 1.0;
+        const flavor    = document.getElementById("train-flavor").value;
+        if (!p2t) { showAlert(result_el, "Dataset path is required", "error"); return; }
+        data = await apiJson("/api/evaluate/" + evalType, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p2t, run, file_ratio: fileRatio, flavor })
+        });
+      }
+      showAlert(result_el,
+        `Job started: ${data.job_id}  — `,
+        "success"
+      );
+      const link = document.createElement("a");
+      link.href = "#";
+      link.textContent = "View Log";
+      link.onclick = (e) => { e.preventDefault(); viewLog(data.job_id); };
+      result_el.appendChild(link);
+      await loadJobs();
+    } catch (e) {
+      showAlert(result_el, "Error: " + e.message, "error");
+    }
+  }
+
+  // ── Section 4: Upload Training Data ───────────────────────────────────────
+
+  async function submitUpload() {
+    const result_el = document.getElementById("upload-result");
+    result_el.classList.add("hidden");
+    const model     = document.getElementById("upload-model").value;
+    const flavor    = document.getElementById("upload-flavor").value;
+    const batchName = document.getElementById("upload-batch-name").value.trim();
+    if (!COLLECTION) { showAlert(result_el, "No collection selected in the application", "error"); return; }
+    if (!model)      { showAlert(result_el, "Please select a model", "error"); return; }
+    try {
+      const data = await apiJson("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_name: model, flavor: flavor || null, collection: COLLECTION, variant: VARIANT, batch_name: batchName })
+      });
+      let msg = `Batch ${data.batch_id}: ${data.files_added_count} file(s) added, ${data.files_skipped_count} skipped.`;
+      if (data.docs_without_cache && data.docs_without_cache.length)
+        msg += ` (${data.docs_without_cache.length} doc(s) had no cached training data.)`;
+      showAlert(result_el, msg, "success");
+      await loadBatches();
+    } catch (e) {
+      showAlert(result_el, "Error: " + e.message, "error");
+    }
+  }
+
+  // ── Section 5: Upload Batches ──────────────────────────────────────────────
+
+  async function loadBatches() {
+    const tbody = document.getElementById("batches-tbody");
+    const noData = document.getElementById("no-batches");
+    try {
+      const batches = await apiJson("/api/uploads");
+      if (!batches || batches.length === 0) {
+        tbody.innerHTML = "";
+        noData.classList.remove("hidden");
+        return;
+      }
+      noData.classList.add("hidden");
+      tbody.innerHTML = batches.map(b => `<tr>
+        <td class="mono">${b.batch_id}</td>
+        <td>${b.model}</td>
+        <td>${b.flavor || "—"}</td>
+        <td>${fmtTime(b.timestamp)}</td>
+        <td>${b.files_added_count ?? "—"}</td>
+        <td>${b.batch_name || "—"}</td>
+        <td><button class="btn-sm btn-danger" onclick="revertBatch('${b.batch_id}')">Revert</button></td>
+      </tr>`).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="no-data">Failed to load batches: ${e.message}</td></tr>`;
+      noData.classList.add("hidden");
+    }
+  }
+
+  async function revertBatch(batchId) {
+    if (!confirm("Revert batch " + batchId + "? This permanently removes the uploaded files from the corpus.")) return;
+    try {
+      const data = await apiJson("/api/revert/" + batchId, { method: "POST" });
+      alert("Reverted. Files removed: " + (data.files_removed ? data.files_removed.length : 0));
+      await loadBatches();
+    } catch (e) {
+      alert("Failed to revert: " + e.message);
+    }
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    await loadHealth();
+    await loadFlavors();
+    await loadJobs();
+    await loadBatches();
+    jobsTimer = setInterval(loadJobs, 5000);
+    setInterval(loadHealth, 30000);
+  });
+</script>
+
+<!-- Section 1: Service Status -->
+<section>
+  <div class="section-head"><h2>Service Status</h2></div>
+  <div class="section-body" style="display:flex;flex-direction:column;gap:0.4rem">
+    <div style="display:flex;align-items:center;gap:0.5rem">
+      <span style="min-width:9rem;font-size:0.85em;color:#555">Trainer service</span>
+      <span id="trainer-status-badge" class="badge muted">…</span>
+      <details id="trainer-details" style="flex:1;margin:0">
+        <summary style="cursor:pointer;color:#666;font-size:0.82em;user-select:none">Details</summary>
+        <div id="trainer-detail-content"></div>
+      </details>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.5rem">
+      <span style="min-width:9rem;font-size:0.85em;color:#555">Extraction server</span>
+      <span id="extraction-status-badge" class="badge muted">…</span>
+      <details id="extraction-details" style="flex:1;margin:0">
+        <summary style="cursor:pointer;color:#666;font-size:0.82em;user-select:none">Details</summary>
+        <div id="extraction-detail-content"></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Jobs -->
+<section>
+  <div class="section-head"><h2>Jobs</h2></div>
+  <div class="section-body">
+    <table>
+      <thead><tr><th>Job ID</th><th>Status</th><th>Model / Eval</th><th>Started</th><th>Duration</th><th>Actions</th></tr></thead>
+      <tbody id="jobs-tbody"></tbody>
+    </table>
+    <p id="no-jobs" class="no-data hidden">No jobs yet.</p>
+  </div>
+</section>
+
+<!-- Section 3: Start Job -->
+<section>
+  <div class="section-head"><h2>Start Training / Evaluation</h2></div>
+  <div class="section-body">
+    <div class="field">
+      <label>Type</label>
+      <div class="radio-group">
+        <label><input type="radio" name="job-type" id="type-train" value="train" checked onchange="onTypeChange()"> Training</label>
+        <label><input type="radio" name="job-type" id="type-eval"  value="eval"  onchange="onTypeChange()"> End-to-end evaluation</label>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="train-model">Model</label>
+        <select id="train-model" onchange="updateFlavorSelect()"><option>Loading…</option></select>
+      </div>
+      <div class="field">
+        <label for="train-flavor">Flavor</label>
+        <select id="train-flavor"><option value="">— default —</option></select>
+      </div>
+    </div>
+
+    <!-- Training-specific options -->
+    <div id="training-opts">
+      <div class="field">
+        <label for="train-mode">Mode</label>
+        <select id="train-mode" onchange="onModeChange()">
+          <option value="0">0 — Train only (all corpus files)</option>
+          <option value="1">1 — Evaluate only</option>
+          <option value="2">2 — Auto-split: train + evaluate</option>
+          <option value="3">3 — N-fold cross-evaluation</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="field hidden" id="seg-ratio-field">
+          <label for="seg-ratio">Train/eval split ratio</label>
+          <input type="number" id="seg-ratio" value="0.8" min="0.1" max="0.99" step="0.05">
+        </div>
+        <div class="field hidden" id="n-folds-field">
+          <label for="n-folds">Number of folds</label>
+          <input type="number" id="n-folds" value="10" min="2" max="20">
+        </div>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" id="train-incremental"> Incremental (continue from existing model)</label>
+    </div>
+
+    <!-- Evaluation-specific options -->
+    <div id="eval-opts" class="hidden">
+      <div class="field">
+        <label>Evaluation format</label>
+        <div class="radio-group">
+          <label><input type="radio" name="eval-type" value="nlm" checked> NLM / JATS</label>
+          <label><input type="radio" name="eval-type" value="tei"> TEI</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="eval-p2t">Gold-standard dataset path (absolute)</label>
+        <input type="text" id="eval-p2t" placeholder="/data/PMC_sample_1943">
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="eval-file-ratio">File ratio (0–1)</label>
+          <input type="number" id="eval-file-ratio" value="1.0" min="0.01" max="1.0" step="0.05">
+        </div>
+        <div class="field" style="padding-top:1.4rem">
+          <label class="checkbox-label"><input type="checkbox" id="eval-run"> Run GROBID on PDFs first</label>
+        </div>
+      </div>
+    </div>
+
+    <div id="train-result" class="alert hidden"></div>
+    <div style="margin-top:0.6rem">
+      <button class="btn-primary" onclick="submitJob()">▶ Start</button>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Upload Training Data -->
+<section>
+  <div class="section-head"><h2>Upload Training Data from Collection</h2></div>
+  <div class="section-body">
+    <p id="upload-notice" class="alert alert-info hidden">
+      Select a collection and variant in the application to enable upload.
+    </p>
+    <div id="upload-form">
+      <p class="muted" style="margin:0 0 0.5rem">
+        Collection: <strong id="coll-label"></strong>&nbsp;&nbsp;
+        Variant: <strong id="var-label"></strong>
+      </p>
+      <div class="form-row">
+        <div class="field">
+          <label for="upload-model">Target model</label>
+          <select id="upload-model" onchange="updateUploadFlavorSelect()"><option>Loading…</option></select>
+        </div>
+        <div class="field">
+          <label for="upload-flavor">Flavor</label>
+          <select id="upload-flavor"><option value="">— default —</option></select>
+        </div>
+        <div class="field">
+          <label for="upload-batch-name">Batch name (optional)</label>
+          <input type="text" id="upload-batch-name" placeholder="e.g. initial load v1">
+        </div>
+      </div>
+      <div id="upload-result" class="alert hidden"></div>
+      <div style="margin-top:0.6rem">
+        <button class="btn-primary" onclick="submitUpload()">⬆ Upload</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Upload Batches -->
+<section>
+  <div class="section-head"><h2>Upload Batches</h2></div>
+  <div class="section-body">
+    <table>
+      <thead><tr><th>Batch ID</th><th>Model</th><th>Flavor</th><th>Timestamp</th><th>Files</th><th>Name</th><th></th></tr></thead>
+      <tbody id="batches-tbody"></tbody>
+    </table>
+    <p id="no-batches" class="no-data hidden">No upload batches.</p>
+  </div>
+</section>
+
+<script>
+  // Show upload form only when both collection and variant are set
+  const hasCollectionAndVariant = COLLECTION && VARIANT;
+  document.getElementById("upload-notice").classList.toggle("hidden",  hasCollectionAndVariant);
+  document.getElementById("upload-form").classList.toggle("hidden", !hasCollectionAndVariant);
+  if (hasCollectionAndVariant) {
+    document.getElementById("coll-label").textContent = COLLECTION;
+    document.getElementById("var-label").textContent  = VARIANT;
+    document.getElementById("upload-batch-name").value = COLLECTION;
+  }
+</script>
+
+</body>
+</html>

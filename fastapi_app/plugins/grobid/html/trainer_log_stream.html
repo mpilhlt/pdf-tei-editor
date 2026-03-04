@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Job Log</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; font-size: 13px; margin: 0; padding: 0.75rem; background: #1a1a1a; color: #e8e8e8; display: flex; flex-direction: column; height: 100vh; }
+    h1 { font-size: 0.95rem; margin: 0 0 0.5rem; color: #ccc; font-weight: 500; }
+    #status { font-size: 0.82em; color: #aaa; margin-bottom: 0.4rem; }
+    #log { flex: 1; overflow-y: auto; background: #111; border: 1px solid #333; border-radius: 4px; padding: 0.6rem; font-family: monospace; font-size: 0.82em; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+    .exit-ok   { color: #5cb85c; }
+    .exit-fail { color: #d9534f; }
+  </style>
+</head>
+<body>
+  <h1>Job Log — <span id="job-id-label"></span></h1>
+  <div id="status">Connecting…</div>
+  <pre id="log"></pre>
+
+  <script>
+    const SESSION_ID = "{{ SESSION_ID }}";
+    const JOB_ID     = "{{ JOB_ID }}";
+    const BASE       = "/api/plugins/grobid/trainer";
+
+    document.getElementById("job-id-label").textContent = JOB_ID;
+
+    const logEl    = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+
+    const streamUrl = BASE + "/api/jobs/" + encodeURIComponent(JOB_ID) + "/stream"
+      + "?session_id=" + encodeURIComponent(SESSION_ID);
+
+    const es = new EventSource(streamUrl);
+
+    es.onopen = () => { statusEl.textContent = "Streaming…"; };
+
+    es.onmessage = (e) => {
+      logEl.textContent += e.data + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    es.addEventListener("done", (e) => {
+      es.close();
+      const exitCode = (e.data || "").replace("exit_code=", "").trim();
+      const ok = exitCode === "0";
+      const span = document.createElement("span");
+      span.className = ok ? "exit-ok" : "exit-fail";
+      span.textContent = "\n[Job finished — exit code " + exitCode + "]";
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+      statusEl.textContent = "Done (exit code " + exitCode + ")";
+    });
+
+    es.addEventListener("error", (e) => {
+      if (e.data) {
+        const span = document.createElement("span");
+        span.className = "exit-fail";
+        span.textContent = "\n[Error: " + e.data + "]";
+        logEl.appendChild(span);
+      }
+      es.close();
+      statusEl.textContent = "Stream ended.";
+    });
+
+    es.onerror = () => {
+      es.close();
+      statusEl.textContent = "Connection lost.";
+    };
+  </script>
+</body>
+</html>

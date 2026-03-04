@@ -594,6 +594,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "flask" },
+    { name = "httpx" },
     { name = "jsonschema" },
     { name = "llamore" },
     { name = "lxml" },
@@ -628,6 +629,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.2" },
     { name = "flask", specifier = ">=3.1.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "llamore", git = "https://github.com/mpilhlt/llamore.git" },
     { name = "lxml", specifier = ">=5.3.1" },

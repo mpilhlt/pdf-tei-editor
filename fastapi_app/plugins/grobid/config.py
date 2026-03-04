@@ -26,6 +26,16 @@ def get_grobid_server_url() -> str | None:
     return url if url else None
 
 
+# Mapping from PDF-TEI editor variant ID to Grobid trainer model name.
+# The flavor cannot be determined from the variant name.
+VARIANT_TO_TRAINER_MODEL: dict[str, str] = {
+    "grobid.training.segmentation": "segmentation",
+    "grobid.training.references.referenceSegmenter": "reference-segmentation",
+    "grobid.training.references": "citation",
+    "grobid.service.fulltext": "fulltext",
+    "grobid.service.references": "citation",
+}
+
 # Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
     # Training variants (use /api/createTraining endpoint)
@@ -129,6 +139,26 @@ ANNOTATION_GUIDES = [
         "url": "https://pad.gwdg.de/s/1Oti-hJDb#reference-segmenter"
     }
 ]
+
+
+def get_grobid_trainer_url() -> str:
+    """
+    Get the Grobid Trainer service URL from config.
+
+    The config value is initialized from the GROBID_TRAINER_URL environment
+    variable by GrobidPlugin.__init__().
+
+    Returns:
+        The Grobid Trainer service URL.
+    """
+    config = get_config()
+    url = config.get("plugin.grobid.trainer-url")
+    return url if url else "http://localhost:8072"
+
+
+def get_variant_to_trainer_model() -> dict[str, str]:
+    """Return mapping from variant ID to Grobid trainer model name."""
+    return VARIANT_TO_TRAINER_MODEL.copy()
 
 
 def get_supported_variants() -> list[str]:

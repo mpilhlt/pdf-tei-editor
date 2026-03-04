@@ -1,7 +1,8 @@
 """
 Custom routes for GROBID plugin.
 
-Provides download endpoint for GROBID training data packages.
+Provides download endpoint for GROBID training data packages, and the Grobid
+Trainer dashboard for managing model training and evaluation.
 """
 
 import asyncio
@@ -11,9 +12,11 @@ import os
 import shutil
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+import httpx
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
@@ -23,8 +26,13 @@ from fastapi_app.lib.core.dependencies import (
     get_sse_service,
 )
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
-from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
-from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_supported_variants
+from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data, get_cache_dir
+from fastapi_app.plugins.grobid.config import (
+    get_grobid_server_url,
+    get_grobid_trainer_url,
+    get_supported_variants,
+    get_variant_to_trainer_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -375,3 +383,477 @@ async def download_training_package(
     except Exception as e:
         logger.error(f"Failed to generate GROBID training package: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Grobid Trainer Dashboard routes
+# ---------------------------------------------------------------------------
+
+# Mapping from Grobid trainer model names to training file suffixes (without hash prefix)
+_TRAINER_MODEL_SUFFIXES: dict[str, list[str]] = {
+    "segmentation": [".training.segmentation", ".training.segmentation.tei.xml"],
+    "header": [".training.header", ".training.header.tei.xml"],
+    "citation": [".training.references.tei.xml"],
+    "reference-segmentation": [
+        ".training.references.referenceSegmenter",
+        ".training.references.referenceSegmenter.tei.xml",
+    ],
+    "fulltext": [".training.fulltext", ".training.fulltext.tei.xml"],
+    "figure": [".training.figure.tei.xml"],
+    "table": [".training.table.tei.xml"],
+    "name-header": [".training.header.authors.tei.xml"],
+    "name-citation": [".training.references.authors.tei.xml"],
+    "affiliation-address": [".training.header.affiliation.tei.xml"],
+}
+
+
+def _authenticate_admin(
+    x_session_id: str | None,
+    session_id: str | None,
+    session_manager,
+    auth_manager,
+) -> tuple[str, dict]:
+    """Validate session and require admin role. Returns (session_id_value, user)."""
+    from fastapi_app.config import get_settings
+
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    roles = user.get("roles", [])
+    if "admin" not in roles:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    return session_id_value, user
+
+
+def _get_latest_cached_zip(doc_id: str) -> Path | None:
+    """Return the most recently modified training.zip for a doc_id, or None."""
+    cache_dir = get_cache_dir()
+    matches: list[tuple[float, Path]] = []
+    for p in cache_dir.iterdir():
+        if p.is_dir() and (p.name == doc_id or p.name.startswith(f"{doc_id}_")):
+            zip_path = p / "training.zip"
+            if zip_path.exists():
+                matches.append((zip_path.stat().st_mtime, zip_path))
+    if not matches:
+        return None
+    return max(matches)[1]
+
+
+async def _fetch_and_cache(
+    doc_id: str,
+    pdf_path: str | Path,
+    grobid_server_url: str,
+    flavor: str,
+    grobid_revision: str,
+) -> bool:
+    """Fetch training data from GROBID for one document and store it in the cache.
+
+    Returns True on success, False if the fetch failed.
+    """
+    from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+
+    extractor = GrobidTrainingExtractor()
+    try:
+        temp_dir, files = await asyncio.to_thread(
+            extractor._fetch_training_package,  # type: ignore[attr-defined]
+            str(pdf_path),
+            grobid_server_url,
+            flavor,
+        )
+        cache_training_data(doc_id, grobid_revision, temp_dir, files)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to fetch training data for {doc_id}: {e}")
+        return False
+
+
+async def _proxy_json(method: str, path: str, **kwargs) -> dict:
+    """Forward a JSON request to the Grobid Trainer service."""
+    url = get_grobid_trainer_url().rstrip("/") + path
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Grobid Trainer service is not reachable")
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", e.response.text)
+        except Exception:
+            detail = e.response.text
+        raise HTTPException(status_code=e.response.status_code, detail=detail)
+
+
+@router.get("/trainer/dashboard", response_class=HTMLResponse)
+async def trainer_dashboard(
+    collection: str = Query(""),
+    variant: str = Query(""),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> HTMLResponse:
+    """Serve the Grobid Trainer dashboard HTML page."""
+    from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
+
+    session_id_value, _ = _authenticate_admin(
+        x_session_id, session_id, session_manager, auth_manager
+    )
+    import json as _json
+    html = load_plugin_html(__file__, "trainer_dashboard.html")
+    html = html.replace("{{ SESSION_ID }}", session_id_value)
+    html = html.replace("{{ COLLECTION }}", collection)
+    html = html.replace("{{ VARIANT }}", variant)
+    html = html.replace("{{ VARIANT_MODEL_MAP }}", _json.dumps(get_variant_to_trainer_model()))
+    return HTMLResponse(content=html)
+
+
+@router.get("/trainer/log/{job_id}", response_class=HTMLResponse)
+async def trainer_log_stream_page(
+    job_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> HTMLResponse:
+    """Serve the SSE log viewer page for a job."""
+    from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
+
+    session_id_value, _ = _authenticate_admin(
+        x_session_id, session_id, session_manager, auth_manager
+    )
+    html = load_plugin_html(__file__, "trainer_log_stream.html", inject_sandbox=False)
+    html = html.replace("{{ SESSION_ID }}", session_id_value)
+    html = html.replace("{{ JOB_ID }}", job_id)
+    return HTMLResponse(content=html)
+
+
+@router.get("/trainer/api/extraction-health")
+async def trainer_extraction_health(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    """Return health status of the GROBID extraction server."""
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    url = get_grobid_server_url()
+    if not url:
+        return {"ok": False, "detail": "GROBID_SERVER_URL not configured"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{url.rstrip('/')}/api/version")
+            r.raise_for_status()
+            return {"ok": True, "version": r.text.strip()}
+    except httpx.ConnectError:
+        return {"ok": False, "detail": f"Cannot connect to {url}"}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)}
+
+
+@router.get("/trainer/api/health")
+async def trainer_health(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("GET", "/health")
+
+
+@router.get("/trainer/api/jobs")
+async def trainer_list_jobs(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> list:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("GET", "/jobs")
+
+
+@router.get("/trainer/api/jobs/{job_id}")
+async def trainer_get_job(
+    job_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("GET", f"/jobs/{job_id}")
+
+
+@router.post("/trainer/api/jobs/{job_id}/stop")
+async def trainer_stop_job(
+    job_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("POST", f"/jobs/{job_id}/stop")
+
+
+@router.get("/trainer/api/jobs/{job_id}/stream")
+async def trainer_stream_job(
+    job_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> StreamingResponse:
+    """Proxy SSE stream from Grobid Trainer service to the client."""
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    trainer_url = get_grobid_trainer_url().rstrip("/")
+
+    async def event_generator():
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "GET", f"{trainer_url}/jobs/{job_id}/stream"
+                ) as response:
+                    async for chunk in response.aiter_text():
+                        yield chunk
+        except httpx.ConnectError:
+            yield "event: error\ndata: Grobid Trainer service is not reachable\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/trainer/api/flavors")
+async def trainer_list_flavors(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("GET", "/flavors")
+
+
+@router.post("/trainer/api/train/{model_name}")
+async def trainer_start_training(
+    model_name: str,
+    body: dict = Body(default={}),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("POST", f"/train/{model_name}", json=body)
+
+
+@router.post("/trainer/api/evaluate/{eval_type}")
+async def trainer_start_evaluation(
+    eval_type: str,
+    body: dict = Body(default={}),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("POST", f"/evaluate/{eval_type}", json=body)
+
+
+@router.get("/trainer/api/uploads")
+async def trainer_list_uploads(
+    model: str | None = Query(None),
+    flavor: str | None = Query(None),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> list:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    params = {}
+    if model:
+        params["model"] = model
+    if flavor:
+        params["flavor"] = flavor
+    return await _proxy_json("GET", "/uploads", params=params)
+
+
+@router.get("/trainer/api/uploads/{batch_id}")
+async def trainer_get_upload(
+    batch_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("GET", f"/uploads/{batch_id}")
+
+
+@router.post("/trainer/api/revert/{batch_id}")
+async def trainer_revert_upload(
+    batch_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("POST", f"/revert/{batch_id}")
+
+
+@router.post("/trainer/api/upload")
+async def trainer_upload_collection(
+    body: dict = Body(...),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+    db=Depends(get_db),
+    file_storage=Depends(get_file_storage),
+) -> dict:
+    """
+    Package GROBID training data for a collection and upload to the Grobid Trainer
+    service. Uses cached data when available; fetches from GROBID for documents that
+    have not yet been cached.
+
+    Body fields:
+        model_name: Target Grobid model (e.g. "segmentation")
+        collection: PDF-TEI editor collection ID
+        flavor: Grobid trainer flavor (optional)
+        variant: Application variant identifier (not used as flavor)
+        batch_name: Optional human-readable label for the uploaded batch
+    """
+    from fastapi_app.lib.repository.file_repository import FileRepository
+
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+
+    model_name = body.get("model_name", "").strip()
+    collection = body.get("collection", "").strip()
+    variant = body.get("variant", "").strip()
+    flavor = (body.get("flavor") or "").strip()
+    batch_name = body.get("batch_name", "").strip()
+
+    if not model_name:
+        raise HTTPException(status_code=422, detail="model_name is required")
+    if not collection:
+        raise HTTPException(status_code=422, detail="collection is required")
+
+    suffixes = _TRAINER_MODEL_SUFFIXES.get(model_name)
+    if suffixes is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown model '{model_name}'. Known models: {list(_TRAINER_MODEL_SUFFIXES)}"
+        )
+
+    file_repo = FileRepository(db)
+    all_files = file_repo.get_files_by_collection(collection)
+    pdf_files = [f for f in all_files if f.file_type == "pdf" and not f.deleted]
+
+    if not pdf_files:
+        raise HTTPException(status_code=404, detail="No PDF files in collection")
+
+    # Resolve GROBID server for on-demand fetching when cache is missing
+    grobid_server_url = get_grobid_server_url()
+    grobid_revision = "unknown"
+    grobid_available = False
+    if grobid_server_url:
+        from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+        try:
+            _, grobid_revision = GrobidTrainingExtractor()._get_grobid_version(grobid_server_url)
+            grobid_available = True
+        except Exception as e:
+            logger.warning(f"GROBID server unreachable at {grobid_server_url}: {e}")
+
+    # Build the upload ZIP in memory
+    upload_buffer = io.BytesIO()
+    files_added: list[str] = []
+    docs_without_cache: list[str] = []
+    docs_fetch_failed: list[str] = []
+
+    with zipfile.ZipFile(upload_buffer, "w", zipfile.ZIP_DEFLATED) as out_zip:
+        for pdf in pdf_files:
+            doc_id = pdf.doc_id
+            if not doc_id:
+                continue
+
+            cached_zip_path = _get_latest_cached_zip(doc_id)
+            if cached_zip_path is None and grobid_available:
+                pdf_path = file_storage.get_file_path(pdf.id, "pdf")
+                if pdf_path:
+                    ok = await _fetch_and_cache(
+                        doc_id, pdf_path, grobid_server_url,
+                        flavor or "default", grobid_revision,
+                    )
+                    if ok:
+                        cached_zip_path = _get_latest_cached_zip(doc_id)
+                    else:
+                        docs_fetch_failed.append(doc_id)
+
+            if cached_zip_path is None:
+                docs_without_cache.append(doc_id)
+                continue
+
+            with zipfile.ZipFile(cached_zip_path, "r") as src_zip:
+                for name in src_zip.namelist():
+                    # Strip hash prefix: "hash.training.segmentation.tei.xml" → ".training.segmentation.tei.xml"
+                    dot_idx = name.find(".")
+                    if dot_idx == -1:
+                        continue
+                    suffix = name[dot_idx:]  # e.g. ".training.segmentation.tei.xml"
+                    if suffix not in suffixes:
+                        continue
+                    new_name = doc_id + suffix
+                    data = src_zip.read(name)
+                    out_zip.writestr(new_name, data)
+                    files_added.append(new_name)
+
+    if not files_added:
+        parts = [f"No matching training files found for model '{model_name}'."]
+        if not grobid_server_url:
+            parts.append("GROBID server URL is not configured (GROBID_SERVER_URL); cannot fetch missing training data.")
+        elif not grobid_available:
+            parts.append(f"GROBID server at {grobid_server_url} was unreachable.")
+        if docs_fetch_failed:
+            parts.append(f"{len(docs_fetch_failed)} document(s) failed to fetch from GROBID.")
+        if docs_without_cache:
+            parts.append(f"{len(docs_without_cache)} document(s) had no cached training data.")
+        raise HTTPException(status_code=404, detail=" ".join(parts))
+
+    upload_buffer.seek(0)
+    zip_bytes = upload_buffer.read()
+
+    trainer_url = get_grobid_trainer_url().rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{trainer_url}/upload/{model_name}",
+                files={"file": ("training.zip", zip_bytes, "application/zip")},
+                data={"flavor": flavor, "batch_name": batch_name},
+            )
+            response.raise_for_status()
+            result = response.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Grobid Trainer service is not reachable")
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", e.response.text)
+        except Exception:
+            detail = e.response.text
+        raise HTTPException(status_code=e.response.status_code, detail=detail)
+
+    if docs_without_cache:
+        result["docs_without_cache"] = docs_without_cache
+
+    return result
