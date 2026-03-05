@@ -37,7 +37,7 @@ class GrobidPlugin(Plugin):
         """Return plugin metadata."""
         return {
             "id": "grobid",
-            "name": "GROBID Extractor",
+            "name": "GROBID",
             "description": "Extract training data using GROBID server",
             "category": "extractor",
             "version": "1.0.0",

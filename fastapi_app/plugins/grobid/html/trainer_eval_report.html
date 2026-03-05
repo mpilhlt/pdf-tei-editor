@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Evaluation Comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; margin: 0; padding: 0.75rem; color: #222; background: #fff; }
+    h1 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+    .sub { color: #666; font-weight: normal; font-size: 0.9em; }
+
+    /* Controls */
+    .controls { display: flex; align-items: flex-start; gap: 1.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+    .control-group label { font-size: 0.8em; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+    .radio-row { display: flex; gap: 0.75rem; }
+    .radio-row label { font-weight: normal; display: flex; align-items: center; gap: 0.25rem; font-size: 0.87em; }
+    .model-list { display: flex; flex-direction: column; gap: 0.2rem; max-height: 8rem; overflow-y: auto; }
+    .model-list label { font-weight: normal; display: flex; align-items: center; gap: 0.4rem; font-size: 0.87em; cursor: pointer; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.87em; }
+    th { text-align: left; padding: 0.3rem 0.5rem; background: #f8f8fc; border-bottom: 2px solid #dde; white-space: nowrap; }
+    td { padding: 0.28rem 0.5rem; border-bottom: 1px solid #eef; vertical-align: middle; font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+    tr.summary-sep td { border-top: 2px solid #ccc; }
+    .label-col { color: #444; font-family: monospace; font-size: 0.9em; }
+    .num { text-align: right; }
+    .delta-pos { color: #197a35; font-weight: 600; }
+    .delta-neg { color: #c00; font-weight: 600; }
+    .delta-zero { color: #888; }
+
+    .no-data { color: #888; font-style: italic; padding: 1rem 0; }
+    button { cursor: pointer; padding: 0.2rem 0.55rem; border: 1px solid #bbb; border-radius: 3px; background: #fff; font-size: 0.82em; }
+    button:hover { background: #f0f0f8; }
+    .btn-sm { padding: 0.15rem 0.4rem; font-size: 0.78em; }
+    #refresh-btn { margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<script>
+  const SESSION_ID = "{{ SESSION_ID }}";
+  const MODEL      = "{{ MODEL }}";
+  const FLAVOR     = "{{ FLAVOR }}";
+  const FILE       = "{{ FILE }}";
+
+  // ── Read sessionStorage caches ────────────────────────────────────────────
+
+  function loadStore(key) {
+    try { return JSON.parse(sessionStorage.getItem(key) || "{}"); } catch (_) { return {}; }
+  }
+
+  /**
+   * Build a list of evaluation entries by joining the three caches.
+   * Each entry: { jobId, filename, label, preset, timestamp, rows }
+   */
+  function buildEntries() {
+    const evalByJob  = loadStore("grobid_eval_by_job");
+    const jobCache   = loadStore("grobid_trainer_jobs");
+    const labelStore = loadStore("grobid_model_labels");
+
+    const entries = [];
+    for (const [jobId, evalData] of Object.entries(evalByJob)) {
+      const meta     = jobCache[jobId] || {};
+      const filename = meta.trained_model_file || meta.evaluated_file || null;
+      const label    = filename ? (labelStore[filename] || filename) : jobId;
+      const model    = meta.model || "";
+      const flavor   = meta.flavor || "";
+      entries.push({ jobId, filename, label, preset: meta.preset || "—", model, flavor, timestamp: evalData.timestamp, rows: evalData.rows });
+    }
+    // Sort newest first
+    entries.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+    return entries;
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────
+
+  let allEntries = [];
+  let selectedIds = new Set();
+  let metric = "f1";
+
+  const SUMMARY_LABELS = ["all (micro avg.)", "all (macro avg.)"];
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  function renderHeading() {
+    if (FILE) {
+      const label = allEntries.length ? allEntries[0].label : FILE;
+      document.getElementById("heading").textContent = "Evaluation — " + label;
+    } else {
+      const parts = [MODEL || "all models"];
+      if (FLAVOR) parts.push(FLAVOR);
+      document.getElementById("heading").textContent = "Evaluation Comparison — " + parts.join(" / ");
+    }
+  }
+
+  function renderModelList() {
+    const ul = document.getElementById("model-list");
+    ul.innerHTML = allEntries.map(e => {
+      const checked = selectedIds.has(e.jobId) ? "checked" : "";
+      const ts = e.timestamp ? new Date(e.timestamp).toLocaleString() : "";
+      return `<label>
+        <input type="checkbox" value="${e.jobId}" ${checked} onchange="onModelToggle(this)">
+        <span>${escHtml(e.label)}</span>
+        <span style="color:#aaa;font-size:0.8em">${ts}</span>
+      </label>`;
+    }).join("");
+  }
+
+  function renderTable() {
+    const container = document.getElementById("table-container");
+    const selected = allEntries.filter(e => selectedIds.has(e.jobId));
+
+    if (selected.length === 0) {
+      container.innerHTML = `<p class="no-data">Select at least one model to display.</p>`;
+      return;
+    }
+
+    // Union of all non-summary labels (preserving order from first entry)
+    const labelOrder = [];
+    const labelSet = new Set();
+    for (const e of selected) {
+      for (const r of e.rows) {
+        if (!SUMMARY_LABELS.includes(r.label) && !labelSet.has(r.label)) {
+          labelSet.add(r.label);
+          labelOrder.push(r.label);
+        }
+      }
+    }
+    const allLabels = [...labelOrder, ...SUMMARY_LABELS.filter(sl => selected.some(e => e.rows.some(r => r.label === sl)))];
+
+    // Build lookup: entry.jobId → label → row
+    function getVal(entry, rowLabel) {
+      const row = entry.rows.find(r => r.label === rowLabel);
+      return row ? row[metric] : null;
+    }
+
+    const showDelta = selected.length === 2;
+
+    // Header
+    let html = `<table><thead><tr><th>Label</th>`;
+    for (const e of selected) html += `<th class="num">${escHtml(e.label)}</th>`;
+    if (showDelta) html += `<th class="num">Δ</th>`;
+    html += `</tr></thead><tbody>`;
+
+    // Rows
+    for (let i = 0; i < allLabels.length; i++) {
+      const lbl = allLabels[i];
+      const isSummary = SUMMARY_LABELS.includes(lbl);
+      const isFirstSummary = isSummary && (i === 0 || !SUMMARY_LABELS.includes(allLabels[i - 1]));
+      const sepClass = isFirstSummary ? ` class="summary-sep"` : "";
+      html += `<tr${sepClass}><td class="label-col">${escHtml(lbl)}</td>`;
+      const vals = selected.map(e => getVal(e, lbl));
+      for (const v of vals) {
+        html += `<td class="num">${v != null ? v.toFixed(2) : "—"}</td>`;
+      }
+      if (showDelta) {
+        const [a, b] = vals;
+        if (a != null && b != null) {
+          const d = b - a;
+          const cls = d > 0 ? "delta-pos" : d < 0 ? "delta-neg" : "delta-zero";
+          const sign = d > 0 ? "+" : "";
+          html += `<td class="num ${cls}">${sign}${d.toFixed(2)}</td>`;
+        } else {
+          html += `<td class="num delta-zero">—</td>`;
+        }
+      }
+      html += `</tr>`;
+    }
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+
+  function renderDetailTable() {
+    const container = document.getElementById("table-container");
+    const entry = allEntries[0];
+    if (!entry) {
+      container.innerHTML = `<p class="no-data">No evaluation data for this file.</p>`;
+      return;
+    }
+    const nonSummary = entry.rows.filter(r => !SUMMARY_LABELS.includes(r.label));
+    const summary    = entry.rows.filter(r =>  SUMMARY_LABELS.includes(r.label));
+    const rows = [...nonSummary, ...summary];
+    let html = `<table><thead><tr>
+      <th>Label</th><th class="num">Accuracy</th><th class="num">Precision</th>
+      <th class="num">Recall</th><th class="num">F1</th><th class="num">Support</th>
+    </tr></thead><tbody>`;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const isFirstSummary = SUMMARY_LABELS.includes(r.label) && (i === 0 || !SUMMARY_LABELS.includes(rows[i-1].label));
+      const sepClass = isFirstSummary ? ` class="summary-sep"` : "";
+      html += `<tr${sepClass}>
+        <td class="label-col">${escHtml(r.label)}</td>
+        <td class="num">${r.accuracy.toFixed(2)}</td>
+        <td class="num">${r.precision.toFixed(2)}</td>
+        <td class="num">${r.recall.toFixed(2)}</td>
+        <td class="num">${r.f1.toFixed(2)}</td>
+        <td class="num">${r.support}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+
+  function copyAsTsv() {
+    const entry = allEntries[0];
+    if (!entry) return;
+    const nonSummary = entry.rows.filter(r => !SUMMARY_LABELS.includes(r.label));
+    const summary    = entry.rows.filter(r =>  SUMMARY_LABELS.includes(r.label));
+    const rows = [...nonSummary, ...summary];
+    const lines = ["Label\tAccuracy\tPrecision\tRecall\tF1\tSupport"];
+    for (const r of rows) lines.push(`${r.label}\t${r.accuracy.toFixed(2)}\t${r.precision.toFixed(2)}\t${r.recall.toFixed(2)}\t${r.f1.toFixed(2)}\t${r.support}`);
+    navigator.clipboard.writeText(lines.join("\n"));
+  }
+
+  function render() {
+    if (FILE) {
+      renderHeading();
+      renderDetailTable();
+    } else {
+      renderModelList();
+      renderTable();
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // ── Event handlers ────────────────────────────────────────────────────────
+
+  function onModelToggle(cb) {
+    if (cb.checked) selectedIds.add(cb.value);
+    else selectedIds.delete(cb.value);
+    renderTable();
+  }
+
+  function onMetricChange(val) {
+    metric = val;
+    renderTable();
+  }
+
+  function refresh() {
+    allEntries = buildEntries();
+    // Filter to model/flavor if provided; fall back to all if none match
+    let filtered = MODEL ? allEntries.filter(e => (!e.model || e.model === MODEL) && (!FLAVOR || e.flavor === FLAVOR)) : allEntries;
+    if (FILE) filtered = allEntries.filter(e => e.filename === FILE);
+    const display = filtered.length ? filtered : allEntries;
+    // Keep existing selections valid; select all by default if nothing selected
+    selectedIds = new Set(display.map(e => e.jobId).filter(id => !selectedIds.size || selectedIds.has(id)));
+    if (!selectedIds.size) selectedIds = new Set(display.map(e => e.jobId));
+    allEntries = display;
+    render();
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (FILE) {
+      document.querySelector(".controls").style.display = "none";
+      document.getElementById("copy-btn").style.display = "inline-block";
+    }
+    renderHeading();
+    refresh();
+  });
+</script>
+
+<h1 id="heading">Evaluation Comparison</h1>
+<button id="refresh-btn" class="btn-sm" onclick="refresh()">↻ Refresh</button>
+<button id="copy-btn" class="btn-sm" onclick="copyAsTsv()" style="display:none">⎘ Copy as TSV</button>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Metric</label>
+    <div class="radio-row">
+      <label><input type="radio" name="metric" value="f1" checked onchange="onMetricChange('f1')"> F1</label>
+      <label><input type="radio" name="metric" value="precision" onchange="onMetricChange('precision')"> Precision</label>
+      <label><input type="radio" name="metric" value="recall" onchange="onMetricChange('recall')"> Recall</label>
+      <label><input type="radio" name="metric" value="accuracy" onchange="onMetricChange('accuracy')"> Accuracy</label>
+    </div>
+  </div>
+  <div class="control-group">
+    <label>Compare</label>
+    <div id="model-list" class="model-list"></div>
+  </div>
+</div>
+
+<div id="table-container"></div>
+
+</body>
+</html>

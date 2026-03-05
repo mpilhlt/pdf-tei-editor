@@ -64,6 +64,10 @@
     .hidden { display: none !important; }
     .muted { color: #888; font-size: 0.82em; }
     .mono { font-family: monospace; font-size: 0.9em; }
+
+    /* Training run subsection */
+    .training-run-body { padding-top: 0.6rem; border-top: 1px solid #eef; margin-top: 0.6rem; }
+    details.train-run > summary { font-weight: 500; font-size: 0.87em; color: #2970b0; cursor: pointer; user-select: none; padding: 0.3rem 0; }
   </style>
 </head>
 <body>
@@ -113,6 +117,56 @@
     return `${s}s`;
   }
 
+  function parseNum(s) {
+    return parseFloat(s.replace(/\./g, "").replace(",", "."));
+  }
+
+  function applyLogLine(line, state) {
+    const maxM = line.match(/nb max iterations:\s*(\d+)/);
+    if (maxM) state.maxIter = parseInt(maxM[1]);
+    const iterM = line.match(/^\s*\[\s*(\d+)\]\s+obj=([\d.,]+)\s+act=\d+\s+err=\s*([\d.,]+)%.*time=([\d.,]+)s\/([\d.,]+)s/);
+    if (!iterM) return;
+    state.curIter  = parseInt(iterM[1]);
+    state.obj      = parseNum(iterM[2]);
+    state.err      = parseNum(iterM[3]);
+    state.durations.push(parseNum(iterM[4]));
+    if (state.durations.length > 10) state.durations.shift();
+    state.cumSecs  = parseNum(iterM[5]);
+    const avg      = state.durations.reduce((a, b) => a + b, 0) / state.durations.length;
+    state.etaSecs  = (state.maxIter - state.curIter) * avg;
+  }
+
+  async function openJobStream(jobId) {
+    if (jobStreams.hasOwnProperty(jobId)) return;  // already open or in-progress
+    jobStreams[jobId] = null;                       // mark as in-progress
+    const state = { maxIter: 0, curIter: 0, cumSecs: 0, etaSecs: 0, durations: [] };
+    jobProgress[jobId] = state;
+    try {
+      const detail = await apiJson("/api/jobs/" + encodeURIComponent(jobId));
+      for (const line of (detail.log || "").split("\n")) applyLogLine(line, state);
+    } catch (_) {}
+    const url = BASE + "/api/jobs/" + encodeURIComponent(jobId) + "/stream"
+      + "?session_id=" + encodeURIComponent(SESSION_ID);
+    const es = new EventSource(url);
+    jobStreams[jobId] = es;
+    es.onmessage = (e) => { applyLogLine(e.data, state); renderJobs(_lastJobs); };
+    es.addEventListener("done", () => closeJobStream(jobId));
+    es.onerror = () => closeJobStream(jobId);
+  }
+
+  function closeJobStream(jobId) {
+    const es = jobStreams[jobId];
+    if (es && es.close) es.close();
+    delete jobStreams[jobId];
+  }
+
+  function fmtBytes(bytes) {
+    if (bytes == null) return "—";
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + " KB";
+    return bytes + " B";
+  }
+
   function elapsedSince(isoStart) {
     if (!isoStart) return null;
     return (Date.now() - new Date(isoStart).getTime()) / 1000;
@@ -128,7 +182,6 @@
 
   let healthData = null;
   let modelList  = [];
-  let modelFiles = [];
 
   function setStatusBadge(id, ok, label) {
     const el = document.getElementById(id);
@@ -138,7 +191,6 @@
   }
 
   async function loadHealth() {
-    // Trainer health
     const trainerDetail = document.getElementById("trainer-detail-content");
     try {
       healthData = await apiJson("/api/health");
@@ -158,7 +210,6 @@
       document.getElementById("trainer-details").open = true;
     }
 
-    // Extraction server health
     const extractDetail = document.getElementById("extraction-detail-content");
     try {
       const exHealth = await apiJson("/api/extraction-health");
@@ -174,80 +225,9 @@
     }
   }
 
-  // ── Section 2: Jobs ───────────────────────────────────────────────────────
+  // ── Section 2: Model Files ─────────────────────────────────────────────────
 
-  let jobsTimer = null;
-
-  function extractModelFromCmd(cmd) {
-    if (!cmd) return "—";
-    // Eval job: contains EndToEndEvaluation followed by eval_type
-    const evalMatch = cmd.match(/EndToEndEvaluation\s+(\S+)/);
-    if (evalMatch) return "eval/" + evalMatch[1];
-    // Training job: onejar.jar <mode> <model_name> -gH ...
-    const trainMatch = cmd.match(/onejar\.jar\s+\d+\s+(\S+)/);
-    if (trainMatch) return trainMatch[1];
-    return "—";
-  }
-
-  function renderJobs(jobs) {
-    const tbody = document.getElementById("jobs-tbody");
-    const noJobs = document.getElementById("no-jobs");
-    if (!jobs || jobs.length === 0) {
-      tbody.innerHTML = "";
-      noJobs.classList.remove("hidden");
-      return;
-    }
-    noJobs.classList.add("hidden");
-    tbody.innerHTML = jobs.map(j => {
-      const isRunning = j.status === "running";
-      const stopBtn = isRunning
-        ? `<button class="btn-sm btn-danger" onclick="stopJob('${j.job_id}')">Stop</button>`
-        : "";
-      return `<tr>
-        <td class="mono">${j.job_id}</td>
-        <td>${badge(j.status)}</td>
-        <td>${extractModelFromCmd(j.cmd)}</td>
-        <td class="mono">${j.trained_model_file || "—"}</td>
-        <td>${fmtTime(j.start_time)}</td>
-        <td>${j.status === "running" ? fmtDuration(elapsedSince(j.start_time)) + " ▸" : fmtDuration(j.duration_s)}</td>
-        <td>
-          <div class="btn-row">
-            ${stopBtn}
-            <button class="btn-sm" onclick="viewLog('${j.job_id}')">View Log</button>
-          </div>
-        </td>
-      </tr>`;
-    }).join("");
-  }
-
-  async function loadJobs() {
-    try {
-      const jobs = await apiJson("/api/jobs");
-      // Fetch full details in parallel to get untruncated cmd for model extraction
-      const detailed = await Promise.all(
-        jobs.map(j => apiJson("/api/jobs/" + encodeURIComponent(j.job_id)).catch(() => j))
-      );
-      renderJobs(detailed);
-    } catch (_) { /* silent */ }
-  }
-
-  async function stopJob(jobId) {
-    if (!confirm("Stop job " + jobId + "?")) return;
-    try {
-      await apiJson("/api/jobs/" + jobId + "/stop", { method: "POST" });
-      await loadJobs();
-    } catch (e) {
-      alert("Failed to stop job: " + e.message);
-    }
-  }
-
-  function viewLog(jobId) {
-    const url = BASE + "/log/" + jobId + "?session_id=" + encodeURIComponent(SESSION_ID);
-    window.open(url, "_blank", "width=900,height=600,resizable=yes,scrollbars=yes");
-  }
-
-  // ── Section 3: Start Job ───────────────────────────────────────────────────
-
+  let modelFiles = [];
   let flavorData = {};
 
   async function loadFlavors() {
@@ -269,15 +249,16 @@
     });
     updateFlavorSelect();
     updateUploadFlavorSelect();
-    loadModelFiles();
   }
 
   function updateFlavorSelect() {
     const model  = document.getElementById("train-model").value;
     const sel    = document.getElementById("train-flavor");
+    const prev   = sel.value;
     const flavors = flavorData[model] || [];
     sel.innerHTML = `<option value="">— default —</option>` +
       flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+    if (prev && flavors.includes(prev)) sel.value = prev;
     loadModelFiles();
   }
 
@@ -292,39 +273,50 @@
     } catch (_) {
       modelFiles = [];
     }
-    populateModelFileSelect();
+    renderModelFilesTable();
   }
 
-  function populateModelFileSelect() {
-    const sel = document.getElementById("train-model-file");
-    const prev = sel.value;
-    const timestamped = modelFiles.filter(f => f.name !== "model.wapiti");
-    sel.innerHTML =
-      `<option value="new">Temporary model</option>` +
-      `<option value="model.wapiti">Active model</option>` +
-      timestamped.map(f => `<option value="${f.name}">${f.name}</option>`).join("");
-    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-    else sel.value = "new";
-    onModelFileChange();
-  }
-
-  function onModelFileChange() {
-    const val   = document.getElementById("train-model-file").value;
-    const mode1 = document.querySelector("#train-mode option[value='1']");
-    const isNew = (val === "new");
-    mode1.disabled = isNew;
-    if (isNew && document.getElementById("train-mode").value === "1") {
-      document.getElementById("train-mode").value = "0";
-      onModeChange();
+  function renderModelFilesTable() {
+    const tbody  = document.getElementById("model-files-tbody");
+    const noData = document.getElementById("no-model-files");
+    if (!modelFiles.length) {
+      tbody.innerHTML = "";
+      noData.classList.remove("hidden");
+      return;
     }
-    document.getElementById("delete-model-file-btn").disabled =
-      (val === "new" || val === "model.wapiti");
+    noData.classList.add("hidden");
+    tbody.innerHTML = modelFiles.map(f => {
+      const activeBadge = f.is_active
+        ? `<span class="badge badge-ok">Active</span>`
+        : `<span class="muted">–</span>`;
+      const label     = getModelLabel(f.name);
+      const jobCache  = _loadJobCache();
+      const evalByJob = JSON.parse(sessionStorage.getItem("grobid_eval_by_job") || "{}");
+      const hasEval   = Object.entries(jobCache).some(([jid, m]) => (m.trained_model_file === f.name || m.evaluated_file === f.name) && evalByJob[jid]);
+      const labelText = label || `<span class="muted">—</span>`;
+      const evalCell  = hasEval ? `<span title="Eval data available">✓</span>` : `<span class="muted">—</span>`;
+      const evalBtn    = `<button class="btn-sm" onclick="submitModelEval('${f.name}')">Eval</button>`;
+      const evalDetail = hasEval ? `<button class="btn-sm" onclick="openEvalDetail('${f.name}')">📊</button>` : "";
+      const labelBtn  = `<button class="btn-sm" onclick="editModelLabel('${f.name}')">Label</button>`;
+      const deleteBtn = !f.is_active
+        ? `<button class="btn-sm btn-danger" onclick="deleteModelFile('${f.name}')">Delete</button>`
+        : "";
+      const modified = f.modified_at ? new Date(f.modified_at).toLocaleString() : "—";
+      return `<tr>
+        <td class="mono">${f.name}</td>
+        <td>${labelText}</td>
+        <td>${activeBadge}</td>
+        <td>${evalCell}</td>
+        <td>${fmtBytes(f.size_bytes)}</td>
+        <td>${modified}</td>
+        <td><div class="btn-row">${evalBtn}${evalDetail}${labelBtn}${deleteBtn}</div></td>
+      </tr>`;
+    }).join("");
   }
 
-  async function deleteModelFile() {
+  async function deleteModelFile(name) {
     const model  = document.getElementById("train-model").value;
     const flavor = document.getElementById("train-flavor").value;
-    const name   = document.getElementById("train-model-file").value;
     if (!confirm(`Delete model file "${name}"?`)) return;
     try {
       const qs = "?name=" + encodeURIComponent(name) + (flavor ? "&flavor=" + encodeURIComponent(flavor) : "");
@@ -335,19 +327,260 @@
     }
   }
 
-  function updateUploadFlavorSelect() {
-    const model   = document.getElementById("upload-model").value;
-    const sel     = document.getElementById("upload-flavor");
-    const flavors = flavorData[model] || [];
-    sel.innerHTML = `<option value="">— default —</option>` +
-      flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+  function openEvalDetail(filename) {
+    const model  = document.getElementById("train-model").value;
+    const flavor = document.getElementById("train-flavor").value;
+    const url = BASE + "/eval-report?session_id=" + encodeURIComponent(SESSION_ID)
+      + "&model=" + encodeURIComponent(model)
+      + (flavor ? "&flavor=" + encodeURIComponent(flavor) : "")
+      + "&file=" + encodeURIComponent(filename);
+    window.open(url, "eval-detail-" + filename, "width=700,height=600,resizable=yes,scrollbars=yes");
   }
 
-  function onTypeChange() {
-    const isTraining = document.getElementById("type-train").checked;
-    document.getElementById("training-opts").classList.toggle("hidden", !isTraining);
-    document.getElementById("eval-opts").classList.toggle("hidden", isTraining);
+  function openEvalReport() {
+    const model  = document.getElementById("train-model").value;
+    const flavor = document.getElementById("train-flavor").value;
+    const url = BASE + "/eval-report?session_id=" + encodeURIComponent(SESSION_ID)
+      + "&model=" + encodeURIComponent(model)
+      + (flavor ? "&flavor=" + encodeURIComponent(flavor) : "");
+    window.open(url, "eval-report", "width=1100,height=700,resizable=yes,scrollbars=yes");
   }
+
+  function editModelLabel(filename) {
+    const current = getModelLabel(filename) || "";
+    const next = prompt("Label for " + filename + ":", current);
+    if (next === null) return;
+    if (next.trim()) setModelLabel(filename, next.trim());
+    else deleteModelLabel(filename);
+    renderModelFilesTable();
+    renderJobs(_lastJobs);
+  }
+
+  async function submitModelEval(name) {
+    const model   = document.getElementById("train-model").value;
+    const flavor  = document.getElementById("train-flavor").value;
+    const body    = { mode: 1, flavor, incremental: false };
+    if (name !== "model.wapiti") body.model_file = name;
+    const resultEl = document.getElementById("model-eval-result");
+    resultEl.classList.add("hidden");
+    try {
+      const data = await apiJson("/api/train/" + encodeURIComponent(model), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+      setJobMeta(data.job_id, { preset: "eval/1", evaluated_file: name, model, flavor });
+      showAlert(resultEl, `Evaluation started: ${data.job_id} — `, "success");
+      const link = document.createElement("a");
+      link.href = "#"; link.textContent = "View Log";
+      link.onclick = (e) => { e.preventDefault(); viewLog(data.job_id); };
+      resultEl.appendChild(link);
+      await loadJobs();
+    } catch (e) {
+      showAlert(resultEl, "Error: " + e.message, "error");
+    }
+  }
+
+  // ── Section 3: Jobs ────────────────────────────────────────────────────────
+
+  let jobsTimer  = null;
+  let _lastJobs  = [];
+  const jobStreams   = {};   // job_id → EventSource
+  const jobProgress = {};   // job_id → { maxIter, curIter, cumSecs, etaSecs, durations[] }
+
+  // Session-persistent cache: job_id → { preset, trained_model_file }
+  const JOB_CACHE_KEY    = "grobid_trainer_jobs";
+  const MODEL_LABELS_KEY = "grobid_model_labels";
+  function _loadJobCache() {
+    try { return JSON.parse(sessionStorage.getItem(JOB_CACHE_KEY) || "{}"); } catch (_) { return {}; }
+  }
+  function _saveJobCache(c) {
+    try { sessionStorage.setItem(JOB_CACHE_KEY, JSON.stringify(c)); } catch (_) {}
+  }
+  function setJobMeta(jobId, data) {
+    const c = _loadJobCache();
+    c[jobId] = Object.assign(c[jobId] || {}, data);
+    _saveJobCache(c);
+  }
+  function getJobMeta(jobId) {
+    return _loadJobCache()[jobId] || {};
+  }
+
+  function parseEvalTable(text) {
+    if (!text) return null;
+    const rows = [];
+    let inTable = false;
+    for (const line of text.split("\n")) {
+      if (/\baccuracy\b.*\bprecision\b.*\brecall\b.*\bf1\b/.test(line)) {
+        inTable = true; continue;
+      }
+      if (!inTable) continue;
+      const parts = line.trim().split(/\s{2,}/);
+      if (parts.length < 6) continue;
+      const nums = parts.slice(-5).map(Number);
+      if (nums.some(isNaN)) continue;
+      rows.push({ label: parts.slice(0, parts.length - 5).join(" ").trim(),
+        accuracy: nums[0], precision: nums[1], recall: nums[2], f1: nums[3], support: nums[4] });
+    }
+    return rows.length ? rows : null;
+  }
+
+  function storeEvalFromLog(jobId, log) {
+    try {
+      const store = JSON.parse(sessionStorage.getItem("grobid_eval_by_job") || "{}");
+      if (store[jobId]) return; // already stored
+      const rows = parseEvalTable(log);
+      if (!rows) return;
+      store[jobId] = { timestamp: new Date().toISOString(), rows };
+      sessionStorage.setItem("grobid_eval_by_job", JSON.stringify(store));
+    } catch (_) {}
+  }
+
+  function _loadModelLabels() {
+    try { return JSON.parse(sessionStorage.getItem(MODEL_LABELS_KEY) || "{}"); } catch (_) { return {}; }
+  }
+  function getModelLabel(filename) {
+    return _loadModelLabels()[filename] || null;
+  }
+  function setModelLabel(filename, label) {
+    const c = _loadModelLabels();
+    c[filename] = label;
+    try { sessionStorage.setItem(MODEL_LABELS_KEY, JSON.stringify(c)); } catch (_) {}
+  }
+  function deleteModelLabel(filename) {
+    const c = _loadModelLabels();
+    delete c[filename];
+    try { sessionStorage.setItem(MODEL_LABELS_KEY, JSON.stringify(c)); } catch (_) {}
+  }
+
+  function extractModelFromCmd(cmd) {
+    if (!cmd) return "—";
+    const evalMatch = cmd.match(/EndToEndEvaluation\s+(\S+)/);
+    if (evalMatch) return "e2e/" + evalMatch[1];
+    const trainMatch = cmd.match(/onejar\.jar\s+\d+\s+(\S+)/);
+    if (trainMatch) return trainMatch[1];
+    return "—";
+  }
+
+  function renderJobs(jobs) {
+    const tbody = document.getElementById("jobs-tbody");
+    const noJobs = document.getElementById("no-jobs");
+    if (!jobs || jobs.length === 0) {
+      tbody.innerHTML = "";
+      noJobs.classList.remove("hidden");
+      return;
+    }
+    noJobs.classList.add("hidden");
+    tbody.innerHTML = jobs.map(j => {
+      const isRunning = j.status === "running";
+      const stopBtn = isRunning
+        ? `<button class="btn-sm btn-danger" onclick="stopJob('${j.job_id}')">Stop</button>`
+        : "";
+      const deleteBtn = !isRunning
+        ? `<button class="btn-sm btn-danger" onclick="deleteJob('${j.job_id}')">Delete</button>`
+        : "";
+      const modelLabel = j.model || (j.eval_type ? `e2e/${j.eval_type}` : extractModelFromCmd(j.cmd));
+      const modeLabel  = j.mode != null ? j.mode : "—";
+      const cached      = getJobMeta(j.job_id);
+      const presetLabel = cached.preset || "—";
+      const rawFile     = j.trained_model_file || cached.trained_model_file;
+      const modelFile   = rawFile ? (getModelLabel(rawFile) || rawFile) : "—";
+      return `<tr>
+        <td class="mono">${j.job_id}</td>
+        <td>${badge(j.status)}</td>
+        <td>${modelLabel}</td>
+        <td>${modeLabel}</td>
+        <td>${presetLabel}</td>
+        <td>${modelFile}</td>
+        <td>${fmtTime(j.start_time)}</td>
+        <td>${(() => {
+          if (j.status !== "running") return fmtDuration(j.duration_s);
+          const base = fmtDuration(elapsedSince(j.start_time)) + " ▸";
+          const p = jobProgress[j.job_id];
+          if (!p || !p.curIter || !p.maxIter) return base;
+          const objStr = p.obj != null ? ` · obj=${Math.round(p.obj).toLocaleString()}` : "";
+          const errStr = p.err != null ? ` · err=${p.err.toFixed(2)}%` : "";
+          return base + `<br><small style="color:#7eb8f7">iter ${p.curIter}/${p.maxIter}${objStr}${errStr} · ETA ≤${fmtDuration(p.etaSecs)}</small>`;
+        })()}</td>
+        <td>
+          <div class="btn-row">
+            ${stopBtn}
+            ${deleteBtn}
+            <button class="btn-sm" onclick="viewLog('${j.job_id}')">View Log</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function loadJobs() {
+    try {
+      const jobs = await apiJson("/api/jobs");
+      const detailed = await Promise.all(
+        jobs.map(j => apiJson("/api/jobs/" + encodeURIComponent(j.job_id)).catch(() => j))
+      );
+      for (const j of detailed) {
+        if (j.trained_model_file) {
+          setJobMeta(j.job_id, { trained_model_file: j.trained_model_file });
+          // Auto-label: once per file, using job id + preset
+          if (!getModelLabel(j.trained_model_file)) {
+            const preset = getJobMeta(j.job_id).preset;
+            if (preset) setModelLabel(j.trained_model_file, `${j.job_id} (${preset})`);
+          }
+        }
+        if (j.status === "running") {
+          openJobStream(j.job_id);
+        } else {
+          if (jobStreams.hasOwnProperty(j.job_id)) closeJobStream(j.job_id);
+          if (j.log) storeEvalFromLog(j.job_id, j.log);
+        }
+      }
+      _lastJobs = detailed;
+      renderJobs(detailed);
+    } catch (_) { /* silent */ }
+  }
+
+  async function stopJob(jobId) {
+    if (!confirm("Stop job " + jobId + "?")) return;
+    try {
+      await apiJson("/api/jobs/" + jobId + "/stop", { method: "POST" });
+      await loadJobs();
+    } catch (e) {
+      alert("Failed to stop job: " + e.message);
+    }
+  }
+
+  async function deleteJob(jobId) {
+    if (!confirm("Delete job " + jobId + "?")) return;
+    try {
+      await apiJson("/api/jobs/" + jobId, { method: "DELETE" });
+      const c = _loadJobCache();
+      delete c[jobId];
+      _saveJobCache(c);
+      const ev = JSON.parse(sessionStorage.getItem("grobid_eval_by_job") || "{}");
+      delete ev[jobId];
+      sessionStorage.setItem("grobid_eval_by_job", JSON.stringify(ev));
+      await loadJobs();
+    } catch (e) {
+      alert("Failed to delete job: " + e.message);
+    }
+  }
+
+  async function clearAllJobs() {
+    if (!confirm("Delete all finished jobs?")) return;
+    try {
+      await apiJson("/api/jobs", { method: "DELETE" });
+      sessionStorage.removeItem("grobid_eval_by_job");
+      await loadJobs();
+    } catch (e) {
+      alert("Failed to clear jobs: " + e.message);
+    }
+  }
+
+  function viewLog(jobId) {
+    const url = BASE + "/log/" + jobId + "?session_id=" + encodeURIComponent(SESSION_ID);
+    window.open(url, "_blank", "width=900,height=600,resizable=yes,scrollbars=yes");
+  }
+
+  // ── Training run form (inside Model Files section) ─────────────────────────
 
   function onModeChange() {
     const mode = parseInt(document.getElementById("train-mode").value);
@@ -355,69 +588,73 @@
     document.getElementById("n-folds-field").classList.toggle("hidden", mode !== 3);
   }
 
-  async function submitJob() {
-    const result_el = document.getElementById("train-result");
-    result_el.classList.add("hidden");
-    const isTraining = document.getElementById("type-train").checked;
+  async function submitTrainingRun() {
+    const resultEl = document.getElementById("train-result");
+    resultEl.classList.add("hidden");
+    const model  = document.getElementById("train-model").value;
+    const flavor = document.getElementById("train-flavor").value;
+    const mode   = parseInt(document.getElementById("train-mode").value);
+    const preset = document.getElementById("train-speed").value;
+    const saveAs = document.querySelector("input[name='save-as']:checked").value;
+    const body   = { mode, flavor, incremental: preset === "incremental", keep_existing: saveAs === "temporary" };
+    if (mode === 2) body.seg_ratio = parseFloat(document.getElementById("seg-ratio").value) || 0.8;
+    if (mode === 3) body.n_folds   = parseInt(document.getElementById("n-folds").value) || 10;
+    if (preset === "testing")     { body.epsilon = 0.001;  body.nb_max_iterations = 200;  }
+    if (preset === "development") { body.epsilon = 0.0001; body.nb_max_iterations = 500;  }
+    if (preset === "incremental") { body.epsilon = 1e-8;   body.nb_max_iterations = 1500; }
     try {
-      let data;
-      if (isTraining) {
-        const mode     = parseInt(document.getElementById("train-mode").value);
-        const model    = document.getElementById("train-model").value;
-        const flavor   = document.getElementById("train-flavor").value;
-        const preset   = document.getElementById("train-speed").value;
-        const body     = { mode, flavor, incremental: preset === "incremental" };
-        if (mode === 2) body.seg_ratio = parseFloat(document.getElementById("seg-ratio").value) || 0.8;
-        if (mode === 3) body.n_folds   = parseInt(document.getElementById("n-folds").value) || 10;
-        // Model file / keep_existing
-        const modelFileVal = document.getElementById("train-model-file").value;
-        if (mode !== 1) {
-          body.keep_existing = (modelFileVal === "new");
-        } else if (modelFileVal !== "new" && modelFileVal !== "model.wapiti") {
-          body.model_file = modelFileVal;
-        }
-        // Training speed / incremental preset
-        if (preset === "testing") {
-          body.epsilon = 0.001;
-          body.nb_max_iterations = 200;
-        } else if (preset === "development") {
-          body.epsilon = 0.0001;
-          body.nb_max_iterations = 500;
-        } else if (preset === "incremental") {
-          body.epsilon = 1e-8;
-          body.nb_max_iterations = 1500;
-        }
-        data = await apiJson("/api/train/" + encodeURIComponent(model), {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-        });
-      } else {
-        const evalType  = document.querySelector("input[name=eval-type]:checked").value;
-        const p2t       = document.getElementById("eval-p2t").value.trim();
-        const run       = document.getElementById("eval-run").checked;
-        const fileRatio = parseFloat(document.getElementById("eval-file-ratio").value) || 1.0;
-        const flavor    = document.getElementById("train-flavor").value;
-        if (!p2t) { showAlert(result_el, "Dataset path is required", "error"); return; }
-        data = await apiJson("/api/evaluate/" + evalType, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p2t, run, file_ratio: fileRatio, flavor })
-        });
-      }
-      showAlert(result_el,
-        `Job started: ${data.job_id}  — `,
-        "success"
-      );
+      const data = await apiJson("/api/train/" + encodeURIComponent(model), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+      setJobMeta(data.job_id, { preset, model, flavor });
+      showAlert(resultEl, `Job started: ${data.job_id} — `, "success");
       const link = document.createElement("a");
-      link.href = "#";
-      link.textContent = "View Log";
+      link.href = "#"; link.textContent = "View Log";
       link.onclick = (e) => { e.preventDefault(); viewLog(data.job_id); };
-      result_el.appendChild(link);
+      resultEl.appendChild(link);
       await loadJobs();
     } catch (e) {
-      showAlert(result_el, "Error: " + e.message, "error");
+      showAlert(resultEl, "Error: " + e.message, "error");
     }
   }
 
-  // ── Section 4: Upload Training Data ───────────────────────────────────────
+  // ── Section 4: End-to-end Evaluation ──────────────────────────────────────
+
+  async function submitE2EEval() {
+    const resultEl = document.getElementById("eval-result");
+    resultEl.classList.add("hidden");
+    const evalType  = document.querySelector("input[name=eval-type]:checked").value;
+    const p2t       = document.getElementById("eval-p2t").value.trim();
+    const run       = document.getElementById("eval-run").checked;
+    const fileRatio = parseFloat(document.getElementById("eval-file-ratio").value) || 1.0;
+    const flavor    = document.getElementById("train-flavor").value;
+    if (!p2t) { showAlert(resultEl, "Dataset path is required", "error"); return; }
+    try {
+      const data = await apiJson("/api/evaluate/" + evalType, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ p2t, run, file_ratio: fileRatio, flavor })
+      });
+      setJobMeta(data.job_id, { preset: "e2e" });
+      showAlert(resultEl, `Evaluation started: ${data.job_id} — `, "success");
+      const link = document.createElement("a");
+      link.href = "#"; link.textContent = "View Log";
+      link.onclick = (e) => { e.preventDefault(); viewLog(data.job_id); };
+      resultEl.appendChild(link);
+      await loadJobs();
+    } catch (e) {
+      showAlert(resultEl, "Error: " + e.message, "error");
+    }
+  }
+
+  // ── Section 5: Upload Training Data ───────────────────────────────────────
+
+  function updateUploadFlavorSelect() {
+    const model   = document.getElementById("upload-model").value;
+    const sel     = document.getElementById("upload-flavor");
+    const flavors = flavorData[model] || [];
+    sel.innerHTML = `<option value="">— default —</option>` +
+      flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+  }
 
   async function submitUpload() {
     const result_el = document.getElementById("upload-result");
@@ -448,7 +685,7 @@
     }
   }
 
-  // ── Section 5: Upload Batches ──────────────────────────────────────────────
+  // ── Section 6: Upload Batches ──────────────────────────────────────────────
 
   async function loadBatches() {
     const tbody = document.getElementById("batches-tbody");
@@ -497,6 +734,10 @@
     jobsTimer = setInterval(loadJobs, 5000);
     setInterval(loadHealth, 30000);
   });
+
+  window.addEventListener("beforeunload", () => {
+    Object.keys(jobStreams).forEach(closeJobStream);
+  });
 </script>
 
 <!-- Section 1: Service Status -->
@@ -522,122 +763,107 @@
   </div>
 </section>
 
-<!-- Section 2: Jobs -->
+<!-- Section 2: Model Files -->
 <section>
-  <div class="section-head"><h2>Jobs</h2></div>
-  <div class="section-body">
-    <table>
-      <thead><tr><th>Job ID</th><th>Status</th><th>Model / Eval</th><th>Model file</th><th>Started</th><th>Duration</th><th>Actions</th></tr></thead>
-      <tbody id="jobs-tbody"></tbody>
-    </table>
-    <p id="no-jobs" class="no-data hidden">No jobs yet.</p>
-  </div>
-</section>
-
-<!-- Section 3: Training / Evaluation -->
-<section>
-  <div class="section-head"><h2>Training / Evaluation</h2></div>
-  <div class="section-body">
-    <div class="field">
-      <label>Type</label>
-      <div class="radio-group">
-        <label><input type="radio" name="job-type" id="type-train" value="train" checked onchange="onTypeChange()"> Training</label>
-        <label><input type="radio" name="job-type" id="type-eval"  value="eval"  onchange="onTypeChange()"> End-to-end evaluation</label>
-      </div>
+  <div class="section-head" style="justify-content:space-between">
+    <h2>Model Files</h2>
+    <div class="btn-row">
+      <button class="btn-sm" onclick="openEvalReport()">📊 Compare</button>
+      <button class="btn-sm" onclick="loadModelFiles()">↻ Refresh</button>
     </div>
+  </div>
+  <div class="section-body">
 
-    <div class="form-row">
+    <!-- Model + Flavor selectors (shared with training form and E2E eval) -->
+    <div class="form-row" style="margin-bottom:0.6rem">
       <div class="field">
         <label for="train-model">Model</label>
         <select id="train-model" onchange="updateFlavorSelect()"><option>Loading…</option></select>
       </div>
       <div class="field">
         <label for="train-flavor">Flavor</label>
-        <select id="train-flavor"><option value="">— default —</option></select>
+        <select id="train-flavor" onchange="loadModelFiles()"><option value="">— default —</option></select>
       </div>
     </div>
 
-    <!-- Training-specific options -->
-    <div id="training-opts">
-      <div class="field">
-        <label for="train-mode">Mode</label>
-        <select id="train-mode" onchange="onModeChange()">
-          <option value="0">0 — Train only (all corpus files)</option>
-          <option value="1">1 — Evaluate only</option>
-          <option value="2">2 — Auto-split: train + evaluate</option>
-          <option value="3">3 — N-fold cross-evaluation</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="field hidden" id="seg-ratio-field">
-          <label for="seg-ratio">Train/eval split ratio</label>
-          <input type="number" id="seg-ratio" value="0.8" min="0.1" max="0.99" step="0.05">
-        </div>
-        <div class="field hidden" id="n-folds-field">
-          <label for="n-folds">Number of folds</label>
-          <input type="number" id="n-folds" value="10" min="2" max="20">
-        </div>
-      </div>
-      <div class="form-row" style="align-items:flex-end">
-        <div class="field" style="flex:2">
-          <label for="train-model-file">Model file</label>
-          <select id="train-model-file" onchange="onModelFileChange()">
-            <option value="new">Temporary model</option>
-            <option value="model.wapiti">Active model</option>
-          </select>
-        </div>
-        <div style="padding-bottom:0.15rem">
-          <button id="delete-model-file-btn" class="btn-danger btn-sm" disabled
-                  onclick="deleteModelFile()">Delete</button>
-        </div>
-      </div>
-      <div class="field">
-        <label for="train-speed">Training mode</label>
-        <select id="train-speed">
-          <option value="production">Production — default grobid.yaml convergence (slowest, most accurate)</option>
-          <option value="development">Development — ε=0.0001, 500 iterations (under an hour, good accuracy)</option>
-          <option value="testing" selected>Testing — ε=0.001, 200 iterations (minutes, smoke-test only)</option>
-          <option value="incremental">Incremental — continue from existing model (ε=1e-8, 1500 iterations)</option>
-        </select>
-        <span class="muted" style="display:block;margin-top:0.25rem">
-          <em>Testing</em>: verify the pipeline end-to-end in minutes; accuracy not representative. —
-          <em>Development</em>: iterate on training data; finishes in under an hour with good accuracy. —
-          <em>Production</em>: final model using tight convergence from grobid.yaml; may take many hours. —
-          <em>Incremental</em>: resumes training from the existing model rather than starting from scratch;
-          uses a very loose epsilon (1e-8) and high iteration cap (1500) to avoid premature convergence
-          when the optimizer picks up from a near-optimal state.
-        </span>
-      </div>
-    </div>
+    <!-- Model files table -->
+    <table>
+      <thead><tr><th>File name</th><th>Label</th><th>Active</th><th>Evaluated</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+      <tbody id="model-files-tbody"></tbody>
+    </table>
+    <p id="no-model-files" class="no-data hidden">No model files found — select a model above to load.</p>
+    <div id="model-eval-result" class="alert hidden" style="margin-top:0.4rem"></div>
 
-    <!-- Evaluation-specific options -->
-    <div id="eval-opts" class="hidden">
-      <div class="field">
-        <label>Evaluation format</label>
-        <div class="radio-group">
-          <label><input type="radio" name="eval-type" value="nlm" checked> NLM / JATS</label>
-          <label><input type="radio" name="eval-type" value="tei"> TEI</label>
+    <!-- New training run subsection -->
+    <details class="train-run" style="margin-top:0.75rem">
+      <summary>▸ New training run</summary>
+      <div class="training-run-body">
+        <div class="form-row">
+          <div class="field">
+            <label for="train-mode">Mode</label>
+            <select id="train-mode" onchange="onModeChange()">
+              <option value="0">0 — Train only (all corpus files)</option>
+              <option value="2">2 — Auto-split: train + evaluate</option>
+              <option value="3">3 — N-fold cross-evaluation</option>
+            </select>
+          </div>
+          <div class="field hidden" id="seg-ratio-field">
+            <label for="seg-ratio">Train/eval split ratio</label>
+            <input type="number" id="seg-ratio" value="0.8" min="0.1" max="0.99" step="0.05">
+          </div>
+          <div class="field hidden" id="n-folds-field">
+            <label for="n-folds">Number of folds</label>
+            <input type="number" id="n-folds" value="10" min="2" max="20">
+          </div>
         </div>
-      </div>
-      <div class="field">
-        <label for="eval-p2t">Gold-standard dataset path (absolute)</label>
-        <input type="text" id="eval-p2t" placeholder="/data/PMC_sample_1943">
-      </div>
-      <div class="form-row">
         <div class="field">
-          <label for="eval-file-ratio">File ratio (0–1)</label>
-          <input type="number" id="eval-file-ratio" value="1.0" min="0.01" max="1.0" step="0.05">
+          <label for="train-speed">Training mode</label>
+          <select id="train-speed">
+            <option value="production">Production — default grobid.yaml convergence (slowest, most accurate)</option>
+            <option value="development">Development — ε=0.0001, 500 iterations (under an hour, good accuracy)</option>
+            <option value="testing" selected>Testing — ε=0.001, 200 iterations (minutes, smoke-test only)</option>
+            <option value="incremental">Incremental — continue from existing model (ε=1e-8, 1500 iterations)</option>
+          </select>
+          <span class="muted" style="display:block;margin-top:0.25rem">
+            <em>Testing</em>: verify the pipeline end-to-end in minutes; accuracy not representative. —
+            <em>Development</em>: iterate on training data; finishes in under an hour with good accuracy. —
+            <em>Production</em>: final model using tight convergence from grobid.yaml; may take many hours. —
+            <em>Incremental</em>: resumes training from the existing model rather than starting from scratch;
+            uses a very loose epsilon (1e-8) and high iteration cap (1500) to avoid premature convergence
+            when the optimizer picks up from a near-optimal state.
+          </span>
         </div>
-        <div class="field" style="padding-top:1.4rem">
-          <label class="checkbox-label"><input type="checkbox" id="eval-run"> Run GROBID on PDFs first</label>
+        <div class="field">
+          <label>Save as</label>
+          <div class="radio-group" style="flex-direction:column;gap:0.25rem">
+            <label style="font-weight:normal"><input type="radio" name="save-as" value="temporary" checked>
+              Temporary model — saved with timestamp; active model unchanged</label>
+            <label style="font-weight:normal"><input type="radio" name="save-as" value="active">
+              Active model — replaces current model.wapiti; previous is saved as backup</label>
+          </div>
+        </div>
+        <div id="train-result" class="alert hidden"></div>
+        <div style="margin-top:0.5rem">
+          <button class="btn-primary" onclick="submitTrainingRun()">▶ Start</button>
         </div>
       </div>
-    </div>
+    </details>
 
-    <div id="train-result" class="alert hidden"></div>
-    <div style="margin-top:0.6rem">
-      <button class="btn-primary" onclick="submitJob()">▶ Start</button>
-    </div>
+  </div>
+</section>
+
+<!-- Section 3: Jobs -->
+<section>
+  <div class="section-head" style="justify-content:space-between">
+    <h2>Jobs</h2>
+    <button class="btn-sm btn-danger" onclick="clearAllJobs()">Clear All Finished</button>
+  </div>
+  <div class="section-body">
+    <table>
+      <thead><tr><th>Job ID</th><th>Status</th><th>Model / Eval</th><th>Mode</th><th>Preset</th><th>Label</th><th>Started</th><th>Duration</th><th>Actions</th></tr></thead>
+      <tbody id="jobs-tbody"></tbody>
+    </table>
+    <p id="no-jobs" class="no-data hidden">No jobs yet.</p>
   </div>
 </section>
 
@@ -687,8 +913,38 @@
   </div>
 </section>
 
+<!-- Section 6: End-to-end Evaluation -->
+<section>
+  <div class="section-head"><h2>End-to-end Evaluation</h2></div>
+  <div class="section-body">
+    <div class="field">
+      <label>Evaluation format</label>
+      <div class="radio-group">
+        <label><input type="radio" name="eval-type" value="nlm" checked> NLM / JATS</label>
+        <label><input type="radio" name="eval-type" value="tei"> TEI</label>
+      </div>
+    </div>
+    <div class="field">
+      <label for="eval-p2t">Gold-standard dataset path (absolute)</label>
+      <input type="text" id="eval-p2t" placeholder="/data/PMC_sample_1943">
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="eval-file-ratio">File ratio (0–1)</label>
+        <input type="number" id="eval-file-ratio" value="1.0" min="0.01" max="1.0" step="0.05">
+      </div>
+      <div class="field" style="padding-top:1.4rem">
+        <label class="checkbox-label"><input type="checkbox" id="eval-run"> Run GROBID on PDFs first</label>
+      </div>
+    </div>
+    <div id="eval-result" class="alert hidden"></div>
+    <div style="margin-top:0.6rem">
+      <button class="btn-primary" onclick="submitE2EEval()">▶ Start</button>
+    </div>
+  </div>
+</section>
+
 <script>
-  // Show upload form only when both collection and variant are set
   const hasCollectionAndVariant = COLLECTION && VARIANT;
   document.getElementById("upload-notice").classList.toggle("hidden",  hasCollectionAndVariant);
   document.getElementById("upload-form").classList.toggle("hidden", !hasCollectionAndVariant);

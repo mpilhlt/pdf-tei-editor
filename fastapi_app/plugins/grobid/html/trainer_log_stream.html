@@ -7,16 +7,20 @@
     * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; font-size: 13px; margin: 0; padding: 0.75rem; background: #1a1a1a; color: #e8e8e8; display: flex; flex-direction: column; height: 100vh; }
     h1 { font-size: 0.95rem; margin: 0 0 0.5rem; color: #ccc; font-weight: 500; }
-    #status { font-size: 0.82em; color: #aaa; margin-bottom: 0.4rem; }
+    #status { font-size: 0.82em; color: #aaa; margin-bottom: 0.2rem; }
+    #progress { font-size: 0.82em; color: #7eb8f7; margin-bottom: 0.4rem; min-height: 1.2em; }
     #log { flex: 1; overflow-y: auto; background: #111; border: 1px solid #333; border-radius: 4px; padding: 0.6rem; font-family: monospace; font-size: 0.82em; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
     .exit-ok   { color: #5cb85c; }
     .exit-fail { color: #d9534f; }
+    #eval-notice { font-size: 0.82em; color: #5cb85c; margin-top: 0.3rem; display: none; }
   </style>
 </head>
 <body>
   <h1>Job Log — <span id="job-id-label"></span></h1>
   <div id="status">Connecting…</div>
+  <div id="progress"></div>
   <pre id="log"></pre>
+  <div id="eval-notice">📊 Evaluation results captured.</div>
 
   <script>
     const SESSION_ID = "{{ SESSION_ID }}";
@@ -25,8 +29,98 @@
 
     document.getElementById("job-id-label").textContent = JOB_ID;
 
-    const logEl    = document.getElementById("log");
-    const statusEl = document.getElementById("status");
+    const logEl      = document.getElementById("log");
+    const statusEl   = document.getElementById("status");
+    const progressEl = document.getElementById("progress");
+    const evalNotice = document.getElementById("eval-notice");
+
+    // ── Progress / ETA tracking ────────────────────────────────────────────────
+
+    let maxIter    = 0;
+    let curIter    = 0;
+    let cumSecs    = 0;
+    const recentDurations = [];   // sliding window of per-iteration durations
+
+    // Parse "1.234,56" or "1234,56" or "1234.56" → number (handles both . and , as decimal)
+    function parseNum(s) {
+      // Remove thousand-separators (periods), replace comma decimal → dot
+      return parseFloat(s.replace(/\./g, "").replace(",", "."));
+    }
+
+    function fmtDuration(secs) {
+      secs = Math.round(secs);
+      if (secs < 60)  return secs + "s";
+      if (secs < 3600) return Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      return h + "h " + m + "m";
+    }
+
+    function updateProgress(line) {
+      // Extract max iterations from header line: "nb max iterations: 2000"
+      const maxMatch = line.match(/nb max iterations:\s*(\d+)/);
+      if (maxMatch) { maxIter = parseInt(maxMatch[1]); }
+
+      // Extract iteration line: [  N] ... time=X,Xs/Y,Ys
+      const iterMatch = line.match(/^\s*\[\s*(\d+)\]\s+.*time=([\d.,]+)s\/([\d.,]+)s/);
+      if (!iterMatch) return;
+
+      const iter   = parseInt(iterMatch[1]);
+      const durS   = parseNum(iterMatch[2]);
+      const cumS   = parseNum(iterMatch[3]);
+
+      recentDurations.push(durS);
+      if (recentDurations.length > 10) recentDurations.shift();
+
+      curIter = iter;
+      cumSecs = cumS;
+
+      if (!maxIter) return;
+
+      const avgRecent = recentDurations.reduce((a, b) => a + b, 0) / recentDurations.length;
+      const remaining = maxIter - curIter;
+      const etaSecs   = remaining * avgRecent;
+
+      progressEl.textContent =
+        `Iteration ${curIter} / ${maxIter}  ·  elapsed ${fmtDuration(cumSecs)}  ·  ETA ~${fmtDuration(etaSecs)} (based on last ${recentDurations.length} iterations)`;
+    }
+
+    // ── Eval result capture ────────────────────────────────────────────────────
+
+    function parseEvalTable(text) {
+      const rows = [];
+      let inTable = false;
+      for (const line of text.split("\n")) {
+        if (/\baccuracy\b.*\bprecision\b.*\brecall\b.*\bf1\b/.test(line)) {
+          inTable = true; continue;
+        }
+        if (!inTable) continue;
+        const parts = line.trim().split(/\s{2,}/);
+        if (parts.length < 6) continue;
+        const nums = parts.slice(-5).map(Number);
+        if (nums.some(isNaN)) continue;
+        rows.push({
+          label:     parts.slice(0, parts.length - 5).join(" ").trim(),
+          accuracy:  nums[0], precision: nums[1],
+          recall:    nums[2], f1:        nums[3], support: nums[4]
+        });
+      }
+      return rows.length ? rows : null;
+    }
+
+    function tryParseAndStore() {
+      const rows = parseEvalTable(logEl.textContent);
+      if (!rows) return false;
+      try {
+        const store = JSON.parse(sessionStorage.getItem("grobid_eval_by_job") || "{}");
+        store[JOB_ID] = { timestamp: new Date().toISOString(), rows };
+        sessionStorage.setItem("grobid_eval_by_job", JSON.stringify(store));
+        evalNotice.style.display = "block";
+        return true;
+      } catch (_) { return false; }
+    }
+
+    // ── SSE stream ────────────────────────────────────────────────────────────
 
     const streamUrl = BASE + "/api/jobs/" + encodeURIComponent(JOB_ID) + "/stream"
       + "?session_id=" + encodeURIComponent(SESSION_ID);
@@ -38,6 +132,7 @@
     es.onmessage = (e) => {
       logEl.textContent += e.data + "\n";
       logEl.scrollTop = logEl.scrollHeight;
+      updateProgress(e.data);
     };
 
     es.addEventListener("done", (e) => {
@@ -50,6 +145,8 @@
       logEl.appendChild(span);
       logEl.scrollTop = logEl.scrollHeight;
       statusEl.textContent = "Done (exit code " + exitCode + ")";
+      progressEl.textContent = "";
+      tryParseAndStore();
     });
 
     es.addEventListener("error", (e) => {
@@ -61,11 +158,13 @@
       }
       es.close();
       statusEl.textContent = "Stream ended.";
+      tryParseAndStore();
     });
 
     es.onerror = () => {
       es.close();
       statusEl.textContent = "Connection lost.";
+      tryParseAndStore();
     };
   </script>
 </body>

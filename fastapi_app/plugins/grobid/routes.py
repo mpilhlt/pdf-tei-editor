@@ -519,6 +519,30 @@ async def trainer_dashboard(
     return HTMLResponse(content=html)
 
 
+@router.get("/trainer/eval-report", response_class=HTMLResponse)
+async def trainer_eval_report(
+    model: str = Query(""),
+    flavor: str = Query(""),
+    file: str = Query(""),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> HTMLResponse:
+    """Serve the evaluation comparison report page."""
+    from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
+
+    session_id_value, _ = _authenticate_admin(
+        x_session_id, session_id, session_manager, auth_manager
+    )
+    html = load_plugin_html(__file__, "trainer_eval_report.html", inject_sandbox=False)
+    html = html.replace("{{ SESSION_ID }}", session_id_value)
+    html = html.replace("{{ MODEL }}", model)
+    html = html.replace("{{ FLAVOR }}", flavor)
+    html = html.replace("{{ FILE }}", file)
+    return HTMLResponse(content=html)
+
+
 @router.get("/trainer/log/{job_id}", response_class=HTMLResponse)
 async def trainer_log_stream_page(
     job_id: str,
@@ -632,6 +656,29 @@ async def trainer_stream_job(
             yield "event: error\ndata: Grobid Trainer service is not reachable\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.delete("/trainer/api/jobs/{job_id}")
+async def trainer_delete_job(
+    job_id: str,
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("DELETE", f"/jobs/{job_id}")
+
+
+@router.delete("/trainer/api/jobs")
+async def trainer_delete_all_jobs(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    return await _proxy_json("DELETE", "/jobs")
 
 
 @router.get("/trainer/api/models/{model_name}")
