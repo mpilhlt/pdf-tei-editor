@@ -128,6 +128,7 @@
 
   let healthData = null;
   let modelList  = [];
+  let modelFiles = [];
 
   function setStatusBadge(id, ok, label) {
     const el = document.getElementById(id);
@@ -173,7 +174,7 @@
     }
   }
 
-  // ── Section 2: Jobs ────────────────────────────────────────────────────────
+  // ── Section 2: Jobs ───────────────────────────────────────────────────────
 
   let jobsTimer = null;
 
@@ -206,6 +207,7 @@
         <td class="mono">${j.job_id}</td>
         <td>${badge(j.status)}</td>
         <td>${extractModelFromCmd(j.cmd)}</td>
+        <td class="mono">${j.trained_model_file || "—"}</td>
         <td>${fmtTime(j.start_time)}</td>
         <td>${j.status === "running" ? fmtDuration(elapsedSince(j.start_time)) + " ▸" : fmtDuration(j.duration_s)}</td>
         <td>
@@ -267,6 +269,7 @@
     });
     updateFlavorSelect();
     updateUploadFlavorSelect();
+    loadModelFiles();
   }
 
   function updateFlavorSelect() {
@@ -275,6 +278,61 @@
     const flavors = flavorData[model] || [];
     sel.innerHTML = `<option value="">— default —</option>` +
       flavors.map(f => `<option value="${f}">${f}</option>`).join("");
+    loadModelFiles();
+  }
+
+  async function loadModelFiles() {
+    const model  = document.getElementById("train-model").value;
+    const flavor = document.getElementById("train-flavor").value;
+    if (!model) return;
+    try {
+      const qs = flavor ? "?flavor=" + encodeURIComponent(flavor) : "";
+      const data = await apiJson("/api/models/" + encodeURIComponent(model) + qs);
+      modelFiles = data.files || [];
+    } catch (_) {
+      modelFiles = [];
+    }
+    populateModelFileSelect();
+  }
+
+  function populateModelFileSelect() {
+    const sel = document.getElementById("train-model-file");
+    const prev = sel.value;
+    const timestamped = modelFiles.filter(f => f.name !== "model.wapiti");
+    sel.innerHTML =
+      `<option value="new">Temporary model</option>` +
+      `<option value="model.wapiti">Active model</option>` +
+      timestamped.map(f => `<option value="${f.name}">${f.name}</option>`).join("");
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+    else sel.value = "new";
+    onModelFileChange();
+  }
+
+  function onModelFileChange() {
+    const val   = document.getElementById("train-model-file").value;
+    const mode1 = document.querySelector("#train-mode option[value='1']");
+    const isNew = (val === "new");
+    mode1.disabled = isNew;
+    if (isNew && document.getElementById("train-mode").value === "1") {
+      document.getElementById("train-mode").value = "0";
+      onModeChange();
+    }
+    document.getElementById("delete-model-file-btn").disabled =
+      (val === "new" || val === "model.wapiti");
+  }
+
+  async function deleteModelFile() {
+    const model  = document.getElementById("train-model").value;
+    const flavor = document.getElementById("train-flavor").value;
+    const name   = document.getElementById("train-model-file").value;
+    if (!confirm(`Delete model file "${name}"?`)) return;
+    try {
+      const qs = "?name=" + encodeURIComponent(name) + (flavor ? "&flavor=" + encodeURIComponent(flavor) : "");
+      await apiJson("/api/models/" + encodeURIComponent(model) + qs, { method: "DELETE" });
+      await loadModelFiles();
+    } catch (e) {
+      alert("Failed to delete: " + e.message);
+    }
   }
 
   function updateUploadFlavorSelect() {
@@ -307,10 +365,28 @@
         const mode     = parseInt(document.getElementById("train-mode").value);
         const model    = document.getElementById("train-model").value;
         const flavor   = document.getElementById("train-flavor").value;
-        const incr     = document.getElementById("train-incremental").checked;
-        const body     = { mode, flavor, incremental: incr };
+        const preset   = document.getElementById("train-speed").value;
+        const body     = { mode, flavor, incremental: preset === "incremental" };
         if (mode === 2) body.seg_ratio = parseFloat(document.getElementById("seg-ratio").value) || 0.8;
         if (mode === 3) body.n_folds   = parseInt(document.getElementById("n-folds").value) || 10;
+        // Model file / keep_existing
+        const modelFileVal = document.getElementById("train-model-file").value;
+        if (mode !== 1) {
+          body.keep_existing = (modelFileVal === "new");
+        } else if (modelFileVal !== "new" && modelFileVal !== "model.wapiti") {
+          body.model_file = modelFileVal;
+        }
+        // Training speed / incremental preset
+        if (preset === "testing") {
+          body.epsilon = 0.001;
+          body.nb_max_iterations = 200;
+        } else if (preset === "development") {
+          body.epsilon = 0.0001;
+          body.nb_max_iterations = 500;
+        } else if (preset === "incremental") {
+          body.epsilon = 1e-8;
+          body.nb_max_iterations = 1500;
+        }
         data = await apiJson("/api/train/" + encodeURIComponent(model), {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
         });
@@ -345,12 +421,15 @@
 
   async function submitUpload() {
     const result_el = document.getElementById("upload-result");
+    const btn       = document.getElementById("upload-btn");
     result_el.classList.add("hidden");
     const model     = document.getElementById("upload-model").value;
     const flavor    = document.getElementById("upload-flavor").value;
     const batchName = document.getElementById("upload-batch-name").value.trim();
     if (!COLLECTION) { showAlert(result_el, "No collection selected in the application", "error"); return; }
     if (!model)      { showAlert(result_el, "Please select a model", "error"); return; }
+    btn.disabled = true;
+    btn.textContent = "Uploading…";
     try {
       const data = await apiJson("/api/upload", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -363,6 +442,9 @@
       await loadBatches();
     } catch (e) {
       showAlert(result_el, "Error: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "⬆ Upload";
     }
   }
 
@@ -445,16 +527,16 @@
   <div class="section-head"><h2>Jobs</h2></div>
   <div class="section-body">
     <table>
-      <thead><tr><th>Job ID</th><th>Status</th><th>Model / Eval</th><th>Started</th><th>Duration</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Job ID</th><th>Status</th><th>Model / Eval</th><th>Model file</th><th>Started</th><th>Duration</th><th>Actions</th></tr></thead>
       <tbody id="jobs-tbody"></tbody>
     </table>
     <p id="no-jobs" class="no-data hidden">No jobs yet.</p>
   </div>
 </section>
 
-<!-- Section 3: Start Job -->
+<!-- Section 3: Training / Evaluation -->
 <section>
-  <div class="section-head"><h2>Start Training / Evaluation</h2></div>
+  <div class="section-head"><h2>Training / Evaluation</h2></div>
   <div class="section-body">
     <div class="field">
       <label>Type</label>
@@ -496,7 +578,36 @@
           <input type="number" id="n-folds" value="10" min="2" max="20">
         </div>
       </div>
-      <label class="checkbox-label"><input type="checkbox" id="train-incremental"> Incremental (continue from existing model)</label>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="field" style="flex:2">
+          <label for="train-model-file">Model file</label>
+          <select id="train-model-file" onchange="onModelFileChange()">
+            <option value="new">Temporary model</option>
+            <option value="model.wapiti">Active model</option>
+          </select>
+        </div>
+        <div style="padding-bottom:0.15rem">
+          <button id="delete-model-file-btn" class="btn-danger btn-sm" disabled
+                  onclick="deleteModelFile()">Delete</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="train-speed">Training mode</label>
+        <select id="train-speed">
+          <option value="production">Production — default grobid.yaml convergence (slowest, most accurate)</option>
+          <option value="development">Development — ε=0.0001, 500 iterations (under an hour, good accuracy)</option>
+          <option value="testing" selected>Testing — ε=0.001, 200 iterations (minutes, smoke-test only)</option>
+          <option value="incremental">Incremental — continue from existing model (ε=1e-8, 1500 iterations)</option>
+        </select>
+        <span class="muted" style="display:block;margin-top:0.25rem">
+          <em>Testing</em>: verify the pipeline end-to-end in minutes; accuracy not representative. —
+          <em>Development</em>: iterate on training data; finishes in under an hour with good accuracy. —
+          <em>Production</em>: final model using tight convergence from grobid.yaml; may take many hours. —
+          <em>Incremental</em>: resumes training from the existing model rather than starting from scratch;
+          uses a very loose epsilon (1e-8) and high iteration cap (1500) to avoid premature convergence
+          when the optimizer picks up from a near-optimal state.
+        </span>
+      </div>
     </div>
 
     <!-- Evaluation-specific options -->
@@ -558,7 +669,7 @@
       </div>
       <div id="upload-result" class="alert hidden"></div>
       <div style="margin-top:0.6rem">
-        <button class="btn-primary" onclick="submitUpload()">⬆ Upload</button>
+        <button id="upload-btn" class="btn-primary" onclick="submitUpload()">⬆ Upload</button>
       </div>
     </div>
   </div>

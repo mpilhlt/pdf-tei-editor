@@ -460,12 +460,12 @@ async def _fetch_and_cache(
 
     Returns True on success, False if the fetch failed.
     """
-    from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+    from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
 
-    extractor = GrobidTrainingExtractor()
+    handler = TrainingHandler()
     try:
         temp_dir, files = await asyncio.to_thread(
-            extractor._fetch_training_package,  # type: ignore[attr-defined]
+            handler._fetch_training_package,
             str(pdf_path),
             grobid_server_url,
             flavor,
@@ -632,6 +632,39 @@ async def trainer_stream_job(
             yield "event: error\ndata: Grobid Trainer service is not reachable\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/trainer/api/models/{model_name}")
+async def trainer_list_model_files(
+    model_name: str,
+    flavor: str | None = Query(None),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    params = {}
+    if flavor:
+        params["flavor"] = flavor
+    return await _proxy_json("GET", f"/models/{model_name}", params=params)
+
+
+@router.delete("/trainer/api/models/{model_name}")
+async def trainer_delete_model_file(
+    model_name: str,
+    name: str = Query(...),
+    flavor: str | None = Query(None),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+) -> dict:
+    _authenticate_admin(x_session_id, session_id, session_manager, auth_manager)
+    params = {"name": name}
+    if flavor:
+        params["flavor"] = flavor
+    return await _proxy_json("DELETE", f"/models/{model_name}", params=params)
 
 
 @router.get("/trainer/api/flavors")
