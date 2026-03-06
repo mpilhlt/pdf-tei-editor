@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_session_manager,
     get_sse_service,
@@ -43,8 +43,8 @@ async def preview_sync(
         HTML page with preview of changes
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.user_utils import user_has_collection_access
-    from fastapi_app.lib.config_utils import get_config
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
+    from fastapi_app.lib.utils.config_utils import get_config
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -128,8 +128,8 @@ async def execute_sync(
         HTML page with sync results (statistics only)
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.user_utils import user_has_collection_access
-    from fastapi_app.lib.config_utils import get_config
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
+    from fastapi_app.lib.utils.config_utils import get_config
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -183,7 +183,7 @@ async def execute_sync(
         logger.debug(f"Sync complete: {updated_count} files updated in collection")
 
         if updated_count > 0:
-            from fastapi_app.lib.sse_utils import broadcast_to_all_sessions
+            from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions
             logger.debug(f"Broadcasting fileDataChanged event to all sessions")
             notified = broadcast_to_all_sessions(
                 sse_service=sse_service,

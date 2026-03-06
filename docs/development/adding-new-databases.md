@@ -25,7 +25,7 @@ Let's say you want to add a new `analytics.db` database:
 
 ### Step 1: Create Schema File
 
-Create `fastapi_app/lib/analytics_schema.py`:
+Create `fastapi_app/lib/core/analytics_schema.py`:
 
 ```python
 """
@@ -254,8 +254,8 @@ def test_analytics_db_initialization():
     import tempfile
     import shutil
     from pathlib import Path
-    from fastapi_app.lib.analytics_db import AnalyticsDB
-    from fastapi_app.lib.migration_runner import reset_migration_cache
+    from fastapi_app.lib.repository.analytics_db import AnalyticsDB
+    from fastapi_app.lib.core.migration_runner import reset_migration_cache
     import logging
 
     logger = logging.getLogger('test')
@@ -310,7 +310,7 @@ conn.execute("PRAGMA journal_mode = DELETE")
 - Databases that don't benefit from WAL's read concurrency
 - When rapid concurrent access during tests causes WAL file corruption
 
-**Example**: The `locks.db` database uses DELETE mode because it's small, has infrequent writes, and WAL mode caused "disk I/O error" issues during rapid test execution. See `fastapi_app/lib/locking.py` for implementation.
+**Example**: The `locks.db` database uses DELETE mode because it's small, has infrequent writes, and WAL mode caused "disk I/O error" issues during rapid test execution. See `fastapi_app/lib/core/locking.py` for implementation.
 
 ### Always Set Busy Timeout
 
@@ -333,7 +333,7 @@ conn.execute("PRAGMA busy_timeout = 30000")  # 30 seconds
 ## Reference
 
 - Migration system: [docs/development/migrations.md](migrations.md)
-- Migration runner: `fastapi_app/lib/migration_runner.py`
+- Migration runner: `fastapi_app/lib/core/migration_runner.py`
 - Database connections guide: [docs/code-assistant/database-connections.md](../code-assistant/database-connections.md)
-- Example WAL database: `fastapi_app/lib/database.py` (metadata.db)
-- Example DELETE database: `fastapi_app/lib/locking.py` (locks.db)
+- Example WAL database: `fastapi_app/lib/core/database.py` (metadata.db)
+- Example DELETE database: `fastapi_app/lib/core/locking.py` (locks.db)

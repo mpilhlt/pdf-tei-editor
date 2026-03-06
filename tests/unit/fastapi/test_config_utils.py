@@ -3,7 +3,7 @@ Unit tests for config_utils.py
 
 Self-contained tests that can be run independently.
 
-@testCovers fastapi_app/lib/config_utils.py
+@testCovers fastapi_app/lib/utils/config_utils.py
 """
 
 import tempfile
@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.config_utils import Config
+from fastapi_app.lib.utils.config_utils import Config
 
 
 class TestConfigUtils(unittest.TestCase):

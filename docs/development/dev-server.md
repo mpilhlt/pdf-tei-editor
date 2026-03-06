@@ -94,13 +94,13 @@ The development server includes platform-specific implementations for managing s
 
 ### Finding Processes on Ports
 
-**Windows** ([fastapi_app/lib/server_startup.py:53-65](../fastapi_app/lib/server_startup.py#L53-L65)):
+**Windows** ([fastapi_app/lib/utils/server_startup.py:53-65](../fastapi_app/lib/utils/server_startup.py#L53-L65)):
 ```bash
 netstat -ano
 ```
 Parses output to find PIDs listening on specific ports.
 
-**Unix/Linux/macOS** ([fastapi_app/lib/server_startup.py:67-75](../fastapi_app/lib/server_startup.py#L67-L75)):
+**Unix/Linux/macOS** ([fastapi_app/lib/utils/server_startup.py:67-75](../fastapi_app/lib/utils/server_startup.py#L67-L75)):
 ```bash
 lsof -ti :8000
 ```
@@ -108,12 +108,12 @@ Directly returns the PID using the port.
 
 ### Killing Processes
 
-**Windows** ([fastapi_app/lib/server_startup.py:95-97](../fastapi_app/lib/server_startup.py#L95-L97)):
+**Windows** ([fastapi_app/lib/utils/server_startup.py:95-97](../fastapi_app/lib/utils/server_startup.py#L95-L97)):
 ```bash
 taskkill /F /PID <pid>
 ```
 
-**Unix/Linux/macOS** ([fastapi_app/lib/server_startup.py:99-100](../fastapi_app/lib/server_startup.py#L99-L100)):
+**Unix/Linux/macOS** ([fastapi_app/lib/utils/server_startup.py:99-100](../fastapi_app/lib/utils/server_startup.py#L99-L100)):
 ```bash
 kill <pid>
 ```

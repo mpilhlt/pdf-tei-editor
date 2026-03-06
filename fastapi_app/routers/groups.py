@@ -13,14 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from ..lib.group_utils import (
+from ..lib.permissions.group_utils import (
     find_group,
     group_exists,
     create_group
 )
-from ..lib.data_utils import load_entity_data, save_entity_data
-from ..lib.dependencies import get_current_user
-from ..lib.logging_utils import get_logger
+from ..lib.utils.data_utils import load_entity_data, save_entity_data
+from ..lib.core.dependencies import get_current_user
+from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
 
 logger = get_logger(__name__)

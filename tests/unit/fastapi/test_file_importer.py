@@ -11,7 +11,7 @@ Tests:
 - Metadata extraction and inheritance
 - Gold standard detection using patterns (filename and directory)
 
-@testCovers fastapi_app/lib/file_importer.py
+@testCovers fastapi_app/lib/storage/file_importer.py
 """
 
 import unittest
@@ -22,10 +22,10 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-from fastapi_app.lib.file_importer import FileImporter
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
+from fastapi_app.lib.storage.file_importer import FileImporter
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
 
 
 class TestFileImporter(unittest.TestCase):
@@ -478,7 +478,7 @@ startxref
 
         # Import with default settings (no gold_pattern - uses version marker logic)
         importer = FileImporter(self.db, self.storage, self.repo)
-        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+        with self.assertLogs('fastapi_app.lib.storage.file_importer', level='WARNING') as cm:
             stats = importer.import_directory(self.import_dir)
 
         # Verify expected warnings about missing PDFs
@@ -522,7 +522,7 @@ startxref
             self.db, self.storage, self.repo,
             gold_pattern=r'\.gold\.'
         )
-        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+        with self.assertLogs('fastapi_app.lib.storage.file_importer', level='WARNING') as cm:
             stats = importer.import_directory(self.import_dir)
 
         # Verify expected warnings about missing PDFs
@@ -559,7 +559,7 @@ startxref
 
         # Import with gold directory pattern (suppress expected warnings)
         importer = FileImporter(self.db, self.storage, self.repo, gold_dir_name='tei')
-        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+        with self.assertLogs('fastapi_app.lib.storage.file_importer', level='WARNING') as cm:
             stats = importer.import_directory(self.import_dir)
 
         # Verify expected warnings about missing PDFs
@@ -597,7 +597,7 @@ startxref
             self.db, self.storage, self.repo,
             gold_dir_name="gold_standard"
         )
-        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+        with self.assertLogs('fastapi_app.lib.storage.file_importer', level='WARNING') as cm:
             stats = importer.import_directory(self.import_dir)
 
         # Verify expected warnings about missing PDFs

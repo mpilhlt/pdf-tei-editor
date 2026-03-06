@@ -8,13 +8,13 @@ xml.encode-entities.server and xml.encode-quotes configuration options.
 import unittest
 from unittest.mock import patch
 
-from fastapi_app.lib.xml_utils import apply_entity_encoding_from_config
+from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
 
 
 class TestEntityEncodingConfiguration(unittest.TestCase):
     """Test XML entity encoding configuration behavior."""
 
-    @patch('fastapi_app.lib.config_utils.get_config')
+    @patch('fastapi_app.lib.utils.config_utils.get_config')
     def test_entity_encoding_disabled(self, mock_get_config):
         """Test that entity encoding can be disabled."""
         # Mock config to return False for server encoding
@@ -31,7 +31,7 @@ class TestEntityEncodingConfiguration(unittest.TestCase):
         # Encoding disabled - input should be unchanged
         self.assertEqual(result, xml_input)
 
-    @patch('fastapi_app.lib.config_utils.get_config')
+    @patch('fastapi_app.lib.utils.config_utils.get_config')
     def test_entity_encoding_with_server_encoding_enabled(self, mock_get_config):
         """Test entity encoding when xml.encode-entities.server is enabled."""
         # Mock config to enable server encoding but not quotes
@@ -57,7 +57,7 @@ class TestEntityEncodingConfiguration(unittest.TestCase):
         self.assertIn('"quotes"', result_quotes)
         self.assertNotIn('&quot;', result_quotes)
 
-    @patch('fastapi_app.lib.config_utils.get_config')
+    @patch('fastapi_app.lib.utils.config_utils.get_config')
     def test_entity_encoding_with_quotes_enabled(self, mock_get_config):
         """Test entity encoding with both server encoding and quote encoding enabled."""
         # Mock config to enable both options

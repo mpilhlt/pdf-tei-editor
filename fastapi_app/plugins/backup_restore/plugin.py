@@ -6,7 +6,7 @@ as a ZIP file and restore from a previously downloaded backup.
 """
 
 from typing import Any, Callable
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 
 
 class BackupRestorePlugin(Plugin):

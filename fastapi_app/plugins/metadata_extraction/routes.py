@@ -9,7 +9,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_session_manager,
 )
@@ -38,7 +38,7 @@ async def extract_metadata(
         JSON with metadata fields (title, authors, date, publisher, etc.)
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.metadata_extraction import get_metadata_for_document
+    from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
 
     # Authenticate
     session_id_value = x_session_id or session_id

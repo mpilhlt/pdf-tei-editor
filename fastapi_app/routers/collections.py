@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from ..lib.collection_utils import (
+from ..lib.utils.collection_utils import (
     get_collections_with_details,
     add_collection,
     find_collection,
@@ -21,9 +21,9 @@ from ..lib.collection_utils import (
     set_collection_property,
     grant_user_collection_access
 )
-from ..lib.dependencies import get_current_user, get_file_repository
-from ..lib.file_repository import FileRepository
-from ..lib.logging_utils import get_logger
+from ..lib.core.dependencies import get_current_user, get_file_repository
+from ..lib.repository.file_repository import FileRepository
+from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
 
 logger = get_logger(__name__)
@@ -104,7 +104,7 @@ def list_all_collections(
     Returns:
         List of Collection objects
     """
-    from ..lib.user_utils import get_user_collections
+    from ..lib.permissions.user_utils import get_user_collections
 
     settings = get_settings()
 

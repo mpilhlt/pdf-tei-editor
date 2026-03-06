@@ -10,7 +10,7 @@ Tests:
 - Thread safety
 - Keep-alive pings
 
-@testCovers fastapi_app/lib/sse_service.py
+@testCovers fastapi_app/lib/sse/sse_service.py
 """
 
 import unittest
@@ -19,7 +19,7 @@ import time
 from unittest.mock import Mock
 from datetime import datetime, timedelta
 
-from fastapi_app.lib.sse_service import SSEService
+from fastapi_app.lib.sse.sse_service import SSEService
 
 
 class TestSSEService(unittest.TestCase):

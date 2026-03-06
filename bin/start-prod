@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from fastapi_app.lib.server_startup import (
+from fastapi_app.lib.utils.server_startup import (
     load_environment,
     check_port_in_use,
     get_pid_on_port,

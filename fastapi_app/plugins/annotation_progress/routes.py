@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from lxml import etree
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
@@ -47,9 +47,9 @@ async def view_progress(
         HTML page with DataTables-powered table
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.config_utils import get_config
-    from fastapi_app.lib.file_repository import FileRepository
-    from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+    from fastapi_app.lib.utils.config_utils import get_config
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -67,7 +67,7 @@ async def view_progress(
         raise HTTPException(status_code=401, detail="User not found")
 
     # Check collection access
-    from fastapi_app.lib.user_utils import user_has_collection_access
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
     if not user_has_collection_access(user, collection, settings.db_dir):
         raise HTTPException(status_code=403, detail="Access denied to collection")
 
@@ -348,8 +348,8 @@ async def export_csv(
         CSV file as streaming response
     """
     from fastapi_app.config import get_settings
-    from fastapi_app.lib.file_repository import FileRepository
-    from fastapi_app.lib.user_utils import user_has_collection_access
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -480,7 +480,7 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
         Dictionary with annotation label, revision count, last change info, and change signatures
     """
     try:
-        from fastapi_app.lib.tei_utils import (
+        from fastapi_app.lib.utils.tei_utils import (
             extract_tei_metadata,
             get_annotator_name,
             extract_change_signatures,
@@ -571,8 +571,8 @@ def _format_version_chains_html(annotations: list[dict]) -> str:
     Returns:
         HTML string with version chains, each on a separate line
     """
-    from fastapi_app.lib.tei_utils import build_version_ancestry_chains
-    from fastapi_app.lib.plugin_tools import escape_html
+    from fastapi_app.lib.utils.tei_utils import build_version_ancestry_chains
+    from fastapi_app.lib.plugins.plugin_tools import escape_html
 
     if not annotations:
         return "No annotations"
@@ -672,7 +672,7 @@ def _create_status_indicator(status: str, lifecycle_order: list[str]) -> str:
     Returns:
         HTML string with status indicator
     """
-    from fastapi_app.lib.plugin_tools import escape_html
+    from fastapi_app.lib.plugins.plugin_tools import escape_html
 
     if not status or not lifecycle_order:
         return '<span class="status-text">—</span>'

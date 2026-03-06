@@ -156,7 +156,7 @@ Example:
 
 ```python
 import pytest
-from fastapi_app.lib.auth import verify_password, hash_password
+from fastapi_app.lib.utils.auth import verify_password, hash_password
 
 def test_password_hashing():
     password = "test123"
@@ -677,7 +677,7 @@ Example scenarios:
 
 - Backend-only changes (fastapi_app/routers/files.py)
 - JavaScript module changes (app/src/modules/state-manager.js)
-- Python utility updates (fastapi_app/lib/auth.py)
+- Python utility updates (fastapi_app/lib/utils/auth.py)
 
 **Path 3: Container Execution** (~10-15 minutes)
 

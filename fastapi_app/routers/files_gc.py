@@ -17,15 +17,15 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_settings
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.models_files import GarbageCollectRequest, GarbageCollectResponse
-from ..lib.dependencies import (
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.models.models_files import GarbageCollectRequest, GarbageCollectResponse
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user
 )
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

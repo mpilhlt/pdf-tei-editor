@@ -13,18 +13,18 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 import logging
 
-from ..lib.models_sync import (
+from ..lib.models.models_sync import (
     SyncStatusResponse,
     SyncRequest,
     SyncSummary,
     ConflictListResponse,
     ConflictResolution
 )
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_sync_service,
     get_session_user
 )
-from ..lib.sync_service import SyncService
+from ..lib.services.sync_service import SyncService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -177,7 +177,7 @@ def list_conflicts(
             if f.sync_status == 'conflict'
         ]
 
-        from ..lib.models_sync import ConflictInfo
+        from ..lib.models.models_sync import ConflictInfo
         for file in conflict_files:
             conflict = ConflictInfo(
                 file_id=file.id,

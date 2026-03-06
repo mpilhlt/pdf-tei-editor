@@ -159,14 +159,14 @@ The system resolves collection access using this priority order:
 
 ### Helper Functions
 
-The [user_utils.py](../../fastapi_app/lib/user_utils.py) module provides collection access helpers:
+The [user_utils.py](../../fastapi_app/lib/permissions/user_utils.py) module provides collection access helpers:
 
 #### `get_user_collections(user, db_dir)`
 
 Returns the list of collections accessible to a user.
 
 ```python
-from fastapi_app.lib.user_utils import get_user_collections
+from fastapi_app.lib.permissions.user_utils import get_user_collections
 
 # Get accessible collections
 accessible_collections = get_user_collections(current_user, settings.db_dir)
@@ -193,7 +193,7 @@ else:
 Checks if a user has access to a specific collection.
 
 ```python
-from fastapi_app.lib.user_utils import user_has_collection_access
+from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
 # Check access to specific collection
 if user_has_collection_access(current_user, 'manuscripts', settings.db_dir):
@@ -610,9 +610,9 @@ Granular mode provides per-document visibility and editability settings stored i
 
 **Core modules:**
 
-- [access_control.py](../../fastapi_app/lib/access_control.py) - Mode-aware permission checking functions
-- [acl_utils.py](../../fastapi_app/lib/acl_utils.py) - Role checking and high-level permission API
-- [permissions_db.py](../../fastapi_app/lib/permissions_db.py) - SQLite database for granular permissions
+- [access_control.py](../../fastapi_app/lib/permissions/access_control.py) - Mode-aware permission checking functions
+- [acl_utils.py](../../fastapi_app/lib/permissions/acl_utils.py) - Role checking and high-level permission API
+- [permissions_db.py](../../fastapi_app/lib/repository/permissions_db.py) - SQLite database for granular permissions
 
 **API endpoints (granular mode only):**
 
@@ -623,7 +623,7 @@ Granular mode provides per-document visibility and editability settings stored i
 **Permission checking functions:**
 
 ```python
-from fastapi_app.lib.access_control import (
+from fastapi_app.lib.permissions.access_control import (
     can_view_document,
     can_edit_document,
     can_delete_document,
@@ -637,7 +637,7 @@ from fastapi_app.lib.access_control import (
 **High-level API (handles mode internally):**
 
 ```python
-from fastapi_app.lib.acl_utils import (
+from fastapi_app.lib.permissions.acl_utils import (
     get_access_control_mode,
     get_file_permissions,
     set_default_permissions_for_new_file,

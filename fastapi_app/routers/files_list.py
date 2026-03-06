@@ -16,25 +16,25 @@ from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional, Dict, List
 from collections import defaultdict
 
-from ..lib.database import DatabaseManager
-from ..lib.file_repository import FileRepository
-from ..lib.models_files import (
+from ..lib.core.database import DatabaseManager
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_files import (
     FileListResponseModel,
     DocumentGroupModel,
     FileItemModel,
     ArtifactModel
 )
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_db,
     get_file_repository,
     get_current_user,
     get_session_id
 )
-from ..lib.locking import get_all_active_locks
-from ..lib.access_control import DocumentAccessFilter
-from ..lib.user_utils import get_user_collections
+from ..lib.core.locking import get_all_active_locks
+from ..lib.permissions.access_control import DocumentAccessFilter
+from ..lib.permissions.user_utils import get_user_collections
 from ..config import get_settings
-from ..lib.logging_utils import get_logger
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

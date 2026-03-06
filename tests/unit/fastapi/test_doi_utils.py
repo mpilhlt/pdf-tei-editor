@@ -7,12 +7,12 @@ Tests:
 - Round-trip encoding
 - Edge cases and error handling
 
-@testCovers fastapi_app/lib/doi_utils.py
+@testCovers fastapi_app/lib/utils/doi_utils.py
 """
 
 import unittest
 
-from fastapi_app.lib.doi_utils import (
+from fastapi_app.lib.utils.doi_utils import (
     encode_filename,
     decode_filename,
     validate_doi,

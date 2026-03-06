@@ -17,11 +17,11 @@ import logging
 # Add fastapi_app to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_importer import FileImporter
-from fastapi_app.lib.file_zip_importer import FileZipImporter
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_importer import FileImporter
+from fastapi_app.lib.storage.file_zip_importer import FileZipImporter
 from fastapi_app.config import get_settings
 
 # Setup logging

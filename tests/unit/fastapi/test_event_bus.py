@@ -3,7 +3,7 @@
 import unittest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
-from fastapi_app.lib.event_bus import EventBus, get_event_bus
+from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
 
 
 class TestEventBus(unittest.TestCase):
@@ -78,7 +78,7 @@ class TestEventBus(unittest.TestCase):
         self.bus.on("test.event", handler3)
 
         # Should not raise exception, but will log the error
-        with self.assertLogs("fastapi_app.lib.event_bus", level="ERROR"):
+        with self.assertLogs("fastapi_app.lib.sse.event_bus", level="ERROR"):
             await self.bus.emit("test.event", arg="value")
             # Allow background tasks to complete (emit is fire-and-forget)
             await asyncio.sleep(0.01)

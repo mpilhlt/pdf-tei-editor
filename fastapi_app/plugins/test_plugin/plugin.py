@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, NotRequired
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
-from fastapi_app.lib.service_registry import ExtractionService, ExtractionResult, get_service_registry
+from fastapi_app.lib.services.service_registry import ExtractionService, ExtractionResult, get_service_registry
 from .extractor import MockExtractor
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,7 @@ class TestPlugin(Plugin):
         logger.info("DummyExtractionService registered for testing")
 
         # Register frontend extension
-        from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+        from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 
         fe_registry = FrontendExtensionRegistry.get_instance()
         extension_dir = Path(__file__).parent / "extensions"
@@ -209,14 +209,14 @@ class TestPlugin(Plugin):
 
         if not text and xml_id:
             # If xml id provided but no text, fetch file content
-            from fastapi_app.lib.dependencies import get_db, get_file_storage
+            from fastapi_app.lib.core.dependencies import get_db, get_file_storage
 
             try:
                 db = get_db()
                 file_storage = get_file_storage()
 
                 # Get file metadata
-                from fastapi_app.lib.file_repository import FileRepository
+                from fastapi_app.lib.repository.file_repository import FileRepository
                 file_repo = FileRepository(db)
                 file_metadata = file_repo.get_file_by_id_or_stable_id(xml_id)
 
@@ -368,8 +368,8 @@ class TestPlugin(Plugin):
     async def _load_xml_content(self, context: PluginContext, xml_id: str) -> str | None:
         """Load XML content from file storage."""
         try:
-            from fastapi_app.lib.dependencies import get_db, get_file_storage
-            from fastapi_app.lib.file_repository import FileRepository
+            from fastapi_app.lib.core.dependencies import get_db, get_file_storage
+            from fastapi_app.lib.repository.file_repository import FileRepository
 
             db = get_db()
             file_storage = get_file_storage()

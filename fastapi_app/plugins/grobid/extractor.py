@@ -12,7 +12,7 @@ from lxml import etree
 logger = logging.getLogger(__name__)
 
 from fastapi_app.lib.extraction import BaseExtractor, get_retry_session
-from fastapi_app.lib.metadata_extraction import get_metadata_for_document
+from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
@@ -26,7 +26,7 @@ from fastapi_app.plugins.grobid.handlers import (
     FulltextHandler,
     ReferencesHandler,
 )
-from fastapi_app.lib.tei_utils import (
+from fastapi_app.lib.utils.tei_utils import (
     create_tei_header,
     create_revision_desc_with_status,
     create_schema_processing_instruction,
@@ -35,7 +35,7 @@ from fastapi_app.lib.tei_utils import (
     create_edition_stmt_with_fileref,
     create_encoding_desc_with_extractor,
 )
-from fastapi_app.lib.debug_utils import log_extraction_response, log_xml_parsing_error
+from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 
 
 class GrobidTrainingExtractor(BaseExtractor):

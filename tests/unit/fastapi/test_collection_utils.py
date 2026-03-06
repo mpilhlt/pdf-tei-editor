@@ -3,7 +3,7 @@ Unit tests for collection_utils.py
 
 Self-contained tests that can be run independently.
 
-@testCovers fastapi_app/lib/collection_utils.py
+@testCovers fastapi_app/lib/utils/collection_utils.py
 """
 
 import tempfile
@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.collection_utils import (
+from fastapi_app.lib.utils.collection_utils import (
     find_collection,
     collection_exists,
     get_available_collections,
@@ -24,10 +24,10 @@ from fastapi_app.lib.collection_utils import (
     set_collection_property,
     list_collections
 )
-from fastapi_app.lib.data_utils import load_entity_data, save_entity_data
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.models import FileCreate
+from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.models.models import FileCreate
 
 
 class TestCollectionUtils(unittest.TestCase):

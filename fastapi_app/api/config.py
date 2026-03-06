@@ -12,11 +12,11 @@ import json
 import os
 
 from ..config import get_settings
-from ..lib.auth import AuthManager
-from ..lib.sessions import SessionManager
-from ..lib.server_utils import get_session_id_from_request
-from ..lib.config_utils import get_config
-from ..lib.logging_utils import get_logger
+from ..lib.utils.auth import AuthManager
+from ..lib.core.sessions import SessionManager
+from ..lib.utils.server_utils import get_session_id_from_request
+from ..lib.utils.config_utils import get_config
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)

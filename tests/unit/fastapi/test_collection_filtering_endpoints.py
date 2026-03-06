@@ -20,12 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from fastapi.testclient import TestClient
 from fastapi_app.main import app
-from fastapi_app.lib.user_utils import add_user
-from fastapi_app.lib.group_utils import add_group, add_collection_to_group
-from fastapi_app.lib.collection_utils import add_collection
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.models import FileMetadata
+from fastapi_app.lib.permissions.user_utils import add_user
+from fastapi_app.lib.permissions.group_utils import add_group, add_collection_to_group
+from fastapi_app.lib.utils.collection_utils import add_collection
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.models.models import FileMetadata
 
 
 class TestCollectionFilteringEndpoints(unittest.TestCase):
@@ -55,11 +55,11 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         add_user(self.db_dir, 'admin', 'admin123', 'Admin User', 'admin@example.com')
 
         # Add user to group1
-        from fastapi_app.lib.user_utils import add_group_to_user
+        from fastapi_app.lib.permissions.user_utils import add_group_to_user
         add_group_to_user(self.db_dir, 'user1', 'group1')
 
         # Make admin an admin
-        from fastapi_app.lib.user_utils import add_role_to_user
+        from fastapi_app.lib.permissions.user_utils import add_role_to_user
         add_role_to_user(self.db_dir, 'admin', 'admin')
 
         # Setup database and repository
@@ -86,7 +86,7 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
         # Override dependencies using FastAPI's dependency_overrides
-        from fastapi_app.lib.dependencies import get_file_repository
+        from fastapi_app.lib.core.dependencies import get_file_repository
         app.dependency_overrides[get_file_repository] = lambda: self.repo
 
     def tearDown(self):
@@ -113,7 +113,7 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
 
     def _add_test_file(self, doc_id: str, collections: list, file_type: str = 'pdf'):
         """Add a test file to the repository."""
-        from fastapi_app.lib.models import FileCreate
+        from fastapi_app.lib.models.models import FileCreate
         import hashlib
         content_hash = hashlib.sha256(f'{doc_id}-{file_type}'.encode()).hexdigest()
 
@@ -130,7 +130,7 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
 
     def _call_with_user(self, user: dict, url: str):
         """Make a request with a specific user by overriding dependencies."""
-        from fastapi_app.lib.dependencies import get_current_user, get_session_id
+        from fastapi_app.lib.core.dependencies import get_current_user, get_session_id
         app.dependency_overrides[get_current_user] = lambda: user
         app.dependency_overrides[get_session_id] = lambda: 'test-session'
 

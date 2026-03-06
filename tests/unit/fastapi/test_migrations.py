@@ -3,8 +3,8 @@ Unit tests for database migration infrastructure.
 
 Tests the MigrationManager and Migration base class.
 
-@testCovers fastapi_app/lib/migrations/manager.py
-@testCovers fastapi_app/lib/migrations/base.py
+@testCovers fastapi_app/lib/core/migrations/manager.py
+@testCovers fastapi_app/lib/core/migrations/base.py
 """
 
 import unittest
@@ -13,7 +13,7 @@ import tempfile
 import logging
 from pathlib import Path
 
-from fastapi_app.lib.migrations import MigrationManager, Migration
+from fastapi_app.lib.core.migrations import MigrationManager, Migration
 
 
 # Test migrations

@@ -9,8 +9,8 @@ import logging
 from typing import Any, Callable
 
 from fastapi_app.lib.extraction import ExtractorRegistry
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.service_registry import get_service_registry
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.services.service_registry import get_service_registry
 
 from .extractor import KisskiExtractor
 from .service import KisskiService

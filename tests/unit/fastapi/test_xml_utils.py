@@ -3,7 +3,7 @@ Unit tests for xml_utils.py
 
 Tests XML entity encoding with configurable quote encoding.
 
-@testCovers fastapi_app/lib/xml_utils.py
+@testCovers fastapi_app/lib/utils/xml_utils.py
 """
 
 import unittest
@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.xml_utils import encode_xml_entities, EncodeOptions
+from fastapi_app.lib.utils.xml_utils import encode_xml_entities, EncodeOptions
 
 
 class TestXmlEntityEncoding(unittest.TestCase):

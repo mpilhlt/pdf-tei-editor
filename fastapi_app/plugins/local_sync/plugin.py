@@ -2,7 +2,7 @@
 Local Sync Plugin - Synchronize collection documents with local filesystem.
 """
 
-from fastapi_app.lib.plugin_base import Plugin
+from fastapi_app.lib.plugins.plugin_base import Plugin
 from typing import Any
 from pathlib import Path
 import hashlib
@@ -35,7 +35,7 @@ class LocalSyncPlugin(Plugin):
     @classmethod
     def is_available(cls) -> bool:
         """Only available if enabled, repo path configured, and user has reviewer role."""
-        from fastapi_app.lib.plugin_tools import get_plugin_config
+        from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
         # Check if enabled
         enabled = get_plugin_config(
@@ -104,9 +104,9 @@ class LocalSyncPlugin(Plugin):
         Returns:
             Dictionary with sync statistics and details
         """
-        from fastapi_app.lib.dependencies import get_db, get_file_storage
-        from fastapi_app.lib.file_repository import FileRepository
-        from fastapi_app.lib.config_utils import get_config
+        from fastapi_app.lib.core.dependencies import get_db, get_file_storage
+        from fastapi_app.lib.repository.file_repository import FileRepository
+        from fastapi_app.lib.utils.config_utils import get_config
 
         results: dict[str, list[dict[str, Any]]] = {
             "skipped": [],
@@ -163,7 +163,7 @@ class LocalSyncPlugin(Plugin):
         fs_map = {}
         for path, content in fs_docs.items():
             try:
-                from fastapi_app.lib.tei_utils import (
+                from fastapi_app.lib.utils.tei_utils import (
                     extract_fileref,
                     extract_variant_id,
                     extract_revision_timestamp
@@ -230,7 +230,7 @@ class LocalSyncPlugin(Plugin):
                         })
                         continue
 
-                    from fastapi_app.lib.tei_utils import extract_revision_timestamp
+                    from fastapi_app.lib.utils.tei_utils import extract_revision_timestamp
                     col_timestamp = extract_revision_timestamp(col_content)
 
                     if col_timestamp and fs_timestamp:
@@ -415,8 +415,8 @@ class LocalSyncPlugin(Plugin):
             collection_id: Collection ID to add the file to
         """
         import logging
-        from fastapi_app.lib.models import FileCreate
-        from fastapi_app.lib.tei_utils import extract_tei_metadata
+        from fastapi_app.lib.models.models import FileCreate
+        from fastapi_app.lib.utils.tei_utils import extract_tei_metadata
 
         logger = logging.getLogger(__name__)
         logger.debug(f"Importing from filesystem: doc_id={doc_id}, variant={variant}")
@@ -472,8 +472,8 @@ class LocalSyncPlugin(Plugin):
         Imports the filesystem content as-is without adding revision changes.
         """
         import logging
-        from fastapi_app.lib.models import FileCreate
-        from fastapi_app.lib.tei_utils import (
+        from fastapi_app.lib.models.models import FileCreate
+        from fastapi_app.lib.utils.tei_utils import (
             extract_tei_metadata,
             extract_processing_instructions,
             serialize_tei_with_formatted_header
@@ -503,7 +503,7 @@ class LocalSyncPlugin(Plugin):
             version_name = f"Imported at {import_date}"
 
         # Serialize modified content with pretty-printing, preserving processing instructions
-        from fastapi_app.lib.xml_utils import apply_entity_encoding_from_config
+        from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
 
         content_str = serialize_tei_with_formatted_header(root, processing_instructions)
 
@@ -562,7 +562,7 @@ class LocalSyncPlugin(Plugin):
 
     def _generate_detailed_report_html(self, results: dict, collection: str, variant: str, is_preview: bool) -> str:
         """Generate detailed HTML report for preview mode."""
-        from fastapi_app.lib.plugin_tools import escape_html
+        from fastapi_app.lib.plugins.plugin_tools import escape_html
 
         total = len(results["skipped"]) + len(results["updated_fs"]) + len(results["updated_collection"]) + len(results["errors"])
 
@@ -675,7 +675,7 @@ class LocalSyncPlugin(Plugin):
 
     def _generate_summary_report_html(self, results: dict, is_preview: bool) -> str:
         """Generate summary HTML report for execute mode (statistics only)."""
-        from fastapi_app.lib.plugin_tools import escape_html
+        from fastapi_app.lib.plugins.plugin_tools import escape_html
 
         total = len(results["skipped"]) + len(results["updated_fs"]) + len(results["updated_collection"]) + len(results["errors"])
 

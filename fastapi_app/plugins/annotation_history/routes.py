@@ -7,13 +7,13 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from io import StringIO
 import logging
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_db,
     get_file_storage,
     get_auth_manager,
     get_session_manager,
 )
-from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.lib.repository.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ async def view_history(
         nested_table_html = plugin._generate_nested_table(documents, show_variant_column)
 
         # Wrap in proper HTML page using generate_datatable_page
-        from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+        from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
         # Build title: PDF label - doc_id (variant)
         title = f"{pdf_label} - {doc_id}"

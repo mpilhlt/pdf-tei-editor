@@ -1,15 +1,15 @@
 """
 Tests for plugin dependency management.
 
-@testCovers fastapi_app/lib/plugin_registry.py
-@testCovers fastapi_app/lib/plugin_base.py
+@testCovers fastapi_app/lib/plugins/plugin_registry.py
+@testCovers fastapi_app/lib/plugins/plugin_base.py
 """
 
 import unittest
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.plugin_registry import PluginRegistry
-from fastapi_app.lib.plugin_manager import PluginManager
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_registry import PluginRegistry
+from fastapi_app.lib.plugins.plugin_manager import PluginManager
 
 
 class MockPlugin(Plugin):
@@ -117,7 +117,7 @@ class TestCircularDependencyDetection(unittest.TestCase):
             MockPlugin("b", ["a"]),
         ]
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="ERROR") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="ERROR") as logs:
             self.registry._register_with_dependencies(plugins)
 
         # Neither should be registered
@@ -136,7 +136,7 @@ class TestCircularDependencyDetection(unittest.TestCase):
             MockPlugin("c", ["a"]),
         ]
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="ERROR") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="ERROR") as logs:
             self.registry._register_with_dependencies(plugins)
 
         # None should be registered due to cycle
@@ -146,7 +146,7 @@ class TestCircularDependencyDetection(unittest.TestCase):
         """Self-dependency is detected as circular."""
         plugins = [MockPlugin("a", ["a"])]
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="ERROR") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="ERROR") as logs:
             self.registry._register_with_dependencies(plugins)
 
         self.assertEqual(len(self.registry._plugins), 0)
@@ -162,7 +162,7 @@ class TestMissingDependency(unittest.TestCase):
         """Missing dependencies prevent registration."""
         plugins = [MockPlugin("child", ["nonexistent"])]
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="ERROR") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="ERROR") as logs:
             self.registry._register_with_dependencies(plugins)
 
         self.assertEqual(len(self.registry._plugins), 0)
@@ -177,7 +177,7 @@ class TestMissingDependency(unittest.TestCase):
             MockPlugin("bad", ["nonexistent"]),
         ]
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="ERROR") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="ERROR") as logs:
             self.registry._register_with_dependencies(plugins)
 
         # Only 'good' should be registered
@@ -213,7 +213,7 @@ class TestGetDependency(unittest.TestCase):
         ]
         self.registry._register_with_dependencies(plugins)
 
-        with self.assertLogs("fastapi_app.lib.plugin_registry", level="WARNING") as logs:
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_registry", level="WARNING") as logs:
             result = self.registry.get_dependency("child", "other")
 
         self.assertIsNone(result)

@@ -7,7 +7,7 @@ Registers the LLamoreExtractor with the extraction registry.
 import logging
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
 from .extractor import LLamoreExtractor
 

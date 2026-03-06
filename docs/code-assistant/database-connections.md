@@ -34,11 +34,11 @@ Used for simple databases with infrequent writes:
 - Databases that don't benefit from WAL's read concurrency
 - When rapid concurrent access during tests causes WAL corruption
 
-See `fastapi_app/lib/locking.py` for an example of DELETE mode implementation.
+See `fastapi_app/lib/core/locking.py` for an example of DELETE mode implementation.
 
 ## Key Components
 
-### 1. DatabaseManager (`fastapi_app/lib/database.py`)
+### 1. DatabaseManager (`fastapi_app/lib/core/database.py`)
 
 The core class for database interaction. It implements:
 
@@ -47,12 +47,12 @@ The core class for database interaction. It implements:
 - **Transaction Management**: Provides a `transaction()` context manager that explicitly handles `BEGIN`, `COMMIT`, and `ROLLBACK`.
 - **Autocommit Mode**: Connections are opened with `isolation_level=None` (autocommit) to allow manual transaction control and prevent implicit transactions from locking the database unexpectedly.
 
-### 2. Singleton Pattern (`fastapi_app/lib/dependencies.py`)
+### 2. Singleton Pattern (`fastapi_app/lib/core/dependencies.py`)
 
 - `_DatabaseManagerSingleton` ensures only one `DatabaseManager` instance exists per database file.
 - This allows the connection pool to be shared across the application, preventing multiple pools from competing for the same database file.
 
-### 3. Locking (`fastapi_app/lib/sqlite_utils.py`)
+### 3. Locking (`fastapi_app/lib/core/sqlite_utils.py`)
 
 - `with_db_lock(db_path)`: Uses a reentrant lock (`threading.RLock`) to serialize schema initialization and WAL mode setup per database file.
 

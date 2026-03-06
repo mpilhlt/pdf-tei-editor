@@ -345,8 +345,8 @@ Files are stored in content-addressable storage using SHA-256 hashes. To export:
 1. **Query the database** to find file metadata:
 
    ```python
-   from fastapi_app.lib.database import DatabaseManager
-   from fastapi_app.lib.file_repository import FileRepository
+   from fastapi_app.lib.core.database import DatabaseManager
+   from fastapi_app.lib.repository.file_repository import FileRepository
 
    db = DatabaseManager("data/db/metadata.db")
    repo = FileRepository(db)

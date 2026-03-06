@@ -32,14 +32,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.storage_gc import (
+from fastapi_app.lib.storage.storage_gc import (
     run_garbage_collection,
     rebuild_references_from_database,
     StorageGarbageCollector
 )
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.storage_references import StorageReferenceManager
-from fastapi_app.lib.logging_utils import get_logger
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.storage.storage_references import StorageReferenceManager
+from fastapi_app.lib.utils.logging_utils import get_logger
 
 
 def main():

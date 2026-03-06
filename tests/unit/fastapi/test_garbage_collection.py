@@ -8,8 +8,8 @@ Tests:
 - Additive filter behavior
 - Permanent file deletion
 
-@testCovers fastapi_app/lib/file_repository.py::get_deleted_files_for_gc
-@testCovers fastapi_app/lib/file_repository.py::permanently_delete_file
+@testCovers fastapi_app/lib/repository/file_repository.py::get_deleted_files_for_gc
+@testCovers fastapi_app/lib/repository/file_repository.py::permanently_delete_file
 """
 
 import unittest
@@ -18,10 +18,10 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.models import FileCreate
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.models.models import FileCreate
 
 
 class TestGarbageCollection(unittest.TestCase):

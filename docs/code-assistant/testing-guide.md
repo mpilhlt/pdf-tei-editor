@@ -181,7 +181,7 @@ def setUp(self):
     """Set up test fixtures."""
     from fastapi import FastAPI
     from myapp.routes import router
-    from fastapi_app.lib.dependencies import (
+    from fastapi_app.lib.core.dependencies import (
         get_auth_manager,
         get_session_manager,
         get_db,

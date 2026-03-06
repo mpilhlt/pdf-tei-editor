@@ -7,7 +7,7 @@ import tempfile
 import json
 from pathlib import Path
 from lxml import etree
-from fastapi_app.lib.tei_utils import (
+from fastapi_app.lib.utils.tei_utils import (
     serialize_tei_with_formatted_header,
     create_schema_processing_instruction,
     create_tei_header,
@@ -157,7 +157,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
 
     def test_extract_processing_instructions(self):
         """Test extraction of processing instructions from XML string."""
-        from fastapi_app.lib.tei_utils import extract_processing_instructions
+        from fastapi_app.lib.utils.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0"?>
 <?xml-model href="https://example.com/schema.rng" type="application/xml"?>
@@ -181,7 +181,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
 
     def test_does_not_extract_xml_declaration(self):
         """Test that XML declaration is not extracted as a processing instruction."""
-        from fastapi_app.lib.tei_utils import extract_processing_instructions
+        from fastapi_app.lib.utils.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
@@ -195,7 +195,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
 
     def test_grobid_training_schema_extraction(self):
         """Test extraction of grobid training schema processing instruction."""
-        from fastapi_app.lib.tei_utils import extract_processing_instructions
+        from fastapi_app.lib.utils.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0"?>
 <?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
@@ -244,49 +244,49 @@ class TestGetFileIdFromOptions(unittest.TestCase):
 
     def test_encodes_doi_slash(self):
         """Test that a DOI slash is encoded to double underscore."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({'doc_id': '10.1234/example'})
         self.assertEqual(result, '10.1234__example')
 
     def test_encodes_special_characters(self):
         """Test that filesystem-unsafe characters are encoded."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({'doc_id': '10.1234/test:file'})
         self.assertEqual(result, '10.1234__test$3A$file')
 
     def test_does_not_double_encode(self):
         """Test that an already-encoded doc_id is returned unchanged."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({'doc_id': '10.1234__example'})
         self.assertEqual(result, '10.1234__example')
 
     def test_simple_doc_id_unchanged(self):
         """Test that a doc_id without special characters is unchanged."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({'doc_id': 'my-document'})
         self.assertEqual(result, 'my-document')
 
     def test_fallback_to_pdf_path(self):
         """Test fallback to PDF basename when no doc_id."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({}, '/path/to/document.pdf')
         self.assertEqual(result, 'document')
 
     def test_empty_options_no_pdf(self):
         """Test returns empty string when no doc_id and no pdf_path."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({})
         self.assertEqual(result, '')
 
     def test_doc_id_takes_precedence_over_pdf_path(self):
         """Test that doc_id is used even when pdf_path is provided."""
-        from fastapi_app.lib.tei_utils import get_file_id_from_options
+        from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options(
             {'doc_id': '10.1234/example'},
@@ -300,7 +300,7 @@ class TestExtractChangeSignatures(unittest.TestCase):
 
     def test_extract_change_signatures(self):
         """Test extraction of change signatures from TEI XML."""
-        from fastapi_app.lib.tei_utils import extract_change_signatures
+        from fastapi_app.lib.utils.tei_utils import extract_change_signatures
 
         xml_content = b"""<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
@@ -320,7 +320,7 @@ class TestExtractChangeSignatures(unittest.TestCase):
 
     def test_extract_change_signatures_empty(self):
         """Test extraction with no change elements."""
-        from fastapi_app.lib.tei_utils import extract_change_signatures
+        from fastapi_app.lib.utils.tei_utils import extract_change_signatures
 
         xml_content = b"""<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
@@ -338,7 +338,7 @@ class TestBuildVersionAncestryChains(unittest.TestCase):
 
     def test_build_version_ancestry_chains_linear(self):
         """Test building ancestry chains for linear version history."""
-        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+        from fastapi_app.lib.utils.tei_utils import build_version_ancestry_chains
 
         # Version A (1 change) -> B (2 changes, extends A) -> C (3 changes, extends B)
         versions = [
@@ -377,7 +377,7 @@ class TestBuildVersionAncestryChains(unittest.TestCase):
 
     def test_build_version_ancestry_chains_branching(self):
         """Test building ancestry chains for branching version history."""
-        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+        from fastapi_app.lib.utils.tei_utils import build_version_ancestry_chains
 
         # Version A (1 change) -> B (2 changes, extends A)
         # Version A (1 change) -> D (2 changes, extends A but different from B)
@@ -421,7 +421,7 @@ class TestBuildVersionAncestryChains(unittest.TestCase):
 
     def test_build_version_ancestry_chains_independent(self):
         """Test building ancestry chains for independent versions."""
-        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+        from fastapi_app.lib.utils.tei_utils import build_version_ancestry_chains
 
         # Two independent versions with no common ancestor
         versions = [
@@ -446,7 +446,7 @@ class TestBuildVersionAncestryChains(unittest.TestCase):
 
     def test_build_version_ancestry_chains_empty(self):
         """Test building ancestry chains with empty input."""
-        from fastapi_app.lib.tei_utils import build_version_ancestry_chains
+        from fastapi_app.lib.utils.tei_utils import build_version_ancestry_chains
 
         chains = build_version_ancestry_chains([])
         self.assertEqual(len(chains), 0)
@@ -583,7 +583,7 @@ class TestCreateEncodingDescWithExtractor(unittest.TestCase):
 
     def test_single_ref(self):
         """Test that a single ref element is created with target only."""
-        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+        from fastapi_app.lib.utils.tei_utils import create_encoding_desc_with_extractor
 
         result = create_encoding_desc_with_extractor(
             timestamp="2024-01-15T10:30:00Z",
@@ -600,7 +600,7 @@ class TestCreateEncodingDescWithExtractor(unittest.TestCase):
 
     def test_multiple_refs(self):
         """Test that multiple refs are added in order."""
-        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+        from fastapi_app.lib.utils.tei_utils import create_encoding_desc_with_extractor
 
         result = create_encoding_desc_with_extractor(
             timestamp="2024-01-15T10:30:00Z",
@@ -619,7 +619,7 @@ class TestCreateEncodingDescWithExtractor(unittest.TestCase):
 
     def test_no_refs(self):
         """Test that no ref elements are created when refs is None."""
-        from fastapi_app.lib.tei_utils import create_encoding_desc_with_extractor
+        from fastapi_app.lib.utils.tei_utils import create_encoding_desc_with_extractor
 
         result = create_encoding_desc_with_extractor(
             timestamp="2024-01-15T10:30:00Z",
@@ -810,7 +810,7 @@ class TestExtractBiblStructMetadata(unittest.TestCase):
 
     def test_round_trip_metadata(self):
         """Test that metadata survives create → extract round trip."""
-        from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
+        from fastapi_app.lib.utils.tei_utils import serialize_tei_with_formatted_header
 
         original_metadata = {
             "title": "Round Trip Test",
@@ -976,7 +976,7 @@ class TestBiblStructPriorityExtraction(unittest.TestCase):
 
     def test_round_trip_with_complete_metadata(self):
         """Test round-trip with complete metadata including DOI and URL."""
-        from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
+        from fastapi_app.lib.utils.tei_utils import serialize_tei_with_formatted_header
 
         original_metadata = {
             "title": "Complete Test Article",

@@ -6,7 +6,7 @@ import asyncio
 import logging
 from functools import partial
 from typing import Any, Dict, Optional
-from fastapi_app.lib.service_registry import ExtractionService, ExtractionResult, ModelCapabilityFilter
+from fastapi_app.lib.services.service_registry import ExtractionService, ExtractionResult, ModelCapabilityFilter
 from .extractor import KisskiExtractor
 
 logger = logging.getLogger(__name__)
@@ -132,10 +132,10 @@ class KisskiService(ExtractionService):
             Physical file path or None if not found
         """
         try:
-            from fastapi_app.lib.dependencies import get_db
-            from fastapi_app.lib.file_repository import FileRepository
+            from fastapi_app.lib.core.dependencies import get_db
+            from fastapi_app.lib.repository.file_repository import FileRepository
             from fastapi_app.config import get_settings
-            from fastapi_app.lib.hash_utils import get_storage_path
+            from fastapi_app.lib.utils.hash_utils import get_storage_path
 
             db = get_db()
             repo = FileRepository(db)

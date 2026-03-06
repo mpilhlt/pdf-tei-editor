@@ -6,7 +6,7 @@ This guide explains how to use the SSE mechanism for real-time communication bet
 
 The SSE system consists of three main components:
 
-1. **Backend Service** (`fastapi_app/lib/sse_service.py`) - Manages SSE connections and message queues per session
+1. **Backend Service** (`fastapi_app/lib/sse/sse_service.py`) - Manages SSE connections and message queues per session
 2. **Backend Router** (`fastapi_app/routers/sse.py`) - Provides HTTP endpoints for subscribing and sending messages
 3. **Frontend Plugin** (`app/src/plugins/sse.js`) - Manages client-side EventSource connection with automatic reconnection
 
@@ -26,8 +26,8 @@ Use dependency injection to get the SSE service instance:
 
 ```python
 from fastapi import Depends
-from fastapi_app.lib.dependencies import get_sse_service
-from fastapi_app.lib.sse_service import SSEService
+from fastapi_app.lib.core.dependencies import get_sse_service
+from fastapi_app.lib.sse.sse_service import SSEService
 
 @router.post("/my-endpoint")
 async def my_endpoint(

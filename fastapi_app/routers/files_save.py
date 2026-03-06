@@ -22,7 +22,7 @@ from lxml import etree
 from fastapi import APIRouter, Depends, Request, HTTPException
 from pathlib import Path
 
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user,
@@ -30,19 +30,19 @@ from ..lib.dependencies import (
     get_sse_service,
     get_session_manager
 )
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.locking import acquire_lock, release_lock
-from ..lib.logging_utils import get_logger
-from ..lib.user_utils import user_has_collection_access
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.core.locking import acquire_lock, release_lock
+from ..lib.utils.logging_utils import get_logger
+from ..lib.permissions.user_utils import user_has_collection_access
 from ..config import get_settings
 from ..lib.models import FileCreate, FileUpdate
-from ..lib.models_files import SaveFileRequest, SaveFileResponse
-from ..lib.tei_utils import serialize_tei_with_formatted_header, update_fileref_in_xml
-from ..lib.sse_service import SSEService
-from ..lib.sessions import SessionManager
-from ..lib.sse_utils import broadcast_to_other_sessions
-from ..lib.acl_utils import set_default_permissions_for_new_file
+from ..lib.models.models_files import SaveFileRequest, SaveFileResponse
+from ..lib.utils.tei_utils import serialize_tei_with_formatted_header, update_fileref_in_xml
+from ..lib.sse.sse_service import SSEService
+from ..lib.core.sessions import SessionManager
+from ..lib.sse.sse_utils import broadcast_to_other_sessions
+from ..lib.permissions.acl_utils import set_default_permissions_for_new_file
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -233,7 +233,7 @@ async def save_file(
         file_id, variant = _extract_metadata_from_xml(xml_string, request.file_id, logger_inst)
 
         # Extract full TEI metadata including label, status and last_revision
-        from ..lib.tei_utils import extract_tei_metadata
+        from ..lib.utils.tei_utils import extract_tei_metadata
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         tei_metadata = extract_tei_metadata(xml_root)
         label = tei_metadata.get('edition_title')  # Extract edition title for label
@@ -287,7 +287,7 @@ async def save_file(
         xml_string = _update_fileref_in_xml_with_logging(xml_string, file_id, logger_inst)
 
         # Encode XML entities if configured
-        from ..lib.xml_utils import apply_entity_encoding_from_config
+        from ..lib.utils.xml_utils import apply_entity_encoding_from_config
         xml_string = apply_entity_encoding_from_config(xml_string)
 
         # Refresh existing_gold after resolving doc_id
@@ -335,7 +335,7 @@ async def save_file(
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
         # Emit document.save event before saving
-            from ..lib.event_bus import get_event_bus
+            from ..lib.sse.event_bus import get_event_bus
             # Build base URL from request
             base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
             # Get PDF stable_id
@@ -398,7 +398,7 @@ async def save_file(
             if existing_file.is_gold_standard and tei_metadata:
                 pdf_file = file_repo.get_pdf_for_document(doc_id)
                 if pdf_file:
-                    from ..lib.tei_utils import update_pdf_metadata_from_tei
+                    from ..lib.utils.tei_utils import update_pdf_metadata_from_tei
                     update_pdf_metadata_from_tei(
                         pdf_file,
                         tei_metadata,
@@ -444,7 +444,7 @@ async def save_file(
             doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
 
         # Emit document.save event before saving
-            from ..lib.event_bus import get_event_bus
+            from ..lib.sse.event_bus import get_event_bus
             # Build base URL from request
             base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
             # Get PDF stable_id (pdf_file already retrieved above for collections)
@@ -541,7 +541,7 @@ async def save_file(
             doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
 
         # Emit document.save event before saving
-            from ..lib.event_bus import get_event_bus
+            from ..lib.sse.event_bus import get_event_bus
             # Build base URL from request
             base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
             # Get PDF stable_id (pdf_file already retrieved above for collections)
@@ -595,7 +595,7 @@ async def save_file(
 
         # Update PDF metadata from TEI (for new gold standard)
             if pdf_file and tei_metadata:
-                from ..lib.tei_utils import update_pdf_metadata_from_tei
+                from ..lib.utils.tei_utils import update_pdf_metadata_from_tei
                 update_pdf_metadata_from_tei(
                     pdf_file,
                     tei_metadata,

@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
 
 logger = logging.getLogger(__name__)
@@ -44,4 +44,4 @@ class MetadataExtractionPlugin(Plugin):
             else:
                 logger.warning(f"Enhancement file not found: {enhancement_file}")
         else:
-            logger.warning("tei-wizard dependency not available")
+            logger.debug("tei-wizard dependency not available")

@@ -57,7 +57,7 @@ Creates new collection. Requires admin or reviewer role.
 
 ### RBAC Integration
 
-**Function**: `get_user_collections(user, db_dir)` in `fastapi_app/lib/user_utils.py:325`
+**Function**: `get_user_collections(user, db_dir)` in `fastapi_app/lib/permissions/user_utils.py:325`
 
 **Logic**:
 1. Check user roles for `*` or `admin` → return `None` (all collections)

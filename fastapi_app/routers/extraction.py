@@ -14,7 +14,7 @@ import logging
 from typing import Optional, List
 
 from ..config import get_settings
-from ..lib.models_extraction import (
+from ..lib.models.models_extraction import (
     ListExtractorsResponse,
     ExtractorInfo,
     ExtractRequest,
@@ -25,14 +25,14 @@ from ..lib.extraction import (
     create_extractor,
     should_use_mock_extractor
 )
-from ..lib.dependencies import (
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user
 )
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.hash_utils import get_storage_path
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.utils.hash_utils import get_storage_path
 from ..lib.models import FileCreate
 
 logger = logging.getLogger(__name__)
@@ -269,7 +269,7 @@ def _save_pdf_extraction_result(
         Dict with 'pdf' and 'xml' hashes
     """
     from lxml import etree
-    from ..lib.tei_utils import extract_tei_metadata
+    from ..lib.utils.tei_utils import extract_tei_metadata
 
     # Determine variant from options
     variant = options.get('variant_id')
@@ -324,7 +324,7 @@ def _save_pdf_extraction_result(
 
     # Update PDF metadata from extracted TEI
     if tei_metadata:
-        from ..lib.tei_utils import update_pdf_metadata_from_tei
+        from ..lib.utils.tei_utils import update_pdf_metadata_from_tei
         update_pdf_metadata_from_tei(
             pdf_metadata,
             tei_metadata,

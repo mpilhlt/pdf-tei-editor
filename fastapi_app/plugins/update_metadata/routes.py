@@ -10,16 +10,16 @@ import logging
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
     get_session_manager,
     get_sse_service,
 )
-from fastapi_app.lib.sse_utils import ProgressBar, send_notification
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.metadata_update_utils import update_tei_metadata
+from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.services.metadata_update_utils import update_tei_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ async def options_form(
     """
     _authenticate_admin(session_id, x_session_id, session_manager, auth_manager)
 
-    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+    from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
     sandbox_script = generate_sandbox_client_script()
 

@@ -18,12 +18,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from fastapi_app.lib.dependencies import (
+from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_session_manager,
     get_sse_service,
 )
-from fastapi_app.lib.sse_utils import broadcast_to_all_sessions, send_notification
+from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions, send_notification
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ async def backup_restore_view(
     """Display the backup & restore UI."""
     _authenticate_admin(session_id, x_session_id, session_manager, auth_manager)
 
-    from fastapi_app.lib.plugin_tools import load_plugin_html
+    from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 
     html = load_plugin_html(__file__, "view.html")
     return HTMLResponse(content=html)

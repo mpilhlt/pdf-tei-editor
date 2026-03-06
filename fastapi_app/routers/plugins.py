@@ -15,10 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from fastapi_app.lib.dependencies import get_current_user, get_session_id_from_request
-from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
-from fastapi_app.lib.plugin_manager import PluginManager
-from fastapi_app.lib.plugin_tools import validate_javascript_content
+from fastapi_app.lib.core.dependencies import get_current_user, get_session_id_from_request
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
+from fastapi_app.lib.plugins.plugin_manager import PluginManager
+from fastapi_app.lib.plugins.plugin_tools import validate_javascript_content
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ async def get_sandbox_client_script():
     Static plugin HTML pages can load this via:
         <script src="/api/v1/plugins/sandbox-client.js"></script>
     """
-    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+    from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
     script = generate_sandbox_client_script()
     return PlainTextResponse(content=script, media_type="application/javascript")

@@ -7,8 +7,8 @@ Provides XSLT transformations for TEI documents independently of GROBID.
 import logging
 from typing import Any, Callable
 
-from fastapi_app.lib.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.frontend_extension_registry import FrontendExtensionRegistry
+from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

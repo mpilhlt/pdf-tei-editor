@@ -6,7 +6,7 @@ import unittest
 import asyncio
 from unittest.mock import Mock
 from fastapi_app.plugins.rng_converter.plugin import RngConverterPlugin
-from fastapi_app.lib.plugin_base import PluginContext
+from fastapi_app.lib.plugins.plugin_base import PluginContext
 
 
 class TestRngConverterPlugin(unittest.TestCase):

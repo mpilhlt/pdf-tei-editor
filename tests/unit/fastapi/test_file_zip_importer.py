@@ -11,7 +11,7 @@ Tests:
 - Recursive collections mode
 - Cleanup after import
 
-@testCovers fastapi_app/lib/file_zip_importer.py
+@testCovers fastapi_app/lib/storage/file_zip_importer.py
 """
 
 import unittest
@@ -22,11 +22,11 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi_app.lib.file_zip_importer import FileZipImporter
-from fastapi_app.lib.database import DatabaseManager
-from fastapi_app.lib.file_repository import FileRepository
-from fastapi_app.lib.file_storage import FileStorage
-from fastapi_app.lib.collection_utils import get_available_collections
+from fastapi_app.lib.storage.file_zip_importer import FileZipImporter
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.utils.collection_utils import get_available_collections
 from fastapi_app.config import get_settings
 
 
@@ -233,7 +233,7 @@ class TestFileZipImporter(unittest.TestCase):
         importer = FileZipImporter(self.db, self.storage, self.repo)
 
         # Suppress expected error log output
-        with self.assertLogs('fastapi_app.lib.file_zip_importer', level='ERROR') as log_cm:
+        with self.assertLogs('fastapi_app.lib.storage.file_zip_importer', level='ERROR') as log_cm:
             with self.assertRaises(RuntimeError) as ctx:
                 importer.import_from_zip(zip_path)
 

@@ -16,15 +16,15 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from typing import Optional
 
-from ..lib.file_repository import FileRepository
-from ..lib.file_storage import FileStorage
-from ..lib.dependencies import (
+from ..lib.repository.file_repository import FileRepository
+from ..lib.storage.file_storage import FileStorage
+from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
     get_current_user
 )
-from ..lib.access_control import check_file_access
-from ..lib.logging_utils import get_logger
+from ..lib.permissions.access_control import check_file_access
+from ..lib.utils.logging_utils import get_logger
 
 
 logger = get_logger(__name__)
