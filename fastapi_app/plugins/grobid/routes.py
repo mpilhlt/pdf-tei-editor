@@ -159,7 +159,9 @@ async def download_training_package(
 
         # Get GROBID version info for cache key
         from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
+        from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
         extractor = GrobidTrainingExtractor()
+        training_handler = TrainingHandler()
         _, grobid_revision = extractor._get_grobid_version(grobid_server_url)
 
         # Set up progress tracking with cancellation (only if progress is enabled)
@@ -245,7 +247,7 @@ async def download_training_package(
                         try:
                             # Run blocking GROBID fetch in thread pool to allow SSE events
                             temp_dir, extracted_files = await asyncio.to_thread(
-                                extractor._fetch_training_package, # type:ignore
+                                training_handler._fetch_training_package,
                                 str(pdf_path), grobid_server_url, flavor
                             )
                             # Cache the training data
