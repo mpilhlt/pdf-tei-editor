@@ -609,6 +609,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
     { name = "waitress" },
     { name = "webdav4", extra = ["fsspec"] },
+    { name = "websockets" },
     { name = "xmlschema" },
 ]
 
@@ -644,6 +645,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.36.0" },
     { name = "waitress", specifier = ">=3.0.2" },
     { name = "webdav4", extras = ["fsspec"], specifier = ">=0.10.0" },
+    { name = "websockets", specifier = ">=15.0.1" },
     { name = "xmlschema", specifier = ">=3.4.5" },
 ]
 
