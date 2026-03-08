@@ -653,6 +653,32 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.show();
     }
   }
+
+  /**
+   * Execute a backend plugin by ID. Exposed as a PluginManager endpoint so
+   * frontend extensions can trigger plugin execution via sandbox.invoke().
+   * @param {string} pluginId
+   * @param {string} endpointName
+   * @param {Object} params
+   */
+  async executePluginById(pluginId, endpointName, params) {
+    const plugin = this.plugins.find(p => p.id === pluginId);
+    if (!plugin) {
+      logger.warn(`executePluginById: plugin '${pluginId}' not found`);
+      return;
+    }
+    await this.executePlugin(plugin, endpointName, params);
+  }
+
+  /**
+   * @override
+   */
+  getEndpoints() {
+    return {
+      ...super.getEndpoints(),
+      'backend-plugins.execute': this.executePluginById.bind(this),
+    };
+  }
 }
 
 export default BackendPluginsPlugin;
