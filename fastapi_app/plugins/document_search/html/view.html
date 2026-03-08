@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Search</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sl-font-sans, system-ui, sans-serif);
+      font-size: 14px;
+      background: #fff;
+      color: #333;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    #search-input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    #search-input:focus { border-color: #0066cc; }
+
+    #clear-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      color: #666;
+      padding: 2px 6px;
+      border-radius: 4px;
+      visibility: hidden;
+    }
+
+    #clear-btn:hover { background: #eee; }
+    #clear-btn.visible { visibility: visible; }
+
+    .meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 8px;
+      min-height: 18px;
+    }
+
+    #refresh-link {
+      color: #0066cc;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      font-size: 12px;
+      padding: 0;
+    }
+
+    #results {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .result-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+
+    .result-item:hover { background: #f5f8ff; }
+
+    .result-item a {
+      color: #0066cc;
+      text-decoration: none;
+      display: block;
+    }
+
+    .result-item a:hover { text-decoration: underline; }
+
+    .result-item strong { font-weight: 600; }
+
+    #status {
+      font-style: italic;
+      color: #999;
+      padding: 12px 0;
+      text-align: center;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #aaa;
+      padding: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="search-bar">
+    <input id="search-input" type="text" placeholder="Search documents (min. 4 characters)…" autocomplete="off" />
+    <button id="clear-btn" title="Clear search">×</button>
+  </div>
+
+  <div class="meta-bar">
+    <span id="result-count"></span>
+    <button id="refresh-link" title="Rebuild search index">Refresh index</button>
+  </div>
+
+  <div id="results">
+    <div id="status" class="hint">Type at least 4 characters to search.</div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'document-search.lastQuery';
+    const MIN_LENGTH = 4;
+    const DEBOUNCE_MS = 300;
+
+    const searchInput = document.getElementById('search-input');
+    const clearBtn = document.getElementById('clear-btn');
+    const resultsEl = document.getElementById('results');
+    const statusEl = document.getElementById('status');
+    const resultCountEl = document.getElementById('result-count');
+    const refreshLink = document.getElementById('refresh-link');
+
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session_id') || '';
+
+    // ── Sandbox interaction ───────────────────────────────────────────────────
+
+    function openDocument(xmlId, pdfId) {
+      sandbox.openDocument(xmlId, pdfId).catch(err => {
+        console.warn('openDocument error (may be non-fatal lock release):', err);
+      });
+    }
+
+    // ── Index cleanup ─────────────────────────────────────────────────────────
+
+    window.addEventListener('beforeunload', () => {
+      if (sessionId) {
+        navigator.sendBeacon(
+          `/api/plugins/document-search/cache/clear?session_id=${encodeURIComponent(sessionId)}`
+        );
+      }
+    });
+
+    // ── Search logic ──────────────────────────────────────────────────────────
+
+    let debounceTimer = null;
+    let currentQuery = '';
+
+    function setStatus(msg) {
+      statusEl.style.display = '';
+      statusEl.textContent = msg;
+    }
+
+    function clearStatus() {
+      statusEl.style.display = 'none';
+    }
+
+    function renderResults(items) {
+      resultsEl.innerHTML = '';
+      resultsEl.appendChild(statusEl);
+
+      if (items.length === 0) {
+        setStatus('No results found.');
+        resultCountEl.textContent = '';
+        return;
+      }
+
+      clearStatus();
+      resultCountEl.textContent = `${items.length} result${items.length !== 1 ? 's' : ''}`;
+
+      items.forEach(({ xml_id, pdf_id, match }) => {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+
+        const a = document.createElement('a');
+        a.href = '#';
+        a.innerHTML = match;
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          openDocument(xml_id, pdf_id);
+        });
+
+        div.appendChild(a);
+        resultsEl.appendChild(div);
+      });
+    }
+
+    async function runSearch(q, bustCache) {
+      if (bustCache) {
+        await fetch(
+          `/api/plugins/document-search/cache/clear?session_id=${encodeURIComponent(sessionId)}`,
+          { method: 'POST' }
+        ).catch(() => {});
+      }
+
+      setStatus('Searching…');
+      resultCountEl.textContent = '';
+
+      try {
+        const url = `/api/plugins/document-search/results?q=${encodeURIComponent(q)}&session_id=${encodeURIComponent(sessionId)}`;
+        const resp = await fetch(url, { headers: { 'X-Session-ID': sessionId } });
+        if (!resp.ok) {
+          setStatus('Search failed. Please try again.');
+          return;
+        }
+        const items = await resp.json();
+        renderResults(items);
+      } catch {
+        setStatus('Search failed. Please try again.');
+      }
+    }
+
+    function onInput() {
+      const q = searchInput.value.trim();
+      clearBtn.classList.toggle('visible', q.length > 0);
+      localStorage.setItem(STORAGE_KEY, q);
+      currentQuery = q;
+
+      clearTimeout(debounceTimer);
+
+      if (q.length < MIN_LENGTH) {
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(statusEl);
+        setStatus(q.length === 0 ? 'Type at least 4 characters to search.' : `${MIN_LENGTH - q.length} more character${MIN_LENGTH - q.length !== 1 ? 's' : ''} needed…`);
+        resultCountEl.textContent = '';
+        return;
+      }
+
+      debounceTimer = setTimeout(() => runSearch(q, false), DEBOUNCE_MS);
+    }
+
+    function clearSearch() {
+      searchInput.value = '';
+      localStorage.setItem(STORAGE_KEY, '');
+      onInput();
+      searchInput.focus();
+    }
+
+    // ── Event wiring ──────────────────────────────────────────────────────────
+
+    searchInput.addEventListener('input', onInput);
+    clearBtn.addEventListener('click', clearSearch);
+
+    refreshLink.addEventListener('click', () => {
+      const q = searchInput.value.trim();
+      if (q.length >= MIN_LENGTH) {
+        runSearch(q, true);
+      }
+    });
+
+    // ── Restore last query on load ────────────────────────────────────────────
+
+    const lastQuery = localStorage.getItem(STORAGE_KEY) || '';
+    if (lastQuery) {
+      searchInput.value = lastQuery;
+      clearBtn.classList.add('visible');
+      currentQuery = lastQuery;
+      if (lastQuery.length >= MIN_LENGTH) {
+        runSearch(lastQuery, false);
+      }
+    }
+
+    searchInput.focus();
+  </script>
+</body>
+</html>

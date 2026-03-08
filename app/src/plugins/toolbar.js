@@ -52,6 +52,7 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * @property {UIPart<SlButtonGroup, backendPluginsButtonPart>} backendPluginsGroup - Backend plugins dropdown (added by backend-plugins plugin)
  * @property {UIPart<import('../ui.js').SlDropdown, toolbarMenuPart>} toolbarMenu - Generic toolbar menu dropdown (added by toolbar plugin)
  * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
+ * @property {SlButton} searchBtn - Document search button (added by document-search extension)
  */
 
 /**

@@ -152,22 +152,23 @@ export class PluginSandbox {
   /**
    * Open a document by updating xml and pdf state and closing dialog
    * @param {string} stableId - Document stable ID (typically a TEI file)
+   * @param {string} [pdfId] - Optional PDF stable ID; if omitted, looked up from fileData
    *
    * This method loads both the TEI document and its corresponding PDF source file.
-   * If the stable ID corresponds to a TEI artifact, the associated PDF source is
-   * automatically loaded alongside it to keep the UI in sync.
+   * If pdfId is not provided and the stable ID corresponds to a TEI artifact, the
+   * associated PDF source is automatically looked up from fileData.
    */
-  async openDocument(stableId) {
-    // Get the corresponding PDF for this TEI file
+  async openDocument(stableId, pdfId) {
+    // Use provided pdfId or look up from fileData
     const state = this.context.getCurrentState();
-    const fileData = state.fileData;
-    const sourceInfo = fileData ? findCorrespondingSource(fileData, stableId) : null;
-    const pdfId = sourceInfo?.sourceId;
+    const resolvedPdfId = pdfId || (
+      state.fileData ? findCorrespondingSource(state.fileData, stableId)?.sourceId : null
+    );
 
     // Load both XML and PDF
     await services.load({
       xml: stableId,
-      pdf: pdfId || undefined
+      pdf: resolvedPdfId || undefined
     });
     this.closeDialog();
   }
