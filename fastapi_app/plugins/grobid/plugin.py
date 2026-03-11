@@ -39,7 +39,7 @@ class GrobidPlugin(Plugin):
             "id": "grobid",
             "name": "GROBID",
             "description": "Extract training data using GROBID server",
-            "category": "extractor",
+            "category": "grobid",
             "version": "1.0.0",
             "required_roles": ["user"],
             "endpoints": [
