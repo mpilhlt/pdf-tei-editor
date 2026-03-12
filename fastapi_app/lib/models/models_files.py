@@ -40,6 +40,7 @@ class ArtifactModel(FileItemModel):
     variant: Optional[str] = None              # Variant name or null
     version: Optional[int] = None              # Version number or null for gold
     is_gold_standard: bool                     # True for gold standards
+    status: Optional[str] = None               # Last revision status (from TEI revisionDesc)
     is_locked: bool                            # Lock status
     access_control: Optional[Dict[str, Any]] = None  # Access control rules or null
     created_by: Optional[str] = None           # Username of user who created this file

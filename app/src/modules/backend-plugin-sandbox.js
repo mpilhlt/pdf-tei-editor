@@ -153,12 +153,13 @@ export class PluginSandbox {
    * Open a document by updating xml and pdf state and closing dialog
    * @param {string} stableId - Document stable ID (typically a TEI file)
    * @param {string} [pdfId] - Optional PDF stable ID; if omitted, looked up from fileData
+   * @param {boolean} [closeDialog] - Closes the dialog after loading the document (default true)
    *
    * This method loads both the TEI document and its corresponding PDF source file.
    * If pdfId is not provided and the stable ID corresponds to a TEI artifact, the
-   * associated PDF source is automatically looked up from fileData.
+   * associated PDF source is automatically looked up from fileData. 
    */
-  async openDocument(stableId, pdfId) {
+  async openDocument(stableId, pdfId, closeDialog = true ) {
     // Use provided pdfId or look up from fileData
     const state = this.context.getCurrentState();
     const resolvedPdfId = pdfId || (
@@ -170,18 +171,23 @@ export class PluginSandbox {
       xml: stableId,
       pdf: resolvedPdfId || undefined
     });
-    this.closeDialog();
+    if (closeDialog) {
+      this.closeDialog();
+    } 
   }
 
   /**
    * Open diff view between two documents
    * @param {string} stableId1 - First document stable ID
    * @param {string} stableId2 - Second document stable ID
+   * @param {boolean} [closeDialog] - Closes the dialog after loading the document (default true)
    */
-  async openDiff(stableId1, stableId2) {
+  async openDiff(stableId1, stableId2, closeDialog = true) {
     await services.load({xml: stableId1});
     await services.showMergeView(stableId2);
-    this.closeDialog();
+    if (closeDialog) {
+      this.closeDialog();
+    } 
   }
 
   /**
@@ -189,10 +195,13 @@ export class PluginSandbox {
    * @param {string} stableId - Document stable ID
    * @param {number} lineNumber - Line number (1-based)
    * @param {number} [column=0] - Optional column position (0-based)
+   * @param {boolean} [closeDialog] - Closes the dialog after loading the document (default true)
    */
-  async openDocumentAtLine(stableId, lineNumber, column = 0) {
+  async openDocumentAtLine(stableId, lineNumber, column = 0, closeDialog = true) {
     await xmlEditorOpenDocumentAtLine(stableId, lineNumber, column);
-    this.closeDialog();
+    if (closeDialog) {
+      this.closeDialog();
+    } 
   }
 
   /**

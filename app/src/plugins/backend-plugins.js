@@ -186,38 +186,35 @@ export class BackendPluginsPlugin extends Plugin {
     const categories = Object.keys(pluginsByCategory).sort();
 
     categories.forEach((category, index) => {
-      // Skip if no plugins in a category
-      if (pluginsByCategory[category].length === 0) {
-        return;
-      }
-
-      // Add category label
-      const categoryLabel = document.createElement('small');
-      categoryLabel.textContent = this.formatCategoryName(category);
-      pluginsMenu.appendChild(categoryLabel);
-
-      // Add plugins in this category
+      // Collect menu items for this category first
+      const items = [];
       pluginsByCategory[category].forEach(plugin => {
-        // Check if plugin defines endpoints
         const endpoints = plugin.endpoints || [
           { name: 'execute', label: plugin.name, state_params: [] }
         ];
-
         endpoints.forEach(endpoint => {
           const menuItem = document.createElement('sl-menu-item');
           menuItem.dataset.pluginId = plugin.id;
           menuItem.dataset.endpointName = endpoint.name;
           menuItem.dataset.stateParams = JSON.stringify(endpoint.state_params);
           menuItem.textContent = endpoint.label;
-
-          // Add description as tooltip if available
           if (endpoint.description) {
             menuItem.title = endpoint.description;
           }
-
-          pluginsMenu.appendChild(menuItem);
+          items.push(menuItem);
         });
       });
+
+      // Skip category entirely if no items
+      if (items.length === 0) {
+        return;
+      }
+
+      // Add category label then items
+      const categoryLabel = document.createElement('small');
+      categoryLabel.textContent = this.formatCategoryName(category);
+      pluginsMenu.appendChild(categoryLabel);
+      items.forEach(item => pluginsMenu.appendChild(item));
 
       // Add divider between categories (except after last one)
       if (index < categories.length - 1) {
