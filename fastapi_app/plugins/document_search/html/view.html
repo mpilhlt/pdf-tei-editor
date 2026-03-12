@@ -107,12 +107,42 @@
       color: #aaa;
       padding: 4px 0;
     }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: #eef2f8;
+      color: #445;
+      white-space: nowrap;
+    }
+
+    .result-item.gold-standard > a::before {
+      content: '🥇 ';
+    }
   </style>
 </head>
 <body>
   <div class="search-bar">
-    <input id="search-input" type="text" placeholder="Search documents (min. 4 characters)…" autocomplete="off" />
+    <input id="search-input" type="text" placeholder="Search… e.g. brahms  |  status:published  |  is_gold_standard:true" autocomplete="off" />
     <button id="clear-btn" title="Clear search">×</button>
+  </div>
+
+  <div class="hint" style="margin-bottom:6px;font-size:11px;color:#aaa">
+    Filters: <code>is_gold_standard:true|false</code> &nbsp;
+    <code>status:value</code> &nbsp;
+    <code>variant:value</code> &nbsp;
+    <code>created_by:value</code> &nbsp;
+    <code>collection:id</code> &nbsp;
+    <code>status:not:v1|v2</code> &nbsp;—&nbsp; combined with AND; plain terms use full-text search.
   </div>
 
   <div class="meta-bar">
@@ -126,7 +156,8 @@
 
   <script>
     const STORAGE_KEY = 'document-search.lastQuery';
-    const MIN_LENGTH = 4;
+    const MIN_LENGTH = 1;
+    const MIN_TEXT_LENGTH = 4; // plain text terms need at least 4 chars; DSL filters exempt
     const DEBOUNCE_MS = 300;
 
     const searchInput = document.getElementById('search-input');
@@ -184,9 +215,9 @@
       clearStatus();
       resultCountEl.textContent = `${items.length} result${items.length !== 1 ? 's' : ''}`;
 
-      items.forEach(({ xml_id, pdf_id, match }) => {
+      items.forEach(({ xml_id, pdf_id, match, is_gold, status, variant, created_by, collections }) => {
         const div = document.createElement('div');
-        div.className = 'result-item';
+        div.className = 'result-item' + (is_gold ? ' gold-standard' : '');
 
         const a = document.createElement('a');
         a.href = '#';
@@ -195,8 +226,26 @@
           e.preventDefault();
           openDocument(xml_id, pdf_id);
         });
-
         div.appendChild(a);
+
+        const tags = [];
+        if (collections && collections.length) tags.push(`collection: ${collections.join(', ')}`);
+        if (variant) tags.push(`variant: ${variant}`);
+        if (created_by) tags.push(`created_by: ${created_by}`);
+        if (status) tags.push(`status: ${status}`);
+
+        if (tags.length) {
+          const tagsDiv = document.createElement('div');
+          tagsDiv.className = 'tags';
+          tags.forEach(t => {
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.textContent = t;
+            tagsDiv.appendChild(span);
+          });
+          div.appendChild(tagsDiv);
+        }
+
         resultsEl.appendChild(div);
       });
     }
@@ -234,10 +283,16 @@
 
       clearTimeout(debounceTimer);
 
-      if (q.length < MIN_LENGTH) {
+      // Allow query if it contains a DSL filter token (field:value) or enough plain text
+      const hasDslFilter = /\b(?:is_gold_standard|status|variant|created_by|collection):[^\s]+/.test(q);
+      const textPart = q.replace(/\b(?:is_gold_standard|status|variant|created_by|collection):(?:not:)?[^\s]+/g, '').trim();
+      const notEnough = !hasDslFilter && textPart.length < MIN_TEXT_LENGTH;
+
+      if (q.length < MIN_LENGTH || notEnough) {
         resultsEl.innerHTML = '';
         resultsEl.appendChild(statusEl);
-        setStatus(q.length === 0 ? 'Type at least 4 characters to search.' : `${MIN_LENGTH - q.length} more character${MIN_LENGTH - q.length !== 1 ? 's' : ''} needed…`);
+        const need = MIN_TEXT_LENGTH - textPart.length;
+        setStatus(q.length === 0 ? 'Type to search. Use field filters like status:published.' : `${need} more character${need !== 1 ? 's' : ''} needed (or add a filter like status:published).`);
         resultCountEl.textContent = '';
         return;
       }
