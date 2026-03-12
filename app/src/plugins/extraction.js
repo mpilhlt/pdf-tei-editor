@@ -95,6 +95,8 @@ export default plugin
  * @property {string} [label] - Display label for the option
  * @property {string} [description] - Help text for the option
  * @property {string[]} [options] - Predefined values for select options
+ * @property {Array<{label: string, options: string[]}>} [groups] - Grouped values; renders as flat list with "[group] value" display text; values use "group/value" format
+ * @property {Record<string, string>} [depends] - Only render this option when all key=value pairs match current dynamic option values
  */
 
 /**
@@ -445,82 +447,135 @@ async function promptForExtractionOptions(options={}) {
 
     const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
 
-    // Hide DOI field for XML-based extractors (like RNG schema extractor)
+    // Hide DOI and collection fields for XML-based extractors
     const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes("xml")
-    if (isXmlExtractor) {
-      /** @type {any} */(ui.extractionOptions.doi).style.display = 'none';
-      const doiContainer = ui.extractionOptions.doi.closest('sl-input, .form-group, .field');
-      if (doiContainer) {
-        /** @type {HTMLElement} */(doiContainer).style.display = 'none';
-      }
-    } else {
-      /** @type {any} */(ui.extractionOptions.doi).style.display = '';
-      const doiContainer = ui.extractionOptions.doi.closest('sl-input, .form-group, .field');
-      if (doiContainer) {
-        /** @type {HTMLElement} */(doiContainer).style.display = '';
-      }
-    }
+    const doiEl = /** @type {HTMLElement} */(ui.extractionOptions.doi)
+    const collectionEl = /** @type {HTMLElement} */(collectionSelectBox.parentElement)
+    doiEl.style.display = isXmlExtractor ? 'none' : ''
+    if (collectionEl) collectionEl.style.display = isXmlExtractor ? 'none' : ''
 
-    // Clear existing dynamic options
+    // Snapshot current dynamic option values before clearing.
+    // Use .name property (not getAttribute) since Shoelace reflects to attribute only after first render.
+    /** @type {Record<string, string>} */
+    const currentValues = {}
     const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
     if (dynamicOptionsContainer) {
+      for (const el of dynamicOptionsContainer.querySelectorAll('sl-select, sl-input')) {
+        const name = /** @type {any} */(el).name
+        if (name) currentValues[name] = /** @type {any} */(el).value
+      }
       dynamicOptionsContainer.innerHTML = ""
     }
     if (!selectedExtractor || !selectedExtractor.options) return
-    
+
+    // Track intended values for options built so far (for depends evaluation).
+    // We store chosenValue returned from createOptionElement, not element.value,
+    // because Shoelace may not apply the value until after its first render cycle.
+    /** @type {Record<string, string>} */
+    const builtValues = {}
+    /** @type {Array<[Element, string]>} */
+    const pendingValues = []
+
     // Generate UI elements for each extractor option (except doi which is handled separately)
     for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
       if (optionKey === 'doi') continue // DOI is handled separately
-      
-      const element = createOptionElement(optionKey, optionConfig, selectedExtractorId)
-      if (element && dynamicOptionsContainer) {
+
+      const result = createOptionElement(optionKey, optionConfig, selectedExtractorId, currentValues, builtValues)
+      if (result && dynamicOptionsContainer) {
+        const {element, chosenValue} = result
+        builtValues[optionKey] = chosenValue
         dynamicOptionsContainer.appendChild(element)
+        pendingValues.push([element, chosenValue])
+        // Re-run dynamic options when any dynamic select changes (for depends conditions)
+        element.addEventListener('sl-change', updateDynamicOptions)
       }
     }
+
+    // Re-apply values after Shoelace has completed its first render cycle.
+    // Setting value before or during DOM insertion is unreliable for Lit-based components.
+    requestAnimationFrame(() => {
+      for (const [element, value] of pendingValues) {
+        /** @type {any} */(element).value = value
+      }
+    })
   }
-  
-  // Helper function to create form elements for extractor options
+
+  // Helper function to create form elements for extractor options.
+  // Returns {element, chosenValue} so the caller can track the intended value
+  // independently of element.value (which Shoelace may not apply until after render).
   /**
    * @param {string} optionKey
    * @param {ExtractorOption} optionConfig
    * @param {string} extractorId
-   * @returns {SlSelect|SlInput|null}
+   * @param {Record<string, string>} currentValues - Snapshot of values before the current re-render
+   * @param {Record<string, string>} builtValues - Intended values of options already built in this pass
+   * @returns {{element: SlSelect|SlInput, chosenValue: string}|null}
    */
-  function createOptionElement(optionKey, optionConfig, extractorId) {
-    if (optionConfig.type === 'string' && optionConfig.options) {
+  function createOptionElement(optionKey, optionConfig, extractorId, currentValues = {}, builtValues = {}) {
+    // Skip this option if its depends condition is not met
+    if (optionConfig.depends) {
+      for (const [condKey, condVal] of Object.entries(optionConfig.depends)) {
+        const actual = builtValues[condKey] ?? currentValues[condKey] ?? ''
+        if (actual !== condVal) return null
+      }
+    }
+
+    if (optionConfig.type === 'string' && (optionConfig.options || optionConfig.groups)) {
       // Create select dropdown for predefined options
       const select = Object.assign(new SlSelect, {
         name: optionKey,
         label: optionConfig.label || optionKey,
         size: "small"
       })
-      
+
       if (optionConfig.description) {
         select.setAttribute("help-text", optionConfig.description)
       }
-      
-      // Add options
-      for (const optionValue of optionConfig.options) {
-        const option = Object.assign(new SlOption, {
-          value: optionValue,
-          textContent: optionValue
-        })
-        select.appendChild(option)
+
+      /** @type {string[]} */
+      const allValues = []
+
+      if (optionConfig.groups) {
+        // Render grouped options as flat list with "[provider] model" display text
+        for (const group of optionConfig.groups) {
+          for (const optionValue of group.options) {
+            const value = `${group.label}/${optionValue}`
+            const option = Object.assign(new SlOption, {
+              value,
+              textContent: `[${group.label}] ${optionValue}`
+            })
+            select.appendChild(option)
+            allValues.push(value)
+          }
+        }
+      } else if (optionConfig.options) {
+        for (const optionValue of optionConfig.options) {
+          const option = Object.assign(new SlOption, {
+            value: optionValue,
+            textContent: optionValue
+          })
+          select.appendChild(option)
+          allValues.push(optionValue)
+        }
       }
-      
-      // Set default value - use document metadata or options if available for variant_id
-      const variantId = documentMetadata.variant_id || options.variant_id;
-      if (optionKey === 'variant_id' && variantId && 
-          optionConfig.options.includes(variantId)) {
-        select.value = variantId;
-      } else if (optionKey === 'flavor' && documentMetadata.extractor_flavor && 
-                 optionConfig.options.includes(documentMetadata.extractor_flavor)) {
-        select.value = documentMetadata.extractor_flavor;
-      } else if (optionConfig.options.length > 0) {
-        select.value = optionConfig.options[0];
+
+      // Determine chosen value: prefer previously selected value, then document metadata, then first option
+      let chosenValue = ''
+      if (currentValues[optionKey] && allValues.includes(currentValues[optionKey])) {
+        chosenValue = currentValues[optionKey]
+      } else {
+        const variantId = documentMetadata.variant_id || options.variant_id
+        if (optionKey === 'variant_id' && variantId && allValues.includes(variantId)) {
+          chosenValue = variantId
+        } else if (optionKey === 'flavor' && documentMetadata.extractor_flavor &&
+                   allValues.includes(documentMetadata.extractor_flavor)) {
+          chosenValue = documentMetadata.extractor_flavor
+        } else if (allValues.length > 0) {
+          chosenValue = allValues[0]
+        }
       }
-      
-      return select
+
+      return {element: select, chosenValue}
     } else if (optionKey === 'instructions' && extractorId && instructionsData) {
       // Special handling for instructions - use existing instructions data
       const select = Object.assign(new SlSelect, {
@@ -529,13 +584,13 @@ async function promptForExtractionOptions(options={}) {
         size: "small"
       })
       select.setAttribute("help-text", "Choose the instruction set that is added to the prompt")
-      
+
       let instructionIndex = 0
       for (const instructionData of instructionsData) {
         /** @type {InstructionData} */
         const instructionDataTyped = /** @type {InstructionData} */(instructionData)
         const { label, text, extractor = [] } = instructionDataTyped
-        
+
         // Check if this instruction supports the selected extractor
         if (extractor.includes(extractorId)) {
           const option = Object.assign(new SlOption, {
@@ -547,7 +602,7 @@ async function promptForExtractionOptions(options={}) {
           instructionIndex++
         }
       }
-      
+
       // If no instructions found, show a default option
       if (instructionIndex === 0) {
         const option = Object.assign(new SlOption, {
@@ -557,9 +612,8 @@ async function promptForExtractionOptions(options={}) {
         instructions[0] = ""
         select.appendChild(option)
       }
-      
-      select.value = "0"
-      return select
+
+      return {element: select, chosenValue: "0"}
     } else if (optionConfig.type === 'string') {
       // Create text input for free-form string fields
       const input = Object.assign(new SlInput, {
@@ -568,14 +622,14 @@ async function promptForExtractionOptions(options={}) {
         size: "small",
         type: "text"
       })
-      
+
       if (optionConfig.description) {
         input.setAttribute("help-text", optionConfig.description)
       }
-      
-      return input
+
+      return {element: input, chosenValue: currentValues[optionKey] ?? ''}
     }
-    
+
     return null
   }
   
