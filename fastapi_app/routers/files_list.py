@@ -259,6 +259,7 @@ def _build_artifact(file_metadata) -> ArtifactModel:
         variant=file_metadata.variant,
         version=file_metadata.version,
         is_gold_standard=file_metadata.is_gold_standard,
+        status=file_metadata.status,
         is_locked=False,  # Will be updated later
         access_control=None,  # Will be updated later if needed
         created_by=file_metadata.created_by  # Owner for access control

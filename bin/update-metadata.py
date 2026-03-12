@@ -86,6 +86,30 @@ def revert() -> None:
 
 
 @runnable
+def repopulate_status() -> None:
+    """Repopulate the status column from the last revisionDesc/change/@status in each TEI file."""
+    import sys
+    sys.path.insert(0, str(project_root))
+    from fastapi_app.lib.core.migrations.utils import repopulate_column_from_tei_files, get_file_storage_paths
+    from fastapi_app.lib.utils.tei_utils import extract_last_revision_status
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logger = logging.getLogger(__name__)
+    with sqlite3.connect(DB_PATH) as conn:
+        _, files_dir = get_file_storage_paths(conn)
+        stats = repopulate_column_from_tei_files(
+            conn=conn,
+            files_dir=files_dir,
+            column_name="status",
+            extract_function=extract_last_revision_status,
+            logger=logger,
+            column_description="status",
+        )
+        conn.commit()
+    print(f"Done: updated={stats['updated']}, skipped={stats['skipped']}, errors={stats['errors']}, total={stats['total']}")
+
+
+@runnable
 def remove_gold_from_extraction_tei() -> None:
     """Remove gold standard status from TEI files whose label contains 'Extraction'."""
     with sqlite3.connect(DB_PATH) as conn:

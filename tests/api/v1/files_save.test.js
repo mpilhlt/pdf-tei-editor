@@ -21,6 +21,29 @@ import { logger } from '../helpers/test-logger.js';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
+// TEI XML with revisionDesc status for status-persistence tests
+const createTeiXmlWithStatus = (docId, status, content = 'Content with revision status') => `<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Status Test Document ${docId}</title>
+      </titleStmt>
+      <editionStmt>
+        <edition>
+          <idno type="fileref">${docId}</idno>
+        </edition>
+      </editionStmt>
+      <publicationStmt><p>Test</p></publicationStmt>
+      <sourceDesc><p>Test</p></sourceDesc>
+    </fileDesc>
+    <revisionDesc>
+      <change when="2024-01-01" status="${status}">Status set to ${status}</change>
+    </revisionDesc>
+  </teiHeader>
+  <text><body><div><p>${content}</p></div></body></text>
+</TEI>`;
+
 // Sample TEI XML templates
 const createTeiXml = (docId, content, variant = null) => {
   const variantLabel = variant ? `<label type="variant-id">${variant}</label>` : '';
@@ -875,6 +898,78 @@ describe('Files Save API E2E Tests', () => {
       '/files/delete',
       'POST',
       { files: [goldFileId, versionFileId, pdfFileId] },
+      BASE_URL
+    );
+  });
+
+  // Test: revisionDesc status is persisted in the database
+  test('POST /api/files/save should persist revisionDesc status to the database', async () => {
+    const statusDocId = `test-status-persist-${testRunId}`;
+    const expectedStatus = 'published';
+
+    // Upload a PDF so the TEI appears as an artifact (not as standalone source)
+    const pdfContent = Buffer.from('%PDF-1.4 fake pdf for status test');
+    const formData = new FormData();
+    formData.append('file', new Blob([pdfContent], { type: 'application/pdf' }), `${statusDocId}.pdf`);
+    const uploadResp = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+      method: 'POST',
+      headers: { 'X-Session-ID': reviewerSession.sessionId },
+      body: formData
+    });
+    assert.ok(uploadResp.ok, 'PDF upload should succeed');
+    const uploadResult = await uploadResp.json();
+    const pdfFileId = uploadResult.filename;
+
+    // Save TEI with revisionDesc status
+    const xmlContent = createTeiXmlWithStatus(statusDocId, expectedStatus);
+    const saveResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/save',
+      'POST',
+      { file_id: statusDocId, xml_string: xmlContent, new_version: false },
+      BASE_URL
+    );
+
+    assert.ok(saveResponse, 'Should receive save response');
+    assert.strictEqual(saveResponse.status, 'new_gold', 'Should create new gold standard');
+    const teiFileId = saveResponse.file_id;
+
+    // Fetch the file list and verify the artifact's status field
+    const listResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/list',
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    assert.ok(listResponse?.files, 'Should return file list');
+    const doc = listResponse.files.find(d => d.doc_id === statusDocId);
+    assert.ok(doc, `Document ${statusDocId} should appear in file list`);
+
+    const artifact = doc.artifacts.find(a => a.id === teiFileId);
+    assert.ok(artifact, 'Saved TEI should appear as artifact');
+    assert.strictEqual(
+      artifact.status,
+      expectedStatus,
+      `Artifact status should be "${expectedStatus}" (from revisionDesc), not null or "saved"`
+    );
+
+    logger.success(`Status "${artifact.status}" correctly persisted from revisionDesc`);
+
+    // Cleanup
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/release_lock',
+      'POST',
+      { file_id: teiFileId },
+      BASE_URL
+    );
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/delete',
+      'POST',
+      { files: [teiFileId, pdfFileId] },
       BASE_URL
     );
   });

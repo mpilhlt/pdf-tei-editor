@@ -237,7 +237,7 @@ async def save_file(
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         tei_metadata = extract_tei_metadata(xml_root)
         label = tei_metadata.get('edition_title')  # Extract edition title for label
-        status = tei_metadata.get('status')  # Extract status from last revision
+        tei_status = tei_metadata.get('status')  # Extract status from last revision
         last_revision = tei_metadata.get('last_revision')  # Extract timestamp from last revision
 
         # For new saves, file_id becomes the doc_id (PDF and TEI share same doc_id)
@@ -348,7 +348,7 @@ async def save_file(
                 pdf_stable_id=pdf_stable_id,
                 xml_content=xml_string,
                 label=label,
-                status=status,
+                status=tei_status,
                 collections=doc_collections,
                 is_gold=existing_file.is_gold_standard,
                 version=existing_file.version,
@@ -374,7 +374,7 @@ async def save_file(
                     FileUpdate(
                         id=saved_hash,  # Update hash if content changed
                         label=label,  # Update label from edition title
-                        status=status,  # Update status from last revision
+                        status=tei_status,  # Update status from last revision
                         last_revision=last_revision,  # Update timestamp from last revision
                         file_size=file_size,
                         file_metadata={}  # Could extract more metadata from XML
@@ -387,7 +387,7 @@ async def save_file(
                     existing_file.id,
                     FileUpdate(
                         label=label,  # Still update label even if content unchanged
-                        status=status,  # Update status from last revision
+                        status=tei_status,  # Update status from last revision
                         last_revision=last_revision,  # Update timestamp from last revision
                         file_size=file_size,
                         file_metadata={}
@@ -455,7 +455,7 @@ async def save_file(
                 pdf_stable_id=pdf_stable_id,
                 xml_content=xml_string,
                 label=label,
-                status=status,
+                status=tei_status,
                 collections=doc_collections,
                 is_gold=False,
                 version=next_version,
@@ -488,7 +488,7 @@ async def save_file(
                 doc_id=doc_id,
                 file_type='tei',
                 label=label,  # Use extracted edition title
-                status=status,  # Status from last revision
+                status=tei_status,  # Status from last revision
                 last_revision=last_revision,  # Timestamp from last revision
                 variant=variant,
                 version=next_version,
@@ -552,7 +552,7 @@ async def save_file(
                 pdf_stable_id=pdf_stable_id,
                 xml_content=xml_string,
                 label=label,
-                status=status,
+                status=tei_status,
                 collections=doc_collections,
                 is_gold=True,
                 version=None,
@@ -574,7 +574,7 @@ async def save_file(
                 doc_id=doc_id,
                 file_type='tei',
                 label=label,  # Use extracted edition title
-                status=status,  # Status from last revision
+                status=tei_status,  # Status from last revision
                 last_revision=last_revision,  # Timestamp from last revision
                 variant=variant,
                 version=None,  # Gold files have no version
