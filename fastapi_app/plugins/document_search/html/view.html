@@ -154,7 +154,9 @@
     <div id="status" class="hint">Type at least 4 characters to search.</div>
   </div>
 
-  <script>
+  <script type="module">
+    /** @import { PluginSandbox } from '../../../../app/src/modules/backend-plugin-sandbox.js' */
+
     const STORAGE_KEY = 'document-search.lastQuery';
     const MIN_LENGTH = 1;
     const MIN_TEXT_LENGTH = 4; // plain text terms need at least 4 chars; DSL filters exempt
@@ -172,10 +174,28 @@
 
     // ── Sandbox interaction ───────────────────────────────────────────────────
 
+    const sandbox = /** @type {PluginSandbox} */ (window.sandbox);
+
     function openDocument(xmlId, pdfId) {
       sandbox.openDocument(xmlId, pdfId).catch(err => {
         console.warn('openDocument error (may be non-fatal lock release):', err);
       });
+    }
+
+    function updateResultState(collections, variant) {
+      const stateUpdates = {};
+      if (collections && collections.length) {
+        const currentFilter = sandbox.getCurrentState().collectionFilter;
+        const collection = collections.includes(currentFilter) ? currentFilter : collections[0];
+        stateUpdates.collection = collection;
+        stateUpdates.collectionFilter = collection;
+      }
+      if (variant) {
+        stateUpdates.variant = variant;
+      }
+      if (Object.keys(stateUpdates).length) {
+        sandbox.updateState(stateUpdates);
+      }
     }
 
     // ── Index cleanup ─────────────────────────────────────────────────────────
@@ -224,13 +244,18 @@
         a.innerHTML = match;
         a.addEventListener('click', e => {
           e.preventDefault();
+          updateResultState(collections, variant);
           openDocument(xml_id, pdf_id);
         });
         div.appendChild(a);
 
         const tags = [];
-        if (collections && collections.length) tags.push(`collection: ${collections.join(', ')}`);
-        if (variant) tags.push(`variant: ${variant}`);
+        if (collections && collections.length) {
+          tags.push(`collection: ${collections.join(', ')}`);
+        }
+        if (variant) {
+          tags.push(`variant: ${variant}`);
+        }
         if (created_by) tags.push(`created_by: ${created_by}`);
         if (status) tags.push(`status: ${status}`);
 
