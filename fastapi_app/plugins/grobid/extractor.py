@@ -17,6 +17,7 @@ from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
     get_grobid_server_url,
+    get_model_path,
     get_navigation_xpath,
     get_schema_url,
 )
@@ -250,18 +251,32 @@ class GrobidTrainingExtractor(BaseExtractor):
         if existing_encodingDesc is not None:
             tei_header.remove(existing_encodingDesc)
 
-        # Create encodingDesc with PDF-TEI-Editor and GROBID applications
+        # Create encodingDesc with PDF-TEI-Editor and GROBID applications.
+        # For training variants, include model/flavor/variant-id labels in the
+        # desired order via additional_labels (variant_id param would insert before them).
         schema_url = get_schema_url(variant_id)
+        if variant_id.startswith("grobid.training."):
+            model_name = get_model_path(variant_id)
+            enc_variant_id = None
+            enc_labels: list[tuple[str, str]] = [
+                ("model", model_name),
+                ("flavor", flavor),
+                ("variant-id", variant_id),
+                ("revision", grobid_revision),
+            ]
+        else:
+            enc_variant_id = variant_id
+            enc_labels = [
+                ("revision", grobid_revision),
+                ("flavor", flavor),
+            ]
         encodingDesc = create_encoding_desc_with_extractor(
             timestamp=timestamp,
             extractor_name="GROBID",
             extractor_ident="GROBID",
             extractor_version=grobid_version,
-            variant_id=variant_id,
-            additional_labels=[
-                ("revision", grobid_revision),
-                ("flavor", flavor),
-            ],
+            variant_id=enc_variant_id,
+            additional_labels=enc_labels,
             refs=[
                 "https://github.com/grobidOrg/grobid",
                 schema_url,

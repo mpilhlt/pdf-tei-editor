@@ -26,6 +26,13 @@ def get_grobid_server_url() -> str | None:
     return url if url else None
 
 
+# Mapping from training variant ID to GROBID model path
+VARIANT_MODEL_PATHS: dict[str, str] = {
+    "grobid.training.segmentation": "segmentation",
+    "grobid.training.references": "citation",
+    "grobid.training.references.referenceSegmenter": "reference-segmenter",
+}
+
 # Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
     # Training variants (use /api/createTraining endpoint)
@@ -151,6 +158,14 @@ def get_navigation_xpath() -> dict:
     """Return navigation XPath expressions for each variant."""
     import copy
     return copy.deepcopy(NAVIGATION_XPATH)
+
+
+def get_model_path(variant_id: str) -> str:
+    """Return the GROBID model path for a training variant ID."""
+    if variant_id in VARIANT_MODEL_PATHS:
+        return VARIANT_MODEL_PATHS[variant_id]
+    # Fallback: strip prefix and replace dots with slashes
+    return variant_id.removeprefix("grobid.training.").replace(".", "/")
 
 
 def get_annotation_guides() -> list[dict]:

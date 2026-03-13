@@ -179,30 +179,21 @@ export class BackendPluginsPlugin extends Plugin {
     // Clear existing items
     pluginsMenu.innerHTML = '';
 
-    // Group plugins by category
-    const pluginsByCategory = this.groupPluginsByCategory();
-
     // Add menu items for each category
-    const categories = Object.keys(pluginsByCategory).sort();
+    const endpointsByCategory = this.groupEndpointsByCategory();
+    const categories = Object.keys(endpointsByCategory).sort();
 
     categories.forEach((category, index) => {
-      // Collect menu items for this category first
-      const items = [];
-      pluginsByCategory[category].forEach(plugin => {
-        const endpoints = plugin.endpoints || [
-          { name: 'execute', label: plugin.name, state_params: [] }
-        ];
-        endpoints.forEach(endpoint => {
-          const menuItem = document.createElement('sl-menu-item');
-          menuItem.dataset.pluginId = plugin.id;
-          menuItem.dataset.endpointName = endpoint.name;
-          menuItem.dataset.stateParams = JSON.stringify(endpoint.state_params);
-          menuItem.textContent = endpoint.label;
-          if (endpoint.description) {
-            menuItem.title = endpoint.description;
-          }
-          items.push(menuItem);
-        });
+      const items = endpointsByCategory[category].map(({ plugin, endpoint }) => {
+        const menuItem = document.createElement('sl-menu-item');
+        menuItem.dataset.pluginId = plugin.id;
+        menuItem.dataset.endpointName = endpoint.name;
+        menuItem.dataset.stateParams = JSON.stringify(endpoint.state_params);
+        menuItem.textContent = endpoint.label;
+        if (endpoint.description) {
+          menuItem.title = endpoint.description;
+        }
+        return menuItem;
       });
 
       // Skip category entirely if no items
@@ -225,23 +216,27 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
-   * Group plugins by category
-   * @returns {Record<string, BackendPlugin[]>}
+   * Group all plugin endpoints by their effective category.
+   * An endpoint can override the plugin-level category via its own `category` field.
+   * @returns {Record<string, Array<{plugin: BackendPlugin, endpoint: object}>>}
    */
-  groupPluginsByCategory() {
+  groupEndpointsByCategory() {
     const grouped = {};
 
     this.plugins.forEach(plugin => {
-      const category = plugin.category || 'other';
-      if (!grouped[category]) {
-        grouped[category] = [];
-      }
-      grouped[category].push(plugin);
+      const endpoints = plugin.endpoints || [];
+      endpoints.forEach(endpoint => {
+        const category = endpoint.category || plugin.category || 'other';
+        if (!grouped[category]) {
+          grouped[category] = [];
+        }
+        grouped[category].push({ plugin, endpoint });
+      });
     });
 
-    // Sort plugins within each category by name
+    // Sort entries within each category by label
     Object.keys(grouped).forEach(category => {
-      grouped[category].sort((a, b) => a.name.localeCompare(b.name));
+      grouped[category].sort((a, b) => a.endpoint.label.localeCompare(b.endpoint.label));
     });
 
     return grouped;
