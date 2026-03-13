@@ -37,6 +37,7 @@ class GrobidPlugin(Plugin):
                     "name": "download_training",
                     "label": "Download GROBID Training Data",
                     "description": "Download complete GROBID training package for a collection",
+                    "category": "collection",
                     "state_params": ["collection"],
                     "required_roles": ["reviewer"],
                 },
@@ -165,8 +166,6 @@ class GrobidPlugin(Plugin):
         download_url = f"/api/plugins/grobid/download?collection={collection}&no_progress=false"
 
         # Add optional parameters if provided
-        if params.get("gold_only"):
-            download_url += "&gold_only=true"
         if params.get("force_refresh"):
             download_url += "&force_refresh=true"
         if params.get("flavor"):

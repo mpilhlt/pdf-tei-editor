@@ -23,17 +23,10 @@ class DocumentSearchPlugin(Plugin):
             "id": "document-search",
             "name": "Document Search",
             "description": "Search across all accessible documents",
-            "category": "collection",
+            "category": "search",
             "version": "1.0.0",
             "required_roles": ["user"],
-            "endpoints": [
-                {
-                    "name": "search",
-                    "label": "Search Documents",
-                    "description": "Search documents by title, ID, or author",
-                    "state_params": [],
-                }
-            ],
+            "endpoints": [],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
