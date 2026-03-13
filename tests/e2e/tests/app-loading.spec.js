@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '../fixtures/debug-on-failure.js';
-/** @import { namedElementsTree } from '../../app/src/ui.js' */
+/** @import { namedElementsTree } from '../../../app/src/ui.js' */
 
 test.describe('Application Loading', () => {
   test('should load application without critical console errors', async ({ page }) => {

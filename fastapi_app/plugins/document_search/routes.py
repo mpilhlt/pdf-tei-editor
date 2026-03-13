@@ -17,11 +17,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_auth_manager, get_db, get_session_manager
+from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.models.models import FileMetadata
 from fastapi_app.lib.permissions.user_utils import get_user_collections
 from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.utils.auth import AuthManager
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +106,7 @@ def _create_search_table(conn: sqlite3.Connection) -> bool:
         return False
 
 
-def _build_index(db: Any, user: Any) -> tuple[sqlite3.Connection, bool]:
+def _build_index(db: DatabaseManager, user: dict[str, Any]) -> tuple[sqlite3.Connection, bool]:
     """Build the in-memory search index for the given user's accessible documents."""
     settings = get_settings()
     file_repo = FileRepository(db)
@@ -140,7 +143,10 @@ def _build_index(db: Any, user: Any) -> tuple[sqlite3.Connection, bool]:
         for tei in tei_files:
             by_variant.setdefault(tei.variant, []).append(tei)
 
-        collection_str = "|".join(pdf.doc_collections or [])
+        doc_collections = pdf.doc_collections or []
+        if accessible_collections is not None:
+            doc_collections = [c for c in doc_collections if c in accessible_collections]
+        collection_str = "|".join(doc_collections)
 
         for _variant, variant_teis in by_variant.items():
             gold = next((t for t in variant_teis if t.is_gold_standard), None)
@@ -200,9 +206,9 @@ def _parse_dsl(q: str) -> tuple[list[tuple[str, bool, list[str]]], str]:
 
 
 def _apply_filters_python(
-    rows: list[tuple],
+    rows: list[tuple[Any, ...]],
     filters: list[tuple[str, bool, list[str]]],
-) -> list[tuple]:
+) -> list[tuple[Any, ...]]:
     """Post-filter rows in Python by DSL filter conditions.
 
     ``collection`` is special: the column stores pipe-separated IDs, so we check
@@ -230,7 +236,7 @@ def _apply_filters_python(
     return rows
 
 
-def _row_to_result(r: tuple, match_text: str) -> dict:
+def _row_to_result(r: tuple[Any, ...], match_text: str) -> dict[str, Any]:
     """Convert a DB row to the JSON result dict returned to the frontend."""
     collections = [c for c in (r[_COL_COLLECTION] or "").split("|") if c]
     return {
@@ -296,7 +302,7 @@ def _search_fts5(
     conn: sqlite3.Connection,
     q: str,
     filters: list[tuple[str, bool, list[str]]],
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Search using FTS5 MATCH + optional DSL filters. Returns [] on malformed query.
 
     Filters are applied in Python after the SQL query to avoid FTS5 limitations
@@ -335,7 +341,7 @@ def _search_like(
     conn: sqlite3.Connection,
     q: str,
     filters: list[tuple[str, bool, list[str]]],
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """LIKE-based fallback search with Python-side scoring, highlighting, and filtering."""
     terms = _parse_query(q) if q.strip() else []
 
@@ -370,9 +376,9 @@ def _search_like(
 def _authenticate(
     session_id: str | None,
     x_session_id: str | None,
-    session_manager: Any,
-    auth_manager: Any,
-) -> Any:
+    session_manager: SessionManager,
+    auth_manager: AuthManager,
+) -> dict[str, Any]:
     """Shared authentication helper. Returns the authenticated user."""
     settings = get_settings()
     sid = x_session_id or session_id
@@ -390,8 +396,8 @@ def _authenticate(
 async def view(
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
 ) -> HTMLResponse:
     """Serve the standalone search UI HTML page."""
     _authenticate(session_id, x_session_id, session_manager, auth_manager)
@@ -404,13 +410,14 @@ async def results(
     q: str = Query(..., min_length=1),
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
-    db=Depends(get_db),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
 ) -> JSONResponse:
     """Return JSON search results for the given query."""
     user = _authenticate(session_id, x_session_id, session_manager, auth_manager)
     sid = x_session_id or session_id
+    assert sid is not None
 
     filters, text_query = _parse_dsl(q)
 
@@ -437,12 +444,13 @@ async def results(
 async def clear_cache(
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
 ) -> Response:
     """Invalidate the search index for this session (called on window close)."""
     _authenticate(session_id, x_session_id, session_manager, auth_manager)
     sid = x_session_id or session_id
+    assert sid is not None
 
     if sid in _search_cache:
         conn, _ = _search_cache.pop(sid)
