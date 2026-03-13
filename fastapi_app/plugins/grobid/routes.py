@@ -24,11 +24,68 @@ from fastapi_app.lib.core.dependencies import (
 )
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
-from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_supported_variants
+from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/plugins/grobid", tags=["grobid"])
+
+
+def _corpus_base_path(tei_content: str, variant: str, fallback_flavor: str) -> str:
+    """
+    Derive the corpus base path from TEI header labels.
+
+    Reads model and flavor from encodingDesc/appInfo/application[@type='extractor'].
+    Tries both namespaced and un-namespaced XPath because the actual namespace of
+    encodingDesc elements depends on how the TEI was created and serialized.
+
+    Falls back to parsing variant and fallback_flavor if labels are absent.
+    For the default flavor the path is ``{model}/corpus``; otherwise
+    ``{model}/{flavor}/corpus``.
+    """
+    from lxml import etree
+    NS = "http://www.tei-c.org/ns/1.0"
+
+    def _find_app(root: etree._Element) -> etree._Element | None:  # type: ignore[name-defined]
+        """Find application[@type='extractor'] trying both namespace variants."""
+        return (
+            root.find(".//encodingDesc/appInfo/application[@type='extractor']")
+            or root.find(
+                f".//{{{NS}}}encodingDesc/{{{NS}}}appInfo"
+                f"/{{{NS}}}application[@type='extractor']"
+            )
+        )
+
+    def _find_label(app: etree._Element, label_type: str) -> str | None:  # type: ignore[name-defined]
+        """Find label text by type, trying both namespace variants."""
+        el = app.find(f"label[@type='{label_type}']") or app.find(
+            f"{{{NS}}}label[@type='{label_type}']"
+        )
+        return el.text if el is not None and el.text else None
+
+    try:
+        parser = etree.XMLParser(recover=True)
+        root = etree.fromstring(tei_content.encode("utf-8"), parser)
+        app = _find_app(root)
+        if app is not None:
+            tei_flavor = _find_label(app, "flavor") or fallback_flavor
+            variant_id_label = _find_label(app, "variant-id") or ""
+            model = (
+                _find_label(app, "model")
+                or (get_model_path(variant_id_label) if variant_id_label else "")
+                or get_model_path(variant)
+            )
+            if tei_flavor == "default":
+                return f"{model}/corpus"
+            return f"{model}/{tei_flavor}/corpus"
+    except Exception:
+        pass
+    # Last-resort fallback: derive from variant + fallback_flavor
+    model_path = get_model_path(variant)
+    if fallback_flavor == "default":
+        return f"{model_path}/corpus"
+    return f"{model_path}/{fallback_flavor}/corpus"
+
 
 # Cancellation tokens for in-progress downloads
 _cancellation_tokens: dict[str, bool] = {}
@@ -77,7 +134,6 @@ async def download_training_package(
     collection: str = Query(..., description="Collection ID"),
     flavor: str = Query("default", description="GROBID processing flavor"),
     force_refresh: bool = Query(False, description="Force re-download from GROBID"),
-    gold_only: bool = Query(False, description="Only include documents/variants with gold files"),
     no_progress: bool = Query(True, description="Suppress SSE progress events (for programmatic API use)"),
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
@@ -88,15 +144,18 @@ async def download_training_package(
     """
     Download GROBID training package for all documents in a collection as ZIP.
 
-    For each document and variant:
-    - If gold standard file exists: include gold file as main, GROBID output as .generated
-    - If no gold standard file: include GROBID output as main (unless gold_only=True)
+    Only documents with gold standard TEI files are included. The ZIP mirrors
+    the grobid-trainer/resources/dataset/ folder structure and can be dropped
+    directly into that directory.
+
+    ZIP structure:
+        {model}/{flavor}/corpus/tei/{doc_id}.tei.xml  ← gold TEI annotation
+        {model}/{flavor}/corpus/raw/{doc_id}           ← GROBID raw feature file
 
     Args:
         collection: Collection ID to process
-        flavor: GROBID processing flavor
+        flavor: GROBID processing flavor (e.g. "default", "article/dh-law-footnotes")
         force_refresh: Force re-download from GROBID (ignore cached data)
-        gold_only: If True, only include variants with gold standard files
         session_id: Session ID from query parameter
         x_session_id: Session ID from header
 
@@ -147,8 +206,6 @@ async def download_training_package(
         if not grobid_server_url:
             raise HTTPException(status_code=503, detail="GROBID server not configured")
 
-        supported_variants = get_supported_variants()
-
         # Get GROBID version info for cache key
         from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
         from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
@@ -172,6 +229,11 @@ async def download_training_package(
             await asyncio.sleep(0)  # Yield to allow SSE event delivery
 
         try:
+            # Generate filename before writing so it can be used as the top-level dir
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            zip_stem = f"{collection}-training-data-{timestamp}"
+            zip_filename = f"{zip_stem}.zip"
+
             # Create output ZIP in memory
             zip_buffer = io.BytesIO()
             documents_processed = 0
@@ -205,29 +267,28 @@ async def download_training_package(
                         documents_skipped += 1
                         continue
 
-                    # Get all gold standard TEI files for this document
+                    # Get all gold standard training TEI files for this document
                     doc_files = file_repo.get_files_by_doc_id(doc_id)
                     gold_files = [
                         f for f in doc_files
-                        if f.file_type == "tei" and f.is_gold_standard
+                        if f.file_type == "tei"
+                        and f.is_gold_standard
+                        and f.variant
+                        and f.variant.startswith("grobid.training.")
                     ]
 
-                    # Build map of variant -> gold file
-                    gold_by_variant = {}
+                    # Build map of variant -> gold file content
+                    gold_by_variant: dict[str, str] = {}
                     for gold_file in gold_files:
-                        if gold_file.variant in supported_variants:
-                            content = file_storage.read_file(gold_file.id, "tei")
-                            if content:
-                                gold_by_variant[gold_file.variant] = content.decode("utf-8")
+                        content = file_storage.read_file(gold_file.id, "tei")
+                        if content:
+                            gold_by_variant[gold_file.variant] = content.decode("utf-8")
 
-                    # Determine which variants to process
-                    if gold_only:
-                        if not gold_by_variant:
-                            documents_skipped += 1
-                            continue
-                        variants_to_process = list(gold_by_variant.keys())
-                    else:
-                        variants_to_process = supported_variants
+                    # Skip documents without any gold standard files
+                    if not gold_by_variant:
+                        documents_skipped += 1
+                        continue
+                    variants_to_process = list(gold_by_variant.keys())
 
                     # Check cache first
                     cached_data = check_cache(doc_id, grobid_revision, force_refresh)
@@ -250,72 +311,27 @@ async def download_training_package(
                             continue
 
                     try:
-                        if gold_only:
-                            # Only include supported variants that have gold files
-                            for variant in variants_to_process:
-                                has_gold = variant in gold_by_variant
+                        for variant in variants_to_process:
+                            grobid_suffix = variant.removeprefix("grobid.")
+                            tei_content = gold_by_variant[variant]
+                            base_path = _corpus_base_path(tei_content, variant, flavor)
 
-                                # Find the GROBID output file for this variant
-                                variant_suffix = variant.removeprefix("grobid.")
-                                grobid_file = None
-                                for filename in extracted_files:
-                                    if filename.endswith(f".{variant_suffix}.tei.xml"):
-                                        grobid_file = os.path.join(temp_dir, filename)
-                                        break
+                            # Write gold TEI to corpus/tei/
+                            zf.writestr(
+                                f"{zip_stem}/{base_path}/tei/{doc_id}.tei.xml",
+                                tei_content
+                            )
 
-                                if not grobid_file or not os.path.exists(grobid_file):
-                                    continue
-
-                                # Read GROBID output
-                                with open(grobid_file, "r", encoding="utf-8") as f:
-                                    grobid_content = f.read()
-
-                                # Add files to ZIP in doc_id subdirectory
-                                if has_gold:
-                                    # Gold file as main, GROBID as .generated
-                                    gold_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
-                                    generated_name = f"{doc_id}/{doc_id}.{variant_suffix}.generated.tei.xml"
-                                    zf.writestr(gold_name, gold_by_variant[variant])
-                                    zf.writestr(generated_name, grobid_content)
-                                else:
-                                    # GROBID as main (no .generated suffix)
-                                    main_name = f"{doc_id}/{doc_id}.{variant_suffix}.tei.xml"
-                                    zf.writestr(main_name, grobid_content)
-                        else:
-                            # Include ALL files from GROBID package
-                            # Gold files replace originals, originals get .generated infix
-                            for filename in extracted_files:
-                                src_path = os.path.join(temp_dir, filename)
-                                if not os.path.exists(src_path):
-                                    continue
-
-                                # Extract suffix after hash prefix
-                                # e.g., "hash.training.segmentation.tei.xml" -> "training.segmentation.tei.xml"
-                                parts = filename.split(".", 1)
-                                if len(parts) < 2:
-                                    continue
-                                file_suffix = parts[1]
-
-                                # Check if this file has a corresponding gold file
-                                matching_gold_variant = None
-                                for variant in gold_by_variant:
-                                    variant_suffix = variant.removeprefix("grobid.")
-                                    if file_suffix == f"{variant_suffix}.tei.xml":
-                                        matching_gold_variant = variant
-                                        break
-
-                                if matching_gold_variant:
-                                    # Gold replaces original, original gets .generated infix
-                                    base = file_suffix[:-8]  # Remove ".tei.xml"
-                                    gold_name = f"{doc_id}/{doc_id}.{file_suffix}"
-                                    generated_name = f"{doc_id}/{doc_id}.{base}.generated.tei.xml"
-                                    zf.writestr(gold_name, gold_by_variant[matching_gold_variant])
-                                    with open(src_path, "r", encoding="utf-8") as f:
-                                        zf.writestr(generated_name, f.read())
-                                else:
-                                    # No gold - include file as-is with doc_id prefix
-                                    dest_name = f"{doc_id}/{doc_id}.{file_suffix}"
-                                    zf.write(src_path, dest_name)
+                            # Write raw feature file to corpus/raw/ (no extension)
+                            raw_file = next(
+                                (f for f in extracted_files
+                                 if f.endswith(f".{grobid_suffix}") and not f.endswith(".tei.xml")),
+                                None
+                            )
+                            if raw_file:
+                                raw_path = os.path.join(temp_dir, raw_file)
+                                if os.path.exists(raw_path):
+                                    zf.write(raw_path, f"{zip_stem}/{base_path}/raw/{doc_id}")
 
                         documents_processed += 1
 
@@ -337,10 +353,6 @@ async def download_training_package(
                 )
 
             zip_buffer.seek(0)
-
-            # Generate timestamp for filename
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_filename = f"{collection}-training-data-{timestamp}.zip"
 
             # Send success notification (only if progress is enabled)
             if not no_progress:
