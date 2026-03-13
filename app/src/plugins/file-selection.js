@@ -104,6 +104,7 @@ function updateSelectboxValues(state) {
     ui.toolbar.pdf.value = sourceValue;
     ui.toolbar.xml.value = state.xml || "";
     ui.toolbar.diff.value = state.diff || "";
+    ui.toolbar.collection.value = state.collectionFilter || "";
   } finally {
     isUpdatingProgrammatically = false;
   }

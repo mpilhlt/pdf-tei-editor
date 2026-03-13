@@ -48,6 +48,14 @@ fastapi_app/plugins/my_plugin/
 
 **Static Files**: Files in the `html/` subdirectory are automatically served at `/api/plugins/{plugin_id}/static/`. Use this for XSLT, CSS, JS assets instead of custom routes. See [Static File Serving](../development/plugin-system-backend.md#static-file-serving).
 
+**Keep JavaScript out of HTML templates**: Never put `<script>` blocks with significant logic inline in HTML template files. Instead, place JavaScript in a separate `.js` file in the `html/` directory — it will be served automatically at `/api/plugins/{plugin_id}/static/view.js` — and reference it from the template:
+
+```html
+<script type="module" src="/api/plugins/my-plugin/static/view.js"></script>
+```
+
+This keeps templates lean, enables IDE type-checking and autocompletion in the JS file, and avoids JSDoc type resolution limitations in inline scripts.
+
 **Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
 
 **Example Test Annotation**:

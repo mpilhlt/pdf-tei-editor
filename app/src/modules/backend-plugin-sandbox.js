@@ -118,6 +118,15 @@ export class PluginSandbox {
   }
 
   /**
+   * Get application state 
+   * @returns {ApplicationState}
+   */
+  getCurrentState() {
+    return this.context.getCurrentState()
+  }
+
+
+  /**
    * Update application state
    * @param {Partial<ApplicationState>} updates - State fields to update
    */
