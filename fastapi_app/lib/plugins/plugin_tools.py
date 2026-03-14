@@ -454,7 +454,7 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
         (r'\bWebSocket\b', 'WebSocket connection'),
         (r'\beval\s*\(', 'Dynamic code execution via eval()'),
         (r'\bnew\s+Function\s*\(', 'Dynamic code execution via Function constructor'),
-        (r'\bimport\s*\(', 'Dynamic import'),
+        (r'(?<!@)\bimport\s*\(', 'Dynamic import'),
         (r'\bwindow\s*\.\s*open\s*\(', 'Opening new windows'),
         (r'\blocation\s*\.\s*href\s*=', 'Navigation/redirect'),
         (r'\bdocument\s*\.\s*cookie\b', 'Cookie access'),
