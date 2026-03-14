@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-03-12T14:40:38.477Z
+ * Generated from OpenAPI schema at 2026-03-14T14:56:29.309Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -482,6 +482,7 @@
  * @property {number=} errors
  * @property {number=} new_version
  * @property {number=} duration_ms
+ * @property {string=} message
  */
 
 /**
@@ -584,7 +585,7 @@
  */
 
 /**
- * @typedef {Object} plugin_kisski_routes__ExtractRequest
+ * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractRequest
  * @property {string} model
  * @property {string} prompt
  * @property {string=} stable_id
@@ -595,7 +596,7 @@
  */
 
 /**
- * @typedef {Object} plugin_kisski_routes__ExtractResponse
+ * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractResponse
  * @property {boolean} success
  * @property {Object<string, any>=} data
  * @property {string=} error
@@ -718,7 +719,7 @@ export class ApiClientV1 {
 
   /**
    * Get application state information.
-   * Returns state including WebDAV status and internet connectivity.
+   * Returns state including internet connectivity.
    *
    * @returns {Promise<StateResponse>}
    */

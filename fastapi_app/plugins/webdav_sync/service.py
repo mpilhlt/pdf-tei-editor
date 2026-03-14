@@ -186,7 +186,7 @@ class SyncService(SyncServiceBase):
                     self._sync_deletions(remote_mgr, changes, new_version, summary)
 
                     send_progress(55, "Syncing files...")
-                    self._sync_data_files(remote_mgr, changes, new_version, summary)
+                    self._sync_data_files(remote_mgr, changes, new_version, summary, client_id=client_id)
 
                     send_progress(75, "Syncing metadata...")
                     self._sync_metadata(remote_mgr, changes, new_version, summary)
@@ -355,44 +355,130 @@ class SyncService(SyncServiceBase):
                     self.logger.error(f"Failed to mark remote deleted {local_file.id[:8]}...: {e}")
                 summary.errors += 1
 
+    def _send_message(self, client_id: Optional[str], message: str) -> None:
+        """Send a syncMessage SSE event to the client."""
+        if self.sse_service and client_id:
+            self.sse_service.send_message(client_id, 'syncMessage', message)
+
     def _sync_data_files(
         self,
         remote_mgr: RemoteMetadataManager,
         changes: Dict,
         version: int,
-        summary: SyncSummary
+        summary: SyncSummary,
+        client_id: Optional[str] = None,
     ) -> None:
-        """Sync actual data files (upload/download)."""
-        for local_file in changes['local_new'] + changes['local_modified']:
-            try:
-                file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
-                if not file_path.exists():
-                    if self.logger:
-                        self.logger.warning(f"File not found for upload: {file_path}")
-                    continue
+        """Sync actual data files using parallel HTTP transfers and sequential metadata writes."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from .config import get_transfer_workers
 
-                remote_path = self._get_remote_file_path(local_file.id, local_file.file_type)
-                self._upload_file(file_path, remote_path)
+        workers = get_transfer_workers()
+
+        # --- Uploads ---
+        to_upload = changes['local_new'] + changes['local_modified']
+        n_upload = len(to_upload)
+        upload_done = 0
+
+        if n_upload:
+            self._send_message(client_id, f"Uploading {n_upload} file(s)...")
+
+        def _do_upload(local_file: Any) -> tuple[Any, None]:
+            file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
+            if not file_path.exists():
+                if self.logger:
+                    self.logger.warning(f"File not found for upload: {file_path}")
+                return local_file, None
+            remote_path = self._get_remote_file_path(local_file.id, local_file.file_type)
+            self._upload_file(file_path, remote_path)
+            return local_file, None
+
+        upload_errors: dict[int, Exception] = {}
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_do_upload, f): f for f in to_upload}
+            for future in as_completed(futures):
+                local_file = futures[future]
+                upload_done += 1
+                try:
+                    future.result()
+                    self._send_message(
+                        client_id,
+                        f"\u2191 {local_file.filename} ({upload_done}/{n_upload})"
+                    )
+                except Exception as e:
+                    upload_errors[id(local_file)] = e
+                    self._send_message(
+                        client_id,
+                        f"\u2715 {local_file.filename}: {e}"
+                    )
+
+        for local_file in to_upload:
+            err = upload_errors.get(id(local_file))
+            if err is not None:
+                if self.logger:
+                    self.logger.error(f"Failed to upload {local_file.filename}: {err}")
+                summary.errors += 1
+                continue
+            file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
+            if not file_path.exists():
+                continue
+            try:
                 remote_mgr.upsert_file(self._file_to_remote_dict(local_file, version))
                 self.file_repo.mark_file_synced(local_file.id, version)
                 summary.uploaded += 1
-
                 if self.logger:
                     self.logger.info(f"Uploaded: {local_file.filename}")
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"Failed to upload {local_file.filename}: {e}")
+                    self.logger.error(f"Failed to record upload metadata {local_file.filename}: {e}")
                 summary.errors += 1
 
-        for remote_file in changes['remote_new']:
+        # --- Downloads ---
+        to_download = changes['remote_new']
+        n_download = len(to_download)
+        download_done = 0
+
+        if n_download:
+            self._send_message(client_id, f"Downloading {n_download} file(s)...")
+
+        def _do_download(remote_file: dict[str, Any]) -> tuple[dict[str, Any], None]:
+            from fastapi_app.lib.utils.hash_utils import get_storage_path
+            file_id = remote_file['id']
+            file_type = remote_file['file_type']
+            remote_path = self._get_remote_file_path(file_id, file_type)
+            # Use get_storage_path directly — file_storage.get_file_path returns None for files
+            # that don't exist yet, which is always the case for remote_new files.
+            local_path = get_storage_path(self.file_storage.data_root, file_id, file_type)
+            self._download_file(remote_path, local_path)
+            return remote_file, None
+
+        download_errors: dict[str, Exception] = {}
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_do_download, f): f for f in to_download}
+            for future in as_completed(futures):
+                remote_file = futures[future]
+                download_done += 1
+                try:
+                    future.result()
+                    self._send_message(
+                        client_id,
+                        f"\u2193 {remote_file['filename']} ({download_done}/{n_download})"
+                    )
+                except Exception as e:
+                    download_errors[remote_file['id']] = e
+                    self._send_message(
+                        client_id,
+                        f"\u2715 {remote_file['filename']}: {e}"
+                    )
+
+        for remote_file in to_download:
+            file_id = remote_file['id']
+            err = download_errors.get(file_id)
+            if err is not None:
+                if self.logger:
+                    self.logger.error(f"Failed to download {remote_file['filename']}: {err}")
+                summary.errors += 1
+                continue
             try:
-                file_id = remote_file['id']
-                file_type = remote_file['file_type']
-
-                remote_path = self._get_remote_file_path(file_id, file_type)
-                local_path = self.file_storage.get_file_path(file_id, file_type)
-                self._download_file(remote_path, local_path)
-
                 from fastapi_app.lib.models.models import FileCreate
                 file_create = FileCreate(
                     id=file_id,
@@ -400,7 +486,7 @@ class SyncService(SyncServiceBase):
                     filename=remote_file['filename'],
                     doc_id=remote_file['doc_id'],
                     doc_id_type=remote_file.get('doc_id_type', 'custom'),
-                    file_type=file_type,
+                    file_type=remote_file['file_type'],
                     file_size=remote_file['file_size'],
                     label=remote_file.get('label'),
                     variant=remote_file.get('variant'),
@@ -410,16 +496,14 @@ class SyncService(SyncServiceBase):
                     doc_metadata=json.loads(remote_file.get('doc_metadata', '{}')),
                     file_metadata=json.loads(remote_file.get('file_metadata', '{}'))
                 )
-
                 self.file_repo.insert_file(file_create)
                 self.file_repo.mark_file_synced(file_id, version)
                 summary.downloaded += 1
-
                 if self.logger:
                     self.logger.info(f"Downloaded: {remote_file['filename']}")
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"Failed to download {remote_file['filename']}: {e}")
+                    self.logger.error(f"Failed to record download metadata {remote_file['filename']}: {e}")
                 summary.errors += 1
 
     def _sync_metadata(

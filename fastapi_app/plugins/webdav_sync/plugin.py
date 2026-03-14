@@ -67,6 +67,7 @@ class WebDavSyncPlugin(Plugin):
         Returns SyncSummary dict directly so the frontend sync widget
         can process the result without an intermediate page.
         """
+        import asyncio
         from fastapi_app.lib.core.dependencies import get_db, get_file_storage, get_sse_service
         from fastapi_app.lib.repository.file_repository import FileRepository
         from .service import SyncService
@@ -77,7 +78,7 @@ class WebDavSyncPlugin(Plugin):
             file_storage = get_file_storage()
             sse_service = get_sse_service()
 
-            client_id = context.user.get('username') if context.user else None
+            client_id = params.get('_session_id') or (context.user.get('username') if context.user else None)
 
             webdav_config = get_webdav_config()
             sync_service = SyncService(
@@ -88,14 +89,17 @@ class WebDavSyncPlugin(Plugin):
                 logger=logger,
             )
 
-            # Mark sync in progress
-            file_repo.set_sync_metadata('sync_in_progress', '1')
-            try:
-                summary = sync_service.perform_sync(client_id=client_id, force=False)
-                import json
-                file_repo.set_sync_metadata('last_sync_summary', summary.model_dump_json())
-            finally:
-                file_repo.set_sync_metadata('sync_in_progress', '0')
+            def _run_sync() -> None:
+                file_repo.set_sync_metadata('sync_in_progress', '1')
+                try:
+                    return sync_service.perform_sync(client_id=client_id, force=False)
+                finally:
+                    file_repo.set_sync_metadata('sync_in_progress', '0')
+
+            # Run blocking sync in a thread pool to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            summary = await loop.run_in_executor(None, _run_sync)
+            file_repo.set_sync_metadata('last_sync_summary', summary.model_dump_json())
 
             return summary.model_dump()
 

@@ -149,6 +149,14 @@ def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> 
     # Remove import statements
     content = re.sub(r"^import\s+.*?;?\s*$", "", content, flags=re.MULTILINE)
 
+    # If the content already calls window.registerFrontendExtension directly,
+    # just wrap it in an IIFE for scoping — don't add a second registration.
+    if "window.registerFrontendExtension" in content:
+        return f"""// Frontend extension from plugin: {plugin_id} ({filename})
+(function() {{
+{content.strip()}
+}})();"""
+
     # Remove 'export' keywords
     content = re.sub(r"^export\s+const\s+", "const ", content, flags=re.MULTILINE)
     content = re.sub(r"^export\s+function\s+", "function ", content, flags=re.MULTILINE)

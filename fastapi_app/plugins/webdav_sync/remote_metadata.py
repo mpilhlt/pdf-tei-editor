@@ -344,10 +344,11 @@ class RemoteMetadataManager:
         column_names = ', '.join(columns)
         update_clause = ', '.join(f"{col} = excluded.{col}" for col in columns if col != 'id')
 
+        # Use INSERT OR REPLACE to handle both id conflicts and stable_id conflicts
+        # (stable_id changes when file content changes but the logical file is the same)
         query = f"""
-            INSERT INTO file_metadata ({column_names})
+            INSERT OR REPLACE INTO file_metadata ({column_names})
             VALUES ({placeholders})
-            ON CONFLICT(id) DO UPDATE SET {update_clause}
         """
 
         with self.transaction():

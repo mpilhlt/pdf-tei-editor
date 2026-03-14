@@ -11,6 +11,7 @@ def init_plugin_config() -> None:
     get_plugin_config("plugin.webdav-sync.username", "WEBDAV_USERNAME", default="")
     get_plugin_config("plugin.webdav-sync.password", "WEBDAV_PASSWORD", default="")
     get_plugin_config("plugin.webdav-sync.remote-root", "WEBDAV_REMOTE_ROOT", default="/pdf-tei-editor")
+    get_plugin_config("plugin.webdav-sync.transfer-workers", "WEBDAV_TRANSFER_WORKERS", default="4")
 
 
 def get_webdav_config() -> dict[str, str]:
@@ -22,6 +23,11 @@ def get_webdav_config() -> dict[str, str]:
         'password': config.get("plugin.webdav-sync.password", default=""),
         'remote_root': config.get("plugin.webdav-sync.remote-root", default="/pdf-tei-editor"),
     }
+
+
+def get_transfer_workers() -> int:
+    """Return the number of parallel transfer workers for uploads/downloads."""
+    return int(get_config().get("plugin.webdav-sync.transfer-workers", default="4"))
 
 
 def is_configured() -> bool:
