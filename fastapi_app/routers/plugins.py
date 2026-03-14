@@ -148,7 +148,7 @@ def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> 
     """
     # Strip block and line comments (includes JSDoc @import annotations)
     content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
-    content = re.sub(r"//[^\n]*", "", content)
+    content = re.sub(r"^\s*//[^\n]*", "", content, flags=re.MULTILINE)
 
     # Remove import statements
     content = re.sub(r"^import\s+.*?;?\s*$", "", content, flags=re.MULTILINE)

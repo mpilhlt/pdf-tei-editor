@@ -445,7 +445,7 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
     # (e.g. @param {import('...')}) don't trigger false positives.
     # Order matters: block comments first, then line comments.
     code = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
-    code = re.sub(r'//[^\n]*', '', code)
+    code = re.sub(r'^\s*//[^\n]*', '', code, flags=re.MULTILINE)
 
     # Patterns that indicate potential security issues
     dangerous_patterns = [
