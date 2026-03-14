@@ -2,7 +2,7 @@
 Pydantic models for file API operations.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -11,17 +11,18 @@ from datetime import datetime
 
 class DocumentMetadata(BaseModel):
     """Document metadata extracted from TEI header"""
+    model_config = ConfigDict(from_attributes=True)
+
     title: str
     authors: List[Dict[str, Any]] = []
     date: Optional[str] = None
     publisher: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class FileItemModel(BaseModel):
     """Base model for files with label field"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str                                    # Stable ID for URLs and references
     filename: str
     file_type: str                             # 'pdf' or 'tei'
@@ -30,9 +31,6 @@ class FileItemModel(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: Optional[str] = None           # Username of user who created this file
-
-    class Config:
-        from_attributes = True
 
 
 class ArtifactModel(FileItemModel):
@@ -48,14 +46,13 @@ class ArtifactModel(FileItemModel):
 
 class DocumentGroupModel(BaseModel):
     """Document with source file and artifacts"""
+    model_config = ConfigDict(from_attributes=True)
+
     doc_id: str
     collections: List[str]                     # All collections
     doc_metadata: Dict[str, Any]               # Metadata from TEI header
     source: FileItemModel                      # Source file (PDF or primary XML)
     artifacts: List[ArtifactModel]             # All artifact files (flattened)
-
-    class Config:
-        from_attributes = True
 
 
 class FileListResponseModel(BaseModel):
@@ -66,6 +63,8 @@ class FileListResponseModel(BaseModel):
 # Legacy models (kept for backward compatibility with other endpoints)
 class FileListItem(BaseModel):
     """Single file entry in list response (LEGACY - use FileItemModel/ArtifactModel)"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str                                    # Stable ID (6+ chars, permanent) for client
     filename: str
     doc_id: str
@@ -87,9 +86,6 @@ class FileListItem(BaseModel):
 
     # Access control (added at runtime)
     access_control: Optional[Dict[str, Any]] = None
-
-    class Config:
-        from_attributes = True
 
 
 class DocumentGroup(BaseModel):

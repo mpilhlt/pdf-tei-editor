@@ -92,10 +92,18 @@ function wrapExtensionAsPlugin(extension) {
       extension.onStateUpdate(changedKeys, state, sandbox);
   }
 
-  // Include custom endpoints with sandbox injection
+  // Include custom endpoints with sandbox injection (supports one level of nesting)
   for (const [key, value] of Object.entries(extension)) {
-    if (typeof value === 'function' && !lifecycleMethods.includes(key) && key !== 'name') {
+    if (lifecycleMethods.includes(key) || key === 'name' || key === 'pluginId' || key === 'description') continue;
+    if (typeof value === 'function') {
       plugin[key] = (...args) => value(...args, sandbox);
+    } else if (typeof value === 'object' && value !== null) {
+      plugin[key] = {};
+      for (const [nestedKey, nestedValue] of Object.entries(value)) {
+        if (typeof nestedValue === 'function') {
+          plugin[key][nestedKey] = (...args) => nestedValue(...args, sandbox);
+        }
+      }
     }
   }
 

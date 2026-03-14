@@ -54,7 +54,7 @@ from fastapi_app.lib.models.models_permissions import (
     SetPermissionsRequest,
     AccessControlModeResponse,
 )
-from fastapi_app.lib.models.models_sync import (
+from fastapi_app.lib.sync.models import (
     SyncStatusResponse,
     SyncRequest,
     ConflictInfo,

@@ -122,6 +122,7 @@ class RemoteMetadataManager:
         try:
             # Create temporary file for downloaded database
             temp_fd, temp_path = tempfile.mkstemp(suffix='.db', prefix='remote_metadata_')
+            os.close(temp_fd)
             self.temp_db_path = Path(temp_path)
 
             if self.fs.exists(self.remote_db_path):
@@ -184,7 +185,7 @@ class RemoteMetadataManager:
                     shutil.copyfileobj(local_file, remote_file)
 
             if self.logger:
-                self.logger.info(f"Uploaded metadata.db successfully")
+                self.logger.info("Uploaded metadata.db successfully")
 
         except Exception as e:
             if self.logger:
@@ -222,12 +223,12 @@ class RemoteMetadataManager:
                     self.temp_db_path.unlink()
                     self.temp_db_path = None
                     break
-                except (PermissionError, OSError) as e:
+                except (PermissionError, OSError):
                     if attempt < max_retries - 1:
                         time.sleep(0.1 * (attempt + 1))  # Exponential backoff
                         gc.collect()  # Try again after another collection
                     else:
-                        # Last resort: silently ignore cleanup failure (file will be cleaned by OS temp cleanup)
+                        # Last resort: silently ignore cleanup failure (OS temp cleanup will handle it)
                         self.temp_db_path = None
 
     @contextmanager
@@ -267,13 +268,11 @@ class RemoteMetadataManager:
         result = []
         for row in rows:
             row_dict = dict(row)
-            # Parse JSON fields (stored as TEXT in SQLite)
             for json_field in ['doc_collections', 'doc_metadata', 'file_metadata']:
                 if json_field in row_dict and row_dict[json_field]:
                     try:
                         row_dict[json_field] = json.loads(row_dict[json_field])
                     except (json.JSONDecodeError, TypeError):
-                        # If parsing fails, use empty default
                         row_dict[json_field] = [] if json_field == 'doc_collections' else {}
             result.append(row_dict)
 
@@ -294,17 +293,14 @@ class RemoteMetadataManager:
         cursor.execute(query)
         rows = cursor.fetchall()
 
-        # Parse JSON fields from TEXT to proper Python objects
         result = []
         for row in rows:
             row_dict = dict(row)
-            # Parse JSON fields (stored as TEXT in SQLite)
             for json_field in ['doc_collections', 'doc_metadata', 'file_metadata']:
                 if json_field in row_dict and row_dict[json_field]:
                     try:
                         row_dict[json_field] = json.loads(row_dict[json_field])
                     except (json.JSONDecodeError, TypeError):
-                        # If parsing fails, use empty default
                         row_dict[json_field] = [] if json_field == 'doc_collections' else {}
             result.append(row_dict)
 
@@ -340,11 +336,9 @@ class RemoteMetadataManager:
         if not self.local_db_conn:
             raise RuntimeError("Not connected to database")
 
-        # Prepare data for upsert
         file_data = file_data.copy()
         file_data['updated_at'] = datetime.now(timezone.utc).isoformat()
 
-        # Build column names and placeholders
         columns = list(file_data.keys())
         placeholders = ', '.join('?' * len(columns))
         column_names = ', '.join(columns)

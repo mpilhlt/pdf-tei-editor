@@ -19,7 +19,6 @@ from fastapi_app.lib.utils.auth import AuthManager
 from fastapi_app.lib.utils.server_utils import get_session_id_from_request
 from fastapi_app.lib.utils.logging_utils import get_logger
 from fastapi_app.lib.sse.sse_service import SSEService
-from fastapi_app.lib.services.sync_service import SyncService
 from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
 
 
@@ -293,35 +292,6 @@ def get_sse_service() -> SSEService:
     if _sse_service_instance is None:
         _sse_service_instance = SSEService(logger=logger)
     return _sse_service_instance
-
-
-def get_sync_service(
-    file_repo: FileRepository = Depends(get_file_repository),
-    file_storage: FileStorage = Depends(get_file_storage),
-    sse_service: SSEService = Depends(get_sse_service)
-) -> Optional[SyncService]:
-    """Get SyncService instance with dependencies. Returns None if WebDAV is not configured."""
-    settings = get_settings()
-
-    # Check if WebDAV is configured
-    if not settings.webdav_base_url:
-        return None
-
-    # Build WebDAV config
-    webdav_config = {
-        'base_url': settings.webdav_base_url,
-        'username': settings.webdav_username,
-        'password': settings.webdav_password,
-        'remote_root': settings.webdav_remote_root
-    }
-
-    return SyncService(
-        file_repo=file_repo,
-        file_storage=file_storage,
-        webdav_config=webdav_config,
-        sse_service=sse_service,
-        logger=logger
-    )
 
 
 # Alias for backward compatibility with Phase 3-5 naming

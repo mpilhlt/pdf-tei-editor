@@ -161,11 +161,7 @@ function start(state, timeoutSeconds = 60) {
         authentication.logout()
       } else {
         // Another server-side error occurred
-        if (currentState.webdavEnabled) {
-          logger.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-          dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-          await updateState({ webdavEnabled: false });
-        }
+        logger.error("An unexpected server error occurred during heartbeat.", error);
       }
     }
   }, heartbeatFrequency);

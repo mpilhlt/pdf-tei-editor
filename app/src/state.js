@@ -27,7 +27,6 @@
  * @property {string|null} diff - The document identifier for an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
- * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode, i.e. the backend has disconnected
  * @property {UserData|null} user - The currently logged-in user
@@ -51,7 +50,6 @@ const initialState = {
   diff: null,
   xpath: null,
   variant: null,
-  webdavEnabled: false,
   editorReadOnly: false,
   sessionId: null,
   user: null,

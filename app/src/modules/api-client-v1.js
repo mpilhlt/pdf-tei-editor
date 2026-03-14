@@ -445,7 +445,6 @@
 
 /**
  * @typedef {Object} StateResponse
- * @property {boolean} webdavEnabled
  * @property {boolean=} hasInternet
  */
 
@@ -1579,82 +1578,6 @@ export class ApiClientV1 {
    */
   async filesSetPermissions(requestBody) {
     const endpoint = `/files/set_permissions`
-    return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Check if synchronization is needed (O(1) operation).
-   * Performs quick checks:
-   * - Count of unsynced files in local database
-   * - Local vs remote version comparison
-   * Returns:
-   * Sync status with version info and unsynced count
-   *
-   * @returns {Promise<SyncStatusResponse>}
-   */
-  async syncStatus() {
-    const endpoint = `/sync/status`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Perform database-driven synchronization.
-   * Process:
-   * 1. Quick skip check (unless force=true)
-   * 2. Acquire remote lock
-   * 3. Download remote metadata.db
-   * 4. Compare metadata (find changes)
-   * 5. Sync deletions (via database flags)
-   * 6. Sync data files (upload/download)
-   * 7. Sync metadata changes (no file transfers)
-   * 8. Upload updated metadata.db
-   * 9. Release lock
-   * Progress updates are sent via SSE to the user's session.
-   * Args:
-   * request: Sync request with force flag
-   * Returns:
-   * Summary of sync operations performed
-   *
-   * @param {SyncRequest} requestBody
-   * @returns {Promise<SyncSummary>}
-   */
-  async sync(requestBody) {
-    const endpoint = `/sync`
-    return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * List files with sync conflicts.
-   * Conflicts occur when:
-   * - File modified locally and remotely
-   * - File deleted remotely but modified locally
-   * - File deleted locally but modified remotely
-   * Returns:
-   * List of conflicts with details
-   *
-   * @returns {Promise<ConflictListResponse>}
-   */
-  async syncConflicts() {
-    const endpoint = `/sync/conflicts`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Resolve a sync conflict.
-   * Strategies:
-   * - local_wins: Keep local version, mark as modified for upload
-   * - remote_wins: Download remote version, overwrite local
-   * - keep_both: Create new variant with local version
-   * Args:
-   * resolution: Conflict resolution request
-   * Returns:
-   * Success message
-   *
-   * @param {ConflictResolution} requestBody
-   * @returns {Promise<Object<string, any>>}
-   */
-  async syncResolveConflict(requestBody) {
-    const endpoint = `/sync/resolve-conflict`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

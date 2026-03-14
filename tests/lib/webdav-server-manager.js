@@ -190,8 +190,9 @@ export class WebdavServerManager extends ServerManager {
     console.log(`[INFO] WebDAV process PID: ${this.webdavProcess.pid}`);
 
     // Handle process exit
+    // Code 143 = SIGTERM (expected during cleanup), null = killed by signal
     this.webdavProcess.on('exit', (code) => {
-      if (code !== 0 && code !== null) {
+      if (code !== 0 && code !== null && code !== 143) {
         console.error(`[ERROR] WebDAV process exited with code ${code}`);
       }
     });
