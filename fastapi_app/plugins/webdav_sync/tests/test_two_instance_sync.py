@@ -1,28 +1,23 @@
 """
-Two-instance sync regression tests.
+Two-instance sync regression tests for the operation-log–based SyncService.
 
-Simulates two independent instances (local + server) sharing the same WebDAV
-repository.  The tests expose two concrete bugs in _compare_metadata and
-_sync_data_files:
+These tests exercise _apply_ops / _collect_own_ops directly to verify the key
+correctness properties that were previously broken:
 
   Bug 1 – Ping-pong re-upload
-    A file that was synced by instance A (sync_status='synced') gets its hash
-    removed from the remote DB when instance B uploads a newer version of the
-    same logical file (same stable_id, different hash) via INSERT OR REPLACE.
-    On A's next sync the hash is missing from remote, so _compare_metadata
-    unconditionally puts it in local_new and re-uploads it.  B then re-uploads
-    its version, replacing A's entry again → infinite loop.
+    Resolved by design: once a file is marked synced (via mark_file_synced) it
+    does not appear in get_files_to_upload(), so it is never re-uploaded.
 
-  Bug 2 – Download IntegrityError
-    When _sync_data_files tries to INSERT the remote_new file (hash_b,
-    stable_id=X) it fails with a UNIQUE constraint violation because local
-    already has (hash_a, stable_id=X).  The error is silently counted in
-    summary.errors and the file is never downloaded.
+  Bug 2 – Stable_id UNIQUE conflict during download
+    When an upsert op arrives for a stable_id that already exists locally with
+    a different hash, _apply_upsert_op performs a hash-replacement rather than
+    a bare INSERT, avoiding the UNIQUE constraint error.
 
 @testCovers fastapi_app/plugins/webdav_sync/service.py
 """
 
 import gc
+import json
 import shutil
 import tempfile
 import unittest
@@ -44,7 +39,7 @@ from fastapi_app.plugins.webdav_sync.service import SyncService
 # ---------------------------------------------------------------------------
 
 def _make_service(file_repo: FileRepository, file_storage: FileStorage) -> SyncService:
-    """Create a SyncService backed by the given repo/storage (WebDAV is mocked)."""
+    """Create a SyncService with mocked WebDAV transport."""
     with patch('fastapi_app.plugins.webdav_sync.service.WebdavFileSystem'):
         return SyncService(
             file_repo, file_storage,
@@ -54,16 +49,9 @@ def _make_service(file_repo: FileRepository, file_storage: FileStorage) -> SyncS
         )
 
 
-def _remote_mgr_mock(remote_files: list) -> Mock:
-    """Return a mock RemoteMetadataManager that serves the given file list."""
-    m = Mock()
-    m.get_all_files.return_value = remote_files
-    return m
-
-
-def _remote_entry(file_id: str, stable_id: str, **kwargs) -> dict:
-    """Build a minimal remote file-metadata dict."""
-    return {
+def _upsert_op(seq: int, file_id: str, stable_id: str, **kwargs) -> dict:
+    """Build a minimal upsert op dict (as returned by RemoteQueueManager)."""
+    file_data = {
         'id': file_id,
         'stable_id': stable_id,
         'filename': kwargs.get('filename', 'doc.tei.xml'),
@@ -71,159 +59,109 @@ def _remote_entry(file_id: str, stable_id: str, **kwargs) -> dict:
         'doc_id_type': 'custom',
         'file_type': kwargs.get('file_type', 'tei'),
         'file_size': kwargs.get('file_size', 100),
-        'label': None, 'variant': None, 'version': None,
+        'label': None, 'variant': None, 'version': kwargs.get('version', 1),
         'is_gold_standard': False,
-        'doc_collections': '[]', 'doc_metadata': '{}', 'file_metadata': '{}',
-        'deleted': kwargs.get('deleted', False),
-        'updated_at': kwargs.get('updated_at',
-                                 datetime.now(timezone.utc).isoformat()),
+        'doc_collections': [], 'doc_metadata': {}, 'file_metadata': {},
+        'deleted': False,
+    }
+    return {
+        'seq': seq,
+        'client_id': kwargs.get('client_id', 'remote-client-uuid'),
+        'op_type': 'upsert',
+        'stable_id': stable_id,
+        'file_id': file_id,
+        'file_data': json.dumps(file_data),
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _delete_op(seq: int, file_id: str, stable_id: str, **kwargs) -> dict:
+    return {
+        'seq': seq,
+        'client_id': kwargs.get('client_id', 'remote-client-uuid'),
+        'op_type': 'delete',
+        'stable_id': stable_id,
+        'file_id': file_id,
+        'file_data': None,
+        'created_at': datetime.now(timezone.utc).isoformat(),
     }
 
 
 # ---------------------------------------------------------------------------
-# Test suite for _compare_metadata
+# Test suite: _apply_ops
 # ---------------------------------------------------------------------------
 
-class TestCompareMetadataTwoInstances(unittest.TestCase):
-    """Unit tests for _compare_metadata with two-instance scenarios."""
+class TestApplyOps(unittest.TestCase):
 
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp())
-        self.db = DatabaseManager(self.test_dir / "test.db")
+        self.db = DatabaseManager(self.test_dir / 'test.db')
         self.repo = FileRepository(self.db)
         self.storage = FileStorage(self.test_dir, self.db)
         self.service = _make_service(self.repo, self.storage)
-
-    def tearDown(self):
-        gc.collect()
-        shutil.rmtree(self.test_dir, ignore_errors=True)
-
-    # -- positive cases --------------------------------------------------
-
-    def test_new_version_appears_in_local_new(self):
-        """
-        A newly-created version (sync_status='modified', brand-new stable_id)
-        must appear in local_new so it gets uploaded.
-        """
-        # Synced original
-        self.repo.insert_file(FileCreate(
-            id='hash_orig', stable_id='stable_orig',
-            filename='doc.tei.xml', doc_id='doc1',
-            file_type='tei', file_size=100
-        ))
-        self.repo.mark_file_synced('hash_orig', 1)
-
-        # New version (different stable_id, not yet synced)
-        self.repo.insert_file(FileCreate(
-            id='hash_v2', stable_id='stable_v2',
-            filename='doc.v2.tei.xml', doc_id='doc1',
-            file_type='tei', file_size=150
-        ))
-
-        # Remote only knows the original
-        remote_mgr = _remote_mgr_mock([
-            _remote_entry('hash_orig', 'stable_orig')
-        ])
-        changes = self.service._compare_metadata(remote_mgr)
-
-        local_new_ids = {f.id for f in changes['local_new']}
-        self.assertIn('hash_v2', local_new_ids,
-                      "New version must appear in local_new")
-        self.assertNotIn('hash_orig', local_new_ids,
-                         "Synced original must not appear in local_new")
-
-    def test_unsynced_file_not_in_remote_is_local_new(self):
-        """A file that was never synced and is absent from remote → local_new."""
-        self.repo.insert_file(FileCreate(
-            id='hash_new', stable_id='stable_new',
-            filename='new.tei.xml', doc_id='doc2',
-            file_type='tei', file_size=200
-        ))
-        changes = self.service._compare_metadata(_remote_mgr_mock([]))
-        local_new_ids = {f.id for f in changes['local_new']}
-        self.assertIn('hash_new', local_new_ids)
-
-    # -- Bug 1: ping-pong ------------------------------------------------
-
-    def test_synced_file_replaced_in_remote_not_in_local_new(self):
-        """
-        hash_a is marked 'synced' locally.  Remote has hash_b for the same
-        stable_id (another instance replaced hash_a via INSERT OR REPLACE).
-        hash_a must NOT appear in local_new (no ping-pong re-upload).
-        hash_b must be in remote_modified (same stable_id, different hash).
-        """
-        stable_id = 'stable_x'
-        self.repo.insert_file(FileCreate(
-            id='hash_a', stable_id=stable_id,
-            filename='doc.tei.xml', doc_id='doc1',
-            file_type='tei', file_size=100
-        ))
-        self.repo.mark_file_synced('hash_a', 1)
-
-        remote_mgr = _remote_mgr_mock([
-            _remote_entry('hash_b', stable_id)
-        ])
-        changes = self.service._compare_metadata(remote_mgr)
-
-        local_new_ids = {f.id for f in changes['local_new']}
-        self.assertNotIn('hash_a', local_new_ids,
-                         "Synced hash_a replaced in remote must not be re-uploaded")
-
-        remote_modified_ids = {f['id'] for f in changes['remote_modified']}
-        self.assertIn('hash_b', remote_modified_ids,
-                      "Remote hash_b (same stable_id) must appear in remote_modified")
-
-
-
-# ---------------------------------------------------------------------------
-# Test suite for _sync_data_files (download path)
-# ---------------------------------------------------------------------------
-
-class TestDownloadStableIdConflict(unittest.TestCase):
-    """Tests for the stable_id UNIQUE constraint error during downloads."""
-
-    def setUp(self):
-        self.test_dir = Path(tempfile.mkdtemp())
-        self.db = DatabaseManager(self.test_dir / "test.db")
-        self.repo = FileRepository(self.db)
-        self.storage = FileStorage(self.test_dir, self.db)
-        self.service = _make_service(self.repo, self.storage)
+        # Prevent real file downloads
+        self.service._download_file = Mock()
 
     def tearDown(self):
         gc.collect()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _write_file(self, content: bytes, file_type: str = 'tei') -> str:
-        file_hash, _ = self.storage.save_file(content, file_type,
-                                              increment_ref=True)
+        file_hash, _ = self.storage.save_file(content, file_type, increment_ref=True)
         return file_hash
 
-    def _run_download(self, remote_file: dict) -> SyncSummary:
-        """Run _sync_data_files with a single remote_new entry."""
-        changes = {
-            'local_new': [], 'local_modified': [],
-            'remote_new': [remote_file],
-            'remote_modified': [], 'remote_deleted': [], 'conflicts': [],
-        }
+    # -- new file -----------------------------------------------------------
+
+    def test_new_file_is_inserted(self):
+        """An upsert op for a file absent locally inserts it into the DB."""
+        op = _upsert_op(seq=1, file_id='hash_new', stable_id='stable_new')
         summary = SyncSummary()
-        mock_remote_mgr = Mock()
-        with patch.object(self.service, '_download_file'):
-            self.service._sync_data_files(
-                mock_remote_mgr, changes, version=2, summary=summary)
-        return summary
+        self.service._apply_ops([op], summary, client_id=None)
 
-    # -- Bug 2 -----------------------------------------------------------
+        file = self.repo.get_file_by_id('hash_new')
+        self.assertIsNotNone(file)
+        self.assertEqual(file.stable_id, 'stable_new')
+        self.assertEqual(summary.downloaded, 1)
+        self.assertEqual(summary.errors, 0)
 
-    def test_download_stable_id_conflict_applies_metadata(self):
+    def test_new_file_marked_synced_after_insert(self):
+        """After applying an upsert op the record is in sync_status='synced'."""
+        op = _upsert_op(seq=1, file_id='hash_a', stable_id='stable_a')
+        self.service._apply_ops([op], SyncSummary(), client_id=None)
+
+        file = self.repo.get_file_by_id('hash_a')
+        self.assertEqual(file.sync_status, 'synced')
+
+    # -- metadata-only update -----------------------------------------------
+
+    def test_same_hash_is_metadata_update(self):
+        """An upsert op for a hash already in local DB updates metadata, not downloads."""
+        hash_a = self._write_file(b'<tei/>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_a',
+            filename='old.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=6
+        ))
+        self.repo.mark_file_synced(hash_a, 1)
+
+        op = _upsert_op(seq=2, file_id=hash_a, stable_id='stable_a',
+                        filename='renamed.tei.xml')
+        summary = SyncSummary()
+        self.service._apply_ops([op], summary, client_id=None)
+
+        self.assertEqual(summary.metadata_synced, 1)
+        self.assertEqual(summary.downloaded, 0)
+
+    # -- Bug 2: stable_id conflict ------------------------------------------
+
+    def test_upsert_op_different_hash_same_stable_id_replaces(self):
         """
-        When remote_new contains a file with the same stable_id as an
-        existing local file (different hash), the conflict is resolved via
-        a metadata update on the existing record — no error, no duplicate
-        insert.
+        Bug 2 regression: when remote op has same stable_id but different hash
+        than local, the local record is replaced without UNIQUE constraint error.
         """
-        stable_id = 'stable_x'
         hash_a = self._write_file(b'<tei>version-a</tei>')
         hash_b = self._write_file(b'<tei>version-b</tei>')
+        stable_id = 'stable_x'
 
         self.repo.insert_file(FileCreate(
             id=hash_a, stable_id=stable_id,
@@ -232,16 +170,142 @@ class TestDownloadStableIdConflict(unittest.TestCase):
         ))
         self.repo.mark_file_synced(hash_a, 1)
 
-        remote_file = _remote_entry(hash_b, stable_id, file_size=20)
-        summary = self._run_download(remote_file)
+        op = _upsert_op(seq=2, file_id=hash_b, stable_id=stable_id)
+        summary = SyncSummary()
+        self.service._apply_ops([op], summary, client_id=None)
 
-        self.assertEqual(summary.errors, 0,
-                         "Stable_id conflict must be handled without error")
-        self.assertEqual(summary.downloaded, 0,
-                         "File must not be counted as a full download")
-        self.assertGreater(summary.metadata_synced, 0,
-                           "Conflict must be counted as a metadata sync")
+        self.assertEqual(summary.errors, 0, 'No errors expected')
+        self.assertEqual(summary.downloaded, 1)
 
+        # New hash is now in the DB; old hash should be gone (or deleted).
+        new_file = self.repo.get_file_by_stable_id(stable_id)
+        self.assertIsNotNone(new_file)
+        self.assertEqual(new_file.id, hash_b)
+
+    # -- Bug 1: no ping-pong re-upload --------------------------------------
+
+    def test_synced_file_not_re_uploaded(self):
+        """
+        Bug 1 regression: a file marked synced must NOT appear in
+        get_files_to_upload() and must not generate a new upsert op.
+        """
+        hash_a = self._write_file(b'<tei>synced</tei>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_a',
+            filename='doc.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=10
+        ))
+        self.repo.mark_file_synced(hash_a, 5)
+
+        to_upload = self.repo.get_files_to_upload()
+        self.assertNotIn(hash_a, [f.id for f in to_upload],
+                         'Synced file must not appear in get_files_to_upload()')
+
+    # -- delete op ----------------------------------------------------------
+
+    def test_delete_op_soft_deletes_local_file(self):
+        """A delete op marks the local file as deleted and deletion_synced."""
+        hash_a = self._write_file(b'<tei/>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_del',
+            filename='del.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=6
+        ))
+        self.repo.mark_file_synced(hash_a, 1)
+
+        op = _delete_op(seq=2, file_id=hash_a, stable_id='stable_del')
+        summary = SyncSummary()
+        self.service._apply_ops([op], summary, client_id=None)
+
+        file = self.repo.get_file_by_id(hash_a, include_deleted=True)
+        self.assertIsNotNone(file)
+        self.assertTrue(file.deleted)
+        self.assertEqual(file.sync_status, 'deletion_synced')
+        self.assertEqual(summary.deleted_local, 1)
+        self.assertEqual(summary.errors, 0)
+
+    def test_delete_op_idempotent_for_unknown_file(self):
+        """A delete op for a file not in local DB is silently ignored."""
+        op = _delete_op(seq=1, file_id='unknown_hash', stable_id='unknown_stable')
+        summary = SyncSummary()
+        self.service._apply_ops([op], summary, client_id=None)
+        self.assertEqual(summary.errors, 0)
+        self.assertEqual(summary.deleted_local, 0)
+
+
+# ---------------------------------------------------------------------------
+# Test suite: _collect_own_ops
+# ---------------------------------------------------------------------------
+
+class TestCollectOwnOps(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+        self.db = DatabaseManager(self.test_dir / 'test.db')
+        self.repo = FileRepository(self.db)
+        self.storage = FileStorage(self.test_dir, self.db)
+        self.service = _make_service(self.repo, self.storage)
+        self.service._upload_file = Mock()
+
+    def tearDown(self):
+        gc.collect()
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _write_file(self, content: bytes, file_type: str = 'tei') -> str:
+        file_hash, _ = self.storage.save_file(content, file_type, increment_ref=True)
+        return file_hash
+
+    def test_new_file_produces_upsert_op(self):
+        """An unsynced file produces one upsert op."""
+        hash_a = self._write_file(b'<tei/>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_new',
+            filename='new.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=6
+        ))
+
+        summary = SyncSummary()
+        ops = self.service._collect_own_ops('client-uuid', summary, client_id=None)
+
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(ops[0]['op_type'], 'upsert')
+        self.assertEqual(ops[0]['file_id'], hash_a)
+        self.assertEqual(summary.uploaded, 1)
+
+    def test_pending_delete_produces_delete_op(self):
+        """A pending_delete file produces one delete op."""
+        hash_a = self._write_file(b'<tei/>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_del',
+            filename='del.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=6
+        ))
+        self.repo.mark_file_synced(hash_a, 1)
+        self.repo.delete_file(hash_a)
+
+        summary = SyncSummary()
+        ops = self.service._collect_own_ops('client-uuid', summary, client_id=None)
+
+        delete_ops = [o for o in ops if o['op_type'] == 'delete']
+        self.assertEqual(len(delete_ops), 1)
+        self.assertEqual(delete_ops[0]['file_id'], hash_a)
+        self.assertEqual(summary.deleted_remote, 1)
+
+    def test_synced_file_produces_no_op(self):
+        """A file already in sync_status='synced' must not produce any op."""
+        hash_a = self._write_file(b'<tei/>')
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id='stable_synced',
+            filename='synced.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=6
+        ))
+        self.repo.mark_file_synced(hash_a, 5)
+
+        summary = SyncSummary()
+        ops = self.service._collect_own_ops('client-uuid', summary, client_id=None)
+
+        self.assertEqual(ops, [])
+        self.assertEqual(summary.uploaded, 0)
 
 
 if __name__ == '__main__':

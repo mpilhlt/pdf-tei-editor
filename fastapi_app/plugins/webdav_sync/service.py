@@ -1,43 +1,47 @@
 """
-WebDAV synchronization service.
+WebDAV synchronization service — operation-log edition.
 
-Implements O(1) change detection and database-driven sync with:
-- Two-tier database architecture (local + remote metadata.db)
-- Deletion tracking via database flags (no .deleted marker files)
-- Metadata synchronization
-- Conflict detection and resolution
-- Progress updates via SSE
+Uses an append-only operation log (queue.db) shared on WebDAV instead of a
+mutable metadata snapshot.  Each sync cycle:
+
+  1. Lock
+  2. Download queue.db
+  3. Register own client ID
+  4. Apply ops from other clients (download files, update local DB)
+  5. Append own pending ops (upload files, record in log)
+  6. Compact old ops
+  7. Upload queue.db + update version.txt
+  8. Release lock
 """
 
-import time
 import json
 import shutil
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+import time
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from webdav4.fsspec import WebdavFileSystem
 
+from fastapi_app.lib.models.models import FileCreate
 from fastapi_app.lib.repository.file_repository import FileRepository
-from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.sse.sse_service import SSEService
+from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.sync.base import SyncServiceBase
 from fastapi_app.lib.sync.models import (
-    SyncSummary,
-    SyncStatusResponse,
     ConflictInfo,
     ConflictListResponse,
     ConflictResolution,
+    SyncStatusResponse,
+    SyncSummary,
 )
-from fastapi_app.lib.utils.hash_utils import get_file_extension
-from .remote_metadata import RemoteMetadataManager
+from fastapi_app.lib.utils.hash_utils import get_file_extension, get_storage_path
+from .remote_queue import RemoteQueueManager
 
 
 def _parse_json_field(value: Any, default: Any) -> Any:
-    """Return value parsed from JSON if it is a string, otherwise return as-is.
-
-    Remote file dicts from get_all_files() already have parsed JSON fields,
-    but dicts constructed from raw DB rows or test fixtures may have strings.
-    """
+    """Return value parsed from JSON if it is a string, otherwise return as-is."""
     if isinstance(value, str):
         try:
             return json.loads(value)
@@ -48,14 +52,14 @@ def _parse_json_field(value: Any, default: Any) -> Any:
 
 class SyncService(SyncServiceBase):
     """
-    Database-driven WebDAV sync service.
+    Operation-log–based WebDAV sync service.
 
-    Key features:
-    - O(1) quick skip check (count unsynced files + version comparison)
-    - Database-driven change detection (no filesystem scanning)
-    - Deletion propagation via database flags
-    - Metadata sync without file transfers
-    - Version-based conflict detection
+    Key properties vs the previous metadata.db approach:
+    - Append-only log: an empty or missing queue.db means "no ops yet", never
+      "all files deleted".
+    - Seq counter only moves forward; version regression is impossible.
+    - A fresh instance with an empty local DB simply applies all ops in the log
+      and rebuilds its state correctly.
     """
 
     def __init__(
@@ -64,18 +68,8 @@ class SyncService(SyncServiceBase):
         file_storage: FileStorage,
         webdav_config: Dict[str, str],
         sse_service: Optional[SSEService] = None,
-        logger=None
+        logger=None,
     ):
-        """
-        Initialize sync service.
-
-        Args:
-            file_repo: FileRepository instance for local database
-            file_storage: FileStorage instance for local files
-            webdav_config: WebDAV configuration dict
-            sse_service: Optional SSEService for progress updates
-            logger: Optional logger instance
-        """
         self.file_repo = file_repo
         self.file_storage = file_storage
         self.webdav_config = webdav_config
@@ -83,173 +77,151 @@ class SyncService(SyncServiceBase):
         self.logger = logger
 
         self.fs = WebdavFileSystem(
-            webdav_config['base_url'],
-            auth=(webdav_config['username'], webdav_config['password'])
+            webdav_config["base_url"],
+            auth=(webdav_config["username"], webdav_config["password"]),
         )
-        self.remote_root = webdav_config['remote_root'].rstrip('/')
+        self.remote_root = webdav_config["remote_root"].rstrip("/")
         self.lock_path = f"{self.remote_root}/version.txt.lock"
+
+    # ------------------------------------------------------------------
+    # SyncServiceBase interface
+    # ------------------------------------------------------------------
 
     def check_if_sync_needed(self) -> Dict[str, Any]:
         """
-        O(1) check if synchronization is needed.
+        O(1) check whether synchronisation is needed.
 
         Returns:
-            Dict with 'needs_sync', 'local_version', 'remote_version', 'unsynced_count'
+            Dict with 'needs_sync', 'local_version', 'remote_version',
+            'unsynced_count'.
         """
         unsynced_count = self.file_repo.count_unsynced_files()
 
-        local_version_str = self.file_repo.get_sync_metadata('remote_version')
-        local_version = int(local_version_str) if local_version_str else 0
+        local_seq_str = self.file_repo.get_sync_metadata("last_applied_seq")
+        local_seq = int(local_seq_str) if local_seq_str else 0
 
         try:
-            remote_version = self._get_remote_version()
-        except Exception as e:
+            remote_seq = self._get_remote_version()
+        except Exception as exc:
             if self.logger:
-                self.logger.error(f"Failed to get remote version: {e}")
-            remote_version = local_version
+                self.logger.error(f"Failed to get remote version: {exc}")
+            remote_seq = local_seq
 
-        needs_sync = (unsynced_count > 0) or (local_version != remote_version)
+        needs_sync = (unsynced_count > 0) or (local_seq != remote_seq)
 
         return {
-            'needs_sync': needs_sync,
-            'local_version': local_version,
-            'remote_version': remote_version,
-            'unsynced_count': unsynced_count
+            "needs_sync": needs_sync,
+            "local_version": local_seq,
+            "remote_version": remote_seq,
+            "unsynced_count": unsynced_count,
         }
 
     def check_status(self) -> SyncStatusResponse:
         """Check sync status (SyncServiceBase interface)."""
         status = self.check_if_sync_needed()
-
-        last_sync_str = self.file_repo.get_sync_metadata('last_sync_time')
-        from datetime import datetime
+        last_sync_str = self.file_repo.get_sync_metadata("last_sync_time")
         last_sync_time = datetime.fromisoformat(last_sync_str) if last_sync_str else None
-
-        sync_in_progress_str = self.file_repo.get_sync_metadata('sync_in_progress')
-        sync_in_progress = sync_in_progress_str == '1' if sync_in_progress_str else False
-
+        sync_in_progress = (
+            self.file_repo.get_sync_metadata("sync_in_progress") == "1"
+        )
         return SyncStatusResponse(
-            needs_sync=status['needs_sync'],
-            local_version=status['local_version'],
-            remote_version=status['remote_version'],
-            unsynced_count=status['unsynced_count'],
+            needs_sync=status["needs_sync"],
+            local_version=status["local_version"],
+            remote_version=status["remote_version"],
+            unsynced_count=status["unsynced_count"],
             last_sync_time=last_sync_time,
-            sync_in_progress=sync_in_progress
+            sync_in_progress=sync_in_progress,
         )
 
     def perform_sync(
         self,
         client_id: Optional[str] = None,
-        force: bool = False
+        force: bool = False,
     ) -> SyncSummary:
         """
-        Perform database-driven synchronization.
+        Perform one sync cycle.
 
-        Steps:
-        1. Quick skip check (unless forced)
-        2. Acquire remote lock
-        3. Download remote metadata.db
-        4. Compare metadata (find changes)
-        5. Sync deletions (database-driven)
-        6. Sync data files (upload/download)
-        7. Sync metadata changes (no file transfers)
-        8. Upload updated metadata.db
-        9. Release lock
+        Args:
+            client_id: SSE session ID for progress updates (not the sync
+                client UUID — those are separate concepts).
+            force: Skip the quick-check and always run a full sync.
+
+        Returns:
+            SyncSummary with counts of what was transferred.
         """
         start_time = time.time()
         summary = SyncSummary()
 
         try:
-            def send_progress(progress: int, message: str = ""):
+            def send_progress(pct: int, message: str = "") -> None:
                 if self.sse_service and client_id:
-                    self.sse_service.send_message(client_id, 'syncProgress', str(progress))
+                    self.sse_service.send_message(client_id, "syncProgress", str(pct))
                     if message:
-                        self.sse_service.send_message(client_id, 'syncMessage', message)
+                        self.sse_service.send_message(client_id, "syncMessage", message)
 
             send_progress(0, "Starting sync...")
 
             if not force:
                 check = self.check_if_sync_needed()
-                if not check['needs_sync']:
+                if not check["needs_sync"]:
                     summary.skipped = True
                     summary.duration_ms = int((time.time() - start_time) * 1000)
                     send_progress(100, "No changes to sync")
                     return summary
 
             send_progress(10, "Acquiring sync lock...")
-
             if not self._acquire_lock():
                 raise Exception("Failed to acquire sync lock")
 
             try:
-                send_progress(20, "Downloading remote metadata...")
+                own_client_id = self._get_or_create_client_id()
 
-                remote_mgr = RemoteMetadataManager(self.webdav_config, self.logger)
-                remote_db_path = remote_mgr.download()
-                remote_mgr.connect(remote_db_path)
-
-                # Detect version regression: another instance may have uploaded a
-                # fresh metadata.db (version=1), erasing deletion flags and other
-                # changes we already synced.  Re-queue all deletion_synced files so
-                # they get re-pushed in this sync cycle.
-                remote_db_version = remote_mgr.get_version()
-                local_known_version = int(
-                    self.file_repo.get_sync_metadata('remote_version') or '0'
-                )
-                if remote_db_version < local_known_version:
-                    if self.logger:
-                        self.logger.warning(
-                            f"Remote metadata.db version {remote_db_version} < local known "
-                            f"{local_known_version} — version regression detected, "
-                            f"re-queuing deletion_synced files"
-                        )
-                    requeued = self.file_repo.requeue_deletion_synced_files()
-                    if requeued and self.logger:
-                        self.logger.info(f"Re-queued {requeued} deletion_synced file(s) for re-push")
+                send_progress(20, "Downloading sync queue...")
+                queue_mgr = RemoteQueueManager(self.webdav_config, self.logger)
+                queue_db_path = queue_mgr.download()
+                queue_mgr.connect(queue_db_path)
 
                 try:
-                    send_progress(30, "Comparing metadata...")
+                    queue_mgr.register_client(own_client_id)
 
-                    changes = self._compare_metadata(remote_mgr)
-
-                    current_version = remote_mgr.get_version()
-                    new_version = current_version + 1
-
-                    send_progress(40, "Syncing deletions...")
-                    self._sync_deletions(remote_mgr, changes, new_version, summary, client_id=client_id)
-
-                    send_progress(55, "Syncing files...")
-                    self._sync_data_files(remote_mgr, changes, new_version, summary, client_id=client_id)
-
-                    send_progress(75, "Syncing metadata...")
-                    self._sync_metadata(remote_mgr, changes, new_version, summary, client_id=client_id)
-
-                    remote_mgr.set_sync_metadata('version', str(new_version))
-                    summary.new_version = new_version
-
-                    send_progress(90, "Uploading metadata...")
-                    remote_mgr.upload(remote_db_path)
-
-                    self._set_remote_version(new_version)
-
-                    self.file_repo.set_sync_metadata('remote_version', str(new_version))
-                    self.file_repo.set_sync_metadata(
-                        'last_sync_time',
-                        datetime.now(timezone.utc).isoformat()
+                    last_seq = int(
+                        self.file_repo.get_sync_metadata("last_applied_seq") or "0"
                     )
 
+                    send_progress(30, "Applying remote changes...")
+                    pending_ops = queue_mgr.get_pending_ops(own_client_id, last_seq)
+                    if pending_ops:
+                        self._apply_ops(pending_ops, summary, client_id)
+
+                    send_progress(60, "Uploading local changes...")
+                    own_ops = self._collect_own_ops(own_client_id, summary, client_id)
+                    max_seq = queue_mgr.append_ops(own_ops)
+
+                    queue_mgr.update_client_seq(own_client_id, max_seq)
+                    queue_mgr.compact()
+
+                    send_progress(90, "Uploading sync queue...")
+                    queue_mgr.upload(queue_db_path)
+
+                    self._set_remote_version(max_seq)
+                    self.file_repo.set_sync_metadata("last_applied_seq", str(max_seq))
+                    self.file_repo.set_sync_metadata(
+                        "last_sync_time", datetime.now(timezone.utc).isoformat()
+                    )
+                    summary.new_version = max_seq
+
                 finally:
-                    remote_mgr.disconnect()
+                    queue_mgr.disconnect()
 
             finally:
                 self._release_lock()
 
             send_progress(100, "Sync complete")
 
-        except Exception as e:
+        except Exception as exc:
             if self.logger:
-                self.logger.error(f"Sync failed: {e}")
-            summary.errors = 1
+                self.logger.error(f"Sync failed: {exc}")
+            summary.errors += 1
             raise
 
         finally:
@@ -259,446 +231,457 @@ class SyncService(SyncServiceBase):
 
     def get_conflicts(self) -> ConflictListResponse:
         """Get list of sync conflicts (SyncServiceBase interface)."""
-        conflicts = []
         conflict_files = [
-            f for f in self.file_repo.get_all_files()
-            if f.sync_status == 'conflict'
+            f for f in self.file_repo.get_all_files() if f.sync_status == "conflict"
         ]
-
-        for file in conflict_files:
-            conflict = ConflictInfo(
-                file_id=file.id,
-                stable_id=file.stable_id,
-                filename=file.filename,
-                doc_id=file.doc_id,
-                local_modified_at=file.local_modified_at,
-                local_hash=file.id,
+        conflicts = [
+            ConflictInfo(
+                file_id=f.id,
+                stable_id=f.stable_id,
+                filename=f.filename,
+                doc_id=f.doc_id,
+                local_modified_at=f.local_modified_at,
+                local_hash=f.id,
                 remote_modified_at=None,
-                remote_hash=file.sync_hash,
-                conflict_type='modified_both'
+                remote_hash=f.sync_hash,
+                conflict_type="modified_both",
             )
-            conflicts.append(conflict)
-
+            for f in conflict_files
+        ]
         return ConflictListResponse(conflicts=conflicts, total=len(conflicts))
 
     def resolve_conflict(self, resolution: ConflictResolution) -> dict:
         """Resolve a sync conflict (SyncServiceBase interface)."""
         file_id = resolution.file_id
 
-        if resolution.resolution == 'local_wins':
+        if resolution.resolution == "local_wins":
             from fastapi_app.lib.models import SyncUpdate
             self.file_repo.update_sync_status(
-                file_id,
-                SyncUpdate(sync_status='modified', sync_hash=None)
+                file_id, SyncUpdate(sync_status="modified", sync_hash=None)
             )
             return {"message": "Local version will be uploaded on next sync"}
 
-        elif resolution.resolution == 'remote_wins':
-            remote_version_str = self.file_repo.get_sync_metadata('remote_version')
-            remote_version = int(remote_version_str) if remote_version_str else 0
-            self.file_repo.mark_file_synced(file_id, remote_version)
+        if resolution.resolution == "remote_wins":
+            self.file_repo.mark_file_synced(file_id, 0)
             return {"message": "Remote version will be downloaded on next sync"}
 
-        elif resolution.resolution == 'keep_both':
+        if resolution.resolution == "keep_both":
             if not resolution.new_variant:
                 raise ValueError("new_variant required for keep_both resolution")
             return {"message": f"Created variant '{resolution.new_variant}' (not implemented)"}
 
         raise ValueError(f"Invalid resolution strategy: {resolution.resolution}")
 
-    def _compare_metadata(
+    # ------------------------------------------------------------------
+    # Op application
+    # ------------------------------------------------------------------
+
+    def _apply_ops(
         self,
-        remote_mgr: RemoteMetadataManager
-    ) -> Dict[str, List]:
-        """Compare local and remote metadata to find changes."""
-        local_files = {f.id: f for f in self.file_repo.get_all_files(include_deleted=True)}
-        all_remote = remote_mgr.get_all_files(include_deleted=True)
-        remote_files = {f['id']: f for f in all_remote}
-        # stable_id lookup for detecting same-logical-file conflicts across instances
-        remote_by_stable_id = {f['stable_id']: f for f in all_remote}
-        local_by_stable_id = {f.stable_id: f for f in local_files.values()}
-
-        changes: Dict[str, List] = {
-            'local_new': [],
-            'local_modified': [],
-            'remote_new': [],
-            'remote_modified': [],
-            'remote_deleted': [],
-            'conflicts': []
-        }
-
-        for file_id, local_file in local_files.items():
-            if file_id not in remote_files:
-                if not local_file.deleted:
-                    if local_file.sync_status != 'synced':
-                        # Genuinely new or modified – needs upload.
-                        changes['local_new'].append(local_file)
-                    # else: was synced but its hash was replaced in the remote DB
-                    # by another instance (INSERT OR REPLACE on stable_id).
-                    # Do not re-upload the stale version; the remote's newer hash
-                    # will be detected in the second loop below.
-            else:
-                remote_file = remote_files[file_id]
-                local_modified = local_file.sync_status != 'synced'
-                remote_deleted = remote_file['deleted']
-
-                if local_modified and remote_deleted:
-                    changes['conflicts'].append((local_file, remote_file))
-                elif local_modified:
-                    changes['local_modified'].append(local_file)
-
-        # Build an index for version-supersession checks: (doc_id, file_type, variant) → max local version
-        local_max_version: dict[tuple, int] = {}
-        for f in local_files.values():
-            if f.version is not None:
-                key = (f.doc_id, f.file_type, f.variant)
-                local_max_version[key] = max(local_max_version.get(key, 0), f.version)
-
-        for file_id, remote_file in remote_files.items():
-            if file_id not in local_files:
-                if not remote_file['deleted']:
-                    stable_id = remote_file.get('stable_id')
-                    if stable_id and stable_id in local_by_stable_id:
-                        # Local already has a different-hash version of this logical
-                        # file.  Treat as a remote metadata/content update rather than
-                        # a new download to avoid stable_id UNIQUE constraint errors.
-                        changes['remote_modified'].append(remote_file)
-                    else:
-                        # Skip if local already has a newer version of the same document/variant
-                        remote_version = remote_file.get('version') or 0
-                        key = (remote_file.get('doc_id'), remote_file.get('file_type'), remote_file.get('variant'))
-                        if remote_version and local_max_version.get(key, 0) > remote_version:
-                            if self.logger:
-                                self.logger.debug(
-                                    f"Skipping remote_new {remote_file.get('filename')}: "
-                                    f"local has version {local_max_version[key]} > remote {remote_version}"
-                                )
-                        else:
-                            changes['remote_new'].append(remote_file)
-            else:
-                local_file = local_files[file_id]
-                remote_updated = remote_file.get('updated_at', '')
-                local_updated = local_file.updated_at.isoformat() if local_file.updated_at else ''
-
-                if remote_file['deleted']:
-                    changes['remote_deleted'].append(remote_file)
-                elif remote_updated > local_updated and local_file.sync_status == 'synced':
-                    changes['remote_modified'].append(remote_file)
-
-        return changes
-
-    def _sync_deletions(
-        self,
-        remote_mgr: RemoteMetadataManager,
-        changes: Dict,
-        version: int,
+        ops: List[Dict[str, Any]],
         summary: SyncSummary,
-        client_id: Optional[str] = None,
+        client_id: Optional[str],
     ) -> None:
-        """Sync deletions via database flags."""
-        for remote_file in changes['remote_deleted']:
-            file_id = remote_file['id']
-            try:
-                local_file = self.file_repo.get_file_by_id(file_id, include_deleted=True)
-                if local_file and not local_file.deleted:
-                    self.file_repo.delete_file(file_id)
-                    # Mark as deletion_synced immediately — the remote already has deleted=1,
-                    # so we must not re-push this deletion on the next sync.
-                    self.file_repo.mark_deletion_synced(file_id, version)
-                    self._send_message(client_id, f"🗑 {remote_file.get('filename', file_id[:8])}")
-                    summary.deleted_local += 1
-                    if self.logger:
-                        self.logger.info(f"Applied remote deletion: {file_id[:8]}...")
-                elif not local_file:
-                    # File was never downloaded locally — nothing to delete
-                    if self.logger:
-                        self.logger.debug(
-                            f"Remote deletion skipped (not in local DB): {file_id[:8]}..."
-                        )
-            except Exception as e:
-                self._send_message(client_id, f"✕ delete {remote_file.get('filename', file_id[:8])}: {e}")
-                if self.logger:
-                    self.logger.error(f"Failed to apply remote deletion {file_id[:8]}...: {e}")
-                summary.errors += 1
-
-        local_deleted = self.file_repo.get_deleted_files()
-        for local_file in local_deleted:
-            try:
-                remote_mgr.mark_deleted(local_file.id, version)
-                summary.deleted_remote += 1
-                self.file_repo.mark_deletion_synced(local_file.id, version)
-                if self.logger:
-                    self.logger.info(f"Marked remote as deleted: {local_file.id[:8]}...")
-            except Exception as e:
-                self._send_message(client_id, f"✕ delete {local_file.filename}: {e}")
-                if self.logger:
-                    self.logger.error(f"Failed to mark remote deleted {local_file.id[:8]}...: {e}")
-                summary.errors += 1
-
-    def _send_message(self, client_id: Optional[str], message: str) -> None:
-        """Send a syncMessage SSE event to the client."""
-        if self.sse_service and client_id:
-            self.sse_service.send_message(client_id, 'syncMessage', message)
-
-    def _sync_data_files(
-        self,
-        remote_mgr: RemoteMetadataManager,
-        changes: Dict,
-        version: int,
-        summary: SyncSummary,
-        client_id: Optional[str] = None,
-    ) -> None:
-        """Sync actual data files using parallel HTTP transfers and sequential metadata writes."""
+        """Apply a list of remote ops to the local database, downloading files as needed."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         from .config import get_transfer_workers
 
         workers = get_transfer_workers()
 
-        # --- Uploads ---
-        to_upload = changes['local_new'] + changes['local_modified']
-        n_upload = len(to_upload)
-        upload_done = 0
+        # Separate upserts from deletes so we can parallelise downloads.
+        upserts = [op for op in ops if op["op_type"] == "upsert"]
+        deletes = [op for op in ops if op["op_type"] == "delete"]
 
-        if n_upload:
-            self._send_message(client_id, f"Uploading {n_upload} file(s)...")
+        # --- Downloads (parallel) ---
+        if upserts:
+            self._send_message(client_id, f"Downloading {len(upserts)} file(s)...")
 
-        def _do_upload(local_file: Any) -> tuple[Any, None]:
-            file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
-            if not file_path.exists():
+        download_errors: Dict[str, Exception] = {}
+
+        def _maybe_download(op: Dict[str, Any]) -> None:
+            """Download file content only if we don't already have it locally."""
+            file_id = op["file_id"]
+            file_type = (json.loads(op["file_data"]) if op.get("file_data") else {}).get(
+                "file_type", "tei"
+            )
+            local_path = get_storage_path(self.file_storage.data_root, file_id, file_type)
+            if local_path.exists():
+                return
+            remote_path = self._get_remote_file_path(file_id, file_type)
+            self._download_file(remote_path, local_path)
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_maybe_download, op): op for op in upserts}
+            for future in as_completed(futures):
+                op = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    download_errors[op["file_id"]] = exc
+                    self._send_message(
+                        client_id,
+                        f"✕ {op.get('stable_id', op['file_id'][:8])}: {exc}",
+                    )
+
+        # --- Metadata (sequential) ---
+        for op in upserts:
+            file_id = op["file_id"]
+            if file_id in download_errors:
+                summary.errors += 1
+                continue
+            try:
+                self._apply_upsert_op(op, summary, client_id)
+            except Exception as exc:
+                self._send_message(client_id, f"✕ {op.get('stable_id', file_id[:8])}: {exc}")
                 if self.logger:
-                    self.logger.warning(f"File not found for upload: {file_path}")
-                return local_file, None
+                    self.logger.error(f"Failed to apply upsert op {file_id[:8]}: {exc}")
+                summary.errors += 1
+
+        for op in deletes:
+            try:
+                self._apply_delete_op(op, summary, client_id)
+            except Exception as exc:
+                self._send_message(
+                    client_id, f"✕ delete {op.get('stable_id', op['file_id'][:8])}: {exc}"
+                )
+                if self.logger:
+                    self.logger.error(
+                        f"Failed to apply delete op {op['file_id'][:8]}: {exc}"
+                    )
+                summary.errors += 1
+
+    def _apply_upsert_op(
+        self,
+        op: Dict[str, Any],
+        summary: SyncSummary,
+        client_id: Optional[str],
+    ) -> None:
+        """Apply a single upsert op: insert/update local DB record."""
+        file_id = op["file_id"]
+        stable_id = op["stable_id"]
+        file_data: Dict[str, Any] = json.loads(op["file_data"]) if op.get("file_data") else {}
+
+        existing = self.file_repo.get_file_by_stable_id(stable_id, include_deleted=True)
+
+        if existing is None:
+            # Entirely new file
+            file_create = FileCreate(
+                id=file_id,
+                stable_id=stable_id,
+                filename=file_data.get("filename", ""),
+                doc_id=file_data.get("doc_id", ""),
+                doc_id_type=file_data.get("doc_id_type", "custom"),
+                file_type=file_data.get("file_type", "tei"),
+                file_size=file_data.get("file_size", 0),
+                label=file_data.get("label"),
+                variant=file_data.get("variant"),
+                version=file_data.get("version"),
+                is_gold_standard=bool(file_data.get("is_gold_standard", False)),
+                doc_collections=_parse_json_field(file_data.get("doc_collections"), []),
+                doc_metadata=_parse_json_field(file_data.get("doc_metadata"), {}),
+                file_metadata=_parse_json_field(file_data.get("file_metadata"), {}),
+            )
+            self.file_repo.insert_file(file_create)
+            self.file_repo.mark_file_synced(file_id, op["seq"])
+            summary.downloaded += 1
+            self._send_message(client_id, f"↓ {file_data.get('filename', file_id[:8])}")
+            if self.logger:
+                self.logger.info(f"Downloaded: {file_data.get('filename')}")
+
+        elif existing.id == file_id:
+            # Same content; only metadata may have changed.
+            self.file_repo.apply_remote_metadata(file_id, file_data)
+            summary.metadata_synced += 1
+
+        else:
+            # Same logical file (stable_id), different content hash.
+            if existing.sync_status == "synced":
+                # Remote has a newer version — accept it.
+                self.file_repo.apply_remote_metadata(existing.id, file_data)
+                # Note: the new file_id content was already downloaded; update
+                # the local record to point to the new hash.
+                self._replace_local_file_hash(existing, file_id, file_data, op["seq"])
+                summary.downloaded += 1
+                self._send_message(
+                    client_id, f"↓ {file_data.get('filename', stable_id[:8])} (updated)"
+                )
+            else:
+                # Both sides modified the same file — conflict.
+                self._mark_conflict(existing.id, op)
+                summary.conflicts += 1
+                self._send_message(
+                    client_id,
+                    f"⚠ conflict: {file_data.get('filename', stable_id[:8])}",
+                )
+
+    def _apply_delete_op(
+        self,
+        op: Dict[str, Any],
+        summary: SyncSummary,
+        client_id: Optional[str],
+    ) -> None:
+        """Apply a single delete op: soft-delete local record."""
+        file_id = op["file_id"]
+        stable_id = op["stable_id"]
+
+        local_file = self.file_repo.get_file_by_id(file_id, include_deleted=True)
+        if local_file is None:
+            # Not in local DB; try by stable_id
+            local_file = self.file_repo.get_file_by_stable_id(stable_id, include_deleted=True)
+
+        if local_file and not local_file.deleted:
+            self.file_repo.delete_file(local_file.id)
+            self.file_repo.mark_deletion_synced(local_file.id, op["seq"])
+            summary.deleted_local += 1
+            self._send_message(
+                client_id, f"🗑 {local_file.filename}"
+            )
+            if self.logger:
+                self.logger.info(f"Applied remote deletion: {local_file.id[:8]}")
+
+    # ------------------------------------------------------------------
+    # Op collection
+    # ------------------------------------------------------------------
+
+    def _collect_own_ops(
+        self,
+        own_client_id: str,
+        summary: SyncSummary,
+        client_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """
+        Build the list of ops to append to the log for this sync cycle.
+
+        Uploads file content first (parallel), then assembles op records.
+        Marks local files as synced/deletion_synced as ops are recorded.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from .config import get_transfer_workers
+
+        workers = get_transfer_workers()
+        now = datetime.now(timezone.utc).isoformat()
+        ops: List[Dict[str, Any]] = []
+
+        # --- Upsert ops (new / modified files) ---
+        to_upload = self.file_repo.get_files_to_upload()
+        if to_upload:
+            self._send_message(client_id, f"Uploading {len(to_upload)} file(s)...")
+
+        remote_file_index = self._build_remote_file_index(to_upload)
+
+        def _do_upload(local_file: Any) -> tuple:
+            file_path = self.file_storage.get_file_path(
+                local_file.id, local_file.file_type
+            )
+            if file_path is None or not file_path.exists():
+                return local_file, FileNotFoundError(
+                    f"File not on disk: {local_file.filename}"
+                )
             remote_path = self._get_remote_file_path(local_file.id, local_file.file_type)
+            if remote_path in remote_file_index:
+                return local_file, None  # Already on remote — metadata-only op
             self._upload_file(file_path, remote_path)
             return local_file, None
 
-        upload_errors: dict[int, Exception] = {}
+        upload_errors: Dict[int, Exception] = {}
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(_do_upload, f): f for f in to_upload}
             for future in as_completed(futures):
                 local_file = futures[future]
-                upload_done += 1
                 try:
-                    future.result()
-                    self._send_message(
-                        client_id,
-                        f"\u2191 {local_file.filename} ({upload_done}/{n_upload})"
-                    )
-                except Exception as e:
-                    upload_errors[id(local_file)] = e
-                    self._send_message(
-                        client_id,
-                        f"\u2715 {local_file.filename}: {e}"
-                    )
+                    _, err = future.result()
+                    if err:
+                        upload_errors[id(local_file)] = err
+                        self._send_message(client_id, f"✕ {local_file.filename}: {err}")
+                    else:
+                        self._send_message(client_id, f"↑ {local_file.filename}")
+                except Exception as exc:
+                    upload_errors[id(local_file)] = exc
+                    self._send_message(client_id, f"✕ {local_file.filename}: {exc}")
 
         for local_file in to_upload:
             err = upload_errors.get(id(local_file))
             if err is not None:
-                self._send_message(client_id, f"✕ {local_file.filename}: {err}")
                 if self.logger:
-                    self.logger.error(f"Failed to upload {local_file.filename}: {err}")
+                    self.logger.error(f"Upload failed {local_file.filename}: {err}")
                 summary.errors += 1
                 continue
-            file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
-            if file_path is None or not file_path.exists():
-                if self.logger:
-                    self.logger.warning(f"Skipping upload metadata: file not found on disk for {local_file.filename}")
-                continue
-            try:
-                remote_mgr.upsert_file(self._file_to_remote_dict(local_file, version))
-                self.file_repo.mark_file_synced(local_file.id, version)
-                summary.uploaded += 1
-                if self.logger:
-                    self.logger.info(f"Uploaded: {local_file.filename}")
-            except Exception as e:
-                self._send_message(client_id, f"✕ {local_file.filename}: {e}")
-                if self.logger:
-                    self.logger.error(f"Failed to record upload metadata {local_file.filename}: {e}")
-                summary.errors += 1
+            ops.append({
+                "client_id": own_client_id,
+                "op_type": "upsert",
+                "stable_id": local_file.stable_id,
+                "file_id": local_file.id,
+                "file_data": json.dumps(self._file_to_dict(local_file)),
+                "created_at": now,
+            })
+            # Mark synced with seq=0 as placeholder; seq is assigned by
+            # AUTOINCREMENT after append_ops().  The exact seq value is only
+            # needed for conflict detection, which uses seq ordering — 0 is fine
+            # as long as a later sync cycle updates the record normally.
+            self.file_repo.mark_file_synced(local_file.id, 0)
+            summary.uploaded += 1
 
-        # --- Downloads ---
-        to_download = changes['remote_new']
-        n_download = len(to_download)
-        download_done = 0
+        # --- Delete ops ---
+        for deleted_file in self.file_repo.get_deleted_files():
+            ops.append({
+                "client_id": own_client_id,
+                "op_type": "delete",
+                "stable_id": deleted_file.stable_id,
+                "file_id": deleted_file.id,
+                "file_data": None,
+                "created_at": now,
+            })
+            self.file_repo.mark_deletion_synced(deleted_file.id, 0)
+            summary.deleted_remote += 1
+            if self.logger:
+                self.logger.info(f"Queued deletion: {deleted_file.id[:8]}")
 
-        if n_download:
-            self._send_message(client_id, f"Downloading {n_download} file(s)...")
+        return ops
 
-        def _do_download(remote_file: dict[str, Any]) -> tuple[dict[str, Any], None]:
-            from fastapi_app.lib.utils.hash_utils import get_storage_path
-            file_id = remote_file['id']
-            file_type = remote_file['file_type']
-            remote_path = self._get_remote_file_path(file_id, file_type)
-            # Use get_storage_path directly — file_storage.get_file_path returns None for files
-            # that don't exist yet, which is always the case for remote_new files.
-            local_path = get_storage_path(self.file_storage.data_root, file_id, file_type)
-            self._download_file(remote_path, local_path)
-            return remote_file, None
+    # ------------------------------------------------------------------
+    # Client identity
+    # ------------------------------------------------------------------
 
-        download_errors: dict[str, Exception] = {}
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(_do_download, f): f for f in to_download}
-            for future in as_completed(futures):
-                remote_file = futures[future]
-                download_done += 1
-                try:
-                    future.result()
-                    self._send_message(
-                        client_id,
-                        f"\u2193 {remote_file['filename']} ({download_done}/{n_download})"
-                    )
-                except Exception as e:
-                    download_errors[remote_file['id']] = e
-                    self._send_message(
-                        client_id,
-                        f"\u2715 {remote_file['filename']}: {e}"
-                    )
+    def _get_or_create_client_id(self) -> str:
+        """
+        Return this instance's sync client UUID.
 
-        for remote_file in to_download:
-            file_id = remote_file['id']
-            err = download_errors.get(file_id)
-            if err is not None:
-                self._send_message(client_id, f"✕ {remote_file['filename']}: {err}")
-                if self.logger:
-                    self.logger.error(f"Failed to download {remote_file['filename']}: {err}")
-                summary.errors += 1
-                continue
-            try:
-                from fastapi_app.lib.models.models import FileCreate
-                # Check for stable_id conflict: local already has a different-hash
-                # version of the same logical file (can happen when _compare_metadata
-                # is bypassed or called with a pre-built changes dict).
-                stable_id = remote_file.get('stable_id')
-                existing_local = (
-                    self.file_repo.get_file_by_stable_id(stable_id)
-                    if stable_id else None
-                )
-                if existing_local and existing_local.id != file_id:
-                    # Apply remote metadata to the existing local record and mark
-                    # it as synced.  Full content replacement is out of scope here.
-                    self.file_repo.apply_remote_metadata(existing_local.id, remote_file)
-                    self.file_repo.mark_file_synced(existing_local.id, version)
-                    summary.metadata_synced += 1
-                    if self.logger:
-                        self.logger.info(
-                            f"Stable_id conflict resolved via metadata update: "
-                            f"{remote_file['filename']}"
-                        )
-                    continue
-                file_create = FileCreate(
-                    id=file_id,
-                    stable_id=stable_id,
-                    filename=remote_file['filename'],
-                    doc_id=remote_file['doc_id'],
-                    doc_id_type=remote_file.get('doc_id_type', 'custom'),
-                    file_type=remote_file['file_type'],
-                    file_size=remote_file['file_size'],
-                    label=remote_file.get('label'),
-                    variant=remote_file.get('variant'),
-                    version=remote_file.get('version'),
-                    is_gold_standard=bool(remote_file.get('is_gold_standard', False)),
-                    doc_collections=_parse_json_field(remote_file.get('doc_collections'), []),
-                    doc_metadata=_parse_json_field(remote_file.get('doc_metadata'), {}),
-                    file_metadata=_parse_json_field(remote_file.get('file_metadata'), {})
-                )
-                self.file_repo.insert_file(file_create)
-                self.file_repo.mark_file_synced(file_id, version)
-                summary.downloaded += 1
-                if self.logger:
-                    self.logger.info(f"Downloaded: {remote_file['filename']}")
-            except Exception as e:
-                self._send_message(client_id, f"✕ {remote_file['filename']}: {e}")
-                if self.logger:
-                    self.logger.error(f"Failed to record download metadata {remote_file['filename']}: {e}")
-                summary.errors += 1
+        Stored in sync_metadata['sync_client_id'].  Generated once and
+        persisted permanently.
 
-    def _sync_metadata(
+        On first call (no stored ID), marks all existing synced files as
+        'modified' so they are re-uploaded into the new operation log.  This
+        one-time bootstrap ensures that instances migrating from the old
+        metadata.db approach contribute their existing files to the queue.
+        """
+        stored = self.file_repo.get_sync_metadata("sync_client_id")
+        if stored:
+            return stored
+
+        new_id = str(uuid.uuid4())
+        self.file_repo.set_sync_metadata("sync_client_id", new_id)
+        if self.logger:
+            self.logger.info(f"Generated sync client ID: {new_id} — bootstrapping existing files into queue")
+
+        # Re-queue all previously-synced files so they are uploaded as upsert
+        # ops on this first sync cycle.  Without this, files synced under the
+        # old metadata.db approach would be invisible to other instances.
+        bootstrapped = self.file_repo.requeue_synced_files_for_bootstrap()
+        if self.logger:
+            self.logger.info(f"Bootstrap: re-queued {bootstrapped} synced file(s) for upload")
+
+        return new_id
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _replace_local_file_hash(
         self,
-        remote_mgr: RemoteMetadataManager,
-        changes: Dict,
-        version: int,
-        summary: SyncSummary,
-        client_id: Optional[str] = None,
+        existing_file: Any,
+        new_file_id: str,
+        file_data: Dict[str, Any],
+        seq: int,
     ) -> None:
-        """Sync metadata changes without transferring files."""
-        for remote_file in changes['remote_modified']:
-            try:
-                file_id = remote_file['id']
-                self.file_repo.apply_remote_metadata(file_id, remote_file)
-                summary.metadata_synced += 1
-                if self.logger:
-                    self.logger.info(f"Applied remote metadata: {file_id[:8]}...")
-            except Exception as e:
-                msg = f"✕ metadata {remote_file.get('filename', file_id[:8])}: {e}"
-                self._send_message(client_id, msg)
-                if self.logger:
-                    self.logger.error(f"Failed to apply remote metadata {file_id[:8]}...: {e}")
-                summary.errors += 1
+        """
+        Replace an existing local file record with a new content hash.
+
+        Updates the id (PRIMARY KEY) in-place via update_file_content so the
+        stable_id UNIQUE constraint is never violated.
+        """
+        try:
+            self.file_repo.update_file_content(
+                stable_id=existing_file.stable_id,
+                new_file_id=new_file_id,
+                new_file_size=int(file_data.get("file_size") or existing_file.file_size),
+                remote_version=seq,
+            )
+            # Apply any metadata changes on top of the updated record.
+            self.file_repo.apply_remote_metadata(new_file_id, file_data)
+        except Exception as exc:
+            if self.logger:
+                self.logger.error(
+                    f"Failed to replace local file hash for {existing_file.stable_id}: {exc}"
+                )
+            raise
+
+    def _mark_conflict(self, file_id: str, op: Dict[str, Any]) -> None:
+        """Mark a local file as conflicted."""
+        try:
+            from fastapi_app.lib.models import SyncUpdate
+            self.file_repo.update_sync_status(
+                file_id,
+                SyncUpdate(sync_status="conflict", sync_hash=op["file_id"]),
+            )
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning(f"Failed to mark conflict for {file_id[:8]}: {exc}")
+
+    def _send_message(self, client_id: Optional[str], message: str) -> None:
+        """Send a syncMessage SSE event."""
+        if self.sse_service and client_id:
+            self.sse_service.send_message(client_id, "syncMessage", message)
 
     def _get_remote_version(self) -> int:
-        """Get remote version number."""
+        """Read the current max seq from version.txt."""
         version_path = f"{self.remote_root}/version.txt"
         try:
             if not self.fs.exists(version_path):
-                with self.fs.open(version_path, 'w') as f:
-                    f.write('1')
-                return 1
-            with self.fs.open(version_path, 'r') as f:
+                return 0
+            with self.fs.open(version_path, "r") as f:
                 return int(f.read().strip())
-        except Exception as e:
+        except Exception as exc:
             if self.logger:
-                self.logger.error(f"Failed to get remote version: {e}")
+                self.logger.error(f"Failed to get remote version: {exc}")
             raise
 
-    def _set_remote_version(self, version: int) -> None:
-        """Set remote version number in version.txt."""
+    def _set_remote_version(self, seq: int) -> None:
+        """Write the current max seq to version.txt for quick-check use."""
         version_path = f"{self.remote_root}/version.txt"
         try:
-            with self.fs.open(version_path, 'w') as f:
-                f.write(str(version))
+            with self.fs.open(version_path, "w") as f:
+                f.write(str(seq))
+        except Exception as exc:
             if self.logger:
-                self.logger.info(f"Updated remote version to {version}")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"Failed to set remote version: {e}")
+                self.logger.error(f"Failed to set remote version: {exc}")
             raise
 
     def _acquire_lock(self, timeout_seconds: int = 300) -> bool:
-        """Acquire sync lock."""
+        """Acquire sync lock on WebDAV."""
         start_time = time.time()
 
         try:
             if not self.fs.exists(self.remote_root):
-                if self.logger:
-                    self.logger.info(f"Creating remote root directory: {self.remote_root}")
                 self.fs.makedirs(self.remote_root, exist_ok=True)
-        except Exception as e:
+        except Exception as exc:
             if self.logger:
-                self.logger.error(f"Failed to create remote root directory: {e}")
+                self.logger.error(f"Failed to create remote root: {exc}")
             return False
 
         while time.time() - start_time < timeout_seconds:
             try:
                 if self.fs.exists(self.lock_path):
-                    lock_info = self.fs.info(self.lock_path)
-                    if lock_info.get('modified'):
-                        lock_age = datetime.now(timezone.utc) - lock_info['modified']
-                        if lock_age.total_seconds() > 60:
+                    info = self.fs.info(self.lock_path)
+                    if info.get("modified"):
+                        age = datetime.now(timezone.utc) - info["modified"]
+                        if age.total_seconds() > 60:
                             self.fs.rm(self.lock_path)
                         else:
                             time.sleep(2)
                             continue
 
-                with self.fs.open(self.lock_path, 'w') as f:
-                    f.write(json.dumps({
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'host': 'fastapi-instance'
-                    }))
+                with self.fs.open(self.lock_path, "w") as f:
+                    f.write(
+                        json.dumps({
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "host": "fastapi-instance",
+                        })
+                    )
                 return True
 
-            except Exception as e:
+            except Exception as exc:
                 if self.logger:
-                    self.logger.debug(f"Lock acquisition attempt failed: {e}")
+                    self.logger.debug(f"Lock attempt failed: {exc}")
                 time.sleep(2)
 
         return False
@@ -708,52 +691,91 @@ class SyncService(SyncServiceBase):
         try:
             if self.fs.exists(self.lock_path):
                 self.fs.rm(self.lock_path)
-        except Exception as e:
+        except Exception as exc:
             if self.logger:
-                self.logger.warning(f"Failed to release lock: {e}")
+                self.logger.warning(f"Failed to release lock: {exc}")
+
+    def _build_remote_file_index(self, files: List[Any]) -> set:
+        """
+        Return a set of remote paths for the given files by listing each
+        relevant shard directory once rather than issuing one EXISTS request
+        per file.
+
+        For N files spread across S distinct shards this is O(S) round trips
+        instead of O(N).  In practice S ≤ 256 (2-char hex prefix) but is
+        usually much smaller than N for typical collections.
+
+        Args:
+            files: Iterable of FileMetadata objects whose remote paths to check.
+
+        Returns:
+            Set of remote path strings that exist on the WebDAV server.
+        """
+        # Try a single recursive PROPFIND (Depth: infinity).  Many servers
+        # support it; those that don't (e.g. Nextcloud default config) return
+        # 403/400, in which case we fall back to per-shard ls() calls.
+        try:
+            return set(self.fs.find(self.remote_root))
+        except Exception:
+            pass
+
+        # Fallback: list only the shard directories that are relevant.
+        shards: Dict[str, List[Any]] = {}
+        for f in files:
+            shards.setdefault(f.id[:2], [])
+
+        existing: set = set()
+        for shard in shards:
+            shard_dir = f"{self.remote_root}/{shard}"
+            try:
+                if not self.fs.exists(shard_dir):
+                    continue
+                for entry in self.fs.ls(shard_dir, detail=False):
+                    existing.add(entry)
+            except Exception as exc:
+                if self.logger:
+                    self.logger.debug(f"Could not list shard {shard}: {exc}")
+        return existing
 
     def _get_remote_file_path(self, file_id: str, file_type: str) -> str:
-        """Get remote path for a file."""
+        """Return the WebDAV path for a file."""
         ext = get_file_extension(file_type)
         shard = file_id[:2]
         return f"{self.remote_root}/{shard}/{file_id}{ext}"
 
     def _upload_file(self, local_path: Path, remote_path: str) -> None:
-        """Upload file to WebDAV."""
-        remote_dir = '/'.join(remote_path.split('/')[:-1])
+        """Upload a file to WebDAV."""
+        remote_dir = "/".join(remote_path.split("/")[:-1])
         if not self.fs.exists(remote_dir):
             self.fs.makedirs(remote_dir)
-
-        with open(local_path, 'rb') as local_file:
-            with self.fs.open(remote_path, 'wb') as remote_file:
-                shutil.copyfileobj(local_file, remote_file)
+        with open(local_path, "rb") as lf:
+            with self.fs.open(remote_path, "wb") as rf:
+                shutil.copyfileobj(lf, rf)
 
     def _download_file(self, remote_path: str, local_path: Path) -> None:
-        """Download file from WebDAV."""
+        """Download a file from WebDAV."""
         local_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.fs.open(remote_path, "rb") as rf:
+            with open(local_path, "wb") as lf:
+                shutil.copyfileobj(rf, lf)
 
-        with self.fs.open(remote_path, 'rb') as remote_file:
-            with open(local_path, 'wb') as local_file:
-                shutil.copyfileobj(remote_file, local_file)
-
-    def _file_to_remote_dict(self, file_metadata, version: int) -> Dict[str, Any]:
-        """Convert FileMetadata to dict for remote database."""
+    def _file_to_dict(self, file_metadata: Any) -> Dict[str, Any]:
+        """Convert a FileMetadata ORM object to a JSON-serialisable dict."""
         return {
-            'id': file_metadata.id,
-            'stable_id': file_metadata.stable_id,
-            'filename': file_metadata.filename,
-            'doc_id': file_metadata.doc_id,
-            'doc_id_type': getattr(file_metadata, 'doc_id_type', 'custom'),
-            'file_type': file_metadata.file_type,
-            'mime_type': getattr(file_metadata, 'mime_type', None),
-            'file_size': file_metadata.file_size,
-            'label': file_metadata.label,
-            'variant': file_metadata.variant,
-            'version': file_metadata.version,
-            'is_gold_standard': file_metadata.is_gold_standard,
-            'doc_collections': json.dumps(file_metadata.doc_collections),
-            'doc_metadata': json.dumps(file_metadata.doc_metadata),
-            'file_metadata': json.dumps(file_metadata.file_metadata),
-            'deleted': file_metadata.deleted,
-            'remote_version': version
+            "id": file_metadata.id,
+            "stable_id": file_metadata.stable_id,
+            "filename": file_metadata.filename,
+            "doc_id": file_metadata.doc_id,
+            "doc_id_type": getattr(file_metadata, "doc_id_type", "custom"),
+            "file_type": file_metadata.file_type,
+            "mime_type": getattr(file_metadata, "mime_type", None),
+            "file_size": file_metadata.file_size,
+            "label": file_metadata.label,
+            "variant": file_metadata.variant,
+            "version": file_metadata.version,
+            "is_gold_standard": file_metadata.is_gold_standard,
+            "doc_collections": file_metadata.doc_collections,
+            "doc_metadata": file_metadata.doc_metadata,
+            "file_metadata": file_metadata.file_metadata,
+            "deleted": file_metadata.deleted,
         }
