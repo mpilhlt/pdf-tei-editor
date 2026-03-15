@@ -79,6 +79,13 @@ class WebDavSyncPlugin(Plugin):
             sse_service = get_sse_service()
 
             client_id = params.get('_session_id') or (context.user.get('username') if context.user else None)
+            active_queues = sse_service.get_active_clients()
+            if client_id and client_id not in active_queues:
+                logger.warning(
+                    f"SSE queue not found for client_id '{client_id}' "
+                    f"(active queues: {[q[:8] for q in active_queues]}). "
+                    "Progress events will not be delivered."
+                )
 
             from fastapi_app.config import get_settings
             webdav_config = get_webdav_config()
@@ -99,7 +106,7 @@ class WebDavSyncPlugin(Plugin):
                     file_repo.set_sync_metadata('sync_in_progress', '0')
 
             # Run blocking sync in a thread pool to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             summary = await loop.run_in_executor(None, _run_sync)
             file_repo.set_sync_metadata('last_sync_summary', summary.model_dump_json())
 
