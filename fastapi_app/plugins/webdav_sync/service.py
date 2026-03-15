@@ -634,6 +634,7 @@ class SyncService(SyncServiceBase):
             return local_file, None
 
         upload_errors: Dict[int, Exception] = {}
+        uploads_done = 0
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(_do_upload, f): f for f in to_upload}
             for future in as_completed(futures):
@@ -648,6 +649,10 @@ class SyncService(SyncServiceBase):
                 except Exception as exc:
                     upload_errors[id(local_file)] = exc
                     self._send_message(client_id, f"✕ {local_file.filename}: {exc}")
+                uploads_done += 1
+                if to_upload and self.sse_service and client_id:
+                    pct = 60 + int(uploads_done / len(to_upload) * 30)
+                    self.sse_service.send_message(client_id, "syncProgress", str(pct))
 
         for local_file in to_upload:
             err = upload_errors.get(id(local_file))
