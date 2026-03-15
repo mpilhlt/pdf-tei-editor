@@ -43,6 +43,35 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
+def _schedule_lock_sync(repo: FileRepository) -> None:
+    """Fire-and-forget: push updated lock state to remote if WebDAV is configured."""
+    try:
+        from fastapi_app.plugins.webdav_sync.config import is_configured, get_webdav_config
+        if not is_configured():
+            return
+    except Exception:
+        return
+
+    import threading
+
+    def _run() -> None:
+        try:
+            from fastapi_app.plugins.webdav_sync.service import SyncService
+            settings = get_settings()
+            service = SyncService(
+                file_repo=repo,
+                file_storage=None,
+                webdav_config=get_webdav_config(),
+                logger=logger,
+                db_dir=settings.db_dir,
+            )
+            service.sync_locks()
+        except Exception as exc:
+            logger.debug(f"Background lock sync failed (non-fatal): {exc}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @router.get("/locks", response_model=GetLocksResponse)
 def get_all_locks(
     repo: FileRepository = Depends(get_file_repository),
@@ -156,6 +185,7 @@ def acquire_lock_endpoint(
             logger=logger
         )
 
+        _schedule_lock_sync(repo)
         return "OK"
 
     # Could not acquire lock
@@ -213,6 +243,7 @@ def release_lock_endpoint(
             logger=logger
         )
 
+        _schedule_lock_sync(repo)
         return ReleaseLockResponse(
             action=result["action"],
             message=result["message"]

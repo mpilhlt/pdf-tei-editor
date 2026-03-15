@@ -69,7 +69,7 @@ class SyncService(SyncServiceBase):
     def __init__(
         self,
         file_repo: FileRepository,
-        file_storage: FileStorage,
+        file_storage: Optional[FileStorage],
         webdav_config: Dict[str, str],
         sse_service: Optional[SSEService] = None,
         logger=None,
@@ -274,6 +274,57 @@ class SyncService(SyncServiceBase):
             summary.duration_ms = int((time.time() - start_time) * 1000)
 
         return summary
+
+    def sync_locks(self) -> None:
+        """Push own current lock state to queue.db without a full sync.
+
+        Downloads queue.db, updates this client's active_locks column, also
+        reads other clients' lock state to refresh the local cache, then
+        uploads.  No file transfers or op processing occurs.
+
+        Skips silently if the sync lock cannot be acquired (another sync is
+        already running).
+        """
+        _log = self.logger or __import__('logging').getLogger(__name__)
+        if not self.db_dir:
+            return
+        if not self._acquire_lock(timeout_seconds=10):
+            _log.debug("sync_locks: could not acquire sync lock, skipping")
+            return
+        try:
+            own_client_id = self._get_or_create_client_id()
+
+            raw = get_all_active_locks(self.db_dir, _log)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            own_active_locks = {
+                stable_id: {"acquired_at": now_iso, "updated_at": now_iso}
+                for stable_id in raw
+            }
+
+            queue_mgr = RemoteQueueManager(self.webdav_config, self.logger)
+            queue_db_path = queue_mgr.download()
+            queue_mgr.connect(queue_db_path)
+            try:
+                queue_mgr.register_client(own_client_id, json.dumps(own_active_locks))
+
+                # Refresh remote lock cache while we have the DB
+                try:
+                    remote_client_locks = queue_mgr.get_all_client_locks(own_client_id)
+                    merged: Dict[str, Any] = {}
+                    for locks_json in remote_client_locks.values():
+                        try:
+                            merged.update(json.loads(locks_json) if locks_json else {})
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    self.file_repo.set_remote_locks(merged)
+                except Exception as exc:
+                    _log.debug(f"sync_locks: remote cache refresh failed (non-fatal): {exc}")
+
+                queue_mgr.upload(queue_db_path)
+            finally:
+                queue_mgr.disconnect()
+        finally:
+            self._release_lock()
 
     def get_conflicts(self) -> ConflictListResponse:
         """Get list of sync conflicts (SyncServiceBase interface)."""
