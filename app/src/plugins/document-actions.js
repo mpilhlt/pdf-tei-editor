@@ -12,8 +12,8 @@
 import { app } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
-  client, logger, dialog, authentication,
-  xmlEditor, sync, accessControl, testLog, fileselection, config, services
+  endpoints as ep, client, logger, dialog, authentication,
+  xmlEditor, accessControl, testLog, fileselection, config, services
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
@@ -274,7 +274,7 @@ async function deleteCurrentVersion(state) {
       const xml = ui.toolbar.xml.firstChild?.value
       await services.load({ xml })
       notify(`Version "${versionName}" has been deleted.`)
-      sync.syncFiles(state)
+      app.invokePluginEndpoint(ep.sync.syncFiles, state)
         .then(summary => summary && console.debug(summary))
         .catch(e => console.error(e))
     } catch (error) {
@@ -361,7 +361,7 @@ async function deleteAllVersions() {
     const variantText = variant === "none" ? "without variant" :
                       variant && variant !== "" ? `with variant "${variant}"` : "";
     notify(`All versions ${variantText} have been deleted`)
-    sync.syncFiles(currentState)
+    app.invokePluginEndpoint(ep.sync.syncFiles, currentState)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
@@ -401,7 +401,7 @@ async function deleteAll(state) {
   try {
     await client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
     notify(`${filePathsToDelete.length} files have been deleted.`)
-    sync.syncFiles(state)
+    app.invokePluginEndpoint(ep.sync.syncFiles, state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
@@ -578,7 +578,7 @@ async function saveRevision(state) {
       notify("Revision saved successfully")
     }
 
-    sync.syncFiles(state)
+    app.invokePluginEndpoint(ep.sync.syncFiles, state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 
@@ -695,19 +695,16 @@ async function createNewVersion(state) {
 
     notify("Document was duplicated. You are now editing the copy.")
 
-    // sync the new file to the WebDav server
-    if (state.webdavEnabled) {
-      sync.syncFiles(state)
+    // sync the new file
+    app.invokePluginEndpoint(ep.sync.syncFiles, state)
       .then(/** @param {any} summary */ summary => {
         if (summary) {
           logger.debug(summary);
         }
       })
       .catch(e => console.error(e))
-    }
   } catch (e) {
-    console.error(e)
-    notify(`Could not create new version: ${String(error)}`, 'danger', 'exclamation-octagon');
+    dialog.error(`Could not create new version: ${String(e)}`)
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
     newVersiondialog.hide()
@@ -953,7 +950,7 @@ async function editFileMetadata(state) {
       await services.load({xml: state.xml})
     }
 
-    sync.syncFiles(state)
+    app.invokePluginEndpoint(ep.sync.syncFiles, state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 

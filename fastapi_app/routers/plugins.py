@@ -118,7 +118,7 @@ async def execute_plugin(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error executing plugin {plugin_id}.{request.endpoint}: {e}")
+        logger.error(f"Error executing plugin {plugin_id}.{exec_request.endpoint}: {e}")
         raise HTTPException(
             status_code=500, detail=f"Plugin execution failed: {str(e)}"
         )
@@ -146,8 +146,20 @@ def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> 
           });
         })();
     """
+    # Strip block and line comments (includes JSDoc @import annotations)
+    content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
+    content = re.sub(r"^\s*//[^\n]*", "", content, flags=re.MULTILINE)
+
     # Remove import statements
     content = re.sub(r"^import\s+.*?;?\s*$", "", content, flags=re.MULTILINE)
+
+    # If the content already calls window.registerFrontendExtension directly,
+    # just wrap it in an IIFE for scoping — don't add a second registration.
+    if "window.registerFrontendExtension" in content:
+        return f"""// Frontend extension from plugin: {plugin_id} ({filename})
+(function() {{
+{content.strip()}
+}})();"""
 
     # Remove 'export' keywords
     content = re.sub(r"^export\s+const\s+", "const ", content, flags=re.MULTILINE)
@@ -222,4 +234,8 @@ async def get_extensions_bundle():
 
     bundle = "\n\n".join(bundle_parts)
 
-    return PlainTextResponse(content=bundle, media_type="application/javascript")
+    return PlainTextResponse(
+        content=bundle,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )

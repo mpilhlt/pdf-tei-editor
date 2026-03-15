@@ -5,7 +5,7 @@ For FastAPI migration - Phase 5.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ValidateRequest(BaseModel):
@@ -79,23 +79,22 @@ class AutocompleteDataResponse(BaseModel):
         description="CodeMirror autocomplete map with element definitions"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "data": {
-                    "title": {
-                        "attrs": {
-                            "xml:lang": None,
-                            "type": ["main", "sub", "desc"]
-                        },
-                        "children": ["ref", "note"],
-                        "doc": "Title of the document"
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "data": {
+                "title": {
+                    "attrs": {
+                        "xml:lang": None,
+                        "type": ["main", "sub", "desc"]
                     },
-                    "ref": {
-                        "attrs": {
-                            "target": None
-                        }
+                    "children": ["ref", "note"],
+                    "doc": "Title of the document"
+                },
+                "ref": {
+                    "attrs": {
+                        "target": None
                     }
                 }
             }
         }
+    })

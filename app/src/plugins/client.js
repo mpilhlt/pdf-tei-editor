@@ -125,7 +125,6 @@ const api = {
   uploadFile,
   getConfigData,
   setConfigValue,
-  syncFiles,
   moveFiles,
   copyFiles,
   getCollections,
@@ -472,14 +471,6 @@ async function state() {
   return await apiClient.configState();
 }
 
-
-/**
- * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<import('./sync.js').SyncResult>}
- */
-async function syncFiles() {
-  return await apiClient.sync({});
-}
 
 /**
  * Moves the given files to a new collection

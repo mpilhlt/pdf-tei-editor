@@ -1,6 +1,5 @@
 import { ServerManager } from './server-manager.js';
-import { WebdavServerManager } from './webdav-server-manager.js';
-import { getPortWithFallback, allocateports } from './port-allocator.js';
+import { getPortWithFallback } from './port-allocator.js';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -19,7 +18,6 @@ const __dirname = dirname(__filename);
  * - Kills existing servers on port 8000
  * - Optionally wipes database for clean slate
  * - Starts local server
- * - Optionally starts WebDAV server for sync tests (via WebdavServerManager)
  * - Waits for /health endpoint
  * - Cleanup on exit
  *
@@ -48,7 +46,6 @@ export class LocalServerManager extends ServerManager {
     this.serverUrl = null; // Set during start()
 
     this.serverProcess = null;
-    this.webdavManager = null;
     this.tempEnvFile = null;
   }
 
@@ -210,14 +207,13 @@ export class LocalServerManager extends ServerManager {
 
 
   /**
-   * Create temporary .env file with WebDAV configuration
+   * Create temporary .env file for the test server
    *
    * @private
-   * @param {Object} webdavConfig - WebDAV configuration object
    * @param {Object} customEnv - Custom environment variables from test runner
    * @returns {Promise<string>} Path to temporary env file
    */
-  async createTempEnvFile(webdavConfig, customEnv = {}) {
+  async createTempEnvFile(customEnv = {}) {
     const { tmpdir } = await import('os');
     const { randomBytes } = await import('crypto');
     const { resolve } = await import('path');
@@ -244,18 +240,6 @@ SESSION_TIMEOUT=3600
 LOG_LEVEL=INFO
 `;
 
-    // Add WebDAV configuration if provided
-    if (webdavConfig) {
-      envContent += `
-# WebDAV Configuration for Sync Tests
-WEBDAV_ENABLED=${webdavConfig.WEBDAV_ENABLED}
-WEBDAV_BASE_URL=${webdavConfig.WEBDAV_BASE_URL}
-WEBDAV_USERNAME=${webdavConfig.WEBDAV_USERNAME}
-WEBDAV_PASSWORD=${webdavConfig.WEBDAV_PASSWORD}
-WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
-`;
-    }
-
     // Add custom environment variables from .env.test or --env flags
     if (customEnv && Object.keys(customEnv).length > 0) {
       envContent += '\n# Custom Test Environment Variables\n';
@@ -270,7 +254,6 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
 
     await fs.writeFile(tempFileName, envContent, 'utf-8');
     console.log(`[INFO] Created temporary env file: ${tempFileName}`);
-    console.log('[SUCCESS] WebDAV configuration written to temp env file');
 
     return tempFileName;
   }
@@ -501,40 +484,18 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       cleanDb = true,
       verbose = false,
       env = {},
-      needsWebdav = false,
     } = options;
 
-    // Step 0: Resolve ports - allocate main server and WebDAV ports together to avoid conflicts
-    let webdavPort = null;
-
+    // Step 0: Resolve ports
     if (this.explicitPort) {
-      // Explicit port specified - use it directly and kill any existing servers on it
       this.port = this.explicitPort;
       console.log(`[INFO] Using explicitly specified port ${this.port} for local server`);
       this.serverUrl = `http://${this.host}:${this.port}`;
-
-      // Kill existing servers on the explicit port
       await this.killExistingServers();
-
-      // If WebDAV needed, allocate its port separately (excluding the explicit main port)
-      if (needsWebdav) {
-        webdavPort = await getPortWithFallback(8012, 8012, 8999, [this.port]);
-      }
     } else {
-      // No explicit port - auto-select available port(s) in 8010+ range
-      if (needsWebdav) {
-        // Allocate both main and WebDAV ports together to avoid conflicts
-        const [mainPort, wdavPort] = await allocateports(2, 8010, 8999);
-        this.port = mainPort;
-        webdavPort = wdavPort;
-        console.log(`[INFO] Auto-selected available ports: ${this.port} (main), ${webdavPort} (WebDAV)`);
-      } else {
-        // Just allocate main server port
-        this.port = await getPortWithFallback(8010, 8010, 8999);
-        console.log(`[INFO] Auto-selected available port ${this.port} for local server`);
-      }
+      this.port = await getPortWithFallback(8010, 8010, 8999);
+      console.log(`[INFO] Auto-selected available port ${this.port} for local server`);
       this.serverUrl = `http://${this.host}:${this.port}`;
-      // No need to kill servers - ports are already available
     }
 
     // Step 2: Wipe database (unless cleanDb is false)
@@ -545,18 +506,8 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       console.warn('[WARNING] Tests may fail if database schema is outdated');
     }
 
-    // Step 2.5: Start WebDAV server if needed and create temp env file
-    let webdavConfig = null;
-    if (needsWebdav) {
-      // Create and start WebDAV server manager with pre-allocated port
-      this.webdavManager = new WebdavServerManager({ port: webdavPort });
-      await this.webdavManager.start({ verbose });
-      webdavConfig = this.webdavManager.getConfig();
-    }
-
-    // Always create temporary .env file (even without WebDAV) to set CONFIG_DIR
-    // Pass custom env vars so they're written to the temp file for FastAPI to read
-    this.tempEnvFile = await this.createTempEnvFile(webdavConfig, env);
+    // Create temporary .env file to set CONFIG_DIR and custom env vars
+    this.tempEnvFile = await this.createTempEnvFile(env);
     process.env.FASTAPI_ENV_FILE = this.tempEnvFile;
     console.log(`[INFO] Set FASTAPI_ENV_FILE=${this.tempEnvFile}\n`);
 
@@ -592,9 +543,6 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
     if (keepRunning) {
       console.warn('\n[WARNING] Skipping cleanup (keepRunning=true)');
       console.log(`[INFO] FastAPI server still running at ${this.serverUrl}`);
-      if (this.webdavManager) {
-        console.log(`[INFO] WebDAV server still running at ${this.webdavManager.getBaseUrl()}`);
-      }
       console.log(`[INFO] View logs: tail -f ${this.logFile}`);
       return;
     }
@@ -684,12 +632,6 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
         console.warn(`[WARNING] Error stopping server: ${err.message}`);
       }
       this.serverProcess = null;
-    }
-
-    // Stop WebDAV server
-    if (this.webdavManager) {
-      await this.webdavManager.stop({ keepRunning: false });
-      this.webdavManager = null;
     }
 
     // Clean up temporary env file

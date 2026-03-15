@@ -372,9 +372,6 @@ async function main() {
     logger.success(`Running ${filteredTests.length} test files`);
     console.log();
 
-    // Check if any tests need WebDAV
-    const needsWebdav = filteredTests.some((test) => test.includes('sync'));
-
     // Step 3: Initialize server manager
     // Resolve host and port: env vars take precedence over CLI options
     const host = options.env.HOST || options.env.E2E_HOST || cliOptions.host;
@@ -409,7 +406,6 @@ async function main() {
       verbose: options.verbose,
       noRebuild: options.noRebuild,
       env: options.env,
-      needsWebdav: needsWebdav,
     };
 
     const baseUrl = await serverManager.start(startOptions);

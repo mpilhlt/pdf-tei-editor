@@ -268,7 +268,16 @@ def _acquire_lock_impl(file_id: str, session_id: str, db_dir: Path, logger: logg
                     )
                     return False
             else:
-                # No existing lock, create new one
+                # No local lock — check remote lock cache before granting
+                if _is_remotely_locked(file_id, db_dir, logger):
+                    conn.rollback()
+                    logger.warning(
+                        f"[LOCK] Session {session_id[:8]}... DENIED lock for file {file_id[:8]}...: "
+                        f"file is locked on a remote instance"
+                    )
+                    return False
+
+                # No lock at all, create new one
                 logger.debug(f"[LOCK] No existing lock found for file {file_id[:8]}...")
                 cursor.execute("""
                     INSERT INTO locks (file_id, session_id, updated_at)
@@ -281,6 +290,41 @@ def _acquire_lock_impl(file_id: str, session_id: str, db_dir: Path, logger: logg
             conn.rollback()
             logger.error(f"[LOCK] Error during lock acquisition: {e}")
             raise
+
+
+_REMOTE_LOCK_TTL_SECONDS = 90 + 360  # local timeout + one sync-cycle buffer
+
+
+def _is_remotely_locked(file_id: str, db_dir: Path, logger: logging.Logger) -> bool:
+    """Check the remote lock cache to see if another instance holds this file.
+
+    Args:
+        file_id: The file's stable_id.
+        db_dir: Application db directory (contains metadata.db).
+        logger: Logger instance.
+
+    Returns:
+        True if a non-expired remote lock exists for this file.
+    """
+    try:
+        from fastapi_app.lib.core.database import DatabaseManager
+        from fastapi_app.lib.repository.file_repository import FileRepository
+        repo = FileRepository(DatabaseManager(db_dir / "metadata.db"))
+        remote_locks = repo.get_remote_locks()
+        if file_id not in remote_locks:
+            return False
+        lock_info = remote_locks[file_id]
+        updated_at_str = lock_info.get("updated_at") or lock_info.get("acquired_at", "")
+        if not updated_at_str:
+            return False
+        updated_at = datetime.fromisoformat(updated_at_str)
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
+        return age_seconds < _REMOTE_LOCK_TTL_SECONDS
+    except Exception as exc:
+        logger.debug(f"[LOCK] Remote lock check failed (non-fatal): {exc}")
+        return False
 
 
 def release_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> Dict[str, str]:

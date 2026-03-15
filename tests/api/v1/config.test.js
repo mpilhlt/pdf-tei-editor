@@ -128,10 +128,8 @@ describe('Configuration API', () => {
         assert.strictEqual(response.status, 200);
 
         const data = await response.json();
-        assert.ok('webdavEnabled' in data, 'Should have webdavEnabled');
-        assert.strictEqual(typeof data.webdavEnabled, 'boolean');
 
-        // hasInternet is optional but should be present
+        // hasInternet is optional
         if ('hasInternet' in data) {
             assert.strictEqual(typeof data.hasInternet, 'boolean');
         }

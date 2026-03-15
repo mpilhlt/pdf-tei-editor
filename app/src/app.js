@@ -49,10 +49,11 @@ export { app }
 // Register plugins
 app.registerPlugins(plugins)
 
-// Initialize frontend extension sandbox with state getter and invoke function
+// Initialize frontend extension sandbox with state getter, invoke function, and updateState
 initializeSandbox(
   () => app.getCurrentState(),
-  (endpoint, args, options) => pluginManager.invoke(endpoint, args, options)
+  (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
+  (changes) => app.updateState(changes)
 )
 
 // Load and register frontend extensions from backend plugins
@@ -77,7 +78,6 @@ if (sessionState) {
 }
 
 // server state overrides saved state on reload
-sessionState.webdavEnabled = serverState.webdavEnabled
 sessionState.hasInternet = serverState.hasInternet
 
 // Apply session state to current state

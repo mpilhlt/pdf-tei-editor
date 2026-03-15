@@ -11,7 +11,7 @@
 import ui from '../ui.js'
 import {
   endpoints as ep, app, logger, services, dialog, validation, xmlEditor,
-  config, authentication, heartbeat, sync, testLog
+  config, authentication, heartbeat, testLog
 } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -148,7 +148,7 @@ async function start() {
       const newState = await app.updateState({ xpath })
 
       // synchronize in the background
-      sync.syncFiles(currentState).then(async (summary) => {
+      app.invokePluginEndpoint(ep.sync.syncFiles, currentState).then(async (summary) => {
         if (summary && !summary.skipped) {
           await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
         }

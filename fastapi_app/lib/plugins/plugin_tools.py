@@ -441,6 +441,12 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
     """
     warnings = []
 
+    # Strip comments before checking so JSDoc/TypeScript annotations
+    # (e.g. @param {import('...')}) don't trigger false positives.
+    # Order matters: block comments first, then line comments.
+    code = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+    code = re.sub(r'^\s*//[^\n]*', '', code, flags=re.MULTILINE)
+
     # Patterns that indicate potential security issues
     dangerous_patterns = [
         (r'\bfetch\s*\(\s*(?![\'"`]/api/)', 'Network access via fetch() to external URLs'),
@@ -448,7 +454,7 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
         (r'\bWebSocket\b', 'WebSocket connection'),
         (r'\beval\s*\(', 'Dynamic code execution via eval()'),
         (r'\bnew\s+Function\s*\(', 'Dynamic code execution via Function constructor'),
-        (r'\bimport\s*\(', 'Dynamic import'),
+        (r'(?<!@)\bimport\s*\(', 'Dynamic import'),
         (r'\bwindow\s*\.\s*open\s*\(', 'Opening new windows'),
         (r'\blocation\s*\.\s*href\s*=', 'Navigation/redirect'),
         (r'\bdocument\s*\.\s*cookie\b', 'Cookie access'),
@@ -458,7 +464,7 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
     ]
 
     for pattern, description in dangerous_patterns:
-        if re.search(pattern, content):
+        if re.search(pattern, code):
             warnings.append(f"{filename}: {description} detected")
 
     return (len(warnings) == 0, warnings)

@@ -105,6 +105,13 @@ const endpoints = {
      * Function signature: () => Array<{id: string, label: string, url: string}>
      */
     formats: "export_formats"
+  },
+  sync: {
+    /**
+     * Trigger file synchronization. Returns SyncResult or {skipped:true} if no sync plugin is active.
+     * Function signature: (state: ApplicationState) => Promise<SyncResult>
+     */
+    syncFiles: "sync.syncFiles"
   }
 }
 
