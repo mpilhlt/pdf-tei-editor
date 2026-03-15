@@ -220,8 +220,9 @@ window.registerFrontendExtension({
         const response = await sandbox.api.pluginsExecute('webdav-sync', { endpoint: 'execute', params: {} });
         const summary = response?.result;
         if (summary && summary.skipped) {
-          console.debug(`Sync skipped: ${summary.message}`);
-          addMessage(`Sync skipped: ${summary.message}`);
+          const reason = summary.message || 'already in sync';
+          console.debug(`Sync skipped: ${reason}`);
+          addMessage(`Sync skipped: ${reason}`);
         } else if (summary) {
           console.debug(`Sync completed: ${JSON.stringify(summary)}`);
           addMessage(_formatSummary(summary));

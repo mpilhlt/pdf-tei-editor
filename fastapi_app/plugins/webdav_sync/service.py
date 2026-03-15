@@ -32,6 +32,20 @@ from fastapi_app.lib.utils.hash_utils import get_file_extension
 from .remote_metadata import RemoteMetadataManager
 
 
+def _parse_json_field(value: Any, default: Any) -> Any:
+    """Return value parsed from JSON if it is a string, otherwise return as-is.
+
+    Remote file dicts from get_all_files() already have parsed JSON fields,
+    but dicts constructed from raw DB rows or test fixtures may have strings.
+    """
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return default
+    return value if value is not None else default
+
+
 class SyncService(SyncServiceBase):
     """
     Database-driven WebDAV sync service.
@@ -189,7 +203,7 @@ class SyncService(SyncServiceBase):
                     self._sync_data_files(remote_mgr, changes, new_version, summary, client_id=client_id)
 
                     send_progress(75, "Syncing metadata...")
-                    self._sync_metadata(remote_mgr, changes, new_version, summary)
+                    self._sync_metadata(remote_mgr, changes, new_version, summary, client_id=client_id)
 
                     remote_mgr.set_sync_metadata('version', str(new_version))
                     summary.new_version = new_version
@@ -448,6 +462,7 @@ class SyncService(SyncServiceBase):
         for local_file in to_upload:
             err = upload_errors.get(id(local_file))
             if err is not None:
+                self._send_message(client_id, f"✕ {local_file.filename}: {err}")
                 if self.logger:
                     self.logger.error(f"Failed to upload {local_file.filename}: {err}")
                 summary.errors += 1
@@ -464,6 +479,7 @@ class SyncService(SyncServiceBase):
                 if self.logger:
                     self.logger.info(f"Uploaded: {local_file.filename}")
             except Exception as e:
+                self._send_message(client_id, f"✕ {local_file.filename}: {e}")
                 if self.logger:
                     self.logger.error(f"Failed to record upload metadata {local_file.filename}: {e}")
                 summary.errors += 1
@@ -510,6 +526,7 @@ class SyncService(SyncServiceBase):
             file_id = remote_file['id']
             err = download_errors.get(file_id)
             if err is not None:
+                self._send_message(client_id, f"✕ {remote_file['filename']}: {err}")
                 if self.logger:
                     self.logger.error(f"Failed to download {remote_file['filename']}: {err}")
                 summary.errors += 1
@@ -548,9 +565,9 @@ class SyncService(SyncServiceBase):
                     variant=remote_file.get('variant'),
                     version=remote_file.get('version'),
                     is_gold_standard=bool(remote_file.get('is_gold_standard', False)),
-                    doc_collections=json.loads(remote_file.get('doc_collections', '[]')),
-                    doc_metadata=json.loads(remote_file.get('doc_metadata', '{}')),
-                    file_metadata=json.loads(remote_file.get('file_metadata', '{}'))
+                    doc_collections=_parse_json_field(remote_file.get('doc_collections'), []),
+                    doc_metadata=_parse_json_field(remote_file.get('doc_metadata'), {}),
+                    file_metadata=_parse_json_field(remote_file.get('file_metadata'), {})
                 )
                 self.file_repo.insert_file(file_create)
                 self.file_repo.mark_file_synced(file_id, version)
@@ -558,6 +575,7 @@ class SyncService(SyncServiceBase):
                 if self.logger:
                     self.logger.info(f"Downloaded: {remote_file['filename']}")
             except Exception as e:
+                self._send_message(client_id, f"✕ {remote_file['filename']}: {e}")
                 if self.logger:
                     self.logger.error(f"Failed to record download metadata {remote_file['filename']}: {e}")
                 summary.errors += 1
@@ -567,7 +585,8 @@ class SyncService(SyncServiceBase):
         remote_mgr: RemoteMetadataManager,
         changes: Dict,
         version: int,
-        summary: SyncSummary
+        summary: SyncSummary,
+        client_id: Optional[str] = None,
     ) -> None:
         """Sync metadata changes without transferring files."""
         for remote_file in changes['remote_modified']:
@@ -578,6 +597,8 @@ class SyncService(SyncServiceBase):
                 if self.logger:
                     self.logger.info(f"Applied remote metadata: {file_id[:8]}...")
             except Exception as e:
+                msg = f"✕ metadata {remote_file.get('filename', file_id[:8])}: {e}"
+                self._send_message(client_id, msg)
                 if self.logger:
                     self.logger.error(f"Failed to apply remote metadata {file_id[:8]}...: {e}")
                 summary.errors += 1
