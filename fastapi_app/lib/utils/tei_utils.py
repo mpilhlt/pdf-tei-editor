@@ -812,10 +812,15 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
 
     metadata['is_gold_standard'] = is_gold  # type: ignore[assignment]
 
-    # Extract edition title (preferred for labels)
-    edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
-    if edition_title_elem is not None and edition_title_elem.text:
-        metadata['edition_title'] = edition_title_elem.text.strip()
+    # Extract label: priority 1 — last revisionDesc/change/note[@type="label"]
+    change_label_elems = tei_root.findall('.//tei:revisionDesc/tei:change/tei:note[@type="label"]', ns)
+    if change_label_elems and change_label_elems[-1].text:
+        metadata['edition_title'] = change_label_elems[-1].text.strip()
+    else:
+        # Priority 2 — editionStmt/edition/title (backward compat)
+        edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
+        if edition_title_elem is not None and edition_title_elem.text:
+            metadata['edition_title'] = edition_title_elem.text.strip()
 
     # Extract labels/roles from respStmt (fallback)
     labels = []
@@ -1264,7 +1269,8 @@ def add_revision_change(
     status: str,
     who: str,
     desc: str,
-    full_name: Optional[str] = None
+    full_name: Optional[str] = None,
+    label: Optional[str] = None
 ) -> None:
     """
     Add a change element to the revisionDesc section.
@@ -1276,6 +1282,7 @@ def add_revision_change(
         who: Person ID (will be prefixed with # if needed)
         desc: Description of the change
         full_name: Optional full name for the person (creates respStmt if needed)
+        label: Optional label stored as <note type="label"> before <desc>
 
     Raises:
         ValueError: If teiHeader is not found
@@ -1302,6 +1309,11 @@ def add_revision_change(
     change.set("when", when)
     change.set("status", status)
     change.set("who", f"#{clean_who}" if not who.startswith('#') else who)
+
+    if label and label.strip():
+        note_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}note")
+        note_elem.set("type", "label")
+        note_elem.text = label.strip()
 
     desc_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
     desc_elem.text = desc
