@@ -1196,17 +1196,25 @@ class FileRepository:
             file_id: File ID (hash)
             remote_metadata: Dict with metadata fields to update
         """
-        # Extract fields to update
+        # Fields that must not be overwritten — they are either identity keys or
+        # local-only state managed outside this method.
+        _SKIP = frozenset({
+            'id', 'stable_id',               # identity
+            'sync_status', 'sync_hash',      # local state machine
+            'local_modified_at',             # local timestamp
+            'created_at', 'updated_at',      # timestamps managed by DB
+            'deleted',                       # managed by delete_file / restore_file
+        })
+        _JSON_FIELDS = frozenset({'doc_collections', 'doc_metadata', 'file_metadata'})
+
         update_data = {}
-        json_fields = ['doc_collections', 'doc_metadata', 'file_metadata']
-
-        for field in ['label', 'variant', 'version', 'is_gold_standard', 'remote_version']:
-            if field in remote_metadata:
-                update_data[field] = remote_metadata[field]
-
-        for field in json_fields:
-            if field in remote_metadata:
-                update_data[field] = json.dumps(remote_metadata[field])
+        for field, value in remote_metadata.items():
+            if field in _SKIP or value is None:
+                continue
+            if field in _JSON_FIELDS:
+                update_data[field] = json.dumps(value) if not isinstance(value, str) else value
+            else:
+                update_data[field] = value
 
         if not update_data:
             return

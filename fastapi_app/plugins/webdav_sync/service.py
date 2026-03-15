@@ -413,6 +413,7 @@ class SyncService(SyncServiceBase):
                 doc_collections=_parse_json_field(file_data.get("doc_collections"), []),
                 doc_metadata=_parse_json_field(file_data.get("doc_metadata"), {}),
                 file_metadata=_parse_json_field(file_data.get("file_metadata"), {}),
+                created_by=file_data.get("created_by"),
             )
             self.file_repo.insert_file(file_create)
             self.file_repo.mark_file_synced(file_id, op["seq"])
@@ -842,23 +843,21 @@ class SyncService(SyncServiceBase):
             with open(local_path, "wb") as lf:
                 shutil.copyfileobj(rf, lf)
 
+    # Fields that must NOT be propagated to other instances — they represent
+    # local state or are managed automatically by the DB.
+    _LOCAL_ONLY_FIELDS = frozenset({
+        "sync_status", "sync_hash", "local_modified_at",
+        "created_at", "updated_at",
+    })
+
     def _file_to_dict(self, file_metadata: Any) -> Dict[str, Any]:
-        """Convert a FileMetadata ORM object to a JSON-serialisable dict."""
+        """
+        Convert a FileMetadata Pydantic model to a JSON-serialisable dict,
+        including all syncable fields and excluding local-only state.
+        """
+        data = file_metadata.model_dump(exclude=self._LOCAL_ONLY_FIELDS)
+        # Pydantic may return datetime objects; convert them for json.dumps.
         return {
-            "id": file_metadata.id,
-            "stable_id": file_metadata.stable_id,
-            "filename": file_metadata.filename,
-            "doc_id": file_metadata.doc_id,
-            "doc_id_type": getattr(file_metadata, "doc_id_type", "custom"),
-            "file_type": file_metadata.file_type,
-            "mime_type": getattr(file_metadata, "mime_type", None),
-            "file_size": file_metadata.file_size,
-            "label": file_metadata.label,
-            "variant": file_metadata.variant,
-            "version": file_metadata.version,
-            "is_gold_standard": file_metadata.is_gold_standard,
-            "doc_collections": file_metadata.doc_collections,
-            "doc_metadata": file_metadata.doc_metadata,
-            "file_metadata": file_metadata.file_metadata,
-            "deleted": file_metadata.deleted,
+            k: v.isoformat() if hasattr(v, "isoformat") else v
+            for k, v in data.items()
         }
