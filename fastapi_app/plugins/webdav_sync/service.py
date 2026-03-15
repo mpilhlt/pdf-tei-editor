@@ -197,7 +197,7 @@ class SyncService(SyncServiceBase):
                     new_version = current_version + 1
 
                     send_progress(40, "Syncing deletions...")
-                    self._sync_deletions(remote_mgr, changes, new_version, summary)
+                    self._sync_deletions(remote_mgr, changes, new_version, summary, client_id=client_id)
 
                     send_progress(55, "Syncing files...")
                     self._sync_data_files(remote_mgr, changes, new_version, summary, client_id=client_id)
@@ -373,7 +373,8 @@ class SyncService(SyncServiceBase):
         remote_mgr: RemoteMetadataManager,
         changes: Dict,
         version: int,
-        summary: SyncSummary
+        summary: SyncSummary,
+        client_id: Optional[str] = None,
     ) -> None:
         """Sync deletions via database flags."""
         for remote_file in changes['remote_deleted']:
@@ -382,10 +383,21 @@ class SyncService(SyncServiceBase):
                 local_file = self.file_repo.get_file_by_id(file_id, include_deleted=True)
                 if local_file and not local_file.deleted:
                     self.file_repo.delete_file(file_id)
+                    # Mark as deletion_synced immediately — the remote already has deleted=1,
+                    # so we must not re-push this deletion on the next sync.
+                    self.file_repo.mark_deletion_synced(file_id, version)
+                    self._send_message(client_id, f"🗑 {remote_file.get('filename', file_id[:8])}")
                     summary.deleted_local += 1
                     if self.logger:
                         self.logger.info(f"Applied remote deletion: {file_id[:8]}...")
+                elif not local_file:
+                    # File was never downloaded locally — nothing to delete
+                    if self.logger:
+                        self.logger.debug(
+                            f"Remote deletion skipped (not in local DB): {file_id[:8]}..."
+                        )
             except Exception as e:
+                self._send_message(client_id, f"✕ delete {remote_file.get('filename', file_id[:8])}: {e}")
                 if self.logger:
                     self.logger.error(f"Failed to apply remote deletion {file_id[:8]}...: {e}")
                 summary.errors += 1
@@ -399,6 +411,7 @@ class SyncService(SyncServiceBase):
                 if self.logger:
                     self.logger.info(f"Marked remote as deleted: {local_file.id[:8]}...")
             except Exception as e:
+                self._send_message(client_id, f"✕ delete {local_file.filename}: {e}")
                 if self.logger:
                     self.logger.error(f"Failed to mark remote deleted {local_file.id[:8]}...: {e}")
                 summary.errors += 1
