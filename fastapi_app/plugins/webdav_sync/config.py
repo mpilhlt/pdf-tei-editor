@@ -12,6 +12,7 @@ def init_plugin_config() -> None:
     get_plugin_config("plugin.webdav-sync.password", "WEBDAV_PASSWORD", default="")
     get_plugin_config("plugin.webdav-sync.remote-root", "WEBDAV_REMOTE_ROOT", default="/pdf-tei-editor")
     get_plugin_config("plugin.webdav-sync.transfer-workers", "WEBDAV_TRANSFER_WORKERS", default="4")
+    get_plugin_config("plugin.webdav-sync.sync-interval", "WEBDAV_SYNC_INTERVAL", default="300")
 
 
 def get_webdav_config() -> dict[str, str]:
@@ -23,6 +24,11 @@ def get_webdav_config() -> dict[str, str]:
         'password': config.get("plugin.webdav-sync.password", default=""),
         'remote_root': config.get("plugin.webdav-sync.remote-root", default="/pdf-tei-editor"),
     }
+
+
+def get_sync_interval() -> int:
+    """Return the periodic sync interval in seconds (0 = disabled)."""
+    return int(get_config().get("plugin.webdav-sync.sync-interval", default="300"))
 
 
 def get_transfer_workers() -> int:

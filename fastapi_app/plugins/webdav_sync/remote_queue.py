@@ -42,7 +42,8 @@ CREATE INDEX IF NOT EXISTS idx_ops_client ON ops(client_id);
 CREATE TABLE IF NOT EXISTS clients (
     client_id        TEXT PRIMARY KEY,
     last_applied_seq INTEGER NOT NULL DEFAULT 0,
-    last_seen_at     TEXT NOT NULL
+    last_seen_at     TEXT NOT NULL,
+    active_locks     TEXT NOT NULL DEFAULT '{}'
 );
 """
 
@@ -112,6 +113,13 @@ class RemoteQueueManager:
         self._conn.row_factory = sqlite3.Row
         # Ensure schema exists (handles stale DB without ops/clients tables)
         self._conn.executescript(QUEUE_SCHEMA)
+        # Migrate older queue.db that lack the active_locks column
+        try:
+            self._conn.execute(
+                "ALTER TABLE clients ADD COLUMN active_locks TEXT NOT NULL DEFAULT '{}'"
+            )
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         self._conn.commit()
 
     def disconnect(self) -> None:
@@ -150,19 +158,39 @@ class RemoteQueueManager:
     # Client registry
     # ------------------------------------------------------------------
 
-    def register_client(self, client_id: str) -> None:
-        """Insert or refresh this client's entry in the clients table."""
+    def register_client(self, client_id: str, active_locks: str = "{}") -> None:
+        """Insert or refresh this client's entry in the clients table.
+
+        Args:
+            client_id: This client's UUID.
+            active_locks: JSON string mapping stable_id → lock info dict.
+        """
         self._require_conn()
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(  # type: ignore[union-attr]
             """
-            INSERT INTO clients (client_id, last_applied_seq, last_seen_at)
-            VALUES (?, 0, ?)
-            ON CONFLICT(client_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+            INSERT INTO clients (client_id, last_applied_seq, last_seen_at, active_locks)
+            VALUES (?, 0, ?, ?)
+            ON CONFLICT(client_id) DO UPDATE SET
+                last_seen_at  = excluded.last_seen_at,
+                active_locks  = excluded.active_locks
             """,
-            (client_id, now),
+            (client_id, now, active_locks),
         )
         self._conn.commit()  # type: ignore[union-attr]
+
+    def get_all_client_locks(self, own_client_id: str) -> Dict[str, str]:
+        """Return active_locks JSON strings for all clients except own.
+
+        Returns:
+            Dict mapping client_id → active_locks JSON string.
+        """
+        self._require_conn()
+        rows = self._conn.execute(  # type: ignore[union-attr]
+            "SELECT client_id, active_locks FROM clients WHERE client_id != ?",
+            (own_client_id,),
+        ).fetchall()
+        return {row["client_id"]: row["active_locks"] for row in rows}
 
     def update_client_seq(self, client_id: str, last_seq: int) -> None:
         """Record the highest seq this client has applied."""

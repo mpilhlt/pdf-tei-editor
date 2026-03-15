@@ -197,6 +197,22 @@ window.registerFrontendExtension({
     document.addEventListener('click', hidePopup);
 
     sandbox.ui.pdfViewer.statusbar.add(syncContainer, 'right', 3);
+
+    // Periodic sync
+    const syncIntervalSeconds = await sandbox.config.get('plugin.webdav-sync.sync-interval', 0);
+    if (syncIntervalSeconds > 0) {
+      console.debug(`WebDAV sync: periodic sync every ${syncIntervalSeconds}s`);
+      setInterval(async () => {
+        try {
+          const summary = await sandbox.invoke('sync.syncFiles', sandbox.getState());
+          if (summary && (summary.downloaded || summary.deleted_local || summary.conflicts)) {
+            await sandbox.services.reloadFiles({ refresh: true });
+          }
+        } catch (e) {
+          console.error('Periodic sync failed:', e);
+        }
+      }, syncIntervalSeconds * 1000);
+    }
   },
 
   /**

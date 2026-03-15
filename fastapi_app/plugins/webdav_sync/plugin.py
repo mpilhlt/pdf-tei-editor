@@ -49,7 +49,7 @@ class WebDavSyncPlugin(Plugin):
 
     def get_endpoints(self) -> dict[str, Any]:
         return {
-            "execute": self.execute_sync
+            "execute": self.execute_sync,
         }
 
     async def initialize(self, context: PluginContext) -> None:

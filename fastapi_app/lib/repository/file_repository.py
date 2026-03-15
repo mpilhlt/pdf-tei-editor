@@ -881,6 +881,31 @@ class FileRepository:
             cursor = conn.cursor()
             cursor.execute(query, (key, value))
 
+    def get_remote_locks(self) -> dict:
+        """Return the cached remote lock state (from last sync).
+
+        Returns:
+            Dict mapping stable_id → {client_id, acquired_at, updated_at}.
+            Empty dict if not yet populated.
+        """
+        import json
+        raw = self.get_sync_metadata("remote_locks")
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_remote_locks(self, locks: dict) -> None:
+        """Persist the merged remote lock state from the last sync.
+
+        Args:
+            locks: Dict mapping stable_id → {client_id, acquired_at, updated_at}.
+        """
+        import json
+        self.set_sync_metadata("remote_locks", json.dumps(locks))
+
     def get_files_to_upload(self) -> List[FileMetadata]:
         """
         Return non-deleted files whose content has not yet been pushed to remote.

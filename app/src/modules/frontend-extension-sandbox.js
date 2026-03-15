@@ -14,7 +14,7 @@
  */
 
 import ui from '../ui.js';
-import { dialog as dialogApi, services, client, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
+import { dialog as dialogApi, services, client, config as configApi, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
 
 /**
@@ -28,6 +28,7 @@ import { notify } from './sl-utils.js';
  * @property {Object} services - Application services (load, showMergeView, reloadFiles)
  * @property {Object} sse - SSE event bus (addEventListener, removeEventListener)
  * @property {Object} api - API client for backend calls
+ * @property {{ get: function(string, any=): Promise<any> }} config - Configuration API
  * @property {function(string): Promise<string>} fetchText - Fetch text content from URL
  * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
  */
@@ -114,6 +115,7 @@ export function getSandbox() {
       removeEventListener: sseApi.removeEventListener
     },
     api: client.apiClient,
+    config: { get: configApi.get },
     fetchText,
     registerXslStylesheet
   };

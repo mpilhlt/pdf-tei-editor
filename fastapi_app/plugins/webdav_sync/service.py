@@ -36,8 +36,12 @@ from fastapi_app.lib.sync.models import (
     SyncStatusResponse,
     SyncSummary,
 )
+from fastapi_app.lib.core.locking import get_all_active_locks
 from fastapi_app.lib.utils.hash_utils import get_file_extension, get_storage_path
 from .remote_queue import RemoteQueueManager
+
+# Remote lock TTL: local timeout + one full sync-cycle buffer
+_REMOTE_LOCK_TTL_SECONDS = 90 + 360
 
 
 def _parse_json_field(value: Any, default: Any) -> Any:
@@ -184,7 +188,34 @@ class SyncService(SyncServiceBase):
                 queue_mgr.connect(queue_db_path)
 
                 try:
-                    queue_mgr.register_client(own_client_id)
+                    # Serialize own active locks so other instances can see them
+                    own_active_locks: Dict[str, Any] = {}
+                    if self.db_dir:
+                        try:
+                            raw = get_all_active_locks(self.db_dir, self.logger or __import__('logging').getLogger(__name__))
+                            now_iso = datetime.now(timezone.utc).isoformat()
+                            own_active_locks = {
+                                stable_id: {"acquired_at": now_iso, "updated_at": now_iso}
+                                for stable_id in raw
+                            }
+                        except Exception:
+                            pass
+                    queue_mgr.register_client(own_client_id, json.dumps(own_active_locks))
+
+                    # Cache remote lock state from other clients
+                    try:
+                        remote_client_locks = queue_mgr.get_all_client_locks(own_client_id)
+                        merged_remote_locks: Dict[str, Any] = {}
+                        for locks_json in remote_client_locks.values():
+                            try:
+                                client_locks = json.loads(locks_json) if locks_json else {}
+                                merged_remote_locks.update(client_locks)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        self.file_repo.set_remote_locks(merged_remote_locks)
+                    except Exception as exc:
+                        if self.logger:
+                            self.logger.warning(f"Failed to cache remote locks (non-fatal): {exc}")
 
                     last_seq = int(
                         self.file_repo.get_sync_metadata("last_applied_seq") or "0"
