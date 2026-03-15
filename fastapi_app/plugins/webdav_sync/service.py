@@ -279,7 +279,11 @@ class SyncService(SyncServiceBase):
     ) -> Dict[str, List]:
         """Compare local and remote metadata to find changes."""
         local_files = {f.id: f for f in self.file_repo.get_all_files(include_deleted=True)}
-        remote_files = {f['id']: f for f in remote_mgr.get_all_files(include_deleted=True)}
+        all_remote = remote_mgr.get_all_files(include_deleted=True)
+        remote_files = {f['id']: f for f in all_remote}
+        # stable_id lookup for detecting same-logical-file conflicts across instances
+        remote_by_stable_id = {f['stable_id']: f for f in all_remote}
+        local_by_stable_id = {f.stable_id: f for f in local_files.values()}
 
         changes: Dict[str, List] = {
             'local_new': [],
@@ -293,7 +297,13 @@ class SyncService(SyncServiceBase):
         for file_id, local_file in local_files.items():
             if file_id not in remote_files:
                 if not local_file.deleted:
-                    changes['local_new'].append(local_file)
+                    if local_file.sync_status != 'synced':
+                        # Genuinely new or modified – needs upload.
+                        changes['local_new'].append(local_file)
+                    # else: was synced but its hash was replaced in the remote DB
+                    # by another instance (INSERT OR REPLACE on stable_id).
+                    # Do not re-upload the stale version; the remote's newer hash
+                    # will be detected in the second loop below.
             else:
                 remote_file = remote_files[file_id]
                 local_modified = local_file.sync_status != 'synced'
@@ -304,10 +314,34 @@ class SyncService(SyncServiceBase):
                 elif local_modified:
                     changes['local_modified'].append(local_file)
 
+        # Build an index for version-supersession checks: (doc_id, file_type, variant) → max local version
+        local_max_version: dict[tuple, int] = {}
+        for f in local_files.values():
+            if f.version is not None:
+                key = (f.doc_id, f.file_type, f.variant)
+                local_max_version[key] = max(local_max_version.get(key, 0), f.version)
+
         for file_id, remote_file in remote_files.items():
             if file_id not in local_files:
                 if not remote_file['deleted']:
-                    changes['remote_new'].append(remote_file)
+                    stable_id = remote_file.get('stable_id')
+                    if stable_id and stable_id in local_by_stable_id:
+                        # Local already has a different-hash version of this logical
+                        # file.  Treat as a remote metadata/content update rather than
+                        # a new download to avoid stable_id UNIQUE constraint errors.
+                        changes['remote_modified'].append(remote_file)
+                    else:
+                        # Skip if local already has a newer version of the same document/variant
+                        remote_version = remote_file.get('version') or 0
+                        key = (remote_file.get('doc_id'), remote_file.get('file_type'), remote_file.get('variant'))
+                        if remote_version and local_max_version.get(key, 0) > remote_version:
+                            if self.logger:
+                                self.logger.debug(
+                                    f"Skipping remote_new {remote_file.get('filename')}: "
+                                    f"local has version {local_max_version[key]} > remote {remote_version}"
+                                )
+                        else:
+                            changes['remote_new'].append(remote_file)
             else:
                 local_file = local_files[file_id]
                 remote_updated = remote_file.get('updated_at', '')
@@ -419,7 +453,9 @@ class SyncService(SyncServiceBase):
                 summary.errors += 1
                 continue
             file_path = self.file_storage.get_file_path(local_file.id, local_file.file_type)
-            if not file_path.exists():
+            if file_path is None or not file_path.exists():
+                if self.logger:
+                    self.logger.warning(f"Skipping upload metadata: file not found on disk for {local_file.filename}")
                 continue
             try:
                 remote_mgr.upsert_file(self._file_to_remote_dict(local_file, version))
@@ -480,9 +516,29 @@ class SyncService(SyncServiceBase):
                 continue
             try:
                 from fastapi_app.lib.models.models import FileCreate
+                # Check for stable_id conflict: local already has a different-hash
+                # version of the same logical file (can happen when _compare_metadata
+                # is bypassed or called with a pre-built changes dict).
+                stable_id = remote_file.get('stable_id')
+                existing_local = (
+                    self.file_repo.get_file_by_stable_id(stable_id)
+                    if stable_id else None
+                )
+                if existing_local and existing_local.id != file_id:
+                    # Apply remote metadata to the existing local record and mark
+                    # it as synced.  Full content replacement is out of scope here.
+                    self.file_repo.apply_remote_metadata(existing_local.id, remote_file)
+                    self.file_repo.mark_file_synced(existing_local.id, version)
+                    summary.metadata_synced += 1
+                    if self.logger:
+                        self.logger.info(
+                            f"Stable_id conflict resolved via metadata update: "
+                            f"{remote_file['filename']}"
+                        )
+                    continue
                 file_create = FileCreate(
                     id=file_id,
-                    stable_id=remote_file['stable_id'],
+                    stable_id=stable_id,
                     filename=remote_file['filename'],
                     doc_id=remote_file['doc_id'],
                     doc_id_type=remote_file.get('doc_id_type', 'custom'),

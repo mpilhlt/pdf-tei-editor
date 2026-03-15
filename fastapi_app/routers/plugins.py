@@ -234,4 +234,8 @@ async def get_extensions_bundle():
 
     bundle = "\n\n".join(bundle_parts)
 
-    return PlainTextResponse(content=bundle, media_type="application/javascript")
+    return PlainTextResponse(
+        content=bundle,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )

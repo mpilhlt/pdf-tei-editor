@@ -8,13 +8,15 @@
  * Registers the "sync.syncFiles" endpoint so other plugins can trigger synchronization.
  *
  * @typedef {{
- *   conflicts_resolved?: number,
- *   downloads?: number,
- *   local_deletes?: number,
- *   local_markers_cleaned_up?: number,
- *   remote_deletes?: number,
- *   stale_locks_purged?: number,
- *   uploads?: number,
+ *   conflicts?: number,
+ *   downloaded?: number,
+ *   deleted_local?: number,
+ *   deleted_remote?: number,
+ *   errors?: number,
+ *   metadata_synced?: number,
+ *   uploaded?: number,
+ *   new_version?: number,
+ *   duration_ms?: number,
  *   message?: string,
  *   skipped?: boolean
  * }} SyncResult
@@ -91,6 +93,32 @@ function hidePopup() {
   if (messagePopup) messagePopup.style.display = 'none';
 }
 
+function togglePopup() {
+  if (!messagePopup) return;
+  if (messagePopup.style.display === 'none' || !messagePopup.style.display) {
+    showPopup();
+  } else {
+    hidePopup();
+  }
+}
+
+/**
+ * Format a SyncResult into a human-readable summary line.
+ * @param {SyncResult} summary
+ * @returns {string}
+ */
+function _formatSummary(summary) {
+  const parts = [];
+  if (summary.uploaded) parts.push(`↑${summary.uploaded}`);
+  if (summary.downloaded) parts.push(`↓${summary.downloaded}`);
+  if (summary.metadata_synced) parts.push(`≡${summary.metadata_synced}`);
+  if (summary.deleted_remote) parts.push(`remote_del:${summary.deleted_remote}`);
+  if (summary.deleted_local) parts.push(`local_del:${summary.deleted_local}`);
+  if (summary.conflicts) parts.push(`conflicts:${summary.conflicts}`);
+  if (summary.errors) parts.push(`errors:${summary.errors}`);
+  return parts.length ? `Sync done — ${parts.join(' ')}` : 'Sync done — no changes';
+}
+
 window.registerFrontendExtension({
   name: "webdav-sync-extension",
   pluginId: "webdav-sync",
@@ -128,7 +156,7 @@ window.registerFrontendExtension({
     syncIcon.style.marginRight = '4px';
     syncIcon.style.cursor = 'pointer';
     syncIcon.title = 'Click to sync files';
-    syncIcon.addEventListener('click', () => onClickSyncBtn(sandbox));
+    syncIcon.addEventListener('click', (e) => { e.stopPropagation(); onClickSyncBtn(sandbox); });
 
     // Wrap icon and progress bar in a container
     syncContainer = document.createElement('div');
@@ -137,8 +165,10 @@ window.registerFrontendExtension({
     syncContainer.appendChild(syncIcon);
     syncContainer.appendChild(syncProgressWidget);
 
-    syncContainer.addEventListener('mouseenter', showPopup);
-    syncContainer.addEventListener('mouseleave', hidePopup);
+    syncContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePopup();
+    });
 
     // Hover popup — fixed position so it sits above the statusbar regardless of scroll
     messagePopup = document.createElement('div');
@@ -156,13 +186,15 @@ window.registerFrontendExtension({
       'max-width: 420px',
       'min-width: 200px',
       'z-index: 9999',
-      'pointer-events: none',
     ].join(';');
+
+    messagePopup.addEventListener('click', (e) => e.stopPropagation());
 
     messageList = document.createElement('div');
     messageList.style.cssText = 'max-height: 180px; overflow-y: auto;';
     messagePopup.appendChild(messageList);
     document.body.appendChild(messagePopup);
+    document.addEventListener('click', hidePopup);
 
     sandbox.ui.pdfViewer.statusbar.add(syncContainer, 'right', 3);
   },
@@ -184,19 +216,18 @@ window.registerFrontendExtension({
         syncProgressWidget.value = 0;
       }
 
-      const originalReadOnly = sandbox.getState().editorReadOnly;
-      await sandbox.updateState({ editorReadOnly: true });
-
       try {
-        const summary = await sandbox.api.pluginsExecute('webdav-sync', { endpoint: 'execute', params: {} });
+        const response = await sandbox.api.pluginsExecute('webdav-sync', { endpoint: 'execute', params: {} });
+        const summary = response?.result;
         if (summary && summary.skipped) {
           console.debug(`Sync skipped: ${summary.message}`);
-        } else {
-          console.log(`Sync completed: ${JSON.stringify(summary)}`);
+          addMessage(`Sync skipped: ${summary.message}`);
+        } else if (summary) {
+          console.debug(`Sync completed: ${JSON.stringify(summary)}`);
+          addMessage(_formatSummary(summary));
         }
         return summary;
       } finally {
-        await sandbox.updateState({ editorReadOnly: originalReadOnly });
         if (syncIcon) syncIcon.classList.remove("rotating");
         if (syncProgressWidget) {
           syncProgressWidget.indeterminate = false;

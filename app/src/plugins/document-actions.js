@@ -704,8 +704,7 @@ async function createNewVersion(state) {
       })
       .catch(e => console.error(e))
   } catch (e) {
-    console.error(e)
-    notify(`Could not create new version: ${String(error)}`, 'danger', 'exclamation-octagon');
+    dialog.error(`Could not create new version: ${String(e)}`)
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
     newVersiondialog.hide()
