@@ -881,6 +881,48 @@ class FileRepository:
             cursor = conn.cursor()
             cursor.execute(query, (key, value))
 
+    def get_remote_locks(self) -> dict:
+        """Return the cached remote lock state (from last sync).
+
+        Returns:
+            Dict mapping stable_id → {client_id, acquired_at, updated_at}.
+            Empty dict if not yet populated.
+        """
+        import json
+        raw = self.get_sync_metadata("remote_locks")
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_remote_locks(self, locks: dict) -> None:
+        """Persist the merged remote lock state from the last sync.
+
+        Args:
+            locks: Dict mapping stable_id → {client_id, acquired_at, updated_at}.
+        """
+        import json
+        self.set_sync_metadata("remote_locks", json.dumps(locks))
+
+    def get_files_to_upload(self) -> List[FileMetadata]:
+        """
+        Return non-deleted files whose content has not yet been pushed to remote.
+
+        Returns:
+            Files with deleted=0 and sync_status not in ('synced', 'deletion_synced')
+        """
+        query = """
+            SELECT * FROM files
+            WHERE deleted = 0
+            AND sync_status NOT IN ('synced', 'deletion_synced')
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return [self._row_to_model(r) for r in cursor.fetchall()]
+
     def get_deleted_files(self) -> List[FileMetadata]:
         """
         Get all soft-deleted files that need to be synced to remote.
@@ -1051,6 +1093,123 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Marked deletion as synced: {file_id}")
 
+    def requeue_synced_files_for_bootstrap(self) -> int:
+        """
+        Mark all non-deleted synced files as 'modified' so they are uploaded
+        as upsert ops on the next sync cycle.
+
+        Called once per instance when migrating to the operation-log sync
+        approach.  Without this, files synced under the old metadata.db
+        approach would never appear in the shared queue.
+
+        Returns:
+            Number of files re-queued
+        """
+        query = """
+            UPDATE files
+            SET sync_status = 'modified',
+                updated_at  = CURRENT_TIMESTAMP
+            WHERE deleted = 0
+            AND sync_status = 'synced'
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return cursor.rowcount
+
+    def requeue_deletion_synced_files(self) -> int:
+        """
+        Reset deletion_synced files to pending_delete so they are re-pushed.
+
+        Called when a remote metadata.db version regression is detected (another
+        instance overwrote the shared DB with a lower version), which means
+        deletions previously marked as synced may no longer be reflected remotely.
+
+        Returns:
+            Number of files re-queued
+        """
+        query = """
+            UPDATE files
+            SET sync_status = 'pending_delete',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE deleted = 1
+            AND sync_status = 'deletion_synced'
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return cursor.rowcount
+
+    def update_file_content(
+        self,
+        stable_id: str,
+        new_file_id: str,
+        new_file_size: int,
+        remote_version: int,
+    ) -> None:
+        """
+        Replace the content hash (id) of a file record in-place.
+
+        Used when a remote sync op delivers a new version of a logical file
+        (same stable_id, different content hash).  Updating the id column in
+        place avoids the stable_id UNIQUE constraint issue that would arise
+        from a delete + insert.
+
+        Args:
+            stable_id: Stable file identifier (identifies which record to update)
+            new_file_id: New content hash to store as the primary key
+            new_file_size: Size of the new content
+            remote_version: Remote seq/version at sync time
+        """
+        query = """
+            UPDATE files
+            SET id             = ?,
+                file_size      = ?,
+                sync_status    = 'synced',
+                sync_hash      = ?,
+                remote_version = ?,
+                updated_at     = CURRENT_TIMESTAMP
+            WHERE stable_id = ? AND deleted = 0
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (new_file_id, new_file_size, new_file_id, remote_version, stable_id))
+
+    def restore_file(
+        self,
+        stable_id: str,
+        file_id: str,
+        file_size: int,
+        remote_version: int,
+    ) -> None:
+        """
+        Un-delete a file and set its content hash, restoring it as synced.
+
+        Works on both deleted and non-deleted records.  Used when a remote
+        upsert op arrives for a file that was previously deleted locally —
+        the remote is asserting the file should exist.
+
+        Args:
+            stable_id: Stable file identifier (locates the record)
+            file_id: New (or same) content hash
+            file_size: File size in bytes
+            remote_version: Remote seq at sync time
+        """
+        query = """
+            UPDATE files
+            SET id             = ?,
+                file_size      = ?,
+                deleted        = 0,
+                sync_status    = 'synced',
+                sync_hash      = ?,
+                remote_version = ?,
+                updated_at     = CURRENT_TIMESTAMP
+            WHERE stable_id = ?
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (file_id, file_size, file_id, remote_version, stable_id))
+
     def apply_remote_metadata(self, file_id: str, remote_metadata: dict) -> None:
         """
         Apply metadata changes from remote without triggering sync.
@@ -1062,17 +1221,25 @@ class FileRepository:
             file_id: File ID (hash)
             remote_metadata: Dict with metadata fields to update
         """
-        # Extract fields to update
+        # Fields that must not be overwritten — they are either identity keys or
+        # local-only state managed outside this method.
+        _SKIP = frozenset({
+            'id', 'stable_id',               # identity
+            'sync_status', 'sync_hash',      # local state machine
+            'local_modified_at',             # local timestamp
+            'created_at', 'updated_at',      # timestamps managed by DB
+            'deleted',                       # managed by delete_file / restore_file
+        })
+        _JSON_FIELDS = frozenset({'doc_collections', 'doc_metadata', 'file_metadata'})
+
         update_data = {}
-        json_fields = ['doc_collections', 'doc_metadata', 'file_metadata']
-
-        for field in ['label', 'variant', 'version', 'is_gold_standard', 'remote_version']:
-            if field in remote_metadata:
-                update_data[field] = remote_metadata[field]
-
-        for field in json_fields:
-            if field in remote_metadata:
-                update_data[field] = json.dumps(remote_metadata[field])
+        for field, value in remote_metadata.items():
+            if field in _SKIP or value is None:
+                continue
+            if field in _JSON_FIELDS:
+                update_data[field] = json.dumps(value) if not isinstance(value, str) else value
+            else:
+                update_data[field] = value
 
         if not update_data:
             return

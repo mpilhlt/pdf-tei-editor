@@ -114,18 +114,32 @@ class PluginManager:
 
                 if routes_file.exists():
                     try:
-                        # Load the routes module
+                        # Load the routes module using its proper dotted module name
+                        # so relative imports work correctly.
+                        import importlib
                         import importlib.util
+                        import sys
 
-                        module_name = f"plugin_{plugin_id}_routes"
+                        project_root = get_settings().project_root_dir
+                        rel = routes_file.relative_to(project_root).with_suffix("")
+                        module_name = ".".join(rel.parts)
+                        package_name = ".".join(rel.parts[:-1])
+
+                        # Ensure all parent packages are importable
+                        if package_name not in sys.modules:
+                            importlib.import_module(package_name)
+
                         spec = importlib.util.spec_from_file_location(
-                            module_name, routes_file
+                            module_name, routes_file,
+                            submodule_search_locations=[]
                         )
                         if spec is None or spec.loader is None:
                             logger.warning(f"Could not create spec for {routes_file}")
                             continue
 
                         module = importlib.util.module_from_spec(spec)
+                        module.__package__ = package_name
+                        sys.modules[module_name] = module
                         spec.loader.exec_module(module)
 
                         # Look for 'router' in the module

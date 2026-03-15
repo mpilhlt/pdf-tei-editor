@@ -31,15 +31,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = ""
     LOG_DIR: str = ""  # Optional: override default log directory (default: project_root/log)
 
-    # Features
-    WEBDAV_ENABLED: bool = False
-
-    # WebDAV Configuration (Phase 6)
-    WEBDAV_BASE_URL: str = ""
-    WEBDAV_USERNAME: str = ""
-    WEBDAV_PASSWORD: str = ""
-    WEBDAV_REMOTE_ROOT: str = "/pdf-tei-editor"
-
     # Session
     SESSION_TIMEOUT: int = 3600  # Session timeout in seconds (default: 1 hour)
 
@@ -66,10 +57,6 @@ class Settings(BaseSettings):
         if not self.CONFIG_DIR:
             return None
         return Path(self.CONFIG_DIR)
-
-    @property
-    def webdav_enabled(self) -> bool:
-        return self.WEBDAV_ENABLED
 
     @property
     def upload_dir(self) -> Path:
@@ -115,22 +102,6 @@ class Settings(BaseSettings):
 
         # Use the pydantic default as final fallback
         return self.SESSION_TIMEOUT
-
-    @property
-    def webdav_base_url(self) -> str:
-        return self.WEBDAV_BASE_URL
-
-    @property
-    def webdav_username(self) -> str:
-        return self.WEBDAV_USERNAME
-
-    @property
-    def webdav_password(self) -> str:
-        return self.WEBDAV_PASSWORD
-
-    @property
-    def webdav_remote_root(self) -> str:
-        return self.WEBDAV_REMOTE_ROOT
 
     @property
     def application_mode(self) -> str:

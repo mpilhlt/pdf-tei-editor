@@ -108,6 +108,11 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
         for handler in uvicorn_logger.handlers:
             handler.setFormatter(formatter)
 
+    # Suppress routine HTTP request logs from httpx/httpcore — these flood the
+    # log during WebDAV lock polling and other high-frequency network operations.
+    for noisy_logger in ['httpx', 'httpcore']:
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> logging.Logger:
     """

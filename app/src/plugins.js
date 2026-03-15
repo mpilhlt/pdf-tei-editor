@@ -43,7 +43,6 @@ import { plugin as annotationGuidePlugin, api as annotationGuide } from './plugi
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
-import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
@@ -83,7 +82,6 @@ const plugins = [
   fileSelectionDrawerPlugin,
   documentActionsPlugin,
   servicesPlugin,
-  syncPlugin,
   extractionPlugin,
   promptEditorPlugin,
   teiWizardPlugin,
@@ -125,7 +123,6 @@ export {
   promptEditor,
   appInfo,
   annotationGuide,
-  sync,
   accessControl,
   heartbeat,
   progress

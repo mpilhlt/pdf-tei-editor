@@ -14,7 +14,7 @@
  */
 
 import ui from '../ui.js';
-import { dialog as dialogApi, services, client, XslViewerPlugin } from '../plugins.js';
+import { dialog as dialogApi, services, client, config as configApi, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
 
 /**
@@ -23,9 +23,12 @@ import { notify } from './sl-utils.js';
  * @property {Object} dialog - Dialog API (info, error, success, confirm, prompt)
  * @property {function(string, string, string): void} notify - Notification function
  * @property {function(): Object} getState - Get current application state
+ * @property {function(Partial<Object>): Promise<Object>} updateState - Update application state
  * @property {function(string, any, Object): Promise<any>} invoke - Invoke PluginManager endpoint
- * @property {Object} services - Application services (load, showMergeView)
+ * @property {Object} services - Application services (load, showMergeView, reloadFiles)
+ * @property {Object} sse - SSE event bus (addEventListener, removeEventListener)
  * @property {Object} api - API client for backend calls
+ * @property {{ get: function(string, any=): Promise<any> }} config - Configuration API
  * @property {function(string): Promise<string>} fetchText - Fetch text content from URL
  * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
  */
@@ -36,15 +39,22 @@ let getStateFn = () => ({});
 /** @type {function(string, any, Object): Promise<any>} */
 let invokeFn = async () => undefined;
 
+/** @type {function(Partial<Object>): Promise<Object>} */
+let updateStateFn = async (changes) => changes;
+
 /**
- * Initialize sandbox with state getter and invoke function.
+ * Initialize sandbox with state getter, invoke function, and updateState function.
  * Called by Application during initialization.
  * @param {function(): Object} stateFn - Function to get current state
  * @param {function(string, any, Object): Promise<any>} invokeFunction - PluginManager invoke function
+ * @param {function(Partial<Object>): Promise<Object>} updateStateFunction - App updateState function
  */
-export function initializeSandbox(stateFn, invokeFunction) {
+export function initializeSandbox(stateFn, invokeFunction, updateStateFunction) {
   getStateFn = stateFn;
   invokeFn = invokeFunction;
+  if (updateStateFunction) {
+    updateStateFn = updateStateFunction;
+  }
 }
 
 /**
@@ -93,12 +103,19 @@ export function getSandbox() {
     dialog: dialogApi,
     notify,
     getState: getStateFn,
+    updateState: updateStateFn,
     invoke: invokeFn,
     services: {
       load: services.load,
-      showMergeView: services.showMergeView
+      showMergeView: services.showMergeView,
+      reloadFiles: (options) => fileselection.reload(options)
+    },
+    sse: {
+      addEventListener: sseApi.addEventListener,
+      removeEventListener: sseApi.removeEventListener
     },
     api: client.apiClient,
+    config: { get: configApi.get },
     fetchText,
     registerXslStylesheet
   };

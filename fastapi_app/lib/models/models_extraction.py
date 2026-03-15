@@ -5,7 +5,7 @@ For FastAPI migration - Phase 5.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnnotationGuideInfo(BaseModel):
@@ -89,18 +89,17 @@ class ExtractRequest(BaseModel):
         description="Extractor-specific options (e.g., doi, collection, variant_id)"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "extractor": "grobid",
-                "file_id": "abc123def456",
-                "options": {
-                    "doi": "10.1234/example",
-                    "collection": "my_corpus",
-                    "variant_id": "grobid"
-                }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "extractor": "grobid",
+            "file_id": "abc123def456",
+            "options": {
+                "doi": "10.1234/example",
+                "collection": "my_corpus",
+                "variant_id": "grobid"
             }
         }
+    })
 
 
 class ExtractResponse(BaseModel):
@@ -118,11 +117,10 @@ class ExtractResponse(BaseModel):
         description="Extracted/generated XML file hash"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "example_doc",
-                "pdf": "abc123def456",
-                "xml": "789ghi012jkl"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "example_doc",
+            "pdf": "abc123def456",
+            "xml": "789ghi012jkl"
         }
+    })
