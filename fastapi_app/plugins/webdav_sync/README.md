@@ -1,8 +1,8 @@
 # WebDAV Sync Plugin
 
-Synchronizes the application's file store with a remote WebDAV server. When enabled, a sync icon and progress bar appear in the PDF viewer statusbar. Sync runs automatically on startup and after file operations (save, delete, duplicate), and can be triggered manually by clicking the sync icon.
+Synchronizes the application's file store with a remote WebDAV server using an append-only operation log. When enabled, a sync icon and progress bar appear in the PDF viewer statusbar. Sync runs automatically on startup and after file operations (save, delete, duplicate), periodically in the background, and can be triggered manually by clicking the sync icon.
 
-Conflicts (file modified on both sides) are detected and can be resolved via the conflict resolution API.
+Conflicts (file modified locally while deleted remotely) are detected and can be resolved via the conflict resolution API. File locks acquired on one instance are propagated to other instances via the operation log.
 
 ---
 
@@ -15,7 +15,9 @@ WEBDAV_ENABLED=true
 WEBDAV_BASE_URL=https://your-webdav-server/remote.php/dav/files/username
 WEBDAV_USERNAME=your-username
 WEBDAV_PASSWORD=your-password
-WEBDAV_REMOTE_ROOT=/pdf-tei-editor   # Remote directory to sync into (default: /pdf-tei-editor)
+WEBDAV_REMOTE_ROOT=/pdf-tei-editor   # Remote directory (default: /pdf-tei-editor)
+WEBDAV_SYNC_INTERVAL=300             # Periodic sync interval in seconds (default: 300; 0 = disabled)
+WEBDAV_TRANSFER_WORKERS=4            # Parallel upload/download workers (default: 4)
 ```
 
 The plugin is inactive unless both `WEBDAV_ENABLED=true` and `WEBDAV_BASE_URL` are set. All other settings fall back to their defaults when omitted.
@@ -28,71 +30,104 @@ These values are also writable at runtime via the configuration API under the ke
 
 ### Plugin structure
 
-```
+```text
 fastapi_app/plugins/webdav_sync/
 ├── __init__.py          # Exports WebDavSyncPlugin, router, plugin instance
 ├── plugin.py            # Plugin class — availability check, endpoint registration, extension init
 ├── routes.py            # FastAPI routes at /api/plugins/webdav-sync/*
-├── service.py           # SyncService — sync logic, conflict detection/resolution
-├── remote_metadata.py   # RemoteMetadataManager — WebDAV metadata.db download/upload
+├── service.py           # SyncService — sync logic, conflict detection/resolution, lock sync
+├── remote_queue.py      # RemoteQueueManager — queue.db download/upload/compaction
 ├── config.py            # init_plugin_config(), get_webdav_config(), is_configured()
 ├── extensions/
-│   └── webdav-sync.js   # Frontend extension — sync icon, progress bar, SSE listeners
+│   └── webdav-sync.js   # Frontend extension — sync icon, progress bar, SSE listeners, periodic sync
 └── tests/
-    ├── test_sync_service.py
-    ├── test_remote_metadata.py
-    ├── sync.test.js
+    ├── test_two_instance_sync.py   # Unit tests for _apply_ops / _collect_own_ops
     └── run-integration-tests.js
 ```
 
 ### Backend
 
-**Plugin activation** (`plugin.py`): `WebDavSyncPlugin.is_available()` returns `True` only when both `plugin.webdav-sync.enabled` and `plugin.webdav-sync.base-url` are set (checked via `is_configured()`). Discovery and route registration happen at module import time; initialization (frontend extension registration) runs in `initialize()` during app startup.
+**Plugin activation** (`plugin.py`): `WebDavSyncPlugin.is_available()` returns `True` only when both `plugin.webdav-sync.enabled` and `plugin.webdav-sync.base-url` are set. Discovery and route registration happen at module import time; initialization (frontend extension registration) runs in `initialize()` during app startup.
 
 **Configuration** (`config.py`): `init_plugin_config()` is called in `__init__()` to register config keys from environment variables via `get_plugin_config()`. All other code reads values with `get_config().get(key)`.
 
 **Routes** (`routes.py`): Unversioned routes at `/api/plugins/webdav-sync/`:
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/status` | O(1) check — returns version numbers and unsynced file count |
-| `POST` | `/sync` | Run full sync; progress sent via SSE (`syncProgress`, `syncMessage` events) |
+| ------ | ---- | ----------- |
+| `GET` | `/status` | O(1) check — returns seq numbers and unsynced file count |
+| `POST` | `/sync` | Run full sync; progress via SSE (`syncProgress`, `syncMessage` events) |
 | `GET` | `/conflicts` | List files with unresolved conflicts |
 | `POST` | `/resolve` | Resolve a conflict (`local_wins`, `remote_wins`, `keep_both`) |
 
 The plugin's `execute` endpoint (invoked via `POST /api/v1/plugins/webdav-sync/execute`) delegates to `execute_sync()`, which calls `SyncService.perform_sync()` and returns a `SyncSummary` dict. This is how the frontend extension triggers sync.
 
-**Sync logic** (`service.py`): `SyncService` implements `SyncServiceBase`. The core algorithm:
+### Sync algorithm
 
-1. **Skip check**: Compare local and remote version numbers. If equal and there are no locally unsynced files, return early unless `force=True`.
-2. **Lock**: Write `{remote_root}/version.txt.lock` on the WebDAV server. Polls up to 300 seconds if a lock already exists. Stale locks (older than 60 seconds) are forcibly removed.
-3. **Download remote metadata**: Fetch `metadata.db` from the WebDAV server via `RemoteMetadataManager`.
-4. **Classify changes** (`_compare_metadata`): Diff local and remote metadata records to produce five change sets:
-   - `local_new` — file exists locally, absent from remote, not marked deleted locally
-   - `local_modified` — file exists on both sides, local `sync_status != 'synced'`, remote not deleted
-   - `remote_new` — file exists on remote, absent locally, not marked deleted on remote
-   - `remote_modified` — file exists on both sides, remote `updated_at > local updated_at`, local `sync_status == 'synced'`
-   - `remote_deleted` — file exists locally, remote record is present but marked deleted
-   - `conflicts` — file is `local_modified` AND remote record is marked deleted simultaneously
-5. **Transfer files**: Upload `local_new` and `local_modified`; download `remote_new` and `remote_modified`; propagate `remote_deleted` locally.
-6. **Sync metadata**: Apply metadata-only changes (no file transfer needed for records already in sync).
-7. **Update version**: Increment the remote version number and write it back to `{remote_root}/version.txt`.
-8. **Upload metadata**: Push the updated `metadata.db` to the WebDAV server.
-9. **Release lock**: Delete `{remote_root}/version.txt.lock`.
+The shared state on WebDAV is `queue.db` — an append-only SQLite operation log. Each sync client has a persistent UUID (`sync_metadata['sync_client_id']`) and tracks the highest sequence number it has applied (`sync_metadata['last_applied_seq']`). Because the log is append-only, an empty or missing `queue.db` means "no operations yet" — it never destroys existing client state.
 
-Progress is reported via SSE `syncProgress` events at fixed checkpoints (0 → 10 → 20 → 30 → 40 → 55 → 75 → 90 → 100).
+**`queue.db` schema:**
 
-**Conflict definition**: A conflict arises when a file has been modified locally (not yet synced) and simultaneously deleted on the remote. Local-modified + remote-modified is not currently treated as a conflict — remote changes only apply when the local file is in `sync_status == 'synced'` state, so a locally modified file is never overwritten by a remote modification.
+```sql
+CREATE TABLE ops (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id  TEXT NOT NULL,
+    op_type    TEXT NOT NULL,   -- 'upsert' | 'delete'
+    stable_id  TEXT NOT NULL,
+    file_id    TEXT NOT NULL,
+    file_data  TEXT,            -- JSON metadata blob for upsert ops
+    created_at TEXT NOT NULL
+);
 
-**Conflict resolution** (`POST /resolve`): Accepts `file_id` and one of three strategies:
+CREATE TABLE clients (
+    client_id        TEXT PRIMARY KEY,
+    last_applied_seq INTEGER NOT NULL DEFAULT 0,
+    last_seen_at     TEXT NOT NULL,
+    active_locks     TEXT NOT NULL DEFAULT '{}'  -- JSON: {stable_id: {acquired_at, updated_at}}
+);
+```
+
+**Full sync cycle** (`SyncService.perform_sync()`):
+
+1. **Skip check**: compare `last_applied_seq` with `MAX(ops.seq)` on remote and count locally unsynced files. Skip unless `force=True`.
+2. **Lock**: write `{remote_root}/version.txt.lock` on WebDAV. Polls up to 300 s; stale locks (> 60 s) are forcibly removed.
+3. **Download** `queue.db`.
+4. **Register client**: upsert own row in `clients`, writing the current local lock state into `active_locks`.
+5. **Cache remote locks**: read all other clients' `active_locks` columns and store the merged result in `sync_metadata['remote_locks']` for use by the lock system.
+6. **Apply remote ops**: for each op with `seq > last_applied_seq` and `client_id != own`, apply locally:
+   - `upsert`: download file if hash is new; update local DB record (un-delete if needed).
+   - `delete`: soft-delete local record (skip if file is currently locked).
+7. **Collect own ops**: for each locally unsynced or pending-delete file, upload content if not already on remote, then record an `upsert` or `delete` op.
+8. **Compact**: remove ops already applied by all known clients; purge clients absent for > 7 days.
+9. **Upload** `queue.db`, update `version.txt`, release lock.
+
+**Bootstrap**: a new instance starts with `last_applied_seq = 0` and applies all ops in order. On first use of the new queue system, any existing locally `synced` files are re-queued as `modified` so they are uploaded and become part of the log.
+
+**Conflict definition**: a conflict arises when a file has been modified locally (not yet synced) and simultaneously deleted on the remote. Local-modified + remote-modified is not treated as a conflict — a locally modified file is never silently overwritten by a remote modification.
+
+**Conflict resolution** (`POST /resolve`): accepts `file_id` and one of three strategies:
 
 | Strategy | Effect |
-| --- | --- |
-| `local_wins` | Sets `sync_status='modified'` and clears `sync_hash`. The file is treated as locally modified and uploaded on the next sync. |
-| `remote_wins` | Marks the file as synced against the remote version (`mark_file_synced`). The remote deletion propagates on the next sync. |
-| `keep_both` | Not yet implemented. Intended to create a new variant from the local version. Requires a `new_variant` value in the request. |
+| -------- | ------ |
+| `local_wins` | Sets `sync_status='modified'`, clears `sync_hash`. Uploaded on next sync. |
+| `remote_wins` | Marks file synced against remote version. Remote deletion propagates on next sync. |
+| `keep_both` | Not yet implemented. Intended to create a new variant from the local version. |
 
-**Remote metadata** (`remote_metadata.py`): `RemoteMetadataManager` handles uploading and downloading `metadata.db` (the SQLite file) to/from the WebDAV server using Python's `http.client`. Temporary files are cleaned up after each operation.
+### Lock propagation
+
+Each client writes its current active file locks into `clients.active_locks` on every sync and on every lock acquire/release (via a lightweight `sync_locks()` call that skips file transfers and op processing). Other instances read this column and cache the merged state in `sync_metadata['remote_locks']`.
+
+The cached state is consulted in two places:
+- **`acquire_lock()`** (`locking.py`): before granting a new local lock, checks whether the file appears in the remote lock cache with a non-expired TTL (local timeout 90 s + one sync-cycle buffer 360 s = 450 s). Returns `False` (→ HTTP 423) if so.
+- **`/files/list`**: `_add_remote_lock_info()` marks artifacts as `is_locked=True` for the same TTL check, so the lock icon appears in the file list even when the lock is held on a remote instance.
+
+Lock state propagation latency after a `sync_locks()` call is one WebDAV round-trip (typically < 2 s), so the remote instance sees the lock icon within seconds of the file being opened.
+
+### Periodic sync
+
+The frontend extension reads `plugin.webdav-sync.sync-interval` via `sandbox.config.get()` on install (default: 300 s) and starts a `setInterval` loop. Each tick calls `sync.syncFiles`, which runs a full `perform_sync()`. If the result includes downloaded or locally-deleted files, the file list is reloaded automatically.
+
+Set `WEBDAV_SYNC_INTERVAL=0` to disable periodic sync.
 
 ### Abstract sync infrastructure
 
@@ -106,24 +141,19 @@ Progress is reported via SSE `syncProgress` events at fixed checkpoints (0 → 1
 `extensions/webdav-sync.js` is loaded by the frontend extension system when the plugin is available. It:
 
 - Adds a sync icon (`sl-icon[name=arrow-repeat]`) and `<status-progress>` widget to the PDF viewer statusbar
-- Registers SSE listeners for `syncProgress` (updates the progress bar) and `syncMessage` (logs to console)
-- Implements the `sync.syncFiles` plugin endpoint (`ep.sync.syncFiles`), which is invoked by other plugins (on startup, after save/delete/duplicate) via `app.invokePluginEndpoint(ep.sync.syncFiles, state)`
-- On manual icon click, invokes the endpoint and then reloads the file list
+- Registers SSE listeners for `syncProgress` (updates the progress bar) and `syncMessage` (appends to a hover popup log)
+- Implements the `sync.syncFiles` plugin endpoint (`ep.sync.syncFiles`), invoked by other plugins via `app.invokePluginEndpoint(ep.sync.syncFiles, state)`
+- On manual icon click, invokes the endpoint and reloads the file list
+- Starts a periodic sync timer based on `plugin.webdav-sync.sync-interval`
 
-The extension uses sandbox capabilities: `sandbox.api.pluginsExecute`, `sandbox.updateState`, `sandbox.sse`, and `sandbox.services.reloadFiles`.
+The extension uses sandbox capabilities: `sandbox.api.pluginsExecute`, `sandbox.config.get`, `sandbox.invoke`, `sandbox.sse`, and `sandbox.services.reloadFiles`.
 
 ### Testing
 
 **Unit tests** (no server required):
 
 ```bash
-uv run python -m pytest fastapi_app/plugins/webdav_sync/tests/test_sync_service.py fastapi_app/plugins/webdav_sync/tests/test_remote_metadata.py
+uv run python -m pytest fastapi_app/plugins/webdav_sync/tests/test_two_instance_sync.py
 ```
 
-**Integration tests** (requires a WebDAV server):
-
-```bash
-node fastapi_app/plugins/webdav_sync/tests/run-integration-tests.js
-```
-
-The runner starts a local FastAPI instance with WebDAV config and a test WebDAV server, executes `sync.test.js`, then shuts both down.
+The test suite covers `_apply_ops` and `_collect_own_ops` directly, verifying the key correctness properties: no ping-pong re-upload, no UNIQUE constraint errors on hash replacement, correct soft-delete and restore semantics.
