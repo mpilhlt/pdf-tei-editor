@@ -80,6 +80,7 @@ class WebDavSyncPlugin(Plugin):
 
             client_id = params.get('_session_id') or (context.user.get('username') if context.user else None)
 
+            from fastapi_app.config import get_settings
             webdav_config = get_webdav_config()
             sync_service = SyncService(
                 file_repo=file_repo,
@@ -87,6 +88,7 @@ class WebDavSyncPlugin(Plugin):
                 webdav_config=webdav_config,
                 sse_service=sse_service,
                 logger=logger,
+                db_dir=get_settings().db_dir,
             )
 
             def _run_sync() -> None:

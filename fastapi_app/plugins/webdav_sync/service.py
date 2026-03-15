@@ -69,12 +69,14 @@ class SyncService(SyncServiceBase):
         webdav_config: Dict[str, str],
         sse_service: Optional[SSEService] = None,
         logger=None,
+        db_dir: Optional[Path] = None,
     ):
         self.file_repo = file_repo
         self.file_storage = file_storage
         self.webdav_config = webdav_config
         self.sse_service = sse_service
         self.logger = logger
+        self.db_dir = db_dir  # for lock checks; None disables the feature
 
         self.fs = WebdavFileSystem(
             webdav_config["base_url"],
@@ -188,13 +190,26 @@ class SyncService(SyncServiceBase):
                         self.file_repo.get_sync_metadata("last_applied_seq") or "0"
                     )
 
-                    send_progress(30, "Applying remote changes...")
                     pending_ops = queue_mgr.get_pending_ops(own_client_id, last_seq)
-                    if pending_ops:
-                        self._apply_ops(pending_ops, summary, client_id)
+                    if self.logger:
+                        self.logger.debug(
+                            f"Pending ops from other clients: {len(pending_ops)} "
+                            f"(since seq {last_seq})"
+                        )
 
-                    send_progress(60, "Uploading local changes...")
+                    if pending_ops:
+                        send_progress(30, f"Applying {len(pending_ops)} remote op(s)...")
+                        self._apply_ops(pending_ops, summary, client_id)
+                    else:
+                        send_progress(30, "No remote changes")
+
                     own_ops = self._collect_own_ops(own_client_id, summary, client_id)
+                    if self.logger:
+                        self.logger.debug(f"Own ops to append: {len(own_ops)}")
+                    if own_ops:
+                        send_progress(60, f"Uploading {sum(1 for o in own_ops if o['op_type'] == 'upsert')} local change(s)...")
+                    else:
+                        send_progress(60, "No local changes to upload")
                     max_seq = queue_mgr.append_ops(own_ops)
 
                     queue_mgr.update_client_seq(own_client_id, max_seq)
@@ -420,24 +435,56 @@ class SyncService(SyncServiceBase):
         summary: SyncSummary,
         client_id: Optional[str],
     ) -> None:
-        """Apply a single delete op: soft-delete local record."""
+        """Apply a single delete op: soft-delete local record.
+
+        Skips deletion if the file currently has an active lock (i.e. is open
+        in the editor), and re-queues it for re-upload instead so the local
+        version is preserved and propagated back to remote on the next sync.
+        """
         file_id = op["file_id"]
         stable_id = op["stable_id"]
 
         local_file = self.file_repo.get_file_by_id(file_id, include_deleted=True)
         if local_file is None:
-            # Not in local DB; try by stable_id
             local_file = self.file_repo.get_file_by_stable_id(stable_id, include_deleted=True)
 
-        if local_file and not local_file.deleted:
-            self.file_repo.delete_file(local_file.id)
-            self.file_repo.mark_deletion_synced(local_file.id, op["seq"])
-            summary.deleted_local += 1
-            self._send_message(
-                client_id, f"🗑 {local_file.filename}"
-            )
-            if self.logger:
-                self.logger.info(f"Applied remote deletion: {local_file.id[:8]}")
+        if local_file is None or local_file.deleted:
+            return
+
+        # Check whether this file is currently locked (being edited).
+        if self.db_dir is not None:
+            try:
+                from fastapi_app.lib.core.locking import get_locked_file_ids
+                locked = get_locked_file_ids(self.db_dir, self.logger or __import__('logging').getLogger(__name__))
+                if local_file.stable_id in locked:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Remote deletion of {local_file.filename} rejected: "
+                            f"file is currently locked (open in editor)"
+                        )
+                    self._send_message(
+                        client_id,
+                        f"⚠ {local_file.filename}: deleted remotely but open locally — kept, will re-upload"
+                    )
+                    # Mark as modified so it gets re-uploaded on next sync,
+                    # overriding the remote deletion.
+                    from fastapi_app.lib.models.models import SyncUpdate
+                    self.file_repo.update_sync_status(
+                        local_file.id,
+                        SyncUpdate(sync_status="modified", sync_hash=None)
+                    )
+                    summary.conflicts += 1
+                    return
+            except Exception as exc:
+                if self.logger:
+                    self.logger.warning(f"Lock check failed (proceeding with deletion): {exc}")
+
+        self.file_repo.delete_file(local_file.id)
+        self.file_repo.mark_deletion_synced(local_file.id, op["seq"])
+        summary.deleted_local += 1
+        self._send_message(client_id, f"⊖ {local_file.filename}")
+        if self.logger:
+            self.logger.info(f"Applied remote deletion: {local_file.id[:8]}")
 
     # ------------------------------------------------------------------
     # Op collection
@@ -464,10 +511,12 @@ class SyncService(SyncServiceBase):
 
         # --- Upsert ops (new / modified files) ---
         to_upload = self.file_repo.get_files_to_upload()
+        if self.logger:
+            self.logger.debug(f"Files to upload: {len(to_upload)}")
         if to_upload:
             self._send_message(client_id, f"Uploading {len(to_upload)} file(s)...")
 
-        remote_file_index = self._build_remote_file_index(to_upload)
+        remote_file_index = self._build_remote_file_index(to_upload) if to_upload else set()
 
         def _do_upload(local_file: Any) -> tuple:
             file_path = self.file_storage.get_file_path(
@@ -711,20 +760,36 @@ class SyncService(SyncServiceBase):
         Returns:
             Set of remote path strings that exist on the WebDAV server.
         """
-        # Try a single recursive PROPFIND (Depth: infinity).  Many servers
-        # support it; those that don't (e.g. Nextcloud default config) return
-        # 403/400, in which case we fall back to per-shard ls() calls.
+        # For a small number of files, individual EXISTS checks are cheaper
+        # than fetching a directory listing (each WebDAV round trip has fixed
+        # overhead, and listing returns data we don't need).  The crossover is
+        # roughly at the point where N individual requests cost more than one
+        # listing request plus parsing: empirically ~10 files for a typical
+        # internet WebDAV.
+        if len(files) <= 10:
+            existing: set = set()
+            for f in files:
+                remote_path = self._get_remote_file_path(f.id, f.file_type)
+                try:
+                    if self.fs.exists(remote_path):
+                        existing.add(remote_path)
+                except Exception:
+                    pass
+            return existing
+
+        # For larger batches (e.g. bootstrap), try a single recursive
+        # PROPFIND (Depth: infinity).  Servers that disable it return 403/400;
+        # fall back to per-shard ls() in that case.
         try:
             return set(self.fs.find(self.remote_root))
         except Exception:
             pass
 
-        # Fallback: list only the shard directories that are relevant.
         shards: Dict[str, List[Any]] = {}
         for f in files:
             shards.setdefault(f.id[:2], [])
 
-        existing: set = set()
+        existing = set()
         for shard in shards:
             shard_dir = f"{self.remote_root}/{shard}"
             try:
