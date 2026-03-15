@@ -786,15 +786,29 @@ class SyncService(SyncServiceBase):
             raise
 
     def _set_remote_version(self, seq: int) -> None:
-        """Write the current max seq to version.txt for quick-check use."""
+        """Write the current max seq to version.txt for quick-check use.
+
+        Non-fatal: version.txt is only an optimistic skip-check. If it cannot
+        be written after one retry, a warning is logged and sync continues.
+        """
         version_path = f"{self.remote_root}/version.txt"
-        try:
-            with self.fs.open(version_path, "w") as f:
-                f.write(str(seq))
-        except Exception as exc:
-            if self.logger:
-                self.logger.error(f"Failed to set remote version: {exc}")
-            raise
+        for attempt in range(2):
+            try:
+                with self.fs.open(version_path, "w") as f:
+                    f.write(str(seq))
+                return
+            except Exception as exc:
+                if attempt == 0:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Failed to set remote version (retrying): {exc}"
+                        )
+                    time.sleep(2)
+                else:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Failed to set remote version after retry, skipping: {exc}"
+                        )
 
     def _acquire_lock(self, timeout_seconds: int = 300) -> bool:
         """Acquire sync lock on WebDAV."""
