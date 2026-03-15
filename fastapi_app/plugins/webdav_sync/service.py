@@ -188,6 +188,25 @@ class SyncService(SyncServiceBase):
                 remote_db_path = remote_mgr.download()
                 remote_mgr.connect(remote_db_path)
 
+                # Detect version regression: another instance may have uploaded a
+                # fresh metadata.db (version=1), erasing deletion flags and other
+                # changes we already synced.  Re-queue all deletion_synced files so
+                # they get re-pushed in this sync cycle.
+                remote_db_version = remote_mgr.get_version()
+                local_known_version = int(
+                    self.file_repo.get_sync_metadata('remote_version') or '0'
+                )
+                if remote_db_version < local_known_version:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Remote metadata.db version {remote_db_version} < local known "
+                            f"{local_known_version} — version regression detected, "
+                            f"re-queuing deletion_synced files"
+                        )
+                    requeued = self.file_repo.requeue_deletion_synced_files()
+                    if requeued and self.logger:
+                        self.logger.info(f"Re-queued {requeued} deletion_synced file(s) for re-push")
+
                 try:
                     send_progress(30, "Comparing metadata...")
 

@@ -1051,6 +1051,29 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Marked deletion as synced: {file_id}")
 
+    def requeue_deletion_synced_files(self) -> int:
+        """
+        Reset deletion_synced files to pending_delete so they are re-pushed.
+
+        Called when a remote metadata.db version regression is detected (another
+        instance overwrote the shared DB with a lower version), which means
+        deletions previously marked as synced may no longer be reflected remotely.
+
+        Returns:
+            Number of files re-queued
+        """
+        query = """
+            UPDATE files
+            SET sync_status = 'pending_delete',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE deleted = 1
+            AND sync_status = 'deletion_synced'
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return cursor.rowcount
+
     def apply_remote_metadata(self, file_id: str, remote_metadata: dict) -> None:
         """
         Apply metadata changes from remote without triggering sync.
