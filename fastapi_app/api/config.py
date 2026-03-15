@@ -43,7 +43,6 @@ class InstructionItem(BaseModel):
 
 class StateResponse(BaseModel):
     """Response model for application state"""
-    webdavEnabled: bool
     hasInternet: Optional[bool] = None
 
 
@@ -209,11 +208,6 @@ async def get_state():
     """
     Get application state information.
 
-    Returns state including WebDAV status and internet connectivity.
+    Returns state including internet connectivity.
     """
-    settings = get_settings()
-
-    return StateResponse(
-        webdavEnabled=settings.webdav_enabled,
-        hasInternet=has_internet()
-    )
+    return StateResponse(hasInternet=has_internet())

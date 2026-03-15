@@ -143,7 +143,7 @@ def list_files(
         documents_map = _apply_variant_filtering(documents_map, variant)
         logger.debug(f"After variant filter: {len(documents_map)} documents")
 
-    # Add lock information
+    # Add lock information (local + remote)
     settings = get_settings()
     try:
         active_locks = get_all_active_locks(settings.db_dir, logger)
@@ -151,6 +151,10 @@ def list_files(
     except Exception as e:
         logger.error(f"Error getting lock info: {e}")
         # Continue without lock info
+    try:
+        _add_remote_lock_info(documents_map, repo)
+    except Exception as e:
+        logger.error(f"Error getting remote lock info: {e}")
 
     # Apply collection-based filtering first
     settings = get_settings()
@@ -271,6 +275,49 @@ def _build_artifact(file_metadata) -> ArtifactModel:
     return artifact
 
 
+def _add_remote_lock_info(
+    documents: Dict[str, DocumentGroupModel],
+    repo: FileRepository,
+) -> None:
+    """Mark artifacts as locked if a non-expired remote lock exists for them.
+
+    Remote lock state is populated during WebDAV sync and stored in
+    sync_metadata['remote_locks'].  Artifacts already marked locked by the
+    local lock check are left unchanged.
+
+    Args:
+        documents: Dict of doc_id -> DocumentGroupModel (modified in place).
+        repo: File repository used to read the remote lock cache.
+    """
+    from datetime import datetime, timezone
+    _REMOTE_LOCK_TTL_SECONDS = 90 + 360
+
+    remote_locks = repo.get_remote_locks()
+    if not remote_locks:
+        return
+
+    now = datetime.now(timezone.utc)
+    for doc_group in documents.values():
+        for artifact in doc_group.artifacts:
+            if artifact.is_locked:
+                continue  # already locked locally
+            lock_info = remote_locks.get(artifact.id)
+            if not lock_info:
+                continue
+            updated_at_str = lock_info.get("updated_at") or lock_info.get("acquired_at", "")
+            if not updated_at_str:
+                continue
+            try:
+                updated_at = datetime.fromisoformat(updated_at_str)
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                age_seconds = (now - updated_at).total_seconds()
+                if age_seconds < _REMOTE_LOCK_TTL_SECONDS:
+                    artifact.is_locked = True
+            except (ValueError, TypeError):
+                continue
+
+
 def _apply_variant_filtering(
     documents: Dict[str, DocumentGroupModel],
     variant: str
@@ -311,9 +358,6 @@ def _add_lock_info(
         session_id: Current session ID
     """
     for doc_group in documents.values():
-        # Check all artifacts
         for artifact in doc_group.artifacts:
-            # Use content hash stored as private attribute for lock lookup
-            content_hash = getattr(artifact, '_content_hash', None)
-            if content_hash and content_hash in active_locks and active_locks[content_hash] != session_id:
+            if artifact.id in active_locks and active_locks[artifact.id] != session_id:
                 artifact.is_locked = True

@@ -8,5 +8,15 @@
   "plugin.local-sync.repo.include": "2_corrected",
   "plugin.local-sync.repo.include.type": "string",
   "grobid.server.url": "https://lfoppiano-grobid-dev-footnotes.hf.space",
-  "grobid.server.url.type": "string"
+  "grobid.server.url.type": "string",
+  "plugin.webdav-sync.enabled": true,
+  "plugin.webdav-sync.enabled.type": "boolean",
+  "plugin.webdav-sync.base-url": "http://localhost:8012",
+  "plugin.webdav-sync.base-url.type": "string",
+  "plugin.webdav-sync.username": "",
+  "plugin.webdav-sync.username.type": "string",
+  "plugin.webdav-sync.password": "",
+  "plugin.webdav-sync.password.type": "string",
+  "plugin.webdav-sync.remote-root": "/pdf-tei-editor",
+  "plugin.webdav-sync.remote-root.type": "string"
 }
