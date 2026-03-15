@@ -378,6 +378,24 @@ class SyncService(SyncServiceBase):
 
         existing = self.file_repo.get_file_by_stable_id(stable_id, include_deleted=True)
 
+        if existing is not None and existing.deleted:
+            # Remote upsert always means "file should exist".  Regardless of
+            # whether the content hash matches, un-delete the record and apply
+            # the remote content/metadata.  File content was already downloaded
+            # by _maybe_download if the hash changed.
+            self.file_repo.restore_file(
+                stable_id=stable_id,
+                file_id=file_id,
+                file_size=int(file_data.get("file_size") or existing.file_size or 0),
+                remote_version=op["seq"],
+            )
+            self.file_repo.apply_remote_metadata(file_id, file_data)
+            summary.downloaded += 1
+            self._send_message(client_id, f"↓ {file_data.get('filename', stable_id[:8])} (restored)")
+            if self.logger:
+                self.logger.info(f"Restored remotely: {file_data.get('filename')}")
+            return
+
         if existing is None:
             # Entirely new file
             file_create = FileCreate(

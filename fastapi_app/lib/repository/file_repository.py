@@ -1150,6 +1150,41 @@ class FileRepository:
             cursor = conn.cursor()
             cursor.execute(query, (new_file_id, new_file_size, new_file_id, remote_version, stable_id))
 
+    def restore_file(
+        self,
+        stable_id: str,
+        file_id: str,
+        file_size: int,
+        remote_version: int,
+    ) -> None:
+        """
+        Un-delete a file and set its content hash, restoring it as synced.
+
+        Works on both deleted and non-deleted records.  Used when a remote
+        upsert op arrives for a file that was previously deleted locally —
+        the remote is asserting the file should exist.
+
+        Args:
+            stable_id: Stable file identifier (locates the record)
+            file_id: New (or same) content hash
+            file_size: File size in bytes
+            remote_version: Remote seq at sync time
+        """
+        query = """
+            UPDATE files
+            SET id             = ?,
+                file_size      = ?,
+                deleted        = 0,
+                sync_status    = 'synced',
+                sync_hash      = ?,
+                remote_version = ?,
+                updated_at     = CURRENT_TIMESTAMP
+            WHERE stable_id = ?
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (file_id, file_size, file_id, remote_version, stable_id))
+
     def apply_remote_metadata(self, file_id: str, remote_metadata: dict) -> None:
         """
         Apply metadata changes from remote without triggering sync.

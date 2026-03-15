@@ -224,6 +224,36 @@ class TestApplyOps(unittest.TestCase):
         self.assertEqual(summary.deleted_local, 1)
         self.assertEqual(summary.errors, 0)
 
+    def test_upsert_op_restores_locally_deleted_file(self):
+        """
+        When B has previously deleted a file and A sends an upsert op for it
+        (e.g. because A rejected the deletion due to a lock), B must un-delete
+        the record rather than silently ignoring the re-upsert.
+        """
+        hash_a = self._write_file(b'<tei>content</tei>')
+        stable_id = 'stable_restore'
+
+        self.repo.insert_file(FileCreate(
+            id=hash_a, stable_id=stable_id,
+            filename='doc.tei.xml', doc_id='doc1',
+            file_type='tei', file_size=16
+        ))
+        self.repo.mark_file_synced(hash_a, 1)
+        # Simulate B having deleted this file
+        self.repo.delete_file(hash_a)
+        self.repo.mark_deletion_synced(hash_a, 2)
+
+        # A sends a re-upsert for the same file
+        op = _upsert_op(seq=3, file_id=hash_a, stable_id=stable_id)
+        summary = SyncSummary()
+        self.service._apply_ops([op], summary, client_id=None)
+
+        self.assertEqual(summary.errors, 0)
+        restored = self.repo.get_file_by_stable_id(stable_id, include_deleted=True)
+        self.assertIsNotNone(restored)
+        self.assertFalse(restored.deleted, "File must be un-deleted after remote re-upsert")
+        self.assertEqual(restored.sync_status, 'synced')
+
     def test_delete_op_idempotent_for_unknown_file(self):
         """A delete op for a file not in local DB is silently ignored."""
         op = _delete_op(seq=1, file_id='unknown_hash', stable_id='unknown_stable')
