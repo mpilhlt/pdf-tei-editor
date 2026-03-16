@@ -513,9 +513,9 @@ def serialize_tei_xml(tei_doc: etree._Element) -> str:  # type: ignore[name-defi
 def remove_whitespace(element):
     """Recursively removes all tails and texts from the tree."""
     if element.text:
-        element.text = element.text.strip()
+        element.text = element.text.strip() or None
     if element.tail:
-        element.tail = element.tail.strip()
+        element.tail = element.tail.strip() or None
     for child in element:
         remove_whitespace(child)
 
@@ -627,6 +627,7 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
                 if line.strip() != tag.strip():
                     before, after = line.rsplit(tag, 1)
                     header_lines[i:i+1] = [before, tag + after] if after.strip() else [before, tag]
+                    closing_tei_idx = i + 1  # </TEI> moved to i+1 after split
                 break
 
         if closing_tei_idx is not None:
