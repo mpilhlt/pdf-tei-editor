@@ -596,6 +596,9 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
     else:
         added_temp_content = False
 
+    # Remove existing whitespace so pretty_print produces consistent indentation
+    remove_whitespace(tei_doc)
+
     # Use lxml's pretty printing which preserves case
     header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml', pretty_print=True)
 
@@ -612,11 +615,18 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
 
     # Handle TEI closing tag properly
     if non_header_elements:
-        # Find the closing TEI tag (case-insensitive) and insert the elements before it
+        # Find the closing TEI tag from the end (last occurrence, case-insensitive)
         closing_tei_idx = None
-        for i, line in enumerate(header_lines):
-            if '</TEI>' in line or '</tei>' in line:
+        for i in range(len(header_lines) - 1, -1, -1):
+            line = header_lines[i]
+            tag = '</TEI>' if '</TEI>' in line else ('</tei>' if '</tei>' in line else None)
+            if tag:
                 closing_tei_idx = i
+                # If the closing tag shares the line with other content (e.g. <TEI>...</TEI> on one line),
+                # split it so non-header elements can be inserted inside the TEI element.
+                if line.strip() != tag.strip():
+                    before, after = line.rsplit(tag, 1)
+                    header_lines[i:i+1] = [before, tag + after] if after.strip() else [before, tag]
                 break
 
         if closing_tei_idx is not None:
@@ -626,7 +636,6 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
                 closing_tei_idx += 1  # Update index for next insertion
         else:
             # If no closing TEI tag found, this might be a self-closing tag or malformed XML
-            # In this case, we need to reconstruct the document properly
             # Remove any self-closing TEI tags and rebuild
             header_lines = [line for line in header_lines if not line.strip().endswith('/>')]
 

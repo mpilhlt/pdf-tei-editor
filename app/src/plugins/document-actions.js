@@ -81,12 +81,17 @@ let currentState = null
  */
 
 /**
+ * @typedef {object} optionsSectionPart
+ * @property {HTMLDivElement & saveToNewCopySectionPart} saveToNewCopySection - New-copy option
+ * @property {HTMLDivElement & saveAsGoldSectionPart} saveAsGoldSection - Gold version option, shown only to reviewers
+ */
+
+/**
  * Dialog for saving a revision (and optionally forking to a personal copy)
  * @typedef {object} saveDocumentDialogPart
- * @property {HTMLDivElement & saveToNewCopySectionPart} saveToNewCopySection - Wrapper for the new-copy option
  * @property {SlInput} changeDesc - Change description input
  * @property {SlSelect} status - Status select
- * @property {HTMLDivElement & saveAsGoldSectionPart} saveAsGoldSection - Wrapper shown only to reviewers
+ * @property {HTMLDivElement & optionsSectionPart} options - Options section containing copy and gold checkboxes
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
  */
@@ -131,6 +136,9 @@ async function install(state) {
 
   const da = ui.toolbar.documentActions
 
+  // disable metadata button for the moment 
+  da.editMetadata.style.display = "none"
+
   // save a revision (or fork to new copy)
   da.saveRevision.addEventListener('click', () => {
     if (currentState) saveDocument(currentState);
@@ -147,10 +155,10 @@ async function install(state) {
     if (currentState) deleteAll(currentState);
   })
 
-  // edit metadata
-  da.editMetadata.addEventListener("click", () => {
-    if (currentState) editFileMetadata(currentState);
-  })
+  // edit metadata - disabled
+  // da.editMetadata.addEventListener("click", () => {
+  //   if (currentState) editFileMetadata(currentState);
+  // })
 }
 
 /**
@@ -199,12 +207,12 @@ async function onStateUpdate(changedKeys, state) {
     da.saveRevision.disabled = true
   }
 
-  // Edit metadata - allow for annotators and reviewers when XML is loaded
-  if (isAnnotator || isReviewer) {
-    da.editMetadata.disabled = !Boolean(state.xml) || state.editorReadOnly
-  } else {
-    da.editMetadata.disabled = true
-  }
+  // Edit metadata - allow for annotators and reviewers when XML is loaded - disabled
+  // if (isAnnotator || isReviewer) {
+  //   da.editMetadata.disabled = !Boolean(state.xml) || state.editorReadOnly
+  // } else {
+  //   da.editMetadata.disabled = true
+  // }
 }
 
 /**
@@ -420,41 +428,59 @@ async function saveDocument(state) {
       const fileData = getFileDataById(state.xml, state.fileData)
       const isOwner = fileData?.item?.created_by === userData.username
       const forceCopy = isOwnerBasedMode && !isOwner
-      dlg.saveToNewCopySection.saveToNewCopy.checked = forceCopy
-      dlg.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
+      dlg.options.saveToNewCopySection.saveToNewCopy.checked = forceCopy
+      dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 
       // Default copy label: v{N} (userId) where N = non-gold artifact count + 1
       const nonGoldCount = /** @type {any[]} */ (fileData?.file?.artifacts ?? [])
         .filter(a => !a.is_gold_standard).length
-      dlg.saveToNewCopySection.copyLabel.value = `v${nonGoldCount + 1} (${userData.username})`
+      dlg.options.saveToNewCopySection.copyLabel.value = `v${nonGoldCount + 1} (${userData.username})`
 
       // Toggle copyLabel visibility based on checkbox
       const updateCopyLabelVisibility = () => {
-        dlg.saveToNewCopySection.copyLabel.style.display = dlg.saveToNewCopySection.saveToNewCopy.checked ? '' : 'none'
-        if (!dlg._changeDescManuallyEdited) {
-          dlg.changeDesc.value = dlg.saveToNewCopySection.saveToNewCopy.checked ? 'Initial revision' : 'Corrections'
-        }
+        dlg.options.saveToNewCopySection.copyLabel.style.display = dlg.options.saveToNewCopySection.saveToNewCopy.checked ? '' : 'none'
       }
       updateCopyLabelVisibility()
-      dlg.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
+      dlg.options.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
 
-      // Default change description
-      dlg.changeDesc.value = dlg.saveToNewCopySection.saveToNewCopy.checked ? 'Initial revision' : 'Corrections'
-      dlg._changeDescManuallyEdited = false
-      dlg.changeDesc.addEventListener('sl-input', () => { dlg._changeDescManuallyEdited = true }, { once: true })
-
-      // Get current status from TEI document
+      // Get current status and last change description from TEI document
       const xmlDoc = xmlEditor.getXmlTree()
       let currentStatus = 'draft'
+      let lastChangeDesc = ''
       if (xmlDoc) {
         const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
         if (lastChange) {
           currentStatus = lastChange.getAttribute('status') || 'draft'
+          const descEl = lastChange.querySelector('desc')
+          if (descEl?.textContent?.trim()) {
+            lastChangeDesc = descEl.textContent.trim()
+          }
         }
       }
 
-      // Dynamically populate status options based on configuration
+      // Fetch lifecycle config
       const lifecycleOrder = await config.get('annotation.lifecycle.order')
+      const changeDescriptions = /** @type {string[]} */ (await config.get('annotation.lifecycle.change-descriptions', []))
+
+      // Build status → default description map (index-aligned with lifecycle order)
+      /** @type {Object.<string, string>} */
+      const statusDescMap = Object.fromEntries(
+        lifecycleOrder.map((/** @type {string} */ s, /** @type {number} */ i) => [s, changeDescriptions[i] ?? ''])
+      )
+
+      // Annotators must not save with status 'extraction' — advance to the next lifecycle step
+      if (currentStatus === 'extraction') {
+        const idx = lifecycleOrder.indexOf('extraction')
+        currentStatus = (idx >= 0 && idx < lifecycleOrder.length - 1)
+          ? lifecycleOrder[idx + 1]
+          : 'unfinished'
+      }
+
+      // Default change description: last XML <change><desc> has precedence over configured default,
+      // unless it equals the extraction description (index 0) — in that case use the configured default.
+      const extractionDesc = changeDescriptions[0] ?? ''
+      const reuseLastDesc = lastChangeDesc && lastChangeDesc !== extractionDesc
+      const defaultChangeDesc = reuseLastDesc ? lastChangeDesc : (statusDescMap[currentStatus] || '')
 
       // Collect allowed statuses for user's roles
       const userRoles = userData.roles || []
@@ -495,13 +521,18 @@ async function saveDocument(state) {
       // Set current status as selected
       dlg.status.value = currentStatus
 
+      // Set default change description
+      dlg.changeDesc.value = defaultChangeDesc
+      dlg._changeDescManuallyEdited = false
+      dlg.changeDesc.addEventListener('sl-input', () => { dlg._changeDescManuallyEdited = true }, { once: true })
+
       // Show/hide gold version section based on user role
       const isReviewer = userHasRole(userData, ["admin", "reviewer"])
-      dlg.saveAsGoldSection.style.display = isReviewer ? '' : 'none'
+      dlg.options.saveAsGoldSection.style.display = isReviewer ? '' : 'none'
 
       // Pre-check if current document is already a gold version
       const isCurrentlyGold = state.xml ? isGoldFile(state.xml) : false
-      dlg.saveAsGoldSection.saveAsGold.checked = isCurrentlyGold
+      dlg.options.saveAsGoldSection.saveAsGold.checked = isCurrentlyGold
     }
     // Wait for dialog to be fully visible (attach listener before showing)
     const dialogShown = new Promise(resolve => dlg.addEventListener('sl-after-show', resolve, { once: true }))
@@ -533,7 +564,7 @@ async function saveDocument(state) {
 
   dlg.hide()
 
-  const saveToNewCopy = dlg.saveToNewCopySection.saveToNewCopy.checked
+  const saveToNewCopy = dlg.options.saveToNewCopySection.saveToNewCopy.checked
 
   /** @type {RespStmt} */
   const respStmt = {
@@ -547,10 +578,10 @@ async function saveDocument(state) {
     status: dlg.status.value,
     persId: userData.username,
     desc: dlg.changeDesc.value,
-    label: saveToNewCopy ? (dlg.saveToNewCopySection.copyLabel.value.trim() || undefined) : undefined
+    label: saveToNewCopy ? (dlg.options.saveToNewCopySection.copyLabel.value.trim() || undefined) : undefined
   }
 
-  const saveAsGold = dlg.saveAsGoldSection.saveAsGold.checked
+  const saveAsGold = dlg.options.saveAsGoldSection.saveAsGold.checked
 
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {

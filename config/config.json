@@ -52,6 +52,16 @@
     "published"
   ],
   "annotation.lifecycle.order.type": "array",
+  "annotation.lifecycle.change-descriptions": [
+    "Extraction",
+    "Pre-Draft",
+    "Pre-Check",
+    "Pre-Review",
+    "Pre-Approval",
+    "Pre-Candidate",
+    "Pre-Publication"
+  ],
+  "annotation.lifecycle.change-descriptions.type": "array",
   "annotation.lifecycle.role.annotator": [
     "draft",
     "unfinished",

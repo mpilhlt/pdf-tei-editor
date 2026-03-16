@@ -91,9 +91,11 @@ div[name = "xmlEditor"] tool-bar sl-button::part(label) {
   margin-top: 5px;
 }
 
-sl-select::part(form-control-label) {
-  font-size: smaller;
-  color: var(--sl-color-gray-500)
+sl-select::part(form-control-label),
+sl-input::part(form-control-label) {
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-700);
+  font-weight: var(--sl-font-weight-normal);
 }
 
 /* Loading state for file selection selectboxes */
@@ -245,11 +247,21 @@ status-bar {
 .dialog-checkbox-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 12px 14px;
   background: var(--sl-color-neutral-50);
   border: 1px solid var(--sl-color-neutral-200);
   border-radius: var(--sl-border-radius-medium);
+}
+
+.dialog-checkbox-section sl-checkbox::part(label) {
+  font-size: var(--sl-font-size-small);
+  font-weight: var(--sl-font-weight-normal);
+}
+
+.dialog-checkbox-section .help-text {
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
 .dialog-row {
@@ -260,7 +272,8 @@ status-bar {
 
 sl-select::part(display-input) {
   caret-color: transparent !important;
-  font-size: smaller;
+  font-size: inherit;
+  font-family: inherit;
 }
 
 sl-select::part(listbox) {

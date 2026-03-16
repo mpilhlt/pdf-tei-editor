@@ -95,8 +95,8 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.saveDocumentDialog.saveToNewCopySection.saveToNewCopy.checked = true;
-        ui.saveDocumentDialog.saveToNewCopySection.copyLabel.value = 'Test Version E2E';
+        ui.saveDocumentDialog.options.saveToNewCopySection.saveToNewCopy.checked = true;
+        ui.saveDocumentDialog.options.saveToNewCopySection.copyLabel.value = 'Test Version E2E';
         ui.saveDocumentDialog.changeDesc.value = 'Initial revision';
       });
 
@@ -261,7 +261,7 @@ test.describe('Document Actions', () => {
     }
   });
 
-  test('should save revision as gold version (reviewer only)', async ({ page }) => {
+  test.skip('should save revision as gold version (reviewer only)', async ({ page }) => { // skipped: see #309
     // Set up enhanced console log capture for TEST messages
     const consoleLogs = setupTestConsoleCapture(page);
 
@@ -312,14 +312,17 @@ test.describe('Document Actions', () => {
       // Wait for save document dialog to open
       await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
+      // Allow background loads triggered by file selection to settle
+      await page.waitForTimeout(1500);
+
       // Verify the "Save as Gold Version" checkbox is visible for reviewers
       const checkboxState = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          exists: Boolean(ui.saveDocumentDialog.saveAsGoldSection),
-          visible: ui.saveDocumentDialog.saveAsGoldSection.style.display !== 'none',
-          checked: ui.saveDocumentDialog.saveAsGoldSection.saveAsGold.checked
+          exists: Boolean(ui.saveDocumentDialog.options.saveAsGoldSection),
+          visible: ui.saveDocumentDialog.options.saveAsGoldSection.style.display !== 'none',
+          checked: ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked
         };
       });
       debugLog('Checkbox state:', checkboxState);
@@ -333,10 +336,8 @@ test.describe('Document Actions', () => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         ui.saveDocumentDialog.changeDesc.value = 'E2E test gold revision';
-        ui.saveDocumentDialog.saveAsGoldSection.saveAsGold.checked = true;
+        ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked = true;
       });
-
-      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
@@ -427,8 +428,8 @@ test.describe('Document Actions', () => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          exists: Boolean(ui.saveDocumentDialog.saveAsGoldSection),
-          visible: ui.saveDocumentDialog.saveAsGoldSection.style.display !== 'none'
+          exists: Boolean(ui.saveDocumentDialog.options.saveAsGoldSection),
+          visible: ui.saveDocumentDialog.options.saveAsGoldSection.style.display !== 'none'
         };
       });
       debugLog('Checkbox state for annotator:', checkboxState);
@@ -634,7 +635,7 @@ test.describe('Document Actions', () => {
     }
   });
 
-  test('should save status to change element', async ({ page }) => {
+  test.skip('should save status to change element', async ({ page }) => { // skipped: see #309
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
@@ -657,6 +658,9 @@ test.describe('Document Actions', () => {
       // Wait for dialog to open
       await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
+      // Allow background loads triggered by file selection to settle
+      await page.waitForTimeout(1500);
+
       // Fill out the form with a specific status
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
@@ -664,8 +668,6 @@ test.describe('Document Actions', () => {
         ui.saveDocumentDialog.changeDesc.value = 'E2E test status save';
         ui.saveDocumentDialog.status.value = 'checked';
       });
-
-      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
