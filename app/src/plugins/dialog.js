@@ -11,6 +11,15 @@ import { logger } from '../app.js'
  * @import { SlInput } from '../ui.js'
  */
 
+/**
+ * @typedef {Object} dialogApi 
+ * @property {(message:string) => void} info
+ * @property {(message:string) => void} error
+ * @property {(message:string) => void} success
+ * @property {(message:string) => Promise<boolean>} confirm
+ * @property {(message:string, title:string) => Promise<string>} prompt
+ */
+
 // Plugin API
 const api = {
   info,
