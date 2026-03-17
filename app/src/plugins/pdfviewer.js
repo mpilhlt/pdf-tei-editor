@@ -8,10 +8,12 @@
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
-import { app, logger, services, xmlEditor, hasStateChanged } from '../app.js'
+import { app, logger, services, xmlEditor, hasStateChanged, client, fileselection } from '../app.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { SessionStorage } from '../modules/session-storage.js'
+import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { encodeFilename, decodeFilename } from '../modules/utils.js'
 
 // Session storage for persisting viewer state per PDF
 const storage = new SessionStorage('pdfviewer')
@@ -26,8 +28,8 @@ let isRestoringState = false
 /**
  * PDF viewer headerbar navigation properties
  * @typedef {object} pdfViewerHeaderbarPart
- * @property {HTMLElement} titleWidget - The document title widget
- * @property {HTMLElement} filenameWidget - The widget for displaying the filename
+ * @property {StatusText} titleWidget - The document title widget
+ * @property {StatusText} filenameWidget - The widget for displaying the filename (doc_id)
  */
 
 /**
@@ -70,6 +72,9 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 pdfViewer.hide()
 
 // Note: currentFile state tracking now handled via state.previousState instead of local variable
+/** @type {import('../state.js').ApplicationState|null} */
+let currentState = null;
+
 /** @type {StatusText} */
 let titleWidget;
 
@@ -112,6 +117,25 @@ async function install(state) {
     name: 'titleWidget'
   })
   titleWidget.classList.add('title-widget')
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    titleWidget.clickable = true
+    titleWidget.dblclickable = true
+    titleWidget.tooltip = 'Click to copy, doubleclick to edit'
+    titleWidget.addEventListener('widget-click', () => {
+      const title = titleWidget.text
+      if (title) {
+        navigator.clipboard.writeText(title).then(() => {
+          notify(`Document title copied to clipboard`, 'success', 'clipboard-check')
+        }).catch(err => {
+          logger.error('Failed to copy to clipboard: ' + String(err))
+          notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
+        })
+      }
+    })
+    titleWidget.addEventListener('widget-dblclick', () => editTitle())
+  }
+
   headerBar.add(titleWidget, 'left', 1)
 
   filenameWidget = PanelUtils.createText({
@@ -120,21 +144,22 @@ async function install(state) {
     name: 'filenameWidget'
   })
 
-  // Make clickable to copy doc_id to clipboard if clipboard API is available
   if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     filenameWidget.clickable = true
-    filenameWidget.tooltip = 'Click to copy document id'
+    filenameWidget.dblclickable = true
+    filenameWidget.tooltip = 'Click to copy, doubleclick to edit'
     filenameWidget.addEventListener('widget-click', () => {
       const docId = filenameWidget.text
       if (docId) {
         navigator.clipboard.writeText(docId).then(() => {
           notify(`Document id '${docId}' copied to clipboard`, 'success', 'clipboard-check')
         }).catch(err => {
-          console.error('Failed to copy to clipboard:', err)
+          logger.error('Failed to copy to clipboard: ' + String(err))
           notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
         })
       }
     })
+    filenameWidget.addEventListener('widget-dblclick', () => editDocId())
   }
 
   headerBar.add(filenameWidget, 'right', 1)
@@ -355,6 +380,7 @@ async function install(state) {
  * @returns {Promise<void>}
  */
 async function update(state) {
+  currentState = state
   if (hasStateChanged(state, 'pdf')) {
     // Reset pages loaded flag for new PDF
     pdfViewer._pagesLoaded = false
@@ -378,15 +404,81 @@ async function update(state) {
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
-      titleWidget.tooltip = title || 'PDF Document';
     } catch (error) {
       titleWidget.text = 'PDF Document';
-      titleWidget.tooltip = 'PDF Document';
     }
   } else if (titleWidget) {
     titleWidget.text = '';
-    titleWidget.tooltip = '';
     filenameWidget.text = '';
+  }
+}
+
+/**
+ * Prompt the reviewer to edit the document title and save it via the metadata API.
+ * @returns {Promise<void>}
+ */
+// <sl-icon name="clipboard-check"></sl-icon>
+// <sl-icon name="exclamation-triangle"></sl-icon>
+// <sl-icon name="exclamation-octagon"></sl-icon>
+// <sl-icon name="check-circle"></sl-icon>
+// <sl-icon name="info-circle"></sl-icon>
+async function editTitle() {
+  if (!currentState?.pdf) return
+  if (!userHasRole(currentState.user, ['admin', 'reviewer'])) {
+    notify('You are not allowed to edit the document title', 'warning', 'exclamation-triangle')
+    return
+  }
+  const currentTitle = titleWidget.text
+  const newTitle = prompt('Edit document label:', currentTitle)
+  if (newTitle === null || newTitle.trim() === currentTitle) return
+  try {
+    await client.apiClient.filesPatchMetadata(currentState.pdf, { label: newTitle.trim() })
+    notify('Document title updated', 'success', 'check-circle')
+    await fileselection.reload({ refresh: true })
+  } catch (error) {
+    logger.error('Failed to update title: ' + String(error))
+    notify('Failed to update title: ' + String(error), 'danger', 'exclamation-octagon')
+  }
+}
+
+/**
+ * Prompt the reviewer to edit the document ID and save it via the doc-id API.
+ * Requires a gold TEI artifact to be loaded (state.xml).
+ * @returns {Promise<void>}
+ */
+async function editDocId() {
+  if (!currentState?.pdf) return
+  if (!userHasRole(currentState.user, ['admin', 'reviewer'])) {
+    notify('You are not allowed to edit the document ID', 'warning', 'exclamation-triangle')
+    return
+  }
+  if (!currentState.xml || !isGoldFile(currentState.xml)) {
+    notify('Please load a gold TEI artifact to edit the document ID', 'warning', 'info-circle')
+    return
+  }
+  const currentDocId = filenameWidget.text
+  const newDocId = prompt('Edit document ID:', currentDocId)
+  if (newDocId === null || newDocId.trim() === currentDocId) return
+
+  let finalDocId = newDocId.trim()
+  const decoded = decodeFilename(finalDocId)
+  const encoded = encodeFilename(decoded)
+  if (encoded !== finalDocId) {
+    const useEncoded = confirm(
+      `The document ID contains characters that need encoding.\n\nEntered: ${finalDocId}\nEncoded: ${encoded}\n\nUse the encoded version?`
+    )
+    if (!useEncoded) return
+    finalDocId = encoded
+  }
+
+  try {
+    await client.apiClient.filesDocId(currentState.xml, { doc_id: finalDocId })
+    notify(`Document ID updated to '${finalDocId}'`, 'success', 'check-circle')
+    await fileselection.reload({ refresh: true })
+    await services.load({ xml: currentState.xml })
+  } catch (error) {
+    logger.error('Failed to update doc_id: ' + String(error))
+    notify('Failed to update document ID: ' + String(error), 'danger', 'exclamation-octagon')
   }
 }
 

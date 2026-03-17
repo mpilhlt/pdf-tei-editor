@@ -22,7 +22,7 @@ import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
-import { encodeFilename, decodeFilename } from '../modules/utils.js'
+
 
 /**
  * plugin API
@@ -32,8 +32,7 @@ const api = {
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll,
-  addTeiHeaderInfo,
-  editFileMetadata
+  addTeiHeaderInfo
 }
 
 /**
@@ -66,7 +65,6 @@ let currentState = null
  * @property {SlButton} deleteCurrentVersion - Delete current version button
  * @property {SlButton} deleteAllVersions - Delete all versions button
  * @property {SlButton} deleteAll - Delete all files button
- * @property {SlButton} editMetadata - Edit file metadata button
  */
 
 /**
@@ -96,20 +94,9 @@ let currentState = null
  * @property {SlButton} cancel - Cancel button
  */
 
-/**
- * Dialog for editing file metadata
- * @typedef {object} editMetadataDialogPart
- * @property {SlInput} docTitle - Document title input (readonly)
- * @property {SlInput} docId - Document ID input (editable for gold files by reviewers)
- * @property {SlInput} source - Source input
- * @property {SlButton} submit - Submit button
- * @property {SlButton} cancel - Cancel button
- */
-
 // Register templates
 await registerTemplate('document-action-buttons', 'document-action-buttons.html');
 await registerTemplate('save-document-dialog', 'save-document-dialog.html');
-await registerTemplate('edit-metadata-dialog', 'edit-metadata-dialog.html');
 
 //
 // Implementation
@@ -124,7 +111,6 @@ async function install(state) {
   // Create UI elements
   const documentActionButtons = createFromTemplate('document-action-buttons');
   createSingleFromTemplate('save-document-dialog', document.body);
-  createSingleFromTemplate('edit-metadata-dialog', document.body);
 
   // Add document action buttons to toolbar with medium priority
   documentActionButtons.forEach(buttonGroup => {
@@ -135,9 +121,6 @@ async function install(state) {
   updateUi() // Update UI so navigation objects are available
 
   const da = ui.toolbar.documentActions
-
-  // disable metadata button for the moment 
-  da.editMetadata.style.display = "none"
 
   // save a revision (or fork to new copy)
   da.saveRevision.addEventListener('click', () => {
@@ -154,11 +137,6 @@ async function install(state) {
   da.deleteAll.addEventListener('click', () => {
     if (currentState) deleteAll(currentState);
   })
-
-  // edit metadata - disabled
-  // da.editMetadata.addEventListener("click", () => {
-  //   if (currentState) editFileMetadata(currentState);
-  // })
 }
 
 /**
@@ -207,12 +185,6 @@ async function onStateUpdate(changedKeys, state) {
     da.saveRevision.disabled = true
   }
 
-  // Edit metadata - allow for annotators and reviewers when XML is loaded - disabled
-  // if (isAnnotator || isReviewer) {
-  //   da.editMetadata.disabled = !Boolean(state.xml) || state.editorReadOnly
-  // } else {
-  //   da.editMetadata.disabled = true
-  // }
 }
 
 /**
@@ -707,169 +679,3 @@ async function addTeiHeaderInfo(respStmt, _edition, revisionChange) {
   await xmlEditor.updateEditorFromXmlTree()
 }
 
-/**
- * Edit file metadata (docId from fileref, source from bibl)
- * @param {ApplicationState} state
- */
-async function editFileMetadata(state) {
-  if (!state.xml) {
-    dialog.error("No file loaded")
-    return
-  }
-
-  // @ts-ignore
-  const metadataDlg = ui.editMetadataDialog;
-
-  // Get current XML document to read TEI header
-  const xmlDoc = xmlEditor.getXmlTree()
-  if (!xmlDoc) {
-    dialog.error("No XML document loaded")
-    return
-  }
-
-  // Get file metadata to populate doc_id and determine if editable
-  const fileData = getFileDataById(state.xml)
-  const currentDocId = fileData?.file?.doc_id || ""
-  const isGold = isGoldFile(state.xml)
-  const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
-
-  // Extract current values from TEI header
-  const titleEl = xmlDoc.querySelector('teiHeader fileDesc titleStmt title')
-  const biblEl = xmlDoc.querySelector('teiHeader fileDesc sourceDesc bibl')
-
-  // Pre-fill form with current values
-  metadataDlg.docTitle.value = titleEl?.textContent || ""
-  metadataDlg.docId.value = currentDocId
-  metadataDlg.source.value = biblEl?.textContent || ""
-
-  // Enable doc_id editing only for gold files by reviewers
-  metadataDlg.docId.disabled = !(isGold && isReviewer)
-
-  let updatedDocId = ""
-  let updatedSource = ""
-  let validationPassed = false
-
-  while (!validationPassed) {
-    try {
-      // Wait for dialog to be fully visible (attach listener before showing)
-      const dialogShown = new Promise(resolve => metadataDlg.addEventListener('sl-after-show', resolve, { once: true }))
-      metadataDlg.show()
-      await dialogShown
-      await new Promise((resolve, reject) => {
-        metadataDlg.submit.addEventListener('click', resolve, { once: true })
-        metadataDlg.cancel.addEventListener('click', reject, { once: true })
-        // Only reject on dialog hide, not on nested component events
-        const handleHide = (e) => {
-          if (e.target === metadataDlg) {
-            reject()
-          }
-        }
-        metadataDlg.addEventListener('sl-hide', handleHide, { once: true })
-      })
-    } catch (e) {
-      console.warn("User cancelled")
-      return
-    } finally {
-      metadataDlg.hide()
-    }
-
-    // Gather updated values
-    updatedDocId = metadataDlg.docId.value.trim()
-    updatedSource = metadataDlg.source.value.trim()
-
-    // Validate doc_id if it changed and user has permission to edit it
-    if (updatedDocId !== currentDocId && isGold && isReviewer) {
-      // Check if the input needs encoding by doing encode(decode(input))
-      const decoded = decodeFilename(updatedDocId)
-      const encoded = encodeFilename(decoded)
-
-      if (encoded !== updatedDocId) {
-        const useEncoded = confirm(
-          `The document ID contains characters that need to be encoded for filesystem compatibility.\n\n` +
-          `Entered: ${updatedDocId}\n` +
-          `Encoded: ${encoded}\n\n` +
-          `Use the encoded version?`
-        )
-
-        if (useEncoded) {
-          metadataDlg.docId.value = encoded
-          updatedDocId = encoded
-          continue
-        } else {
-          continue
-        }
-      }
-    }
-
-    validationPassed = true
-  }
-
-  ui.toolbar.documentActions.editMetadata.disabled = true
-  try {
-    // Update source in TEI header (sourceDesc/bibl)
-    if (updatedSource !== (biblEl?.textContent || "")) {
-      if (biblEl) {
-        biblEl.textContent = updatedSource
-      } else {
-        // Create the structure if it doesn't exist
-        let sourceDesc = xmlDoc.querySelector('teiHeader fileDesc sourceDesc')
-        if (!sourceDesc) {
-          const fileDesc = xmlDoc.querySelector('teiHeader fileDesc')
-          if (fileDesc) {
-            sourceDesc = xmlDoc.createElement('sourceDesc')
-            fileDesc.appendChild(sourceDesc)
-          }
-        }
-        if (sourceDesc) {
-          const newBibl = xmlDoc.createElement('bibl')
-          newBibl.textContent = updatedSource
-          sourceDesc.appendChild(newBibl)
-        }
-      }
-    }
-
-    prettyPrintXmlDom(xmlDoc, 'teiHeader')
-    await xmlEditor.updateEditorFromXmlTree()
-
-    // Mark editor as clean to prevent autosave from triggering
-    xmlEditor.markAsClean()
-
-    // Save the updated XML
-    const filedata = FiledataPlugin.getInstance()
-    await filedata.saveXml(state.xml)
-
-    // Update doc_id if changed and user has permission
-    let docIdUpdated = false
-    if (updatedDocId !== currentDocId && isGold && isReviewer) {
-      try {
-        await client.apiClient.filesDocId(state.xml, { doc_id: updatedDocId })
-        docIdUpdated = true
-        notify("File metadata and document ID updated successfully")
-      } catch (docIdError) {
-        console.error("Failed to update document ID:", docIdError)
-        notify("File metadata updated, but failed to update document ID", "warning")
-      }
-    } else {
-      notify("File metadata updated successfully")
-    }
-
-    // Reload file data to reflect changes
-    await fileselection.reload({refresh: true})
-
-    // If doc_id was updated, reload the document to show the updated fileref in the editor
-    if (docIdUpdated) {
-      await services.load({xml: state.xml})
-    }
-
-    app.invokePluginEndpoint(ep.sync.syncFiles, state)
-      .then(summary => summary && console.debug(summary))
-      .catch(e => console.error(e))
-
-    xmlEditor.markAsClean()
-  } catch (error) {
-    console.error(error)
-    notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon');
-  } finally {
-    ui.toolbar.documentActions.editMetadata.disabled = false
-  }
-}
