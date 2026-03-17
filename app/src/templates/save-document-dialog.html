@@ -1,0 +1,35 @@
+<sl-dialog name="saveDocumentDialog" label="Save Revision">
+  <div class="dialog-column">
+    <p>This records your changes in the document's revision history.</p>
+
+    <sl-input name="changeDesc" label="Change description" size="small"
+      help-text="Briefly describe what you changed or what the state of the annotation is. This note is stored in the document's revision history."></sl-input>
+    <sl-select name="status" label="Status" size="small" value="draft"
+      help-text="The current annotation status of this document in the project's review lifecycle.">
+    </sl-select>
+
+    <sl-divider style="margin: 0;"></sl-divider>
+
+    <div name="options" class="dialog-checkbox-section">
+      <div name="saveToNewCopySection">
+        <sl-checkbox name="saveToNewCopy">
+          Save to a new personal version
+        </sl-checkbox>
+        <p class="help-text">Creates a personal version copy and records the revision there instead of in the original. Required when you do not own this document. Otherwise, select ony if you want to create an separate version.</p>
+        <sl-input name="copyLabel" label="Label" size="small" style="margin-top: 6px;"
+          help-text="A short label that identifies this version in the document list (e.g. 'v1 janedoe')."></sl-input>
+      </div>
+
+      <sl-divider style="margin: 0;"></sl-divider>
+
+      <div name="saveAsGoldSection">
+        <sl-checkbox name="saveAsGold">
+          Save as gold version
+        </sl-checkbox>
+        <p class="help-text">Marks this document as the Gold Standard: the reviewed, authoritative version. Only available to reviewers.</p>
+      </div>
+    </div>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Save Revision</sl-button>
+</sl-dialog>

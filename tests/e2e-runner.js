@@ -48,7 +48,7 @@ const program = createTestRunnerCommand({
     new Option('--debug-on-failure', 'capture extended debug artifacts on test failure'),
     new Option('--workers <number>', 'number of parallel workers')
       .default('1'),
-    new Option('--fail-fast', 'abort on first test failure'),
+    new Option('--bail', 'abort on first test failure'),
   ],
   examples: [
     '# Fast local iteration',
@@ -107,7 +107,7 @@ const testFiles = program.args;
  * @property {number} workers - Number of parallel workers
  * @property {string|null} grep - Test filter pattern (matches test names)
  * @property {string|null} grepInvert - Test exclude pattern (matches test names)
- * @property {boolean} failFast - Abort on first failure
+ * @property {boolean} bail - Abort on first failure
  * @property {string[]} testFiles - Specific test files to run
  */
 
@@ -326,7 +326,7 @@ class PlaywrightRunner {
     if (options.grepInvert) {
       cmd.push('--grep-invert', options.grepInvert);
     }
-    if (options.failFast || options.debugOnFailure) {
+    if (options.bail || options.debugOnFailure) {
       // Debug-on-failure requires stopping on first failure
       cmd.push('--max-failures=1');
     }
@@ -416,7 +416,7 @@ class PlaywrightRunner {
       workers: parseInt(cliOptions.workers, 10),
       grep: cliOptions.grep || null,
       grepInvert: cliOptions.grepInvert || null,
-      failFast: cliOptions.failFast,
+      bail: cliOptions.bail,
       testFiles: testFiles || [],
     };
 

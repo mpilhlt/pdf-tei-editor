@@ -113,6 +113,7 @@ class FileUpdate(BaseModel):
     are set automatically.
     """
     id: Optional[str] = None  # Allow updating content hash when file content changes
+    doc_id: Optional[str] = None
     filename: Optional[str] = None
     file_size: Optional[int] = None
     label: Optional[str] = None

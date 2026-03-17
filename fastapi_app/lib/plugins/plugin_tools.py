@@ -359,16 +359,19 @@ def load_plugin_html(
     inject_sandbox: bool = True,
 ) -> str:
     """
-    Load an HTML template from a plugin's ``html/`` directory.
+    Load an HTML template from a plugin's ``static/`` directory (preferred) or
+    the legacy ``html/`` directory.
 
-    The template is a plain ``.html`` file (no special placeholder syntax
-    needed).  If *inject_sandbox* is True, the sandbox client script is
-    injected into the ``<head>`` via :func:`wrap_html_with_sandbox_client`.
+    Looks for the template in ``static/`` first; falls back to ``html/`` for
+    backwards compatibility (deprecated, prefer ``static/``).
+
+    If *inject_sandbox* is True, the sandbox client script is injected into
+    the ``<head>`` via :func:`wrap_html_with_sandbox_client`.
 
     Args:
         caller_file: ``__file__`` of the calling module – used to locate the
-            plugin's ``html/`` directory (sibling of the calling file).
-        template_name: File name inside ``html/`` (e.g. ``"view.html"``).
+            plugin's ``static/`` (or ``html/``) directory.
+        template_name: File name inside ``static/`` (e.g. ``"view.html"``).
         inject_sandbox: Inject the sandbox client script (default True).
 
     Returns:
@@ -383,12 +386,28 @@ def load_plugin_html(
             html = load_plugin_html(__file__, "view.html")
             return HTMLResponse(content=html)
     """
+    import warnings
+
     plugin_dir = Path(caller_file).resolve().parent
-    template_path = plugin_dir / "html" / template_name
+
+    # Preferred: static/
+    template_path = plugin_dir / "static" / template_name
     if not template_path.exists():
-        raise FileNotFoundError(
-            f"Plugin HTML template not found: {template_path}"
-        )
+        # Fallback: html/ (deprecated)
+        legacy_path = plugin_dir / "html" / template_name
+        if legacy_path.exists():
+            warnings.warn(
+                f"Plugin HTML template found in deprecated 'html/' directory: {legacy_path}. "
+                "Move it to 'static/' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            template_path = legacy_path
+        else:
+            raise FileNotFoundError(
+                f"Plugin HTML template not found in 'static/' or 'html/': {template_name}"
+            )
+
     html = template_path.read_text(encoding="utf-8")
     if inject_sandbox:
         html = wrap_html_with_sandbox_client(html)

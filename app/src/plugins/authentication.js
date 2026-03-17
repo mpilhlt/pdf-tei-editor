@@ -15,6 +15,7 @@ import { logger, client, config } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 import { FiledataPlugin } from '../plugins.js';
 import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
+import { api as sseApi } from './sse.js';
 
 // 
 // UI Type Definitions
@@ -93,6 +94,16 @@ class AuthenticationPlugin extends Plugin {
   async start() {
     // Initialize session activity tracker
     await this._initializeActivityTracker();
+
+    sseApi.addEventListener('forceLogout', async (event) => {
+      let message = 'Your session has been ended.';
+      try {
+        const data = JSON.parse(event.data);
+        if (data.message) message = data.message;
+      } catch (_e) { /* ignore */ }
+      alert(message);
+      await this.logout();
+    });
   }
 
   /**

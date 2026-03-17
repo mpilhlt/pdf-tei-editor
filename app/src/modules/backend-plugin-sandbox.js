@@ -13,6 +13,7 @@ import { findCorrespondingSource } from '../modules/file-data-utils.js';
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from './plugin-context.js'
  * @import { SlDialog } from '../ui.js'
+ * @import { dialogApi } from '../plugins/dialog.js'
  */
 
 /**
@@ -24,11 +25,11 @@ import { findCorrespondingSource } from '../modules/file-data-utils.js';
 export class PluginSandbox {
   /**
    * @param {PluginContext} context - Plugin context
-   * @param {SlDialog} dialog - Result dialog element
+   * @param {SlDialog} resultDialog - Result dialog element
    */
-  constructor(context, dialog) {
+  constructor(context, resultDialog) {
     this.context = context;
-    this.dialog = dialog;
+    this.resultDialog = resultDialog;
 
     /** @type {Map<string, {eventType: string, listener: Function, source: WindowProxy|null}>} */
     this._sseSubscriptions = new Map();
@@ -138,7 +139,7 @@ export class PluginSandbox {
    * Close the result dialog
    */
   closeDialog() {
-    this.dialog.hide();
+    this.resultDialog.hide();
   }
 
   /**
@@ -146,7 +147,7 @@ export class PluginSandbox {
    * @param {string} url - Relative or absolute URL to navigate to
    */
   navigateIframe(url) {
-    const iframe = this.dialog.content.querySelector('iframe');
+    const iframe = this.resultDialog.content.querySelector('iframe');
     if (!iframe) {
       throw new Error('No iframe found in dialog');
     }
@@ -253,6 +254,37 @@ export class PluginSandbox {
       sseApi.removeEventListener(sub.eventType, sub.listener);
       this._sseSubscriptions.delete(subscriptionId);
     }
+  }
+
+  /**
+   * Call a plugin API endpoint with authentication
+   * @param {string} endpoint - Plugin endpoint path (e.g., '/api/plugins/my-plugin/action')
+   * @param {string} method - HTTP method (GET, POST, etc.)
+   * @param {Object|null} params - Query params for GET or request body for POST/PUT
+   * @returns {Promise<Object>} Parsed JSON response
+   */
+  async callPluginApi(endpoint, method = 'GET', params = null) {
+    const state = this.context.getCurrentState();
+    const url = new URL(endpoint, window.location.origin);
+    /** @type {RequestInit} */
+    const options = {
+      method,
+      headers: { 'X-Session-ID': state?.sessionId || '' }
+    };
+    if (params) {
+      if (method === 'GET') {
+        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+      } else {
+        options.headers = { ...options.headers, 'Content-Type': 'application/json' };
+        options.body = JSON.stringify(params);
+      }
+    }
+    const response = await fetch(url.toString(), options);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(err.detail || response.statusText);
+    }
+    return response.json();
   }
 
   /**

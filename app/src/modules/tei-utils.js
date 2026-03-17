@@ -91,6 +91,7 @@ export function addRespStmt(xmlDoc, respStmt) {
  * @property {string} persId - The ID of the person making the revision.
  * @property {string} desc - A description of the revision.
  * @property {string} [fullName] - The full name of the person making the revision.
+ * @property {string} [label] - Optional label for this version, stored as <note type="label"> inside <change>.
  */
 
 /**
@@ -102,16 +103,16 @@ export function addRespStmt(xmlDoc, respStmt) {
  * @returns {void}
  */
 export function addRevisionChange(xmlDoc, revisionChange) {
-  const { status = "draft", persId, desc, fullName } = revisionChange
+  const { status = "draft", persId, desc, fullName, label } = revisionChange
   if (!persId || !desc) {
     throw new Error("persId and desc data required")
   }
-  
+
   // Ensure respStmt exists for the user
   if (fullName) {
     ensureRespStmtForUser(xmlDoc, persId, fullName);
   }
-  
+
   const currentDateString = new Date().toISOString();
   let revisionDescElements = xmlDoc.getElementsByTagName('revisionDesc');
   let revisionDescElement;
@@ -132,6 +133,14 @@ export function addRevisionChange(xmlDoc, revisionChange) {
     changeElem.setAttribute('who', '#' + persId);
   }
 
+  // Optional label stored as <note type="label"> — comes before <desc>
+  if (label && label.trim()) {
+    const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
+    noteElem.setAttribute('type', 'label');
+    noteElem.textContent = label.trim();
+    changeElem.appendChild(noteElem);
+  }
+
   if (desc) {
     const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
     const textNode = xmlDoc.createTextNode(desc);
@@ -143,86 +152,69 @@ export function addRevisionChange(xmlDoc, revisionChange) {
 }
 
 /**
+ * Returns the label from the last revisionDesc/change/note[@type="label"], or null if none.
+ * Falls back to editionStmt/edition/title for backward compatibility.
+ * @param {Document} xmlDoc
+ * @returns {string|null}
+ */
+export function getRevisionLabel(xmlDoc) {
+  const notes = xmlDoc.querySelectorAll('revisionDesc change note[type="label"]')
+  if (notes.length) {
+    return notes[notes.length - 1].textContent.trim() || null
+  }
+  // Backward compat: read from editionStmt/edition/title
+  const titleEl = xmlDoc.querySelector('teiHeader fileDesc editionStmt edition title')
+  return titleEl?.textContent?.trim() || null
+}
+
+/**
  * Represents an 'edition' statement within a 'editionStmt' element.
  * @typedef {object} Edition
- * @property {string} title - The title of the edition.
+ * @property {string} [title] - The title of the edition (optional).
  * @property {string} [note] - An optional note about the edition.
  */
 
 /**
- * Add or replace a <edition> node to the /TEI/teiHeader/fileDesc/editionStmt section of an XML DOM document.
+ * @deprecated editionStmt is no longer used for document identity or version labelling.
+ * Document identity is stored as {@code xml:id} on {@code fileDesc}.
+ * Version labels are stored in {@code revisionDesc/change/note[@type="label"]}.
+ * This function is a no-op and will be removed in a future version.
  *
- * @param {Document} xmlDoc - The XML DOM Document object.
- * @param {Edition} edition - Object containing data for the 'edition' element
- * @throws {Error} If the TEI header or the fileDesc element is not found in the document.
+ * @param {Document} _xmlDoc - The XML DOM Document object.
+ * @param {Edition} _edition - Object containing data for the 'edition' element
  * @returns {void}
  */
-export function addEdition(xmlDoc, edition) {
-  const { title, note } = edition
-  if (!title || title.trim() === '') {
-    throw new Error("Missing 'title'")
+export function addEdition(_xmlDoc, _edition) {
+  // no-op: editionStmt is deprecated
+}
+
+/**
+ * Make an encode_filename()-encoded file_id valid as an xml:id attribute value.
+ * encode_filename() now produces _xXX_ patterns which are already NCName-safe,
+ * so only the leading-digit case needs handling.
+ * BC: also converts legacy $XX$ patterns to _xXX_ for old-format file_ids.
+ * @param {string} fileId - File ID in encode_filename() format
+ * @returns {string} NCName-safe xml:id value
+ */
+export function encodeFileIdForXmlId(fileId) {
+  // BC: translate any remaining old $XX$ patterns to _xXX_
+  let result = fileId.replace(/\$([0-9A-F]{2})\$/g, '_x$1_')
+  if (result && /^\d/.test(result)) result = '_' + result
+  return result
+}
+
+/**
+ * Decode an xml:id value back to encode_filename() format.
+ * Since encode_filename() now uses _xXX_ patterns (NCName-safe), xml:id values
+ * only differ by the optional leading '_' prepended for digit-starting IDs.
+ * @param {string} xmlId - xml:id value produced by encodeFileIdForXmlId
+ * @returns {string} File ID in encode_filename() format
+ */
+export function decodeXmlIdToFileId(xmlId) {
+  if (xmlId && xmlId.length > 1 && xmlId[0] === '_' && /\d/.test(xmlId[1])) {
+    xmlId = xmlId.slice(1)
   }
-  const date = new Date()
-  const currentDateString = date.toISOString();
-  const teiHeader = getTeiHeader(xmlDoc);
-  const fileDescs = teiHeader.getElementsByTagName('fileDesc');
-  const titleStmts = teiHeader.getElementsByTagName('titleStmt');
-  if (!fileDescs.length || !titleStmts.length) {
-    throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
-  }
-
-  const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
-  const fileDesc = fileDescs[0]
-  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
-  const titleStmt = titleStmts[0]
-
-  // Preserve fileref from existing editionStmt if present
-  let existingFileref = null;
-  if (editionStmts.length > 0) {
-    const lastEditionStmt = editionStmts[editionStmts.length - 1];
-    const editions = lastEditionStmt.getElementsByTagName('edition');
-    if (editions.length > 0) {
-      const idnos = editions[0].querySelectorAll('idno[type="fileref"]');
-      if (idnos.length > 0) {
-        existingFileref = idnos[0].cloneNode(true);
-      }
-    }
-    fileDesc.replaceChild(editionStmt, lastEditionStmt);
-  } else {
-    if (titleStmt.nextSibling) {
-      fileDesc.insertBefore(editionStmt, titleStmt.nextSibling);
-    } else {
-      fileDesc.appendChild(editionStmt)
-    }
-  }
-
-  // <edition>
-  const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
-
-  // <date>
-  const dateElem = xmlDoc.createElementNS(teiNamespaceURI, 'date'); // Fixed: creating <date> element
-  dateElem.setAttribute('when', currentDateString); // Keeping ISO string as per original code.
-  dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
-  editionElem.appendChild(dateElem); // Appending <date> to <edition>
-
-  // <title>
-  const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
-  titleElem.textContent = title;
-  editionElem.appendChild(titleElem);
-
-  // Preserve fileref if it existed
-  if (existingFileref) {
-    editionElem.appendChild(existingFileref);
-  }
-
-  // <note>
-  if (note && note.trim() !== '') {
-    const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
-    noteElem.textContent = note;
-    editionElem.appendChild(noteElem);
-  }
-
-  editionStmt.appendChild(editionElem);
+  return xmlId
 }
 
 /**
@@ -633,7 +625,7 @@ export function getDocumentMetadata(xmlDoc) {
     title: "//tei:teiHeader//tei:title",
     date: '//tei:teiHeader//tei:date[@type="publication"]',
     doi: '//tei:teiHeader//tei:idno[@type="DOI"]',
-    fileref: '//tei:teiHeader//tei:idno[@type="fileref"]',
+    fileref: '//tei:teiHeader/tei:fileDesc/@xml:id',
     variant_id: '//tei:application[@type="extractor"]//tei:label[@type="variant-id"]',
     last_update: '//tei:revisionDesc/tei:change[@when][last()]/@when',
     last_updated_by: '//tei:revisionDesc/tei:change[@who][last()]/@who',
@@ -677,6 +669,28 @@ export function getDocumentMetadata(xmlDoc) {
     metadata[key] = value;
   }
   
+  // Post-process fileref: decode xml:id value; fall back to deprecated idno[@type="fileref"]
+  if (metadata.fileref) {
+    metadata.fileref = decodeXmlIdToFileId(metadata.fileref)
+  } else {
+    // Deprecated fallback: editionStmt/edition/idno[@type="fileref"]
+    try {
+      const result = xmlDoc.evaluate(
+        '//tei:teiHeader//tei:idno[@type="fileref"]',
+        xmlDoc,
+        (prefix) => prefix === 'tei' ? 'http://www.tei-c.org/ns/1.0' : null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      )
+      const node = result.singleNodeValue
+      if (node?.textContent?.trim()) {
+        metadata.fileref = node.textContent.trim()
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
   // Post-process extractor ID to match frontend extractor list format
   if (metadata.extractor_id) {
     // Convert "GROBID" to lowercase to match extractor IDs

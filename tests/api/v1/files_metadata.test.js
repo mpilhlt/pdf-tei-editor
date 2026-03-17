@@ -7,7 +7,7 @@
  * - Update file label
  * - Update file variant
  * - Update multiple metadata fields
- * - Access control enforcement
+ * - Access control enforcement (annotator cannot update gold file metadata)
  * - Error handling (file not found, no fields provided)
  * - Set gold standard status
  * - Gold standard role-based access control
@@ -612,5 +612,37 @@ describe('Files Metadata API E2E Tests', () => {
     }
 
     logger.success('All TEI files have updated fileref values');
+  });
+
+  // Test 19: Access control - annotator cannot update metadata of a gold file
+  test('PATCH /api/v1/files/{stable_id}/metadata should deny annotator editing gold file metadata', async () => {
+    // versionStableId was promoted to gold in Test 9
+    const annotatorSession = await login('annotator', 'annotator', BASE_URL);
+    assert.ok(annotatorSession?.sessionId, 'Should have annotator session');
+
+    try {
+      await authenticatedApiCall(
+        annotatorSession.sessionId,
+        `/files/${testState.versionStableId}/metadata`,
+        'PATCH',
+        { label: 'Unauthorized Label Change' },
+        BASE_URL
+      );
+      assert.fail('Should have thrown 403 error');
+    } catch (error) {
+      assert.match(error.message, /403/i, 'Should throw 403 error');
+      logger.success('Annotator correctly denied from editing gold file metadata');
+    }
+
+    // Verify the label was NOT changed
+    const metadata = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/${testState.versionStableId}/metadata`,
+      'GET',
+      null,
+      BASE_URL
+    );
+    assert.notStrictEqual(metadata.label, 'Unauthorized Label Change', 'Label should not have been changed');
+    logger.success('Gold file label unchanged after unauthorized update attempt');
   });
 });

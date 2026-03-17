@@ -1,13 +1,13 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.39.0",
+    "version": "0.40.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
         "prebuild": "npm run generate-client",
         "build": "node bin/build.js",
         "prepare": "husky",
-        "test": "npm run test:all",
+        "test": "npm run test:all:bail",
         "postinstall": "npm run build",
         "release:patch": "node bin/release.js patch",
         "release:minor": "node bin/release.js minor",
@@ -25,6 +25,7 @@
         "dev:reset": "uv run python bin/reset-application.py",
         "dev:clear-caches": "uv run python bin/manage.py clear-caches",
         "test:all": "node tests/smart-test-runner.js --all",
+        "test:all:bail": "node tests/smart-test-runner.js --all --bail",
         "test:changed": "node tests/smart-test-runner.js",
         "test:tap": "node tests/smart-test-runner.js --all --tap",
         "test:unit:js": "node tests/unit-test-runner.js",
