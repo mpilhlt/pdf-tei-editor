@@ -20,14 +20,27 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from fastapi_app.plugins.test_plugin.extractor import MockExtractor
 
 
+XML_NS = "http://www.w3.org/XML/1998/namespace"
+
+
+def _get_file_desc_xml_id(root: etree._Element) -> str | None:
+    """Helper: return decoded fileref from fileDesc/@xml:id."""
+    from fastapi_app.lib.utils.doi_utils import decode_from_xml_id
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    file_desc = root.find('.//tei:fileDesc', ns)
+    if file_desc is None:
+        return None
+    xml_id = file_desc.get(f"{{{XML_NS}}}id")
+    return decode_from_xml_id(xml_id) if xml_id else None
+
+
 class TestExtractionFileref(unittest.IsolatedAsyncioTestCase):
-    """Test that extractors use doc_id from options for fileref."""
+    """Test that extractors write doc_id to fileDesc/@xml:id."""
 
     async def test_mock_extractor_uses_doc_id_from_options(self):
-        """Test that MockExtractor uses doc_id from options instead of deriving from PDF path."""
+        """Test that MockExtractor uses doc_id from options for fileDesc/@xml:id."""
         extractor = MockExtractor()
 
-        # Simulate extraction with hash-based storage path but doc_id in options
         pdf_path = "/path/to/storage/a1b2c3d4e5f6.pdf"
         doc_id = "my-document-2024"
 
@@ -36,14 +49,12 @@ class TestExtractionFileref(unittest.IsolatedAsyncioTestCase):
             options={'doc_id': doc_id}
         )
 
-        # Parse the result to check fileref
         root = etree.fromstring(result.encode('utf-8'))
-        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-        fileref_elem = root.find('.//tei:idno[@type="fileref"]', ns)
+        fileref = _get_file_desc_xml_id(root)
 
-        self.assertIsNotNone(fileref_elem, "fileref element should exist")
-        self.assertEqual(fileref_elem.text, doc_id,
-                        f"fileref should be '{doc_id}', not derived from storage path")
+        self.assertIsNotNone(fileref, "fileDesc/@xml:id should be set")
+        self.assertEqual(fileref, doc_id,
+                         f"fileref should be '{doc_id}', not derived from storage path")
 
     async def test_mock_extractor_fallback_to_pdf_path(self):
         """Test that MockExtractor falls back to PDF path when no doc_id in options."""
@@ -56,14 +67,12 @@ class TestExtractionFileref(unittest.IsolatedAsyncioTestCase):
             options={}
         )
 
-        # Parse the result to check fileref
         root = etree.fromstring(result.encode('utf-8'))
-        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-        fileref_elem = root.find('.//tei:idno[@type="fileref"]', ns)
+        fileref = _get_file_desc_xml_id(root)
 
-        self.assertIsNotNone(fileref_elem, "fileref element should exist")
-        self.assertEqual(fileref_elem.text, "my-document",
-                        "fileref should be derived from PDF filename when no doc_id provided")
+        self.assertIsNotNone(fileref, "fileDesc/@xml:id should be set")
+        self.assertEqual(fileref, "my-document",
+                         "fileref should be derived from PDF filename when no doc_id provided")
 
     async def test_mock_extractor_without_pdf_path(self):
         """Test that MockExtractor generates a fileref when no PDF path provided."""
@@ -74,14 +83,12 @@ class TestExtractionFileref(unittest.IsolatedAsyncioTestCase):
             options={}
         )
 
-        # Parse the result to check fileref
         root = etree.fromstring(result.encode('utf-8'))
-        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-        fileref_elem = root.find('.//tei:idno[@type="fileref"]', ns)
+        fileref = _get_file_desc_xml_id(root)
 
-        self.assertIsNotNone(fileref_elem, "fileref element should exist")
-        self.assertTrue(fileref_elem.text.startswith("mock-extracted-"),
-                       "fileref should be auto-generated when no PDF path")
+        self.assertIsNotNone(fileref, "fileDesc/@xml:id should be set")
+        self.assertTrue(fileref.startswith("mock-extracted-"),
+                        "fileref should be auto-generated when no PDF path")
 
 
 class TestExtractionRevisionDesc(unittest.IsolatedAsyncioTestCase):

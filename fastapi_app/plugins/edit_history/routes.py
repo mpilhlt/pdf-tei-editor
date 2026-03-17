@@ -171,7 +171,6 @@ async def export_csv(
     """
     from fastapi_app.config import get_settings
     from fastapi_app.lib.repository.file_repository import FileRepository
-    from fastapi_app.lib.utils.tei_utils import extract_tei_metadata
     from fastapi_app.lib.permissions.user_utils import user_has_collection_access
 
     # Extract session ID (header takes precedence)
@@ -279,19 +278,14 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
         List of revision entries (one per change element)
     """
     try:
-        from fastapi_app.lib.utils.tei_utils import extract_tei_metadata, get_annotator_name
+        from fastapi_app.lib.utils.tei_utils import get_artifact_label, get_annotator_name
 
         root = etree.fromstring(xml_content.encode("utf-8"))
         ns = {
             "tei": "http://www.tei-c.org/ns/1.0",
         }
 
-        # Get annotation label from edition title
-        tei_metadata = extract_tei_metadata(root)
-        # Use edition_title (annotation label) if available, fallback to title
-        doc_label = tei_metadata.get("edition_title") or tei_metadata.get(
-            "title", "Untitled"
-        )
+        doc_label = get_artifact_label(root) or "Untitled"
 
         # Get ALL change elements
         change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)

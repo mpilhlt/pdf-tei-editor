@@ -116,8 +116,24 @@ class TestLocalSyncPlugin(unittest.TestCase):
         self.assertTrue(any("article-002.tei.xml" in str(p) for p in docs.keys()))
         self.assertFalse(any("review-001.tei.xml" in str(p) for p in docs.keys()))
 
-    def test_extract_fileref(self):
-        """Test fileref extraction from TEI content using tei_utils."""
+    def test_extract_fileref_from_xml_id(self):
+        """Test fileref extraction from fileDesc/@xml:id (primary path)."""
+        tei_content = b"""<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+    <teiHeader>
+        <fileDesc xml:id="_10.5771__2699-1284-2024-3-149">
+            <titleStmt><title>Test</title></titleStmt>
+        </fileDesc>
+    </teiHeader>
+</TEI>"""
+
+        from fastapi_app.lib.utils.tei_utils import extract_fileref
+
+        fileref = extract_fileref(tei_content)
+        self.assertEqual(fileref, "10.5771__2699-1284-2024-3-149")
+
+    def test_extract_fileref_legacy_fallback(self):
+        """Test fileref extraction from deprecated editionStmt/idno[@type='fileref'] fallback."""
         tei_content = b"""<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
     <teiHeader>
