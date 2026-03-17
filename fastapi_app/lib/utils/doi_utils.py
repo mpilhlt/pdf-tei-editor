@@ -285,7 +285,8 @@ def is_filename_encoded(filename: str) -> bool:
 
     Detects encoding markers:
     - Double underscore (__) where original had forward slash
-    - Dollar-sign patterns ($XX$) for special characters
+    - _xXX_ patterns for special characters (current encoding)
+    - $XX$ patterns for special characters (legacy encoding, BC)
 
     Args:
         filename: Filename to check
@@ -296,14 +297,18 @@ def is_filename_encoded(filename: str) -> bool:
     Examples:
         >>> is_filename_encoded("10.1111__1467-6478.00040")
         True
-        >>> is_filename_encoded("10.1234__test$3A$file")
+        >>> is_filename_encoded("10.1234__test_x3A_file")
         True
         >>> is_filename_encoded("10.1111/1467-6478.00040")
         False
         >>> is_filename_encoded("simple-filename.txt")
         False
     """
-    # Check for $XX$ encoding pattern
+    # Check for _xXX_ encoding pattern (current)
+    if re.search(r'_x[0-9A-F]{2}_', filename):
+        return True
+
+    # Check for $XX$ encoding pattern (legacy BC)
     if re.search(r'\$[0-9A-F]{2}\$', filename):
         return True
 
@@ -321,9 +326,10 @@ def encode_filename(doc_id: str) -> str:
 
     Encoding rules:
     - Forward slashes (/) → double underscore (__)
-    - Other filesystem-incompatible characters → dollar-sign encoding ($XX$)
-      where XX is the hexadecimal representation of the character code
-    - Dollar sign is used instead of percent for better cross-platform compatibility
+    - Other filesystem-incompatible characters → _xXX_ encoding
+      where XX is the uppercase hexadecimal representation of the character code
+    - The _xXX_ pattern is also NCName-safe, so encoded filenames can be used
+      as xml:id values directly (with a leading _ prepended for digit-starting IDs).
 
     Args:
         doc_id: Document identifier to encode (e.g., DOI, file reference)
@@ -338,9 +344,9 @@ def encode_filename(doc_id: str) -> str:
         >>> encode_filename("10.1111/1467-6478.00040")
         "10.1111__1467-6478.00040"
         >>> encode_filename("10.1234/test:file")
-        "10.1234__test$3A$file"
+        "10.1234__test_x3A_file"
         >>> encode_filename("doc<name>")
-        "doc$3C$name$3E$"
+        "doc_x3C_name_x3E_"
     """
     if not doc_id:
         raise ValueError("doc_id cannot be empty")
@@ -351,30 +357,83 @@ def encode_filename(doc_id: str) -> str:
     # Characters that are unsafe on various filesystems
     # Windows: < > : " | ? * and control chars
     # Unix/Mac: / (already handled) and control chars
-    # We'll encode anything that might be problematic
     unsafe_chars = set('<>:"|?*\\')
-
-    # Also encode dollar sign itself to avoid ambiguity
-    unsafe_chars.add('$')
 
     # Build encoded string
     encoded = []
     for char in result:
         if char in unsafe_chars or ord(char) < 32:
-            # Encode as $XX$ where XX is hex
-            encoded.append(f"${ord(char):02X}$")
+            # Encode as _xXX_ where XX is uppercase hex
+            encoded.append(f"_x{ord(char):02X}_")
         else:
             encoded.append(char)
 
     return ''.join(encoded)
 
 
+def encode_for_xml_id(file_id: str) -> str:
+    """
+    Make an encode_filename()-encoded file_id valid as an xml:id attribute value.
+
+    encode_filename() now produces _xXX_ patterns which are already NCName-safe,
+    so only the leading-digit case needs handling:
+    - Converts any legacy $XX$ patterns to _xXX_ (BC for old-format file_ids)
+    - Prepends '_' if the result starts with a digit
+
+    Args:
+        file_id: A file identifier encoded by encode_filename()
+
+    Returns:
+        NCName-safe string suitable for use as xml:id
+
+    Examples:
+        >>> encode_for_xml_id("10.5771__2699-1284-2024-3-149")
+        "_10.5771__2699-1284-2024-3-149"
+        >>> encode_for_xml_id("test_x3A_file")
+        "test_x3A_file"
+        >>> encode_for_xml_id("test$3A$value")
+        "test_x3A_value"
+    """
+    # BC: translate any remaining old $XX$ patterns to _xXX_
+    result = re.sub(r'\$([0-9A-F]{2})\$', r'_x\1_', file_id)
+    if result and result[0].isdigit():
+        result = '_' + result
+    return result
+
+
+def decode_from_xml_id(xml_id: str) -> str:
+    """
+    Decode an xml:id value back to encode_filename() format.
+
+    Since encode_filename() now uses _xXX_ patterns (which are NCName-safe),
+    xml:id values produced by encode_for_xml_id() differ only in the optional
+    leading '_' prepended for digit-starting IDs. This function strips it.
+
+    Args:
+        xml_id: An xml:id value encoded by encode_for_xml_id()
+
+    Returns:
+        The original encode_filename()-encoded file_id
+
+    Examples:
+        >>> decode_from_xml_id("_10.5771__2699-1284-2024-3-149")
+        "10.5771__2699-1284-2024-3-149"
+        >>> decode_from_xml_id("test_x3A_file")
+        "test_x3A_file"
+    """
+    if xml_id and len(xml_id) > 1 and xml_id[0] == '_' and xml_id[1].isdigit():
+        xml_id = xml_id[1:]
+    return xml_id
+
+
 def decode_filename(filename: str) -> str:
     """
     Decode a filesystem-safe filename back to the original document ID.
 
-    Reverses the encoding applied by encode_filename().
-    Handles both new dollar-sign encoding and legacy formats.
+    Reverses the encoding applied by encode_filename():
+    - __ → / (forward slash)
+    - _xXX_ → original character (current encoding)
+    - $XX$ → original character (legacy BC encoding)
 
     Args:
         filename: Encoded filename to decode
@@ -383,43 +442,30 @@ def decode_filename(filename: str) -> str:
         Original document ID string
 
     Raises:
-        ValueError: If filename is empty or contains invalid encoding
+        ValueError: If filename is empty
 
     Examples:
         >>> decode_filename("10.1111__1467-6478.00040")
         "10.1111/1467-6478.00040"
+        >>> decode_filename("10.1234__test_x3A_file")
+        "10.1234/test:file"
         >>> decode_filename("10.1234__test$3A$file")
         "10.1234/test:file"
-        >>> decode_filename("doc$3C$name$3E$")
+        >>> decode_filename("doc_x3C_name_x3E_")
         "doc<name>"
     """
     if not filename:
         raise ValueError("filename cannot be empty")
 
-    # First, restore forward slashes from double underscores
+    # Restore forward slashes from double underscores
     result = filename.replace("__", "/")
 
-    # Decode $XX$ patterns
-    decoded = []
-    i = 0
-    while i < len(result):
-        if result[i] == '$':
-            # Look for pattern $XX$
-            if i + 3 < len(result) and result[i+3] == '$':
-                hex_code = result[i+1:i+3]
-                try:
-                    char_code = int(hex_code, 16)
-                    decoded.append(chr(char_code))
-                    i += 4
-                    continue
-                except ValueError:
-                    raise ValueError(f"Invalid hex encoding: ${hex_code}$")
-            else:
-                raise ValueError(f"Invalid encoding at position {i}: incomplete $XX$ pattern")
-        else:
-            decoded.append(result[i])
-            i += 1
+    # Decode _xXX_ patterns (current encoding)
+    result = re.sub(r'_x([0-9A-F]{2})_', lambda m: chr(int(m.group(1), 16)), result)
 
-    return ''.join(decoded)
+    # Decode $XX$ patterns (legacy BC encoding)
+    result = re.sub(r'\$([0-9A-F]{2})\$', lambda m: chr(int(m.group(1), 16)), result)
+
+    return result
 
 

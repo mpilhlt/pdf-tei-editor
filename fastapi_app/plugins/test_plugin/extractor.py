@@ -14,9 +14,9 @@ from fastapi_app.lib.utils.tei_utils import (
     create_revision_desc_with_status,
     serialize_tei_with_formatted_header,
     get_file_id_from_options,
-    create_edition_stmt_with_fileref,
     create_encoding_desc_with_extractor,
 )
+from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 
 
 class MockExtractor(BaseExtractor):
@@ -91,7 +91,6 @@ class MockExtractor(BaseExtractor):
         tei_header = create_tei_header(doi, {})
         assert tei_header is not None
 
-        # Add editionStmt with fileref
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         file_id = get_file_id_from_options(options, pdf_path)
         if not file_id:
@@ -99,11 +98,9 @@ class MockExtractor(BaseExtractor):
 
         fileDesc = tei_header.find("fileDesc")
         assert fileDesc is not None
-        titleStmt = fileDesc.find("titleStmt")
-        assert titleStmt is not None
 
-        edition_stmt = create_edition_stmt_with_fileref(timestamp, "Mock extraction for testing", file_id)
-        titleStmt.addnext(edition_stmt)
+        # Set xml:id on fileDesc for document identity (NCName-safe encoding)
+        fileDesc.set("{http://www.w3.org/XML/1998/namespace}id", encode_for_xml_id(file_id))
 
         # Create encodingDesc with applications
         existing_encodingDesc = tei_header.find("encodingDesc")

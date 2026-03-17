@@ -1,6 +1,6 @@
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
-  <fileDesc>
+  <fileDesc xml:id="_10.5771__2699-1284-2020-1-83">
     <titleStmt>
       <title level="a">Urheberrecht und Zugang in einer digitalen Welt – Urheberrechtliche Fragestellungen des Zugangs für Gedächtnisinstitutionen und die Digital Humanities –</title>
       <respStmt>
@@ -8,12 +8,6 @@
         <resp>Annotator</resp>
       </respStmt>
     </titleStmt>
-    <editionStmt>
-      <edition>
-        <date when="2025-09-12T13:50:06.033Z">12.9.2025 15:50:06</date>
-        <idno type="fileref">10.5771/2699-1284-2020-1-83</idno>
-      </edition>
-    </editionStmt>
     <publicationStmt>
       <publisher>Nomos Verlag</publisher>
       <availability>

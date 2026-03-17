@@ -13,6 +13,7 @@ from typing_extensions import TypedDict
 from lxml import etree
 
 from fastapi_app.lib.services.metadata_extraction import BibliographicMetadata
+from fastapi_app.lib.utils.doi_utils import encode_for_xml_id, decode_from_xml_id
 
 
 class ExtractedTeiMetadata(BibliographicMetadata, total=False):
@@ -350,8 +351,11 @@ def create_edition_stmt_with_fileref(
     """
     Create an editionStmt element with date, title, and fileref idno.
 
-    Extends create_edition_stmt() by adding a fileref idno element,
-    which is a common pattern in extraction workflows.
+    .. deprecated::
+        The fileref is now stored as ``xml:id`` on ``fileDesc`` (see
+        ``encode_for_xml_id`` / ``decode_from_xml_id`` in doi_utils.py).
+        This function is kept for backward-compatible reading of existing
+        documents only.  Do not call it in new code.
 
     Args:
         timestamp: ISO timestamp string
@@ -360,13 +364,6 @@ def create_edition_stmt_with_fileref(
 
     Returns:
         editionStmt element with fileref
-
-    Examples:
-        >>> stmt = create_edition_stmt_with_fileref(
-        ...     "2024-01-15T10:30:00Z",
-        ...     "Extraction",
-        ...     "10.1234/example"
-        ... )
     """
     edition_stmt = create_edition_stmt(timestamp, title)
     edition = edition_stmt.find("edition")
@@ -686,12 +683,26 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     metadata = {}
 
-    # Extract doc_id - prefer fileref (already encoded) over DOI (needs encoding)
-    fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
-    if fileref_elem is not None and fileref_elem.text:
-        # Fileref is already encoded for filesystem safety
-        metadata['doc_id'] = fileref_elem.text.strip()
+    # Extract doc_id - prefer fileDesc/@xml:id, then editionStmt idno (deprecated), then DOI
+    fileref: Optional[str] = None
+
+    # Primary: xml:id on fileDesc
+    file_desc = tei_root.find('.//tei:fileDesc', ns)
+    if file_desc is not None:
+        xml_id = file_desc.get('{http://www.w3.org/XML/1998/namespace}id')
+        if xml_id:
+            fileref = decode_from_xml_id(xml_id)
+
+    # Deprecated fallback: editionStmt/edition/idno[@type='fileref']
+    if not fileref:
+        fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
+        if fileref_elem is not None and fileref_elem.text:
+            fileref = fileref_elem.text.strip()
+
+    if fileref:
+        metadata['doc_id'] = fileref
         metadata['doc_id_type'] = 'fileref'
+        metadata['fileref'] = fileref
     else:
         # Try DOI as fallback, but encode it for use as doc_id
         doi_elem = tei_root.find('.//tei:idno[@type="DOI"]', ns)
@@ -704,11 +715,6 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
             # No doc_id found - caller must provide fallback
             metadata['doc_id'] = None  # type: ignore[assignment]
             metadata['doc_id_type'] = 'custom'
-
-    # Also extract fileref separately for PDF matching (even if DOI exists)
-    fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
-    if fileref_elem is not None and fileref_elem.text:
-        metadata['fileref'] = fileref_elem.text.strip()
 
     # Extract title - try biblStruct first, fallback to titleStmt
     title_elem = tei_root.find('.//tei:sourceDesc/tei:biblStruct/tei:analytic/tei:title[@level="a"]', ns)
@@ -1101,18 +1107,38 @@ def extract_fileref(content: bytes | etree._Element) -> Optional[str]:  # type: 
     """
     Extract fileref from TEI document.
 
-    Path: /TEI/teiHeader/fileDesc/editionStmt/edition/idno[@type='fileref']
+    Primary path: /TEI/teiHeader/fileDesc/@xml:id (decoded via decode_from_xml_id)
+    Deprecated fallback: /TEI/teiHeader/fileDesc/editionStmt/edition/idno[@type='fileref']
 
     Args:
         content: TEI document as bytes or lxml Element
 
     Returns:
-        Fileref string or None
+        File identifier string (in encode_filename() format) or None
     """
-    return extract_xpath_text(
-        content,
-        ["//tei:fileDesc/tei:editionStmt/tei:edition/tei:idno[@type='fileref']"]
-    )
+    try:
+        if isinstance(content, bytes):
+            root = etree.fromstring(content)
+        else:
+            root = content
+
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0',
+              'xml': 'http://www.w3.org/XML/1998/namespace'}
+
+        # Primary: xml:id on fileDesc
+        file_desc = root.find('.//tei:fileDesc', ns)
+        if file_desc is not None:
+            xml_id = file_desc.get('{http://www.w3.org/XML/1998/namespace}id')
+            if xml_id:
+                return decode_from_xml_id(xml_id)
+
+        # Deprecated fallback: editionStmt/edition/idno[@type='fileref']
+        return extract_xpath_text(
+            root,
+            ["//tei:fileDesc/tei:editionStmt/tei:edition/tei:idno[@type='fileref']"]
+        )
+    except Exception:
+        return None
 
 
 def extract_variant_id(content: bytes | etree._Element) -> Optional[str]:  # type: ignore[name-defined]
@@ -1467,13 +1493,15 @@ def build_version_ancestry_chains(
 
 def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
     """
-    Ensure fileref in XML matches the file_id.
-    Creates fileref element if missing.
-    Preserves processing instructions from the original XML.
+    Ensure the document identifier in XML matches file_id.
+
+    Writes file_id as ``xml:id`` on the ``fileDesc`` element (NCName-safe encoding).
+    Also updates any legacy ``editionStmt/edition/idno[@type='fileref']`` if present,
+    for backward compatibility with tools that still read the deprecated location.
 
     Args:
         xml_string: TEI XML content as string or bytes
-        file_id: File ID to set as fileref
+        file_id: File ID to set (in encode_filename() format)
 
     Returns:
         Updated XML string
@@ -1481,47 +1509,33 @@ def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
     Raises:
         ValueError: If XML parsing fails or teiHeader structure is invalid
     """
-    # Ensure we have a string
     if isinstance(xml_string, bytes):
         xml_string = xml_string.decode('utf-8')
 
-    # Extract processing instructions before parsing
     processing_instructions = extract_processing_instructions(xml_string)
-
     xml_root = etree.fromstring(xml_string.encode('utf-8'))
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    xml_ns = "http://www.w3.org/XML/1998/namespace"
 
-    # Find or create fileref element
+    changed = False
+
+    # Primary: set xml:id on fileDesc
+    file_desc = xml_root.find('.//tei:fileDesc', ns)
+    if file_desc is not None:
+        new_xml_id = encode_for_xml_id(file_id)
+        existing_xml_id = file_desc.get(f"{{{xml_ns}}}id")
+        if existing_xml_id != new_xml_id:
+            file_desc.set(f"{{{xml_ns}}}id", new_xml_id)
+            changed = True
+
+    # Legacy: also update editionStmt/idno[@type='fileref'] if present
     fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
-
-    if fileref_elem is not None:
-        # Update existing fileref
-        if fileref_elem.text != file_id:
-            fileref_elem.text = file_id
-            return serialize_tei_with_formatted_header(xml_root, processing_instructions)
-        return xml_string
-
-    # Create fileref element
-    edition_stmt = xml_root.find('.//tei:editionStmt', ns)
-    if edition_stmt is None:
-        # Create editionStmt in teiHeader/fileDesc
-        file_desc = xml_root.find('.//tei:fileDesc', ns)
-        if file_desc is not None:
-            edition_stmt = etree.SubElement(file_desc, "{http://www.tei-c.org/ns/1.0}editionStmt")
-
-    if edition_stmt is not None:
-        # Find or create edition element
-        edition = edition_stmt.find('./tei:edition', ns)
-        if edition is None:
-            edition = etree.SubElement(edition_stmt, "{http://www.tei-c.org/ns/1.0}edition")
-
-        # Add idno with fileref
-        fileref_elem = etree.SubElement(edition, "{http://www.tei-c.org/ns/1.0}idno")
-        fileref_elem.set("type", "fileref")
+    if fileref_elem is not None and fileref_elem.text != file_id:
         fileref_elem.text = file_id
+        changed = True
 
+    if changed:
         return serialize_tei_with_formatted_header(xml_root, processing_instructions)
-
     return xml_string
 
 

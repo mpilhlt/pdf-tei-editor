@@ -10,96 +10,70 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { addEdition, encodeXmlEntities, ensureExtractorVariant } from '../../../app/src/modules/tei-utils.js';
+import {
+  addEdition,
+  encodeXmlEntities,
+  ensureExtractorVariant,
+  encodeFileIdForXmlId,
+  decodeXmlIdToFileId,
+} from '../../../app/src/modules/tei-utils.js';
 
 describe('TEI Utils', () => {
-  describe('addEdition', () => {
-    it('should preserve fileref when adding new edition', () => {
-      // Create a minimal TEI document with fileref
+  describe('addEdition (deprecated no-op)', () => {
+    it('should not modify the document', () => {
       const xmlString = `<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
-    <fileDesc>
-      <titleStmt>
-        <title>Test Document</title>
-      </titleStmt>
-      <editionStmt>
-        <edition>
-          <date when="2025-01-01T00:00:00.000Z">01.01.2025 00:00:00</date>
-          <title>Original Edition</title>
-          <idno type="fileref">test-document-2025</idno>
-        </edition>
-      </editionStmt>
+    <fileDesc xml:id="_test-document-2025">
+      <titleStmt><title>Test Document</title></titleStmt>
     </fileDesc>
   </teiHeader>
 </TEI>`;
-
       const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
       const xmlDoc = dom.window.document;
-
-      // Add a new edition
-      const newEdition = {
-        title: 'Version 2',
-        note: 'Second version'
-      };
-
-      addEdition(xmlDoc, newEdition);
-
-      // Check that fileref was preserved
-      const filerefElements = xmlDoc.querySelectorAll('idno[type="fileref"]');
-      assert.strictEqual(filerefElements.length, 1, 'Should have exactly one fileref element');
-      assert.strictEqual(
-        filerefElements[0].textContent,
-        'test-document-2025',
-        'Fileref value should be preserved'
-      );
-
-      // Check that new edition info was added
-      const titleElements = xmlDoc.querySelectorAll('edition > title');
-      assert.strictEqual(titleElements.length, 1, 'Should have one title element');
-      assert.strictEqual(
-        titleElements[0].textContent,
-        'Version 2',
-        'New edition title should be present'
-      );
-
-      const noteElements = xmlDoc.querySelectorAll('edition > note');
-      assert.strictEqual(noteElements.length, 1, 'Should have one note element');
-      assert.strictEqual(
-        noteElements[0].textContent,
-        'Second version',
-        'New edition note should be present'
-      );
-    });
-
-    it('should not add fileref when it does not exist', () => {
-      // Create a minimal TEI document without fileref
-      const xmlString = `<?xml version="1.0"?>
-<TEI xmlns="http://www.tei-c.org/ns/1.0">
-  <teiHeader>
-    <fileDesc>
-      <titleStmt>
-        <title>Test Document</title>
-      </titleStmt>
-    </fileDesc>
-  </teiHeader>
-</TEI>`;
-
-      const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
-      const xmlDoc = dom.window.document;
-
-      // Add a new edition
-      const newEdition = {
-        title: 'Version 1'
-      };
-
-      addEdition(xmlDoc, newEdition);
-
-      // Check that no fileref was added
-      const filerefElements = xmlDoc.querySelectorAll('idno[type="fileref"]');
-      assert.strictEqual(filerefElements.length, 0, 'Should not add fileref when it did not exist');
+      addEdition(xmlDoc, { title: 'Version 2', note: 'Second version' });
+      // addEdition is a no-op — document should be unchanged
+      assert.strictEqual(xmlDoc.querySelector('editionStmt'), null, 'No editionStmt should be created');
     });
   });
+
+  describe('encodeFileIdForXmlId / decodeXmlIdToFileId', () => {
+    it('should prepend _ when file_id starts with a digit', () => {
+      assert.strictEqual(encodeFileIdForXmlId('10.5771__2699-1284-2024-3-149'), '_10.5771__2699-1284-2024-3-149');
+    });
+
+    it('should not prepend _ when file_id starts with a letter', () => {
+      assert.strictEqual(encodeFileIdForXmlId('my-document'), 'my-document');
+    });
+
+    it('should replace $XX$ with _xXX_', () => {
+      assert.strictEqual(encodeFileIdForXmlId('doc$2F$name'), 'doc_x2F_name');
+    });
+
+    it('should round-trip: decode reverses encode (new _xXX_ format)', () => {
+      const cases = [
+        '10.5771__2699-1284-2024-3-149',
+        'my-document',
+        'path_x2F_to_x2F_doc',
+        '10.1234__test_x20_value',
+      ];
+      for (const id of cases) {
+        assert.strictEqual(decodeXmlIdToFileId(encodeFileIdForXmlId(id)), id, `Round-trip failed for: ${id}`);
+      }
+    });
+
+    it('should one-way convert legacy $XX$ encoding to new _xXX_ format', () => {
+      // Legacy $XX$ file_ids are converted to new format; not round-trippable
+      assert.strictEqual(decodeXmlIdToFileId(encodeFileIdForXmlId('path$2F$to$2F$doc')), 'path_x2F_to_x2F_doc');
+      assert.strictEqual(decodeXmlIdToFileId(encodeFileIdForXmlId('10.1234__test$20$value')), '10.1234__test_x20_value');
+    });
+
+    it('should strip leading _ only if followed by digit', () => {
+      assert.strictEqual(decodeXmlIdToFileId('_10.5771__abc'), '10.5771__abc');
+      assert.strictEqual(decodeXmlIdToFileId('_my-doc'), '_my-doc'); // _ before letter: keep
+    });
+  });
+
 
   describe('encodeXmlEntities', () => {
     it('should preserve comments with angle brackets', () => {
