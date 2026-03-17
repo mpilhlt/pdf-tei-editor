@@ -261,7 +261,7 @@ test.describe('Document Actions', () => {
     }
   });
 
-  test.skip('should save revision as gold version (reviewer only)', async ({ page }) => { // skipped: see #309
+  test('should save revision as gold version (reviewer only)', async ({ page }) => {
     // Set up enhanced console log capture for TEST messages
     const consoleLogs = setupTestConsoleCapture(page);
 
@@ -635,7 +635,7 @@ test.describe('Document Actions', () => {
     }
   });
 
-  test.skip('should save status to change element', async ({ page }) => { // skipped: see #309
+  test('should save status to change element', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
