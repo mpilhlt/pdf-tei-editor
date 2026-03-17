@@ -42,7 +42,7 @@ import './modules/panels/index.js';
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
- * @import {newVersionDialogPart, newRevisionChangeDialogPart, editMetadataDialogPart} from './plugins/document-actions.js'
+ * @import {saveDocumentDialogPart, editMetadataDialogPart} from './plugins/document-actions.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'
@@ -86,8 +86,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
- * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog - New version dialog (added by document-actions plugin)
- * @property {UIPart<SlDialog, newRevisionChangeDialogPart>} newRevisionChangeDialog - New revision dialog (added by document-actions plugin)
+ * @property {UIPart<SlDialog, saveDocumentDialogPart>} saveDocumentDialog - Save revision dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, editMetadataDialogPart>} editMetadataDialog - Edit metadata dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)

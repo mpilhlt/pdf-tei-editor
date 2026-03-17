@@ -513,9 +513,9 @@ def serialize_tei_xml(tei_doc: etree._Element) -> str:  # type: ignore[name-defi
 def remove_whitespace(element):
     """Recursively removes all tails and texts from the tree."""
     if element.text:
-        element.text = element.text.strip()
+        element.text = element.text.strip() or None
     if element.tail:
-        element.tail = element.tail.strip()
+        element.tail = element.tail.strip() or None
     for child in element:
         remove_whitespace(child)
 
@@ -596,6 +596,9 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
     else:
         added_temp_content = False
 
+    # Remove existing whitespace so pretty_print produces consistent indentation
+    remove_whitespace(tei_doc)
+
     # Use lxml's pretty printing which preserves case
     header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml', pretty_print=True)
 
@@ -612,11 +615,19 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
 
     # Handle TEI closing tag properly
     if non_header_elements:
-        # Find the closing TEI tag (case-insensitive) and insert the elements before it
+        # Find the closing TEI tag from the end (last occurrence, case-insensitive)
         closing_tei_idx = None
-        for i, line in enumerate(header_lines):
-            if '</TEI>' in line or '</tei>' in line:
+        for i in range(len(header_lines) - 1, -1, -1):
+            line = header_lines[i]
+            tag = '</TEI>' if '</TEI>' in line else ('</tei>' if '</tei>' in line else None)
+            if tag:
                 closing_tei_idx = i
+                # If the closing tag shares the line with other content (e.g. <TEI>...</TEI> on one line),
+                # split it so non-header elements can be inserted inside the TEI element.
+                if line.strip() != tag.strip():
+                    before, after = line.rsplit(tag, 1)
+                    header_lines[i:i+1] = [before, tag + after] if after.strip() else [before, tag]
+                    closing_tei_idx = i + 1  # </TEI> moved to i+1 after split
                 break
 
         if closing_tei_idx is not None:
@@ -626,7 +637,6 @@ def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_inst
                 closing_tei_idx += 1  # Update index for next insertion
         else:
             # If no closing TEI tag found, this might be a self-closing tag or malformed XML
-            # In this case, we need to reconstruct the document properly
             # Remove any self-closing TEI tags and rebuild
             header_lines = [line for line in header_lines if not line.strip().endswith('/>')]
 
@@ -812,10 +822,15 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
 
     metadata['is_gold_standard'] = is_gold  # type: ignore[assignment]
 
-    # Extract edition title (preferred for labels)
-    edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
-    if edition_title_elem is not None and edition_title_elem.text:
-        metadata['edition_title'] = edition_title_elem.text.strip()
+    # Extract label: priority 1 — last revisionDesc/change/note[@type="label"]
+    change_label_elems = tei_root.findall('.//tei:revisionDesc/tei:change/tei:note[@type="label"]', ns)
+    if change_label_elems and change_label_elems[-1].text:
+        metadata['edition_title'] = change_label_elems[-1].text.strip()
+    else:
+        # Priority 2 — editionStmt/edition/title (backward compat)
+        edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
+        if edition_title_elem is not None and edition_title_elem.text:
+            metadata['edition_title'] = edition_title_elem.text.strip()
 
     # Extract labels/roles from respStmt (fallback)
     labels = []
@@ -1264,7 +1279,8 @@ def add_revision_change(
     status: str,
     who: str,
     desc: str,
-    full_name: Optional[str] = None
+    full_name: Optional[str] = None,
+    label: Optional[str] = None
 ) -> None:
     """
     Add a change element to the revisionDesc section.
@@ -1276,6 +1292,7 @@ def add_revision_change(
         who: Person ID (will be prefixed with # if needed)
         desc: Description of the change
         full_name: Optional full name for the person (creates respStmt if needed)
+        label: Optional label stored as <note type="label"> before <desc>
 
     Raises:
         ValueError: If teiHeader is not found
@@ -1302,6 +1319,11 @@ def add_revision_change(
     change.set("when", when)
     change.set("status", status)
     change.set("who", f"#{clean_who}" if not who.startswith('#') else who)
+
+    if label and label.strip():
+        note_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}note")
+        note_elem.set("type", "label")
+        note_elem.text = label.strip()
 
     desc_elem = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
     desc_elem.text = desc

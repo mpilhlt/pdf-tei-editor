@@ -575,8 +575,6 @@ describe('Application', () => {
         }
         
         async onStateUpdate(changedKeys) {
-          // Acknowledge changed keys but still try to trigger nested change (should fail)
-          console.log('Received changed keys:', changedKeys);
           // Try to trigger state change in reactive endpoint
           await this.dispatchStateChange({ xml: 'nested-from-class.xml' });
         }

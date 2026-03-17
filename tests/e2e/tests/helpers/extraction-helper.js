@@ -157,9 +157,6 @@ export async function selectFirstDocuments(page) {
   });
   debugLog('XML selection result:', xmlSelected);
 
-  // Wait for XML selection to process
-  await page.waitForTimeout(1000);
-
   // Actually load the selected documents to trigger proper state updates
   const loadResult = await page.evaluate(async () => {
     /** @type {namedElementsTree} */
@@ -190,5 +187,8 @@ export async function selectFirstDocuments(page) {
     return { success: false, reason: 'no files to load' };
   });
   debugLog('Load result:', loadResult);
+  // Wait for XML selection to process
+  await page.waitForTimeout(1000);
+
   return loadResult;
 }

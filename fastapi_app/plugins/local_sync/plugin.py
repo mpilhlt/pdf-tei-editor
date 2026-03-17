@@ -522,8 +522,7 @@ class LocalSyncPlugin(Plugin):
             logger.info(f"Version with this content already exists (stable_id: {existing_file.stable_id}), skipping creation")
             return existing_file
 
-        # Extract metadata from modified TEI
-        root = etree.fromstring(content)
+        # Extract metadata from modified TEI (root already has the modifications applied)
         tei_metadata = extract_tei_metadata(root)
 
         # Get next version number

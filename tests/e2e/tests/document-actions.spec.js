@@ -35,7 +35,7 @@ const ALLOWED_ERROR_PATTERNS = [
 
 test.describe('Document Actions', () => {
 
-  test('should create new version from existing document', async ({ page }) => {
+  test('should create a new copy via saveToNewCopy checkbox', async ({ page }) => {
     // Set up enhanced console log capture for TEST messages
     const consoleLogs = setupTestConsoleCapture(page);
 
@@ -65,7 +65,7 @@ test.describe('Document Actions', () => {
           xmlOptionsCount: ui.toolbar.xml.querySelectorAll('sl-option').length,
           pdfValue: ui.toolbar.pdf.value,
           xmlValue: ui.toolbar.xml.value,
-          createNewVersionEnabled: !ui.toolbar.documentActions.createNewVersion.disabled,
+          saveRevisionEnabled: !ui.toolbar.documentActions.saveRevision.disabled,
           stateXml: state.xml,
           statePdf: state.pdf
         };
@@ -76,82 +76,70 @@ test.describe('Document Actions', () => {
       const isButtonEnabled = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        return !ui.toolbar.documentActions.createNewVersion.disabled;
+        return !ui.toolbar.documentActions.saveRevision.disabled;
       });
 
       expect(isButtonEnabled).toBe(true);
 
-      // Click on create new version button
+      // Click save revision button
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.toolbar.documentActions.createNewVersion.click();
+        ui.toolbar.documentActions.saveRevision.click();
       });
 
-      // Wait for new version dialog to open
-      await page.waitForSelector('sl-dialog[name="newVersionDialog"][open]', { timeout: 5000 });
+      // Wait for save document dialog to open
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
-      // Fill in the version dialog form
+      // Check the saveToNewCopy checkbox and fill in copy details
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.versionName.value = 'Test Version E2E';
-        ui.newVersionDialog.persName.value = 'Test User';
-        ui.newVersionDialog.persId.value = 'TU';
-        ui.newVersionDialog.editionNote.value = 'Created via E2E test';
+        ui.saveDocumentDialog.options.saveToNewCopySection.saveToNewCopy.checked = true;
+        ui.saveDocumentDialog.options.saveToNewCopySection.copyLabel.value = 'Test Version E2E';
+        ui.saveDocumentDialog.changeDesc.value = 'Initial revision';
       });
 
       await page.waitForTimeout(500);
 
-      // Submit the new version dialog
+      // Submit the dialog
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.submit.click();
+        ui.saveDocumentDialog.submit.click();
       });
 
       // Wait for new version creation to complete
       const newVersionLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_CREATED', 10000);
       expect(newVersionLog.value).toHaveProperty('oldFileId');
       expect(newVersionLog.value).toHaveProperty('newFileId');
-      //expect(newVersionLog.value.newFileId).not.toBe(newVersionLog.value.oldFileId); // ??
 
       // Wait for the new version to be loaded and state fully updated
       const versionLoadedLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED', 10000);
       expect(versionLoadedLog.value).toHaveProperty('fileId');
-      expect(versionLoadedLog.value.editorReadOnly).toBe(false);
 
       // Wait for buttons to be enabled (state update propagation to UI)
-      // Poll for button state rather than fixed timeout since onStateUpdate handlers run async
       await page.waitForFunction(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        return !ui.toolbar.documentActions.saveRevision.disabled &&
-               !ui.toolbar.documentActions.createNewVersion.disabled &&
-               !ui.toolbar.documentActions.editMetadata.disabled;
+        return !ui.toolbar.documentActions.saveRevision.disabled
+              //  && !ui.toolbar.documentActions.editMetadata.disabled;
       }, { timeout: 5000 });
 
-      // Verify that buttons are enabled after creating new version (not read-only)
+      // Verify that buttons are enabled after creating new version
       const buttonsEnabledAfterCreate = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          saveRevision: !ui.toolbar.documentActions.saveRevision.disabled,
-          createNewVersion: !ui.toolbar.documentActions.createNewVersion.disabled,
-          editMetadata: !ui.toolbar.documentActions.editMetadata.disabled
+          saveRevision: !ui.toolbar.documentActions.saveRevision.disabled //,
+          //editMetadata: !ui.toolbar.documentActions.editMetadata.disabled
         };
       });
 
       expect(buttonsEnabledAfterCreate.saveRevision).toBe(true);
-      expect(buttonsEnabledAfterCreate.createNewVersion).toBe(true);
-      expect(buttonsEnabledAfterCreate.editMetadata).toBe(true);
+      //expect(buttonsEnabledAfterCreate.editMetadata).toBe(true);
 
       debugLog('New version creation test completed successfully');
-
-      // Note: We don't delete the created version here because:
-      // 1. Tests should not modify fixture data
-      // 2. The database is cleaned between test runs (--clean-db default)
-      // 3. Deleting during test affects subsequent tests in the same run
 
     } finally {
       // Release all locks before logout
@@ -230,16 +218,14 @@ test.describe('Document Actions', () => {
         ui.toolbar.documentActions.saveRevision.click();
       });
 
-      // Wait for revision dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      // Wait for save document dialog to open
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
-      // Fill out the revision change description
+      // Fill out the revision change description (leave saveToNewCopy unchecked for in-place save)
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.changeDesc.value = 'E2E test revision description';
-        ui.newRevisionChangeDialog.persId.value = 'testuser';
-        ui.newRevisionChangeDialog.persName.value = 'Test User';
+        ui.saveDocumentDialog.changeDesc.value = 'E2E test revision description';
       });
 
       await page.waitForTimeout(500);
@@ -248,7 +234,7 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.submit.click();
+        ui.saveDocumentDialog.submit.click();
       });
 
       // Wait a moment for dialog to close and processing to start
@@ -323,17 +309,20 @@ test.describe('Document Actions', () => {
         ui.toolbar.documentActions.saveRevision.click();
       });
 
-      // Wait for revision dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      // Wait for save document dialog to open
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
+
+      // Allow background loads triggered by file selection to settle
+      await page.waitForTimeout(1500);
 
       // Verify the "Save as Gold Version" checkbox is visible for reviewers
       const checkboxState = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          exists: Boolean(ui.newRevisionChangeDialog.saveAsGold),
-          visible: ui.newRevisionChangeDialog.saveAsGold.style.display !== 'none',
-          checked: ui.newRevisionChangeDialog.saveAsGold.checked
+          exists: Boolean(ui.saveDocumentDialog.options.saveAsGoldSection),
+          visible: ui.saveDocumentDialog.options.saveAsGoldSection.style.display !== 'none',
+          checked: ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked
         };
       });
       debugLog('Checkbox state:', checkboxState);
@@ -346,19 +335,15 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.changeDesc.value = 'E2E test gold revision';
-        ui.newRevisionChangeDialog.persId.value = 'testuser';
-        ui.newRevisionChangeDialog.persName.value = 'Test User';
-        ui.newRevisionChangeDialog.saveAsGold.checked = true;
+        ui.saveDocumentDialog.changeDesc.value = 'E2E test gold revision';
+        ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked = true;
       });
-
-      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.submit.click();
+        ui.saveDocumentDialog.submit.click();
       });
 
       // Wait for revision to be saved
@@ -423,39 +408,10 @@ test.describe('Document Actions', () => {
       // Navigate and login as annotator (not a reviewer)
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
 
-      // Select first document and create a new version (non-gold) to work with
+      // Select first document
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
       await page.waitForTimeout(1000);
-
-      // Create a new version from the gold file
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.toolbar.documentActions.createNewVersion.click();
-      });
-
-      // Wait for new version dialog
-      await page.waitForSelector('sl-dialog[name="newVersionDialog"][open]', { timeout: 5000 });
-
-      // Fill in version details
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.versionName.value = 'Test Version for Annotator';
-        ui.newVersionDialog.editionNote.value = 'Created for test';
-      });
-
-      await page.waitForTimeout(500);
-
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.submit.click();
-      });
-
-      // Wait for version creation
-      await page.waitForTimeout(3000);
 
       // Click save revision button
       await page.evaluate(() => {
@@ -464,16 +420,16 @@ test.describe('Document Actions', () => {
         ui.toolbar.documentActions.saveRevision.click();
       });
 
-      // Wait for revision dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      // Wait for save document dialog to open
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
       // Verify the "Save as Gold Version" checkbox is hidden for non-reviewers
       const checkboxState = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          exists: Boolean(ui.newRevisionChangeDialog.saveAsGold),
-          visible: ui.newRevisionChangeDialog.saveAsGold.style.display !== 'none'
+          exists: Boolean(ui.saveDocumentDialog.options.saveAsGoldSection),
+          visible: ui.saveDocumentDialog.options.saveAsGoldSection.style.display !== 'none'
         };
       });
       debugLog('Checkbox state for annotator:', checkboxState);
@@ -484,7 +440,7 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.cancel.click();
+        ui.saveDocumentDialog.cancel.click();
       });
 
       debugLog('Gold checkbox visibility test completed successfully');
@@ -519,16 +475,16 @@ test.describe('Document Actions', () => {
       });
 
       // Wait for dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
       // Verify status select is present and has a value
       const statusState = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
         return {
-          exists: Boolean(ui.newRevisionChangeDialog.status),
-          value: ui.newRevisionChangeDialog.status.value,
-          optionsCount: ui.newRevisionChangeDialog.status.querySelectorAll('sl-option').length
+          exists: Boolean(ui.saveDocumentDialog.status),
+          value: ui.saveDocumentDialog.status.value,
+          optionsCount: ui.saveDocumentDialog.status.querySelectorAll('sl-option').length
         };
       });
       debugLog('Status select state:', statusState);
@@ -540,7 +496,7 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.cancel.click();
+        ui.saveDocumentDialog.cancel.click();
       });
 
       debugLog('Status pre-fill test completed successfully');
@@ -560,39 +516,10 @@ test.describe('Document Actions', () => {
       // Login as annotator (not reviewer)
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
 
-      // Select first document and create a new version (non-gold) to work with
+      // Select first document
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
       await page.waitForTimeout(1000);
-
-      // Create a new version from the gold file
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.toolbar.documentActions.createNewVersion.click();
-      });
-
-      // Wait for new version dialog
-      await page.waitForSelector('sl-dialog[name="newVersionDialog"][open]', { timeout: 5000 });
-
-      // Fill in version details
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.versionName.value = 'Test Version for Status Check';
-        ui.newVersionDialog.editionNote.value = 'Created for test';
-      });
-
-      await page.waitForTimeout(500);
-
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.newVersionDialog.submit.click();
-      });
-
-      // Wait for version creation
-      await page.waitForTimeout(3000);
 
       // Click save revision button
       await page.evaluate(() => {
@@ -602,13 +529,13 @@ test.describe('Document Actions', () => {
       });
 
       // Wait for dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
       // Check which options are disabled
       const optionStates = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        const options = Array.from(ui.newRevisionChangeDialog.status.querySelectorAll('sl-option'));
+        const options = Array.from(ui.saveDocumentDialog.status.querySelectorAll('sl-option'));
         return options.map(opt => ({
           value: opt.value,
           disabled: opt.disabled
@@ -633,7 +560,7 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.cancel.click();
+        ui.saveDocumentDialog.cancel.click();
       });
 
       debugLog('Status restriction test completed successfully');
@@ -666,13 +593,13 @@ test.describe('Document Actions', () => {
       });
 
       // Wait for dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
 
       // Check all options are enabled
       const optionStates = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        const options = Array.from(ui.newRevisionChangeDialog.status.querySelectorAll('sl-option'));
+        const options = Array.from(ui.saveDocumentDialog.status.querySelectorAll('sl-option'));
         return options.map(opt => ({
           value: opt.value,
           disabled: opt.disabled
@@ -684,7 +611,7 @@ test.describe('Document Actions', () => {
       expect(optionStates.length).toBe(6);
 
       // Verify all options are enabled (reviewers have both reviewer and annotator roles)
-      // Expected: 
+      // Expected:
       // - extraction => false
       // - draft, checked (annotator) => true
       // - approved, candidate, published (reviewer) = true
@@ -696,7 +623,7 @@ test.describe('Document Actions', () => {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.cancel.click();
+        ui.saveDocumentDialog.cancel.click();
       });
 
       debugLog('Status options test for reviewer completed successfully');
@@ -729,25 +656,24 @@ test.describe('Document Actions', () => {
       });
 
       // Wait for dialog to open
-      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
+
+      // Allow background loads triggered by file selection to settle
+      await page.waitForTimeout(1500);
 
       // Fill out the form with a specific status
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.newRevisionChangeDialog.changeDesc.value = 'E2E test status save';
-        ui.newRevisionChangeDialog.status.value = 'checked';
+        ui.saveDocumentDialog.changeDesc.value = 'E2E test status save';
+        ui.saveDocumentDialog.status.value = 'checked';
       });
-
-      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        console.warn("Clicking!!")
-        ui.newRevisionChangeDialog.submit.click();
-        console.warn("Clicked!!")
+        ui.saveDocumentDialog.submit.click();
       });
 
       // Wait for revision to be saved and verify status

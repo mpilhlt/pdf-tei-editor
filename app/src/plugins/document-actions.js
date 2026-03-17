@@ -28,8 +28,7 @@ import { encodeFilename, decodeFilename } from '../modules/utils.js'
  * plugin API
  */
 const api = {
-  saveRevision,
-  createNewVersion,
+  saveDocument,
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll,
@@ -63,7 +62,6 @@ let currentState = null
  * Document actions button group navigation properties
  * @typedef {object} documentActionsPart
  * @property {SlButton} saveRevision - Save current revision button
- * @property {SlButton} createNewVersion - Create new version button
  * @property {SlButton} deleteBtn - Delete dropdown button
  * @property {SlButton} deleteCurrentVersion - Delete current version button
  * @property {SlButton} deleteAllVersions - Delete all versions button
@@ -72,24 +70,28 @@ let currentState = null
  */
 
 /**
- * Dialog for creating a new version
- * @typedef {object} newVersionDialogPart
- * @property {SlInput} versionName
- * @property {SlInput} persName
- * @property {SlInput} persId
- * @property {SlInput} editionNote
- * @property {SlButton} submit
- * @property {SlButton} cancel
+ * @typedef {object} saveToNewCopySectionPart
+ * @property {SlCheckbox} saveToNewCopy - Save to a new personal copy checkbox
+ * @property {SlInput} copyLabel - Label for the new copy
  */
 
 /**
- * Dialog for documenting a revision navigation properties
- * @typedef {object} newRevisionChangeDialogPart
- * @property {SlInput} persId - Person ID input
- * @property {SlInput} persName - Person name input
+ * @typedef {object} saveAsGoldSectionPart
+ * @property {SlCheckbox} saveAsGold - Save as gold version checkbox
+ */
+
+/**
+ * @typedef {object} optionsSectionPart
+ * @property {HTMLDivElement & saveToNewCopySectionPart} saveToNewCopySection - New-copy option
+ * @property {HTMLDivElement & saveAsGoldSectionPart} saveAsGoldSection - Gold version option, shown only to reviewers
+ */
+
+/**
+ * Dialog for saving a revision (and optionally forking to a personal copy)
+ * @typedef {object} saveDocumentDialogPart
  * @property {SlInput} changeDesc - Change description input
  * @property {SlSelect} status - Status select
- * @property {SlCheckbox} saveAsGold - Save as gold version checkbox
+ * @property {HTMLDivElement & optionsSectionPart} options - Options section containing copy and gold checkboxes
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
  */
@@ -99,7 +101,6 @@ let currentState = null
  * @typedef {object} editMetadataDialogPart
  * @property {SlInput} docTitle - Document title input (readonly)
  * @property {SlInput} docId - Document ID input (editable for gold files by reviewers)
- * @property {SlInput} label - Extraction label input
  * @property {SlInput} source - Source input
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
@@ -107,8 +108,7 @@ let currentState = null
 
 // Register templates
 await registerTemplate('document-action-buttons', 'document-action-buttons.html');
-await registerTemplate('new-version-dialog', 'new-version-dialog.html');
-await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
+await registerTemplate('save-document-dialog', 'save-document-dialog.html');
 await registerTemplate('edit-metadata-dialog', 'edit-metadata-dialog.html');
 
 //
@@ -123,8 +123,7 @@ async function install(state) {
 
   // Create UI elements
   const documentActionButtons = createFromTemplate('document-action-buttons');
-  createSingleFromTemplate('new-version-dialog', document.body);
-  createSingleFromTemplate('save-revision-dialog', document.body);
+  createSingleFromTemplate('save-document-dialog', document.body);
   createSingleFromTemplate('edit-metadata-dialog', document.body);
 
   // Add document action buttons to toolbar with medium priority
@@ -137,9 +136,12 @@ async function install(state) {
 
   const da = ui.toolbar.documentActions
 
-  // save a revision
+  // disable metadata button for the moment 
+  da.editMetadata.style.display = "none"
+
+  // save a revision (or fork to new copy)
   da.saveRevision.addEventListener('click', () => {
-    if (currentState) saveRevision(currentState);
+    if (currentState) saveDocument(currentState);
   });
 
   // delete
@@ -153,15 +155,10 @@ async function install(state) {
     if (currentState) deleteAll(currentState);
   })
 
-  // new version
-  da.createNewVersion.addEventListener("click", () => {
-    if (currentState) createNewVersion(currentState);
-  })
-
-  // edit metadata
-  da.editMetadata.addEventListener("click", () => {
-    if (currentState) editFileMetadata(currentState);
-  })
+  // edit metadata - disabled
+  // da.editMetadata.addEventListener("click", () => {
+  //   if (currentState) editFileMetadata(currentState);
+  // })
 }
 
 /**
@@ -203,22 +200,19 @@ async function onStateUpdate(changedKeys, state) {
     da.deleteAllVersions.disabled &&
     da.deleteAll.disabled
 
-  // Allow new version or revisions only if we have an xml path
+  // Allow save revision only if we have an xml path
   if (isAnnotator) {
-    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly
-    da.createNewVersion.disabled = !Boolean(state.xml)
+    da.saveRevision.disabled = !Boolean(state.xml)
   } else {
-    for (let btn of [da.saveRevision, da.createNewVersion]) {
-      btn.disabled = true
-    }
+    da.saveRevision.disabled = true
   }
 
-  // Edit metadata - allow for annotators and reviewers when XML is loaded
-  if (isAnnotator || isReviewer) {
-    da.editMetadata.disabled = !Boolean(state.xml) || state.editorReadOnly
-  } else {
-    da.editMetadata.disabled = true
-  }
+  // Edit metadata - allow for annotators and reviewers when XML is loaded - disabled
+  // if (isAnnotator || isReviewer) {
+  //   da.editMetadata.disabled = !Boolean(state.xml) || state.editorReadOnly
+  // } else {
+  //   da.editMetadata.disabled = true
+  // }
 }
 
 /**
@@ -417,35 +411,76 @@ async function deleteAll(state) {
 }
 
 /**
- * Called when the "saveRevision" button is executed
+ * Called when the "Save Revision" button is executed.
+ * Combines saving a revision record with an optional fork to a new personal copy.
  * @param {ApplicationState} state
  */
-async function saveRevision(state) {
+async function saveDocument(state) {
 
   // @ts-ignore
-  const revDlg = ui.newRevisionChangeDialog;
-  revDlg.changeDesc.value = "Corrections"
+  const dlg = ui.saveDocumentDialog;
+  const userData = /** @type {any} */ (authentication.getUser())
 
   try {
-    const user = authentication.getUser()
-    if (user) {
-      const userData = /** @type {any} */ (user);
-      revDlg.persId.disabled = revDlg.persName.disabled = true
-      revDlg.persId.value = userData.username
-      revDlg.persName.value = userData.fullname
+    if (userData) {
+      // Determine whether to auto-check and lock the "save to new copy" checkbox
+      const isOwnerBasedMode = accessControl.getMode() === 'owner-based'
+      const fileData = getFileDataById(state.xml, state.fileData)
+      const isOwner = fileData?.item?.created_by === userData.username
+      const forceCopy = isOwnerBasedMode && !isOwner
+      dlg.options.saveToNewCopySection.saveToNewCopy.checked = forceCopy
+      dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 
-      // Get current status from TEI document
+      // Default copy label: v{N} (userId) where N = non-gold artifact count + 1
+      const nonGoldCount = /** @type {any[]} */ (fileData?.file?.artifacts ?? [])
+        .filter(a => !a.is_gold_standard).length
+      dlg.options.saveToNewCopySection.copyLabel.value = `v${nonGoldCount + 1} (${userData.username})`
+
+      // Toggle copyLabel visibility based on checkbox
+      const updateCopyLabelVisibility = () => {
+        dlg.options.saveToNewCopySection.copyLabel.style.display = dlg.options.saveToNewCopySection.saveToNewCopy.checked ? '' : 'none'
+      }
+      updateCopyLabelVisibility()
+      dlg.options.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
+
+      // Get current status and last change description from TEI document
       const xmlDoc = xmlEditor.getXmlTree()
       let currentStatus = 'draft'
+      let lastChangeDesc = ''
       if (xmlDoc) {
         const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
         if (lastChange) {
           currentStatus = lastChange.getAttribute('status') || 'draft'
+          const descEl = lastChange.querySelector('desc')
+          if (descEl?.textContent?.trim()) {
+            lastChangeDesc = descEl.textContent.trim()
+          }
         }
       }
 
-      // Dynamically populate status options based on configuration
+      // Fetch lifecycle config
       const lifecycleOrder = await config.get('annotation.lifecycle.order')
+      const changeDescriptions = /** @type {string[]} */ (await config.get('annotation.lifecycle.change-descriptions', []))
+
+      // Build status → default description map (index-aligned with lifecycle order)
+      /** @type {Object.<string, string>} */
+      const statusDescMap = Object.fromEntries(
+        lifecycleOrder.map((/** @type {string} */ s, /** @type {number} */ i) => [s, changeDescriptions[i] ?? ''])
+      )
+
+      // Annotators must not save with status 'extraction' — advance to the next lifecycle step
+      if (currentStatus === 'extraction') {
+        const idx = lifecycleOrder.indexOf('extraction')
+        currentStatus = (idx >= 0 && idx < lifecycleOrder.length - 1)
+          ? lifecycleOrder[idx + 1]
+          : 'unfinished'
+      }
+
+      // Default change description: last XML <change><desc> has precedence over configured default,
+      // unless it equals the extraction description (index 0) — in that case use the configured default.
+      const extractionDesc = changeDescriptions[0] ?? ''
+      const reuseLastDesc = lastChangeDesc && lastChangeDesc !== extractionDesc
+      const defaultChangeDesc = reuseLastDesc ? lastChangeDesc : (statusDescMap[currentStatus] || '')
 
       // Collect allowed statuses for user's roles
       const userRoles = userData.roles || []
@@ -472,7 +507,7 @@ async function saveRevision(state) {
       }
 
       // Clear existing options
-      revDlg.status.innerHTML = ''
+      dlg.status.innerHTML = ''
 
       // Add options from lifecycle order, enabling only allowed statuses
       for (const status of lifecycleOrder) {
@@ -480,109 +515,159 @@ async function saveRevision(state) {
         option.value = status
         option.textContent = status.charAt(0).toUpperCase() + status.slice(1)
         option.disabled = !allowedStatuses.includes(status)
-        revDlg.status.appendChild(option)
+        dlg.status.appendChild(option)
       }
 
       // Set current status as selected
-      revDlg.status.value = currentStatus
+      dlg.status.value = currentStatus
 
-      // Show/hide gold version checkbox based on user role
+      // Set default change description
+      dlg.changeDesc.value = defaultChangeDesc
+      dlg._changeDescManuallyEdited = false
+      dlg.changeDesc.addEventListener('sl-input', () => { dlg._changeDescManuallyEdited = true }, { once: true })
+
+      // Show/hide gold version section based on user role
       const isReviewer = userHasRole(userData, ["admin", "reviewer"])
-      revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
+      dlg.options.saveAsGoldSection.style.display = isReviewer ? '' : 'none'
 
       // Pre-check if current document is already a gold version
       const isCurrentlyGold = state.xml ? isGoldFile(state.xml) : false
-      revDlg.saveAsGold.checked = isCurrentlyGold
+      dlg.options.saveAsGoldSection.saveAsGold.checked = isCurrentlyGold
     }
     // Wait for dialog to be fully visible (attach listener before showing)
-    const dialogShown = new Promise(resolve => revDlg.addEventListener('sl-after-show', resolve, { once: true }))
-    revDlg.show()
+    const dialogShown = new Promise(resolve => dlg.addEventListener('sl-after-show', resolve, { once: true }))
+    dlg.show()
     await dialogShown
     await new Promise((resolve, reject) => {
-      revDlg.submit.addEventListener('click', resolve, { once: true })
-      revDlg.cancel.addEventListener('click', reject, { once: true })
+      dlg.submit.addEventListener('click', resolve, { once: true })
+      dlg.cancel.addEventListener('click', reject, { once: true })
       // Only reject on dialog hide, not on nested component events
       const handleHide = (e) => {
-        // Check if the hide event is from the dialog itself, not a child component
-        if (e.target === revDlg) {
+        if (e.target === dlg) {
           reject()
         }
       }
-      revDlg.addEventListener('sl-hide', handleHide, { once: true })
+      dlg.addEventListener('sl-hide', handleHide, { once: true })
     })
   } catch (e) {
     if (e instanceof Error) {
-      console.error("Error in saveRevision:", e)
+      console.error("Error in saveDocument:", e)
       throw e
     }
     console.warn("User cancelled")
     return
   } finally {
-    revDlg.hide()
+    dlg.hide()
+    // Clean up manual-edit tracking flag
+    delete dlg._changeDescManuallyEdited
   }
 
-  revDlg.hide()
+  dlg.hide()
+
+  const saveToNewCopy = dlg.options.saveToNewCopySection.saveToNewCopy.checked
 
   /** @type {RespStmt} */
   const respStmt = {
-    persId: revDlg.persId.value,
-    persName: revDlg.persName.value,
+    persId: userData.username,
+    persName: userData.fullname,
     resp: "Annotator"
   }
 
   /** @type {RevisionChange} */
   const revisionChange = {
-    status: revDlg.status.value,
-    persId: revDlg.persId.value,
-    desc: revDlg.changeDesc.value
+    status: dlg.status.value,
+    persId: userData.username,
+    desc: dlg.changeDesc.value,
+    label: saveToNewCopy ? (dlg.options.saveToNewCopySection.copyLabel.value.trim() || undefined) : undefined
   }
 
-  const saveAsGold = revDlg.saveAsGold.checked
+  const saveAsGold = dlg.options.saveAsGoldSection.saveAsGold.checked
 
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
-    await addTeiHeaderInfo(respStmt, undefined, revisionChange)
-    if (!state.xml) throw new Error('No XML file loaded')
+    if (saveToNewCopy) {
+      if (!state.xml) throw new Error('No XML file loaded');
 
-    // Mark editor as clean to prevent autosave from triggering
-    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
-    xmlEditor.markAsClean()
+      // Keep reference to current file (used to determine doc_id for the new version)
+      const currentFileId = state.xml
 
-    const filedata = FiledataPlugin.getInstance()
-    await filedata.saveXml(state.xml)
+      // Get the source file's variant to preserve it in the new copy
+      const sourceFile = getFileDataById(currentFileId, state.fileData)
+      const sourceVariant = sourceFile?.variant
 
-    testLog('REVISION_SAVED', {
-      changeDescription: revDlg.changeDesc.value,
-      status: revDlg.status.value
-    });
+      // Modify the header FIRST, before saving as new copy.
+      // Pass edition with no title so only date + fileref are updated.
+      await addTeiHeaderInfo(respStmt, /** @type {Edition} */ ({ title: undefined, note: undefined }), revisionChange)
 
-    // Verify revision was added to XML content (self-contained for bundle removal)
-    testLog('REVISION_IN_XML_VERIFIED', {
-      changeDescription: revDlg.changeDesc.value,
-      xmlContainsRevision: xmlEditor.getXML().includes(revDlg.changeDesc.value)
-    });
-
-    // Set as gold standard if checkbox was checked
-    if (saveAsGold) {
-      try {
-        await client.apiClient.filesGoldStandard(state.xml)
-        testLog('GOLD_STANDARD_SET', { fileId: state.xml })
-        // Reload file data to update UI with new gold status
-        await fileselection.reload({ refresh: true })
-        notify("Revision saved and marked as Gold version")
-      } catch (goldError) {
-        console.error("Failed to set gold standard:", goldError)
-        notify("Revision saved, but failed to set as Gold version", "warning")
+      // Ensure variant is preserved in the XML if the source file had a variant
+      if (sourceVariant) {
+        const xmlDoc = xmlEditor.getXmlTree()
+        if (xmlDoc) {
+          tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
+          await xmlEditor.updateEditorFromXmlTree()
+        }
       }
+
+      // Mark editor as clean to prevent autosave from triggering
+      xmlEditor.markAsClean()
+
+      // Save as new version (fork)
+      const filedata = FiledataPlugin.getInstance()
+      let { file_id: newFileId } = await filedata.saveXml(currentFileId, /* save as new version */ true)
+
+      testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId });
+
+      xmlEditor.markAsClean()
+
+      // Reload file data and load the new copy
+      await fileselection.reload({refresh:true})
+      await services.load({ xml: newFileId })
+
+      testLog('NEW_VERSION_LOADED', { fileId: newFileId, editorReadOnly: app.getCurrentState().editorReadOnly });
+
+      notify("Document was duplicated. You are now editing the copy.")
+
     } else {
-      notify("Revision saved successfully")
+      // Save revision in-place
+      await addTeiHeaderInfo(respStmt, undefined, revisionChange)
+      if (!state.xml) throw new Error('No XML file loaded')
+
+      // Mark editor as clean to prevent autosave from triggering
+      xmlEditor.markAsClean()
+
+      const filedata = FiledataPlugin.getInstance()
+      await filedata.saveXml(state.xml)
+
+      testLog('REVISION_SAVED', {
+        changeDescription: dlg.changeDesc.value,
+        status: dlg.status.value
+      });
+
+      testLog('REVISION_IN_XML_VERIFIED', {
+        changeDescription: dlg.changeDesc.value,
+        xmlContainsRevision: xmlEditor.getXML().includes(dlg.changeDesc.value)
+      });
+
+      // Set as gold standard if checkbox was checked
+      if (saveAsGold) {
+        try {
+          await client.apiClient.filesGoldStandard(state.xml)
+          testLog('GOLD_STANDARD_SET', { fileId: state.xml })
+          await fileselection.reload({ refresh: true })
+          notify("Revision saved and marked as Gold version")
+        } catch (goldError) {
+          console.error("Failed to set gold standard:", goldError)
+          notify("Revision saved, but failed to set as Gold version", "warning")
+        }
+      } else {
+        notify("Revision saved successfully")
+      }
     }
 
     app.invokePluginEndpoint(ep.sync.syncFiles, state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 
-    // dirty state
     xmlEditor.markAsClean()
   } catch (error) {
     console.error(error)
@@ -593,126 +678,7 @@ async function saveRevision(state) {
 }
 
 /**
- * Called when the "Create new version" button is executed
- * @param {ApplicationState} state
- */
-async function createNewVersion(state) {
-
-  // @ts-ignore
-  const newVersiondialog = ui.newVersionDialog;
-  try {
-    const userData = authentication.getUser()
-    if (userData) {
-      newVersiondialog.persId.value =  userData.username
-      newVersiondialog.persName.value = userData.fullname
-    }
-    // Wait for dialog to be fully visible (attach listener before showing)
-    const dialogShown = new Promise(resolve => newVersiondialog.addEventListener('sl-after-show', resolve, { once: true }))
-    newVersiondialog.show()
-    await dialogShown
-    await new Promise((resolve, reject) => {
-      newVersiondialog.submit.addEventListener('click', resolve, { once: true })
-      newVersiondialog.cancel.addEventListener('click', reject, { once: true })
-      // Only reject on dialog hide, not on nested component events
-      const handleHide = (e) => {
-        if (e.target === newVersiondialog) {
-          reject()
-        }
-      }
-      newVersiondialog.addEventListener('sl-hide', handleHide, { once: true })
-    })
-  } catch (e) {
-    console.warn("User cancelled")
-    return
-  } finally {
-    newVersiondialog.hide()
-  }
-
-  /** @type {RespStmt} */
-  const respStmt = {
-    persId: newVersiondialog.persId.value,
-    persName: newVersiondialog.persName.value,
-    resp: "Annotator"
-  }
-
-  /** @type {Edition} */
-  const editionStmt = {
-    title: newVersiondialog.versionName.value,
-    note: newVersiondialog.editionNote.value
-  }
-
-  ui.toolbar.documentActions.saveRevision.disabled = true
-  try {
-    if (!state.xml) throw new Error('No XML file loaded');
-
-    // Keep reference to current file (used to determine doc_id for the new version)
-    const currentFileId = state.xml
-
-    // Get the source file's variant to preserve it in the new version
-    const sourceFile = getFileDataById(currentFileId, state.fileData)
-    const sourceVariant = sourceFile?.variant
-
-    // Modify the header FIRST, before saving as new version
-    // This ensures the new version has unique content (won't conflict with existing content hash)
-    await addTeiHeaderInfo(respStmt, editionStmt)
-
-    // Ensure variant is preserved in the XML if the source file had a variant
-    if (sourceVariant) {
-      const xmlDoc = xmlEditor.getXmlTree()
-      if (xmlDoc) {
-        tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
-        await xmlEditor.updateEditorFromXmlTree()
-      }
-    }
-
-    // Mark editor as clean to prevent autosave from triggering
-    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
-    // We want to explicitly control the save with new_version=true below
-    xmlEditor.markAsClean()
-
-    // Save as new version with the modified content
-    // The backend will:
-    // 1. Resolve doc_id from currentFileId (the source file)
-    // 2. Create a new version file with incremented version number
-    // 3. Return the new file's stable_id
-    const filedata = FiledataPlugin.getInstance()
-    let { file_id: newFileId } = await filedata.saveXml(currentFileId, /* save as new version */ true)
-
-    testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId });
-
-    // Mark as clean since we just saved
-    xmlEditor.markAsClean()
-
-    // Reload the file data first to include the new version
-    await fileselection.reload({refresh:true})
-
-    // Load the new file using services.load() to properly acquire lock and reset read-only state
-    // This ensures editorReadOnly is correctly set based on lock status
-    await services.load({ xml: newFileId })
-
-    // Log after state is fully updated for E2E tests
-    testLog('NEW_VERSION_LOADED', { fileId: newFileId, editorReadOnly: app.getCurrentState().editorReadOnly });
-
-    notify("Document was duplicated. You are now editing the copy.")
-
-    // sync the new file
-    app.invokePluginEndpoint(ep.sync.syncFiles, state)
-      .then(/** @param {any} summary */ summary => {
-        if (summary) {
-          logger.debug(summary);
-        }
-      })
-      .catch(e => console.error(e))
-  } catch (e) {
-    dialog.error(`Could not create new version: ${String(e)}`)
-  } finally {
-    ui.toolbar.documentActions.saveRevision.disabled = false
-    newVersiondialog.hide()
-  }
-}
-
-/**
- * Add information on responsibitiy, edition or revisions to the document
+ * Add information on responsibility, edition or revisions to the document
  * @param {RespStmt} [respStmt] - Optional responsible statement details.
  * @param {Edition} [edition] - Optional edition statement details.
  * @param {RevisionChange} [revisionChange] - Optional revision statement details.
@@ -734,17 +700,22 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     }
   }
 
-  // update document: <edition>
+  // update document: <edition> — only when creating a new copy (edition.title is undefined/null)
+  // We still update the editionStmt to refresh the date and preserve the fileref.
   if (edition && currentState?.fileData) {
-    const versionName = edition.title
-    const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
-    const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
-    const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
-    if (nameExistsInDoc || nameExistsInVersions) {
-      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
+    if (edition.title) {
+      // Legacy path: validate name uniqueness when a title is explicitly provided
+      const versionName = edition.title
+      const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
+      const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
+      const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
+      if (nameExistsInDoc || nameExistsInVersions) {
+        throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
+      }
     }
     tei_utils.addEdition(xmlDoc, edition)
   }
+
   if (revisionChange) {
     tei_utils.addRevisionChange(xmlDoc, revisionChange)
   }
@@ -753,7 +724,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 }
 
 /**
- * Edit file metadata (label from edition title, source from bibl)
+ * Edit file metadata (docId from fileref, source from bibl)
  * @param {ApplicationState} state
  */
 async function editFileMetadata(state) {
@@ -780,20 +751,17 @@ async function editFileMetadata(state) {
 
   // Extract current values from TEI header
   const titleEl = xmlDoc.querySelector('teiHeader fileDesc titleStmt title')
-  const editionTitleEl = xmlDoc.querySelector('teiHeader fileDesc editionStmt edition title')
   const biblEl = xmlDoc.querySelector('teiHeader fileDesc sourceDesc bibl')
 
-  // Pre-fill form with current values from TEI header and file metadata
+  // Pre-fill form with current values
   metadataDlg.docTitle.value = titleEl?.textContent || ""
   metadataDlg.docId.value = currentDocId
-  metadataDlg.label.value = editionTitleEl?.textContent || ""
   metadataDlg.source.value = biblEl?.textContent || ""
 
   // Enable doc_id editing only for gold files by reviewers
   metadataDlg.docId.disabled = !(isGold && isReviewer)
 
   let updatedDocId = ""
-  let updatedLabel = ""
   let updatedSource = ""
   let validationPassed = false
 
@@ -823,17 +791,14 @@ async function editFileMetadata(state) {
 
     // Gather updated values
     updatedDocId = metadataDlg.docId.value.trim()
-    updatedLabel = metadataDlg.label.value.trim()
     updatedSource = metadataDlg.source.value.trim()
 
     // Validate doc_id if it changed and user has permission to edit it
     if (updatedDocId !== currentDocId && isGold && isReviewer) {
       // Check if the input needs encoding by doing encode(decode(input))
-      // This makes the check idempotent - if already encoded, it won't change
       const decoded = decodeFilename(updatedDocId)
       const encoded = encodeFilename(decoded)
 
-      // If encode(decode(input)) differs from input, the input has unsafe characters
       if (encoded !== updatedDocId) {
         const useEncoded = confirm(
           `The document ID contains characters that need to be encoded for filesystem compatibility.\n\n` +
@@ -843,56 +808,20 @@ async function editFileMetadata(state) {
         )
 
         if (useEncoded) {
-          // Update the field with encoded version and continue with validation loop
           metadataDlg.docId.value = encoded
           updatedDocId = encoded
           continue
         } else {
-          // User wants to re-enter, show dialog again
           continue
         }
       }
     }
 
-    // Validation passed, exit loop
     validationPassed = true
   }
 
   ui.toolbar.documentActions.editMetadata.disabled = true
   try {
-    // Update label in TEI header (editionStmt/edition/title)
-    if (updatedLabel !== (editionTitleEl?.textContent || "")) {
-      if (editionTitleEl) {
-        editionTitleEl.textContent = updatedLabel
-      } else {
-        // Create the structure if it doesn't exist
-        let editionStmt = xmlDoc.querySelector('teiHeader fileDesc editionStmt')
-        if (!editionStmt) {
-          const fileDesc = xmlDoc.querySelector('teiHeader fileDesc')
-          if (fileDesc) {
-            editionStmt = xmlDoc.createElement('editionStmt')
-            // Insert after titleStmt
-            const titleStmt = xmlDoc.querySelector('teiHeader fileDesc titleStmt')
-            if (titleStmt && titleStmt.nextSibling) {
-              fileDesc.insertBefore(editionStmt, titleStmt.nextSibling)
-            } else {
-              fileDesc.appendChild(editionStmt)
-            }
-          }
-        }
-        if (editionStmt) {
-          let edition = editionStmt.querySelector('edition')
-          if (!edition) {
-            edition = xmlDoc.createElement('edition')
-            editionStmt.appendChild(edition)
-          }
-          const newTitle = xmlDoc.createElement('title')
-          newTitle.textContent = updatedLabel
-          edition.appendChild(newTitle)
-        }
-      }
-    }
-
     // Update source in TEI header (sourceDesc/bibl)
     if (updatedSource !== (biblEl?.textContent || "")) {
       if (biblEl) {
@@ -921,8 +850,7 @@ async function editFileMetadata(state) {
     // Mark editor as clean to prevent autosave from triggering
     xmlEditor.markAsClean()
 
-    // Save the updated XML - the backend will automatically extract and save the label
-    // from editionStmt/edition/title when processing the save
+    // Save the updated XML
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
@@ -941,11 +869,10 @@ async function editFileMetadata(state) {
       notify("File metadata updated successfully")
     }
 
-    // Reload file data to reflect changes (label and doc_id will be updated automatically by backend)
+    // Reload file data to reflect changes
     await fileselection.reload({refresh: true})
 
     // If doc_id was updated, reload the document to show the updated fileref in the editor
-    // TODO this brute-force update could be replaced by a node-level update that is broadcast to all clients
     if (docIdUpdated) {
       await services.load({xml: state.xml})
     }

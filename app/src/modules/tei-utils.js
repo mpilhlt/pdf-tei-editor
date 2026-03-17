@@ -91,6 +91,7 @@ export function addRespStmt(xmlDoc, respStmt) {
  * @property {string} persId - The ID of the person making the revision.
  * @property {string} desc - A description of the revision.
  * @property {string} [fullName] - The full name of the person making the revision.
+ * @property {string} [label] - Optional label for this version, stored as <note type="label"> inside <change>.
  */
 
 /**
@@ -102,16 +103,16 @@ export function addRespStmt(xmlDoc, respStmt) {
  * @returns {void}
  */
 export function addRevisionChange(xmlDoc, revisionChange) {
-  const { status = "draft", persId, desc, fullName } = revisionChange
+  const { status = "draft", persId, desc, fullName, label } = revisionChange
   if (!persId || !desc) {
     throw new Error("persId and desc data required")
   }
-  
+
   // Ensure respStmt exists for the user
   if (fullName) {
     ensureRespStmtForUser(xmlDoc, persId, fullName);
   }
-  
+
   const currentDateString = new Date().toISOString();
   let revisionDescElements = xmlDoc.getElementsByTagName('revisionDesc');
   let revisionDescElement;
@@ -132,6 +133,14 @@ export function addRevisionChange(xmlDoc, revisionChange) {
     changeElem.setAttribute('who', '#' + persId);
   }
 
+  // Optional label stored as <note type="label"> — comes before <desc>
+  if (label && label.trim()) {
+    const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
+    noteElem.setAttribute('type', 'label');
+    noteElem.textContent = label.trim();
+    changeElem.appendChild(noteElem);
+  }
+
   if (desc) {
     const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
     const textNode = xmlDoc.createTextNode(desc);
@@ -143,14 +152,31 @@ export function addRevisionChange(xmlDoc, revisionChange) {
 }
 
 /**
+ * Returns the label from the last revisionDesc/change/note[@type="label"], or null if none.
+ * Falls back to editionStmt/edition/title for backward compatibility.
+ * @param {Document} xmlDoc
+ * @returns {string|null}
+ */
+export function getRevisionLabel(xmlDoc) {
+  const notes = xmlDoc.querySelectorAll('revisionDesc change note[type="label"]')
+  if (notes.length) {
+    return notes[notes.length - 1].textContent.trim() || null
+  }
+  // Backward compat: read from editionStmt/edition/title
+  const titleEl = xmlDoc.querySelector('teiHeader fileDesc editionStmt edition title')
+  return titleEl?.textContent?.trim() || null
+}
+
+/**
  * Represents an 'edition' statement within a 'editionStmt' element.
  * @typedef {object} Edition
- * @property {string} title - The title of the edition.
+ * @property {string} [title] - The title of the edition (optional).
  * @property {string} [note] - An optional note about the edition.
  */
 
 /**
  * Add or replace a <edition> node to the /TEI/teiHeader/fileDesc/editionStmt section of an XML DOM document.
+ * When title is omitted, only the <date> and preserved <idno type="fileref"> are written.
  *
  * @param {Document} xmlDoc - The XML DOM Document object.
  * @param {Edition} edition - Object containing data for the 'edition' element
@@ -159,9 +185,6 @@ export function addRevisionChange(xmlDoc, revisionChange) {
  */
 export function addEdition(xmlDoc, edition) {
   const { title, note } = edition
-  if (!title || title.trim() === '') {
-    throw new Error("Missing 'title'")
-  }
   const date = new Date()
   const currentDateString = date.toISOString();
   const teiHeader = getTeiHeader(xmlDoc);
@@ -205,10 +228,12 @@ export function addEdition(xmlDoc, edition) {
   dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
   editionElem.appendChild(dateElem); // Appending <date> to <edition>
 
-  // <title>
-  const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
-  titleElem.textContent = title;
-  editionElem.appendChild(titleElem);
+  // <title> (only when explicitly provided)
+  if (title && title.trim() !== '') {
+    const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
+    titleElem.textContent = title;
+    editionElem.appendChild(titleElem);
+  }
 
   // Preserve fileref if it existed
   if (existingFileref) {
