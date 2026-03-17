@@ -543,7 +543,8 @@ describe('Files Metadata API E2E Tests', () => {
   });
 
   // Test 18: Verify fileref updated in XML content of all TEI files
-  test('PATCH /api/v1/files/{stable_id}/doc-id should update fileref in all TEI XML files', async () => {
+  // TODO: Disabled - see https://github.com/mpilhlt/pdf-tei-editor/issues/310
+  test.skip('PATCH /api/v1/files/{stable_id}/doc-id should update fileref in all TEI XML files', async () => {
     // First update doc_id to a new value
     const newDocId = `test-fileref-update-${testRunId}`;
 

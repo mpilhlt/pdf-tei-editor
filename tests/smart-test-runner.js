@@ -666,6 +666,7 @@ class SmartTestRunner {
    * @property {boolean} [dryRun] - Show which tests would run without executing
    * @property {boolean} [namesOnly] - Output only test file names (one per line)
    * @property {boolean} [all] - Run all tests regardless of changes
+   * @property {boolean} [bail] - Stop after first test suite failure
    * @property {string[] | null} [changedFiles] - Custom list of changed files to analyze
    */
 
@@ -677,6 +678,7 @@ class SmartTestRunner {
     const isTap = options.tap;
     const dryRun = options.dryRun;
     const namesOnly = options.namesOnly;
+    const failFast = options.bail;
 
     if (isTap) {
         // In TAP mode, we don't show the smart runner's own logs, only the TAP output from the runners
@@ -701,7 +703,7 @@ class SmartTestRunner {
       return;
     }
 
-    const jsCommand = testsToRun.js.length > 0 ? `node tests/unit-test-runner.js ${isTap ? '--tap' : ''} ${testsToRun.js.join(' ')}` : null;
+    const jsCommand = testsToRun.js.length > 0 ? `node tests/unit-test-runner.js ${isTap ? '--tap' : ''} ${testsToRun.js.join(' ')}`.trim() : null;
     const pyCommand = testsToRun.py.length > 0 ? `uv run python tests/unit-test-runner.py ${isTap ? '--tap' : ''} ${testsToRun.py.join(' ')}` : null;
 
     // Collect environment variables from API tests
@@ -776,7 +778,7 @@ class SmartTestRunner {
 
       // Create E2E test suite entry for each browser
       // Test files must come AFTER options to e2e-runner (but will be placed before Playwright options internally)
-      const baseExtraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
+      const baseExtraArgs = [envArgsStr, envFileArg, failFast ? '--bail' : ''].filter(Boolean).join(' ');
       e2eCommands = browsers.map(browser => ({
         name: `E2E tests (${browser})`,
         command: `node tests/e2e-runner.js --browser ${browser} ${baseExtraArgs} ${testFilesArg}`.trim(),
@@ -885,6 +887,7 @@ class SmartTestRunner {
             }
             allTestsPassed = false;
             failedSuites.push(suite.name);
+            if (failFast) break;
         }
     }
 
@@ -919,6 +922,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         .option('--dry-run', 'show which tests would run without executing them')
         .option('--names-only', 'output only test file names (one per line), nothing if no tests')
         .option('--tap', 'output results in TAP format')
+        .option('--bail', 'stop after first test suite failure')
         .option('--debug', 'enable debug logging')
         .option('--browser <browsers>', 'browser(s) to use for E2E tests (comma-separated, default: chromium)', 'chromium')
         .arguments('[files...]')
@@ -958,6 +962,7 @@ How it works:
         tap: options.tap || false,
         dryRun: options.dryRun || false,
         namesOnly: options.namesOnly || false,
+        bail: options.bail || false,
         changedFiles: files.length > 0 ? files : null,
         browser: options.browser
     };

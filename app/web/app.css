@@ -91,9 +91,11 @@ div[name = "xmlEditor"] tool-bar sl-button::part(label) {
   margin-top: 5px;
 }
 
-sl-select::part(form-control-label) {
-  font-size: smaller;
-  color: var(--sl-color-gray-500)
+sl-select::part(form-control-label),
+sl-input::part(form-control-label) {
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-700);
+  font-weight: var(--sl-font-weight-normal);
 }
 
 /* Loading state for file selection selectboxes */
@@ -224,6 +226,44 @@ status-bar {
   gap: 10px;
 }
 
+.dialog-column > p {
+  margin: 0;
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-700);
+}
+
+.dialog-column .help-text {
+  margin: -4px 0 0 calc(var(--sl-toggle-size-medium) + var(--sl-spacing-small));
+  font-size: var(--sl-font-size-x-small);
+  color: var(--sl-color-neutral-500);
+}
+
+/* help-text following an input/select sits flush left like Shoelace's own help-text */
+.dialog-column sl-input + .help-text,
+.dialog-column sl-select + .help-text {
+  margin-left: 0;
+}
+
+.dialog-checkbox-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--sl-color-neutral-50);
+  border: 1px solid var(--sl-color-neutral-200);
+  border-radius: var(--sl-border-radius-medium);
+}
+
+.dialog-checkbox-section sl-checkbox::part(label) {
+  font-size: var(--sl-font-size-small);
+  font-weight: var(--sl-font-weight-normal);
+}
+
+.dialog-checkbox-section .help-text {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
 .dialog-row {
   display: flex block;
   flex-direction: row;
@@ -232,7 +272,8 @@ status-bar {
 
 sl-select::part(display-input) {
   caret-color: transparent !important;
-  font-size: smaller;
+  font-size: inherit;
+  font-family: inherit;
 }
 
 sl-select::part(listbox) {

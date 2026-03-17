@@ -19,6 +19,7 @@ from fastapi_app.lib.utils.tei_utils import (
     create_encoding_desc_with_extractor,
 )
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
+from fastapi_app.lib.utils.config_utils import get_config
 from fastapi_app.plugins.llamore.config import (
     get_annotation_guides,
     get_form_options,
@@ -110,7 +111,8 @@ class LLamoreExtractor(BaseExtractor):
         titleStmt = fileDesc.find("titleStmt")
         assert titleStmt is not None
 
-        edition_stmt = create_edition_stmt_with_fileref(timestamp, "Extraction", file_id)
+        extraction_desc = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
+        edition_stmt = create_edition_stmt_with_fileref(timestamp, extraction_desc, file_id)
         titleStmt.addnext(edition_stmt)
 
         # Create encodingDesc with applications

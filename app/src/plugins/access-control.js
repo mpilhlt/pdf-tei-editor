@@ -562,14 +562,14 @@ function showOwnerBasedNotification() {
   if (!isOwner) {
     if (owner) {
       notify(
-        `This document is owned by ${owner}. Create your own version to edit.`,
+        `This document is owned by ${owner}. Use "Save Revision → Save to a new personal copy" to work on your own copy.`,
         'warning',
         'exclamation-triangle'
       )
     } else {
       // No owner (legacy file created before owner tracking)
       notify(
-        `This document has no owner and is read-only. Create your own version to edit.`,
+        `This document has no owner and is read-only. Use "Save Revision → Save to a new personal copy" to create an editable copy.`,
         'warning',
         'exclamation-triangle'
       )
@@ -671,7 +671,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
     } else if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
       contextText = 'Read-only (version file - annotator role required)'
     } else if (mode === 'owner-based' && owner && owner !== currentUser?.username) {
-      contextText = `Read-only (owned by ${owner})`
+      contextText = `Read-only (owned by ${owner}) — save to a personal copy to edit`
     } else if (mode === 'granular' && currentPermissions.editability === 'owner' && owner !== currentUser?.username) {
       contextText = `Read-only (owned by ${owner})`
     }
