@@ -30,6 +30,7 @@ import { notify } from './sl-utils.js';
  * @property {Object} api - API client for backend calls
  * @property {{ get: function(string, any=): Promise<any> }} config - Configuration API
  * @property {function(string): Promise<string>} fetchText - Fetch text content from URL
+ * @property {function(string, string=, Object=): Promise<Object>} callPluginApi - Call plugin API endpoint with authentication
  * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
  */
 
@@ -81,6 +82,37 @@ async function fetchText(url) {
 }
 
 /**
+ * Call a plugin API endpoint with authentication.
+ * @param {string} endpoint - Plugin endpoint path (e.g., '/api/plugins/my-plugin/action')
+ * @param {string} [method='GET'] - HTTP method (GET, POST, etc.)
+ * @param {Object|null} [params=null] - Query params for GET or request body for POST/PUT
+ * @returns {Promise<Object>} Parsed JSON response
+ */
+async function callPluginApi(endpoint, method = 'GET', params = null) {
+  const state = getStateFn();
+  const url = new URL(endpoint, window.location.origin);
+  /** @type {RequestInit} */
+  const options = {
+    method,
+    headers: { 'X-Session-ID': state?.sessionId || '' }
+  };
+  if (params) {
+    if (method === 'GET') {
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+    } else {
+      options.headers = { ...options.headers, 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(params);
+    }
+  }
+  const response = await fetch(url.toString(), options);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(err.detail || response.statusText);
+  }
+  return response.json();
+}
+
+/**
  * Register an XSL stylesheet with the XslViewerPlugin.
  * @param {XslStylesheetRegistration} options - Stylesheet registration options
  */
@@ -117,6 +149,7 @@ export function getSandbox() {
     api: client.apiClient,
     config: { get: configApi.get },
     fetchText,
+    callPluginApi: (endpoint, method, params) => callPluginApi(endpoint, method, params),
     registerXslStylesheet
   };
 }
