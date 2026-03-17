@@ -5,7 +5,7 @@
 
 class StatusText extends HTMLElement {
   static get observedAttributes() {
-    return ['text', 'icon', 'tooltip'];
+    return ['text', 'icon', 'tooltip', 'dblclickable'];
   }
 
   constructor() {
@@ -150,14 +150,51 @@ class StatusText extends HTMLElement {
     }
   }
 
+  get dblclickable() {
+    return this.hasAttribute('dblclickable');
+  }
+
+  set dblclickable(value) {
+    if (value) {
+      this.setAttribute('dblclickable', '');
+      this.addEventListener('dblclick', this.handleDblClick.bind(this));
+    } else {
+      this.removeAttribute('dblclickable');
+      this.removeEventListener('dblclick', this.handleDblClick);
+    }
+  }
+
   handleClick(event) {
-    this.dispatchEvent(new CustomEvent('widget-click', {
-      bubbles: true,
-      detail: {
-        action: 'click',
-        widget: this,
-        text: this.text
+    if (this.dblclickable) {
+      // Clear any previous timer so only the last click in the sequence is dispatched
+      if (this._clickTimer) {
+        clearTimeout(this._clickTimer);
+        this._clickTimer = null;
       }
+      this._clickTimer = setTimeout(() => {
+        this._clickTimer = null;
+        this.dispatchEvent(new CustomEvent('widget-click', {
+          bubbles: true,
+          detail: { action: 'click', widget: this, text: this.text }
+        }));
+      }, 250);
+    } else {
+      this.dispatchEvent(new CustomEvent('widget-click', {
+        bubbles: true,
+        detail: { action: 'click', widget: this, text: this.text }
+      }));
+    }
+  }
+
+  handleDblClick(event) {
+    event.stopPropagation();
+    if (this._clickTimer) {
+      clearTimeout(this._clickTimer);
+      this._clickTimer = null;
+    }
+    this.dispatchEvent(new CustomEvent('widget-dblclick', {
+      bubbles: true,
+      detail: { action: 'dblclick', widget: this, text: this.text }
     }));
   }
 }

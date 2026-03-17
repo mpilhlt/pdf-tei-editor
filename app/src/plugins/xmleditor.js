@@ -16,7 +16,7 @@
  */
 
 import ui, {updateUi} from '../ui.js'
-import { app, validation, logger, testLog, services } from '../app.js'
+import { app, validation, logger, testLog, services, fileselection } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -28,6 +28,8 @@ import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
 import { client } from '../plugins.js'
+import * as tei_utils from '../modules/tei-utils.js'
+import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -45,7 +47,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 /**
  * XML editor headerbar navigation properties
  * @typedef {object} xmlEditorHeaderbarPart
- * @property {StatusText} titleWidget - The document title widget
+ * @property {StatusText} titlePrefixWidget - The artifact type prefix widget (e.g. "Gold:" / "Version:")
+ * @property {StatusText} titleWidget - The artifact label widget (editable by reviewers)
  * @property {StatusText} lastUpdatedWidget - The last updated widget
  */
 
@@ -98,6 +101,9 @@ const xmlEditor = new NavXmlEditor('codemirror-container')
 let currentState;
 
 // Status widgets for XML editor headerbar and statusbar
+/** @type {StatusText} */
+let titlePrefixWidget;
+
 /** @type {StatusText} */
 let titleWidget;
 
@@ -271,8 +277,28 @@ async function install(state) {
   updateUi()
 
   // Store references to widgets for later use
+  titlePrefixWidget = ui.xmlEditor.headerbar.titlePrefixWidget
   titleWidget = ui.xmlEditor.headerbar.titleWidget
   lastUpdatedWidget = ui.xmlEditor.headerbar.lastUpdatedWidget
+
+  // Make title widget clickable/dblclickable for copy and edit
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    titleWidget.clickable = true
+    titleWidget.dblclickable = true
+    titleWidget.tooltip = 'Click to copy, doubleclick to edit'
+    titleWidget.addEventListener('widget-click', () => {
+      const label = titleWidget.text
+      if (label) {
+        navigator.clipboard.writeText(label).then(() => {
+          notify(`Artifact label copied to clipboard`, 'success', 'clipboard-check')
+        }).catch(err => {
+          logger.error('Failed to copy to clipboard: ' + String(err))
+          notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
+        })
+      }
+    })
+    titleWidget.addEventListener('widget-dblclick', () => editArtifactLabel())
+  }
   indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget
   cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget
 
@@ -606,14 +632,15 @@ async function update(state) {
   ;[readOnlyStatusWidget, cursorPositionWidget, indentationStatusWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
-  // Update title widget with document title
+  // Update title widgets with artifact type prefix and label
   const fileData = getFileDataById(state.xml)
   if (fileData?.item) {
     const versionType = isGoldFile(state.xml) ? "Gold" : "Version"
-    const versionName = fileData.item.version_name || fileData.item.label || '';
-    titleWidget.text = `${versionType}: ${versionName}`
+    titlePrefixWidget.text = `${versionType}:`
+    titleWidget.text = fileData.item.version_name || fileData.item.label || ''
   } else {
-    titleWidget.text = '';
+    titlePrefixWidget.text = ''
+    titleWidget.text = ''
   }
   if (fileData?.item && fileData.item.last_update && fileData.item.last_updated_by) {
     const updateDate = new Date(fileData.item.last_update).toLocaleDateString()
@@ -779,6 +806,58 @@ async function openDocumentAtLine(stableId, lineNumber, column = 0) {
 
   // Scroll to line
   xmlEditor.scrollToLine(lineNumber, column);
+}
+
+/**
+ * Prompt the reviewer to rename the artifact label, add a TEI revision entry, and save.
+ * @returns {Promise<void>}
+ */
+// <sl-icon name="clipboard-check"></sl-icon>
+// <sl-icon name="exclamation-triangle"></sl-icon>
+// <sl-icon name="exclamation-octagon"></sl-icon>
+// <sl-icon name="check-circle"></sl-icon>
+async function editArtifactLabel() {
+  if (!currentState?.xml) return
+  if (currentState.editorReadOnly) {
+    notify('You are not allowed to edit this artifact', 'warning', 'exclamation-triangle')
+    return
+  }
+  const currentLabel = titleWidget.text
+  const newLabel = prompt('Edit artifact label:', currentLabel)
+  if (newLabel === null || newLabel.trim() === currentLabel) return
+  const trimmedLabel = newLabel.trim()
+
+  try {
+    // Add a revision change entry to the TEI header
+    const xmlDoc = xmlEditor.getXmlTree()
+    if (xmlDoc) {
+      const fileData = getFileDataById(currentState.xml)
+      const status = fileData?.file?.last_status || 'draft'
+      tei_utils.addRevisionChange(xmlDoc, {
+        status,
+        persId: currentState.user.username,
+        fullName: currentState.user.fullname,
+        desc: `Renamed to ${trimmedLabel}`,
+        label: trimmedLabel
+      })
+      prettyPrintXmlDom(xmlDoc, 'teiHeader')
+      await xmlEditor.updateEditorFromXmlTree()
+      xmlEditor.markAsClean()
+      const filedata = FiledataPlugin.getInstance()
+      await filedata.saveXml(currentState.xml)
+    }
+
+    // Update the label in the database
+    await client.apiClient.filesPatchMetadata(currentState.xml, { label: trimmedLabel })
+    notify(`Artifact label updated to '${trimmedLabel}'`, 'success', 'check-circle')
+
+    // Reload file data and re-render the current XML
+    await fileselection.reload({ refresh: true })
+    await services.load({ xml: currentState.xml })
+  } catch (error) {
+    logger.error('Failed to update artifact label: ' + String(error))
+    notify('Failed to update artifact label: ' + String(error), 'danger', 'exclamation-octagon')
+  }
 }
 
 /**

@@ -96,6 +96,8 @@ class TestPlugin(Plugin):
     Test plugin that performs basic text analysis and demonstrates frontend extensions.
     """
 
+    __test__ = False  # Prevent pytest from collecting this class as a test suite
+
     @property
     def metadata(self) -> dict[str, Any]:
         """Return plugin metadata."""

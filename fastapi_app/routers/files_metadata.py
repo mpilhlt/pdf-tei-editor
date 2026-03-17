@@ -17,6 +17,7 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.utils.logging_utils import get_logger
 from ..lib.permissions.user_utils import user_has_collection_access
+from ..lib.permissions.access_control import check_file_access
 from ..lib.models import FileMetadata
 from ..config import get_settings
 
@@ -119,6 +120,12 @@ async def update_file_metadata(
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to modify this file"
+        )
+
+    if not check_file_access(file, user, 'edit'):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to edit this file"
         )
 
     # Update metadata fields
