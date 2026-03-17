@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.39.0",
+    "version": "0.40.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
