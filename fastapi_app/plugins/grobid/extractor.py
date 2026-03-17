@@ -33,9 +33,9 @@ from fastapi_app.lib.utils.tei_utils import (
     create_schema_processing_instruction,
     serialize_tei_with_formatted_header,
     get_file_id_from_options,
-    create_edition_stmt_with_fileref,
     create_encoding_desc_with_extractor,
 )
+from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 from fastapi_app.lib.utils.config_utils import get_config
 
@@ -237,16 +237,12 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Add custom elements to header
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
-        # Add editionStmt after titleStmt with fileref
         fileDesc = tei_header.find("fileDesc")
         assert fileDesc is not None
-        titleStmt = fileDesc.find("titleStmt")
-        assert titleStmt is not None
 
         file_id = get_file_id_from_options(options, pdf_path)
-        extraction_desc = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
-        edition_stmt = create_edition_stmt_with_fileref(timestamp, extraction_desc, file_id)
-        titleStmt.addnext(edition_stmt)
+        # Set xml:id on fileDesc for document identity (NCName-safe encoding)
+        fileDesc.set("{http://www.w3.org/XML/1998/namespace}id", encode_for_xml_id(file_id))
 
         # Replace encodingDesc with GROBID-specific version
         existing_encodingDesc = tei_header.find("encodingDesc")
@@ -291,6 +287,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         if existing_revisionDesc is not None:
             tei_header.remove(existing_revisionDesc)
 
+        extraction_desc = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
         revision_desc = create_revision_desc_with_status(timestamp, "extraction", extraction_desc)
         tei_header.append(revision_desc)
 

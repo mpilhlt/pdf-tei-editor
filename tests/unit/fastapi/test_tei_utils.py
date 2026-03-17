@@ -254,7 +254,7 @@ class TestGetFileIdFromOptions(unittest.TestCase):
         from fastapi_app.lib.utils.tei_utils import get_file_id_from_options
 
         result = get_file_id_from_options({'doc_id': '10.1234/test:file'})
-        self.assertEqual(result, '10.1234__test$3A$file')
+        self.assertEqual(result, '10.1234__test_x3A_file')
 
     def test_does_not_double_encode(self):
         """Test that an already-encoded doc_id is returned unchanged."""

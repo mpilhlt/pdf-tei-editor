@@ -684,7 +684,7 @@ async function saveDocument(state) {
  * @param {RevisionChange} [revisionChange] - Optional revision statement details.
  * @throws {Error} If any of the operations to add teiHeader info fail
  */
-async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
+async function addTeiHeaderInfo(respStmt, _edition, revisionChange) {
 
   const xmlDoc = xmlEditor.getXmlTree()
   if (!xmlDoc) {
@@ -698,22 +698,6 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     } else {
       tei_utils.addRespStmt(xmlDoc, respStmt)
     }
-  }
-
-  // update document: <edition> — only when creating a new copy (edition.title is undefined/null)
-  // We still update the editionStmt to refresh the date and preserve the fileref.
-  if (edition && currentState?.fileData) {
-    if (edition.title) {
-      // Legacy path: validate name uniqueness when a title is explicitly provided
-      const versionName = edition.title
-      const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
-      const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
-      const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
-      if (nameExistsInDoc || nameExistsInVersions) {
-        throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
-      }
-    }
-    tei_utils.addEdition(xmlDoc, edition)
   }
 
   if (revisionChange) {

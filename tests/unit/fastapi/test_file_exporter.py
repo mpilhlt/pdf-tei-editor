@@ -416,7 +416,7 @@ class TestFileExporter(unittest.TestCase):
         stats = exporter.export_files(self.export_dir)
 
         # Verify encoded filename
-        exported_file = self.export_dir / "pdf" / "10.1234__test$3A$file$3C$name$3E$.pdf"
+        exported_file = self.export_dir / "pdf" / "10.1234__test_x3A_file_x3C_name_x3E_.pdf"
         self.assertTrue(exported_file.exists())
 
     def test_filename_transform(self):
