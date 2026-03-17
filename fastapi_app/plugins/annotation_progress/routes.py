@@ -80,14 +80,18 @@ async def view_progress(
         config = get_config()
         lifecycle_order = config.get("annotation.lifecycle.order", [])
 
+        from fastapi_app.lib.utils.doi_utils import normalize_legacy_encoding
+
         # Get all files in the collection
         all_files = file_repo.get_files_by_collection(collection)
 
-        # Get all unique doc_ids from the collection (from PDF and TEI files)
+        # Get all unique doc_ids from the collection (from PDF and TEI files).
+        # Normalize legacy $XX$ encoding so files with the same logical doc_id
+        # are not counted as separate documents.
         all_doc_ids = set()
         for f in all_files:
             if f.doc_id:
-                all_doc_ids.add(f.doc_id)
+                all_doc_ids.add(normalize_legacy_encoding(f.doc_id))
 
         # Filter to TEI files only
         tei_files = [f for f in all_files if f.file_type == "tei"]
@@ -110,7 +114,7 @@ async def view_progress(
                 annotation_info = _extract_annotation_info(xml_content, file_metadata)
 
                 if annotation_info:
-                    doc_id = file_metadata.doc_id or "Unknown"
+                    doc_id = normalize_legacy_encoding(file_metadata.doc_id or "Unknown")
                     doc_annotations[doc_id].append(annotation_info)
 
             except Exception as e:
@@ -375,14 +379,16 @@ async def export_csv(
         file_repo = FileRepository(db)
         file_storage = get_file_storage()
 
+        from fastapi_app.lib.utils.doi_utils import normalize_legacy_encoding
+
         # Get all files in the collection
         all_files = file_repo.get_files_by_collection(collection)
 
-        # Get all unique doc_ids from the collection (from PDF and TEI files)
+        # Get all unique doc_ids, normalizing legacy $XX$ encoding
         all_doc_ids = set()
         for f in all_files:
             if f.doc_id:
-                all_doc_ids.add(f.doc_id)
+                all_doc_ids.add(normalize_legacy_encoding(f.doc_id))
 
         # Filter to TEI files only
         tei_files = [f for f in all_files if f.file_type == "tei"]
@@ -405,7 +411,7 @@ async def export_csv(
                 annotation_info = _extract_annotation_info(xml_content, file_metadata)
 
                 if annotation_info:
-                    doc_id = file_metadata.doc_id or "Unknown"
+                    doc_id = normalize_legacy_encoding(file_metadata.doc_id or "Unknown")
                     doc_annotations[doc_id].append(annotation_info)
 
             except Exception as e:
@@ -481,7 +487,7 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
     """
     try:
         from fastapi_app.lib.utils.tei_utils import (
-            extract_tei_metadata,
+            get_artifact_label,
             get_annotator_name,
             extract_change_signatures,
         )
@@ -491,12 +497,7 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
             "tei": "http://www.tei-c.org/ns/1.0",
         }
 
-        # Get annotation label from edition title
-        tei_metadata = extract_tei_metadata(root)
-        # Use edition_title (annotation label) if available, fallback to title
-        annotation_label = tei_metadata.get("edition_title") or tei_metadata.get(
-            "title", "Untitled"
-        )
+        annotation_label = get_artifact_label(root) or "Untitled"
 
         # Count all change elements (revision count)
         change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)

@@ -371,20 +371,33 @@ def encode_filename(doc_id: str) -> str:
     return ''.join(encoded)
 
 
+_LEGACY_ENCODING_RE = re.compile(r'\$([0-9A-Fa-f]{2})\$')
+
+
+def normalize_legacy_encoding(s: str) -> str:
+    """Convert legacy ``$XX$`` percent-style encoding to the current ``_xXX_`` format."""
+    return _LEGACY_ENCODING_RE.sub(lambda m: f"_x{m.group(1).upper()}_", s)
+
+
+_NCNAME_INVALID_RE = re.compile(r'[^a-zA-Z0-9._\-]')
+
+
 def encode_for_xml_id(file_id: str) -> str:
     """
-    Make an encode_filename()-encoded file_id valid as an xml:id attribute value.
+    Convert any file identifier to a valid XML NCName for use as ``xml:id``.
 
-    encode_filename() now produces _xXX_ patterns which are already NCName-safe,
-    so only the leading-digit case needs handling:
-    - Converts any legacy $XX$ patterns to _xXX_ (BC for old-format file_ids)
-    - Prepends '_' if the result starts with a digit
+    Handles input in any encoding state:
+    - Legacy ``$XX$`` patterns → ``_xXX_``
+    - URL ``%XX`` percent-encoding → ``_xXX_``
+    - ``/`` (raw or unencoded DOI slash) → ``__``
+    - Any remaining character invalid in NCName → ``_xXX_``
+    - Prepends ``_`` if the result starts with a digit
 
     Args:
-        file_id: A file identifier encoded by encode_filename()
+        file_id: Any file identifier string
 
     Returns:
-        NCName-safe string suitable for use as xml:id
+        NCName-safe string suitable for use as ``xml:id``
 
     Examples:
         >>> encode_for_xml_id("10.5771__2699-1284-2024-3-149")
@@ -393,9 +406,18 @@ def encode_for_xml_id(file_id: str) -> str:
         "test_x3A_file"
         >>> encode_for_xml_id("test$3A$value")
         "test_x3A_value"
+        >>> encode_for_xml_id("10.1023/a%3A1015833415224")
+        "_10.1023__a_x3A_1015833415224"
     """
-    # BC: translate any remaining old $XX$ patterns to _xXX_
-    result = re.sub(r'\$([0-9A-F]{2})\$', r'_x\1_', file_id)
+    # 1. Legacy $XX$ → _xXX_
+    result = normalize_legacy_encoding(file_id)
+    # 2. URL %XX → _xXX_
+    result = re.sub(r'%([0-9A-Fa-f]{2})', lambda m: f"_x{m.group(1).upper()}_", result)
+    # 3. / → __ (DOI slash convention, must come before generic char encoding)
+    result = result.replace("/", "__")
+    # 4. Any remaining NCName-invalid character → _xXX_
+    result = _NCNAME_INVALID_RE.sub(lambda m: f"_x{ord(m.group()):02X}_", result)
+    # 5. Prepend _ if starts with digit
     if result and result[0].isdigit():
         result = '_' + result
     return result

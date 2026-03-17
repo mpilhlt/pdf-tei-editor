@@ -157,7 +157,7 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         result = _extract_annotation_info(xml_content, file_metadata)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["annotation_label"], "Test Document Title")
+        self.assertEqual(result["annotation_label"], "Untitled")
         self.assertEqual(result["revision_count"], 1)
 
 

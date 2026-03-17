@@ -1058,6 +1058,32 @@ def get_annotator_name(tei_root: etree._Element, who_id: str) -> str:  # type: i
     return clean_id
 
 
+def get_artifact_label(tei_root: etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Return the artifact label for a TEI document.
+
+    Checks locations in priority order:
+    1. Last ``revisionDesc/change/note[@type="label"]``
+    2. ``editionStmt/edition/title`` (backward compatibility)
+
+    Args:
+        tei_root: TEI root element
+
+    Returns:
+        Label string, or ``None`` if none is present.
+    """
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    change_label_elems = tei_root.findall(
+        './/tei:revisionDesc/tei:change/tei:note[@type="label"]', ns
+    )
+    if change_label_elems and change_label_elems[-1].text:
+        return change_label_elems[-1].text.strip()
+    edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
+    if edition_title_elem is not None and edition_title_elem.text:
+        return edition_title_elem.text.strip()
+    return None
+
+
 def extract_xpath_text(
     content: bytes | etree._Element,  # type: ignore[name-defined]
     xpath_paths: list[str],
