@@ -35,20 +35,20 @@ fastapi_app/plugins/my_plugin/
 ├── plugin.py          # Main plugin class
 ├── routes.py          # Optional custom routes
 ├── extensions/        # Optional: frontend extensions to be registered
-│   ├── my-script.js   
-├── html/              # Optional: static files and HTML templates (auto-mounted)
-│   ├── view.html      # HTML templates loaded via load_plugin_html()
+│   ├── my-script.js
+├── static/            # Optional: static assets served at /api/plugins/{plugin_id}/static/
+│   ├── view.html      # HTML templates (read by routes.py, also served statically)
+│   ├── view.js        # JavaScript for view.html
 │   ├── styles.css
-│   ├── scripts.js
 │   └── template.xslt
 └── tests/             # Plugin tests
     ├── test_plugin.py # Python unit tests
     └── script.test.js # JavaScript unit tests (if applicable)
 ```
 
-**Static Files**: Files in the `html/` subdirectory are automatically served at `/api/plugins/{plugin_id}/static/`. Use this for XSLT, CSS, JS assets instead of custom routes. See [Static File Serving](../development/plugin-system-backend.md#static-file-serving).
+**Static assets** (`static/`): Files in the `static/` subdirectory are automatically served at `/api/plugins/{plugin_id}/static/`. Use this for HTML templates, JS, CSS, XSLT, and other assets. See [Static File Serving](../development/plugin-system-backend.md#static-file-serving).
 
-**Keep JavaScript out of HTML templates**: Never put `<script>` blocks with significant logic inline in HTML template files. Instead, place JavaScript in a separate `.js` file in the `html/` directory — it will be served automatically at `/api/plugins/{plugin_id}/static/view.js` — and reference it from the template:
+**Keep JavaScript out of HTML templates**: Never put `<script>` blocks with significant logic inline in HTML template files. Instead, place JavaScript in a separate `.js` file in the `static/` directory — it will be served automatically at `/api/plugins/{plugin_id}/static/view.js` — and reference it from the template:
 
 ```html
 <script type="module" src="/api/plugins/my-plugin/static/view.js"></script>
@@ -943,7 +943,7 @@ safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 
 **`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use).
 
-**`load_plugin_html()`** - Load an HTML template from the plugin's `html/` directory:
+**`load_plugin_html()`** - Load an HTML template from `static/` and inject the sandbox client automatically:
 
 ```python
 from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
@@ -954,9 +954,11 @@ async def view_page(...):
     return HTMLResponse(content=html)
 ```
 
-This reads `html/view.html` relative to the calling plugin's directory and injects the sandbox client script automatically. Pass `inject_sandbox=False` to skip sandbox injection.
+Reads `static/view.html` relative to the calling module's directory. Pass `inject_sandbox=False` to skip sandbox injection. The legacy `html/` directory is still supported as a fallback for backwards compatibility but is deprecated.
 
-**IMPORTANT**: Never inline long HTML strings in route files. Place HTML in external template files under the plugin's `html/` directory and load them with `load_plugin_html()`.
+**`wrap_html_with_sandbox_client()`** - Lower-level helper that injects the sandbox client script into an arbitrary HTML string (advanced use).
+
+**IMPORTANT**: Never inline long HTML strings in route files. Place HTML in external template files in `static/` and load them with `load_plugin_html()`.
 
 ## Frontend Extensions
 
