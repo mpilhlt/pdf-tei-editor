@@ -18,7 +18,8 @@ import { logger, client, dialog, xmlEditor, sse } from '../app.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
-import { registerTemplate, createFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { api as tools } from './tools.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -35,7 +36,7 @@ class FiledataPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'filedata',
-      deps: ['logger', 'client', 'dialog', 'xmleditor', 'toolbar']
+      deps: ['logger', 'client', 'dialog', 'xmleditor', 'toolbar', 'tools']
     });
 
     /** @type {StatusText | null} */
@@ -63,19 +64,6 @@ class FiledataPlugin extends Plugin {
       variant: 'primary',
       name: 'savingStatus'
     });
-
-    // Add garbage collection menu item to toolbar menu
-    createFromTemplate('gc-menu-item', ui.toolbar.toolbarMenu.menu);
-
-    logger.debug('Garbage collection menu item added to toolbar menu');
-
-    // Setup menu item handler
-    ui.toolbar.toolbarMenu.menu.gcMenuItem.addEventListener('click', () => {
-      this.showGarbageCollectionDialog();
-    });
-
-    // Initially hide menu item until we check admin status
-    ui.toolbar.toolbarMenu.menu.gcMenuItem.style.display = 'none';
 
     // Listen for SSE events about file data changes
     sse.addEventListener('fileDataChanged', async (event) => {
@@ -117,6 +105,19 @@ class FiledataPlugin extends Plugin {
       // Reload file data when changes occur from other sessions
       this.reload({ refresh: true });
     });
+  }
+
+  async start() {
+    const gcElement = createSingleFromTemplate('gc-menu-item');
+    this._gcItem = gcElement;
+    tools.addMenuItems([gcElement], 'administration');
+
+    gcElement.querySelector('[name="gcMenuItem"]').addEventListener('click', () => {
+      this.showGarbageCollectionDialog();
+    });
+
+    // Initially hide until admin status is known
+    this._gcItem.style.display = 'none';
   }
 
   /**
@@ -168,11 +169,8 @@ class FiledataPlugin extends Plugin {
    */
   async onStateUpdate(changedKeys) {
     if (changedKeys.includes('user')) {
-      // Only admins can access garbage collection - hide menu item for non-admins
-      const isAdmin = userIsAdmin(this.state.user);
-      if (ui.toolbar?.toolbarMenu?.menu?.gcMenuItem) {
-        ui.toolbar.toolbarMenu.menu.gcMenuItem.style.display = isAdmin ? '' : 'none';
-      }
+      // Only admins can access garbage collection
+      if (this._gcItem) this._gcItem.style.display = userIsAdmin(this.state.user) ? '' : 'none';
     }
   }
 
