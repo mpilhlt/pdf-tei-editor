@@ -143,7 +143,9 @@ class LLamoreExtractor(BaseExtractor):
         if existing_revisionDesc is not None:
             tei_header.remove(existing_revisionDesc)
 
-        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with LLamore")
+        from fastapi_app.lib.utils.config_utils import get_config
+        extraction_label = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with LLamore", label=extraction_label)
         tei_header.append(revision_desc)
 
         tei_doc.append(tei_header)

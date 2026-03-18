@@ -288,7 +288,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             tei_header.remove(existing_revisionDesc)
 
         extraction_desc = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
-        revision_desc = create_revision_desc_with_status(timestamp, "extraction", extraction_desc)
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", extraction_desc, label=extraction_desc)
         tei_header.append(revision_desc)
 
         # Add header to new document

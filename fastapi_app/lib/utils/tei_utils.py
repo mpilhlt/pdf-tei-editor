@@ -288,7 +288,7 @@ def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, 
     return encodingDesc
 
 
-def create_revision_desc_with_status(timestamp: str, status: str, description: str) -> etree._Element:  # type: ignore[name-defined]
+def create_revision_desc_with_status(timestamp: str, status: str, description: str, label: Optional[str] = None) -> etree._Element:  # type: ignore[name-defined]
     """
     Create a revisionDesc element with change tracking.
 
@@ -296,12 +296,17 @@ def create_revision_desc_with_status(timestamp: str, status: str, description: s
         timestamp: ISO timestamp string
         status: Status of the change (e.g., "draft")
         description: Description of the change
+        label: Optional label stored as <note type="label"> before <desc>
 
     Returns:
         revisionDesc element
     """
     revisionDesc = etree.Element("revisionDesc")
     change = etree.SubElement(revisionDesc, "change", when=timestamp, status=status)
+    if label and label.strip():
+        note_elem = etree.SubElement(change, "note")
+        note_elem.set("type", "label")
+        note_elem.text = label.strip()
     desc = etree.SubElement(change, "desc")
     desc.text = description
     return revisionDesc
