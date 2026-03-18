@@ -87,6 +87,10 @@ div[name = "xmlEditor"] tool-bar sl-button::part(label) {
   font-size: smaller;
 }
 
+#toolbar sl-select::part(display-input) {
+  font-size: var(--sl-font-size-x-small);
+}
+
 #toolbar sl-select::part(form-control) {
   transform: translateY(-5px);
 }
@@ -284,7 +288,12 @@ sl-select::part(listbox) {
   width: max-content;
 }
 
-sl-option::part(label),
+/* Make sl-option rows match sl-menu-item size: override the medium token used by
+   sl-option's shadow :host so options render at the small size */
+#toolbar sl-select {
+  --sl-font-size-medium: var(--sl-font-size-x-small);
+}
+
 sl-menu-item::part(label) {
   font-size: smaller;
 }
