@@ -3,6 +3,9 @@ name: Build and Push Docker Image
 on:
   workflow_call:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 concurrency:
   group: docker-build-${{ github.ref }}
 #  cancel-in-progress: true
