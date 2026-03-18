@@ -12,7 +12,8 @@
 
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { registerTemplate, createSingleFromTemplate, createFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { api as tools } from './tools.js'
 import { getEntitySchema, getEntityTypes } from '../modules/rbac/entity-schemas.js'
 import { renderEntityForm, extractFormData, displayFormErrors, clearFormErrors } from '../modules/rbac/form-renderer.js'
 import { createEntityManagers } from '../modules/rbac/entity-manager.js'
@@ -47,8 +48,9 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: 'rbac-manager',
   install,
+  start,
   state: { update },
-  deps: ['client', 'toolbar']
+  deps: ['client', 'toolbar', 'tools']
 }
 
 export { plugin }
@@ -68,8 +70,8 @@ await registerTemplate('rbac-manager-menu-item', 'rbac-manager-menu-item.html')
 // <sl-icon name="trash"></sl-icon>
 
 // Plugin state
-/** @type {ApplicationState | null} */
-let currentState = null
+/** @type {HTMLElement | null} */
+let menuItem = null
 
 /** @type {Record<string, import('../modules/rbac/entity-manager.js').EntityManager>} */
 let entityManagers = {}
@@ -89,47 +91,36 @@ let optionsData = {}
 /**
  * @param {ApplicationState} state
  */
-async function install(state) {
+async function install(_state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Create UI elements
   createSingleFromTemplate('rbac-manager-dialog', document.body)
-  createFromTemplate('rbac-manager-menu-item', ui.toolbar.toolbarMenu.menu)
-
-  logger.debug('RBAC manager menu item added to toolbar menu')
-
-  // Create entity managers with typed API client
   entityManagers = createEntityManagers(client.apiClient)
+  setupDialogListeners()
+}
 
-  // Set up event listeners
-  setupEventListeners()
-
-  // Initially hide menu item until we check admin status
-  ui.toolbar.toolbarMenu.menu.rbacManagerMenuItem.style.display = 'none'
+async function start() {
+  menuItem = createSingleFromTemplate('rbac-manager-menu-item')
+  tools.addMenuItems([menuItem], 'administration')
+  menuItem.addEventListener('click', openDialog)
+  menuItem.style.display = 'none'
 }
 
 /**
  * @param {ApplicationState} state
  */
 async function update(state) {
-  currentState = state
-
-  // Only admins can access RBAC manager - hide menu item for non-admins
-  const isAdmin = userIsAdmin(state.user)
-  if (ui.toolbar?.toolbarMenu?.menu?.rbacManagerMenuItem) {
-    ui.toolbar.toolbarMenu.menu.rbacManagerMenuItem.style.display = isAdmin ? '' : 'none'
+  if (menuItem) {
+    menuItem.style.display = userIsAdmin(state.user) ? '' : 'none'
   }
 }
 
 /**
- * Set up all event listeners for the dialog
+ * Set up dialog event listeners
  */
-function setupEventListeners() {
+function setupDialogListeners() {
   /** @type {rbacManagerDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.rbacManagerDialog)
-
-  // Open dialog menu item
-  ui.toolbar.toolbarMenu.menu.rbacManagerMenuItem.addEventListener('click', openDialog)
 
   // Close dialog
   dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())

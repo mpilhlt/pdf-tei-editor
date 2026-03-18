@@ -1,0 +1,12 @@
+<!-- Tools Button Group -->
+<sl-button-group label="Tools" name="toolsGroup" style="display: none;">
+  <!-- Native split button for frontend/JS menu items; hidden until items are added -->
+  <sl-dropdown name="toolsDropdown" placement="bottom-end" style="display: none;">
+    <sl-button name="toolsBtn" size="small" slot="trigger" caret>
+      <sl-icon name="tools"></sl-icon>
+    </sl-button>
+    <sl-menu name="toolsMenu">
+      <!-- Populated dynamically by frontend plugins -->
+    </sl-menu>
+  </sl-dropdown>
+</sl-button-group>

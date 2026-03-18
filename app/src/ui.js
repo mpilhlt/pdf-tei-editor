@@ -54,7 +54,7 @@ import './modules/panels/index.js';
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {teiRevisionHistoryDrawerPart} from './plugins/tei-tools.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
- * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
+ * @import {backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
  * @import {progressWidgetPart} from './plugins/progress.js'
