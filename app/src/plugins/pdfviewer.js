@@ -13,7 +13,7 @@ import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js
 import { notify } from '../modules/sl-utils.js'
 import { SessionStorage } from '../modules/session-storage.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
-import { encodeFilename, decodeFilename } from '../modules/utils.js'
+import { encodeFilename, decodeFilename } from '../modules/doi-utils.js'
 
 // Session storage for persisting viewer state per PDF
 const storage = new SessionStorage('pdfviewer')

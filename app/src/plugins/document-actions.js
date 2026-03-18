@@ -297,7 +297,13 @@ async function deleteAllVersions() {
   const { services } = await import('../app.js')
   services.removeMergeView()
   // delete
-  await client.deleteFiles(filePathsToDelete)
+  try {
+    await client.deleteFiles(filePathsToDelete)
+  } catch (err) {
+    notify(err.message || 'Failed to delete files.', 'danger', 'exclamation-octagon')
+    await fileselection.reload()
+    return;
+  }
   try {
     // Clear current XML state after successful deletion
     await app.updateState({ xml: null })

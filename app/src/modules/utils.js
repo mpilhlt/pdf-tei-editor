@@ -379,110 +379,17 @@ function dashToCamelCase(str) {
   return camelCaseResult;
 }
 
-export const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
-
-/**
- * Extracts a DOI from a string using a regex. Assumes '/' as separator.
- * @param {string} str The string to extract from.
- * @returns {string|null}
- */
-export function extractDoi(str) {
-  if (!str) return null;
-  const DOI_EXTRACT_PATTERN = /10.\d{4,9}\/[-._;()\/:A-Z0-9]+/i;
-  const match = str.match(DOI_EXTRACT_PATTERN);
-  return match ? match[0] : null;
-}
-
-/**
- * Checks if a string is a valid DOI.
- * @param {string} doi The string to check.
- * @returns {boolean}
- */
-export function isDoi(doi) {
-  if (!doi) return false;
-  return DOI_REGEX.test(doi);
-}
-
-/**
- * Encode a document ID to a filesystem-safe filename.
- *
- * Encoding rules:
- * - Forward slashes (/) → double underscore (__)
- * - Other filesystem-incompatible characters → dollar-sign encoding ($XX$)
- *   where XX is the hexadecimal representation of the character code
- * - Spaces are also encoded for filesystem safety
- *
- * @param {string} docId - Document identifier to encode
- * @returns {string} Filesystem-safe encoded string
- * @throws {Error} If docId is empty
- *
- * @example
- * encodeFilename("10.1111/1467-6478.00040") // "10.1111__1467-6478.00040"
- * encodeFilename("10.1234/test:file") // "10.1234__test$3A$file"
- * encodeFilename("doc<name>") // "doc$3C$name$3E$"
- * encodeFilename("doc name") // "doc$20$name"
- */
-export function encodeFilename(docId) {
-  if (!docId) {
-    throw new Error("docId cannot be empty");
-  }
-
-  // First handle forward slashes specially (common in DOIs)
-  let result = docId.replace(/\//g, "__");
-
-  // Characters that are unsafe on various filesystems
-  // Windows: < > : " | ? * \ and control chars
-  // Unix/Mac: / (already handled) and control chars
-  // Also encode spaces and dollar sign itself
-  const unsafeChars = new Set(['<', '>', ':', '"', '|', '?', '*', '\\', '$', ' ']);
-
-  // Build encoded string
-  const encoded = [];
-  for (const char of result) {
-    if (unsafeChars.has(char) || char.charCodeAt(0) < 32) {
-      // Encode as $XX$ where XX is hex
-      const hex = char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
-      encoded.push(`$${hex}$`);
-    } else {
-      encoded.push(char);
-    }
-  }
-
-  return encoded.join('');
-}
-
-/**
- * Decode a filesystem-safe filename back to the original document ID.
- *
- * Reverses the encoding applied by encodeFilename().
- * Silently skips invalid encoding patterns instead of throwing errors.
- *
- * @param {string} filename - Encoded filename to decode
- * @returns {string} Original document ID string
- *
- * @example
- * decodeFilename("10.1111__1467-6478.00040") // "10.1111/1467-6478.00040"
- * decodeFilename("10.1234__test$3A$file") // "10.1234/test:file"
- * decodeFilename("doc$3C$name$3E$") // "doc<name>"
- * decodeFilename("doc$20$name") // "doc name"
- * decodeFilename("invalid$XY$") // "invalid$XY$" (invalid hex, not decoded)
- */
-export function decodeFilename(filename) {
-  if (!filename) {
-    return filename;
-  }
-
-  // First, restore forward slashes from double underscores
-  let result = filename.replace(/__/g, "/");
-
-  // Decode $XX$ patterns using regex
-  // Match: dollar sign, exactly 2 hex digits, dollar sign
-  const hexPattern = /\$([0-9A-F]{2})\$/g;
-
-  result = result.replace(hexPattern, (match, hexCode) => {
-    const charCode = parseInt(hexCode, 16);
-    return String.fromCharCode(charCode);
-  });
-
-  return result;
-}
+// DOI and filename encoding utilities — implementations live in doi-utils.js
+export {
+  DOI_REGEX,
+  isDoi,
+  validateDoi,
+  normalizeDoi,
+  extractDoi,
+  encodeFilename,
+  decodeFilename,
+  isFilenameEncoded,
+  encodeForXmlId,
+  decodeFromXmlId,
+  normalizeLegacyEncoding,
+} from './doi-utils.js'

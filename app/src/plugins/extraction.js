@@ -11,9 +11,10 @@ import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
-import { isDoi, extractDoi } from '../modules/utils.js';
+import { extractDoi } from '../modules/doi-utils.js';
 import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 
 // Current state for use in event handlers
 /** @type {ApplicationState} */
@@ -256,10 +257,18 @@ async function extractFromPDF(state, defaultOptions={}) {
         console.warn("Cannot get DOI from document:", String(error))
       }
 
-      // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
-      const filenameForDoi = state.pdf || defaultOptions.filename
-      if (filenameForDoi) {
-        doi = doi || getDoiFromFilename(filenameForDoi)
+      // Fallback: extract DOI from uploaded filename (only meaningful for new uploads, not stable IDs)
+      if (!doi && defaultOptions.filename) {
+        doi = getDoiFromFilename(defaultOptions.filename)
+      }
+
+      // Fallback: try to extract DOI from the document's doc_id (e.g. "10.1234/some-doi")
+      if (!doi) {
+        const fileId = state.pdf || state.xml
+        const docId = fileId ? getFileDataById(fileId)?.file?.doc_id : null
+        if (docId) {
+          doi = extractDoi(docId)
+        }
       }
     }
 
@@ -278,7 +287,6 @@ async function extractFromPDF(state, defaultOptions={}) {
     ui.spinner.show('Extracting, please wait')
     let result
     try {
-      if (!options) throw new Error("Missing extraction options")
 
       // Determine which source file to use based on extractor type
       const extractors = await client.getExtractorList()
@@ -634,107 +642,97 @@ async function promptForExtractionOptions(options={}) {
   }
   
   modelSelectBox.addEventListener('sl-change', updateDynamicOptions)
-  
+
   // Initial population of dynamic options
   updateDynamicOptions()
 
-  // display the dialog and await the user's response
-  const result = await new Promise(resolve => {
-    // user cancels
-    function cancel() {
-      resolve(false)
-    }
-    // user submits their input
-    function submit() {
-      resolve(true)
-    }
+  // Display the dialog and loop until valid input or cancellation
+  ui.extractionOptions.show()
 
-    // event listeners
-    ui.extractionOptions.addEventListener("sl-request-close", cancel, { once: true })
-    ui.extractionOptions.cancel.addEventListener("click", cancel, { once: true })
-    ui.extractionOptions.submit.addEventListener("click", submit, { once: true })
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const result = await new Promise(resolve => {
+      function cancel() { resolve(false) }
+      function submit() { resolve(true) }
+      ui.extractionOptions.addEventListener("sl-request-close", cancel, { once: true })
+      ui.extractionOptions.cancel.addEventListener("click", cancel, { once: true })
+      ui.extractionOptions.submit.addEventListener("click", submit, { once: true })
+    })
 
-    ui.extractionOptions.show()
-  })
-  ui.extractionOptions.hide()
-
-  if (result === false) {
-    // user has cancelled the form
-    throw new UserAbortException("User cancelled the dialog")
-  }
-
-  // Collect form data from static and dynamic fields
-  /** @type {DynamicExtractionFormData} */
-  const formData = {
-    'doi': ui.extractionOptions.doi.value || null,
-    'collection': String(ui.extractionOptions.collectionName.value),
-    'extractor': String(ui.extractionOptions.modelIndex.value)
-  }
-
-  // Collect values from dynamic options
-  const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
-  /** @type {NodeListOf<SlSelect|SlInput>} */
-  const dynamicInputs = /** @type {NodeListOf<SlSelect|SlInput>} */(dynamicOptionsContainer?.querySelectorAll('sl-select, sl-input') || [])
-
-  for (const input of dynamicInputs) {
-    /** @type {SlSelect|SlInput} */
-    const typedInput = /** @type {SlSelect|SlInput} */(input)
-    const name = typedInput.name
-    let value = typedInput.value
-
-    // Special handling for instructions - convert to actual instruction text
-    if (name === 'instructions' && instructions[parseInt(String(value))]) {
-      value = instructions[parseInt(String(value))]
+    if (result === false) {
+      ui.extractionOptions.hide()
+      modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
+      throw new UserAbortException("User cancelled the dialog")
     }
 
-    // Skip empty variant_id values - they'll be provided from options/state
-    if (name === 'variant_id' && (!value || value === '')) {
-      continue
+    // Collect form data from static and dynamic fields
+    /** @type {DynamicExtractionFormData} */
+    const formData = {
+      'doi': ui.extractionOptions.doi.value || null,
+      'collection': String(ui.extractionOptions.collectionName.value),
+      'extractor': String(ui.extractionOptions.modelIndex.value)
     }
 
-    formData[name] = String(value)
-  }
-  
-  // Check if selected extractor is XML-based (doesn't need DOI)
-  const selectedExtractor = availableExtractors.find(e => e.id === formData.extractor)
-  const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes("xml")
+    // Collect values from dynamic options
+    const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
+    /** @type {NodeListOf<SlSelect|SlInput>} */
+    const dynamicInputs = /** @type {NodeListOf<SlSelect|SlInput>} */(dynamicOptionsContainer?.querySelectorAll('sl-select, sl-input') || [])
 
-  // Validate DOI only if one is provided and we're not using an XML extractor
-  if (!isXmlExtractor && formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
-    dialog.error(`"${formData.doi}" does not seem to be a DOI, please try again.`)
-    return null
-  }
+    for (const input of dynamicInputs) {
+      /** @type {SlSelect|SlInput} */
+      const typedInput = /** @type {SlSelect|SlInput} */(input)
+      const name = typedInput.name
+      let value = typedInput.value
 
-  // If DOI is empty or using XML extractor, set it to null for the request
-  if (!formData.doi || formData.doi === "" || isXmlExtractor) {
-    formData.doi = null
-  }
+      // Special handling for instructions - convert to actual instruction text
+      if (name === 'instructions' && instructions[parseInt(String(value))]) {
+        value = instructions[parseInt(String(value))]
+      }
 
-  return Object.assign(options, formData)
+      // Skip empty variant_id values - they'll be provided from options/state
+      if (name === 'variant_id' && (!value || value === '')) {
+        continue
+      }
+
+      formData[name] = String(value)
+    }
+
+    // Check if selected extractor is XML-based (doesn't need DOI)
+    const selectedExtractor = availableExtractors.find(e => e.id === formData.extractor)
+    const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes("xml")
+
+    // Normalize and validate DOI if one is provided and not using an XML extractor
+    if (!isXmlExtractor && formData.doi) {
+      const extracted = extractDoi(formData.doi)
+      if (extracted) {
+        formData.doi = extracted
+      } else {
+        dialog.error(`"${formData.doi}" does not seem to be a valid DOI. Please correct it or leave the field empty.`)
+        continue  // keep dialog open, let user correct
+      }
+    }
+
+    // If DOI is empty or using XML extractor, set it to null for the request
+    if (!formData.doi || formData.doi === "" || isXmlExtractor) {
+      formData.doi = null
+    }
+
+    ui.extractionOptions.hide()
+    modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
+    return Object.assign(options, formData)
+  }
 }
 
 
 
 /**
- * Extract DOI from filename
+ * Extract DOI from a PDF filename. Strips the .pdf extension and decodes
+ * URI components before calling extractDoi, which handles filename encoding.
  * @param {string} filename
  * @returns {string|null}
  */
 function getDoiFromFilename(filename) {
-  console.debug("Extracting DOI from filename:", filename);
   if (!filename) return null;
-
-  // 1. Sanitize: remove extension, decode URI components
-  let candidate = filename.toLowerCase().split('.pdf')[0];
-  candidate = decodeURIComponent(candidate);
-  
-  // 2. Normalize: handle different separator conventions
-  candidate = candidate.replaceAll(/__/g, '/');
-  candidate = candidate.replace(/10\.(\d+)_(.+)/, '10.$1/$2');
-  
-  // 3. Extract from the normalized string
-  const doi = extractDoi(candidate);
-  console.debug("Extracted DOI from filename:", doi);
-  
-  return doi;
+  const candidate = decodeURIComponent(filename.toLowerCase().split('.pdf')[0]);
+  return extractDoi(candidate);
 }
