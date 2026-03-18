@@ -61,7 +61,8 @@ const _observer = new MutationObserver(() => {
 const plugin = {
   name: 'tools',
   install,
-  start
+  start,
+  get api() { return api; }
 };
 
 const api = {

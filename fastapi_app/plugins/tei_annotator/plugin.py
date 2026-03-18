@@ -1,44 +1,46 @@
 """
 TEI Annotator plugin.
 
-Registers TeiAnnotatorExtractor with the extraction registry and fetches
-the available provider/model list from the annotator service at startup.
+Provides LLM-based annotation of <bibl> elements via the TEI Annotator webservice.
+Exposes a "TEI Annotator" submenu in the frontend Tools menu through a frontend extension.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
-from fastapi_app.lib.extraction import ExtractorRegistry
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
-from fastapi_app.plugins.tei_annotator.extractor import TeiAnnotatorExtractor
 
 logger = logging.getLogger(__name__)
 
 
 class TeiAnnotatorPlugin(Plugin):
-    """Plugin that provides LLM-based re-annotation of GROBID training documents."""
+    """Plugin that provides LLM-based annotation of <bibl> elements."""
 
     def __init__(self) -> None:
-        # Config keys must be initialised in __init__ (not __init__.py) per project convention.
+        # Config keys must be initialised in __init__ per project convention.
         get_plugin_config("tei-annotator.server.url",     "TEI_ANNOTATOR_SERVER_URL", default=None)
         get_plugin_config("tei-annotator.server.api-key", "TEI_ANNOTATOR_API_KEY",    default=None)
+        get_plugin_config("tei-annotator.provider",       "TEI_ANNOTATOR_PROVIDER",   default=None)
+        get_plugin_config("tei-annotator.model",          "TEI_ANNOTATOR_MODEL",      default=None)
 
     @property
     def metadata(self) -> dict[str, Any]:
         return {
             "id": "tei-annotator",
             "name": "TEI Annotator",
-            "description": "Re-annotates GROBID training documents with LLM inference",
-            "category": "extractor",
+            "description": "Annotates <bibl> elements using LLM inference via the TEI Annotator webservice",
+            "category": "annotation",
             "version": "1.0.0",
             "required_roles": ["user"],
+            "endpoints": [],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
-        # This is an extractor-only plugin; no custom plugin endpoints are exposed.
         return {}
 
     @classmethod
@@ -52,16 +54,14 @@ class TeiAnnotatorPlugin(Plugin):
         return bool(url)
 
     async def initialize(self, context: PluginContext) -> None:
-        """Register the extractor and pre-fetch the provider/model list."""
-        # Populate dynamic provider list from the annotator service.
-        # Falls back to hardcoded gemini default if the service is unreachable.
-        TeiAnnotatorExtractor._load_providers()
-
-        registry = ExtractorRegistry.get_instance()
-        registry.register(TeiAnnotatorExtractor)
-        logger.info("TEI Annotator extractor registered")
+        """Register the frontend extension."""
+        registry = FrontendExtensionRegistry.get_instance()
+        extension_file = Path(__file__).parent / "extensions" / "tei-annotator.js"
+        if extension_file.exists():
+            registry.register_extension(extension_file, self.metadata["id"])
+            logger.info("TEI Annotator frontend extension registered")
+        else:
+            logger.warning("TEI Annotator frontend extension not found at %s", extension_file)
 
     async def cleanup(self) -> None:
-        """Unregister the extractor."""
-        ExtractorRegistry.get_instance().unregister("tei-annotator")
-        logger.info("TEI Annotator extractor unregistered")
+        pass

@@ -53,7 +53,8 @@ app.registerPlugins(plugins)
 initializeSandbox(
   () => app.getCurrentState(),
   (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
-  (changes) => app.updateState(changes)
+  (changes) => app.updateState(changes),
+  (pluginName) => pluginManager.getPlugin(pluginName)
 )
 
 // Load and register frontend extensions from backend plugins

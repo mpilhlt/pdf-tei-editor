@@ -1,5 +1,10 @@
 """
-TEI Annotator extraction engine.
+TEI Annotator extraction engine (DISABLED — kept for reference only).
+
+This module is no longer imported or registered. The plugin now uses a standalone
+annotators/ package and routes.py instead of the BaseExtractor integration.
+Several imports below will fail if this module is loaded directly, as constants and
+helpers have been moved to config.py / utils.py.
 
 Re-annotates GROBID training documents using LLM inference via the
 TEI Annotator webservice (/api/annotate). Supports two training variants:

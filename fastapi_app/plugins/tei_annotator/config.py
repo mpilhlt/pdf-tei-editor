@@ -1,20 +1,8 @@
 """
-Constants, schema builders, and text-processing helpers for the tei-annotator plugin.
-
-Both annotation schemas are defined here so they are independent of the upstream
-TEI Annotator webservice and can be updated without touching the server code.
+Constants and annotation schema builders for the tei-annotator plugin.
 """
 
 from __future__ import annotations
-
-from lxml import etree
-
-# ---------------------------------------------------------------------------
-# Variant identifiers
-# ---------------------------------------------------------------------------
-
-VARIANT_REFERENCES = "grobid.training.references"
-VARIANT_SEGMENTER  = "grobid.training.references.referenceSegmenter"
 
 # ---------------------------------------------------------------------------
 # Annotator service defaults
@@ -22,21 +10,9 @@ VARIANT_SEGMENTER  = "grobid.training.references.referenceSegmenter"
 
 DEFAULT_PROVIDER   = "gemini"
 DEFAULT_MODEL      = "gemini-2.5-flash"
-DEFAULT_BATCH_SIZE = 5
 
 # Placeholder used to round-trip <lb/> elements through plain text
 LB_PLACEHOLDER = "|||LB|||"
-
-# ---------------------------------------------------------------------------
-# Schema URLs (for xml-model processing instruction in saved TEI)
-# ---------------------------------------------------------------------------
-
-SCHEMA_URL_REFERENCES = (
-    "https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.rng"
-)
-SCHEMA_URL_SEGMENTER = (
-    "https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.referenceSegmenter.rng"
-)
 
 # ---------------------------------------------------------------------------
 # XML namespace
@@ -54,10 +30,8 @@ TEI_BIBL  = f"{{{TEI_NS}}}bibl"
 
 def build_references_schema() -> dict:
     """
-    Return the annotation schema for grobid.training.references.
+    Return the annotation schema for tagging bibliographic fields inside a <bibl>.
 
-    Full copy of the BLBL schema from tei_annotator/schemas/blbl.py,
-    stored here so the plugin is independent of the upstream webservice.
     Sent as the 'schema' field of POST /api/annotate requests.
     """
     return {
@@ -243,12 +217,10 @@ def build_references_schema() -> dict:
 
 def build_segmenter_schema() -> dict:
     """
-    Return the annotation schema for grobid.training.references.referenceSegmenter.
+    Return the annotation schema for segmenting text into individual <bibl> references.
 
-    The LLM receives plain text (a footnote or list of references) and must identify
-    spans corresponding to individual bibliographic references, optionally including
-    immediately attached commentary. Labels (footnote numbers, reference numbers) are
-    identified as nested spans within the reference span.
+    The LLM receives plain text and must identify spans corresponding to individual
+    bibliographic references. Labels (footnote numbers) are identified as nested spans.
     """
     return {
         "elements": [
@@ -310,71 +282,10 @@ def build_segmenter_schema() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Text-processing helpers
+# Annotator registry access
 # ---------------------------------------------------------------------------
 
-def bibl_to_plain_text(bibl_el: etree._Element) -> str:
-    """
-    Extract plain text from a <bibl> element, replacing <lb/> with LB_PLACEHOLDER.
-
-    All annotation child elements (author, title, etc.) are stripped; only their
-    text content is preserved. lb milestone elements become the placeholder so
-    they can be restored after annotation.
-    """
-    return _collect_text(bibl_el, strip_bibl=False)
-
-
-def element_to_plain_text_with_lb(el: etree._Element) -> str:
-    """
-    Extract plain text from any element, replacing <lb/> with LB_PLACEHOLDER
-    and stripping <bibl> wrapper tags along with all other annotation elements.
-
-    Used for the referenceSegmenter variant where existing <bibl> segments
-    must be removed before re-segmentation.
-    """
-    return _collect_text(el, strip_bibl=True)
-
-
-def restore_lb(xml_fragment: str) -> str:
-    """Replace LB_PLACEHOLDER occurrences with <lb/> in an XML fragment string."""
-    return xml_fragment.replace(LB_PLACEHOLDER, "<lb/>")
-
-
-def _collect_text(el: etree._Element, strip_bibl: bool) -> str:
-    """
-    Recursively collect text content of *el*, converting lb elements to the
-    placeholder and stripping all other element wrappers.
-    """
-    parts: list[str] = []
-
-    def _visit(node: etree._Element) -> None:
-        # Include the element's own leading text
-        if node.text:
-            parts.append(node.text)
-        for child in node:
-            local = etree.QName(child.tag).localname if isinstance(child.tag, str) else None
-            if local == "lb":
-                parts.append(LB_PLACEHOLDER)
-            elif local == "bibl" and strip_bibl:
-                # Strip the bibl wrapper but recurse into its content
-                _visit(child)
-            else:
-                # Strip annotation wrapper, recurse into content
-                _visit(child)
-            # Always include tail text (text after closing tag, before next sibling)
-            if child.tail:
-                parts.append(child.tail)
-
-    # Start with the element's own text, then process children
-    if el.text:
-        parts.append(el.text)
-    for child in el:
-        local = etree.QName(child.tag).localname if isinstance(child.tag, str) else None
-        if local == "lb":
-            parts.append(LB_PLACEHOLDER)
-        else:
-            _visit(child)
-        if child.tail:
-            parts.append(child.tail)
-
-    return "".join(parts)
+def get_annotators() -> list:
+    """Return the list of registered Annotator instances."""
+    from fastapi_app.plugins.tei_annotator.annotators import ANNOTATORS  # noqa: PLC0415
+    return ANNOTATORS
