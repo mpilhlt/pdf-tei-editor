@@ -9,10 +9,12 @@ Provides:
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from lxml import etree
 from pydantic import BaseModel
+from fastapi_app.lib.utils.xml_utils import strip_namespaces
 
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
@@ -127,7 +129,7 @@ async def annotate(
 
     # Find the target element
     try:
-        matches = root.xpath(body.xpath, namespaces=TEI_NSMAP)
+        matches: Any = root.xpath(body.xpath, namespaces=TEI_NSMAP)
     except etree.XPathEvalError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid XPath: {exc}") from exc
 
@@ -165,9 +167,12 @@ async def annotate(
     from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
     new_elements = annotator.apply_result(element, annotated_xml)
     fragments = [
-        apply_entity_encoding_from_config(
-            etree.tostring(el, encoding="unicode", xml_declaration=False)
+        strip_namespaces(
+            apply_entity_encoding_from_config(
+                etree.tostring(el, encoding="unicode", xml_declaration=False)
+            )    
         )
+        
         for el in new_elements
     ]
     return {"fragments": fragments}

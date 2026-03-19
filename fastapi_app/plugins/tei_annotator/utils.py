@@ -116,9 +116,29 @@ async def call_annotate(
         "text": text,
     }
 
+    # Log request details for debugging
+    logger.debug(
+        "TEI Annotator request to %s: provider=%s, model=%s, text_length=%d, schema_keys=%s",
+        url,
+        provider,
+        model,
+        len(text),
+        list(schema.keys()) if isinstance(schema, dict) else type(schema).__name__,
+    )
+
     def _do_post() -> list[dict[str, Any]]:
         resp = requests.post(url, json=body, headers=headers, timeout=300)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            # Log the response body for debugging 422 errors
+            logger.error(
+                "TEI Annotator API error %s for %s. Response body: %s",
+                resp.status_code,
+                url,
+                resp.text[:1000] if resp.text else "(empty)",
+            )
+            raise
         data = resp.json()
         return data if isinstance(data, list) else [data]
 
