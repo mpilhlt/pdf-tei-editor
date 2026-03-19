@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-03-18T14:29:05.320Z
+ * Generated from OpenAPI schema at 2026-03-19T08:54:47.855Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -17,13 +17,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnnotateRequest
- * @property {string} stable_id
- * @property {string} xpath
- * @property {string} annotator_id
  */
 
 /**
@@ -125,6 +118,32 @@
 /**
  * @typedef {Object} ConfigSetResponse
  * @property {string} result
+ */
+
+/**
+ * @typedef {Object} ConflictInfo
+ * @property {string} file_id
+ * @property {string} stable_id
+ * @property {string} filename
+ * @property {string} doc_id
+ * @property {string} local_modified_at
+ * @property {string} local_hash
+ * @property {string} remote_modified_at
+ * @property {string} remote_hash
+ * @property {string} conflict_type
+ */
+
+/**
+ * @typedef {Object} ConflictListResponse
+ * @property {Array<ConflictInfo>} conflicts
+ * @property {number} total
+ */
+
+/**
+ * @typedef {Object} ConflictResolution
+ * @property {string} file_id
+ * @property {string} resolution
+ * @property {string=} new_variant - Variant name when using 'keep_both' resolution
  */
 
 /**
@@ -376,17 +395,6 @@
  * @typedef {Object} ReleaseLockResponse
  * @property {string} action
  * @property {string} message
- */
-
-/**
- * @typedef {Object} RemoveAllSessionsRequest
- * @property {string=} message
- */
-
-/**
- * @typedef {Object} RemoveSessionRequest
- * @property {string} target_session_id
- * @property {string=} message
  */
 
 /**
