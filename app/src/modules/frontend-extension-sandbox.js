@@ -16,6 +16,7 @@
 import ui from '../ui.js';
 import { dialog as dialogApi, services, client, config as configApi, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
+import * as teiUtilsApi from './tei-utils.js';
 
 /**
  * @typedef {Object} FrontendExtensionSandbox
@@ -33,6 +34,7 @@ import { notify } from './sl-utils.js';
  * @property {function(string, string=, Object=): Promise<Object>} callPluginApi - Call plugin API endpoint with authentication
  * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
  * @property {function(string): Object|undefined} getPluginApi - Get the api export of a registered frontend plugin by name
+ * @property {typeof import('./tei-utils.js')} teiUtils - TEI utility functions (e.g., encodeXmlEntities)
  */
 
 /** @type {function(): Object} */
@@ -46,6 +48,7 @@ let updateStateFn = async (changes) => changes;
 
 /** @type {function(string): Object|undefined} */
 let getPluginFn = () => undefined;
+
 
 /**
  * Initialize sandbox with state getter, invoke function, updateState function, and plugin getter.
@@ -159,6 +162,7 @@ export function getSandbox() {
     fetchText,
     callPluginApi: (endpoint, method, params) => callPluginApi(endpoint, method, params),
     registerXslStylesheet,
-    getPluginApi: (pluginId) => getPluginFn(pluginId)?.api
+    getPluginApi: (pluginId) => getPluginFn(pluginId)?.api,
+    teiUtils: teiUtilsApi
   };
 }

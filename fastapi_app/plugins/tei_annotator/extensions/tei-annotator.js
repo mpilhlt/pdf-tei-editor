@@ -7,11 +7,10 @@
  */
 
 /**
- * @import { FrontendExtensionSandbox } from '../../../app/src/modules/frontend-extension-sandbox.js'
- * @import { ApplicationState } from '../../../app/src/state.js'
+ * @import { FrontendExtensionSandbox } from '../../../../app/src/modules/frontend-extension-sandbox.js'
+ * @import { ApplicationState } from '../../../../app/src/state.js'
  */
 
-import { encodeXmlEntities } from '../../../app/src/modules/tei-utils.js';
 
 export const name = "tei-annotator";
 export const deps = ["tools", "xmleditor"];
@@ -92,6 +91,7 @@ export function onStateUpdate(changedKeys, state, _sandbox) {
  * @param {FrontendExtensionSandbox} sandbox
  */
 async function _runAnnotator(ann, sandbox) {
+  console.log({sandbox, ann});
   const state = sandbox.getState();
 
   if (!_isBiblXpath(state.xpath)) {
@@ -119,7 +119,7 @@ async function _runAnnotator(ann, sandbox) {
     let modifiedXml = _substituteAtXpath(xmleditorApi, state.xpath, fragments);
     if (await sandbox.config.get('xml.encode-entities.server', false)) {
       const encodeQuotes = await sandbox.config.get('xml.encode-quotes', false);
-      modifiedXml = encodeXmlEntities(modifiedXml, { encodeQuotes });
+      modifiedXml = sandbox.teiUtils.encodeXmlEntities(modifiedXml, { encodeQuotes });
     }
     await xmleditorApi.showMergeView(modifiedXml);
   } catch (err) {
