@@ -12,7 +12,8 @@
 
 import ui, { updateUi } from '../ui.js'
 import { logger, client } from '../app.js'
-import { registerTemplate, createSingleFromTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { api as tools } from './tools.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -28,8 +29,9 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: 'config-editor',
   install,
+  start,
   state: { update },
-  deps: ['client', 'toolbar']
+  deps: ['client', 'toolbar', 'tools']
 }
 
 export { plugin }
@@ -59,54 +61,40 @@ let modifiedKeys = new Set()
 /** @type {string | null} Key currently being edited */
 let editingKey = null
 
+/** @type {HTMLElement | null} */
+let menuItem = null
+
 /**
- * @param {ApplicationState} state
+ * @param {ApplicationState} _state
  */
-async function install(state) {
+async function install(_state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Create UI elements
   createSingleFromTemplate('config-editor-dialog', document.body)
-  createFromTemplate('config-editor-menu-item', ui.toolbar.toolbarMenu.menu)
-
   updateUi()
+  setupDialogListeners()
+}
 
-  logger.debug('Config editor menu item added to toolbar menu')
-
-  // Set up event listeners
-  setupEventListeners()
-
-  // Initially hide menu item until we check admin status
-  ui.toolbar.toolbarMenu.menu.configEditorMenuItem.style.display = 'none'
+async function start() {
+  menuItem = createSingleFromTemplate('config-editor-menu-item')
+  tools.addMenuItems([menuItem], 'administration')
+  menuItem.addEventListener('click', openDialog)
+  menuItem.style.display = 'none'
 }
 
 /**
  * @param {ApplicationState} state
  */
 async function update(state) {
-  // Only admins can access config editor - hide menu item for non-admins
-  const isAdmin = userIsAdmin(state.user)
-  if (ui.toolbar?.toolbarMenu?.menu?.configEditorMenuItem) {
-    ui.toolbar.toolbarMenu.menu.configEditorMenuItem.style.display = isAdmin ? '' : 'none'
+  if (menuItem) {
+    menuItem.style.display = userIsAdmin(state.user) ? '' : 'none'
   }
 }
 
 /**
- * Set up all event listeners
+ * Set up dialog event listeners
  */
-function setupEventListeners() {
-  logger.debug('Setting up event listeners for config editor')
-
-  // Check if menu item exists
-  if (!ui.toolbar?.toolbarMenu?.menu?.configEditorMenuItem) {
-    logger.error('Config editor menu item not found in UI')
-    return
-  }
-
-  // Open dialog menu item
-  ui.toolbar.toolbarMenu.menu.configEditorMenuItem.addEventListener('click', openDialog)
-  logger.debug('Added click listener to config editor menu item')
-
+function setupDialogListeners() {
   /** @type {configEditorDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.configEditorDialog)
 

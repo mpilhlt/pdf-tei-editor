@@ -7,9 +7,10 @@
 
 import { Plugin } from '../modules/plugin-base.js';
 import { api } from './client.js';
+import { api as tools } from './tools.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
-import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu } from '../ui.js';
+import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import ui from '../ui.js';
 import { logger } from '../app.js';
 
@@ -20,11 +21,10 @@ import { logger } from '../app.js';
  */
 
 /**
- * Backend plugins button group UI structure
- * @typedef {object} backendPluginsButtonPart
- * @property {SlDropdown} pluginsDropdown - The dropdown containing the plugins menu
- * @property {SlButton} pluginsBtn - The button that triggers the dropdown
- * @property {SlMenu} pluginsMenu - The menu containing plugin items
+ * Backend plugins split button added to the tools button group
+ * @typedef {object} backendPluginsDropdownPart
+ * @property {SlButton} pluginsBtn - The button that triggers the backend plugins dropdown
+ * @property {SlMenu} pluginsMenu - The menu containing backend plugin items
  */
 
 /**
@@ -39,8 +39,8 @@ import { logger } from '../app.js';
  */
 
 // Register templates
-await registerTemplate('backend-plugins-button', 'backend-plugins-button.html');
 await registerTemplate('backend-plugins-result-dialog', 'backend-plugins-result-dialog.html');
+await registerTemplate('backend-plugins-dropdown', 'backend-plugins-dropdown.html');
 
 export class BackendPluginsPlugin extends Plugin {
   /**
@@ -50,17 +50,17 @@ export class BackendPluginsPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'backend-plugins',
-      deps: ['client','extraction']
+      deps: ['client', 'extraction', 'tools']
     });
 
     /** @type {BackendPlugin[]} */
     this.plugins = [];
 
-    /** @type {boolean} */
-    this.initialized = false;
-
     /** @type {PluginSandbox|null} */
     this.pluginSandbox = null;
+
+    /** @type {HTMLElement|null} The split button added to the tools button group */
+    this._dropdown = null;
   }
 
   /**
@@ -94,42 +94,43 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   async start() {
+    // Create the backend-plugins split button and add it to the tools button group
+    this._dropdown = createSingleFromTemplate('backend-plugins-dropdown');
+    tools.addButton(this._dropdown);
 
-    // Add button to toolbar before the logout button
-    const buttonElement = createSingleFromTemplate('backend-plugins-button');
-    ui.toolbar.add(buttonElement, 0, -2)
-    updateUi();
+    // Attach menu selection handler once on this plugin's own menu
+    this._dropdown.querySelector('[name="pluginsMenu"]').addEventListener('sl-select', (event) => {
+      this.handlePluginSelection(event);
+    });
 
-    // Discover available plugins
+    // Discover available plugins and populate menu
     await this.discoverPlugins();
-
-    // Setup UI if plugins are available
+    this._updateDropdownVisibility();
     if (this.plugins.length > 0) {
-      this.setupUI();
-      this.initialized = true;
+      this.populateMenu();
     }
   }
 
   /**
    * Reacts to state updates
-   * @param {Array<String>} changedKeys 
+   * @param {Array<String>} changedKeys
    */
   async onStateUpdate(changedKeys) {
-    // Show/hide plugin button based on login state
     if (changedKeys.includes('sessionId')) {
       await this.discoverPlugins();
-
-      if (this.plugins.length > 0 && !this.initialized) {
-        this.setupUI();
-        this.initialized = true;
-      } else if (this.plugins.length === 0 && this.initialized) {
-        this.hideUI();
-        this.initialized = false;
-      } else if (this.plugins.length > 0 && this.initialized) {
-        // Refresh plugin list
-        this.populateMenu();
-      }
+      this._updateDropdownVisibility();
+      this.populateMenu();
     }
+  }
+
+  /**
+   * Show the split button when backend plugins exist; hide it otherwise.
+   * Notifies the tools group to recalculate its own visibility.
+   */
+  _updateDropdownVisibility() {
+    if (!this._dropdown) return;
+    this._dropdown.style.display = this.plugins.length > 0 ? '' : 'none';
+    tools.updateVisibility();
   }
 
   /**
@@ -145,41 +146,12 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
-   * Setup UI elements and event handlers
-   */
-  setupUI() {
-    // Show the button group
-    ui.toolbar.backendPluginsGroup.style.display = 'inline-flex';
-
-    // Populate menu with plugins
-    this.populateMenu();
-
-    // Setup event handler for menu item clicks
-    // Note: Using querySelector here because Shoelace components use Shadow DOM
-    const pluginsMenu = ui.toolbar.backendPluginsGroup.querySelector('[name="pluginsMenu"]');
-    pluginsMenu.addEventListener('sl-select', (event) => {
-      this.handlePluginSelection(event);
-    });
-  }
-
-  /**
-   * Hide the plugin UI
-   */
-  hideUI() {
-    ui.toolbar.backendPluginsGroup.style.display = 'none';
-  }
-
-  /**
-   * Populate the dropdown menu with plugins organized by category
+   * Populate the backend plugins dropdown with endpoints organized by category.
    */
   populateMenu() {
-    // Note: Using querySelector here because Shoelace components use Shadow DOM
-    const pluginsMenu = ui.toolbar.backendPluginsGroup.querySelector('[name="pluginsMenu"]');
-
-    // Clear existing items
+    const pluginsMenu = this._dropdown.querySelector('[name="pluginsMenu"]');
     pluginsMenu.innerHTML = '';
 
-    // Add menu items for each category
     const endpointsByCategory = this.groupEndpointsByCategory();
     const categories = Object.keys(endpointsByCategory).sort();
 
@@ -196,21 +168,17 @@ export class BackendPluginsPlugin extends Plugin {
         return menuItem;
       });
 
-      // Skip category entirely if no items
       if (items.length === 0) {
         return;
       }
 
-      // Add category label then items
       const categoryLabel = document.createElement('small');
       categoryLabel.textContent = this.formatCategoryName(category);
       pluginsMenu.appendChild(categoryLabel);
       items.forEach(item => pluginsMenu.appendChild(item));
 
-      // Add divider between categories (except after last one)
       if (index < categories.length - 1) {
-        const divider = document.createElement('sl-divider');
-        pluginsMenu.appendChild(divider);
+        pluginsMenu.appendChild(document.createElement('sl-divider'));
       }
     });
   }

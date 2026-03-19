@@ -43,6 +43,7 @@ import { plugin as annotationGuidePlugin, api as annotationGuide } from './plugi
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
+import { plugin as toolsPlugin } from './plugins/tools.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
@@ -61,6 +62,7 @@ const plugins = [
   configPlugin,
   dialogPlugin,
   toolbarPlugin,
+  toolsPlugin,
 
   // Help plugin (must come before info plugin which depends on it)
   HelpPlugin,
@@ -68,10 +70,12 @@ const plugins = [
   // Toolbar menu items (order matters - determines menu item order)
   infoPlugin,          // User Manual (first)
   annotationGuidePlugin, // Annotation Guide
-  FiledataPlugin,      // Garbage Collection (second, admin only)
-  rbacManagerPlugin,   // Manage Users & Roles (third, admin only)
-  configEditorPlugin,  // Configuration Editor (fourth, admin only)
   UserAccountPlugin,   // User Profile + Logout (last)
+
+  // Tools menu — Administration section (admin only, order determines item order)
+  FiledataPlugin,      // Garbage Collection
+  rbacManagerPlugin,   // Manage Users & Roles
+  configEditorPlugin,  // Configuration Editor
 
   // Other plugins
   pdfViewerPlugin,

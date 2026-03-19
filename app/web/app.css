@@ -83,6 +83,14 @@ div[name = "xmlEditor"] tool-bar sl-button::part(label) {
   display: block;
 }
 
+#toolbar sl-select::part(form-control-label) {
+  font-size: smaller;
+}
+
+#toolbar sl-select::part(display-input) {
+  font-size: var(--sl-font-size-x-small);
+}
+
 #toolbar sl-select::part(form-control) {
   transform: translateY(-5px);
 }
@@ -280,7 +288,12 @@ sl-select::part(listbox) {
   width: max-content;
 }
 
-sl-option::part(label),
+/* Make sl-option rows match sl-menu-item size: override the medium token used by
+   sl-option's shadow :host so options render at the small size */
+#toolbar sl-select {
+  --sl-font-size-medium: var(--sl-font-size-x-small);
+}
+
 sl-menu-item::part(label) {
   font-size: smaller;
 }
@@ -365,7 +378,8 @@ sl-tree-item sl-icon[slot="prefix"] {
   margin-right: 0.5rem;
 }
 
-/* Backend plugins menu styling */
+/* Tools menu category label styling (applies to both native and backend-plugins menus) */
+sl-menu[name="toolsMenu"] small,
 sl-menu[name="pluginsMenu"] small {
   display: block;
   padding: 0.5rem 1rem 0.25rem;
