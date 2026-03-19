@@ -149,7 +149,7 @@ async def download_training_package(
     directly into that directory.
 
     ZIP structure:
-        {model}/{flavor}/corpus/tei/{doc_id}.tei.xml  ← gold TEI annotation
+        {model}/{flavor}/corpus/tei/{doc_id}.{model_name}.tei.xml  ← gold TEI annotation
         {model}/{flavor}/corpus/raw/{doc_id}           ← GROBID raw feature file
 
     Args:
@@ -281,7 +281,7 @@ async def download_training_package(
                     gold_by_variant: dict[str, str] = {}
                     for gold_file in gold_files:
                         content = file_storage.read_file(gold_file.id, "tei")
-                        if content:
+                        if content and gold_file.variant:
                             gold_by_variant[gold_file.variant] = content.decode("utf-8")
 
                     # Skip documents without any gold standard files
@@ -315,10 +315,11 @@ async def download_training_package(
                             grobid_suffix = variant.removeprefix("grobid.")
                             tei_content = gold_by_variant[variant]
                             base_path = _corpus_base_path(tei_content, variant, flavor)
+                            model_name = variant.removeprefix("grobid.")
 
                             # Write gold TEI to corpus/tei/
                             zf.writestr(
-                                f"{zip_stem}/{base_path}/tei/{doc_id}.tei.xml",
+                                f"{zip_stem}/{base_path}/tei/{doc_id}.{model_name}.tei.xml",
                                 tei_content
                             )
 
