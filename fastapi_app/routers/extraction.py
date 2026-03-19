@@ -222,18 +222,18 @@ async def extract_metadata(
                 xml=result['xml']
             )
         else:
-            # For XML-based extraction, save as standalone file
+            # For XML-based extraction, save as associated file (reusing source doc_id when available)
             result = _save_xml_extraction_result(
                 tei_xml,
                 request.extractor,
-                request.options,
+                extraction_options,
                 repo,
                 storage,
                 username=current_user.get('username') if current_user else None
             )
             return ExtractResponse(
-                id=None,
-                pdf=None,
+                id=result.get('pdf') and file_metadata.doc_id or None,
+                pdf=result.get('pdf'),
                 xml=result['xml']
             )
 
@@ -350,72 +350,101 @@ def _save_xml_extraction_result(
     username: str = None
 ) -> dict:
     """
-    Save XML extraction result as standalone file.
+    Save XML extraction result.
+
+    When the source file has a doc_id in options (i.e. it was extracted from a known
+    document), the result inherits that doc_id so it stays associated with the original
+    PDF/document family.  Otherwise a fresh doc_id is generated.
 
     Args:
         content: Extracted XML content
         extractor_id: ID of the extractor used
-        options: Extraction options (must include 'variant_id' for RNG)
+        options: Extraction options; may contain doc_id, stable_id, variant_id
         repo: File repository
         storage: File storage
+        username: Authenticated username
 
     Returns:
-        Dict with 'xml': stable_id
+        Dict with 'xml': stable_id and optionally 'pdf': stable_id of the associated PDF
     """
     import hashlib
     from datetime import datetime
+    from lxml import etree
+    from ..lib.utils.tei_utils import extract_tei_metadata
 
-    # Determine file type from extractor
     file_type = 'tei'
-    default_label = extractor_id
 
-    # For XML extractions, generate doc_id from timestamp and hash
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    content_bytes = content.encode('utf-8')
-    content_hash = hashlib.sha256(content_bytes).hexdigest()[:8]
-    doc_id = f"{extractor_id}_{timestamp}_{content_hash}"
+    # Reuse the source file's doc_id when available so the result stays linked to the
+    # original document family (PDF + all its TEI variants share the same doc_id).
+    source_doc_id = options.get('doc_id')
+    if source_doc_id:
+        doc_id = source_doc_id
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        content_bytes_tmp = content.encode('utf-8')
+        content_hash = hashlib.sha256(content_bytes_tmp).hexdigest()[:8]
+        doc_id = f"{extractor_id}_{timestamp}_{content_hash}"
 
-    # Save file to storage
+    variant = options.get('variant_id')
+    collection = options.get('collection', '_inbox')
+
     content_bytes = content.encode('utf-8')
     file_hash, _ = storage.save_file(content_bytes, file_type)
-
-    # Get collection from options
-    collection = options.get('collection', '_inbox')
 
     # Check if file with this hash already exists (same content)
     try:
         existing_hash_file = repo.get_file_by_id(file_hash)
         if existing_hash_file:
             logger.info(f"File with hash {file_hash[:8]}... already exists, returning stable_id: {existing_hash_file.stable_id}")
-            return {'xml': existing_hash_file.stable_id}
+            pdf_stable_id = _find_pdf_stable_id(repo, doc_id)
+            return {'xml': existing_hash_file.stable_id, 'pdf': pdf_stable_id}
     except ValueError:
         pass  # Hash doesn't exist, continue
 
-    # Use file_type as variant to enable filtering
-    file_variant = file_type if file_type != 'tei' else None
+    # Parse label from TEI header if possible
+    label = extractor_id
+    try:
+        tei_root = etree.fromstring(content_bytes)
+        tei_meta = extract_tei_metadata(tei_root)
+        label = tei_meta.get('edition_title') or extractor_id
+    except Exception:
+        pass
 
     file_create = FileCreate(
         id=file_hash,
         stable_id=None,  # Will be auto-generated
-        filename=f"{doc_id}.{file_type}.xml",
+        filename=f"{doc_id}-{extractor_id}.xml",
         doc_id=doc_id,
         file_type=file_type,
         file_size=len(content_bytes),
         doc_collections=[collection],
         doc_metadata={},
-        variant=file_variant,
-        version=1,  # Extractions are versioned artifacts
-        is_gold_standard=False,  # Extractions are not gold standard
-        label=default_label,
+        variant=variant,
+        version=1,
+        is_gold_standard=False,
+        label=label,
         file_metadata={'extractor': extractor_id},
         created_by=username
     )
 
-    # Insert into database
     inserted_file = repo.insert_file(file_create)
+    pdf_stable_id = _find_pdf_stable_id(repo, doc_id)
 
-    logger.info(f"Saved {extractor_id} extraction result: {file_hash[:8]}... (doc_id={doc_id})")
+    logger.info(f"Saved {extractor_id} extraction result: {file_hash[:8]}... (doc_id={doc_id}, variant={variant})")
 
     return {
-        'xml': inserted_file.stable_id
+        'xml': inserted_file.stable_id,
+        'pdf': pdf_stable_id,
     }
+
+
+def _find_pdf_stable_id(repo: FileRepository, doc_id: str) -> Optional[str]:
+    """Return the stable_id of the PDF file with the given doc_id, or None."""
+    try:
+        siblings = repo.get_files_by_doc_id(doc_id)
+        for f in siblings:
+            if f.file_type == 'pdf':
+                return f.stable_id
+    except Exception:
+        pass
+    return None

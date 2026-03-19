@@ -15,10 +15,14 @@ $(function () {
             type: 'GET',
             headers: { 'X-Session-ID': sessionId },
             dataSrc: 'data',
+            error: function (xhr, error, thrown) {
+                console.error('DataTables AJAX error:', error, thrown);
+            },
         },
         columns: [
             { title: 'Session ID' },
             { title: 'Age' },
+            { title: 'Last Access' },
             { title: 'Owner' },
             { title: 'Action', orderable: false },
         ],

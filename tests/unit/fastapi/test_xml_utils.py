@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.utils.xml_utils import encode_xml_entities, EncodeOptions
+from fastapi_app.lib.utils.xml_utils import encode_xml_entities, EncodeOptions, strip_namespaces
 
 
 class TestXmlEntityEncoding(unittest.TestCase):
@@ -153,6 +153,80 @@ V1 - corrected
         expected = """<root><!-- <?xml-model href="test.rng"?> --><text>Content</text></root>"""
         result = encode_xml_entities(xml_input)
         self.assertEqual(result, expected)
+
+
+class TestStripNamespaces(unittest.TestCase):
+    """Test XML namespace stripping functionality."""
+
+    def test_strip_prefixed_namespace_declarations(self):
+        """Test removal of prefixed namespace declarations."""
+        xml_input = '<TEI xmlns:tei="http://www.tei-c.org/ns/1.0"><tei:body>Content</tei:body></TEI>'
+        expected = '<TEI><body>Content</body></TEI>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_strip_default_namespace_declaration(self):
+        """Test removal of default namespace declaration."""
+        xml_input = '<root xmlns="http://example.com/ns"><child>Content</child></root>'
+        expected = '<root><child>Content</child></root>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_strip_multiple_namespace_declarations(self):
+        """Test removal of multiple namespace declarations."""
+        xml_input = '<root xmlns:tei="http://www.tei-c.org/ns/1.0" xmlns:xlink="http://www.w3.org/1999/xlink"><tei:body xlink:href="test">Content</tei:body></root>'
+        expected = '<root><body href="test">Content</body></root>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_strip_namespace_prefixes_from_elements(self):
+        """Test removal of namespace prefixes from element names."""
+        xml_input = '<tei:TEI><tei:header><tei:title>Test</tei:title></tei:header><tei:body><tei:p>Paragraph</tei:p></tei:body></tei:TEI>'
+        expected = '<TEI><header><title>Test</title></header><body><p>Paragraph</p></body></TEI>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_preserve_non_namespaced_content(self):
+        """Test that non-namespaced content is preserved."""
+        xml_input = '<root><child attr="value">Content & text</child></root>'
+        expected = '<root><child attr="value">Content & text</child></root>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_empty_string(self):
+        """Test stripping namespaces from empty string."""
+        result = strip_namespaces("")
+        self.assertEqual(result, "")
+
+    def test_xml_without_namespaces(self):
+        """Test XML that has no namespaces."""
+        xml_input = '<root><child>Content</child></root>'
+        expected = '<root><child>Content</child></root>'
+        result = strip_namespaces(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_complex_tei_document(self):
+        """Test with a more complex TEI document structure."""
+        xml_input = '''<TEI xmlns:tei="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <tei:teiHeader>
+    <tei:fileDesc>
+      <tei:titleStmt>
+        <tei:title>Test Document</tei:title>
+      </tei:titleStmt>
+    </tei:fileDesc>
+  </tei:teiHeader>
+  <tei:text>
+    <tei:body>
+      <tei:p>First paragraph</tei:p>
+    </tei:body>
+  </tei:text>
+</TEI>'''
+        result = strip_namespaces(xml_input)
+        self.assertIn('<teiHeader>', result)
+        self.assertIn('<body>', result)
+        self.assertIn('<p>First paragraph</p>', result)
+        self.assertNotIn('xmlns:', result)
+        self.assertNotIn('<tei:', result)
 
 
 if __name__ == '__main__':

@@ -76,6 +76,8 @@ const api = {
   }
 };
 
+plugin.api = api;
+
 export { plugin, api };
 
 /**
