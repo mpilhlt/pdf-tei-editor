@@ -5,6 +5,8 @@ This module provides framework-agnostic XML processing utilities.
 No Flask or FastAPI dependencies.
 """
 
+import re
+
 import xml.sax.saxutils as saxutils
 from html import unescape
 from typing import TypedDict, Optional
@@ -224,3 +226,34 @@ def apply_entity_encoding_from_config(xml_string: str) -> str:
         return encode_xml_entities(xml_string, encode_options)
 
     return xml_string
+
+
+def strip_namespaces(xml_string: str) -> str:
+    """
+    Remove all XML namespace declarations and prefixes from an XML string.
+
+    This function:
+    - Removes xmlns namespace declarations (e.g., xmlns:tei="...")
+    - Removes namespace prefixes from element names (e.g., <tei:body> → <body>)
+    - Removes namespace prefixes from attribute names (e.g., xlink:href → href)
+    - Preserves the XML structure and content
+
+    Args:
+        xml_string: The XML string to process
+
+    Returns:
+        The XML string with namespaces removed
+    """
+    # Remove xmlns declarations (both prefixed and default)
+    # Matches: xmlns:prefix="..." or xmlns="..."
+    result = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_string)
+
+    # Remove namespace prefixes from element names
+    # Matches opening/closing tags like <prefix:element or </prefix:element
+    result = re.sub(r'<(/?)(\w+):', r'<\1', result)
+
+    # Remove namespace prefixes from attribute names
+    # Matches: prefix:attr="..." and replaces with: attr="..."
+    result = re.sub(r'(\s+)(\w+):(\w+=)', r'\1\3', result)
+
+    return result

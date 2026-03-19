@@ -16,6 +16,7 @@
 import ui from '../ui.js';
 import { dialog as dialogApi, services, client, config as configApi, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
+import * as teiUtilsApi from './tei-utils.js';
 
 /**
  * @typedef {Object} FrontendExtensionSandbox
@@ -32,6 +33,8 @@ import { notify } from './sl-utils.js';
  * @property {function(string): Promise<string>} fetchText - Fetch text content from URL
  * @property {function(string, string=, Object=): Promise<Object>} callPluginApi - Call plugin API endpoint with authentication
  * @property {function(XslStylesheetRegistration): void} registerXslStylesheet - Register XSL stylesheet
+ * @property {function(string): Object|undefined} getPluginApi - Get the api export of a registered frontend plugin by name
+ * @property {typeof import('./tei-utils.js')} teiUtils - TEI utility functions (e.g., encodeXmlEntities)
  */
 
 /** @type {function(): Object} */
@@ -43,18 +46,25 @@ let invokeFn = async () => undefined;
 /** @type {function(Partial<Object>): Promise<Object>} */
 let updateStateFn = async (changes) => changes;
 
+/** @type {function(string): Object|undefined} */
+let getPluginFn = () => undefined;
+
 /**
- * Initialize sandbox with state getter, invoke function, and updateState function.
+ * Initialize sandbox with state getter, invoke function, updateState function, and plugin getter.
  * Called by Application during initialization.
  * @param {function(): Object} stateFn - Function to get current state
  * @param {function(string, any, Object): Promise<any>} invokeFunction - PluginManager invoke function
  * @param {function(Partial<Object>): Promise<Object>} updateStateFunction - App updateState function
+ * @param {function(string): Object|undefined} [getPluginFunction] - Function to get a plugin by name
  */
-export function initializeSandbox(stateFn, invokeFunction, updateStateFunction) {
+export function initializeSandbox(stateFn, invokeFunction, updateStateFunction, getPluginFunction) {
   getStateFn = stateFn;
   invokeFn = invokeFunction;
   if (updateStateFunction) {
     updateStateFn = updateStateFunction;
+  }
+  if (getPluginFunction) {
+    getPluginFn = getPluginFunction;
   }
 }
 
@@ -150,6 +160,8 @@ export function getSandbox() {
     config: { get: configApi.get },
     fetchText,
     callPluginApi: (endpoint, method, params) => callPluginApi(endpoint, method, params),
-    registerXslStylesheet
+    registerXslStylesheet,
+    getPluginApi: (pluginId) => getPluginFn(pluginId)?.api,
+    teiUtils: teiUtilsApi
   };
 }

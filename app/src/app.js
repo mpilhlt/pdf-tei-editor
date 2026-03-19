@@ -49,11 +49,12 @@ export { app }
 // Register plugins
 app.registerPlugins(plugins)
 
-// Initialize frontend extension sandbox with state getter, invoke function, and updateState
+// Initialize frontend extension sandbox with state getter, invoke function, updateState, and plugin getter
 initializeSandbox(
   () => app.getCurrentState(),
   (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
-  (changes) => app.updateState(changes)
+  (changes) => app.updateState(changes),
+  (pluginName) => pluginManager.getPlugin(pluginName)
 )
 
 // Load and register frontend extensions from backend plugins

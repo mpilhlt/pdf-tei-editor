@@ -193,7 +193,8 @@ const plugin = {
   },
   validation: {
     inProgress
-  }
+  },
+  get api() { return xmlEditor; }
 }
 
 export { xmlEditor as api, plugin, XMLEditor, saveIfDirty, openDocumentAtLine, inProgress }
