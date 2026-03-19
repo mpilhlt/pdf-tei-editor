@@ -51,6 +51,19 @@ def _format_age(created_at: float) -> str:
     return f"{seconds}s"
 
 
+def _format_last_access(last_access: float) -> str:
+    """Format last access time as a human-readable string."""
+    delta = datetime.now() - datetime.fromtimestamp(last_access)
+    total_seconds = int(delta.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    if minutes > 0:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
 
 @router.get("/view", response_class=HTMLResponse)
 async def view_sessions(
@@ -101,6 +114,7 @@ async def get_sessions_data(
         sid = s["session_id"]
         abbrev = sid[:8] + "..."
         age = _format_age(s["created_at"])
+        last_access = _format_last_access(s["last_access"])
 
         user_data = auth_manager.get_user_by_username(s["username"]) or {}
         fullname = user_data.get("fullname") or s["username"]
@@ -117,7 +131,7 @@ async def get_sessions_data(
                 f'border-radius:3px;cursor:pointer;">Remove</button>'
             )
 
-        rows.append([abbrev, age, owner, action])
+        rows.append([abbrev, age, last_access, owner, action])
 
     return {"data": rows}
 
