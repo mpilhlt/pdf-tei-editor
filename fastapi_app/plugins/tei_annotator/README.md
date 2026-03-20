@@ -31,7 +31,6 @@ fastapi_app/plugins/tei_annotator/
 ├── routes.py            # REST API endpoints
 ├── config.py            # Constants, XML namespace helpers, schema builders
 ├── utils.py             # Text-processing helpers and webservice call utility
-├── extractor.py         # Legacy extractor (disabled, kept for reference)
 ├── annotators/          # Annotator classes (strategy pattern)
 │   ├── __init__.py      # Annotator registry
 │   ├── base.py          # Abstract base class

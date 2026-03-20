@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Read(//Volumes/Hub/Users/christianboulanger/Code/tei-annotator/tei_annotator/postprocessing/**)"
     ]
   }
 }

@@ -9,6 +9,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -23,10 +24,77 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
 )
 from fastapi_app.plugins.tei_annotator.annotators import get_annotator
+from fastapi_app.plugins.tei_annotator.annotators.base import BaseAnnotator
 from fastapi_app.plugins.tei_annotator.config import TEI_NSMAP, get_annotators
 from fastapi_app.plugins.tei_annotator.utils import call_annotate
 
 logger = logging.getLogger(__name__)
+
+MAX_ANNOTATION_RETRIES = 2
+
+_xml_tag_re = re.compile(r"<[^>]+>")
+
+
+async def run_annotation(
+    element: etree._Element,
+    annotator: BaseAnnotator,
+    call_fn=call_annotate,
+    max_retries: int = MAX_ANNOTATION_RETRIES,
+) -> list[str]:
+    """
+    Annotate *element* using *annotator*, calling *call_fn* for LLM inference.
+
+    Retries up to *max_retries* times if the webservice response drops content
+    (detected by stripping XML tags and comparing with the original plain text).
+    Falls back to serializing the original element unchanged if all retries fail.
+
+    Returns a list of serialized XML fragment strings ready for the frontend to
+    insert into the document.
+    """
+    from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
+
+    plain_text = annotator.get_plain_text(element)
+    plain_text_stripped = plain_text.rstrip()
+    new_elements: list[etree._Element] = [element]
+
+    for attempt in range(max_retries + 1):
+        result = await call_fn(
+            text=plain_text,
+            schema=annotator.get_schema(),
+            provider=annotator.provider,
+            model=annotator.model,
+        )
+        annotated_xml = result.get("xml", "")
+        annotated_plain = _xml_tag_re.sub("", annotated_xml).rstrip()
+
+        if annotated_plain == plain_text_stripped:
+            new_elements = annotator.apply_result(element, annotated_xml)
+            break
+
+        if attempt < max_retries:
+            logger.warning(
+                "tei-annotator: attempt %d/%d content mismatch, retrying "
+                "(len plain=%d len result=%d)",
+                attempt + 1,
+                max_retries + 1,
+                len(plain_text_stripped),
+                len(annotated_plain),
+            )
+        else:
+            logger.warning(
+                "tei-annotator: all %d attempts failed content validation; returning original element",
+                max_retries + 1,
+            )
+
+    return [
+        strip_namespaces(
+            apply_entity_encoding_from_config(
+                etree.tostring(el, encoding="unicode", xml_declaration=False,
+                               with_tail=(el is not element))
+            )
+        )
+        for el in new_elements
+    ]
 
 router = APIRouter(prefix="/api/plugins/tei-annotator", tags=["tei-annotator"])
 
@@ -153,26 +221,5 @@ async def annotate(
             ),
         )
 
-    # Call the TEI Annotator webservice
-    plain_text = annotator.get_plain_text(element)
-    result = await call_annotate(
-        text=plain_text,
-        schema=annotator.get_schema(),
-        provider=annotator.provider,
-        model=annotator.model,
-    )
-    annotated_xml = result.get("xml", "")
-
-    # Serialize each replacement element; the frontend inserts them into the document.
-    from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
-    new_elements = annotator.apply_result(element, annotated_xml)
-    fragments = [
-        strip_namespaces(
-            apply_entity_encoding_from_config(
-                etree.tostring(el, encoding="unicode", xml_declaration=False)
-            )    
-        )
-        
-        for el in new_elements
-    ]
+    fragments = await run_annotation(element, annotator)
     return {"fragments": fragments}

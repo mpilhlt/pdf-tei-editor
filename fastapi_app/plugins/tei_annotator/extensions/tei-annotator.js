@@ -91,7 +91,6 @@ export function onStateUpdate(changedKeys, state, _sandbox) {
  * @param {FrontendExtensionSandbox} sandbox
  */
 async function _runAnnotator(ann, sandbox) {
-  console.log({sandbox, ann});
   const state = sandbox.getState();
 
   if (!_isBiblXpath(state.xpath)) {
