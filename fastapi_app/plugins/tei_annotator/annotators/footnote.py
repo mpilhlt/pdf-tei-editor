@@ -96,7 +96,15 @@ class FootnoteAnnotator(BaseAnnotator):
                         prev_bibl = child
                     elif local == "lb" and prev_bibl is not None:
                         prev_bibl.append(child)
-                return bibls
+                # Serialize the full inner content of the wrapper, preserving any
+                # text nodes (bare text between or before bibl spans) alongside the
+                # bibl elements, so nothing is silently discarded.
+                parts: list[str] = []
+                if wrapper.text:
+                    parts.append(wrapper.text)
+                for child in wrapper:
+                    parts.append(etree.tostring(child, encoding="unicode", with_tail=True))
+                return ["".join(parts)]
         except etree.XMLSyntaxError as exc:
             logger.warning("tei-annotator footnote: could not parse result: %s", exc)
 

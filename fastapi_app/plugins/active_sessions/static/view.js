@@ -21,8 +21,8 @@ $(function () {
         },
         columns: [
             { title: 'Session ID' },
-            { title: 'Age' },
-            { title: 'Last Access' },
+            { title: 'Age', render: (data, type) => type === 'sort' ? data.sort : data.display },
+            { title: 'Last Access', render: (data, type) => type === 'sort' ? data.sort : data.display },
             { title: 'Owner' },
             { title: 'Action', orderable: false },
         ],

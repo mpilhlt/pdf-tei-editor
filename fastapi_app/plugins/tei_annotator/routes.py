@@ -54,8 +54,8 @@ async def run_annotation(
     from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
 
     plain_text = annotator.get_plain_text(element)
-    plain_text_stripped = plain_text.rstrip()
-    new_elements: list[etree._Element] = [element]
+    plain_text_stripped = plain_text.rstrip(' \t')
+    new_items: list[etree._Element | str] = [element]
 
     for attempt in range(max_retries + 1):
         result = await call_fn(
@@ -65,10 +65,10 @@ async def run_annotation(
             model=annotator.model,
         )
         annotated_xml = result.get("xml", "")
-        annotated_plain = _xml_tag_re.sub("", annotated_xml).rstrip()
+        annotated_plain = _xml_tag_re.sub("", annotated_xml).rstrip(' \t')
 
         if annotated_plain == plain_text_stripped:
-            new_elements = annotator.apply_result(element, annotated_xml)
+            new_items = annotator.apply_result(element, annotated_xml)
             break
 
         if attempt < max_retries:
@@ -89,11 +89,12 @@ async def run_annotation(
     return [
         strip_namespaces(
             apply_entity_encoding_from_config(
-                etree.tostring(el, encoding="unicode", xml_declaration=False,
-                               with_tail=(el is not element))
+                item if isinstance(item, str) else
+                etree.tostring(item, encoding="unicode", xml_declaration=False,
+                               with_tail=(item is not element))
             )
         )
-        for el in new_elements
+        for item in new_items
     ]
 
 router = APIRouter(prefix="/api/plugins/tei-annotator", tags=["tei-annotator"])

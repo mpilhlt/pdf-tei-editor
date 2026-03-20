@@ -12,7 +12,7 @@ DEFAULT_PROVIDER   = "gemini"
 DEFAULT_MODEL      = "gemini-2.5-flash"
 
 # Placeholder used to round-trip <lb/> elements through plain text
-LB_PLACEHOLDER = "|||LB|||"
+LB_PLACEHOLDER = "\n"
 
 # ---------------------------------------------------------------------------
 # XML namespace

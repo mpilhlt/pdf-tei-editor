@@ -56,10 +56,13 @@ class BaseAnnotator(ABC):
         self,
         original_element: etree._Element,
         annotated_xml: str,
-    ) -> list[etree._Element]:
+    ) -> list[etree._Element | str]:
         """
-        Parse *annotated_xml* and return the list of elements that should replace
-        *original_element* in its parent.
+        Parse *annotated_xml* and return the replacements for *original_element*.
+
+        Each item is either an ``etree._Element`` or a raw XML fragment string.
+        Raw strings are inserted as-is by the serializer and may contain mixed
+        content (text nodes, lb elements, and bibl elements).
 
         On failure, return ``[original_element]`` to preserve the original.
         """

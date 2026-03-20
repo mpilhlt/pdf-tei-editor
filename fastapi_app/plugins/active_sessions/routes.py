@@ -103,7 +103,7 @@ async def get_sessions_data(
     _user: dict = Depends(require_admin_user),
     session_manager: SessionManager = Depends(get_session_manager),
     auth_manager: AuthManager = Depends(get_auth_manager),
-) -> dict[str, list[list[str]]]:
+) -> dict[str, list[list[str | dict[str, str | int]]]]:
     """
     Return sessions as a DataTables-compatible JSON object.
     """
@@ -113,8 +113,10 @@ async def get_sessions_data(
     for s in sessions:
         sid = s["session_id"]
         abbrev = sid[:8] + "..."
-        age = _format_age(s["created_at"])
-        last_access = _format_last_access(s["last_access"])
+        age_seconds = int((datetime.now() - datetime.fromtimestamp(s["created_at"])).total_seconds())
+        last_access_seconds = int((datetime.now() - datetime.fromtimestamp(s["last_access"])).total_seconds())
+        age = {"display": _format_age(s["created_at"]), "sort": age_seconds}
+        last_access = {"display": _format_last_access(s["last_access"]), "sort": last_access_seconds}
 
         user_data = auth_manager.get_user_by_username(s["username"]) or {}
         fullname = user_data.get("fullname") or s["username"]

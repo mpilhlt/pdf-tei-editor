@@ -199,7 +199,7 @@ class TestAnnotatorApplyResult(unittest.TestCase):
         self.assertIs(result[0], original)
 
     def test_footnote_apply_result_splits_bibls(self):
-        """FootnoteAnnotator splits multiple references into separate bibl elements."""
+        """FootnoteAnnotator returns full annotated content as a single XML string."""
         annotator = FootnoteAnnotator()
         original = self._bibl("1. Doe, J. (2024). Paper. 2. Smith, A. (2023). Book.")
         annotated_xml = (
@@ -207,9 +207,10 @@ class TestAnnotatorApplyResult(unittest.TestCase):
             '<bibl><label>2.</label> Smith, A. (2023). Book.</bibl>'
         )
         result = annotator.apply_result(original, annotated_xml)
-        self.assertEqual(len(result), 2)
-        for bibl in result:
-            self.assertEqual(etree.QName(bibl.tag).localname, "bibl")
+        self.assertEqual(len(result), 1)
+        self.assertIsInstance(result[0], str)
+        self.assertIn("Doe, J.", result[0])
+        self.assertIn("Smith, A.", result[0])
 
 
 class TestAnnotatorRegistry(unittest.TestCase):

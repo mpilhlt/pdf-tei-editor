@@ -92,10 +92,10 @@ class TestRunAnnotationSingleBibl(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRunAnnotationMultiBibl(unittest.IsolatedAsyncioTestCase):
-    """Multi-reference bibl: footnote annotator splits into separate bibl elements."""
+    """Multi-reference bibl: footnote annotator returns full annotated content as one fragment."""
 
-    async def test_split_produces_multiple_fragments(self):
-        """Two references yield two fragments."""
+    async def test_split_produces_single_fragment_with_all_content(self):
+        """Two annotated references yield one fragment containing both bibl elements."""
         annotator = FootnoteAnnotator()
         original = _bibl(
             f"<label>15</label> SAAD-DINIZ, E. Book, 2015, p. 114-128; "
@@ -108,10 +108,12 @@ class TestRunAnnotationMultiBibl(unittest.IsolatedAsyncioTestCase):
 
         fragments = await run_annotation(original, annotator, _make_call_fn(annotated_xml))
 
-        self.assertEqual(len(fragments), 2)
+        self.assertEqual(len(fragments), 1)
+        self.assertIn("SAAD-DINIZ", fragments[0])
+        self.assertIn("BRAGATO", fragments[0])
 
-    async def test_inter_bibl_separator_preserved_as_tail(self):
-        """Separator text between split bibls is included in the first fragment's tail."""
+    async def test_inter_bibl_separator_preserved(self):
+        """Separator text between split bibls is preserved in the single fragment."""
         annotator = FootnoteAnnotator()
         original = _bibl(
             f"<label>15</label> SAAD-DINIZ, E. Book, 2015; BRAGATO, A. Thesis, 2017.{LB_PLACEHOLDER} "
@@ -123,9 +125,9 @@ class TestRunAnnotationMultiBibl(unittest.IsolatedAsyncioTestCase):
 
         fragments = await run_annotation(original, annotator, _make_call_fn(annotated_xml))
 
-        # The space separator " " is the tail of the first bibl and must appear
-        # in the first fragment (with_tail=True for candidate elements).
-        self.assertIn(" ", fragments[0][-5:])
+        self.assertEqual(len(fragments), 1)
+        # The space separator between the two bibls must be present in the fragment.
+        self.assertIn("</bibl> <bibl>", fragments[0])
 
     async def test_split_trailing_lb_outside_last_bibl_reattached(self):
         """Trailing <lb/> outside the last bibl span is moved into the last bibl."""
@@ -140,8 +142,9 @@ class TestRunAnnotationMultiBibl(unittest.IsolatedAsyncioTestCase):
 
         fragments = await run_annotation(original, annotator, _make_call_fn(annotated_xml))
 
-        self.assertEqual(len(fragments), 2)
-        self.assertIn("<lb/>", fragments[1])
+        self.assertEqual(len(fragments), 1)
+        self.assertIn("<lb/>", fragments[0])
+        self.assertIn("BRAGATO", fragments[0])
 
 
 class TestRunAnnotationRetry(unittest.IsolatedAsyncioTestCase):
@@ -150,16 +153,16 @@ class TestRunAnnotationRetry(unittest.IsolatedAsyncioTestCase):
     async def test_content_mismatch_retries_and_succeeds(self):
         """A bad first response is retried; a good second response is accepted."""
         annotator = FootnoteAnnotator()
-        plain = f"<label>1</label> Text.{LB_PLACEHOLDER} "
-        original = _bibl(plain)
+        original = _bibl(f"<label>1</label> Text.{LB_PLACEHOLDER} ")
         bad_response = f'<bibl><label>1</label> Text.</bibl>'   # lb dropped
         good_response = f'<bibl><label>1</label> Text.{LB_PLACEHOLDER} </bibl>'
 
-        fragments = await run_annotation(
-            original, annotator,
-            _make_call_fn(bad_response, good_response),
-            max_retries=1,
-        )
+        with self.assertLogs("fastapi_app.plugins.tei_annotator.routes", level="WARNING"):
+            fragments = await run_annotation(
+                original, annotator,
+                _make_call_fn(bad_response, good_response),
+                max_retries=1,
+            )
 
         self.assertEqual(len(fragments), 1)
         self.assertIn("<lb/>", fragments[0])
@@ -168,7 +171,7 @@ class TestRunAnnotationRetry(unittest.IsolatedAsyncioTestCase):
         """When every attempt drops content, the original element is returned unchanged."""
         annotator = FootnoteAnnotator()
         original = _bibl(f"<label>1</label> Text.{LB_PLACEHOLDER} ", tail="\n  ")
-        bad = f'<bibl><label>1</label> Text.</bibl>'
+        bad = f'<bibl><label>1</label> Text.</bibl>'   # lb dropped
 
         with self.assertLogs("fastapi_app.plugins.tei_annotator.routes", level="WARNING"):
             fragments = await run_annotation(
