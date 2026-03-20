@@ -54,7 +54,7 @@ async def run_annotation(
     from fastapi_app.lib.utils.xml_utils import apply_entity_encoding_from_config
 
     plain_text = annotator.get_plain_text(element)
-    plain_text_stripped = plain_text.rstrip()
+    plain_text_stripped = plain_text.rstrip(' \t')
     new_items: list[etree._Element | str] = [element]
 
     for attempt in range(max_retries + 1):
@@ -65,7 +65,7 @@ async def run_annotation(
             model=annotator.model,
         )
         annotated_xml = result.get("xml", "")
-        annotated_plain = _xml_tag_re.sub("", annotated_xml).rstrip()
+        annotated_plain = _xml_tag_re.sub("", annotated_xml).rstrip(' \t')
 
         if annotated_plain == plain_text_stripped:
             new_items = annotator.apply_result(element, annotated_xml)
