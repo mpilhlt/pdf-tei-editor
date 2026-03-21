@@ -229,7 +229,12 @@ async function load({ xml, pdf }) {
 
     // Always load XML content and update state
     await removeMergeView()
-    await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked })
+    await app.updateState({ 
+      xml: null, 
+      diff: null, 
+      editorReadOnly: file_is_locked,
+      xpath: null 
+    })
     logger.info(`Loading XML: ${xml} (read-only: ${file_is_locked})`)
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`

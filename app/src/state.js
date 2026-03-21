@@ -28,6 +28,7 @@
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
+ * @property {boolean} connectionLost - Whether the browser cannot reach the backend server (client-server connectivity)
  * @property {boolean} offline  - Whether the application is in offline mode, i.e. the backend has disconnected
  * @property {UserData|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
@@ -51,6 +52,7 @@ const initialState = {
   xpath: null,
   variant: null,
   editorReadOnly: false,
+  connectionLost: false,
   sessionId: null,
   user: null,
   collection: null,

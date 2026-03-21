@@ -6,7 +6,7 @@
  * @import { ApplicationState, Plugin } from '../app.js' 
  */
 import ui from '../ui.js'
-import { logger, client, updateState, dialog, authentication } from '../app.js'
+import { app, logger, client, dialog, authentication } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 
 /**
@@ -37,6 +37,8 @@ export default plugin
 let heartbeatInterval = null;
 let lockTimeoutSeconds = 60;
 let editorReadOnlyState;
+/** Tracks whether the heartbeat detected a client→server connection loss (independent of state.offline) */
+let isConnectionLost = false;
 
 /** @type {ApplicationState} */
 let currentState;
@@ -45,7 +47,7 @@ let currentState;
  * Runs when the main app starts
  * @param {ApplicationState} state
  */
-async function install(state) {
+async function install() {
   logger.debug(`Installing plugin "${plugin.name}"`);
   // Plugin installation complete - actual start happens via API
 }
@@ -64,7 +66,7 @@ async function update(state) {
  * @param {ApplicationState} state
  * @param {number} [timeoutSeconds=60] - Heartbeat interval in seconds
  */
-function start(state, timeoutSeconds = 60) {
+function start(_state, timeoutSeconds = 60) {
   if (!Number.isInteger(timeoutSeconds)) {
     throw new Error(`Invalid timeout value: ${timeoutSeconds}`)
   }
@@ -105,47 +107,52 @@ function start(state, timeoutSeconds = 60) {
     }
 
     try {
-      // Only send heartbeat lock refresh if we're in edit mode
-      if (!currentState.editorReadOnly) {
-        logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-        await client.sendHeartbeat(filePath);
-      } else {
-        // In read-only mode, skip heartbeat - no lock to maintain
+      if (currentState.editorReadOnly && !isConnectionLost) {
+        // Read-only due to lock (not connection loss): no lock to maintain, skip
         logger.debug(`Read-only mode: skipping heartbeat for ${filePath}`);
         return;
       }
+      logger.debug(`Sending heartbeat to server${isConnectionLost ? ' (connectivity probe)' : ''} for ${filePath}`);
+      await client.sendHeartbeat(filePath);
 
-      // If we are here, the request was successful. Check if we were offline before.
-      if (currentState.offline) {
+      // Request succeeded — check if we had a connection loss to recover from
+      if (isConnectionLost) {
+        isConnectionLost = false;
         logger.info("Connection restored.");
         notify("Connection restored.");
-        await updateState({ offline: false, editorReadOnly: editorReadOnlyState });
+        await app.updateState({ connectionLost: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
       console.warn("Error during heartbeat:", error.name, String(error), error.statusCode);
-      // Handle different types of errors
       if (error instanceof TypeError) {
-        // This is likely a network error (client is offline)
-        if (currentState.offline) {
-          // we are still offline
-          const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`
+        // Network error: browser cannot reach the backend
+        if (isConnectionLost) {
+          const message = `Still unreachable, will try again in ${lockTimeoutSeconds} seconds ...`
           logger.warn(message)
           notify(message)
           return
         }
-        logger.warn("Connection lost.");
+        logger.warn("Connection to backend lost.");
         notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
-        editorReadOnlyState = currentState.editorReadOnly
-        await updateState({ offline: true, editorReadOnly: true });
+        isConnectionLost = true;
+        editorReadOnlyState = currentState.editorReadOnly;
+        await app.updateState({ connectionLost: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
-        // Lock conflict - either lost lock or file locked by another user
+        // Server responded — connectivity is confirmed.
+        // If we had a connection loss, the lock expired during the outage — restore state.
+        if (isConnectionLost) {
+          isConnectionLost = false;
+          logger.info("Connection restored (lock expired during outage).");
+          notify("Connection restored.");
+          await app.updateState({ connectionLost: false, editorReadOnly: editorReadOnlyState });
+          return;
+        }
         // Only show error dialog if we were in edit mode (i.e., we actually had the lock and lost it)
-        // Re-check editorReadOnly state in case it was updated since heartbeat started
         const currentReadOnlyState = currentState?.editorReadOnly || false;
         if (!currentReadOnlyState) {
           logger.critical("Lock lost for file: " + filePath);
           dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          await updateState({ editorReadOnly: true });
+          await app.updateState({ editorReadOnly: true });
         } else {
           // We're in read-only mode, so lock conflicts are expected - just log it
           logger.debug(`Heartbeat received lock conflict for read-only file ${filePath} (expected, not showing error)`);

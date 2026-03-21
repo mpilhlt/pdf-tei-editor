@@ -645,7 +645,7 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
     return
   }
 
-  updateReadOnlyWidgetText(ui.xmlEditor.statusbar.readOnlyStatus)
+  updateReadOnlyWidgetText(ui.xmlEditor.headerbar.readOnlyStatus)
 }
 
 /**
