@@ -578,6 +578,11 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
 
+  // When diff is cleared externally (e.g. logout), hide the merge view
+  if (!state.diff && xmlEditor.isMergeViewActive()) {
+    await xmlEditor.hideMergeView();
+  }
+
   // Cache extractor list when user changes
   let extractorsJustCached = false
   if (currentUser !== state.user && state.user !== null) {
