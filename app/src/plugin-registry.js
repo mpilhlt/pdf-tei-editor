@@ -12,6 +12,8 @@ export { default as BackendPluginsPlugin } from './plugins/backend-plugins.js';
 export { default as ClientPlugin } from './plugins/client.js';
 export { default as ConfigPlugin } from './plugins/config.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
+export { default as FileSelectionDrawerPlugin } from './plugins/file-selection-drawer.js';
+export { default as FileSelectionPlugin } from './plugins/file-selection.js';
 export { default as FiledataPlugin } from './plugins/filedata.js';
 export { default as HeartbeatPlugin } from './plugins/heartbeat.js';
 export { default as HelpPlugin } from './plugins/help.js';
@@ -35,8 +37,8 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   dialog: import('./plugins/dialog.js').default,
  *   "document-actions": import('./plugins/document-actions.js').api,
  *   extraction: import('./plugins/extraction.js').api,
- *   "file-selection-drawer": import('./plugins/file-selection-drawer.js').api,
- *   "file-selection": import('./plugins/file-selection.js').api,
+ *   "file-selection-drawer": import('./plugins/file-selection-drawer.js').default,
+ *   "file-selection": import('./plugins/file-selection.js').default,
  *   filedata: import('./plugins/filedata.js').default,
  *   heartbeat: import('./plugins/heartbeat.js').default,
  *   help: import('./plugins/help.js').default,

@@ -5,7 +5,6 @@
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import ui from '../ui.js';
 import Plugin from '../modules/plugin-base.js';
-import LoggerPlugin from './logger.js';
 
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
@@ -46,7 +45,7 @@ class DialogPlugin extends Plugin {
 
   async install(state) {
     await super.install(state);
-    LoggerPlugin.getInstance().debug(`Installing plugin "${this.name}"`);
+    this.getDependency('logger').debug(`Installing plugin "${this.name}"`);
     createSingleFromTemplate('dialog-template', document.body);
     updateUi();
     ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());

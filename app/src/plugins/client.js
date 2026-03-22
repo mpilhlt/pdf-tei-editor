@@ -14,7 +14,6 @@
  */
 
 import Plugin from '../modules/plugin-base.js';
-import LoggerPlugin from './logger.js';
 import { ApiClientV1 } from '../modules/api-client-v1.js';
 
 /**
@@ -113,7 +112,7 @@ class ClientPlugin extends Plugin {
     await super.install(initialState);
     if (initialState.sessionId) {
       sessionId = initialState.sessionId;
-      LoggerPlugin.getInstance().debug(`Initialized session id from initial state: ${sessionId}`);
+      this.getDependency('logger').debug(`Initialized session id from initial state: ${sessionId}`);
     }
   }
 
@@ -124,7 +123,7 @@ class ClientPlugin extends Plugin {
   onStateUpdate(changedKeys, state) {
     if (changedKeys.includes('sessionId')) {
       sessionId = state.sessionId;
-      LoggerPlugin.getInstance().debug(`Setting session id to ${sessionId}`);
+      this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
     }
   }
 

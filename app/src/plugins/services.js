@@ -40,6 +40,7 @@ const api = {
 const plugin = {
   name: "services",
   deps: ['file-selection', 'document-actions'],
+  api,
   install,
   onStateUpdate,
   shutdown

@@ -18,6 +18,7 @@ import {
   ConfigPlugin,
   DialogPlugin,
   FiledataPlugin,
+  FileSelectionDrawerPlugin,
   HeartbeatPlugin,
   HelpPlugin,
   LoggerPlugin,
@@ -38,7 +39,7 @@ import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor
 import { api as validation } from './plugins/tei-validation.js'
 import { api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
+import { api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
 import { plugin as documentActionsPlugin, api as documentActions } from './plugins/document-actions.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
@@ -89,7 +90,7 @@ const plugins = [
   XslViewerPlugin,
   teiToolsPlugin,
   fileselectionPlugin,
-  fileSelectionDrawerPlugin,
+  FileSelectionDrawerPlugin,
   documentActionsPlugin,
   servicesPlugin,
   extractionPlugin,

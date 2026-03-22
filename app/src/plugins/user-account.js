@@ -11,9 +11,7 @@
 import ui from '../ui.js';
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
-import { logger, client } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
-import { AuthenticationPlugin } from '../plugins.js';
 
 //
 // UI Type Definitions
@@ -50,13 +48,19 @@ class UserAccountPlugin extends Plugin {
     });
   }
 
+  // Cached dependencies
+  #logger;
+  #client;
+
   /**
    * Plugin installation - creates UI and sets up event handlers
    * @param {ApplicationState} initialState
    */
   async install(initialState) {
     await super.install(initialState);
-    logger.debug(`Installing plugin "${this.name}"`);
+    this.#logger = this.getDependency('logger');
+    this.#client = this.getDependency('client');
+    this.#logger.debug(`Installing plugin "${this.name}"`);
 
     // Create UI elements
     createFromTemplate('user-profile-dialog', document.body);
@@ -74,7 +78,7 @@ class UserAccountPlugin extends Plugin {
     // Add menu items to the toolbar menu (which was created by toolbar plugin)
     createFromTemplate('user-menu-items', ui.toolbar.toolbarMenu.menu);
 
-    logger.debug('User account menu items added to toolbar menu');
+    this.#logger.debug('User account menu items added to toolbar menu');
 
     // Setup menu item handlers
     ui.toolbar.toolbarMenu.menu.profileMenuItem.addEventListener('click', () => {
@@ -88,7 +92,7 @@ class UserAccountPlugin extends Plugin {
 
   async start() {
     // No longer needed - menu items are added during install phase
-    logger.debug(`Starting plugin "${this.name}"`);
+    this.#logger.debug(`Starting plugin "${this.name}"`);
   }
 
   /**
@@ -112,7 +116,7 @@ class UserAccountPlugin extends Plugin {
   async showProfileDialog() {
     const user = this.state?.user;
     if (!user) {
-      logger.error('No user logged in');
+      this.#logger.error('No user logged in');
       return;
     }
 
@@ -130,8 +134,7 @@ class UserAccountPlugin extends Plugin {
    * Logs the user out by delegating to the authentication plugin
    */
   async logout() {
-    const authPlugin = AuthenticationPlugin.getInstance();
-    await authPlugin.logout();
+    await this.getDependency('authentication').logout();
   }
 
   /**
@@ -202,7 +205,7 @@ class UserAccountPlugin extends Plugin {
 
     try {
       // Call API to update profile
-      const updatedUser = await client.apiClient.usersMeProfile(updateData);
+      const updatedUser = await this.#client.apiClient.usersMeProfile(updateData);
 
       // Update state with new user data
       await this.dispatchStateChange({
@@ -220,9 +223,9 @@ class UserAccountPlugin extends Plugin {
       // Close dialog
       ui.userProfileDialog.hide();
 
-      logger.info('User profile updated successfully');
+      this.#logger.info('User profile updated successfully');
     } catch (error) {
-      logger.error('Error updating profile: ' + String(error));
+      this.#logger.error('Error updating profile: ' + String(error));
       ui.userProfileDialog.profileForm.errorMessage.textContent = 'Failed to update profile: ' + String(error);
       ui.userProfileDialog.profileForm.errorMessage.style.display = 'block';
     }
