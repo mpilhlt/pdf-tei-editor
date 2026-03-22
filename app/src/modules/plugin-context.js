@@ -102,6 +102,20 @@ export class PluginContext {
   }
 
   //
+  // Dependency injection
+  //
+
+  /**
+   * Get the public API of a registered plugin by name.
+   * Mirrors the backend `context.get_dependency(id)` pattern.
+   * @param {string} name - Plugin name
+   * @returns {any} The plugin's public API
+   */
+  getDependency(name) {
+    return this.#application.getDependency(name);
+  }
+
+  //
   // Utility methods plugins might need
   //
 

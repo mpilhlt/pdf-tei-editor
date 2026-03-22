@@ -9,8 +9,8 @@
 
 /** @import { ApplicationState } from './state.js' */
 
-// plugin invocation endpoints
-import ep from './endpoints.js'
+// plugin extension points
+import ep from './extension-points.js'
 export { ep as endpoints }
 
 // plugins

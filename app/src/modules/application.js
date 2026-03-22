@@ -7,7 +7,7 @@
  */
 
 import { PluginContext } from './plugin-context.js';
-import ep from '../endpoints.js';
+import ep from '../extension-points.js';
 
 /**
  * Application class that provides a clean API for plugin management and bootstrapping
@@ -202,10 +202,22 @@ export class Application {
       const internalResults = await this.#pluginManager.invoke(ep.state.updateInternal, newState, { result: 'full' });
       this.#checkForStateChangeErrors(internalResults);
       
-      // 3. New system: onStateUpdate with changed keys
+      // 3. New system: onStateUpdate with changed keys (catch-all)
       const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
       this.#checkForStateChangeErrors(changeResults);
-      
+
+      // 4. Per-key dispatch: state.<key>(newVal, prevVal, state) for object plugins
+      //    and onStateUpdate.<key>(newVal, prevVal) for class plugins (on<Key>Change methods)
+      for (const key of changedKeys) {
+        const newVal = newState[key];
+        const prevVal = this.#stateManager.getPreviousStateValue(newState, key);
+        const perKeyArgs = [newVal, prevVal, newState];
+        const perKeyResults1 = await this.#pluginManager.invoke(`state.${key}`, perKeyArgs, { mode: 'sequential', result: 'full' });
+        this.#checkForStateChangeErrors(perKeyResults1);
+        const perKeyResults2 = await this.#pluginManager.invoke(`onStateUpdate.${key}`, [newVal, prevVal], { mode: 'sequential', result: 'full' });
+        this.#checkForStateChangeErrors(perKeyResults2);
+      }
+
       // Update current state after successful plugin notification
       this.#currentState = newState;
       
@@ -313,6 +325,17 @@ export class Application {
    */
   getPluginManager() {
     return this.#pluginManager;
+  }
+
+  /**
+   * Get the public API of a registered plugin by name.
+   * For class-based plugins returns the Plugin instance; for object plugins returns the
+   * `api` field (or the plugin descriptor as fallback).
+   * @param {string} name - Plugin name
+   * @returns {any} The plugin's public API
+   */
+  getDependency(name) {
+    return this.#pluginManager.getDependency(name);
   }
 }
 
