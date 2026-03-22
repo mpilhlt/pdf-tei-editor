@@ -7,6 +7,7 @@
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput, SlDialog, SlCheckbox, SlSelect } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
+ * @import { Artifact } from '../modules/file-data-utils.js'
  */
 
 import { app } from '../app.js'
@@ -28,7 +29,7 @@ import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
  * plugin API
  */
 const api = {
-  saveDocument,
+  saveRevision,
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll,
@@ -124,7 +125,7 @@ async function install(state) {
 
   // save a revision (or fork to new copy)
   da.saveRevision.addEventListener('click', () => {
-    if (currentState) saveDocument(currentState);
+    if (currentState) saveRevision(currentState);
   });
 
   // delete
@@ -393,7 +394,7 @@ async function deleteAll(state) {
  * Combines saving a revision record with an optional fork to a new personal copy.
  * @param {ApplicationState} state
  */
-async function saveDocument(state) {
+async function saveRevision(state) {
 
   // @ts-ignore
   const dlg = ui.saveDocumentDialog;
@@ -410,8 +411,8 @@ async function saveDocument(state) {
       dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 
       // Default copy label: v{N} (userId) where N = non-gold artifact count + 1
-      const nonGoldCount = /** @type {any[]} */ (fileData?.file?.artifacts ?? [])
-        .filter(a => !a.is_gold_standard).length
+      const nonGoldCount = /** @type {Artifact[]} */ (fileData?.file?.artifacts ?? [])
+        .filter(a => !a.is_gold_standard && a.variant === state.variant).length
       dlg.options.saveToNewCopySection.copyLabel.value = `v${nonGoldCount + 1} (${userData.username})`
 
       // Toggle copyLabel visibility based on checkbox
@@ -529,7 +530,7 @@ async function saveDocument(state) {
     })
   } catch (e) {
     if (e instanceof Error) {
-      console.error("Error in saveDocument:", e)
+      console.error("Error in saveRevision:", e)
       throw e
     }
     console.warn("User cancelled")

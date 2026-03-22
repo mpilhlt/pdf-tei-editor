@@ -50,6 +50,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusText} titlePrefixWidget - The artifact type prefix widget (e.g. "Gold:" / "Version:")
  * @property {StatusText} titleWidget - The artifact label widget (editable by reviewers)
  * @property {StatusText} lastUpdatedWidget - The last updated widget
+ * @property {StatusText} [readOnlyStatusWidget] - Read-only indicator (present when editor is read-only)
  */
 
 /**
@@ -635,7 +636,7 @@ async function update(state) {
   ui.xmlEditor.statusbar.lineWrappingSwitch.disabled = !state.xml
 
   // Hide other statusbar widgets when no document
-  ;[readOnlyStatusWidget, cursorPositionWidget, indentationStatusWidget]
+  ;[cursorPositionWidget, indentationStatusWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widgets with artifact type prefix and label
@@ -663,7 +664,7 @@ async function update(state) {
     // Clear visual indicators when no document is loaded
     ui.xmlEditor.classList.remove("editor-readonly")
     if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
+      ui.xmlEditor.headerbar.removeById(readOnlyStatusWidget.id)
     }
     return
   }
@@ -679,15 +680,19 @@ async function update(state) {
     if (!ui.xmlEditor.classList.contains("editor-readonly")) {
       ui.xmlEditor.classList.add("editor-readonly")
     }
-    if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5)
+    if (readOnlyStatusWidget) {
+      readOnlyStatusWidget.text = state.connectionLost ? 'Connection lost' : 'Read-only'
+      readOnlyStatusWidget.icon = state.connectionLost ? 'wifi-off' : 'lock-fill'
+      if (!readOnlyStatusWidget.isConnected) {
+        ui.xmlEditor.headerbar.add(readOnlyStatusWidget, 'right', 5)
+      }
     }
   } else {
     if (ui.xmlEditor.classList.contains("editor-readonly")) {
       ui.xmlEditor.classList.remove("editor-readonly")
     }
     if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
+      ui.xmlEditor.headerbar.removeById(readOnlyStatusWidget.id)
     }
   }
 

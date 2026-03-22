@@ -332,7 +332,7 @@ async def download_training_package(
                             if raw_file:
                                 raw_path = os.path.join(temp_dir, raw_file)
                                 if os.path.exists(raw_path):
-                                    zf.write(raw_path, f"{zip_stem}/{base_path}/raw/{doc_id}")
+                                    zf.write(raw_path, f"{zip_stem}/{base_path}/raw/{doc_id}.{grobid_suffix}")
 
                         documents_processed += 1
 
