@@ -15,7 +15,7 @@ export { ep as endpoints }
 
 // plugins
 import plugins, { services } from './plugins.js'
-import { logLevel, client, config, sse, AuthenticationPlugin, HelpPlugin, LoggerPlugin, progress } from './plugins.js'
+import { logLevel, client, config, AuthenticationPlugin, HelpPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
 // core application orchestration classes
@@ -130,9 +130,9 @@ if (applicationMode == 'testing' || applicationMode == 'development' ) {
   // @ts-ignore
   window.testLog = testLog;
   // @ts-ignore
-  window.sse = sse;
+  window.sse = pluginManager.getDependency('sse');
     // @ts-ignore
-  window.progress = progress;
+  window.progress = pluginManager.getDependency('progress');
 }
 // @test-end
 
@@ -181,6 +181,8 @@ export {
   pluginManager
 }
 
-// Re-export all plugin APIs and plugin objects from plugins.js for import by plugins
-// TODO replace direct calls to a plugin's API with invoking endpoints
+/** 
+ * Re-export all plugin APIs and plugin objects from plugins.js for import by plugins
+ * @deprecated Do not import plugins as hard file dependendecies, use `getDependency` instead
+ */ 
 export * from './plugins.js'

@@ -6,13 +6,10 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
-import { api } from './client.js';
-import { api as tools } from './tools.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import ui from '../ui.js';
-import { logger } from '../app.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -63,12 +60,20 @@ export class BackendPluginsPlugin extends Plugin {
     this._dropdown = null;
   }
 
+  // Cached dependencies
+  #logger;
+  #client;
+  #tools;
+
   /**
    * Installs the plugin
    * @param {ApplicationState} initialState
    */
   async install(initialState) {
     await super.install(initialState);
+    this.#logger = this.getDependency('logger');
+    this.#client = this.getDependency('client');
+    this.#tools = this.getDependency('tools');
 
     // Add result dialog to document body
     const dialogElement = createSingleFromTemplate('backend-plugins-result-dialog');
@@ -96,7 +101,7 @@ export class BackendPluginsPlugin extends Plugin {
   async start() {
     // Create the backend-plugins split button and add it to the tools button group
     this._dropdown = createSingleFromTemplate('backend-plugins-dropdown');
-    tools.addButton(this._dropdown);
+    this.#tools.addButton(this._dropdown);
 
     // Attach menu selection handler once on this plugin's own menu
     this._dropdown.querySelector('[name="pluginsMenu"]').addEventListener('sl-select', (event) => {
@@ -130,7 +135,7 @@ export class BackendPluginsPlugin extends Plugin {
   _updateDropdownVisibility() {
     if (!this._dropdown) return;
     this._dropdown.style.display = this.plugins.length > 0 ? '' : 'none';
-    tools.updateVisibility();
+    this.#tools.updateVisibility();
   }
 
   /**
@@ -138,7 +143,7 @@ export class BackendPluginsPlugin extends Plugin {
    */
   async discoverPlugins() {
     try {
-      this.plugins = await api.getBackendPlugins();
+      this.plugins = await this.#client.getBackendPlugins();
     } catch (error) {
       console.error('Failed to discover backend plugins:', error);
       this.plugins = [];
@@ -311,7 +316,7 @@ export class BackendPluginsPlugin extends Plugin {
     try {
      
       // Execute the specified endpoint with provided params
-      const result = await api.executeBackendPlugin(plugin.id, endpointName, params);
+      const result = await this.#client.executeBackendPlugin(plugin.id, endpointName, params);
       // Display the result according to content
       this.displayResult(plugin, result);
 
@@ -513,7 +518,7 @@ export class BackendPluginsPlugin extends Plugin {
       if (!response.ok) {
         // Status 499 = cancelled by user, don't show error (notification already sent via SSE)
         if (response.status === 499) {
-          logger.info('Download cancelled by user');
+          this.#logger.info('Download cancelled by user');
           return;
         }
         throw new Error(`Download failed: ${response.statusText}`);
@@ -614,30 +619,22 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
+  static extensionPoints = ['backend-plugins.execute'];
+
   /**
-   * Execute a backend plugin by ID. Exposed as a PluginManager endpoint so
+   * Execute a backend plugin by ID. Exposed as an extension point so
    * frontend extensions can trigger plugin execution via sandbox.invoke().
    * @param {string} pluginId
    * @param {string} endpointName
    * @param {Object} params
    */
-  async executePluginById(pluginId, endpointName, params) {
+  async execute(pluginId, endpointName, params) {
     const plugin = this.plugins.find(p => p.id === pluginId);
     if (!plugin) {
-      logger.warn(`executePluginById: plugin '${pluginId}' not found`);
+      this.#logger.warn(`execute: plugin '${pluginId}' not found`);
       return;
     }
     await this.executePlugin(plugin, endpointName, params);
-  }
-
-  /**
-   * @override
-   */
-  getEndpoints() {
-    return {
-      ...super.getEndpoints(),
-      'backend-plugins.execute': this.executePluginById.bind(this),
-    };
   }
 }
 

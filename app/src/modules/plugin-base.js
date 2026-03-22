@@ -133,6 +133,17 @@ export class Plugin {
   //
 
   /**
+   * Returns the public API object for this plugin instance.
+   * By default returns `this` (the instance itself is the API).
+   * Override when the plugin wraps a separate API object and
+   * `getDependency(name)` should return that object instead of the instance.
+   * @returns {object}
+   */
+  getApi() {
+    return this;
+  }
+
+  /**
    * Read-only access to current state
    * @returns {ApplicationState|null}
    */
@@ -181,9 +192,9 @@ export class Plugin {
    * Get the public API of another registered plugin by name.
    * Mirrors the backend `context.get_dependency(id)` pattern.
    * Use this instead of static imports of other plugins' APIs.
-   * @template {keyof import('./plugin-registry.js').PluginRegistryTypes} N
+   * @template {keyof import('../plugin-registry.js').PluginRegistryTypes} N
    * @param {N} name - Plugin name
-   * @returns {import('./plugin-registry.js').PluginRegistryTypes[N]} The plugin's public API
+   * @returns {import('../plugin-registry.js').PluginRegistryTypes[N]} The plugin's public API
    */
   getDependency(name) {
     return this.context.getDependency(name);
@@ -223,7 +234,7 @@ export class Plugin {
     const pts = {};
 
     // Standard lifecycle extension points
-    for (const name of ['install', 'start', 'shutdown', 'updateInternalState', 'onStateUpdate']) {
+    for (const name of ['install', 'ready', 'start', 'shutdown', 'updateInternalState', 'onStateUpdate']) {
       if (typeof this[name] === 'function') {
         pts[name] = this[name].bind(this);
       }

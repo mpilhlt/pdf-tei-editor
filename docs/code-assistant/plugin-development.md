@@ -13,7 +13,7 @@ For detailed frontend plugin architecture, see [../development/plugin-system-fro
 ## Creating New Plugin Classes
 
 ```javascript
-import { Plugin } from '../modules/plugin-base.js';
+import Plugin from '../modules/plugin-base.js';
 import { registerTemplate, createSingleFromTemplate } from '../ui.js';
 
 class MyPlugin extends Plugin {
@@ -28,7 +28,7 @@ class MyPlugin extends Plugin {
     // Call parent to set initial state
     await super.install(state);
 
-    // Create UI elements
+    // Register templates at install time
     await registerTemplate('my-template', 'my-template.html');
     const element = createSingleFromTemplate('my-template');
     document.body.appendChild(element);
@@ -39,7 +39,7 @@ class MyPlugin extends Plugin {
     });
   }
 
-  async onStateUpdate(changedKeys) {
+  async onStateUpdate(changedKeys, state) {
     // React to specific state changes
     if (changedKeys.includes('user')) {
       this.updateUI();
@@ -53,32 +53,41 @@ class MyPlugin extends Plugin {
     });
   }
 
-  // Override to expose custom endpoints
-  getEndpoints() {
-    return {
-      ...super.getEndpoints(),
-      'custom.action': this.handleCustomAction.bind(this)
-    };
+  // Per-key state handler: called only when state.user changes
+  // Named on<Key>Change where Key is the capitalized state property name
+  async onUserChange(newUser, prevUser) {
+    this.updateUI();
   }
+
+  // Register a custom extension point via static declaration
+  static extensionPoints = ['custom.action'];
+
+  async action() { /* ... */ }
 }
 
 export default MyPlugin;
 ```
 
-## Plugin Registration in app.js
+## Plugin Registration
+
+After creating a plugin class:
+
+1. Run `node bin/build.js --steps=plugins` — this adds the class to `app/src/plugin-registry.js`
+2. In `app/src/plugins.js`, import the class from `./plugin-registry.js` and add it to the `plugins` array
 
 ```javascript
-// Import Plugin class
-import MyPlugin from './plugins/my-plugin.js';
+// app/src/plugins.js
+import { MyPlugin } from './plugin-registry.js';
 
-// Add to plugins array
 const plugins = [
-  MyPlugin,  // Plugin class - will be instantiated automatically
-  legacyPluginObject,  // Legacy object - used as-is
+  MyPlugin,  // Plugin class — instantiated automatically
   // ...
 ];
+```
 
-// Export singleton API (after registration)
+If the plugin's API needs to be accessible to other modules, also export the singleton from `plugins.js`:
+
+```javascript
 export const myPlugin = MyPlugin.getInstance();
 ```
 
@@ -88,27 +97,18 @@ The application uses **immutable state management** with functional programming 
 
 ### Core Rules
 
-- **Never mutate state directly** - always use `dispatchStateChange()`
-- **Use `onStateUpdate()` for reactions** - more efficient than legacy `state.update`
-- **Access current state via `this.state`** - read-only property
-- **Store plugin-specific state in `state.ext`** - avoids naming conflicts
-- **Use `hasStateChanged()` for conditional logic** - available via PluginContext
+- **Never mutate state directly** — always use `dispatchStateChange()`
+- **Use `onStateUpdate()` for reactions** — react to state changes in this method
+- **Access current state via `this.state`** — read-only property
+- **Store plugin-specific state in `state.ext`** — avoids naming conflicts
 
 ### State Management Architecture
 
-State is managed through the `StateManager` class and `Application` orchestrator:
-
 ```javascript
-// Plugin classes - via PluginContext
 class MyPlugin extends Plugin {
   async someAction() {
     // Dispatch state changes through context
     await this.dispatchStateChange({ pdf: 'new-file.pdf' });
-
-    // Check if properties changed (in onStateUpdate)
-    if (changedKeys.includes('user')) {
-      // Handle changes
-    }
 
     // Access current state
     const user = this.state.user;
@@ -119,7 +119,7 @@ class MyPlugin extends Plugin {
     });
   }
 
-  async onStateUpdate(changedKeys) {
+  async onStateUpdate(changedKeys, state) {
     // Reactive updates when state changes
     if (changedKeys.includes('user')) {
       this.handleUserChange();
@@ -130,35 +130,106 @@ class MyPlugin extends Plugin {
 
 **Key Components:**
 
-- `StateManager` - Handles immutable state updates, change detection, history
-- `Application.updateState(changes)` - Orchestrates state changes and plugin notifications
-- `PluginContext` - Provides controlled access to state utilities for Plugin classes
-- Legacy BC wrappers - `updateState(changes)` and `hasStateChanged()` exported from app.js
+- `StateManager` — Handles immutable state updates, change detection, history
+- `Application.updateState(changes)` — Orchestrates state changes and plugin notifications
+- `PluginContext` — Provides controlled access to state utilities for Plugin classes
 
 ### Plugin State Handling Best Practices
 
 1. **Never import global state**: Plugins should only work with state parameters passed to functions
-2. **Use hasStateChanged()**: Replace manual state caching with `hasStateChanged(state, 'property')`
+2. **Use changedKeys.includes()**: Replace manual state caching with key checks in `onStateUpdate`
 3. **Local storage when needed**: Store local copies only for operations that need them (e.g., API requests)
 4. **Access previous state**: Use `state.previousState` to compare with previous values
-5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid TypeScript errors
-6. **Use updateStateExt()**: For updating extension properties immutably
+5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid naming conflicts
 
 ### State Architecture Principles
 
-- **Plugin endpoints are reactive observers, not state mutators**: Plugin `update()` functions receive immutable state snapshots and react to changes by updating UI or internal plugin state. They do not return modified state objects.
-- **Only state utilities create new state objects**: Functions like `updateState()` and `updateStateExt()` are responsible for creating new immutable state objects. Plugin endpoints observe and react to state changes.
+- **Plugin endpoints are reactive observers, not state mutators**: Plugin `onStateUpdate()` functions receive immutable state snapshots and react to changes by updating UI or internal plugin state. They do not return modified state objects.
+- **Only state utilities create new state objects**: Functions like `dispatchStateChange()` and `updateState()` are responsible for creating new immutable state objects. Plugin endpoints observe and react to state changes.
 - **Parallel plugin execution**: Since plugins don't mutate state, multiple plugins can process the same state snapshot concurrently without conflicts.
 - **State initialization is sequential**: During app initialization, state operations are chained sequentially to build up the initial state before plugins start reacting to changes.
-- **CRITICAL: Never call app.updateState() in endpoints that receive the state**: Plugin functions which receive the state must never update it as this creates infinite loops. They are observers/reactors, not mutators.
-- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `app.updateState()`.
-- **Event handlers must use current state**: In legacy code, event handlers registered during plugin installation receive stale state references. For plugin objects, store the current state in a closured variable and update it via an `onStateUpdate` endpoint. Use this updated reference in event handlers instead of the installation-time state parameter!
+- **CRITICAL: Never call dispatchStateChange() in onStateUpdate()**: Plugin functions which receive the state must never update it as this creates infinite loops. They are observers/reactors, not mutators.
+- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `dispatchStateChange()`.
+
+## Per-Key State Handlers
+
+Instead of checking `changedKeys.includes(key)` inside `onStateUpdate`, declare a method named `on<Key>Change` where `Key` is the state property name with the first letter capitalized. The plugin base class auto-discovers these methods and registers them as `onStateUpdate.<key>` extension points.
+
+```javascript
+class MyPlugin extends Plugin {
+  // Called only when state.xml changes — more efficient than a catch-all onStateUpdate
+  async onXmlChange(newXml, prevXml) {
+    if (newXml) this.loadDocument(newXml);
+  }
+
+  // Called only when state.user changes
+  async onUserChange(newUser, prevUser) {
+    this.updateUI(newUser);
+  }
+
+  // Called only when state.sessionId changes
+  async onSessionIdChange(newId, prevId) {
+    this.reconnect(newId);
+  }
+}
+```
+
+The naming convention: `on` + state key with first letter uppercased + `Change`.
+
+- `state.xml` → `onXmlChange`
+- `state.user` → `onUserChange`
+- `state.sessionId` → `onSessionIdChange`
+- `state.editorReadOnly` → `onEditorReadOnlyChange`
+
+Per-key handlers receive `(newValue, prevValue)` — not `changedKeys` and the full state. Use `this.state` to access other state properties.
+
+`onStateUpdate(changedKeys, state)` remains available as the catch-all and runs in parallel with per-key handlers. Both can coexist in the same class.
+
+## Custom Extension Points
+
+The `Plugin` base class auto-mounts two categories of extension points without any declaration:
+
+- **Lifecycle methods** (`install`, `ready`, `start`, `shutdown`, `onStateUpdate`) — just define the method
+- **Per-key state handlers** (`on<Key>Change`) — just follow the naming convention
+
+All other extension points must be mounted explicitly.
+
+To expose a method at a custom path (so other plugins can invoke it via `pluginManager.invoke('ns.method', args)`), use `static extensionPoints`:
+
+```javascript
+class ValidationPlugin extends Plugin {
+  // Declares that this.validate is exposed at 'validation.validate'
+  // and this.configure at 'validation.configure'
+  static extensionPoints = ['validation.validate', 'validation.configure'];
+
+  async validate(xmlString) { /* ... */ }
+  async configure(options) { /* ... */ }
+}
+```
+
+The convention: the last segment of the path is the method name (`validation.validate` → `this.validate`).
+
+For one-off custom extension points not following this convention, override `getExtensionPoints()`:
+
+```javascript
+getExtensionPoints() {
+  return {
+    ...super.getExtensionPoints(),
+    'filedata.loading': this.setLoadingState.bind(this)
+  };
+}
+```
 
 ## Common Patterns
 
 ```javascript
-// Conditional state updates
-async onStateUpdate(changedKeys) {
+// Per-key handler (preferred over onStateUpdate for single-key reactions)
+async onUserChange(newUser, prevUser) {
+  if (newUser) await this.setupUserUI();
+}
+
+// Catch-all for multiple keys or when you need changedKeys
+async onStateUpdate(changedKeys, state) {
   if (changedKeys.includes('user') && this.state.user) {
     await this.setupUserUI();
   }
@@ -177,14 +248,15 @@ async savePreferences(prefs) {
 get preferences() {
   return this.state?.ext?.[this.name]?.preferences || {};
 }
+
 ```
 
 ## Plugin Objects
 
-Plugin objects use the `onStateUpdate` endpoint:
+Plugin objects are plain JavaScript objects that can also serve as plugins. The class-based `Plugin` class is implemented on top of this primitive pattern. If you need to understand the lower-level mechanics or work with object-based plugins directly, see [Object-Based Plugin Pattern](../development/plugin-system-object-based.md).
 
 ```javascript
-import { updateState, hasStateChanged } from '../app.js';
+import { updateState } from '../app.js';
 
 let currentState;
 
@@ -203,6 +275,7 @@ async function someAction() {
 export default {
   name: 'my-plugin',
   deps: ['dependency1'],
+  api: { someAction },
   install: async (state) => { /* setup */ },
   onStateUpdate
 };

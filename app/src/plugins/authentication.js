@@ -11,11 +11,8 @@
 import ui from '../ui.js';
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
-import { logger, client, config } from '../app.js';
-import { UrlHash } from '../modules/browser-utils.js';
-import { FiledataPlugin } from '../plugins.js';
+
 import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
-import { api as sseApi } from './sse.js';
 
 // 
 // UI Type Definitions
@@ -57,11 +54,16 @@ class AuthenticationPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'authentication',
-      deps: ['client']
+      deps: ['client', 'config', 'filedata', 'sse']
     });
     /** @type {SessionActivityTracker|null} */
     this.activityTracker = null;
   }
+
+  // Cached dependencies
+  #logger;
+  #client;
+  #config;
 
   /**
    * Plugin installation - creates UI and sets up event handlers
@@ -69,7 +71,10 @@ class AuthenticationPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
-    logger.debug(`Installing plugin "${this.name}"`);
+    this.#logger = this.getDependency('logger');
+    this.#client = this.getDependency('client');
+    this.#config = this.getDependency('config');
+    this.#logger.debug(`Installing plugin "${this.name}"`);
     
     // Create UI elements
     createFromTemplate('login-dialog', document.body);
@@ -95,7 +100,7 @@ class AuthenticationPlugin extends Plugin {
     // Initialize session activity tracker
     await this._initializeActivityTracker();
 
-    sseApi.addEventListener('forceLogout', async (event) => {
+    this.getDependency('sse').addEventListener('forceLogout', async (event) => {
       let message = 'Your session has been ended.';
       try {
         const data = JSON.parse(event.data);
@@ -126,14 +131,10 @@ class AuthenticationPlugin extends Plugin {
     // release lock - this really should be in xmleditor plugin but the shutdown endpoint will be called only after this
     if (this.state?.xml) {
       try {
-        await client.releaseLock(this.state?.xml)
+        await this.#client.releaseLock(this.state?.xml)
       } catch (_e) {
         // Ignore network errors during page unload
       }
-    }
-    // Save session ID to URL hash so it can be restored on next load
-    if (this.state?.sessionId) {
-      UrlHash.set('sessionId', this.state.sessionId, false);
     }
   }
 
@@ -150,7 +151,7 @@ class AuthenticationPlugin extends Plugin {
     /** @type {AuthenticationData} */
     let authData;
     try {
-      authData = await client.status();
+      authData = await this.#client.status();
     } catch (error) {
       // Not authenticated, proceed to show login dialog
        authData = await this.showLoginDialog();
@@ -167,10 +168,10 @@ class AuthenticationPlugin extends Plugin {
 
     // Reload file data after authentication to get user-specific files
     try {
-      await FiledataPlugin.getInstance().reload({ refresh: true });
-      logger.debug('File data reloaded after authentication');
+      await this.getDependency('filedata').reload({ refresh: true });
+      this.#logger.debug('File data reloaded after authentication');
     } catch (error) {
-      logger.error('Failed to reload file data after authentication: ' + String(error));
+      this.#logger.error('Failed to reload file data after authentication: ' + String(error));
     }
 
     return authData;
@@ -195,12 +196,12 @@ class AuthenticationPlugin extends Plugin {
       try {
         authData = await this._showLoginDialog();
         await this.dispatchStateChange({
-          sessionId: authData.sessionId, 
+          sessionId: authData.sessionId,
           user: authData
         });
         break;
       } catch (error) {
-        logger.error("Error logging in: " + String(error));
+        this.#logger.error("Error logging in: " + String(error));
       }
     }
     return authData
@@ -211,8 +212,8 @@ class AuthenticationPlugin extends Plugin {
    */
   async logout() {
     try {
-      await client.logout();
-      logger.info('User logged out successfully');
+      await this.#client.logout();
+      this.#logger.info('User logged out successfully');
       await this.dispatchStateChange({
         user: null,
         sessionId: null,
@@ -225,13 +226,13 @@ class AuthenticationPlugin extends Plugin {
 
       // Reload file data after re-login to get new user's files
       try {
-        await FiledataPlugin.getInstance().reload({ refresh: true });
-        logger.debug('File data reloaded after logout/re-login');
+        await this.getDependency('filedata').reload({ refresh: true });
+        this.#logger.debug('File data reloaded after logout/re-login');
       } catch (error) {
-        logger.error('Failed to reload file data after re-login: ' + String(error));
+        this.#logger.error('Failed to reload file data after re-login: ' + String(error));
       }
     } catch (error) {
-      logger.critical('Logout failed:' + error);
+      this.#logger.critical('Logout failed:' + error);
     }
   }
 
@@ -248,7 +249,7 @@ class AuthenticationPlugin extends Plugin {
     const dialog = ui.loginDialog;
 
     // Load and display login message if configured
-    const loginMessage = await config.get("application.login-message")
+    const loginMessage = await this.#config.get("application.login-message")
     if (loginMessage) {
       dialog.loginMessage.innerHTML = loginMessage;
       dialog.loginMessage.style.display = 'block';
@@ -264,14 +265,14 @@ class AuthenticationPlugin extends Plugin {
         dialog.message.textContent = '';
         const passwd_hash = await this._hashPassword(password);
         try {
-          const authData = await client.login(username, passwd_hash);
-          logger.info(`Login successful for user: ${authData.username}`);
+          const authData = await this.#client.login(username, passwd_hash);
+          this.#logger.info(`Login successful for user: ${authData.username}`);
           dialog.hide();
           dialog.username.value = "";
           resolve(authData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
-          logger.error('Login failed: ' + String(error))
+          this.#logger.error('Login failed: ' + String(error))
           reject(error);
         } finally {
           dialog.password.value = "";
@@ -301,7 +302,7 @@ class AuthenticationPlugin extends Plugin {
    */
   async _initializeActivityTracker() {
     // Get session timeout from config
-    const sessionTimeout = await config.get('session.timeout');
+    const sessionTimeout = await this.#config.get('session.timeout');
 
     // Stop existing tracker if any
     if (this.activityTracker) {
@@ -312,13 +313,13 @@ class AuthenticationPlugin extends Plugin {
     this.activityTracker = new SessionActivityTracker({
       sessionTimeout,
       onLogout: async () => {
-        logger.info('Session expired due to inactivity. Logging out automatically.');
+        this.#logger.info('Session expired due to inactivity. Logging out automatically.');
         await this.logout();
       },
-      logger
+      logger: this.#logger
     });
 
-    logger.debug(`Session activity tracker initialized with ${sessionTimeout}s timeout`);
+    this.#logger.debug(`Session activity tracker initialized with ${sessionTimeout}s timeout`);
   }
 }
 

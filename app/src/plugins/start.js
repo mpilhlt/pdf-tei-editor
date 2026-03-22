@@ -11,8 +11,9 @@
 import ui from '../ui.js'
 import {
   endpoints as ep, app, logger, services, dialog, validation, xmlEditor,
-  config, authentication, heartbeat, testLog
+  config, authentication, testLog
 } from '../app.js'
+import { HeartbeatPlugin } from '../plugin-registry.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -159,7 +160,7 @@ async function start() {
     configureFindNodeInPdf()
 
     // Heartbeat mechanism for file locking and offline detection
-    heartbeat.start(currentState, await config.get('heartbeat.interval', 10));
+    HeartbeatPlugin.getInstance().start(await config.get('heartbeat.interval', 10));
 
     // finish initialization
     ui.spinner.hide()

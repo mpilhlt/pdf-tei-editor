@@ -49,443 +49,305 @@
  * - Click on widget toggles between minimized/maximized states
  * - Multiple widgets stack vertically (bottom-left when minimized, centered when maximized)
  * - Widget state (minimized) is stored per progress_id in session storage
- */
-
-/**
- * @import { ApplicationState } from '../state.js'
+ *
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlIconButton, SlProgressBar } from '../ui.js'
  */
 
+import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createFromTemplate } from '../ui.js'
-import { logger, sse, client } from '../app.js'
 
-/**
- * Plugin API - operates on specific progress_id instances
- */
-const api = {
-  show,
-  hide,
-  setValue,
-  setLabel,
-  isVisible,
-  getActiveWidgets
-}
-
-/**
- * Plugin object
- */
-const plugin = {
-  name: 'progress',
-  deps: ['sse'],
-  install
-}
-
-export { api, plugin }
-export default plugin
-
-//
-// State
-//
-
-/** @type {Map<string, HTMLElement>} Map of progress_id -> widget element */
-const activeWidgets = new Map()
-
-/** @type {Map<string, string>} Map of progress_id -> cancel URL */
-const cancelUrls = new Map()
-
-/** @type {HTMLTemplateElement|null} */
-let widgetTemplate = null
-
-/** @type {string} */
-let currentSessionId = null
-
-/**
- * Get minimized state from session storage for a specific widget
- * @param {string} progressId
- * @returns {boolean}
- */
-function getMinimizedState(progressId) {
-  return sessionStorage.getItem(`progress-widget-minimized-${progressId}`) === 'true'
-}
-
-/**
- * Save minimized state to session storage for a specific widget
- * @param {string} progressId
- * @param {boolean} minimized
- */
-function setMinimizedState(progressId, minimized) {
-  sessionStorage.setItem(`progress-widget-minimized-${progressId}`, String(minimized))
-}
-
-//
-// Implementation
-//
-
-// Register template at module level
+// Register template before class definition, per convention
 await registerTemplate('progress-template', 'progress.html')
 
-/**
- * Install the progress plugin
- * @param {ApplicationState} state
- */
-async function install(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
+class ProgressPlugin extends Plugin {
+  /** @type {Map<string, HTMLElement>} Map of progress_id -> widget element */
+  #activeWidgets = new Map()
 
-  currentSessionId = state.sessionId
+  /** @type {Map<string, string>} Map of progress_id -> cancel URL */
+  #cancelUrls = new Map()
 
-  // Get the template element
-  createFromTemplate("progress-template", document.body)
-  widgetTemplate = document.getElementById('progress-widget-template')
-  if (!widgetTemplate) {
-    logger.error('Progress widget template not found')
-    return
+  /** @type {HTMLTemplateElement|null} */
+  #widgetTemplate = null
+
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'progress', deps: ['sse'] })
   }
 
-  // Set up SSE listeners
-  sse.addEventListener('progressShow', handleProgressShow)
-  sse.addEventListener('progressValue', handleProgressValue)
-  sse.addEventListener('progressLabel', handleProgressLabel)
-  sse.addEventListener('progressHide', handleProgressHide)
-}
+  async install(state) {
+    await super.install(state)
 
-/**
- * Create a new widget instance from template
- * @param {string} progressId
- * @returns {HTMLElement}
- */
-function createWidgetInstance(progressId) {
-  if (!widgetTemplate) {
-    throw new Error('Progress widget template not loaded')
-  }
-
-  // Clone the template content
-  const content = widgetTemplate.content.cloneNode(true)
-  const widget = /** @type {HTMLElement} */ (content.querySelector('.progress-widget'))
-
-  // Set the progress ID
-  widget.dataset.progressId = progressId
-
-  // Get elements within the widget
-  const progressBar = /** @type {SlProgressBar} */ (widget.querySelector('[name="progressBar"]'))
-  const cancelBtn = /** @type {SlIconButton} */ (widget.querySelector('[data-name="cancelBtn"]'))
-  const labelRow = /** @type {HTMLDivElement} */ (widget.querySelector('[name="labelRow"]'))
-
-  // Store element references on the widget for easy access
-  widget._progressBar = progressBar
-  widget._cancelBtn = cancelBtn
-  widget._labelRow = labelRow
-
-  // Set up click handler for toggle minimize/maximize
-  widget.addEventListener('click', (e) => {
-    // Don't toggle if clicking on buttons
-    if (e.target === cancelBtn || cancelBtn.contains(/** @type {Node} */ (e.target))) {
+    const logger = this.getDependency('logger')
+    createFromTemplate('progress-template', document.body)
+    this.#widgetTemplate = /** @type {HTMLTemplateElement|null} */ (document.getElementById('progress-widget-template'))
+    if (!this.#widgetTemplate) {
+      logger.error('Progress widget template not found')
       return
     }
-    toggleMinimized(progressId)
-  })
 
-  // Set up cancel button handler
-  cancelBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    handleCancel(progressId)
-  })
-
-  // Add to DOM
-  document.body.appendChild(widget)
-
-  // Store in map
-  activeWidgets.set(progressId, widget)
-
-  // Update stacking indices
-  updateStackIndices()
-
-  return widget
-}
-
-/**
- * Get or create widget for a progress ID
- * @param {string} progressId
- * @returns {HTMLElement}
- */
-function getOrCreateWidget(progressId) {
-  let widget = activeWidgets.get(progressId)
-  if (!widget) {
-    widget = createWidgetInstance(progressId)
+    const sse = this.getDependency('sse')
+    sse.addEventListener('progressShow', (e) => this.#handleProgressShow(e))
+    sse.addEventListener('progressValue', (e) => this.#handleProgressValue(e))
+    sse.addEventListener('progressLabel', (e) => this.#handleProgressLabel(e))
+    sse.addEventListener('progressHide', (e) => this.#handleProgressHide(e))
   }
-  return widget
-}
 
-/**
- * Remove a widget from the DOM
- * @param {string} progressId
- */
-function removeWidget(progressId) {
-  const widget = activeWidgets.get(progressId)
-  if (widget) {
-    widget.remove()
-    activeWidgets.delete(progressId)
-    cancelUrls.delete(progressId)
-    updateStackIndices()
+  // ── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * @param {string} progressId
+   * @returns {boolean}
+   */
+  #getMinimizedState(progressId) {
+    return sessionStorage.getItem(`progress-widget-minimized-${progressId}`) === 'true'
   }
-}
 
-/**
- * Update stack indices for all active widgets
- */
-function updateStackIndices() {
-  let index = 0
-  for (const [, widget] of activeWidgets) {
-    widget.dataset.stackIndex = String(index)
-    index++
+  /**
+   * @param {string} progressId
+   * @param {boolean} minimized
+   */
+  #setMinimizedState(progressId, minimized) {
+    sessionStorage.setItem(`progress-widget-minimized-${progressId}`, String(minimized))
   }
-}
 
-/**
- * Toggle minimized state for a widget
- * @param {string} progressId
- */
-function toggleMinimized(progressId) {
-  const widget = activeWidgets.get(progressId)
-  if (!widget) return
+  /**
+   * @param {string} progressId
+   * @returns {HTMLElement}
+   */
+  #createWidgetInstance(progressId) {
+    if (!this.#widgetTemplate) {
+      throw new Error('Progress widget template not loaded')
+    }
 
-  const isMinimized = widget.classList.contains('minimized')
-  setMinimizedState(progressId, !isMinimized)
-  applyMinimizedState(widget, !isMinimized)
-}
+    const content = this.#widgetTemplate.content.cloneNode(true)
+    const widget = /** @type {HTMLElement} */ (/** @type {DocumentFragment} */ (content).querySelector('.progress-widget'))
 
-/**
- * Apply the minimized/maximized visual state to a widget
- * @param {HTMLElement} widget
- * @param {boolean} minimized
- */
-function applyMinimizedState(widget, minimized) {
-  if (minimized) {
-    widget.classList.remove('maximized')
-    widget.classList.add('minimized')
-  } else {
-    widget.classList.remove('minimized')
-    widget.classList.add('maximized')
+    widget.dataset.progressId = progressId
+
+    const progressBar = /** @type {SlProgressBar} */ (widget.querySelector('[name="progressBar"]'))
+    const cancelBtn = /** @type {SlIconButton} */ (widget.querySelector('[data-name="cancelBtn"]'))
+    const labelRow = /** @type {HTMLDivElement} */ (widget.querySelector('[name="labelRow"]'))
+
+    widget._progressBar = progressBar
+    widget._cancelBtn = cancelBtn
+    widget._labelRow = labelRow
+
+    widget.addEventListener('click', (e) => {
+      if (e.target === cancelBtn || cancelBtn.contains(/** @type {Node} */ (e.target))) return
+      this.#toggleMinimized(progressId)
+    })
+
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.#handleCancel(progressId)
+    })
+
+    document.body.appendChild(widget)
+    this.#activeWidgets.set(progressId, widget)
+    this.#updateStackIndices()
+
+    return widget
   }
-}
 
-/**
- * Handle cancel button click for a specific widget
- * @param {string} progressId
- */
-async function handleCancel(progressId) {
-  logger.debug(`Progress cancel requested for ${progressId}`)
+  /**
+   * @param {string} progressId
+   * @returns {HTMLElement}
+   */
+  #getOrCreateWidget(progressId) {
+    return this.#activeWidgets.get(progressId) ?? this.#createWidgetInstance(progressId)
+  }
 
-  // Send cancel request to the backend cancel endpoint if one was provided
-  const cancelUrl = cancelUrls.get(progressId)
-  if (cancelUrl) {
-    try {
-      await client.callApi(cancelUrl, 'POST')
-    } catch (err) {
-      logger.warn(`Failed to send cancel request: ${err}`)
+  /** @param {string} progressId */
+  #removeWidget(progressId) {
+    const widget = this.#activeWidgets.get(progressId)
+    if (widget) {
+      widget.remove()
+      this.#activeWidgets.delete(progressId)
+      this.#cancelUrls.delete(progressId)
+      this.#updateStackIndices()
     }
   }
 
-  // Hide the widget
-  hide(progressId)
-}
+  #updateStackIndices() {
+    let index = 0
+    for (const [, widget] of this.#activeWidgets) {
+      widget.dataset.stackIndex = String(index++)
+    }
+  }
 
-/**
- * Handle progressShow SSE event
- * @param {MessageEvent} event
- */
-function handleProgressShow(event) {
-  let options = {}
-  if (event.data) {
-    try {
-      options = JSON.parse(event.data)
-    } catch {
-      logger.warn('Failed to parse progressShow event data')
+  /** @param {string} progressId */
+  #toggleMinimized(progressId) {
+    const widget = this.#activeWidgets.get(progressId)
+    if (!widget) return
+    const isMinimized = widget.classList.contains('minimized')
+    this.#setMinimizedState(progressId, !isMinimized)
+    this.#applyMinimizedState(widget, !isMinimized)
+  }
+
+  /**
+   * @param {HTMLElement} widget
+   * @param {boolean} minimized
+   */
+  #applyMinimizedState(widget, minimized) {
+    widget.classList.toggle('minimized', minimized)
+    widget.classList.toggle('maximized', !minimized)
+  }
+
+  /** @param {string} progressId */
+  async #handleCancel(progressId) {
+    this.getDependency('logger').debug(`Progress cancel requested for ${progressId}`)
+    const cancelUrl = this.#cancelUrls.get(progressId)
+    if (cancelUrl) {
+      try {
+        await this.getDependency('client').callApi(cancelUrl, 'POST')
+      } catch (err) {
+        this.getDependency('logger').warn(`Failed to send cancel request: ${err}`)
+      }
+    }
+    this.hide(progressId)
+  }
+
+  /** @param {MessageEvent} event */
+  #handleProgressShow(event) {
+    let options = {}
+    if (event.data) {
+      try {
+        options = JSON.parse(event.data)
+      } catch {
+        this.getDependency('logger').warn('Failed to parse progressShow event data')
+        return
+      }
+    }
+    const progressId = options.progress_id
+    if (!progressId) {
+      this.getDependency('logger').warn('progressShow event missing progress_id')
       return
     }
+    this.show(progressId, options)
   }
 
-  const progressId = options.progress_id
-  if (!progressId) {
-    logger.warn('progressShow event missing progress_id')
-    return
+  /** @param {MessageEvent} event */
+  #handleProgressValue(event) {
+    let data = {}
+    try { data = JSON.parse(event.data) } catch {
+      this.getDependency('logger').warn('Failed to parse progressValue event data')
+      return
+    }
+    if (!data.progress_id) { this.getDependency('logger').warn('progressValue event missing progress_id'); return }
+    this.setValue(data.progress_id, data.value)
   }
 
-  show(progressId, options)
-}
-
-/**
- * Handle progressValue SSE event
- * @param {MessageEvent} event
- */
-function handleProgressValue(event) {
-  let data = {}
-  try {
-    data = JSON.parse(event.data)
-  } catch {
-    logger.warn('Failed to parse progressValue event data')
-    return
+  /** @param {MessageEvent} event */
+  #handleProgressLabel(event) {
+    let data = {}
+    try { data = JSON.parse(event.data) } catch {
+      this.getDependency('logger').warn('Failed to parse progressLabel event data')
+      return
+    }
+    if (!data.progress_id) { this.getDependency('logger').warn('progressLabel event missing progress_id'); return }
+    this.setLabel(data.progress_id, data.label)
   }
 
-  const progressId = data.progress_id
-  if (!progressId) {
-    logger.warn('progressValue event missing progress_id')
-    return
+  /** @param {MessageEvent} event */
+  #handleProgressHide(event) {
+    let data = {}
+    try { data = JSON.parse(event.data) } catch {
+      this.getDependency('logger').warn('Failed to parse progressHide event data')
+      return
+    }
+    if (!data.progress_id) { this.getDependency('logger').warn('progressHide event missing progress_id'); return }
+    this.hide(data.progress_id)
   }
 
-  setValue(progressId, data.value)
-}
+  // ── Public API ───────────────────────────────────────────────────────────
 
-/**
- * Handle progressLabel SSE event
- * @param {MessageEvent} event
- */
-function handleProgressLabel(event) {
-  let data = {}
-  try {
-    data = JSON.parse(event.data)
-  } catch {
-    logger.warn('Failed to parse progressLabel event data')
-    return
+  /**
+   * Show or create a progress widget.
+   * @param {string} progressId
+   * @param {object} [options]
+   * @param {string} [options.label]
+   * @param {number|null} [options.value]
+   * @param {boolean} [options.cancellable=true]
+   * @param {string} [options.cancelUrl]
+   */
+  show(progressId, options = {}) {
+    const { label = '', value = null, cancellable = true, cancelUrl } = options
+    const widget = this.#getOrCreateWidget(progressId)
+    if (cancelUrl) this.#cancelUrls.set(progressId, cancelUrl)
+    this.#applyMinimizedState(widget, this.#getMinimizedState(progressId))
+    this.#setWidgetValue(widget, value)
+    this.#setWidgetLabel(widget, label)
+    widget._cancelBtn.style.display = cancellable ? '' : 'none'
+    widget.style.display = ''
   }
 
-  const progressId = data.progress_id
-  if (!progressId) {
-    logger.warn('progressLabel event missing progress_id')
-    return
+  /**
+   * Hide and remove a progress widget.
+   * @param {string} progressId
+   */
+  hide(progressId) {
+    this.#removeWidget(progressId)
   }
 
-  setLabel(progressId, data.label)
-}
-
-/**
- * Handle progressHide SSE event
- * @param {MessageEvent} event
- */
-function handleProgressHide(event) {
-  let data = {}
-  try {
-    data = JSON.parse(event.data)
-  } catch {
-    logger.warn('Failed to parse progressHide event data')
-    return
+  /**
+   * Set the progress value for a widget.
+   * @param {string} progressId
+   * @param {number|null} value
+   */
+  setValue(progressId, value) {
+    const widget = this.#activeWidgets.get(progressId)
+    if (widget) this.#setWidgetValue(widget, value)
   }
 
-  const progressId = data.progress_id
-  if (!progressId) {
-    logger.warn('progressHide event missing progress_id')
-    return
+  /**
+   * @param {HTMLElement} widget
+   * @param {number|null} value
+   */
+  #setWidgetValue(widget, value) {
+    const progressBar = widget._progressBar
+    if (value === null || value === undefined) {
+      progressBar.indeterminate = true
+    } else {
+      progressBar.indeterminate = false
+      progressBar.value = value
+    }
   }
 
-  hide(progressId)
-}
-
-//
-// Public API
-//
-
-/**
- * Show or create a progress widget
- * @param {string} progressId - Unique identifier for this progress instance
- * @param {object} [options]
- * @param {string} [options.label] - Initial label text
- * @param {number|null} [options.value] - Initial value (null for indeterminate)
- * @param {boolean} [options.cancellable=true] - Whether to show cancel button
- * @param {string} [options.cancelUrl] - URL to POST to when cancel is clicked
- */
-function show(progressId, options = {}) {
-  const { label = '', value = null, cancellable = true, cancelUrl } = options
-
-  const widget = getOrCreateWidget(progressId)
-
-  // Store cancel URL if provided
-  if (cancelUrl) {
-    cancelUrls.set(progressId, cancelUrl)
+  /**
+   * Set the label text for a widget.
+   * @param {string} progressId
+   * @param {string} label
+   */
+  setLabel(progressId, label) {
+    const widget = this.#activeWidgets.get(progressId)
+    if (widget) this.#setWidgetLabel(widget, label)
   }
 
-  // Restore minimized state from session storage
-  const minimized = getMinimizedState(progressId)
-  applyMinimizedState(widget, minimized)
+  /**
+   * @param {HTMLElement} widget
+   * @param {string} label
+   */
+  #setWidgetLabel(widget, label) {
+    widget._labelRow.textContent = label
+  }
 
-  // Set initial values
-  setWidgetValue(widget, value)
-  setWidgetLabel(widget, label)
+  /**
+   * Check if a progress widget is visible.
+   * @param {string} progressId
+   * @returns {boolean}
+   */
+  isVisible(progressId) {
+    return this.#activeWidgets.has(progressId)
+  }
 
-  // Show/hide cancel button
-  widget._cancelBtn.style.display = cancellable ? '' : 'none'
-
-  // Show widget
-  widget.style.display = ''
-}
-
-/**
- * Hide and remove a progress widget
- * @param {string} progressId
- */
-function hide(progressId) {
-  removeWidget(progressId)
-}
-
-/**
- * Set the progress value for a widget
- * @param {string} progressId
- * @param {number|null} value - Progress value (0-100), null for indeterminate
- */
-function setValue(progressId, value) {
-  const widget = activeWidgets.get(progressId)
-  if (widget) {
-    setWidgetValue(widget, value)
+  /**
+   * Get list of active widget progress IDs.
+   * @returns {string[]}
+   */
+  getActiveWidgets() {
+    return Array.from(this.#activeWidgets.keys())
   }
 }
 
-/**
- * Set progress value on a widget element
- * @param {HTMLElement} widget
- * @param {number|null} value
- */
-function setWidgetValue(widget, value) {
-  const progressBar = widget._progressBar
-  if (value === null || value === undefined) {
-    progressBar.indeterminate = true
-  } else {
-    progressBar.indeterminate = false
-    progressBar.value = value
-  }
-}
-
-/**
- * Set the label text for a widget
- * @param {string} progressId
- * @param {string} label
- */
-function setLabel(progressId, label) {
-  const widget = activeWidgets.get(progressId)
-  if (widget) {
-    setWidgetLabel(widget, label)
-  }
-}
-
-/**
- * Set label on a widget element
- * @param {HTMLElement} widget
- * @param {string} label
- */
-function setWidgetLabel(widget, label) {
-  widget._labelRow.textContent = label
-}
-
-/**
- * Check if a progress widget is visible
- * @param {string} progressId
- * @returns {boolean}
- */
-function isVisible(progressId) {
-  return activeWidgets.has(progressId)
-}
-
-/**
- * Get list of active widget progress IDs
- * @returns {string[]}
- */
-function getActiveWidgets() {
-  return Array.from(activeWidgets.keys())
-}
+export default ProgressPlugin

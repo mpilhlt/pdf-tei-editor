@@ -164,9 +164,10 @@ export class PluginManager {
     this.pluginsByName.set(pluginConfig.name, normalizedPlugin);
     this.registeredPlugins.push(normalizedPlugin);
 
-    // Store public API: Plugin instances are their own API; object plugins use .api if present
+    // Store public API: Plugin instances use getApi() (defaults to the instance itself);
+    // object plugins use .api if present
     if (plugin instanceof Plugin) {
-      this.pluginApis.set(pluginConfig.name, plugin);
+      this.pluginApis.set(pluginConfig.name, plugin.getApi());
     } else if (pluginConfig.api !== undefined) {
       this.pluginApis.set(pluginConfig.name, pluginConfig.api);
     } else {

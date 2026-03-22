@@ -10,26 +10,33 @@
  * @import {PluginConfig} from './modules/plugin-manager.js'
  */
 
-// class-based plugins
-import AuthenticationPlugin from './plugins/authentication.js'
-import BackendPluginsPlugin from './plugins/backend-plugins.js'
-import FiledataPlugin from './plugins/filedata.js'
-import HelpPlugin from './plugins/help.js'
-import LoggerPlugin from './plugins/logger.js'
-import { logLevel} from './plugins/logger.js'
-import UserAccountPlugin from './plugins/user-account.js'
-import XslViewerPlugin from './plugins/xsl-viewer.js'
+// class-based plugins (imported via plugin-registry.js)
+import {
+  AuthenticationPlugin,
+  BackendPluginsPlugin,
+  ClientPlugin,
+  ConfigPlugin,
+  DialogPlugin,
+  FiledataPlugin,
+  HeartbeatPlugin,
+  HelpPlugin,
+  LoggerPlugin,
+  ProgressPlugin,
+  SsePlugin,
+  TeiValidationPlugin,
+  UrlHashStatePlugin,
+  UserAccountPlugin,
+  XslViewerPlugin,
+} from './plugin-registry.js'
+import { logLevel } from './plugins/logger.js'
 
 // object-based plugins
-import { plugin as configPlugin, api as config } from './plugins/config.js'
-import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
-import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
-import { plugin as progressPlugin, api as progress } from './plugins/progress.js'
-import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
+import { api as config } from './plugins/config.js'
+import { api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
-import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
-import { plugin as clientPlugin, api as client } from './plugins/client.js'
+import { api as validation } from './plugins/tei-validation.js'
+import { api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
 import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
@@ -45,7 +52,6 @@ import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
 import { plugin as toolsPlugin } from './plugins/tools.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
-import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
 import { plugin as configEditorPlugin } from './plugins/config-editor.js'
 
@@ -57,10 +63,10 @@ const plugins = [
   LoggerPlugin,
 
   // modules with config object
-  urlHashStatePlugin,
-  clientPlugin,
-  configPlugin,
-  dialogPlugin,
+  UrlHashStatePlugin,
+  ClientPlugin,
+  ConfigPlugin,
+  DialogPlugin,
   toolbarPlugin,
   toolsPlugin,
 
@@ -89,12 +95,12 @@ const plugins = [
   extractionPlugin,
   promptEditorPlugin,
   teiWizardPlugin,
-  validationPlugin,
+  TeiValidationPlugin,
   moveFilesPlugin,
-  ssePlugin,
-  progressPlugin,
+  SsePlugin,
+  ProgressPlugin,
   accessControlPlugin,
-  heartbeatPlugin,
+  HeartbeatPlugin,
   startPlugin
 ]
 
@@ -112,8 +118,6 @@ export {
   // object plugin APIs
   logLevel,
   config,
-  urlHash,
-  sse,
   dialog, 
   pdfViewer, 
   xmlEditor, 
@@ -127,10 +131,8 @@ export {
   promptEditor,
   appInfo,
   annotationGuide,
-  accessControl,
-  heartbeat,
-  progress
+  accessControl
 }
 
 // Export Plugin classes for getInstance() access
-export { FiledataPlugin, XslViewerPlugin };
+export { FiledataPlugin, HeartbeatPlugin, ProgressPlugin, SsePlugin, UrlHashStatePlugin, XslViewerPlugin };

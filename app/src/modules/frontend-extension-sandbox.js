@@ -14,7 +14,7 @@
  */
 
 import ui from '../ui.js';
-import { dialog as dialogApi, services, client, config as configApi, sse as sseApi, fileselection, XslViewerPlugin } from '../plugins.js';
+import { dialog as dialogApi, services, client, config as configApi, fileselection, XslViewerPlugin, SsePlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
 import * as teiUtilsApi from './tei-utils.js';
 
@@ -153,8 +153,8 @@ export function getSandbox() {
       reloadFiles: (options) => fileselection.reload(options)
     },
     sse: {
-      addEventListener: sseApi.addEventListener,
-      removeEventListener: sseApi.removeEventListener
+      addEventListener: (type, listener) => SsePlugin.getInstance().addEventListener(type, listener),
+      removeEventListener: (type, listener) => SsePlugin.getInstance().removeEventListener(type, listener)
     },
     api: client.apiClient,
     config: { get: configApi.get },

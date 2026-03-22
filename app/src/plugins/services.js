@@ -10,8 +10,9 @@
 import { app, endpoints as ep, services } from '../app.js'
 import ui from '../ui.js'
 import {
-  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, sse, pluginManager
+  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl, pluginManager
 } from '../app.js'
+import { SsePlugin } from '../plugin-registry.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -67,13 +68,13 @@ async function install(state) {
   xmlEditor.on("editorReady",() => {ui.toolbar.documentActions.saveRevision.disabled = false});
 
   // Listen for maintenance mode events
-  sse.addEventListener('maintenanceOn', async (event) => {
+  SsePlugin.getInstance().addEventListener('maintenanceOn', async (event) => {
     const data = JSON.parse(event.data);
     await app.updateState({ maintenanceMode: true });
     ui.spinner.show(data.message || '');
   });
 
-  sse.addEventListener('maintenanceOff', async (event) => {
+  SsePlugin.getInstance().addEventListener('maintenanceOff', async (event) => {
     ui.spinner.hide();
     await app.updateState({ maintenanceMode: false });
     const data = JSON.parse(event.data);
@@ -82,12 +83,12 @@ async function install(state) {
     }
   });
 
-  sse.addEventListener('maintenanceReload', () => {
+  SsePlugin.getInstance().addEventListener('maintenanceReload', () => {
     window.location.reload();
   });
 
   // Listen for lock release events to attempt acquiring locks for read-only documents
-  sse.addEventListener('lockReleased', async (event) => {
+  SsePlugin.getInstance().addEventListener('lockReleased', async (event) => {
     const data = JSON.parse(event.data);
     const releasedStableId = data.stable_id;
 

@@ -5,7 +5,7 @@
  * Available as `window.pluginSandbox` when plugin HTML content is displayed.
  */
 
-import { services, sse as sseApi } from '../plugins.js';
+import { services, SsePlugin } from '../plugins.js';
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
 import { findCorrespondingSource } from '../modules/file-data-utils.js';
 
@@ -238,7 +238,7 @@ export class PluginSandbox {
       }
     };
 
-    sseApi.addEventListener(eventType, listener);
+    SsePlugin.getInstance().addEventListener(eventType, listener);
     this._sseSubscriptions.set(subscriptionId, { eventType, listener, source: null });
 
     return subscriptionId;
@@ -251,7 +251,7 @@ export class PluginSandbox {
   unsubscribeSSE(subscriptionId) {
     const sub = this._sseSubscriptions.get(subscriptionId);
     if (sub) {
-      sseApi.removeEventListener(sub.eventType, sub.listener);
+      SsePlugin.getInstance().removeEventListener(sub.eventType, sub.listener);
       this._sseSubscriptions.delete(subscriptionId);
     }
   }
