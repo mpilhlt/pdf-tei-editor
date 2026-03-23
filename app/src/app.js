@@ -14,8 +14,9 @@ import ep from './extension-points.js'
 export { ep as endpoints }
 
 // plugins
-import plugins, { services } from './plugins.js'
-import { logLevel, client, config, AuthenticationPlugin, HelpPlugin, LoggerPlugin } from './plugins.js'
+import plugins from './plugins.js'
+import { logLevel } from './plugins/logger.js'
+import { AuthenticationPlugin, HelpPlugin, LoggerPlugin } from './plugin-registry.js'
 import initialState from './state.js'
 
 // core application orchestration classes
@@ -48,6 +49,11 @@ export { app }
 
 // Register plugins
 app.registerPlugins(plugins)
+
+// Resolve plugin singletons after registration
+const client = pluginManager.getDependency('client')
+const config = pluginManager.getDependency('config')
+const services = pluginManager.getDependency('services')
 
 // Initialize frontend extension sandbox with state getter, invoke function, updateState, and plugin getter
 initializeSandbox(
@@ -180,9 +186,3 @@ export {
   /** @deprecated Don't use the pluginManager in plugins */
   pluginManager
 }
-
-/** 
- * Re-export all plugin APIs and plugin objects from plugins.js for import by plugins
- * @deprecated Do not import plugins as hard file dependendecies, use `getDependency` instead
- */ 
-export * from './plugins.js'

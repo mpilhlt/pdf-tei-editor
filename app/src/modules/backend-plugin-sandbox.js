@@ -5,7 +5,6 @@
  * Available as `window.pluginSandbox` when plugin HTML content is displayed.
  */
 
-import { services, SsePlugin } from '../plugins.js';
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
 import { findCorrespondingSource } from '../modules/file-data-utils.js';
 
@@ -177,7 +176,7 @@ export class PluginSandbox {
     );
 
     // Load both XML and PDF
-    await services.load({
+    await this.context.getDependency('services').load({
       xml: stableId,
       pdf: resolvedPdfId || undefined
     });
@@ -193,8 +192,8 @@ export class PluginSandbox {
    * @param {boolean} [closeDialog] - Closes the dialog after loading the document (default true)
    */
   async openDiff(stableId1, stableId2, closeDialog = true) {
-    await services.load({xml: stableId1});
-    await services.showMergeView(stableId2);
+    await this.context.getDependency('services').load({xml: stableId1});
+    await this.context.getDependency('services').showMergeView(stableId2);
     if (closeDialog) {
       this.closeDialog();
     } 
@@ -238,7 +237,7 @@ export class PluginSandbox {
       }
     };
 
-    SsePlugin.getInstance().addEventListener(eventType, listener);
+    this.context.getDependency('sse').addEventListener(eventType, listener);
     this._sseSubscriptions.set(subscriptionId, { eventType, listener, source: null });
 
     return subscriptionId;
@@ -251,7 +250,7 @@ export class PluginSandbox {
   unsubscribeSSE(subscriptionId) {
     const sub = this._sseSubscriptions.get(subscriptionId);
     if (sub) {
-      SsePlugin.getInstance().removeEventListener(sub.eventType, sub.listener);
+      this.context.getDependency('sse').removeEventListener(sub.eventType, sub.listener);
       this._sseSubscriptions.delete(subscriptionId);
     }
   }

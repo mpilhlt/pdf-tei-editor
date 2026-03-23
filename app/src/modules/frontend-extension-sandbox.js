@@ -14,7 +14,6 @@
  */
 
 import ui from '../ui.js';
-import { dialog as dialogApi, services, client, config as configApi, fileselection, XslViewerPlugin, SsePlugin } from '../plugins.js';
 import { notify } from './sl-utils.js';
 import * as teiUtilsApi from './tei-utils.js';
 
@@ -128,7 +127,8 @@ async function callPluginApi(endpoint, method = 'GET', params = null) {
  */
 function registerXslStylesheet(options) {
   try {
-    const xslViewer = XslViewerPlugin.getInstance();
+    const xslViewer = getDependencyFn('xsl-viewer');
+    if (!xslViewer) throw new Error('xsl-viewer plugin not available');
     xslViewer.register(options);
   } catch (error) {
     console.warn('XslViewerPlugin not available:', error.message);
@@ -140,24 +140,26 @@ function registerXslStylesheet(options) {
  * @returns {FrontendExtensionSandbox}
  */
 export function getSandbox() {
+  const services = getDependencyFn('services');
+  const sse = getDependencyFn('sse');
   return {
     ui,
-    dialog: dialogApi,
+    dialog: getDependencyFn('dialog'),
     notify,
     getState: getStateFn,
     updateState: updateStateFn,
     invoke: invokeFn,
     services: {
-      load: services.load,
-      showMergeView: services.showMergeView,
-      reloadFiles: (options) => fileselection.reload(options)
+      load: (files) => services.load(files),
+      showMergeView: (diff) => services.showMergeView(diff),
+      reloadFiles: (options) => getDependencyFn('file-selection').reload(options)
     },
     sse: {
-      addEventListener: (type, listener) => SsePlugin.getInstance().addEventListener(type, listener),
-      removeEventListener: (type, listener) => SsePlugin.getInstance().removeEventListener(type, listener)
+      addEventListener: (type, listener) => sse.addEventListener(type, listener),
+      removeEventListener: (type, listener) => sse.removeEventListener(type, listener)
     },
-    api: client.apiClient,
-    config: { get: configApi.get },
+    api: getDependencyFn('client').apiClient,
+    config: { get: (...args) => getDependencyFn('config').get(...args) },
     fetchText,
     callPluginApi: (endpoint, method, params) => callPluginApi(endpoint, method, params),
     registerXslStylesheet,

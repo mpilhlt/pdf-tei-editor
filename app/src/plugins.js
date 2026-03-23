@@ -1,6 +1,6 @@
 /**
  * Plugin imports and configuration
- * 
+ *
  * This file contains all plugin imports and exports for the PDF-TEI-Editor application.
  * It provides the plugins array for registration and individual plugin APIs for backward compatibility.
  */
@@ -24,11 +24,15 @@ import {
   ExtractionPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
+  FileSelectionPlugin,
   HeartbeatPlugin,
   InfoPlugin,
   MoveFilesPlugin,
   PdfViewerPlugin,
+  PromptEditorPlugin,
   RbacManagerPlugin,
+  ServicesPlugin,
+  StartPlugin,
   TeiToolsPlugin,
   TeiWizardPlugin,
   ToolbarPlugin,
@@ -43,21 +47,8 @@ import {
   UserAccountPlugin,
   XslViewerPlugin,
 } from './plugin-registry.js'
-import { logLevel } from './plugins/logger.js'
 
-// object-based plugins
-import { api as config } from './plugins/config.js'
-import { api as dialog } from './plugins/dialog.js'
-import { api as pdfViewer } from './plugins/pdfviewer.js'
-import { api as xmlEditor } from './plugins/xmleditor.js'
-import { api as validation } from './plugins/tei-validation.js'
-import { api as client } from './plugins/client.js'
-import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { api as extraction } from './plugins/extraction.js'
-import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import PromptEditorPlugin from './plugins/prompt-editor.js'
-import { plugin as startPlugin } from './plugins/start.js'
-import { api as accessControl } from './plugins/access-control.js'
+
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
@@ -90,10 +81,10 @@ const plugins = [
   XmlEditorPlugin,
   XslViewerPlugin,
   TeiToolsPlugin,
-  fileselectionPlugin,
+  FileSelectionPlugin,
   FileSelectionDrawerPlugin,
   DocumentActionsPlugin,
-  servicesPlugin,
+  ServicesPlugin,
   ExtractionPlugin,
   PromptEditorPlugin,
   TeiWizardPlugin,
@@ -103,33 +94,8 @@ const plugins = [
   ProgressPlugin,
   AccessControlPlugin,
   HeartbeatPlugin,
-  startPlugin
+  StartPlugin
 ]
 
 // Export plugins array as default
 export default plugins
-
-// Export individual plugin APIs for backward compatibility
-export {
-  // class-based plugins - needed where?
-  AuthenticationPlugin,
-  HelpPlugin,
-  LoggerPlugin,
-
-  // needed by sandbox modules
-  SsePlugin, 
-  XslViewerPlugin,
-
-  // object plugin APIs
-  logLevel,
-  config,
-  dialog,
-  pdfViewer,
-  xmlEditor,
-  validation,
-  client,
-  fileselection,
-  extraction,
-  services,
-  accessControl
-}

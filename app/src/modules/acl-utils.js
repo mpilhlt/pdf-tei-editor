@@ -3,7 +3,6 @@
  * @import { UserData } from '../plugins/authentication.js'
  */
 
-import { logger } from '../app.js'
 import { getFileDataById } from './file-data-utils.js'
 
 /**
@@ -179,7 +178,7 @@ export function isGoldFile(hash) {
     }
     return false
   } catch (error) {
-    logger.warn(`Error checking if file is gold: ${String(error)}`)
+    console.warn(`Error checking if file is gold: ${String(error)}`)
     return false
   }
 }
@@ -200,7 +199,7 @@ export function isVersionFile(hash) {
     }
     return false
   } catch (error) {
-    logger.warn(`Error checking if file is version: ${String(error)}`)
+    console.warn(`Error checking if file is version: ${String(error)}`)
     return false
   }
 }
@@ -311,7 +310,7 @@ export function canEditFile(user, fileId) {
     const fileData = getFileDataById(fileId)
     if (!fileData || fileData.type === 'source' || !('metadata' in fileData.item) || !fileData.item.metadata?.access_control) {
       // No metadata found or no access control info - role-based restrictions already checked above
-      logger.debug('No access control metadata found for file')
+      console.debug('No access control metadata found for file')
       return true
     }
 
@@ -332,7 +331,7 @@ export function canEditFile(user, fileId) {
 
     return true
   } catch (error) {
-    logger.warn(`Error checking file access permissions: ${String(error)}`)
+    console.warn(`Error checking file access permissions: ${String(error)}`)
     // Default to allowing edit on error to avoid breaking functionality
     return true
   }

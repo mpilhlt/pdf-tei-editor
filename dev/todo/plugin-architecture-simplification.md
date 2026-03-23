@@ -128,7 +128,7 @@ Run via: `node bin/build.js --steps=plugins`
 
 ### Step 6 — Migrate plugins
 
-**Status:** TODO
+**Status:** DONE
 
 Migrate object-based plugins one at a time to class-based, following `docs/code-assistant/plugin-migration-guide.md`.
 
@@ -217,7 +217,13 @@ Steps 1–5 complete. Changes made:
 - `app/src/plugins.js`: Class-based plugin imports consolidated to a single import from `./plugin-registry.js`.
 - `app/src/modules/plugin-base.js`: Updated JSDoc import path to `../plugin-registry.js`.
 
-**Step 6 — Plugin migration:** IN PROGRESS (use `docs/code-assistant/plugin-migration-guide.md`)
+**Step 6 — Plugin migration:** DONE
+
+**`services.js`:** Converted to `ServicesPlugin extends Plugin`. All plugin APIs acquired via `getDependency()` in `install()`. `currentState` module variable eliminated (replaced by `this.state`). `onStateUpdate` removed. `pluginManager.invoke(...)` replaced with `this.context.invokePluginEndpoint(...)`. `app.updateState(...)` replaced with `this.dispatchStateChange(...)`. Self-referencing dynamic import in `uploadXml` replaced with `this.load(...)`. Lazy proxy BC export retained for `app.js` re-export chain. `getNodeText`/`getTextNodes` kept as module-level private utilities.
+
+**`start.js`:** Converted to `StartPlugin extends Plugin`. `state.update` handler removed (auto-tracked by base class). `app.invokePluginEndpoint(...)` replaced with `this.context.invokePluginEndpoint(...)`. `app.updateState(...)` replaced with `this.dispatchStateChange(...)`. `configureFindNodeInPdf` made private (`#configureFindNodeInPdf`). `HeartbeatPlugin.getInstance()` still called directly (singleton is safe post-install).
+
+**`plugins.js`:** `fileselectionPlugin` and `servicesPlugin`/`startPlugin` object imports removed. All plugin classes now imported exclusively from `plugin-registry.js`. BC proxy `api` imports kept only for the named re-exports used by `app.js`.
 
 The target state for `plugins.js` is: it exports only the `plugins` array (default export). All other named exports are loose-coupling violations — they exist because consuming plugins import peer APIs via `app.js`/`plugins.js` instead of using `getDependency()`. BC proxy exports in plugin files are temporary shims; their use should be marked `@deprecated` in JSDoc and eliminated as consuming plugins are updated.
 
@@ -246,6 +252,8 @@ The target state for `plugins.js` is: it exports only the `plugins` array (defau
 | `url-hash-state.js` | `UrlHashStatePlugin` |
 | `user-account.js` | `UserAccountPlugin` |
 | `xsl-viewer.js` | `XslViewerPlugin` |
+| `services.js` | `ServicesPlugin` |
+| `start.js` | `StartPlugin` |
 
 ### Class-based but still causing exports or loose coupling in `plugins.js`
 
@@ -273,17 +281,11 @@ The `app.js` bootstrap uses `client`, `config`, and `services` before plugins ar
 
 ### Not yet migrated — still object-based
 
-| Plugin file | Notes |
-| --- | --- |
-| `services.js` | exports `plugin` + `api as services`; used by `app.js` bootstrap, `start.js`, and many migrated plugins via direct `api` imports |
-| `start.js` | exports `plugin` only; uses `app.invokePluginEndpoint`, `app.updateState`, imports `services` api from `app.js` |
+All plugins have been migrated.
 
 ### Cleanup remaining in `plugins.js` (after migrations above)
 
-- Replace `import { plugin as fileselectionPlugin, api as fileselection }` with `FileSelectionPlugin` from registry; move `fileselection` export to use the BC proxy from `file-selection.js`
-- Replace `import { plugin as servicesPlugin, api as services }` with `ServicesPlugin` from registry once `services.js` is migrated
-- Replace `import { plugin as startPlugin }` with `StartPlugin` from registry once `start.js` is migrated
-- Once `services.js` and `start.js` are migrated, the `accessControl` named export can also be removed
+All class imports now come from `plugin-registry.js`. Remaining BC proxy exports (`config`, `dialog`, `pdfViewer`, `xmlEditor`, `validation`, `client`, `fileselection`, `extraction`, `services`, `accessControl`) are retained for `app.js` re-exports and any code that hasn't yet switched to `getDependency()`.
 
 ---
 
