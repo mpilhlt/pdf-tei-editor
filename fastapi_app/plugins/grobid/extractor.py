@@ -122,6 +122,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         grobid_server_url = get_grobid_server_url()
         if grobid_server_url is None:
             raise ValueError("GROBID server URL not configured")
+        self._check_grobid_health(grobid_server_url)
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
 
         # Get the appropriate handler
@@ -178,7 +179,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                         break
 
                 if raw_tei_content is None:
-                    raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
+                    raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output.")
         else:
             # Non-training variants (fulltext, references) - no caching
             raw_tei_content = handler.fetch_tei(pdf_path, grobid_server_url, variant_id, flavor, options)
@@ -231,7 +232,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         metadata = await get_metadata_for_document(doi=doi, pdf_path=pdf_path, stable_id=stable_id)
 
         # Create TEI header
-        tei_header = create_tei_header(doi, metadata)
+        tei_header = create_tei_header(doi, metadata) # type: ignore
         assert tei_header is not None
 
         # Add custom elements to header
@@ -359,6 +360,25 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Fix invalid xml:id attributes like xml:id="-1"
         xml_content = re.sub(r'xml:id="-?\d+"', 'xml:id="auto-generated"', xml_content)
         return xml_content
+
+    def _check_grobid_health(self, grobid_server_url: str) -> None:
+        """Check GROBID server health and raise RuntimeError if not ready."""
+        session = get_retry_session(retries=1, backoff_factor=0)
+        try:
+            response = session.get(f"{grobid_server_url}/api/health", timeout=10)
+            health = response.json()
+        except Exception as e:
+            raise RuntimeError(f"Could not reach GROBID server: {e}") from e
+        if not health.get("ready", False):
+            parts: list[str] = []
+            init_error = health.get("initializationError")
+            if init_error:
+                parts.append(init_error)
+            failed: dict[str, str] = health.get("models", {}).get("failed", {})
+            for model, error in failed.items():
+                parts.append(f"{model}: {error.strip()}")
+            detail = "; ".join(parts) if parts else "server not ready"
+            raise RuntimeError(f"GROBID server is not ready: {detail}")
 
     def _get_grobid_version(self, grobid_server_url: str) -> tuple[str, str]:
         """Get GROBID version information from the server with retry logic."""

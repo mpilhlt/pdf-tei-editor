@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any
 from urllib.parse import urlparse
 
-from requests.exceptions import ConnectionError, RequestException  # type: ignore[import-untyped]
+from requests.exceptions import ConnectionError, RequestException, RetryError  # type: ignore[import-untyped]
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import get_retry_session
@@ -100,16 +100,12 @@ class TrainingHandler(GrobidHandler):
 
                 response = session.post(url, files=files, timeout=300)  # 5 minute timeout
                 response.raise_for_status()
-        except (ConnectionError, RequestException) as e:
-            # Log full error for debugging
-            logger.error(f"GROBID connection failed: {e}", exc_info=True)
-
-            # Extract hostname for user-friendly message
+        except (ConnectionError, RetryError, RequestException) as e:
+            reason = str(e.__cause__ or e).split('\n')[0]
+            logger.error(f"GROBID request failed: {reason}")
             parsed_url = urlparse(grobid_server_url)
             hostname = parsed_url.netloc or parsed_url.path
-
-            # Raise user-friendly error
-            raise RuntimeError(f"Cannot connect to {hostname}")
+            raise RuntimeError(f"GROBID request to {hostname} failed: {reason}") from None
 
         # Save ZIP file
         zip_path = temp_dir / "training.zip"
