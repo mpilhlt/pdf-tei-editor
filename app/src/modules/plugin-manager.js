@@ -559,7 +559,6 @@ export class PluginManager {
       deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
     };
 
-    // Check if Plugin instance has getExtensionPoints (preferred) or legacy getEndpoints
     const getPointsFn = pluginInstance.getExtensionPoints ?? pluginInstance.getEndpoints;
     if (typeof getPointsFn === 'function') {
       const endpoints = getPointsFn.call(pluginInstance);
