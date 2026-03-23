@@ -54,7 +54,10 @@ class DialogPlugin extends Plugin {
 
 export default DialogPlugin;
 
-/** Lazy-proxy API for backward compatibility */
+/**
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('dialog')` in plugins, or import `DialogPlugin` directly.
+ */
 export const api = {
   info,
   error,

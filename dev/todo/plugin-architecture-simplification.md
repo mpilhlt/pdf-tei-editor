@@ -217,7 +217,66 @@ Steps 1–5 complete. Changes made:
 - `app/src/plugins.js`: Class-based plugin imports consolidated to a single import from `./plugin-registry.js`.
 - `app/src/modules/plugin-base.js`: Updated JSDoc import path to `../plugin-registry.js`.
 
-**Step 6 — Plugin migration:** TODO (use `docs/code-assistant/plugin-migration-guide.md`)
+**Step 6 — Plugin migration:** IN PROGRESS (use `docs/code-assistant/plugin-migration-guide.md`)
+
+The target state for `plugins.js` is: it exports only the `plugins` array (default export). All other named exports are loose-coupling violations — they exist because consuming plugins import peer APIs via `app.js`/`plugins.js` instead of using `getDependency()`. BC proxy exports in plugin files are temporary shims; their use should be marked `@deprecated` in JSDoc and eliminated as consuming plugins are updated.
+
+### Fully migrated — no remaining exports or loose coupling
+
+| Plugin file | Class |
+|---|---|
+| `authentication.js` | `AuthenticationPlugin` |
+| `backend-plugins.js` | `BackendPluginsPlugin` |
+| `filedata.js` | `FiledataPlugin` |
+| `file-selection-drawer.js` | `FileSelectionDrawerPlugin` |
+| `heartbeat.js` | `HeartbeatPlugin` |
+| `help.js` | `HelpPlugin` |
+| `logger.js` | `LoggerPlugin` |
+| `progress.js` | `ProgressPlugin` |
+| `sse.js` | `SsePlugin` |
+| `url-hash-state.js` | `UrlHashStatePlugin` |
+| `user-account.js` | `UserAccountPlugin` |
+| `xsl-viewer.js` | `XslViewerPlugin` |
+
+### Class-based but still causing exports in `plugins.js`
+
+The plugin class exists, but consuming plugins still import the BC proxy via `app.js` (which re-exports everything from `plugins.js`) instead of using `getDependency()`. Removing the export requires updating all consumers to call `getDependency()`. BC proxy exports in the plugin files must be marked `@deprecated`.
+
+| Plugin file | Class | BC export still in `plugins.js` | Consumed by |
+|---|---|---|---|
+| `client.js` | `ClientPlugin` | `client` | `app.js` bootstrap, many plugins via `app.js` |
+| `config.js` | `ConfigPlugin` | `config` | `app.js` bootstrap, `tei-wizard.js` direct, many plugins via `app.js` |
+| `dialog.js` | `DialogPlugin` | `dialog` | many plugins via `app.js` |
+| `file-selection.js` | `FileSelectionPlugin` | `fileselection` | many plugins via `app.js`; also still registered via `plugin` object — switch to class import in `plugins.js` |
+| `pdfviewer.js` | `PdfViewerPlugin` | `pdfViewer` | `services.js` via `app.js` |
+| `tei-validation.js` | `TeiValidationPlugin` | `validation` | `services.js` via `app.js` |
+| `xmleditor.js` | `XmlEditorPlugin` | `xmlEditor` | `document-actions.js`, `extraction.js`, `tei-wizard.js` via `app.js` |
+
+`SsePlugin` and `XslViewerPlugin` are exported because `frontend-extension-sandbox.js` and `backend-plugin-sandbox.js` import them directly from `plugins.js` — a separate loose coupling violation in the sandbox modules that requires those modules to use `getDependency()` instead.
+
+`logLevel` (an enum constant from `logger.js`) is exported for `app.js` bootstrap; it can be imported directly from `./plugins/logger.js` in `app.js` once the re-export is cleaned up.
+
+The `app.js` bootstrap uses `client`, `config`, and `services` before plugins are installed, so `getDependency()` is unavailable. These must be imported directly from their plugin files in `app.js`, not via `plugins.js`.
+
+### Not yet migrated — still object-based
+
+| Plugin file | Notes |
+|---|---|
+| `access-control.js` | exports `plugin` + `api as accessControl` |
+| `annotation-guide.js` | exports `plugin` only |
+| `config-editor.js` | exports `plugin` only |
+| `document-actions.js` | exports `plugin` only |
+| `extraction.js` | exports `plugin` + `api as extraction` (used by `annotation-guide.js`) |
+| `info.js` | exports `plugin` only |
+| `move-files.js` | exports `plugin` only |
+| `prompt-editor.js` | exports `plugin` only |
+| `rbac-manager.js` | exports `plugin` only |
+| `services.js` | exports `plugin` + `api as services` (used by `app.js` bootstrap and many plugins) |
+| `start.js` | exports `plugin` only |
+| `tei-tools.js` | exports `plugin` only |
+| `tei-wizard.js` | exports `plugin` only |
+| `toolbar.js` | exports `plugin` only |
+| `tools.js` | exports `plugin` only |
 
 **Step 7 — Documentation update:** TODO
 

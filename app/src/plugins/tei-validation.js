@@ -130,7 +130,7 @@ class TeiValidationPlugin extends Plugin {
   /** @returns {boolean} */
   isValidDocument() { return this.#lastDiagnostics.length === 0; }
 
-  getApi() { return api; }
+  getApi() { return this; }
 
   //
   // Private methods
@@ -276,7 +276,10 @@ class TeiValidationPlugin extends Plugin {
 
 export default TeiValidationPlugin;
 
-/** Lazy-proxy API for backward compatibility */
+/**
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('tei-validation')` in plugins, or import `TeiValidationPlugin` directly.
+ */
 export const api = {
   configure: (...args) => TeiValidationPlugin.getInstance().configure(...args),
   validate: () => TeiValidationPlugin.getInstance().validate(),

@@ -41,15 +41,14 @@ import { api as xmlEditor } from './plugins/xmleditor.js'
 import { api as validation } from './plugins/tei-validation.js'
 import { api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
-import { plugin as documentActionsPlugin, api as documentActions } from './plugins/document-actions.js'
+import { plugin as documentActionsPlugin } from './plugins/document-actions.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
+import { plugin as promptEditorPlugin } from './plugins/prompt-editor.js'
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
-import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
-import { plugin as annotationGuidePlugin, api as annotationGuide } from './plugins/annotation-guide.js'
+import { plugin as infoPlugin } from './plugins/info.js'
+import { plugin as annotationGuidePlugin } from './plugins/annotation-guide.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
@@ -115,27 +114,21 @@ export {
   // class-based plugins
   AuthenticationPlugin,
   HelpPlugin,
-  UserAccountPlugin,
   LoggerPlugin,
 
   // object plugin APIs
   logLevel,
   config,
-  dialog, 
-  pdfViewer, 
-  xmlEditor, 
+  dialog,
+  pdfViewer,
+  xmlEditor,
   validation,
   client,
   fileselection,
-  fileSelectionDrawer,
   extraction,
-  documentActions,
   services,
-  promptEditor,
-  appInfo,
-  annotationGuide,
   accessControl
 }
 
-// Export Plugin classes for getInstance() access
-export { FiledataPlugin, HeartbeatPlugin, ProgressPlugin, SsePlugin, UrlHashStatePlugin, XslViewerPlugin };
+// Export Plugin classes needed by sandbox modules
+export { SsePlugin, XslViewerPlugin };

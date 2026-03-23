@@ -584,7 +584,10 @@ class FileSelectionPlugin extends Plugin {
 
 export default FileSelectionPlugin;
 
-/** Lazy-proxy API for backward compatibility */
+/**
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('file-selection')` in plugins, or import `FileSelectionPlugin` directly.
+ */
 export const api = {
   reload: (options) => FileSelectionPlugin.getInstance().reload(options),
   get fileData() { return FileSelectionPlugin.getInstance().state?.fileData || []; }

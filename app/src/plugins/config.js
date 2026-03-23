@@ -76,6 +76,7 @@ export default ConfigPlugin;
 
 /**
  * Lazy-proxy API for backward compatibility — delegates to the singleton instance.
+ * @deprecated Use `getDependency('config')` in plugins, or import `ConfigPlugin` directly.
  * @namespace
  */
 export const api = {

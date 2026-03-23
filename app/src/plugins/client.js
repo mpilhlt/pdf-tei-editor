@@ -138,7 +138,10 @@ class ClientPlugin extends Plugin {
 
 export default ClientPlugin;
 
-/** Lazy-proxy API for backward compatibility */
+/**
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('client')` in plugins, or import `ClientPlugin` directly.
+ */
 export const api = {
   get lastHttpStatus() { return lastHttpStatus; },
   ApiError,
