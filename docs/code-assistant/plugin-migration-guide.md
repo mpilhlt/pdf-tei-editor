@@ -132,17 +132,31 @@ Convention: the method name is the last segment of the extension point path (`va
 
 **If `api` was an instance of another class** (e.g., `export const api = xmlEditor` where `xmlEditor` is a `NavXmlEditor` instance):
 
-- Wrap it in a getter: `get editor() { return this.#editor }`
-- Keep a BC re-export at the bottom of the file for modules that cannot be migrated immediately:
+- Override `getApi()` to return the wrapped instance: `getApi() { return this.#editor; }`
+- Keep a BC lazy-proxy re-export at the bottom of the file for modules that cannot be migrated immediately. Use a `Proxy` with `bind` so that method calls preserve the correct `this`, and with a `set` trap so property writes go to the actual instance:
 
   ```js
-  // BC: direct access to the underlying editor instance
-  export const api = /** @type {XxxPlugin} */ (XxxPlugin.getInstance()).editor
+  /** Lazy-proxy for backward compatibility — exposes the wrapped instance */
+  export const api = new Proxy({}, {
+    get(_, prop) {
+      const instance = XxxPlugin.getInstance().getApi();
+      const value = instance[prop];
+      return typeof value === 'function' ? value.bind(instance) : value;
+    },
+    set(_, prop, value) {
+      XxxPlugin.getInstance().getApi()[prop] = value;
+      return true;
+    }
+  });
   ```
 
-- Add the `api` field to the plugin descriptor inside the class (not needed for class plugins; remove the plugin object entirely)
+  Do NOT use `export const api = XxxPlugin.getInstance().getApi()` — `getInstance()` fails at module evaluation time because the instance does not yet exist.
 
 ### 2.9 Replace cross-plugin static imports
+
+**Circular dependency check first**: Before adding any plugin name to `deps`, verify that no circular chain exists. For each candidate dep `B`, read its `deps` array, then recursively check each of those. If any transitive dep points back to the plugin being migrated, do NOT declare `B` as a dep — call `this.getDependency('B')` lazily at call time instead. The plugin manager will throw `Circular dependency detected` at registration time if a cycle is declared.
+
+Example chain that is circular: `xmleditor → tei-validation → xmleditor` (tei-validation lists xmleditor in its own deps, so xmleditor cannot list tei-validation).
 
 Replace static imports of other plugins' APIs with `getDependency`. Cache dependencies that are used in more than one method as private instance fields assigned in `install()`:
 

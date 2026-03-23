@@ -22,7 +22,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from '../../tests/e2e/tests/helpers/test-logging.js'
+import { configureTestLog, testLog } from './modules/test-log.js'
 
 // frontend extension system
 import { loadExtensionsFromServer } from './modules/frontend-extension-registry.js'
@@ -54,7 +54,7 @@ initializeSandbox(
   () => app.getCurrentState(),
   (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
   (changes) => app.updateState(changes),
-  (pluginName) => pluginManager.getPlugin(pluginName)
+  (pluginName) => pluginManager.getDependency(pluginName)
 )
 
 // Load and register frontend extensions from backend plugins
@@ -84,9 +84,9 @@ sessionState.hasInternet = serverState.hasInternet
 // Apply session state to current state
 Object.assign(state, sessionState)
 
-// Create test logger based on configuration
+// Configure test logger based on application mode
 const applicationMode = await config.get("application.mode")
-export const testLog = createTestLogger(applicationMode)
+configureTestLog(applicationMode)
 
 // URL hash params override properties 
 const allowSetFromUrl = (await config.get("state.allowSetFromUrl") || [])

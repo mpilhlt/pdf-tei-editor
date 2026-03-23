@@ -69,7 +69,7 @@ export async function start(sandbox) {
 
   parentItem.appendChild(submenu);
 
-  const toolsApi = sandbox.getPluginApi('tools');
+  const toolsApi = sandbox.getDependency('tools');
   toolsApi.addMenuItems([parentItem], 'annotation');
 }
 
@@ -107,7 +107,7 @@ async function _runAnnotator(ann, sandbox) {
     return;
   }
 
-  const xmleditorApi = sandbox.getPluginApi('xmleditor');
+  const xmleditorApi = sandbox.getDependency('xmleditor');
   sandbox.ui.spinner.show(`${ann.display_name}: annotating…`);
   try {
     const { fragments } = await sandbox.callPluginApi(

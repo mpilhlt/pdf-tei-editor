@@ -11,8 +11,9 @@
 import ui from '../ui.js'
 import {
   endpoints as ep, app, logger, services, dialog, validation, xmlEditor,
-  config, authentication, testLog
+  config, authentication
 } from '../app.js'
+import { testLog } from '../modules/test-log.js'
 import { HeartbeatPlugin } from '../plugin-registry.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'

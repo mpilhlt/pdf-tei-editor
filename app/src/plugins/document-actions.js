@@ -14,8 +14,9 @@ import { app } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
   endpoints as ep, client, logger, dialog, authentication,
-  xmlEditor, accessControl, testLog, fileselection, config, services
+  xmlEditor, accessControl, fileselection, config, services
 } from '../app.js'
+import { testLog } from '../modules/test-log.js'
 import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'

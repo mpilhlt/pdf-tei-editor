@@ -18,11 +18,13 @@ export { default as FiledataPlugin } from './plugins/filedata.js';
 export { default as HeartbeatPlugin } from './plugins/heartbeat.js';
 export { default as HelpPlugin } from './plugins/help.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
+export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
 export { default as ProgressPlugin } from './plugins/progress.js';
 export { default as SsePlugin } from './plugins/sse.js';
 export { default as TeiValidationPlugin } from './plugins/tei-validation.js';
 export { default as UrlHashStatePlugin } from './plugins/url-hash-state.js';
 export { default as UserAccountPlugin } from './plugins/user-account.js';
+export { default as XmlEditorPlugin } from './plugins/xmleditor.js';
 export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
 
 /**
@@ -45,7 +47,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   info: import('./plugins/info.js').api,
  *   logger: import('./plugins/logger.js').default,
  *   "move-files": import('./plugins/move-files.js').plugin,
- *   pdfviewer: import('./plugins/pdfviewer.js').api,
+ *   pdfviewer: import('./plugins/pdfviewer.js').default,
  *   progress: import('./plugins/progress.js').default,
  *   "prompt-editor": import('./plugins/prompt-editor.js').api,
  *   "rbac-manager": import('./plugins/rbac-manager.js').plugin,
@@ -59,7 +61,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   tools: import('./plugins/tools.js').api,
  *   "url-hash-state": import('./plugins/url-hash-state.js').default,
  *   "user-account": import('./plugins/user-account.js').default,
- *   xmleditor: import('./plugins/xmleditor.js').api,
+ *   xmleditor: import('./plugins/xmleditor.js').default,
  *   "xsl-viewer": import('./plugins/xsl-viewer.js').default,
  * }} PluginRegistryTypes
  */

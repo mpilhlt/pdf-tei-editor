@@ -89,9 +89,17 @@ The sandbox provides controlled access to application features:
 | `dialog` | Object | Dialog API (`info`, `error`, `success`, `confirm`, `prompt`) |
 | `notify` | Function | Toast notifications: `notify(message, variant, icon)` |
 | `getState` | Function | Get current application state |
+| `updateState` | Function | Update application state: `await sandbox.updateState({ key: value })` |
 | `invoke` | Function | Invoke PluginManager endpoint |
-| `services` | Object | Application services (`load`, `showMergeView`) |
-| `api` | Object | API client for backend calls |
+| `getDependency` | Function | Get the public API of a registered plugin by name (see below) |
+| `services` | Object | Application services (`load`, `showMergeView`, `reloadFiles`) |
+| `sse` | Object | SSE event bus (`addEventListener`, `removeEventListener`) |
+| `api` | Object | Typed API client for all `/api/v1/` backend endpoints |
+| `config` | Object | Configuration API: `await sandbox.config.get(key, default)` |
+| `fetchText` | Function | Fetch text from a URL with session authentication |
+| `callPluginApi` | Function | Call a backend plugin API endpoint with authentication |
+| `registerXslStylesheet` | Function | Register an XSL stylesheet for the XSL viewer |
+| `teiUtils` | Object | TEI utility functions (e.g., `encodeXmlEntities`) |
 
 ### Examples
 
@@ -120,6 +128,17 @@ const state = sandbox.getState();
 if (state.xml) {
   // Document is loaded
 }
+```
+
+**Access another plugin's API:**
+```javascript
+// Get the NavXmlEditor instance from the xmleditor plugin
+const xmlEditor = sandbox.getDependency('xmleditor');
+const xmlTree = xmlEditor.getXmlTree();
+await xmlEditor.showMergeView(modifiedXml);
+
+// Get the tools plugin API
+const tools = sandbox.getDependency('tools');
 ```
 
 ## Registering Extensions from Backend Plugins

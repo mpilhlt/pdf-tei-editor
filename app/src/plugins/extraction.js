@@ -6,7 +6,8 @@
  * @import { ApplicationState } from '../state.js' 
  * @import { SlButton } from '../ui.js'
  */
-import { app, client, services, dialog, fileselection, xmlEditor, testLog } from '../app.js'
+import { app, client, services, dialog, fileselection, xmlEditor } from '../app.js'
+import { testLog } from '../modules/test-log.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'

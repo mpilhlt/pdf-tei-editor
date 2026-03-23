@@ -20,6 +20,8 @@ import {
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   HeartbeatPlugin,
+  PdfViewerPlugin,
+  XmlEditorPlugin,
   HelpPlugin,
   LoggerPlugin,
   ProgressPlugin,
@@ -34,8 +36,8 @@ import { logLevel } from './plugins/logger.js'
 // object-based plugins
 import { api as config } from './plugins/config.js'
 import { api as dialog } from './plugins/dialog.js'
-import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
-import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
+import { api as pdfViewer } from './plugins/pdfviewer.js'
+import { api as xmlEditor } from './plugins/xmleditor.js'
 import { api as validation } from './plugins/tei-validation.js'
 import { api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
@@ -85,8 +87,8 @@ const plugins = [
   configEditorPlugin,  // Configuration Editor
 
   // Other plugins
-  pdfViewerPlugin,
-  xmlEditorPlugin,
+  PdfViewerPlugin,
+  XmlEditorPlugin,
   XslViewerPlugin,
   teiToolsPlugin,
   fileselectionPlugin,
