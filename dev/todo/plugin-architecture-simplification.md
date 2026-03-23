@@ -154,7 +154,7 @@ For each: read, migrate, verify in browser, run E2E tests.
 ## Critical Files
 
 | File | Change |
-|------|--------|
+| ------ | -------- |
 | `app/src/modules/plugin-base.js` | `on<Key>Change` auto-discovery, `static extensionPoints`, rename `getEndpoints()` |
 | `app/src/modules/plugin-manager.js` | `#pluginApis` Map, `getDependency(name)`, store api on registration |
 | `app/src/modules/plugin-context.js` | `getDependency(name)` |
@@ -224,59 +224,84 @@ The target state for `plugins.js` is: it exports only the `plugins` array (defau
 ### Fully migrated — no remaining exports or loose coupling
 
 | Plugin file | Class |
-|---|---|
+| --- | --- |
 | `authentication.js` | `AuthenticationPlugin` |
 | `backend-plugins.js` | `BackendPluginsPlugin` |
+| `config-editor.js` | `ConfigEditorPlugin` |
 | `filedata.js` | `FiledataPlugin` |
 | `file-selection-drawer.js` | `FileSelectionDrawerPlugin` |
 | `heartbeat.js` | `HeartbeatPlugin` |
 | `help.js` | `HelpPlugin` |
+| `info.js` | `InfoPlugin` |
 | `logger.js` | `LoggerPlugin` |
+| `move-files.js` | `MoveFilesPlugin` |
 | `progress.js` | `ProgressPlugin` |
+| `prompt-editor.js` | `PromptEditorPlugin` |
+| `rbac-manager.js` | `RbacManagerPlugin` |
 | `sse.js` | `SsePlugin` |
+| `tei-tools.js` | `TeiToolsPlugin` |
+| `tei-wizard.js` | `TeiWizardPlugin` |
+| `toolbar.js` | `ToolbarPlugin` |
+| `tools.js` | `ToolsPlugin` |
 | `url-hash-state.js` | `UrlHashStatePlugin` |
 | `user-account.js` | `UserAccountPlugin` |
 | `xsl-viewer.js` | `XslViewerPlugin` |
 
-### Class-based but still causing exports in `plugins.js`
+### Class-based but still causing exports or loose coupling in `plugins.js`
 
 The plugin class exists, but consuming plugins still import the BC proxy via `app.js` (which re-exports everything from `plugins.js`) instead of using `getDependency()`. Removing the export requires updating all consumers to call `getDependency()`. BC proxy exports in the plugin files must be marked `@deprecated`.
 
-| Plugin file | Class | BC export still in `plugins.js` | Consumed by |
-|---|---|---|---|
-| `client.js` | `ClientPlugin` | `client` | `app.js` bootstrap, many plugins via `app.js` |
-| `config.js` | `ConfigPlugin` | `config` | `app.js` bootstrap, `tei-wizard.js` direct, many plugins via `app.js` |
-| `dialog.js` | `DialogPlugin` | `dialog` | many plugins via `app.js` |
-| `file-selection.js` | `FileSelectionPlugin` | `fileselection` | many plugins via `app.js`; also still registered via `plugin` object — switch to class import in `plugins.js` |
+| Plugin file | Class | BC export still in `plugins.js` | Consumed by / notes |
+| --- | --- | --- | --- |
+| `access-control.js` | `AccessControlPlugin` | `accessControl` | `services.js` via `app.js`; can be removed once `services.js` migrated |
+| `annotation-guide.js` | `AnnotationGuidePlugin` | — | imports `api as extraction` and `api as clientApi` directly from plugin files (not via `app.js`) |
+| `client.js` | `ClientPlugin` | `client` | `app.js` bootstrap, many migrated plugins import `api as clientApi` directly |
+| `config.js` | `ConfigPlugin` | `config` | `app.js` bootstrap; migrated plugins now import `api as configApi` directly from `config.js` |
+| `dialog.js` | `DialogPlugin` | `dialog` | migrated plugins use `getDependency('dialog')` directly; BC export remains for `app.js` re-export |
+| `document-actions.js` | `DocumentActionsPlugin` | — | no BC export |
+| `extraction.js` | `ExtractionPlugin` | `extraction` | `annotation-guide.js` uses `extraction.extractorInfo()`; can use `getDependency('extraction').extractorInfo()` once annotation-guide no longer imports directly |
+| `file-selection.js` | `FileSelectionPlugin` | `fileselection` | still registered via `plugin as fileselectionPlugin` in plugins.js — switch to `FileSelectionPlugin` from registry |
 | `pdfviewer.js` | `PdfViewerPlugin` | `pdfViewer` | `services.js` via `app.js` |
 | `tei-validation.js` | `TeiValidationPlugin` | `validation` | `services.js` via `app.js` |
-| `xmleditor.js` | `XmlEditorPlugin` | `xmlEditor` | `document-actions.js`, `extraction.js`, `tei-wizard.js` via `app.js` |
+| `xmleditor.js` | `XmlEditorPlugin` | `xmlEditor` | migrated plugins import `api as xmlEditorApi` directly from `xmleditor.js` |
 
-`SsePlugin` and `XslViewerPlugin` are exported because `frontend-extension-sandbox.js` and `backend-plugin-sandbox.js` import them directly from `plugins.js` — a separate loose coupling violation in the sandbox modules that requires those modules to use `getDependency()` instead.
+`SsePlugin` and `XslViewerPlugin` are exported because `frontend-extension-sandbox.js` and `backend-plugin-sandbox.js` import them directly from `plugins.js` — a separate loose-coupling violation in the sandbox modules.
 
 `logLevel` (an enum constant from `logger.js`) is exported for `app.js` bootstrap; it can be imported directly from `./plugins/logger.js` in `app.js` once the re-export is cleaned up.
 
-The `app.js` bootstrap uses `client`, `config`, and `services` before plugins are installed, so `getDependency()` is unavailable. These must be imported directly from their plugin files in `app.js`, not via `plugins.js`.
+The `app.js` bootstrap uses `client`, `config`, and `services` before plugins are installed, so `getDependency()` is unavailable at that point. These must be imported directly from their plugin files in `app.js`.
 
 ### Not yet migrated — still object-based
 
 | Plugin file | Notes |
-|---|---|
-| `access-control.js` | exports `plugin` + `api as accessControl` |
-| `annotation-guide.js` | exports `plugin` only |
-| `config-editor.js` | exports `plugin` only |
-| `document-actions.js` | exports `plugin` only |
-| `extraction.js` | exports `plugin` + `api as extraction` (used by `annotation-guide.js`) |
-| `info.js` | exports `plugin` only |
-| `move-files.js` | exports `plugin` only |
-| `prompt-editor.js` | exports `plugin` only |
-| `rbac-manager.js` | exports `plugin` only |
-| `services.js` | exports `plugin` + `api as services` (used by `app.js` bootstrap and many plugins) |
-| `start.js` | exports `plugin` only |
-| `tei-tools.js` | exports `plugin` only |
-| `tei-wizard.js` | exports `plugin` only |
-| `toolbar.js` | exports `plugin` only |
-| `tools.js` | exports `plugin` only |
+| --- | --- |
+| `services.js` | exports `plugin` + `api as services`; used by `app.js` bootstrap, `start.js`, and many migrated plugins via direct `api` imports |
+| `start.js` | exports `plugin` only; uses `app.invokePluginEndpoint`, `app.updateState`, imports `services` api from `app.js` |
+
+### Cleanup remaining in `plugins.js` (after migrations above)
+
+- Replace `import { plugin as fileselectionPlugin, api as fileselection }` with `FileSelectionPlugin` from registry; move `fileselection` export to use the BC proxy from `file-selection.js`
+- Replace `import { plugin as servicesPlugin, api as services }` with `ServicesPlugin` from registry once `services.js` is migrated
+- Replace `import { plugin as startPlugin }` with `StartPlugin` from registry once `start.js` is migrated
+- Once `services.js` and `start.js` are migrated, the `accessControl` named export can also be removed
+
+---
+
+### Lessons learned (for future sessions)
+
+**Pattern for accessing APIs of not-yet-migrated plugins:** Import `api as xyzApi` directly from the plugin file (e.g., `import { api as clientApi } from './client.js'`). Do NOT import via `app.js` or `plugins.js`. This avoids circular dependencies and works regardless of whether the target plugin has been migrated.
+
+**`getDependency()` vs direct import:** Use `getDependency(name)` only for plugins fully declared in `deps`. Use direct `api` imports for plugins that are not in `deps` (to avoid circular dependency chains). Always check the dep chain before adding to `deps`.
+
+**`dialog.js` refactor:** Dialog methods (`info`, `error`, `success`, `confirm`, `prompt`) were moved into the `DialogPlugin` class and the `api` export changed to a lazy proxy. All migrated plugins now call `this.getDependency('dialog').error(...)` directly — no separate `dialogApi` import needed.
+
+**`onUserChange` timing:** When a plugin tracks user state to show/hide UI, `onUserChange` fires during initial state setup before `start()` creates UI elements. Fix: read `this.state.user` directly inside `start()` to set initial visibility, rather than relying on `onUserChange` for first render.
+
+**Dead variables:** The original `teiHeaderVisible` in `tei-tools.js` was set but never read (state is persisted only in localStorage). Removed the field rather than converting it to `#teiHeaderVisible`.
+
+**Nested functions in class methods:** Functions like `createOptionElement` and `updateDynamicOptions` inside `extractFromPDF`/`promptForExtractionOptions` close over method-local variables. These remain as nested functions inside the class method — no need to convert them to class methods since they don't need `this` access beyond what is captured via `const state = this.state` at method entry.
+
+**`app.js` re-export trap:** Several plugins previously imported `xmlEditor`, `logger`, `dialog`, etc. from `app.js`. After migration these must import directly from the plugin file or use `getDependency()`. Never re-introduce imports from `app.js` in migrated plugins.
 
 **Step 7 — Documentation update:** TODO
 
