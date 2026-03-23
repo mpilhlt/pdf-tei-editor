@@ -288,10 +288,18 @@ sl-select::part(listbox) {
   width: max-content;
 }
 
+sl-dialog sl-select::part(listbox) {
+  width: unset;
+}
+
 /* Make sl-option rows match sl-menu-item size: override the medium token used by
    sl-option's shadow :host so options render at the small size */
 #toolbar sl-select {
   --sl-font-size-medium: var(--sl-font-size-x-small);
+}
+
+sl-dialog sl-select[size="small"] {
+  --sl-font-size-medium: var(--sl-font-size-small);
 }
 
 sl-menu-item::part(label) {

@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any
 from urllib.parse import urlparse
 
-from requests.exceptions import ConnectionError, RequestException  # type: ignore[import-untyped]
+from requests.exceptions import ConnectionError, RequestException, RetryError  # type: ignore[import-untyped]
 
 from fastapi_app.lib.extraction import get_retry_session
 from fastapi_app.plugins.grobid.handlers.base import GrobidHandler
@@ -46,8 +46,9 @@ class ReferencesHandler(GrobidHandler):
                 response.raise_for_status()
                 return response.text
 
-        except (ConnectionError, RequestException) as e:
-            logger.error(f"GROBID connection failed: {e}", exc_info=True)
+        except (ConnectionError, RetryError, RequestException) as e:
+            reason = str(e.__cause__ or e).split('\n')[0]
+            logger.error(f"GROBID request failed: {reason}")
             parsed_url = urlparse(grobid_server_url)
             hostname = parsed_url.netloc or parsed_url.path
-            raise RuntimeError(f"Cannot connect to {hostname}")
+            raise RuntimeError(f"GROBID request to {hostname} failed: {reason}") from None

@@ -41,7 +41,7 @@ class FootnoteAnnotator(BaseAnnotator):
             "elements": [
                 {
                     "tag": "bibl",
-                    "description": "A span covering one complete bibliographic reference, including any commentary that directly qualifies or elaborates on that specific reference. Commentary that immediately precedes a reference (e.g. 'See also', 'For a different view see', 'Cf.', and similar expressions in other languages, such as 'siehe auch', 'ver tabém') and belongs to it must be included in the span. Commentary that immediately follows a reference and is clearly about that reference (e.g. '(arguing that ...)', 'who first demonstrated that ...') must also be included. A 'bibl' span must contain at minimum one verifiable bibliographic item — author name, title, publication, or a short-form citation ('Ibid.', 'op. cit.', a bare page number following a prior citation). Sources that have no authors, such as websites (typically consisting of a title and a url) are also individual bibliographic references. Do not include commentary that stands completely on its own, refers to no specific reference, or bridges two different references.",
+                    "description": "A span covering one complete bibliographic reference, including any commentary that directly qualifies or elaborates on that specific reference. Commentary that immediately precedes a reference (e.g. 'See also', 'For a different view see', 'Cf.', and similar expressions in other languages, such as 'siehe auch', 'ver tabém') and belongs to it must be included in the span. Commentary that immediately follows a reference and is clearly about that reference (e.g. '(arguing that ...)', 'who first demonstrated that ...') must also be included. A 'bibl' span must contain at minimum one verifiable bibliographic item — author name, title, publication, or a short-form citation ('Ibid.', 'op. cit.', a bare page number following a prior citation). Sources that have no authors, such as websites (typically consisting of a title and a url) are also individual bibliographic references. Include into the following reference commentary that stands completely on its own, refers to no specific reference, or bridges two different references.",
                     "allowed_children": ["label"],
                     "attributes": [],
                 },
@@ -60,11 +60,11 @@ class FootnoteAnnotator(BaseAnnotator):
                 "There must never be two distinct bibliographic references inside one 'bibl' span; emit one span per reference.",
                 "Include the trailing separator of each reference (the semicolon or period that terminates it) inside that reference's 'bibl' span, not at the start of the next one.",
                 "Introductory commentary that immediately precedes a reference and directs the reader to it (e.g. 'See', 'Cf.', 'Nesse sentido:', 'For a contrary view, see') belongs inside that reference's 'bibl' span. When such commentary introduces two or more consecutive references, attach it to the immediately following reference.",
-                "Commentary that immediately follows a reference and elaborates on it (e.g. parenthetical remarks, brief paraphrases) belongs inside that reference's 'bibl' span.",
-                "Truly standalone commentary — general remarks unattached to any single reference, topic sentences, section headings — must NOT be forced into a 'bibl' span. Leave it outside all spans rather than misattributing it.",
-                "Cover as much of the text as possible with 'bibl' spans. Do not leave whitespace or punctuation between spans unless it is genuinely standalone commentary.",
-                "Do not nest 'bibl' spans inside other 'bibl' spans.",
+                "Include standalone commentary that does not directly refer to a reference in the span that covers the following reference, especially when they are at the beginning of a footnote, starting with a label.",
                 "Make sure to recognise 'label' spans at the very beginning of the sequence.",
+                "Commentary that immediately follows a reference and elaborates on it (e.g. parenthetical remarks, brief paraphrases) belongs inside that reference's 'bibl' span.",
+                "Cover as much of the text as possible with 'bibl' spans. Do not leave whitespace or punctuation between spans.",
+                "Do not nest 'bibl' spans inside other 'bibl' spans.",
                 "Preserve all original whitespace and punctuation within spans.",
             ],
         }
