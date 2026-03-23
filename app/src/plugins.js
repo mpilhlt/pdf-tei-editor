@@ -12,15 +12,27 @@
 
 // class-based plugins (imported via plugin-registry.js)
 import {
+  AccessControlPlugin,
+  AnnotationGuidePlugin,
   AuthenticationPlugin,
   BackendPluginsPlugin,
   ClientPlugin,
+  ConfigEditorPlugin,
   ConfigPlugin,
   DialogPlugin,
+  DocumentActionsPlugin,
+  ExtractionPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   HeartbeatPlugin,
+  InfoPlugin,
+  MoveFilesPlugin,
   PdfViewerPlugin,
+  RbacManagerPlugin,
+  TeiToolsPlugin,
+  TeiWizardPlugin,
+  ToolbarPlugin,
+  ToolsPlugin,
   XmlEditorPlugin,
   HelpPlugin,
   LoggerPlugin,
@@ -41,21 +53,11 @@ import { api as xmlEditor } from './plugins/xmleditor.js'
 import { api as validation } from './plugins/tei-validation.js'
 import { api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
-import { plugin as documentActionsPlugin } from './plugins/document-actions.js'
+import { api as extraction } from './plugins/extraction.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import { plugin as promptEditorPlugin } from './plugins/prompt-editor.js'
-import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
-import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
-import { plugin as infoPlugin } from './plugins/info.js'
-import { plugin as annotationGuidePlugin } from './plugins/annotation-guide.js'
-import { plugin as moveFilesPlugin } from './plugins/move-files.js'
+import PromptEditorPlugin from './plugins/prompt-editor.js'
 import { plugin as startPlugin } from './plugins/start.js'
-import { plugin as toolbarPlugin } from './plugins/toolbar.js'
-import { plugin as toolsPlugin } from './plugins/tools.js'
-import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
-import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
-import { plugin as configEditorPlugin } from './plugins/config-editor.js'
+import { api as accessControl } from './plugins/access-control.js'
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
@@ -63,45 +65,43 @@ const plugins = [
   AuthenticationPlugin,
   BackendPluginsPlugin,
   LoggerPlugin,
-
-  // modules with config object
   UrlHashStatePlugin,
   ClientPlugin,
   ConfigPlugin,
   DialogPlugin,
-  toolbarPlugin,
-  toolsPlugin,
+  ToolbarPlugin,
+  ToolsPlugin,
 
   // Help plugin (must come before info plugin which depends on it)
   HelpPlugin,
 
   // Toolbar menu items (order matters - determines menu item order)
-  infoPlugin,          // User Manual (first)
-  annotationGuidePlugin, // Annotation Guide
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Tools menu — Administration section (admin only, order determines item order)
   FiledataPlugin,      // Garbage Collection
-  rbacManagerPlugin,   // Manage Users & Roles
-  configEditorPlugin,  // Configuration Editor
+  RbacManagerPlugin,   // Manage Users & Roles
+  ConfigEditorPlugin,  // Configuration Editor
 
   // Other plugins
+  InfoPlugin,          // User Manual (first)
+  AnnotationGuidePlugin, // Annotation Guide
   PdfViewerPlugin,
   XmlEditorPlugin,
   XslViewerPlugin,
-  teiToolsPlugin,
+  TeiToolsPlugin,
   fileselectionPlugin,
   FileSelectionDrawerPlugin,
-  documentActionsPlugin,
+  DocumentActionsPlugin,
   servicesPlugin,
-  extractionPlugin,
-  promptEditorPlugin,
-  teiWizardPlugin,
+  ExtractionPlugin,
+  PromptEditorPlugin,
+  TeiWizardPlugin,
   TeiValidationPlugin,
-  moveFilesPlugin,
+  MoveFilesPlugin,
   SsePlugin,
   ProgressPlugin,
-  accessControlPlugin,
+  AccessControlPlugin,
   HeartbeatPlugin,
   startPlugin
 ]
@@ -111,10 +111,14 @@ export default plugins
 
 // Export individual plugin APIs for backward compatibility
 export {
-  // class-based plugins
+  // class-based plugins - needed where?
   AuthenticationPlugin,
   HelpPlugin,
   LoggerPlugin,
+
+  // needed by sandbox modules
+  SsePlugin, 
+  XslViewerPlugin,
 
   // object plugin APIs
   logLevel,
@@ -129,6 +133,3 @@ export {
   services,
   accessControl
 }
-
-// Export Plugin classes needed by sandbox modules
-export { SsePlugin, XslViewerPlugin };

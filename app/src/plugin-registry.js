@@ -7,21 +7,34 @@
  */
 
 // Class-based plugin re-exports
+export { default as AccessControlPlugin } from './plugins/access-control.js';
+export { default as AnnotationGuidePlugin } from './plugins/annotation-guide.js';
 export { default as AuthenticationPlugin } from './plugins/authentication.js';
 export { default as BackendPluginsPlugin } from './plugins/backend-plugins.js';
 export { default as ClientPlugin } from './plugins/client.js';
+export { default as ConfigEditorPlugin } from './plugins/config-editor.js';
 export { default as ConfigPlugin } from './plugins/config.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
+export { default as DocumentActionsPlugin } from './plugins/document-actions.js';
+export { default as ExtractionPlugin } from './plugins/extraction.js';
 export { default as FileSelectionDrawerPlugin } from './plugins/file-selection-drawer.js';
 export { default as FileSelectionPlugin } from './plugins/file-selection.js';
 export { default as FiledataPlugin } from './plugins/filedata.js';
 export { default as HeartbeatPlugin } from './plugins/heartbeat.js';
 export { default as HelpPlugin } from './plugins/help.js';
+export { default as InfoPlugin } from './plugins/info.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
+export { default as MoveFilesPlugin } from './plugins/move-files.js';
 export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
 export { default as ProgressPlugin } from './plugins/progress.js';
+export { default as PromptEditorPlugin } from './plugins/prompt-editor.js';
+export { default as RbacManagerPlugin } from './plugins/rbac-manager.js';
 export { default as SsePlugin } from './plugins/sse.js';
+export { default as TeiToolsPlugin } from './plugins/tei-tools.js';
 export { default as TeiValidationPlugin } from './plugins/tei-validation.js';
+export { default as TeiWizardPlugin } from './plugins/tei-wizard.js';
+export { default as ToolbarPlugin } from './plugins/toolbar.js';
+export { default as ToolsPlugin } from './plugins/tools.js';
 export { default as UrlHashStatePlugin } from './plugins/url-hash-state.js';
 export { default as UserAccountPlugin } from './plugins/user-account.js';
 export { default as XmlEditorPlugin } from './plugins/xmleditor.js';
@@ -29,36 +42,36 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
 
 /**
  * @typedef {{
- *   "access-control": import('./plugins/access-control.js').api,
- *   "annotation-guide": import('./plugins/annotation-guide.js').api,
+ *   "access-control": import('./plugins/access-control.js').default,
+ *   "annotation-guide": import('./plugins/annotation-guide.js').default,
  *   authentication: import('./plugins/authentication.js').default,
  *   "backend-plugins": import('./plugins/backend-plugins.js').default,
  *   client: import('./plugins/client.js').default,
- *   "config-editor": import('./plugins/config-editor.js').plugin,
+ *   "config-editor": import('./plugins/config-editor.js').default,
  *   config: import('./plugins/config.js').default,
  *   dialog: import('./plugins/dialog.js').default,
- *   "document-actions": import('./plugins/document-actions.js').api,
- *   extraction: import('./plugins/extraction.js').api,
+ *   "document-actions": import('./plugins/document-actions.js').default,
+ *   extraction: import('./plugins/extraction.js').default,
  *   "file-selection-drawer": import('./plugins/file-selection-drawer.js').default,
  *   "file-selection": import('./plugins/file-selection.js').default,
  *   filedata: import('./plugins/filedata.js').default,
  *   heartbeat: import('./plugins/heartbeat.js').default,
  *   help: import('./plugins/help.js').default,
- *   info: import('./plugins/info.js').api,
+ *   info: import('./plugins/info.js').default,
  *   logger: import('./plugins/logger.js').default,
- *   "move-files": import('./plugins/move-files.js').plugin,
+ *   "move-files": import('./plugins/move-files.js').default,
  *   pdfviewer: import('./plugins/pdfviewer.js').default,
  *   progress: import('./plugins/progress.js').default,
- *   "prompt-editor": import('./plugins/prompt-editor.js').api,
- *   "rbac-manager": import('./plugins/rbac-manager.js').plugin,
+ *   "prompt-editor": import('./plugins/prompt-editor.js').default,
+ *   "rbac-manager": import('./plugins/rbac-manager.js').default,
  *   services: import('./plugins/services.js').api,
  *   sse: import('./plugins/sse.js').default,
  *   start: import('./plugins/start.js').plugin,
- *   "tei-tools": import('./plugins/tei-tools.js').plugin,
+ *   "tei-tools": import('./plugins/tei-tools.js').default,
  *   "tei-validation": import('./plugins/tei-validation.js').default,
- *   "tei-wizard": import('./plugins/tei-wizard.js').plugin,
- *   toolbar: import('./plugins/toolbar.js').plugin,
- *   tools: import('./plugins/tools.js').api,
+ *   "tei-wizard": import('./plugins/tei-wizard.js').default,
+ *   toolbar: import('./plugins/toolbar.js').default,
+ *   tools: import('./plugins/tools.js').default,
  *   "url-hash-state": import('./plugins/url-hash-state.js').default,
  *   "user-account": import('./plugins/user-account.js').default,
  *   xmleditor: import('./plugins/xmleditor.js').default,
