@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
 
 from fastapi_app.lib.extraction import ExtractorRegistry
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 class GrobidPlugin(Plugin):
     """Plugin that provides GROBID-based extraction."""
+
+    def __init__(self) -> None:
+        get_plugin_config("plugin.grobid.server.url", "GROBID_SERVER_URL", default="")
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -54,15 +58,8 @@ class GrobidPlugin(Plugin):
     @classmethod
     def is_available(cls) -> bool:
         """Check if GROBID server URL is configured."""
-        from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
-
-        # Initialize config from env var if not set
-        url = get_plugin_config(
-            "grobid.server.url",
-            "GROBID_SERVER_URL",
-            default=""
-        )
-        return bool(url)
+        from fastapi_app.lib.utils.config_utils import get_config
+        return bool(get_config().get("plugin.grobid.server.url"))
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the GROBID extractor and event handlers."""

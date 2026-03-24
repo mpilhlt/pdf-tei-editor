@@ -22,7 +22,7 @@ def get_grobid_server_url() -> str | None:
         The GROBID server URL, or None if not configured.
     """
     config = get_config()
-    url = config.get("grobid.server.url")
+    url = config.get("plugin.grobid.server.url")
     return url if url else None
 
 

@@ -5,11 +5,11 @@ KISSKI API-based text processing extractor.
 import base64
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.extraction import LLMBaseExtractor, get_retry_session
+from fastapi_app.lib.utils.config_utils import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +52,19 @@ class KisskiExtractor(LLMBaseExtractor):
 
         return cls._pdf_support_available
 
+    @classmethod
+    def is_available(cls) -> bool:
+        """Check if the extractor is available (API key configured)."""
+        return bool(get_config().get("plugin.kisski.api.key"))
+
     def _fetch_models_from_api(self) -> list[dict[str, Any]]:
         """Fetch full model list with capabilities from KISSKI API."""
-        env_var = self._get_api_key_env_var()
-        api_key = os.getenv(env_var)
+        api_key = get_config().get("plugin.kisski.api.key")
         if not api_key:
-            raise RuntimeError(
-                f"API key not available. Please set {env_var} environment variable."
-            )
+            raise RuntimeError("API key not available. Please set KISSKI_API_KEY environment variable.")
 
-        url = "https://chat-ai.academiccloud.de/v1/models"
+        base_url = get_config().get("plugin.kisski.api.url")
+        url = f"{base_url}/models"
         headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {api_key}",
@@ -105,7 +108,8 @@ class KisskiExtractor(LLMBaseExtractor):
         temperature: float = 0.1,
     ) -> str:
         """Call the KISSKI API and return the response text with retry logic."""
-        url = "https://chat-ai.academiccloud.de/v1/chat/completions"
+        base_url = get_config().get("plugin.kisski.api.url")
+        url = f"{base_url}/chat/completions"
 
         if not model or model == "":
             raise RuntimeError("No model given")
@@ -143,7 +147,8 @@ class KisskiExtractor(LLMBaseExtractor):
         temperature: float = 0.1,
     ) -> str:
         """Call the KISSKI API with multimodal content (text + images)."""
-        url = "https://chat-ai.academiccloud.de/v1/chat/completions"
+        base_url = get_config().get("plugin.kisski.api.url")
+        url = f"{base_url}/chat/completions"
 
         if not model:
             raise RuntimeError("No model given")
@@ -262,11 +267,9 @@ class KisskiExtractor(LLMBaseExtractor):
 
         # Initialize client if needed
         if not self.client:
-            api_key = os.getenv(self._get_api_key_env_var())
+            api_key = get_config().get("plugin.kisski.api.key")
             if not api_key:
-                raise RuntimeError(
-                    f"API key not available. Set {self._get_api_key_env_var()}"
-                )
+                raise RuntimeError("API key not available. Set KISSKI_API_KEY environment variable.")
             self.client = self._initialize_client(api_key)
 
         # Build system prompt for JSON output
