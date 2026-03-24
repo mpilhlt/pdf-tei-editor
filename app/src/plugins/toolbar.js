@@ -124,6 +124,14 @@ class ToolbarPlugin extends Plugin {
   }
 
   /**
+   * Enable or disable the toolbar menu button.
+   * @param {boolean} disabled
+   */
+  setMenuButtonDisabled(disabled) {
+    this.#menuUi.menuBtn.disabled = disabled
+  }
+
+  /**
    * Add a widget to the toolbar. Use this for dynamic toolbar items
    * that are added or removed at runtime based on application state.
    * For static items that exist for the life of the app, use the

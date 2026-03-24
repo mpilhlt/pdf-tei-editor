@@ -28,7 +28,7 @@ await registerTemplate('document-action-buttons', 'document-action-buttons.html'
 await registerTemplate('save-document-dialog', 'save-document-dialog.html')
 
 class DocumentActionsPlugin extends Plugin {
-  static extensionPoints = [ep.toolbar.contentItems]
+  static extensionPoints = [ep.toolbar.contentItems];
 
   /** @param {PluginContext} context */
   constructor(context) {
@@ -65,8 +65,6 @@ class DocumentActionsPlugin extends Plugin {
 
     const span = createSingleFromTemplate('document-action-buttons')
     this.#ui = this.createUi(span)
-    // Add to toolbar now so that other plugins installing after this one
-    // can access ui.toolbar.documentActions during their own install() phase.
     ui.toolbar.add(span, 8)
     updateUi()
 
@@ -78,6 +76,15 @@ class DocumentActionsPlugin extends Plugin {
     da.deleteCurrentVersion.addEventListener('click', () => this.deleteCurrentVersion())
     da.deleteAllVersions.addEventListener('click', () => this.deleteAllVersions())
     da.deleteAll.addEventListener('click', () => this.deleteAll())
+  }
+
+  /**
+   * Append a button to the document-actions button group.
+   * Use this instead of accessing `ui.toolbar.documentActions` directly.
+   * @param {HTMLElement} element
+   */
+  addButton(element) {
+    this.#ui.documentActions.append(element)
   }
 
   /**
@@ -399,7 +406,7 @@ class DocumentActionsPlugin extends Plugin {
         console.error("Error in saveRevision:", e)
         throw e
       }
-      console.warn("User cancelled")
+      this.#logger.info("User cancelled")
       return
     } finally {
       dlg.hide()

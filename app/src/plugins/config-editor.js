@@ -8,23 +8,14 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton, SlDialog, SlInput } from '../ui.js'
+ * @import { SlDialog } from '../ui.js'
+ * @import { configEditorDialogPart } from '../templates/config-editor-dialog.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-
-/**
- * Configuration Editor dialog structure
- * @typedef {object} configEditorDialogPart
- * @property {SlInput} searchInput - Search/filter input
- * @property {HTMLTableElement} configTable - Config table element
- * @property {HTMLTableSectionElement} configTableBody - Table body for config entries
- * @property {SlButton} closeBtn - Close dialog button
- */
 
 // Register templates
 await registerTemplate('config-editor-dialog', 'config-editor-dialog.html')
@@ -40,8 +31,13 @@ await registerTemplate('config-editor-menu-item', 'config-editor-menu-item.html'
 class ConfigEditorPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'config-editor', deps: ['client', 'toolbar', 'tools', 'logger'] })
+    super(context, { name: 'config-editor', deps: ['client', 'tools', 'logger'] })
   }
+
+  get #logger() { return this.getDependency('logger') }
+
+  /** @type {SlDialog & configEditorDialogPart} */
+  #dialogUi = null
 
   /** @type {Record<string, any>} */
   #originalConfig = {}
@@ -63,11 +59,10 @@ class ConfigEditorPlugin extends Plugin {
    */
   async install(_state) {
     await super.install(_state)
-    const logger = this.getDependency('logger')
-    logger.debug(`Installing plugin "config-editor"`)
+    this.#logger.debug(`Installing plugin "config-editor"`)
 
-    createSingleFromTemplate('config-editor-dialog', document.body)
-    updateUi()
+    const dialog = createSingleFromTemplate('config-editor-dialog', document.body)
+    this.#dialogUi = this.createUi(dialog)
     this.#setupDialogListeners()
   }
 
@@ -89,29 +84,18 @@ class ConfigEditorPlugin extends Plugin {
 
   /** Set up dialog event listeners */
   #setupDialogListeners() {
-    /** @type {configEditorDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.configEditorDialog)
-
-    if (!dialog) {
-      this.getDependency('logger').error('Config editor dialog not found in UI')
-      return
-    }
-
-    dialog.closeBtn.addEventListener('click', () => dialog.hide())
-    dialog.searchInput.addEventListener('input', () => this.#handleSearch())
+    this.#dialogUi.closeBtn.addEventListener('click', () => this.#dialogUi.hide())
+    this.#dialogUi.searchInput.addEventListener('input', () => this.#handleSearch())
   }
 
   /** Open the config editor dialog */
   async #openDialog() {
-    /** @type {configEditorDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.configEditorDialog)
-
     try {
       await this.#loadConfig()
       this.#renderConfigList()
-      dialog.show()
+      this.#dialogUi.show()
     } catch (error) {
-      this.getDependency('logger').error('Failed to open config editor:', String(error))
+      this.#logger.error('Failed to open config editor:', String(error))
       notify('Failed to load configuration', 'danger', 'exclamation-octagon')
     }
   }
@@ -125,7 +109,7 @@ class ConfigEditorPlugin extends Plugin {
       this.#modifiedKeys.clear()
       this.#editingKey = null
     } catch (error) {
-      this.getDependency('logger').error('Failed to load config:', error)
+      this.#logger.error('Failed to load config:', error)
       throw error
     }
   }
@@ -135,14 +119,7 @@ class ConfigEditorPlugin extends Plugin {
    * @param {string} [filterText]
    */
   #renderConfigList(filterText = '') {
-    /** @type {configEditorDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.configEditorDialog)
-
-    const tbody = dialog.querySelector('[name="configTableBody"]')
-    if (!tbody) {
-      this.getDependency('logger').error('Config table body not found')
-      return
-    }
+    const tbody = this.#dialogUi.configTable.configTableBody
 
     tbody.innerHTML = ''
 
@@ -321,7 +298,7 @@ class ConfigEditorPlugin extends Plugin {
             const parsed = this.#commaSeparatedToArray(input.value)
             this.#handleValueChange(key, parsed)
           } catch (e) {
-            this.getDependency('logger').error('Failed to parse array:', e)
+            this.#logger.error('Failed to parse array:', e)
           }
         })
       }
@@ -391,10 +368,7 @@ class ConfigEditorPlugin extends Plugin {
    * @param {string} key
    */
   #updateRowState(key) {
-    const dialog = ui.configEditorDialog
-    const tbody = dialog.querySelector('[name="configTableBody"]')
-    if (!tbody) return
-
+    const tbody = this.#dialogUi.configTable.configTableBody
     const row = tbody.querySelector(`tr[data-key="${CSS.escape(key)}"]`)
     if (!row) return
 
@@ -427,9 +401,9 @@ class ConfigEditorPlugin extends Plugin {
       this.#editingKey = null
 
       notify(`Saved ${key}`, 'success', 'check-circle')
-      this.#renderConfigList(ui.configEditorDialog.searchInput.value)
+      this.#renderConfigList(this.#dialogUi.searchInput.value)
     } catch (error) {
-      this.getDependency('logger').error('Failed to save config value:', error)
+      this.#logger.error('Failed to save config value:', error)
       notify(`Failed to save ${key}`, 'danger', 'exclamation-octagon')
     }
   }
@@ -441,7 +415,7 @@ class ConfigEditorPlugin extends Plugin {
     this.#modifiedConfig[key] = this.#originalConfig[key]
     this.#modifiedKeys.delete(key)
     this.#editingKey = null
-    this.#renderConfigList(ui.configEditorDialog.searchInput.value)
+    this.#renderConfigList(this.#dialogUi.searchInput.value)
   }
 
   /**
@@ -449,11 +423,11 @@ class ConfigEditorPlugin extends Plugin {
    */
   #enableEditing(key) {
     this.#editingKey = key
-    this.#renderConfigList(ui.configEditorDialog.searchInput.value)
+    this.#renderConfigList(this.#dialogUi.searchInput.value)
   }
 
   #handleSearch() {
-    const filterText = ui.configEditorDialog.searchInput.value
+    const filterText = this.#dialogUi.searchInput.value
     this.#renderConfigList(filterText)
   }
 

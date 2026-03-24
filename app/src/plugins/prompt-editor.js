@@ -6,25 +6,12 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { promptEditorPart } from '../templates/prompt-editor.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput, SlSelect, SlOption } from '../ui.js'
-import { api as clientApi } from './client.js'
-
-/**
- * Prompt editor
- * @typedef {object} promptEditorPart
- * @property {SlInput} label
- * @property {SlMenu} labelMenu
- * @property {SlSelect} extractorSelect
- * @property {SlTextarea} text
- * @property {SlButton} cancel
- * @property {SlButton} delete
- * @property {SlButton} duplicate
- * @property {SlButton} submit
- */
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { SlMenuItem, SlOption } from '../ui.js'
 
 // Register templates at module level
 await registerTemplate('prompt-editor', 'prompt-editor.html')
@@ -35,6 +22,11 @@ class PromptEditorPlugin extends Plugin {
   constructor(context) {
     super(context, { name: 'prompt-editor', deps: ['extraction', 'logger'] })
   }
+
+  get #client() { return this.getDependency('client') }
+
+  /** @type {import('../ui.js').SlDialog & promptEditorPart} */
+  #ui = null
 
   /** @type {Array<{ label: string, text: string[], extractor?: string[] }>|undefined} */
   #prompts
@@ -47,21 +39,19 @@ class PromptEditorPlugin extends Plugin {
     await super.install(_state)
     this.getDependency('logger').debug(`Installing plugin "prompt-editor"`)
 
-    createSingleFromTemplate('prompt-editor', document.body)
+    const dialog = createSingleFromTemplate('prompt-editor', document.body)
+    this.#ui = this.createUi(dialog)
+
+    this.#ui.addEventListener('sl-request-close', e => this.#onDialogRequestClose(e))
+    this.#ui.labelMenu.addEventListener('sl-select', e => this.#onMenuSelect(/** @type {CustomEvent} */(e)))
+    this.#ui.submit.addEventListener('click', () => this.submit())
+    this.#ui.duplicate.addEventListener('click', () => this.duplicate())
+    this.#ui.cancel.addEventListener('click', () => this.close())
+    this.#ui.delete.addEventListener('click', () => this.delete())
+
     const promptEditorButton = createSingleFromTemplate('prompt-editor-button')
-
-    const pe = ui.promptEditor
-    pe.addEventListener('sl-request-close', e => this.#onDialogRequestClose(e))
-    pe.labelMenu.addEventListener('sl-select', e => this.#onMenuSelect(/** @type {CustomEvent} */(e)))
-    pe.submit.addEventListener('click', () => this.submit())
-    pe.duplicate.addEventListener('click', () => this.duplicate())
-    pe.cancel.addEventListener('click', () => this.close())
-    pe.delete.addEventListener('click', () => this.delete())
-
-    ui.toolbar.extractionActions.append(promptEditorButton)
+    this.getDependency('extraction').addButton(promptEditorButton)
     promptEditorButton.addEventListener('click', () => this.open())
-
-    updateUi()
   }
 
   /**
@@ -69,8 +59,8 @@ class PromptEditorPlugin extends Plugin {
    */
   async open() {
     if (!this.#prompts) {
-      ui.promptEditor.labelMenu.childNodes.forEach(node => node.remove())
-      this.#prompts = await clientApi.loadInstructions()
+      this.#ui.labelMenu.childNodes.forEach(node => node.remove())
+      this.#prompts = await this.#client.loadInstructions()
       for (const [idx, prompt] of this.#prompts.entries()) {
         this.#addSlMenuItem(idx, prompt.label)
       }
@@ -78,9 +68,9 @@ class PromptEditorPlugin extends Plugin {
 
     await this.#populateExtractorSelect()
 
-    ui.promptEditor.delete.disabled = this.#prompts.length < 2
+    this.#ui.delete.disabled = this.#prompts.length < 2
     this.edit(this.#currentIndex)
-    ui.promptEditor.show()
+    this.#ui.show()
   }
 
   /**
@@ -89,13 +79,13 @@ class PromptEditorPlugin extends Plugin {
    */
   edit(idx) {
     // @ts-ignore
-    ui.promptEditor.labelMenu.childNodes[idx].checked = true
+    this.#ui.labelMenu.childNodes[idx].checked = true
     const prompt = this.#prompts[idx]
     const { label, text, extractor = ['llamore-gemini'] } = prompt
 
-    ui.promptEditor.label.value = label
-    ui.promptEditor.text.value = Array.isArray(text) ? text.join('\n') : text
-    ui.promptEditor.extractorSelect.value = extractor
+    this.#ui.label.value = label
+    this.#ui.text.value = Array.isArray(text) ? text.join('\n') : text
+    this.#ui.extractorSelect.value = extractor
   }
 
   /**
@@ -108,10 +98,10 @@ class PromptEditorPlugin extends Plugin {
     newPrompt.extractor = [...(this.#prompts[this.#currentIndex].extractor || ['llamore-gemini'])]
     this.#prompts.push(newPrompt)
     // @ts-ignore
-    ui.promptEditor.labelMenu.childNodes[this.#currentIndex].checked = false
+    this.#ui.labelMenu.childNodes[this.#currentIndex].checked = false
     this.#currentIndex = this.#prompts.length - 1
     this.#addSlMenuItem(this.#currentIndex, newPrompt.label)
-    ui.promptEditor.delete.disabled = false
+    this.#ui.delete.disabled = false
     this.edit(this.#currentIndex)
   }
 
@@ -120,7 +110,7 @@ class PromptEditorPlugin extends Plugin {
    */
   async save() {
     this.#saveCurrentPrompt()
-    clientApi.saveInstructions(this.#prompts)
+    this.#client.saveInstructions(this.#prompts)
   }
 
   /**
@@ -135,7 +125,7 @@ class PromptEditorPlugin extends Plugin {
    * Closes the prompt editor
    */
   close() {
-    ui.promptEditor.hide()
+    this.#ui.hide()
   }
 
   /**
@@ -146,19 +136,19 @@ class PromptEditorPlugin extends Plugin {
       throw new Error('There must at least be one prompt entry')
     }
     if (!confirm('Do you really want to delete these prompt instructions?')) return
-    ui.promptEditor.labelMenu.removeChild(ui.promptEditor.labelMenu.childNodes[this.#currentIndex])
+    this.#ui.labelMenu.removeChild(this.#ui.labelMenu.childNodes[this.#currentIndex])
     this.#prompts.splice(this.#currentIndex, 1)
-    ui.promptEditor.delete.disabled = this.#prompts.length < 2
+    this.#ui.delete.disabled = this.#prompts.length < 2
     this.#currentIndex--
     this.edit(this.#currentIndex)
   }
 
   async #populateExtractorSelect() {
-    const extractorSelect = ui.promptEditor.extractorSelect
+    const extractorSelect = this.#ui.extractorSelect
     extractorSelect.innerHTML = ''
 
     try {
-      const extractors = await clientApi.getExtractorList()
+      const extractors = await this.#client.getExtractorList()
       for (const extractor of extractors) {
         const option = Object.assign(new SlOption, {
           value: extractor.id,
@@ -185,15 +175,15 @@ class PromptEditorPlugin extends Plugin {
     slMenuItem.type = 'checkbox'
     slMenuItem.value = idx
     slMenuItem.textContent = label
-    ui.promptEditor.labelMenu.appendChild(slMenuItem)
+    this.#ui.labelMenu.appendChild(slMenuItem)
   }
 
   #saveCurrentPrompt() {
-    const label = ui.promptEditor.label.value
-    const text = ui.promptEditor.text.value.split('\n')
-    const extractor = ui.promptEditor.extractorSelect.value || ['llamore-gemini']
+    const label = this.#ui.label.value
+    const text = this.#ui.text.value.split('\n')
+    const extractor = this.#ui.extractorSelect.value || ['llamore-gemini']
     this.#prompts[this.#currentIndex] = { label, text, extractor }
-    ui.promptEditor.labelMenu.childNodes[this.#currentIndex].textContent = label
+    this.#ui.labelMenu.childNodes[this.#currentIndex].textContent = label
   }
 
   /**
@@ -203,7 +193,7 @@ class PromptEditorPlugin extends Plugin {
     this.#saveCurrentPrompt()
     const item = event.detail.item
     // @ts-ignore
-    ui.promptEditor.labelMenu.childNodes[this.#currentIndex].checked = false
+    this.#ui.labelMenu.childNodes[this.#currentIndex].checked = false
     this.#currentIndex = item.value
     this.edit(this.#currentIndex)
   }

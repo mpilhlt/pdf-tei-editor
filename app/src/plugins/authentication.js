@@ -2,32 +2,17 @@
  * Authentication plugin using the new class-based architecture
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
- * @import { SlButton, SlInput } from '../ui.js'
+/**
+ * @import { ApplicationState } from '../state.js'
+ * @import { SlDialog } from '../ui.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { loginDialogPart } from '../templates/login-dialog.types.js'
  */
 
-import ui from '../ui.js';
-import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
 
 import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
-
-// 
-// UI Type Definitions
-//
-
-/**
- * @typedef {object} loginDialog
- * @property {HTMLFormElement} form
- * @property {SlInput} username
- * @property {SlInput} password
- * @property {SlButton} submit
- * @property {SlButton} [aboutBtn]
- * @property {HTMLDivElement} message
- * @property {HTMLDivElement} loginMessage
- */
 
 /**
  * @typedef {Object} UserData 
@@ -60,10 +45,12 @@ class AuthenticationPlugin extends Plugin {
     this.activityTracker = null;
   }
 
-  // Cached dependencies
-  #logger;
-  #client;
-  #config;
+  get #logger() { return this.getDependency('logger') }
+  get #client() { return this.getDependency('client') }
+  get #config() { return this.getDependency('config') }
+
+  /** @type {SlDialog & loginDialogPart} */
+  #ui = null
 
   /**
    * Plugin installation - creates UI and sets up event handlers
@@ -71,27 +58,24 @@ class AuthenticationPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
-    this.#logger = this.getDependency('logger');
-    this.#client = this.getDependency('client');
-    this.#config = this.getDependency('config');
     this.#logger.debug(`Installing plugin "${this.name}"`);
-    
+
     // Create UI elements
-    createFromTemplate('login-dialog', document.body);
-    
+    this.#ui = this.createUi(createSingleFromTemplate('login-dialog', document.body))
+
     // Prevent dialog from closing
-    ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
-    
+    this.#ui.addEventListener('sl-request-close', (event) => event.preventDefault());
+
     // Add Enter key handling for login
-    ui.loginDialog.username.addEventListener('keydown', (event) => {
+    this.#ui.username.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
-        ui.loginDialog.password.focus();
+        this.#ui.password.focus();
       }
     });
-    
-    ui.loginDialog.password.addEventListener('keydown', (event) => {
+
+    this.#ui.password.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
-        ui.loginDialog.submit.click();
+        this.#ui.submit.click();
       }
     });
   }
@@ -246,39 +230,37 @@ class AuthenticationPlugin extends Plugin {
    * the user data or rejects in case the credentials are wrong
    */
   async _showLoginDialog() {
-    const dialog = ui.loginDialog;
-
     // Load and display login message if configured
     const loginMessage = await this.#config.get("application.login-message")
     if (loginMessage) {
-      dialog.loginMessage.innerHTML = loginMessage;
-      dialog.loginMessage.style.display = 'block';
+      this.#ui.loginMessage.innerHTML = loginMessage;
+      this.#ui.loginMessage.style.display = 'block';
     } else {
-      dialog.loginMessage.innerHTML = '';
-      dialog.loginMessage.style.display = 'none';
+      this.#ui.loginMessage.innerHTML = '';
+      this.#ui.loginMessage.style.display = 'none';
     }
 
     return new Promise((resolve, reject) => {
-      dialog.submit.addEventListener('click', async () => {
-        const username = dialog.username.value;
-        const password = dialog.password.value;
-        dialog.message.textContent = '';
+      this.#ui.submit.addEventListener('click', async () => {
+        const username = this.#ui.username.value;
+        const password = this.#ui.password.value;
+        this.#ui.message.textContent = '';
         const passwd_hash = await this._hashPassword(password);
         try {
           const authData = await this.#client.login(username, passwd_hash);
           this.#logger.info(`Login successful for user: ${authData.username}`);
-          dialog.hide();
-          dialog.username.value = "";
+          this.#ui.hide();
+          this.#ui.username.value = "";
           resolve(authData);
         } catch (error) {
-          dialog.message.textContent = 'Wrong username or password';
+          this.#ui.message.textContent = 'Wrong username or password';
           this.#logger.error('Login failed: ' + String(error))
           reject(error);
         } finally {
-          dialog.password.value = "";
+          this.#ui.password.value = "";
         }
       }, {once: true});
-      dialog.show();
+      this.#ui.show();
     });
   }
 

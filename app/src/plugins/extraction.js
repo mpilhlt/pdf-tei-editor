@@ -4,11 +4,13 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton } from '../ui.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
+ * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
@@ -17,32 +19,6 @@ import { extractDoi } from '../modules/doi-utils.js'
 import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import { api as clientApi } from './client.js'
-import { api as servicesApi } from './services.js'
-import { api as xmlEditorApi } from './xmleditor.js'
-
-//
-// Typedefs
-//
-
-/**
- * Extraction actions button group
- * @typedef {object} extractionActionsPart
- * @property {SlButton} extractNew
- * @property {SlButton} extractCurrent
- * @property {SlButton} editInstructions - added by prompt-editor plugin
- */
-
-/**
- * Extraction dialog navigation properties
- * @typedef {object} extractionDialogPart
- * @property {SlInput} doi - DOI input field
- * @property {SlSelect} collectionName - Collection selection dropdown
- * @property {SlSelect} modelIndex - Model/extractor selection dropdown
- * @property {HTMLDivElement} dynamicOptions - Container for dynamic extractor options
- * @property {SlButton} cancel - Cancel button
- * @property {SlButton} submit - Submit button
- */
 
 /**
  * Extractor configuration object
@@ -130,6 +106,21 @@ class ExtractionPlugin extends Plugin {
     super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog'] })
   }
 
+  static extensionPoints = [ep.toolbar.contentItems];
+
+  [ep.toolbar.contentItems]() {
+    return [{ element: this.#ui, priority: 7, position: 'center' }]
+  }
+
+  get #client()    { return this.getDependency('client') }
+  get #services()  { return this.getDependency('services') }
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+
+  /** @type {HTMLElement & extractionActionsPart} */
+  #ui = null
+  /** @type {import('../ui.js').SlDialog & extractionOptionsPart} */
+  #dialogUi = null
+
   /** @type {ExtractorInfo[]|undefined} */
   #extractors
 
@@ -139,22 +130,33 @@ class ExtractionPlugin extends Plugin {
     this.getDependency('logger').debug(`Installing plugin "extraction"`)
 
     const extractionBtnGroup = createSingleFromTemplate('extraction-buttons')
-    createSingleFromTemplate('extraction-dialog', document.body)
+    const dialog = createSingleFromTemplate('extraction-dialog', document.body)
+    this.#ui = this.createUi(extractionBtnGroup)
+    this.#dialogUi = this.createUi(dialog)
 
     ui.toolbar.add(extractionBtnGroup, 7)
     updateUi()
 
-    ui.toolbar.extractionActions.extractNew.addEventListener('click', () => this.extractFromNewPdf())
-    ui.toolbar.extractionActions.extractCurrent.addEventListener('click', () => this.extractFromCurrentPDF())
+    this.#ui.extractNew.addEventListener('click', () => this.extractFromNewPdf())
+    this.#ui.extractCurrent.addEventListener('click', () => this.extractFromCurrentPDF())
   }
 
   async onStateUpdate(_changedKeys) {
-    ui.toolbar.extractionActions.childNodes.forEach(child => {
+    this.#ui.childNodes.forEach(child => {
       if (child instanceof HTMLElement && 'disabled' in child) {
         /** @type {HTMLButtonElement} */(child).disabled = this.state.offline
       }
     })
-    ui.toolbar.extractionActions.extractCurrent.disabled = !this.state.pdf
+    this.#ui.extractCurrent.disabled = !this.state.pdf
+  }
+
+  /**
+   * Add a button to the extraction actions button group.
+   * Used by plugins that contribute buttons to the extraction toolbar area.
+   * @param {HTMLElement} element
+   */
+  addButton(element) {
+    this.#ui.append(element)
   }
 
   /**
@@ -169,7 +171,7 @@ class ExtractionPlugin extends Plugin {
    */
   async extractFromNewPdf() {
     try {
-      const { type, filename, originalFilename } = await clientApi.uploadFile()
+      const { type, filename, originalFilename } = await this.#client.uploadFile()
       if (type !== 'pdf') {
         this.getDependency('dialog').error('Extraction is only possible from PDF files')
         return
@@ -199,7 +201,7 @@ class ExtractionPlugin extends Plugin {
       let doi = defaultOptions.doi
       if (!doi) {
         try {
-          const xmlDoc = xmlEditorApi.getXmlTree()
+          const xmlDoc = this.#xmlEditor.getXmlTree()
           if (xmlDoc) {
             const metadata = getDocumentMetadata(xmlDoc)
             doi = metadata.doi
@@ -234,7 +236,7 @@ class ExtractionPlugin extends Plugin {
       ui.spinner.show('Extracting, please wait')
       let result
       try {
-        const extractorList = await clientApi.getExtractorList()
+        const extractorList = await this.#client.getExtractorList()
         const selectedExtractor = extractorList.find(e => e.id === options.extractor)
         const needsXmlContent = selectedExtractor && selectedExtractor.input.includes('xml')
 
@@ -249,7 +251,7 @@ class ExtractionPlugin extends Plugin {
           throw new Error('No source file available for extraction')
         }
 
-        result = await clientApi.extract(file_id, options)
+        result = await this.#client.extract(file_id, options)
 
         await this.getDependency('file-selection').reload({ refresh: true })
 
@@ -262,7 +264,7 @@ class ExtractionPlugin extends Plugin {
         if (typedResult && typedResult.pdf === null) {
           await this.dispatchStateChange({ pdf: null })
         }
-        await servicesApi.load(result)
+        await this.#services.load(result)
 
         testLog('EXTRACTION_COMPLETED', { resultHash: typedResult.xml, sourceFileId: file_id })
       } finally {
@@ -293,15 +295,16 @@ class ExtractionPlugin extends Plugin {
     const state = this.state
     const dialog = this.getDependency('dialog')
     const logger = this.getDependency('logger')
+    const dialogUi = this.#dialogUi
 
-    const instructionsData = await clientApi.loadInstructions()
+    const instructionsData = await this.#client.loadInstructions()
     /** @type {string[]} */
     const instructions = []
 
     /** @type {DocumentMetadata} */
     let documentMetadata = {}
     try {
-      const xmlDoc = xmlEditorApi.getXmlTree()
+      const xmlDoc = this.#xmlEditor.getXmlTree()
       if (xmlDoc) {
         documentMetadata = getDocumentMetadata(xmlDoc)
       }
@@ -310,10 +313,10 @@ class ExtractionPlugin extends Plugin {
     }
 
     const doiValue = options.doi || documentMetadata.doi || ''
-    ui.extractionOptions.doi.value = doiValue
+    dialogUi.doi.value = doiValue
 
     /** @type {SlSelect} */
-    const collectionSelectBox = ui.extractionOptions.collectionName
+    const collectionSelectBox = dialogUi.collectionName
     collectionSelectBox.innerHTML = ''
 
     const collections = state?.collections || []
@@ -329,13 +332,13 @@ class ExtractionPlugin extends Plugin {
     collectionSelectBox.value = collectionValue
 
     /** @type {SlSelect} */
-    const modelSelectBox = ui.extractionOptions.modelIndex
+    const modelSelectBox = dialogUi.modelIndex
     modelSelectBox.innerHTML = ''
 
     let availableExtractors = []
     try {
       if (!this.#extractors) {
-        this.#extractors = await clientApi.getExtractorList()
+        this.#extractors = await this.#client.getExtractorList()
       }
 
       availableExtractors = this.#extractors.filter(extractor => {
@@ -379,14 +382,14 @@ class ExtractionPlugin extends Plugin {
       const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
 
       const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes('xml')
-      const doiEl = /** @type {HTMLElement} */(ui.extractionOptions.doi)
+      const doiEl = /** @type {HTMLElement} */(dialogUi.doi)
       const collectionEl = /** @type {HTMLElement} */(collectionSelectBox.parentElement)
       doiEl.style.display = isXmlExtractor ? 'none' : ''
       if (collectionEl) collectionEl.style.display = isXmlExtractor ? 'none' : ''
 
       /** @type {Record<string, string>} */
       const currentValues = {}
-      const dynamicOptionsContainer = ui.extractionOptions.dynamicOptions
+      const dynamicOptionsContainer = dialogUi.dynamicOptions
       if (dynamicOptionsContainer) {
         for (const el of dynamicOptionsContainer.querySelectorAll('sl-select, sl-input')) {
           const name = /** @type {any} */(el).name
@@ -546,32 +549,32 @@ class ExtractionPlugin extends Plugin {
     modelSelectBox.addEventListener('sl-change', updateDynamicOptions)
     updateDynamicOptions()
 
-    ui.extractionOptions.show()
+    dialogUi.show()
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const result = await new Promise(resolve => {
         function cancel() { resolve(false) }
         function submit() { resolve(true) }
-        ui.extractionOptions.addEventListener('sl-request-close', cancel, { once: true })
-        ui.extractionOptions.cancel.addEventListener('click', cancel, { once: true })
-        ui.extractionOptions.submit.addEventListener('click', submit, { once: true })
+        dialogUi.addEventListener('sl-request-close', cancel, { once: true })
+        dialogUi.cancel.addEventListener('click', cancel, { once: true })
+        dialogUi.submit.addEventListener('click', submit, { once: true })
       })
 
       if (result === false) {
-        ui.extractionOptions.hide()
+        dialogUi.hide()
         modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
         throw new UserAbortException('User cancelled the dialog')
       }
 
       /** @type {DynamicExtractionFormData} */
       const formData = {
-        doi: ui.extractionOptions.doi.value || null,
-        collection: String(ui.extractionOptions.collectionName.value),
-        extractor: String(ui.extractionOptions.modelIndex.value)
+        doi: dialogUi.doi.value || null,
+        collection: String(dialogUi.collectionName.value),
+        extractor: String(dialogUi.modelIndex.value)
       }
 
-      const dynamicOptionsContainer = ui.extractionOptions.dynamicOptions
+      const dynamicOptionsContainer = dialogUi.dynamicOptions
       /** @type {NodeListOf<SlSelect|SlInput>} */
       const dynamicInputs = /** @type {NodeListOf<SlSelect|SlInput>} */(dynamicOptionsContainer?.querySelectorAll('sl-select, sl-input') || [])
 
@@ -609,7 +612,7 @@ class ExtractionPlugin extends Plugin {
         formData.doi = null
       }
 
-      ui.extractionOptions.hide()
+      dialogUi.hide()
       modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
       return Object.assign(options, formData)
     }

@@ -59,7 +59,7 @@ Changes made:
 - All own-element accesses use `this.#ui.documentActions.*` instead of `ui.toolbar.documentActions.*`
 - `saveRevision()` uses `this.#dialogUi` instead of `ui.saveDocumentDialog`
 
-Backward compat constraint: `move-files.js` calls `ui.toolbar.documentActions.append(this.#moveBtn)` in its `install()`. Until `move-files` is migrated, `document-actions.install()` must keep adding the element to the toolbar and calling `updateUi()`.
+Backward compat note: `document-actions.install()` still calls `ui.toolbar.add(span, 8)` + `updateUi()` so that the element is in the DOM before `move-files.install()` runs and calls `addButton()`. This can be removed once `document-actions` itself contributes passively (no longer needs early placement).
 
 ---
 

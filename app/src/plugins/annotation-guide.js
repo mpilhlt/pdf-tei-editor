@@ -9,12 +9,12 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import MarkdownIt from 'markdown-it'
- * @import { SlButton } from '../ui.js'
+ * @import { SlDrawer } from '../ui.js'
+ * @import { annotationGuideDrawerPart } from '../templates/annotation-guide-drawer.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui from '../ui.js'
-import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import {
   createMarkdownRenderer,
   fetchMarkdown,
@@ -31,14 +31,6 @@ import { api as clientApi } from './client.js'
  * @property {string} url - The URL to fetch the guide from
  */
 
-/**
- * Annotation Guide Drawer
- * @typedef {object} annotationGuideDrawerPart
- * @property {HTMLDivElement} content
- * @property {SlButton} openInNewWindowBtn
- * @property {SlButton} closeBtn
- */
-
 // Register template
 await registerTemplate('annotation-guide-drawer', 'annotation-guide-drawer.html')
 
@@ -47,6 +39,9 @@ class AnnotationGuidePlugin extends Plugin {
   constructor(context) {
     super(context, { name: 'annotation-guide', deps: ['help', 'extraction', 'dialog', 'logger'] })
   }
+
+  /** @type {SlDrawer & annotationGuideDrawerPart} */
+  #ui = null
 
   /** @type {MarkdownIt | null} */
   #md = null
@@ -62,13 +57,11 @@ class AnnotationGuidePlugin extends Plugin {
    */
   async install(_state) {
     await super.install(_state)
-    const logger = this.getDependency('logger')
-    logger.debug(`Installing plugin "annotation-guide"`)
+    this.getDependency('logger').debug(`Installing plugin "annotation-guide"`)
 
-    createFromTemplate('annotation-guide-drawer', document.body)
-
-    ui.annotationGuideDrawer.closeBtn.addEventListener('click', () => ui.annotationGuideDrawer.hide())
-    ui.annotationGuideDrawer.openInNewWindowBtn.addEventListener('click', () => this.#openInNewWindow())
+    this.#ui = this.createUi(createSingleFromTemplate('annotation-guide-drawer', document.body))
+    this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide())
+    this.#ui.openInNewWindowBtn.addEventListener('click', () => this.#openInNewWindow())
 
     this.getDependency('help').registerTopic(
       'Annotation Guide',
@@ -86,7 +79,7 @@ class AnnotationGuidePlugin extends Plugin {
    * Opens the annotation guide drawer
    */
   async open() {
-    ui.annotationGuideDrawer.show()
+    this.#ui.show()
 
     if (this.#annotationGuides.length === 0) {
       let extractors = extraction.extractorInfo()
@@ -102,8 +95,8 @@ class AnnotationGuidePlugin extends Plugin {
     if (variant) {
       await this.load(variant)
     } else {
-      ui.annotationGuideDrawer.openInNewWindowBtn.hidden = true
-      ui.annotationGuideDrawer.content.innerHTML = `
+      this.#ui.openInNewWindowBtn.hidden = true
+      this.#ui.content.innerHTML = `
         <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
           <sl-icon name="info-circle" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
           <p>No document loaded.</p>
@@ -120,17 +113,17 @@ class AnnotationGuidePlugin extends Plugin {
    * @param {string} variant The variant identifier
    */
   async load(variant) {
-    ui.annotationGuideDrawer.content.innerHTML = ""
+    this.#ui.content.innerHTML = ""
 
     const variantGuides = this.#annotationGuides.filter(g => g.variant_id === variant)
     const markdownGuide = variantGuides.find(g => g.type === 'markdown')
     const htmlGuide = variantGuides.find(g => g.type === 'html')
 
     this.#currentGuideUrl = htmlGuide?.url || null
-    ui.annotationGuideDrawer.openInNewWindowBtn.hidden = !htmlGuide
+    this.#ui.openInNewWindowBtn.hidden = !htmlGuide
 
     if (!markdownGuide && !htmlGuide) {
-      ui.annotationGuideDrawer.content.innerHTML = `
+      this.#ui.content.innerHTML = `
         <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
           <sl-icon name="info-circle" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
           <p>No annotation guide is available for variant: <strong>${variant}</strong></p>
@@ -143,7 +136,7 @@ class AnnotationGuidePlugin extends Plugin {
     }
 
     if (!markdownGuide && htmlGuide) {
-      ui.annotationGuideDrawer.content.innerHTML = `
+      this.#ui.content.innerHTML = `
         <div style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-600);">
           <sl-icon name="box-arrow-up-right" style="font-size: 2rem; margin-bottom: 1rem;"></sl-icon>
           <p>The annotation guide for this variant is available as an external page.</p>
@@ -168,11 +161,11 @@ class AnnotationGuidePlugin extends Plugin {
         openExternalInNewTab: true
       })
 
-      ui.annotationGuideDrawer.content.innerHTML = html
+      this.#ui.content.innerHTML = html
 
       if (anchor) {
         setTimeout(() => {
-          const targetElement = ui.annotationGuideDrawer.content.querySelector(`#${anchor}`)
+          const targetElement = this.#ui.content.querySelector(`#${anchor}`)
           if (targetElement) {
             targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
           } else {
@@ -185,7 +178,7 @@ class AnnotationGuidePlugin extends Plugin {
       this.getDependency('logger').error(`Failed to load annotation guide: ${errorMessage}`)
       this.getDependency('dialog').error(`Failed to load annotation guide: ${errorMessage}`)
 
-      ui.annotationGuideDrawer.content.innerHTML = `
+      this.#ui.content.innerHTML = `
         <div style="padding: 2rem; text-align: center; color: var(--sl-color-danger-600);">
           <sl-icon name="exclamation-octagon" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
           <p><strong>Error loading annotation guide</strong></p>
@@ -199,7 +192,7 @@ class AnnotationGuidePlugin extends Plugin {
    * Closes the annotation guide drawer
    */
   close() {
-    ui.annotationGuideDrawer.hide()
+    this.#ui.hide()
   }
 
   #openInNewWindow() {
