@@ -9,25 +9,13 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import MarkdownIt from 'markdown-it'
- * @import { SlButton } from '../ui.js'
+ * @import { SlDrawer } from '../ui.js'
+ * @import { infoDrawerPart } from '../templates/info-drawer.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { createMarkdownRenderer } from '../modules/markdown-utils.js'
-
-/**
- * Help Window
- * @typedef {object} infoDrawerPart
- * @property {HTMLDivElement} content
- * @property {SlButton} backBtn
- * @property {SlButton} homeBtn
- * @property {SlButton} forwardBtn
- * @property {SlButton} editGitHubBtn
- * @property {SlButton} closeBtn
- * @property {HTMLSpanElement} versionInfo
- */
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
@@ -39,6 +27,9 @@ class InfoPlugin extends Plugin {
   constructor(context) {
     super(context, { name: 'info', deps: ['authentication', 'toolbar', 'help', 'logger', 'config', 'dialog'] })
   }
+
+  /** @type {SlDrawer & infoDrawerPart} */
+  #ui = null
 
   /** @type {MarkdownIt | null} */
   #md = null
@@ -67,25 +58,24 @@ class InfoPlugin extends Plugin {
     const logger = this.getDependency('logger')
     logger.debug(`Installing plugin "info"`)
 
-    createFromTemplate('info-dialog', document.body)
+    this.#ui = this.createUi(createSingleFromTemplate('info-dialog', document.body))
 
-    ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide())
-    ui.infoDrawer.backBtn.addEventListener('click', () => this.goBack())
-    ui.infoDrawer.homeBtn.addEventListener('click', () => this.goHome())
-    ui.infoDrawer.forwardBtn.addEventListener('click', () => this.goForward())
-    ui.infoDrawer.editGitHubBtn.addEventListener('click', () => {
+    this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide())
+    this.#ui.backBtn.addEventListener('click', () => this.goBack())
+    this.#ui.homeBtn.addEventListener('click', () => this.goHome())
+    this.#ui.forwardBtn.addEventListener('click', () => this.goForward())
+    this.#ui.editGitHubBtn.addEventListener('click', () => {
       const githubUrl = `${this.#githubEditBasePath}/${this.#currentPage}`
       window.open(githubUrl, '_blank')
     })
 
     const aboutButton = createSingleFromTemplate('about-button')
     aboutButton.addEventListener('click', () => this.#showHelpFromLoginDialog())
-    ui.loginDialog.insertAdjacentElement("beforeend", aboutButton)
-    updateUi()
+    this.getDependency('authentication').appendToLoginDialog(aboutButton)
 
     this.#loadVersion().then(version => {
       if (version) {
-        ui.infoDrawer.versionInfo.textContent = `v${version}`
+        this.#ui.versionInfo.textContent = `v${version}`
         const versionTag = `v${version}`
         this.#remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
         this.#githubEditBasePath = `https://github.com/mpilhlt/pdf-tei-editor/edit/${versionTag}/docs`
@@ -112,7 +102,7 @@ class InfoPlugin extends Plugin {
    */
   async open() {
     this.#updateNavigationButtons()
-    ui.infoDrawer.show()
+    this.#ui.show()
     if (this.#navigationHistory.length === 0) {
       await this.load('index.md')
     }
@@ -150,7 +140,7 @@ class InfoPlugin extends Plugin {
     this.#currentPage = resolvedPath
     mdPath = resolvedPath
 
-    ui.infoDrawer.content.innerHTML = ""
+    this.#ui.content.innerHTML = ""
 
     let markdown
     let isOnline = false
@@ -196,7 +186,7 @@ class InfoPlugin extends Plugin {
       .replaceAll(/(href="http)/g, `target="_blank" $1`)
       .replaceAll(/<!--|-->/gs, '')
 
-    ui.infoDrawer.content.innerHTML = html
+    this.#ui.content.innerHTML = html
   }
 
   /**
@@ -239,7 +229,7 @@ class InfoPlugin extends Plugin {
    * Closes the info drawer
    */
   close() {
-    ui.infoDrawer.hide()
+    this.#ui.hide()
   }
 
   /**
@@ -255,16 +245,15 @@ class InfoPlugin extends Plugin {
    * Updates the navigation button states based on history
    */
   #updateNavigationButtons() {
-    if (ui.infoDrawer && ui.infoDrawer.backBtn && ui.infoDrawer.forwardBtn) {
-      ui.infoDrawer.backBtn.disabled = this.#navigationHistory.length <= 1
-      ui.infoDrawer.forwardBtn.disabled = this.#forwardHistory.length === 0
-    }
+    this.#ui.backBtn.disabled = this.#navigationHistory.length <= 1
+    this.#ui.forwardBtn.disabled = this.#forwardHistory.length === 0
   }
 
   #showHelpFromLoginDialog() {
-    ui.loginDialog.hide()
-    ui.infoDrawer.addEventListener("sl-hide", () => {
-      ui.loginDialog.show()
+    const auth = this.getDependency('authentication')
+    auth.hideLoginDialog()
+    this.#ui.addEventListener("sl-hide", () => {
+      auth.showLoginDialog()
     }, { once: true })
     this.open()
   }

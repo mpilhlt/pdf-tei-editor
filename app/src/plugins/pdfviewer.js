@@ -4,14 +4,12 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { UIPart } from '../ui.js'
- * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
-import ui, { updateUi } from '../ui.js'
+import ui from '../ui.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { SessionStorage } from '../modules/session-storage.js'
@@ -24,40 +22,11 @@ import Plugin from '../modules/plugin-base.js'
 //
 
 /**
- * PDF viewer headerbar navigation properties
- * @typedef {object} pdfViewerHeaderbarPart
- * @property {StatusText} titleWidget - The document title widget
- * @property {StatusText} filenameWidget - The widget for displaying the filename (doc_id)
- */
-
-/**
- * PDF viewer toolbar properties
- * @typedef {object} pdfViewerToolbarPart
- * @property {HTMLElement} sidebarToggleBtn - Sidebar toggle button
- * @property {HTMLElement} textSelectBtn - Text selection tool button
- * @property {HTMLElement} handToolBtn - Hand tool button
- * @property {HTMLElement} prevPageBtn - Previous page button
- * @property {HTMLElement} nextPageBtn - Next page button
- * @property {HTMLElement} pageInfoWidget - Page info display
- * @property {HTMLElement} zoomOutBtn - Zoom out button
- * @property {HTMLElement} zoomInBtn - Zoom in button
- * @property {HTMLElement} zoomInfoWidget - Zoom level display
- * @property {HTMLElement} fitPageBtn - Fit page button
- * @property {HTMLElement} downloadBtn - Download PDF button
- */
-
-/**
- * PDF viewer statusbar navigation properties
- * @typedef {object} pdfViewerStatusbarPart
- * @property {HTMLElement} searchSwitch - The autosearch toggle switch
- */
-
-/**
  * PDF viewer navigation properties
  * @typedef {object} pdfViewerPart
- * @property {UIPart<StatusBar, pdfViewerHeaderbarPart>} headerbar - The PDF viewer headerbar
- * @property {UIPart<ToolBar, pdfViewerToolbarPart>} toolbar - The PDF viewer toolbar
- * @property {UIPart<StatusBar, pdfViewerStatusbarPart>} statusbar - The PDF viewer statusbar
+ * @property {import('../modules/panels/status-bar.js').StatusBar} headerbar
+ * @property {import('../modules/panels/tool-bar.js').ToolBar} toolbar
+ * @property {import('../modules/panels/status-bar.js').StatusBar} statusbar
  */
 
 class PdfViewerPlugin extends Plugin {
@@ -71,11 +40,9 @@ class PdfViewerPlugin extends Plugin {
     this.#pdfViewer.hide();
   }
 
-  // Cached dependencies
-  #logger;
-  #client;
+  get #logger() { return this.getDependency('logger') }
+  get #client() { return this.getDependency('client') }
 
-  // Private state
   /** @type {PDFJSViewer} */
   #pdfViewer;
   /** @type {SessionStorage} */
@@ -85,6 +52,14 @@ class PdfViewerPlugin extends Plugin {
   #titleWidget;
   /** @type {StatusText} */
   #filenameWidget;
+  /** @type {HTMLElement} */
+  #textSelectBtn;
+  /** @type {HTMLElement} */
+  #handToolBtn;
+  /** @type {HTMLElement} */
+  #pageInfoWidget;
+  /** @type {HTMLElement} */
+  #zoomInfoWidget;
 
   /**
    * Return the PDFJSViewer instance as the plugin API
@@ -97,8 +72,6 @@ class PdfViewerPlugin extends Plugin {
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState);
-    this.#logger = this.getDependency('logger');
-    this.#client = this.getDependency('client');
     this.#logger.debug(`Installing plugin "${this.name}"`);
 
     await this.#pdfViewer.isReady();
@@ -174,24 +147,24 @@ class PdfViewerPlugin extends Plugin {
 
     toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 107);
 
-    const textSelectBtn = PanelUtils.createButton({
+    this.#textSelectBtn = PanelUtils.createButton({
       icon: 'cursor-text',
       tooltip: 'Text selection',
       action: 'pdf-text-select-tool',
       name: 'textSelectBtn',
       variant: 'primary'
     });
-    textSelectBtn.addEventListener('widget-click', () => this.#onSelectTextTool());
-    toolbar.add(textSelectBtn, 106);
+    this.#textSelectBtn.addEventListener('widget-click', () => this.#onSelectTextTool());
+    toolbar.add(this.#textSelectBtn, 106);
 
-    const handToolBtn = PanelUtils.createButton({
+    this.#handToolBtn = PanelUtils.createButton({
       icon: 'hand-index',
       tooltip: 'Hand tool (drag to pan)',
       action: 'pdf-hand-tool',
       name: 'handToolBtn'
     });
-    handToolBtn.addEventListener('widget-click', () => this.#onSelectHandTool());
-    toolbar.add(handToolBtn, 105);
+    this.#handToolBtn.addEventListener('widget-click', () => this.#onSelectHandTool());
+    toolbar.add(this.#handToolBtn, 105);
 
     toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 104);
 
@@ -204,12 +177,12 @@ class PdfViewerPlugin extends Plugin {
     prevPageBtn.addEventListener('widget-click', () => this.#onPageNav(-1));
     toolbar.add(prevPageBtn, 100);
 
-    const pageInfoWidget = PanelUtils.createText({
+    this.#pageInfoWidget = PanelUtils.createText({
       text: '',
       tooltip: 'Current page / Total pages',
       name: 'pageInfoWidget'
     });
-    toolbar.add(pageInfoWidget, 99);
+    toolbar.add(this.#pageInfoWidget, 99);
 
     const nextPageBtn = PanelUtils.createButton({
       icon: 'chevron-right',
@@ -231,12 +204,12 @@ class PdfViewerPlugin extends Plugin {
     zoomOutBtn.addEventListener('widget-click', () => this.#onZoom(-0.1));
     toolbar.add(zoomOutBtn, 80);
 
-    const zoomInfoWidget = PanelUtils.createText({
+    this.#zoomInfoWidget = PanelUtils.createText({
       text: '100%',
       tooltip: 'Zoom level',
       name: 'zoomInfoWidget'
     });
-    toolbar.add(zoomInfoWidget, 79);
+    toolbar.add(this.#zoomInfoWidget, 79);
 
     const zoomInBtn = PanelUtils.createButton({
       icon: 'plus-lg',
@@ -336,13 +309,11 @@ class PdfViewerPlugin extends Plugin {
       this.#pdfViewer._pagesLoaded = true;
     });
 
-    updateUi();
-
     // Restore cursor tool mode
     if (this.#storage.getGlobal('handTool', false)) {
       this.#pdfViewer.setHandToolMode();
-      ui.pdfViewer.toolbar.textSelectBtn.setAttribute('variant', 'default');
-      ui.pdfViewer.toolbar.handToolBtn.setAttribute('variant', 'primary');
+      this.#textSelectBtn.setAttribute('variant', 'default');
+      this.#handToolBtn.setAttribute('variant', 'primary');
     }
   }
 
@@ -502,16 +473,16 @@ class PdfViewerPlugin extends Plugin {
     if (!this.#pdfViewer.isHandTool()) return;
     this.#pdfViewer.setTextSelectMode();
     this.#storage.setGlobal('handTool', false);
-    ui.pdfViewer.toolbar.textSelectBtn.setAttribute('variant', 'primary');
-    ui.pdfViewer.toolbar.handToolBtn.setAttribute('variant', 'default');
+    this.#textSelectBtn.setAttribute('variant', 'primary');
+    this.#handToolBtn.setAttribute('variant', 'default');
   }
 
   #onSelectHandTool() {
     if (this.#pdfViewer.isHandTool()) return;
     this.#pdfViewer.setHandToolMode();
     this.#storage.setGlobal('handTool', true);
-    ui.pdfViewer.toolbar.textSelectBtn.setAttribute('variant', 'default');
-    ui.pdfViewer.toolbar.handToolBtn.setAttribute('variant', 'primary');
+    this.#textSelectBtn.setAttribute('variant', 'default');
+    this.#handToolBtn.setAttribute('variant', 'primary');
   }
 
   async #onDownloadPdf() {
@@ -544,21 +515,14 @@ class PdfViewerPlugin extends Plugin {
    * @param {number} totalPages
    */
   #updatePageInfo(pageNumber, totalPages) {
-    const pageInfoWidget = ui.pdfViewer.toolbar.pageInfoWidget;
-    if (pageInfoWidget) {
-      pageInfoWidget.setAttribute('text', `${pageNumber} / ${totalPages}`);
-    }
+    this.#pageInfoWidget.setAttribute('text', `${pageNumber} / ${totalPages}`);
   }
 
   /**
    * @param {number} scale
    */
   #updateZoomInfo(scale) {
-    const zoomInfoWidget = ui.pdfViewer.toolbar.zoomInfoWidget;
-    if (zoomInfoWidget) {
-      const percentage = Math.round(scale * 100);
-      zoomInfoWidget.setAttribute('text', `${percentage}%`);
-    }
+    this.#zoomInfoWidget.setAttribute('text', `${Math.round(scale * 100)}%`);
   }
 
   /**

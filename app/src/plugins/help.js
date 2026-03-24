@@ -1,5 +1,15 @@
+/**
+ * Help plugin that displays contextual help topics in a radial menu.
+ * Other plugins can register help topics that appear when users click the help icon.
+ */
+
+/**
+ * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { helpWidgetPart } from '../templates/help-widget.types.js'
+ */
+
 import { Plugin } from '../modules/plugin-base.js';
-import ui, { registerTemplate, createFromTemplate, updateUi } from '../ui.js';
+import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
 
 /**
  * @typedef HelpTopic
@@ -9,58 +19,41 @@ import ui, { registerTemplate, createFromTemplate, updateUi } from '../ui.js';
  * @property {Function} callback - Handler when topic is selected
  */
 
-/**
- * @typedef HelpWidgetElements
- * @property {HTMLDivElement} helpIcon - Help icon wrapper (contains sl-icon with tooltip)
- * @property {HTMLDivElement} topicsContainer - Container for topic boxes
- */
+// Register template at module level
+await registerTemplate('help-widget', 'help-widget.html');
 
-/**
- * Help plugin that displays contextual help topics in a radial menu.
- * Other plugins can register help topics that appear when users click the help icon.
- */
 class HelpPlugin extends Plugin {
-  /**
-   * @type {Array<HelpTopic>}
-   * @private
-   */
-  topics = [];
-
-  /**
-   * @type {boolean}
-   * @private
-   */
-  menuVisible = false;
-
-  /**
-   * @type {Function|null}
-   * @private
-   */
-  outsideClickHandler = null;
-
+  /** @param {PluginContext} context */
   constructor(context) {
-    super(context, {
-      name: 'help',
-      deps: []
-    });
+    super(context, { name: 'help', deps: [] });
   }
 
+  /** @type {HTMLElement & helpWidgetPart} */
+  #ui = null
+
+  /** @type {Array<HelpTopic>} */
+  topics = [];
+
+  /** @type {boolean} */
+  menuVisible = false;
+
+  /** @type {Function|null} */
+  outsideClickHandler = null;
+
   /**
-   * Install the help widget
-   * @param {import('../state.js').State} state
+   * @param {import('../state.js').ApplicationState} state
    */
   async install(state) {
     await super.install(state);
 
-    await registerTemplate('help-widget', 'help-widget.html');
-    createFromTemplate('help-widget', document.body);
-    updateUi();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    createFromTemplate('help-widget', container);
+    this.#ui = this.createUi(container);
 
-    // Initially hidden (no topics yet)
-    ui.helpIcon.style.display = 'none';
+    this.#ui.helpIcon.style.display = 'none';
 
-    // Icon click handler - toggle menu
-    ui.helpIcon.addEventListener('click', () => {
+    this.#ui.helpIcon.addEventListener('click', () => {
       if (this.menuVisible) {
         this.hideTopicsMenu();
       } else {
@@ -68,11 +61,10 @@ class HelpPlugin extends Plugin {
       }
     });
 
-    // Close menu when clicking outside
     this.outsideClickHandler = (e) => {
       if (this.menuVisible &&
-          !ui.helpIcon.contains(e.target) &&
-          !ui.topicsContainer.contains(e.target)) {
+          !this.#ui.helpIcon.contains(e.target) &&
+          !this.#ui.topicsContainer.contains(e.target)) {
         this.hideTopicsMenu();
       }
     };
@@ -105,61 +97,36 @@ class HelpPlugin extends Plugin {
     }
   }
 
-  /**
-   * Update help icon visibility based on registered topics
-   * @private
-   */
   updateIconVisibility() {
-    ui.helpIcon.style.display =
-      this.topics.length > 0 ? 'block' : 'none';
+    this.#ui.helpIcon.style.display = this.topics.length > 0 ? 'block' : 'none';
   }
 
-  /**
-   * Render the topics menu in a quarter circle layout
-   * @private
-   */
   renderTopicsMenu() {
-    const container = ui.topicsContainer;
+    const container = this.#ui.topicsContainer;
     container.innerHTML = '';
 
-    // Stack topics vertically above the help icon
     this.topics.forEach((topic) => {
       const box = document.createElement('div');
       box.className = 'help-topic';
-
       box.innerHTML = `
         <sl-icon name="${topic.icon}"></sl-icon>
         <span>${topic.label}</span>
       `;
-
       box.addEventListener('click', () => {
         this.hideTopicsMenu();
         topic.callback();
       });
-
       container.appendChild(box);
-
-      // Trigger animation after DOM insertion
-      requestAnimationFrame(() => {
-        box.classList.add('visible');
-      });
+      requestAnimationFrame(() => { box.classList.add('visible'); });
     });
 
     container.classList.add('visible');
     this.menuVisible = true;
   }
 
-  /**
-   * Hide the topics menu with animation
-   * @private
-   */
   hideTopicsMenu() {
-    const container = ui.topicsContainer;
-    const topics = container.querySelectorAll('.help-topic');
-
-    topics.forEach(el => el.classList.remove('visible'));
-
-    // Wait for animation to complete before clearing DOM
+    const container = this.#ui.topicsContainer;
+    container.querySelectorAll('.help-topic').forEach(el => el.classList.remove('visible'));
     setTimeout(() => {
       container.innerHTML = '';
       container.classList.remove('visible');

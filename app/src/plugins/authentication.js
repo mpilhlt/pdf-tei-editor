@@ -192,6 +192,21 @@ class AuthenticationPlugin extends Plugin {
   }
 
   /**
+   * Hides the login dialog without logging out
+   */
+  hideLoginDialog() {
+    this.#ui.hide()
+  }
+
+  /**
+   * Appends an element to the login dialog
+   * @param {HTMLElement} element
+   */
+  appendToLoginDialog(element) {
+    this.#ui.insertAdjacentElement('beforeend', element)
+  }
+
+  /**
    * Logs the user out
    */
   async logout() {

@@ -133,15 +133,50 @@ For each plugin calling `ui.toolbar.add(element)` in `install()`:
 - `docs/code-assistant/architecture-frontend.md`: update inter-plugin communication section with rule table from §A
 - Add/update E2E test assertions for toolbar item placement
 
-### Migration order
+### Migration status
 
-1. ~~Pilot: `document-actions.js`~~ ✓
-2. `toolbar.js` — already has extension point collection; remove legacy typedef imports from child plugins once those are migrated
-3. `move-files.js` — uses `ui.toolbar.documentActions.append()`; migrate to `getDependency('document-actions').addButton()` or a `toolbar.contentItems` contribution that appends to the button group via a returned element
-4. All remaining plugins adding static toolbar/menu items: `file-selection.js`, `extraction.js`, `tools.js`, `user-account.js`, `file-selection-drawer.js`, etc.
-5. `access-control.js` — cross-plugin widget mutation (#332)
-6. Remaining plugins with `ui.otherPlugin.*` accesses
-7. Remaining plugins with own-plugin `ui` access only
+#### Migrated (using `this.#ui`, scoped UI, EP for toolbar)
+
+| Plugin | Notes |
+| --- | --- |
+| `document-actions.js` | Pilot; still calls `ui.toolbar.add()` in `install()` for backward compat with `move-files.js` |
+| `extraction.js` | `toolbar.contentItems` EP; `addButton()` public API |
+| `tools.js` | `toolbar.contentItems` EP |
+| `file-selection.js` | `toolbar.contentItems` EP; private fields for select refs |
+| `file-selection-drawer.js` | `toolbar.contentItems` EP |
+| `user-account.js` | `toolbar.menuItems` EP; temp container for multi-root template |
+| `prompt-editor.js` | |
+| `config-editor.js` | Removed unused `toolbar` dep |
+| `authentication.js` | |
+| `dialog.js` | |
+| `annotation-guide.js` | |
+| `backend-plugins.js` | `replaceWith` pattern: reassigns `dialog.exportBtn`/`executeBtn`/`openWindowBtn` after clone instead of calling `updateUi()` |
+| `help.js` | Multi-root template: wrapper `div` appended to body used as `createUi` root |
+| `info.js` | Cross-plugin `ui.loginDialog` replaced with `getDependency('authentication').hideLoginDialog()`, `.appendToLoginDialog()`, `.showLoginDialog()` — those three methods added to `AuthenticationPlugin` |
+| `pdfviewer.js` | No template; widget refs stored as private fields; `ui.pdfViewer.headerbar/toolbar/statusbar` kept as local vars in `install()` (own panels) |
+| `xmleditor.js` | No template; panel refs captured early via `ui.xmlEditor.headerbar/toolbar/statusbar`; all subsequent accesses use private fields; both `updateUi()` calls retained for access-control backward compat |
+
+#### Not yet migrated — own-plugin `ui` access (low risk, cosmetic)
+
+| Plugin | Own `ui.*` namespace |
+| --- | --- |
+| `tei-tools.js` | `ui.teiRevisionHistoryDrawer.*` + `ui.xmlEditor.*` as host |
+| `xsl-viewer.js` | `ui.xmlEditor.appendChild(...)`, `ui.xmlEditor.toolbar.add(...)` |
+| `tei-wizard.js` | `ui.xmlEditor.toolbar.add(...)`, `ui.spinner.*` |
+| `rbac-manager.js` | Check needed |
+
+#### Not yet migrated — cross-plugin `ui` access (architectural violations, higher priority)
+
+| Plugin | Violation | Recommended fix |
+| --- | --- | --- |
+| `access-control.js` | `ui.xmlEditor.headerbar.readOnlyStatus`, `ui.xmlEditor.statusbar.add(...)` | Add `getDependency('xmleditor').setReadOnlyContext(...)` API or state key |
+| `document-actions.js` | `ui.toolbar.xml/pdf/diff` reads file-selection's selects | Expose accessor on `file-selection` plugin API or via state |
+| `heartbeat.js` | `ui.toolbar.xml.value` | Same as above |
+| `services.js` | `ui.toolbar.documentActions.saveRevision.disabled` | `getDependency('document-actions').setSaveRevisionDisabled(bool)` |
+| `filedata.js` | `ui.xmlEditor.statusbar.add(...)` | `getDependency('xmleditor').addStatusbarWidget(...)` (already exists?) |
+| `start.js` | `ui.pdfViewer.statusbar.searchSwitch` | `getDependency('pdfviewer').setSearchSwitchState(bool)` or state key |
+
+#### Uses `ui.spinner.*` only (legitimately global, not a violation)
 
 ### Verification
 
