@@ -300,6 +300,12 @@ class ServicesPlugin extends Plugin {
       this.#logger.debug("Loading autocomplete data for XML document")
       const xmlContent = this.#xmlEditor.getEditorContent()
       if (xmlContent) {
+        const hasXsdSchema = /schemaLocation="[^"]+"/.test(xmlContent)
+        const hasRelaxNG = /<\?xml-model\s[^>]*schematypens="http:\/\/relaxng\.org\/ns\/structure\/1\.0"[^>]*\?>/.test(xmlContent)
+        if (!hasXsdSchema && !hasRelaxNG) {
+          this.#logger.info("No schema declaration found in XML document, skipping autocomplete")
+          return true
+        }
         try {
           const invalidateCache = this.state?.hasInternet
           const autocompleteData = await this.#client.getAutocompleteData(xmlContent, invalidateCache)

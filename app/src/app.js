@@ -23,7 +23,8 @@ import { configureTestLog, testLog } from './modules/test-log.js'
 
 // frontend extension system
 import { loadExtensionsFromServer } from './modules/frontend-extension-registry.js'
-import { initializeSandbox } from './modules/frontend-extension-sandbox.js'
+import { FrontendExtensionPlugin } from './modules/frontend-extension-plugin.js'
+import { registerModules } from './module-registry.js'
 
 //
 // Application bootstrapping
@@ -48,17 +49,14 @@ const client = pluginManager.getDependency('client')
 const config = pluginManager.getDependency('config')
 const services = pluginManager.getDependency('services')
 
-// Initialize frontend extension sandbox with state getter, invoke function, updateState, and plugin getter
-// TODO: the sandbox system needs to be refactored
-initializeSandbox(
-  () => app.getCurrentState(),
-  (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
-  (changes) => app.updateState(changes),
-  (pluginName) => pluginManager.getDependency(pluginName)
-)
+// Register utility modules so extensions (and other plugins) can access them via getDependency()
+registerModules(pluginManager)
+
+// Expose FrontendExtensionPlugin globally so IIFE extensions can extend it
+window.FrontendExtensionPlugin = FrontendExtensionPlugin
 
 // Load and register frontend extensions from backend plugins
-await loadExtensionsFromServer(pluginManager)
+await loadExtensionsFromServer(pluginManager, app.getPluginContext())
 
 // Create logger and set log level
 const logger = LoggerPlugin.getInstance()

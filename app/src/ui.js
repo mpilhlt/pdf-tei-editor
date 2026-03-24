@@ -1,4 +1,8 @@
 /**
+ * @registerModule
+ */
+
+/**
  * The UI of the application as a typed object structure, which can then be traversed.
  * In this structure, each named DOM element encapsulates all named descencdent elements.
  * This allows to access the elements via `ui.toolbar.pdf`, `ui.pdfViewer`, etc. The structure

@@ -4,50 +4,39 @@
  * Adds a Search button to the backend plugins button group in the toolbar.
  * Clicking it triggers the document-search plugin's search endpoint, which
  * opens the full-text search UI in the standard plugin result dialog.
+ *
+ * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
  */
 
-export const name = 'document-search';
-export const description = 'Adds Search button to the toolbar';
-export const deps = ['backend-plugins'];
+export default class DocumentSearchExtension extends FrontendExtensionPlugin {
+  constructor(/** @type {PluginContext} */ context) {
+    super(context, { name: 'document-search', deps: ['backend-plugins'] });
+  }
 
-/** @type {HTMLElement|null} */
-let searchButton = null;
+  /** @type {HTMLElement|null} */
+  _searchButton = null;
 
-/**
- * @param {Object} state - Initial application state
- * @param {Object} sandbox - Frontend extension sandbox
- */
-export function install(state, sandbox) {}
+  async start() {
+    this._searchButton = document.createElement('sl-button');
+    this._searchButton.setAttribute('name', 'searchBtn');
+    this._searchButton.setAttribute('size', 'small');
+    this._searchButton.setAttribute('title', 'Search documents');
+    this._searchButton.innerHTML = '<sl-icon name="search"></sl-icon>';
+    this._searchButton.style.display = this.state.user ? '' : 'none';
 
-/**
- * @param {Object} sandbox - Frontend extension sandbox
- */
-export function start(sandbox) {
-  const state = sandbox.getState();
+    this._searchButton.addEventListener('click', () => {
+      this.getDependency('backend-plugins').execute('document-search', 'search', {});
+    });
 
-  searchButton = document.createElement('sl-button');
-  searchButton.setAttribute('name', 'searchBtn');
-  searchButton.setAttribute('size', 'small');
-  searchButton.setAttribute('title', 'Search documents');
-  searchButton.innerHTML = '<sl-icon name="search"></sl-icon>';
-  searchButton.style.display = state.user ? '' : 'none';
+    const ui = this.getDependency('ui');
+    const fileDrawerWidget = ui.toolbar.fileDrawerTrigger.closest('sl-tooltip')
+      ?? ui.toolbar.fileDrawerTrigger;
+    ui.toolbar.addAfter(this._searchButton, 9, fileDrawerWidget);
+  }
 
-  searchButton.addEventListener('click', () => {
-    sandbox.invoke('backend-plugins.execute', ['document-search', 'search', {}]);
-  });
-
-  const fileDrawerWidget = sandbox.ui.toolbar.fileDrawerTrigger.closest('sl-tooltip')
-    ?? sandbox.ui.toolbar.fileDrawerTrigger;
-  sandbox.ui.toolbar.addAfter(searchButton, 9, fileDrawerWidget);
-}
-
-/**
- * @param {string[]} changedKeys
- * @param {Object} state
- * @param {Object} sandbox
- */
-export function onStateUpdate(changedKeys, state, sandbox) {
-  if (changedKeys.includes('user') && searchButton) {
-    searchButton.style.display = state.user ? '' : 'none';
+  async onUserChange(newUser) {
+    if (this._searchButton) {
+      this._searchButton.style.display = newUser ? '' : 'none';
+    }
   }
 }

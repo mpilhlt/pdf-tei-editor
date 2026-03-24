@@ -4,131 +4,111 @@
  * Adds a "TEI Annotator" submenu to the Tools menu. Each sub-item corresponds to
  * a registered annotator. Sub-items are enabled only when a <bibl> element is
  * selected in the XML editor (state.xpath points to a bibl element).
+ *
+ * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
  */
 
-/**
- * @import { FrontendExtensionSandbox } from '../../../../app/src/modules/frontend-extension-sandbox.js'
- * @import { ApplicationState } from '../../../../app/src/state.js'
- */
+const _TEI_NS = 'http://www.tei-c.org/ns/1.0';
 
-
-export const name = "tei-annotator";
-export const deps = ["tools", "xmleditor"];
-
-/**
- * Map of annotator id → sl-menu-item element, populated during start.
- * @type {Record<string, HTMLElement>}
- */
-let menuItems = {};
-
-/**
- * Annotator metadata fetched from the backend, stored for use in start().
- * @type {Array<{id: string, display_name: string, description: string}>|null}
- */
-let _annotators = null;
-
-/**
- * @param {ApplicationState} _state
- * @param {FrontendExtensionSandbox} sandbox
- */
-export async function install(_state, sandbox) {
-  // Fetch annotator list during install (before the toolbar exists).
-  // Menu items are created in start() once the toolbar is ready.
-  try {
-    _annotators = await sandbox.callPluginApi('/api/plugins/tei-annotator/annotators', 'GET');
-  } catch (err) {
-    console.warn('tei-annotator: could not load annotators from backend:', err.message);
-  }
-}
-
-/**
- * @param {FrontendExtensionSandbox} sandbox
- */
-export async function start(sandbox) {
-  if (!_annotators || _annotators.length === 0) {
-    return;
+export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
+  constructor(/** @type {PluginContext} */ context) {
+    super(context, { name: 'tei-annotator', deps: ['tools', 'xmleditor'] });
   }
 
-  // Build parent menu item with nested submenu.
-  // Must run in start() — toolsGroup is only added to the DOM during tools.start().
-  const parentItem = document.createElement('sl-menu-item');
-  parentItem.textContent = 'TEI Annotator';
+  /**
+   * Annotator metadata fetched from the backend, stored for use in start().
+   * @type {Array<{id: string, display_name: string, description: string}>|null}
+   */
+  _annotators = null;
 
-  const submenu = document.createElement('sl-menu');
-  submenu.slot = 'submenu';
+  /**
+   * Map of annotator id → sl-menu-item element, populated during start.
+   * @type {Record<string, HTMLElement>}
+   */
+  _menuItems = {};
 
-  for (const ann of _annotators) {
-    const item = document.createElement('sl-menu-item');
-    item.textContent = ann.display_name;
-    item.title = ann.description;
-    item.disabled = true;
-    item.addEventListener('click', () => _runAnnotator(ann, sandbox));
-    menuItems[ann.id] = item;
-    submenu.appendChild(item);
-  }
-
-  parentItem.appendChild(submenu);
-
-  const toolsApi = sandbox.getDependency('tools');
-  toolsApi.addMenuItems([parentItem], 'annotation');
-}
-
-/**
- * @param {string[]} changedKeys
- * @param {ApplicationState} state
- * @param {FrontendExtensionSandbox} _sandbox
- */
-export function onStateUpdate(changedKeys, state, _sandbox) {
-  if (!changedKeys.includes('xpath')) return;
-  const enabled = _isBiblXpath(state.xpath);
-  for (const item of Object.values(menuItems)) {
-    item.disabled = !enabled;
-  }
-}
-
-/**
- * @param {{id: string, display_name: string}} ann
- * @param {FrontendExtensionSandbox} sandbox
- */
-async function _runAnnotator(ann, sandbox) {
-  const state = sandbox.getState();
-
-  if (!_isBiblXpath(state.xpath)) {
-    sandbox.notify(
-      `Please select a <bibl> element to use the ${ann.display_name}.`,
-      'warning',
-      'exclamation-triangle'
-    );
-    return;
-  }
-
-  if (!state.xml) {
-    sandbox.notify('No document open.', 'warning', 'exclamation-triangle');
-    return;
-  }
-
-  const xmleditorApi = sandbox.getDependency('xmleditor');
-  sandbox.ui.spinner.show(`${ann.display_name}: annotating…`);
-  try {
-    const { fragments } = await sandbox.callPluginApi(
-      '/api/plugins/tei-annotator/annotate',
-      'POST',
-      { stable_id: state.xml, xpath: state.xpath, annotator_id: ann.id }
-    );
-    let modifiedXml = _substituteAtXpath(xmleditorApi, state.xpath, fragments);
-    if (await sandbox.config.get('xml.encode-entities.server', false)) {
-      const encodeQuotes = await sandbox.config.get('xml.encode-quotes', false);
-      modifiedXml = sandbox.teiUtils.encodeXmlEntities(modifiedXml, { encodeQuotes });
+  async install(state) {
+    await super.install(state);
+    try {
+      this._annotators = await this.callPluginApi('/api/plugins/tei-annotator/annotators', 'GET');
+    } catch (err) {
+      console.warn('tei-annotator: could not load annotators from backend:', err.message);
     }
-    await xmleditorApi.showMergeView(modifiedXml);
-  } catch (err) {
-    sandbox.notify(
-      `Annotation failed: ${err.message}`,
-      'danger',
-      'exclamation-octagon'
-    );
-  } finally {
-    sandbox.ui.spinner.hide();
+  }
+
+  async start() {
+    if (!this._annotators || this._annotators.length === 0) return;
+
+    const parentItem = document.createElement('sl-menu-item');
+    parentItem.textContent = 'TEI Annotator';
+
+    const submenu = document.createElement('sl-menu');
+    submenu.slot = 'submenu';
+
+    for (const ann of this._annotators) {
+      const item = document.createElement('sl-menu-item');
+      item.textContent = ann.display_name;
+      item.title = ann.description;
+      item.disabled = true;
+      item.addEventListener('click', () => this._runAnnotator(ann));
+      this._menuItems[ann.id] = item;
+      submenu.appendChild(item);
+    }
+
+    parentItem.appendChild(submenu);
+    this.getDependency('tools').addMenuItems([parentItem], 'annotation');
+  }
+
+  async onXpathChange(newXpath) {
+    const enabled = _isBiblXpath(newXpath);
+    for (const item of Object.values(this._menuItems)) {
+      item.disabled = !enabled;
+    }
+  }
+
+  /**
+   * @param {{id: string, display_name: string}} ann
+   */
+  async _runAnnotator(ann) {
+    const { xpath, xml } = this.state;
+
+    if (!_isBiblXpath(xpath)) {
+      this.getDependency('sl-utils').notify(
+        `Please select a <bibl> element to use the ${ann.display_name}.`,
+        'warning',
+        'exclamation-triangle'
+      );
+      return;
+    }
+
+    if (!xml) {
+      this.getDependency('sl-utils').notify('No document open.', 'warning', 'exclamation-triangle');
+      return;
+    }
+
+    const xmleditorApi = this.getDependency('xmleditor');
+    this.getDependency('ui').spinner.show(`${ann.display_name}: annotating…`);
+    try {
+      const { fragments } = await this.callPluginApi(
+        '/api/plugins/tei-annotator/annotate',
+        'POST',
+        { stable_id: xml, xpath, annotator_id: ann.id }
+      );
+      let modifiedXml = _substituteAtXpath(xmleditorApi, xpath, fragments);
+      if (await this.getDependency('config').get('xml.encode-entities.server', false)) {
+        const encodeQuotes = await this.getDependency('config').get('xml.encode-quotes', false);
+        modifiedXml = this.getDependency('tei-utils').encodeXmlEntities(modifiedXml, { encodeQuotes });
+      }
+      await xmleditorApi.showMergeView(modifiedXml);
+    } catch (err) {
+      this.getDependency('sl-utils').notify(
+        `Annotation failed: ${err.message}`,
+        'danger',
+        'exclamation-octagon'
+      );
+    } finally {
+      this.getDependency('ui').spinner.hide();
+    }
   }
 }
 
@@ -142,8 +122,6 @@ function _isBiblXpath(xpath) {
   if (!xpath) return false;
   return /(?:^|[/\]])(?:tei:)?bibl(?:\[|$)/.test(xpath);
 }
-
-const _TEI_NS = 'http://www.tei-c.org/ns/1.0';
 
 /**
  * Clone the editor's parsed XML tree, replace the element at *xpath* with
@@ -161,7 +139,6 @@ function _substituteAtXpath(xmleditorApi, xpath, fragments) {
     throw new Error('No parsed XML tree available in the editor');
   }
 
-  // Clone to avoid modifying the live editor tree
   const doc = /** @type {Document} */ (liveDoc.cloneNode(true));
 
   /** @param {string} prefix */
@@ -177,7 +154,6 @@ function _substituteAtXpath(xmleditorApi, xpath, fragments) {
 
   const parent = element.parentNode;
 
-  // Parse each fragment inside a TEI-namespace wrapper so element names resolve correctly
   for (const fragXml of fragments) {
     const wrapper = new DOMParser().parseFromString(
       `<w xmlns="${_TEI_NS}">${fragXml}</w>`, 'text/xml'
