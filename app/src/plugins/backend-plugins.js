@@ -321,8 +321,8 @@ export class BackendPluginsPlugin extends Plugin {
       this.displayResult(plugin, result);
 
     } catch (error) {
-      console.error(`Error executing plugin ${plugin.id}:`, error);
-      notify(`Failed to execute ${plugin.name}: ${error.message}`, 'danger', 'exclamation-octagon');
+      console.error(`Error executing plugin ${plugin.id}.${endpointName}:`, error);
+      notify(`Failed to execute endopoint "${endpointName}" of plugin "${plugin.name}", : ${error.message}`, 'danger', 'exclamation-octagon');
     }
   }
 
