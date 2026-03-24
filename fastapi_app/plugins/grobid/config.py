@@ -22,12 +22,14 @@ def get_grobid_server_url() -> str | None:
         The GROBID server URL, or None if not configured.
     """
     config = get_config()
-    url = config.get("grobid.server.url")
+    url = config.get("plugin.grobid.server.url")
     return url if url else None
 
 
 # Mapping from training variant ID to GROBID model path
 VARIANT_MODEL_PATHS: dict[str, str] = {
+    "grobid.training.header.affiliation": "affiliation-address",
+    "grobid.training.header.authors": "name/header",
     "grobid.training.segmentation": "segmentation",
     "grobid.training.references": "citation",
     "grobid.training.references.referenceSegmenter": "reference-segmenter",
@@ -36,9 +38,12 @@ VARIANT_MODEL_PATHS: dict[str, str] = {
 # Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
     # Training variants (use /api/createTraining endpoint)
+    "grobid.training.header.affiliation",
+    "grobid.training.header.authors",    
     "grobid.training.segmentation",
     "grobid.training.references.referenceSegmenter",
     "grobid.training.references",
+    
     # Service variants (use direct API endpoints)
     "grobid.service.fulltext",
     "grobid.service.references",

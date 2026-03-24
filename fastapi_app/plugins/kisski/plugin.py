@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.services.service_registry import get_service_registry
 
 from .extractor import KisskiExtractor
@@ -20,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 class KisskiPlugin(Plugin):
     """Plugin that provides KISSKI API-based text and PDF processing."""
+
+    def __init__(self) -> None:
+        get_plugin_config("plugin.kisski.api.key", "KISSKI_API_KEY", default=None)
+        get_plugin_config("plugin.kisski.api.url", "KISSKI_API_URL", default="https://chat-ai.academiccloud.de/v1")
 
     @property
     def metadata(self) -> dict[str, Any]:
