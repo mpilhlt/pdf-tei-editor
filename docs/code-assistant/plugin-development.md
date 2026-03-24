@@ -93,63 +93,15 @@ export const myPlugin = MyPlugin.getInstance();
 
 ## State Management in Plugins
 
-The application uses **immutable state management** with functional programming principles.
+See [plugin-communication.md](./plugin-communication.md) for when to use state vs. other mechanisms.
 
-### Core Rules
+The application uses **immutable state management**:
 
-- **Never mutate state directly** — always use `dispatchStateChange()`
-- **Use `onStateUpdate()` for reactions** — react to state changes in this method
-- **Access current state via `this.state`** — read-only property
-- **Store plugin-specific state in `state.ext`** — avoids naming conflicts
-
-### State Management Architecture
-
-```javascript
-class MyPlugin extends Plugin {
-  async someAction() {
-    // Dispatch state changes through context
-    await this.dispatchStateChange({ pdf: 'new-file.pdf' });
-
-    // Access current state
-    const user = this.state.user;
-
-    // Plugin-specific state via extensions
-    await this.dispatchStateChange({
-      ext: { [this.name]: { customData: 'value' } }
-    });
-  }
-
-  async onStateUpdate(changedKeys, state) {
-    // Reactive updates when state changes
-    if (changedKeys.includes('user')) {
-      this.handleUserChange();
-    }
-  }
-}
-```
-
-**Key Components:**
-
-- `StateManager` — Handles immutable state updates, change detection, history
-- `Application.updateState(changes)` — Orchestrates state changes and plugin notifications
-- `PluginContext` — Provides controlled access to state utilities for Plugin classes
-
-### Plugin State Handling Best Practices
-
-1. **Never import global state**: Plugins should only work with state parameters passed to functions
-2. **Use changedKeys.includes()**: Replace manual state caching with key checks in `onStateUpdate`
-3. **Local storage when needed**: Store local copies only for operations that need them (e.g., API requests)
-4. **Access previous state**: Use `state.previousState` to compare with previous values
-5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid naming conflicts
-
-### State Architecture Principles
-
-- **Plugin endpoints are reactive observers, not state mutators**: Plugin `onStateUpdate()` functions receive immutable state snapshots and react to changes by updating UI or internal plugin state. They do not return modified state objects.
-- **Only state utilities create new state objects**: Functions like `dispatchStateChange()` and `updateState()` are responsible for creating new immutable state objects. Plugin endpoints observe and react to state changes.
-- **Parallel plugin execution**: Since plugins don't mutate state, multiple plugins can process the same state snapshot concurrently without conflicts.
-- **State initialization is sequential**: During app initialization, state operations are chained sequentially to build up the initial state before plugins start reacting to changes.
-- **CRITICAL: Never call dispatchStateChange() in onStateUpdate()**: Plugin functions which receive the state must never update it as this creates infinite loops. They are observers/reactors, not mutators.
-- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `dispatchStateChange()`.
+- **Dispatch changes**: `await this.dispatchStateChange({ key: value })` — never mutate `this.state` directly
+- **React to changes**: `onStateUpdate(changedKeys, state)` or per-key handlers (see below)
+- **Read current state**: `this.state` — read-only property
+- **Plugin-specific state**: store in `state.ext[this.name]` to avoid key collisions
+- **Never call `dispatchStateChange` inside `onStateUpdate`** — creates infinite loops; only call it from event handlers or async operations
 
 ## Per-Key State Handlers
 
@@ -185,40 +137,61 @@ Per-key handlers receive `(newValue, prevValue)` — not `changedKeys` and the f
 
 `onStateUpdate(changedKeys, state)` remains available as the catch-all and runs in parallel with per-key handlers. Both can coexist in the same class.
 
-## Custom Extension Points
+## Extension Points
 
-The `Plugin` base class auto-mounts two categories of extension points without any declaration:
+See [plugin-communication.md](./plugin-communication.md) for the full extension point system, including when to use them vs. state or `getDependency()`.
 
-- **Lifecycle methods** (`install`, `ready`, `start`, `shutdown`, `onStateUpdate`) — just define the method
-- **Per-key state handlers** (`on<Key>Change`) — just follow the naming convention
+Auto-discovered without any declaration:
 
-All other extension points must be mounted explicitly.
+- **Lifecycle methods**: `install`, `ready`, `start`, `shutdown`, `onStateUpdate` — just define the method
+- **Per-key state handlers**: `on<Key>Change` — follow the naming convention (see below)
 
-To expose a method at a custom path (so other plugins can invoke it via `pluginManager.invoke('ns.method', args)`), use `static extensionPoints`:
+All other extension points: declare in `static extensionPoints` and implement via a computed property getter:
 
 ```javascript
-class ValidationPlugin extends Plugin {
-  // Declares that this.validate is exposed at 'validation.validate'
-  // and this.configure at 'validation.configure'
-  static extensionPoints = ['validation.validate', 'validation.configure'];
+import ep from '../extension-points.js'
 
-  async validate(xmlString) { /* ... */ }
-  async configure(options) { /* ... */ }
+class MyPlugin extends Plugin {
+  static extensionPoints = [ep.toolbar.contentItems]
+
+  get [ep.toolbar.contentItems]() {
+    return () => [{ element: this.#ui, priority: 5, position: 'center' }]
+  }
 }
 ```
 
-The convention: the last segment of the path is the method name (`validation.validate` → `this.validate`).
-
-For one-off custom extension points not following this convention, override `getExtensionPoints()`:
+For one-off extension points, override `getExtensionPoints()`:
 
 ```javascript
 getExtensionPoints() {
   return {
     ...super.getExtensionPoints(),
     'filedata.loading': this.setLoadingState.bind(this)
-  };
+  }
 }
 ```
+
+## Accessing Dependencies
+
+See [plugin-communication.md](./plugin-communication.md) for when to use `getDependency()` vs. state or extension points.
+
+Use private getter properties — resolved lazily at call time, avoiding initialization-order and circular-dependency issues:
+
+```javascript
+class DocumentActionsPlugin extends Plugin {
+  get #logger()    { return this.getDependency('logger') }
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+  get #client()    { return this.getDependency('client') }
+
+  async saveRevision() {
+    this.#logger.debug('saving...')
+    const xmlDoc = this.#xmlEditor.getXmlTree()
+    await this.#client.saveXml(xmlDoc)
+  }
+}
+```
+
+Only add a plugin to `deps` when it must be fully installed before this plugin's own `install()` runs. Plugins only needed at action time don't need a `deps` entry.
 
 ## Common Patterns
 

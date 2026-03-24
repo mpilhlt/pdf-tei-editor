@@ -61,7 +61,10 @@ class TeiValidationPlugin extends Plugin {
     }
   }
 
-  static extensionPoints = ['validation.validate', 'validation.inProgress'];
+  static extensionPoints = [ep.validation.validate, ep.validation.inProgress];
+
+  [ep.validation.validate](...args) { return this.validate(...args) }
+  [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   //
   // Public API

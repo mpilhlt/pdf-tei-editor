@@ -13,6 +13,7 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
@@ -49,7 +50,10 @@ class FiledataPlugin extends Plugin {
   #dialog;
   #xmlEditor;
 
-  static extensionPoints = ['filedata.reload', 'filedata.saveXml'];
+  static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
+
+  [ep.filedata.reload](...args) { return this.reload(...args) }
+  [ep.filedata.saveXml](...args) { return this.saveXml(...args) }
 
   /**
    * @param {ApplicationState} state

@@ -5,62 +5,23 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton, SlInput, SlCheckbox, SlSelect } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { Artifact } from '../modules/file-data-utils.js'
+ * @import { documentActionButtonsPart } from '../templates/document-action-buttons.types.js'
+ * @import { saveDocumentDialogPart } from '../templates/save-document-dialog.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
 import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
-import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
-import { api as clientApi } from './client.js'
-import { api as servicesApi } from './services.js'
-import { api as xmlEditor } from './xmleditor.js'
 
-/**
- * Document actions button group navigation properties
- * @typedef {object} documentActionsPart
- * @property {SlButton} saveRevision - Save current revision button
- * @property {SlButton} deleteBtn - Delete dropdown button
- * @property {SlButton} deleteCurrentVersion - Delete current version button
- * @property {SlButton} deleteAllVersions - Delete all versions button
- * @property {SlButton} deleteAll - Delete all files button
- */
-
-/**
- * @typedef {object} saveToNewCopySectionPart
- * @property {SlCheckbox} saveToNewCopy - Save to a new personal copy checkbox
- * @property {SlInput} copyLabel - Label for the new copy
- */
-
-/**
- * @typedef {object} saveAsGoldSectionPart
- * @property {SlCheckbox} saveAsGold - Save as gold version checkbox
- */
-
-/**
- * @typedef {object} optionsSectionPart
- * @property {HTMLDivElement & saveToNewCopySectionPart} saveToNewCopySection - New-copy option
- * @property {HTMLDivElement & saveAsGoldSectionPart} saveAsGoldSection - Gold version option, shown only to reviewers
- */
-
-/**
- * Dialog for saving a revision (and optionally forking to a personal copy)
- * @typedef {object} saveDocumentDialogPart
- * @property {SlInput} changeDesc - Change description input
- * @property {SlSelect} status - Status select
- * @property {HTMLDivElement & optionsSectionPart} options - Options section containing copy and gold checkboxes
- * @property {SlButton} submit - Submit button
- * @property {SlButton} cancel - Cancel button
- */
 
 // Register templates
 await registerTemplate('document-action-buttons', 'document-action-buttons.html')
@@ -74,18 +35,33 @@ class DocumentActionsPlugin extends Plugin {
     super(context, { name: 'document-actions', deps: ['file-selection', 'authentication', 'access-control', 'config', 'logger', 'dialog'] })
   }
 
-  /** @type {HTMLSpanElement & Record<string, any>} */
+  /** @type {HTMLSpanElement & documentActionButtonsPart} */
   #ui = null
 
-  /** @type {HTMLElement & Record<string, any>} */
+  /** @type {import('../ui.js').SlDialog & saveDocumentDialogPart} */
   #dialogUi = null
+
+  get #client() { return this.getDependency('client') }
+  get #logger() { return this.getDependency('logger') }
+  get #filedata() { return this.getDependency('filedata') }
+  get #services() { return this.getDependency('services') }
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+
+  /**
+   * Contribute toolbar buttons to the main toolbar.
+   * Called by ToolbarPlugin.start() via the toolbar.contentItems extension point.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    return [{ element: this.#ui, priority: 8, position: 'center' }]
+  }
 
   /**
    * @param {ApplicationState} _state
    */
   async install(_state) {
     await super.install(_state)
-    this.getDependency('logger').debug(`Installing plugin "document-actions"`)
+    this.#logger.debug(`Installing plugin "document-actions"`)
 
     const span = createSingleFromTemplate('document-action-buttons')
     this.#ui = this.createUi(span)
@@ -102,15 +78,6 @@ class DocumentActionsPlugin extends Plugin {
     da.deleteCurrentVersion.addEventListener('click', () => this.deleteCurrentVersion())
     da.deleteAllVersions.addEventListener('click', () => this.deleteAllVersions())
     da.deleteAll.addEventListener('click', () => this.deleteAll())
-  }
-
-  /**
-   * Contribute toolbar buttons to the main toolbar.
-   * Called by ToolbarPlugin.start() via the toolbar.contentItems extension point.
-   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
-   */
-  contentItems() {
-    return [{ element: this.#ui, priority: 8, position: 'center' }]
   }
 
   /**
@@ -180,14 +147,14 @@ class DocumentActionsPlugin extends Plugin {
       const msg = `Are you sure you want to delete the current version "${versionName}"?`
       if (!confirm(msg)) return
 
-      servicesApi.removeMergeView()
-      await clientApi.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
+      this.#services.removeMergeView()
+      await this.#client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
       try {
         await this.dispatchStateChange({ xml: null })
         await this.getDependency('file-selection').reload()
         // @ts-ignore
         const xml = ui.toolbar.xml.firstChild?.value
-        await servicesApi.load({ xml })
+        await this.#services.load({ xml })
         notify(`Version "${versionName}" has been deleted.`)
         this.context.invokePluginEndpoint(ep.sync.syncFiles, state)
           .then(summary => summary && console.debug(summary))
@@ -233,9 +200,9 @@ class DocumentActionsPlugin extends Plugin {
       return
     }
 
-    servicesApi.removeMergeView()
+    this.#services.removeMergeView()
     try {
-      await clientApi.deleteFiles(filePathsToDelete)
+      await this.#client.deleteFiles(filePathsToDelete)
     } catch (err) {
       notify(err.message || 'Failed to delete files.', 'danger', 'exclamation-octagon')
       await this.getDependency('file-selection').reload()
@@ -258,7 +225,7 @@ class DocumentActionsPlugin extends Plugin {
       }
 
       if (goldToLoad) {
-        await servicesApi.load({ xml: goldToLoad.id })
+        await this.#services.load({ xml: goldToLoad.id })
       }
 
       const variantText = variant === "none" ? "without variant" :
@@ -296,11 +263,11 @@ class DocumentActionsPlugin extends Plugin {
       if (!confirm(msg)) return
     }
 
-    servicesApi.removeMergeView()
-    this.getDependency('logger').debug("Deleting files:" + filePathsToDelete.join(", "))
+    this.#services.removeMergeView()
+    this.#logger.debug("Deleting files:" + filePathsToDelete.join(", "))
 
     try {
-      await clientApi.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
+      await this.#client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
       notify(`${filePathsToDelete.length} files have been deleted.`)
       this.context.invokePluginEndpoint(ep.sync.syncFiles, state)
         .then(summary => summary && console.debug(summary))
@@ -342,7 +309,7 @@ class DocumentActionsPlugin extends Plugin {
         updateCopyLabelVisibility()
         dlg.options.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
 
-        const xmlDoc = xmlEditor.getXmlTree()
+        const xmlDoc = this.#xmlEditor.getXmlTree()
         let currentStatus = 'draft'
         let lastChangeDesc = ''
         if (xmlDoc) {
@@ -472,24 +439,24 @@ class DocumentActionsPlugin extends Plugin {
         await this.addTeiHeaderInfo(respStmt, /** @type {Edition} */ ({ title: undefined, note: undefined }), revisionChange)
 
         if (sourceVariant) {
-          const xmlDoc = xmlEditor.getXmlTree()
+          const xmlDoc = this.#xmlEditor.getXmlTree()
           if (xmlDoc) {
             tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
-            await xmlEditor.updateEditorFromXmlTree()
+            await this.#xmlEditor.updateEditorFromXmlTree()
           }
         }
 
-        xmlEditor.markAsClean()
+        this.#xmlEditor.markAsClean()
 
-        const filedata = FiledataPlugin.getInstance()
+        const filedata = this.#filedata
         let { file_id: newFileId } = await filedata.saveXml(currentFileId, true)
 
         testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId })
 
-        xmlEditor.markAsClean()
+        this.#xmlEditor.markAsClean()
 
         await this.getDependency('file-selection').reload({ refresh: true })
-        await servicesApi.load({ xml: newFileId })
+        await this.#services.load({ xml: newFileId })
 
         testLog('NEW_VERSION_LOADED', { fileId: newFileId, editorReadOnly: this.state.editorReadOnly })
 
@@ -498,9 +465,9 @@ class DocumentActionsPlugin extends Plugin {
         await this.addTeiHeaderInfo(respStmt, undefined, revisionChange)
         if (!state.xml) throw new Error('No XML file loaded')
 
-        xmlEditor.markAsClean()
+        this.#xmlEditor.markAsClean()
 
-        const filedata = FiledataPlugin.getInstance()
+        const filedata = this.#filedata
         await filedata.saveXml(state.xml)
 
         testLog('REVISION_SAVED', {
@@ -510,12 +477,12 @@ class DocumentActionsPlugin extends Plugin {
 
         testLog('REVISION_IN_XML_VERIFIED', {
           changeDescription: dlg.changeDesc.value,
-          xmlContainsRevision: xmlEditor.getXML().includes(dlg.changeDesc.value)
+          xmlContainsRevision: this.#xmlEditor.getXML().includes(dlg.changeDesc.value)
         })
 
         if (saveAsGold) {
           try {
-            await clientApi.apiClient.filesGoldStandard(state.xml)
+            await this.#client.apiClient.filesGoldStandard(state.xml)
             testLog('GOLD_STANDARD_SET', { fileId: state.xml })
             await this.getDependency('file-selection').reload({ refresh: true })
             notify("Revision saved and marked as Gold version")
@@ -532,7 +499,7 @@ class DocumentActionsPlugin extends Plugin {
         .then(summary => summary && console.debug(summary))
         .catch(e => console.error(e))
 
-      xmlEditor.markAsClean()
+      this.#xmlEditor.markAsClean()
     } catch (error) {
       console.error(error)
       notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon')
@@ -549,7 +516,7 @@ class DocumentActionsPlugin extends Plugin {
    * @throws {Error} If any of the operations to add teiHeader info fail
    */
   async addTeiHeaderInfo(respStmt, _edition, revisionChange) {
-    const xmlDoc = xmlEditor.getXmlTree()
+    const xmlDoc = this.#xmlEditor.getXmlTree()
     if (!xmlDoc) throw new Error("No XML document loaded")
 
     if (respStmt) {
@@ -564,7 +531,7 @@ class DocumentActionsPlugin extends Plugin {
       tei_utils.addRevisionChange(xmlDoc, revisionChange)
     }
     prettyPrintXmlDom(xmlDoc, 'teiHeader')
-    await xmlEditor.updateEditorFromXmlTree()
+    await this.#xmlEditor.updateEditorFromXmlTree()
   }
 }
 

@@ -6,6 +6,7 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
+import ep from '../extension-points.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
@@ -619,7 +620,9 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
-  static extensionPoints = ['backend-plugins.execute'];
+  static extensionPoints = [ep.backendPlugins.execute];
+
+  [ep.backendPlugins.execute](...args) { return this.execute(...args) }
 
   /**
    * Execute a backend plugin by ID. Exposed as an extension point so

@@ -11,7 +11,8 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlButton, SlButtonGroup, SlDropdown, UIPart } from '../ui.js'
- * @import { documentActionsPart } from './document-actions.js'
+ * @import { documentActionsPart } from '../templates/document-action-buttons.types.js'
+ * @import { toolbarMenuPart } from '../templates/toolbar-menu-button.types.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  * @import { toolsGroupPart } from './tools.js'
@@ -24,20 +25,6 @@ import ep from '../extension-points.js'
 
 // Register template
 await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html')
-
-//
-// UI Parts
-//
-
-/**
- * Toolbar menu dropdown structure
- * @typedef {object} toolbarMenuPart
- * @property {SlButton} menuBtn - The menu trigger button
- * @property {object} menu - The menu container
- * @property {import('../ui.js').SlMenuItem} [menu.infoMenuItem] - Info/manual menu item (added by info plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.logoutMenuItem] - Logout menu item (added by user-account plugin)
- */
 
 /**
  * The main toolbar navigation properties.
@@ -62,6 +49,11 @@ class ToolbarPlugin extends Plugin {
     super(context, { name: 'toolbar', deps: ['logger'] })
   }
 
+  get #logger() { return this.getDependency('logger') }
+
+  /** @type {SlDropdown & toolbarMenuPart} */
+  #menuUi = null
+
   /** @type {number} */
   #openDropdownCount = 0
 
@@ -74,16 +66,16 @@ class ToolbarPlugin extends Plugin {
    */
   async install(state) {
     await super.install(state)
-    const logger = this.getDependency('logger')
-    logger.debug(`Installing plugin "toolbar"`)
+    this.#logger.debug(`Installing plugin "toolbar"`)
 
     // Create toolbar menu early so dependent plugins can add menu items during their install phase
     const menuElement = createSingleFromTemplate('toolbar-menu-button')
+    this.#menuUi = this.createUi(menuElement)
     // Add to toolbar at beginning (will be moved to end in start phase)
     ui.toolbar.insertAdjacentElement('afterbegin', menuElement)
     updateUi()
 
-    logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
+    this.#logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
   }
 
   /**
@@ -93,8 +85,7 @@ class ToolbarPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async start() {
-    const logger = this.getDependency('logger')
-    logger.debug(`Starting plugin "toolbar"`)
+    this.#logger.debug(`Starting plugin "toolbar"`)
 
     // Collect toolbar content items from all plugins
     const contentResults = await this.context.invokePluginEndpoint(
@@ -118,18 +109,18 @@ class ToolbarPlugin extends Plugin {
       if (!Array.isArray(items)) continue
       for (const { element } of items) {
         if (element instanceof HTMLElement) {
-          ui.toolbar.toolbarMenu.menu.appendChild(element)
+          this.#menuUi.menu.appendChild(element)
         }
       }
     }
 
     // Move the toolbar menu to the end of the toolbar
-    ui.toolbar.appendChild(ui.toolbar.toolbarMenu)
+    ui.toolbar.appendChild(this.#menuUi)
     updateUi()
 
     this.#initToolbarZIndexAutoFix()
 
-    logger.debug('Toolbar started: collected plugin contributions, menu moved to end')
+    this.#logger.debug('Toolbar started: collected plugin contributions, menu moved to end')
   }
 
   /**

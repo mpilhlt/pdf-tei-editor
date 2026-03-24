@@ -548,7 +548,7 @@ export class PluginManager {
   }
 
   /**
-   * Convert Plugin instance to plugin object using getEndpoints() method
+   * Convert Plugin instance to plugin object using getExtensionPoints() method
    * @param {Plugin} pluginInstance - Plugin instance to convert
    * @returns {Object} Plugin configuration object
    * @private
@@ -559,7 +559,7 @@ export class PluginManager {
       deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
     };
 
-    const getPointsFn = pluginInstance.getExtensionPoints ?? pluginInstance.getEndpoints;
+    const getPointsFn = pluginInstance.getExtensionPoints;
     if (typeof getPointsFn === 'function') {
       const endpoints = getPointsFn.call(pluginInstance);
 

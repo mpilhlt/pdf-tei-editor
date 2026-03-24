@@ -13,6 +13,7 @@ import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
 
 // Register templates
@@ -27,7 +28,9 @@ class FileSelectionPlugin extends Plugin {
     });
   }
 
-  static extensionPoints = ['filedata.loading'];
+  static extensionPoints = [ep.filedata.loading];
+
+  [ep.filedata.loading](...args) { return this.loading(...args) }
 
   // Cached dependencies
   #logger;

@@ -232,9 +232,12 @@ export class Plugin {
    * include the auto-discovered base mappings.
    *
    * @example
-   * static extensionPoints = ['validation.inProgress']
+   * // Primary pattern: computed method (conflict-free, full EP path as key)
+   * static extensionPoints = [ep.toolbar.contentItems]
    *
-   * async inProgress(promise) { ... }
+   * [ep.toolbar.contentItems]() {
+   *   return [{ element: this.#ui, priority: 8, position: 'center' }]
+   * }
    *
    * @example
    * async onXmlChange(newValue, prevValue) { ... }   // called when state.xml changes
@@ -260,14 +263,17 @@ export class Plugin {
       }
     }
 
-    // Auto-discover static extensionPoints declarations: ['ns.method', ...]
-    // Convention: the method name is the last path segment (e.g. 'validation.inProgress' → this.inProgress)
+    // Auto-discover static extensionPoints declarations.
+    // Each path must have a corresponding computed method whose key is the full path string:
+    //   [ep.toolbar.contentItems]() { return [...] }
+    // Methods with dots in their name cannot exist in standard JS, so this[path]
+    // resolves only to computed methods — no naming conflicts between EP namespaces.
     const staticPoints = /** @type {typeof Plugin} */ (this.constructor).extensionPoints;
     if (Array.isArray(staticPoints)) {
       for (const path of staticPoints) {
-        const methodName = path.split('.').pop();
-        if (methodName && typeof this[methodName] === 'function') {
-          pts[path] = this[methodName].bind(this);
+        const value = this[path];
+        if (typeof value === 'function') {
+          pts[path] = value.bind(this);
         }
       }
     }
@@ -300,14 +306,6 @@ export class Plugin {
       yield proto;
       proto = Object.getPrototypeOf(proto);
     }
-  }
-
-  /**
-   * @deprecated Use getExtensionPoints() instead.
-   * @returns {Record<string, Function>}
-   */
-  getEndpoints() {
-    return this.getExtensionPoints();
   }
 
 }

@@ -114,6 +114,10 @@ const extensionPoints = {
      */
     syncFiles: "sync.syncFiles"
   },
+  backendPlugins: {
+    /** Execute a backend plugin by ID. Function signature: (pluginId, endpointName, params) => void */
+    execute: 'backend-plugins.execute'
+  },
   toolbar: {
     /**
      * Contribute static items to the main toolbar.

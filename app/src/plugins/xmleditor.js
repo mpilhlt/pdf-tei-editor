@@ -31,6 +31,7 @@ import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import Plugin from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -93,7 +94,9 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  */
 
 class XmlEditorPlugin extends Plugin {
-  static extensionPoints = ['validation.inProgress'];
+  static extensionPoints = [ep.validation.inProgress];
+
+  [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   /** @param {PluginContext} context */
   constructor(context) {

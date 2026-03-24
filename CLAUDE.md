@@ -20,6 +20,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Class Dependencies](docs/development/class-dependencies.md)** - FastAPI dependency injection system, available dependencies
 - **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
 - **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
+- **[Plugin Communication](docs/code-assistant/plugin-communication.md)** - Inter-plugin communication: state propagation, extension points, getDependency
 - **[Plugin Migration Guide](docs/code-assistant/plugin-migration-guide.md)** - Migrating frontend plugins from object-based to class-based architecture
 - **[CI/CD Pipeline](docs/development/ci-cd-pipeline.md)** - GitHub Actions workflows, test execution, release process
 - **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
