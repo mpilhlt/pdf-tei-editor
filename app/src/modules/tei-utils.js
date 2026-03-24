@@ -1,3 +1,7 @@
+/**
+ * @registerModule
+ */
+
 import { xml } from "@codemirror/lang-xml";
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
@@ -615,7 +619,8 @@ export function getDocumentMetadata(xmlDoc) {
   const namespaceResolver = (prefix) => {
     /** @type {Record<string, string>} */
     const namespaces = {
-      'tei': 'http://www.tei-c.org/ns/1.0'
+      'tei': 'http://www.tei-c.org/ns/1.0',
+      'xml': 'http://www.w3.org/XML/1998/namespace'
     };
     return namespaces[prefix] || null;
   };

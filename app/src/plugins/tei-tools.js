@@ -4,10 +4,8 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
- * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
- * @import SlDrawer from '@shoelace-style/shoelace/dist/components/drawer/drawer.js'
  * @import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 /**
@@ -19,25 +17,19 @@
  * @property {SlButton} closeBtn - The close button
  */
 
+import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
-import { logger } from '../app.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { api as xmlEditor } from './xmleditor.js'
+import { api as xmlEditorApi } from './xmleditor.js'
 
 // Register templates
 await registerTemplate('tei-tools-statusbar', 'tei-tools-statusbar.html')
 await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-drawer.html')
 
 /**
- * Current state for use in event handlers
- * @type {ApplicationState}
- */
-let currentState
-
-/**
  * Get teiHeader visibility preference from localStorage
- * @returns {boolean} Header visibility enabled state (defaults to false - folded)
+ * @returns {boolean}
  */
 function getTeiHeaderVisibilityPreference() {
   const stored = localStorage.getItem('tei-tools.teiHeaderVisible')
@@ -46,290 +38,10 @@ function getTeiHeaderVisibilityPreference() {
 
 /**
  * Set teiHeader visibility preference in localStorage
- * @param {boolean} visible - Whether the header should be visible
+ * @param {boolean} visible
  */
 function setTeiHeaderVisibilityPreference(visible) {
   localStorage.setItem('tei-tools.teiHeaderVisible', String(visible))
-}
-
-/**
- * teiHeader visibility state (initialized from localStorage)
- * @type {boolean}
- */
-let teiHeaderVisible = getTeiHeaderVisibilityPreference()
-
-/**
- * Plugin object
- */
-const plugin = {
-  name: "tei-tools",
-  deps: ['xmleditor'],
-  install,
-  start,
-  onStateUpdate
-}
-
-export { plugin }
-export default plugin
-
-/**
- * Runs when the main app starts
- * @param {ApplicationState} state
- */
-async function install(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
-
-  // Create statusbar widgets and add to XML editor statusbar
-  const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
-  statusbarWidgets.forEach(widget => {
-    if (widget instanceof HTMLElement) {
-      ui.xmlEditor.statusbar.add(widget, 'left', 2)
-    }
-  })
-
-  // Create revision history button and add to XML editor toolbar (right side)
-  const revisionHistoryBtn = PanelUtils.createButton({
-    icon: 'clock-history',
-    tooltip: 'Show revision history',
-    name: 'revisionHistoryBtn'
-  })
-  revisionHistoryBtn.style.display = 'none'
-  ui.xmlEditor.toolbar.add(revisionHistoryBtn, 1) // Priority 1 = rightmost
-
-  // Create revision history drawer
-  createFromTemplate('tei-revision-history-drawer', document.body)
-
-  // Update UI to register the drawer in the ui object
-  updateUi()
-
-  // Listen to xmlEditor events
-  xmlEditor.on("editorAfterLoad", () => {
-    xmlEditor.whenReady().then(() => {
-      updateTeiHeaderToggle()
-      updateRevisionHistoryButton()
-    })
-  })
-}
-
-/**
- * Runs after all plugins are installed to set up event handlers
- * @param {ApplicationState} state
- */
-async function start(state) {
-  logger.debug(`Starting plugin "${plugin.name}"`)
-
-  // Set up event listeners (after updateUi() has been called)
-
-  // teiHeader toggle switch
-  ui.xmlEditor.statusbar.teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
-    const isChecked = event.target.checked
-    toggleTeiHeaderVisibility(isChecked)
-  })
-
-  // Revision history button
-  ui.xmlEditor.toolbar.revisionHistoryBtn.addEventListener('widget-click', () => {
-    showRevisionHistory()
-  })
-
-  // Revision history drawer close button
-  ui.teiRevisionHistoryDrawer.closeBtn.addEventListener('click', () => {
-    ui.teiRevisionHistoryDrawer.hide()
-  })
-}
-
-/**
- * Called when state updates
- * @param {string[]} changedKeys
- * @param {ApplicationState} state
- */
-async function onStateUpdate(changedKeys, state) {
-  currentState = state
-
-  // Keep Header switch visible but disable when no document is loaded
-  const hasDocument = !!state.xml
-  ui.xmlEditor.statusbar.teiHeaderToggleWidget.disabled = !hasDocument
-  ui.xmlEditor.statusbar.teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
-
-  // Hide revision history button when no document
-  if (!hasDocument) {
-    ui.xmlEditor.toolbar.revisionHistoryBtn.style.display = 'none'
-  }
-}
-
-/**
- * Updates the teiHeader toggle widget visibility and state
- */
-function updateTeiHeaderToggle() {
-  const teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
-  const teiHeaderLabel = ui.xmlEditor.statusbar.teiHeaderLabel
-
-  // Check if document has a teiHeader
-  const hasTeiHeader = !!xmlEditor.getDomNodeByXpath("//tei:teiHeader")
-
-  // Enable/disable based on whether document has teiHeader
-  teiHeaderToggleWidget.disabled = !hasTeiHeader
-  teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
-
-  if (hasTeiHeader) {
-    // Apply user's preference for teiHeader visibility
-    const preferredVisible = getTeiHeaderVisibilityPreference()
-    try {
-      if (preferredVisible) {
-        xmlEditor.unfoldByXpath('//tei:teiHeader')
-        teiHeaderVisible = true
-      } else {
-        xmlEditor.foldByXpath('//tei:teiHeader')
-        teiHeaderVisible = false
-      }
-      teiHeaderToggleWidget.checked = preferredVisible
-    } catch (error) {
-      logger.debug(`Error setting teiHeader visibility: ${String(error)}`)
-    }
-  }
-}
-
-/**
- * Updates the revision history button visibility
- */
-function updateRevisionHistoryButton() {
-  const revisionHistoryBtn = ui.xmlEditor.toolbar.revisionHistoryBtn
-
-  // Check if document has a revisionDesc
-  const hasRevisionDesc = !!xmlEditor.getDomNodeByXpath("//tei:revisionDesc")
-
-  if (hasRevisionDesc) {
-    revisionHistoryBtn.style.display = 'inline-flex'
-  } else {
-    revisionHistoryBtn.style.display = 'none'
-  }
-}
-
-/**
- * Toggles the visibility of the teiHeader node
- * @param {boolean} show - Whether to show or hide the teiHeader
- */
-function toggleTeiHeaderVisibility(show) {
-  if (!xmlEditor.isReady()) return
-
-  try {
-    if (show) {
-      // Unfold the teiHeader and scroll it into view
-      xmlEditor.unfoldByXpath('//tei:teiHeader')
-      xmlEditor.selectByXpath('//tei:teiHeader')
-      teiHeaderVisible = true
-      logger.debug('Unfolded teiHeader')
-    } else {
-      // Fold the teiHeader
-      xmlEditor.foldByXpath('//tei:teiHeader')
-      teiHeaderVisible = false
-      logger.debug('Folded teiHeader')
-    }
-    // Persist the preference
-    setTeiHeaderVisibilityPreference(show)
-  } catch (error) {
-    logger.warn(`Error toggling teiHeader visibility: ${String(error)}`)
-  }
-}
-
-/**
- * Shows the revision history drawer with data from revisionDesc
- */
-function showRevisionHistory() {
-  if (!xmlEditor.isReady()) return
-
-  const xmlTree = xmlEditor.getXmlTree()
-  if (!xmlTree) {
-    logger.warn('No XML tree available')
-    return
-  }
-
-  // Get all change elements from revisionDesc
-  const changeNodes = Array.from(xmlTree.querySelectorAll('revisionDesc change'))
-
-  if (changeNodes.length === 0) {
-    logger.debug('No revision history found')
-    return
-  }
-
-  // Sort by date descending (newest first)
-  changeNodes.sort((a, b) => {
-    const dateA = a.getAttribute('when') || ''
-    const dateB = b.getAttribute('when') || ''
-    return dateB.localeCompare(dateA) // Descending order
-  })
-
-  // Get respStmt entries for looking up full names
-  const respStmtMap = buildRespStmtMap(xmlTree)
-
-  // Clear existing table rows
-  const tbody = ui.teiRevisionHistoryDrawer.revisionTable.revisionTableBody
-  tbody.innerHTML = ''
-
-  // Build table rows from change elements
-  changeNodes.forEach((changeNode, index) => {
-    const row = document.createElement('tr')
-    row.style.borderBottom = '1px solid var(--sl-color-neutral-100)'
-
-    // Alternate row background
-    if (index % 2 === 1) {
-      row.style.backgroundColor = 'var(--sl-color-neutral-50)'
-    }
-
-    // Hover effect
-    row.addEventListener('mouseenter', () => {
-      row.style.backgroundColor = 'var(--sl-color-neutral-100)'
-    })
-    row.addEventListener('mouseleave', () => {
-      if (index % 2 === 1) {
-        row.style.backgroundColor = 'var(--sl-color-neutral-50)'
-      } else {
-        row.style.backgroundColor = ''
-      }
-    })
-
-    const cellStyle = 'padding: 0.75rem 1rem; color: var(--sl-color-neutral-700);'
-
-    // Date column
-    const dateCell = document.createElement('td')
-    dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: nowrap;'
-    const whenAttr = changeNode.getAttribute('when')
-    dateCell.textContent = formatDate(whenAttr)
-    row.appendChild(dateCell)
-
-    // Description column
-    const descCell = document.createElement('td')
-    descCell.style.cssText = cellStyle
-    const descNode = changeNode.querySelector('desc')
-    descCell.textContent = descNode ? descNode.textContent.trim() : ''
-    row.appendChild(descCell)
-
-    // Status column
-    const statusCell = document.createElement('td')
-    statusCell.style.cssText = cellStyle + ' text-transform: capitalize;'
-    const statusAttr = changeNode.getAttribute('status')
-    if (statusAttr) {
-      statusCell.textContent = statusAttr
-      // Add a subtle badge-like background for status
-      statusCell.style.fontWeight = '500'
-      statusCell.style.color = 'var(--sl-color-primary-600)'
-    }
-    row.appendChild(statusCell)
-
-    // Who column
-    const whoCell = document.createElement('td')
-    whoCell.style.cssText = cellStyle
-    const whoAttr = changeNode.getAttribute('who')
-    if (whoAttr) {
-      const whoId = whoAttr.replace('#', '')
-      whoCell.textContent = respStmtMap[whoId] || whoAttr
-    }
-    row.appendChild(whoCell)
-
-    tbody.appendChild(row)
-  })
-
-  // Show the drawer
-  ui.teiRevisionHistoryDrawer.show()
 }
 
 /**
@@ -340,7 +52,6 @@ function showRevisionHistory() {
 function buildRespStmtMap(xmlTree) {
   const map = {}
   const persNameNodes = xmlTree.querySelectorAll('respStmt persName[xml\\:id]')
-
   persNameNodes.forEach(node => {
     const xmlId = node.getAttribute('xml:id')
     const fullName = node.textContent.trim()
@@ -348,41 +59,229 @@ function buildRespStmtMap(xmlTree) {
       map[xmlId] = fullName
     }
   })
-
   return map
 }
 
-/**
- * Formats a date string to YYYY-MM-DD HH:mm:SS format
- * @param {string|null} dateStr
- * @returns {string}
- */
-function formatDate(dateStr) {
-  if (!dateStr) return ''
+class TeiToolsPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'tei-tools', deps: ['xmleditor', 'logger'] })
+  }
 
-  try {
-    const date = new Date(dateStr)
+  /** @param {ApplicationState} _state */
+  async install(_state) {
+    await super.install(_state)
+    this.getDependency('logger').debug(`Installing plugin "tei-tools"`)
 
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      // Return as-is if it's just a date without time
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return `${dateStr} 00:00:00`
+    const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
+    statusbarWidgets.forEach(widget => {
+      if (widget instanceof HTMLElement) {
+        ui.xmlEditor.statusbar.add(widget, 'left', 2)
       }
-      return dateStr
+    })
+
+    const revisionHistoryBtn = PanelUtils.createButton({
+      icon: 'clock-history',
+      tooltip: 'Show revision history',
+      name: 'revisionHistoryBtn'
+    })
+    revisionHistoryBtn.style.display = 'none'
+    ui.xmlEditor.toolbar.add(revisionHistoryBtn, 1)
+
+    createFromTemplate('tei-revision-history-drawer', document.body)
+    updateUi()
+
+    xmlEditorApi.on('editorAfterLoad', () => {
+      xmlEditorApi.whenReady().then(() => {
+        this.#updateTeiHeaderToggle()
+        this.#updateRevisionHistoryButton()
+      })
+    })
+  }
+
+  /** @param {ApplicationState} _state */
+  async start(_state) {
+    this.getDependency('logger').debug(`Starting plugin "tei-tools"`)
+
+    ui.xmlEditor.statusbar.teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
+      const isChecked = event.target.checked
+      this.#toggleTeiHeaderVisibility(isChecked)
+    })
+
+    ui.xmlEditor.toolbar.revisionHistoryBtn.addEventListener('widget-click', () => {
+      this.#showRevisionHistory()
+    })
+
+    ui.teiRevisionHistoryDrawer.closeBtn.addEventListener('click', () => {
+      ui.teiRevisionHistoryDrawer.hide()
+    })
+  }
+
+  async onStateUpdate(_changedKeys) {
+    const hasDocument = !!this.state.xml
+    ui.xmlEditor.statusbar.teiHeaderToggleWidget.disabled = !hasDocument
+    ui.xmlEditor.statusbar.teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
+
+    if (!hasDocument) {
+      ui.xmlEditor.toolbar.revisionHistoryBtn.style.display = 'none'
+    }
+  }
+
+  #updateTeiHeaderToggle() {
+    const teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
+    const teiHeaderLabel = ui.xmlEditor.statusbar.teiHeaderLabel
+    const hasTeiHeader = !!xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
+
+    teiHeaderToggleWidget.disabled = !hasTeiHeader
+    teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
+
+    if (hasTeiHeader) {
+      const preferredVisible = getTeiHeaderVisibilityPreference()
+      try {
+        if (preferredVisible) {
+          xmlEditorApi.unfoldByXpath('//tei:teiHeader')
+        } else {
+          xmlEditorApi.foldByXpath('//tei:teiHeader')
+        }
+        teiHeaderToggleWidget.checked = preferredVisible
+      } catch (error) {
+        this.getDependency('logger').debug(`Error setting teiHeader visibility: ${String(error)}`)
+      }
+    }
+  }
+
+  #updateRevisionHistoryButton() {
+    const revisionHistoryBtn = ui.xmlEditor.toolbar.revisionHistoryBtn
+    const hasRevisionDesc = !!xmlEditorApi.getDomNodeByXpath('//tei:revisionDesc')
+    revisionHistoryBtn.style.display = hasRevisionDesc ? 'inline-flex' : 'none'
+  }
+
+  /**
+   * @param {boolean} show
+   */
+  #toggleTeiHeaderVisibility(show) {
+    if (!xmlEditorApi.isReady()) return
+    try {
+      if (show) {
+        xmlEditorApi.unfoldByXpath('//tei:teiHeader')
+        xmlEditorApi.selectByXpath('//tei:teiHeader')
+        this.getDependency('logger').debug('Unfolded teiHeader')
+      } else {
+        xmlEditorApi.foldByXpath('//tei:teiHeader')
+        this.getDependency('logger').debug('Folded teiHeader')
+      }
+      setTeiHeaderVisibilityPreference(show)
+    } catch (error) {
+      this.getDependency('logger').warn(`Error toggling teiHeader visibility: ${String(error)}`)
+    }
+  }
+
+  #showRevisionHistory() {
+    if (!xmlEditorApi.isReady()) return
+    const xmlTree = xmlEditorApi.getXmlTree()
+    if (!xmlTree) {
+      this.getDependency('logger').warn('No XML tree available')
+      return
     }
 
-    // Format as YYYY-MM-DD HH:mm:SS
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    const seconds = String(date.getSeconds()).padStart(2, '0')
+    const changeNodes = Array.from(xmlTree.querySelectorAll('revisionDesc change'))
+    if (changeNodes.length === 0) {
+      this.getDependency('logger').debug('No revision history found')
+      return
+    }
 
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-  } catch (error) {
-    logger.debug(`Error formatting date: ${String(error)}`)
-    return dateStr
+    changeNodes.sort((a, b) => {
+      const dateA = a.getAttribute('when') || ''
+      const dateB = b.getAttribute('when') || ''
+      return dateB.localeCompare(dateA)
+    })
+
+    const respStmtMap = buildRespStmtMap(xmlTree)
+    const tbody = ui.teiRevisionHistoryDrawer.revisionTable.revisionTableBody
+    tbody.innerHTML = ''
+
+    changeNodes.forEach((changeNode, index) => {
+      const row = document.createElement('tr')
+      row.style.borderBottom = '1px solid var(--sl-color-neutral-100)'
+
+      if (index % 2 === 1) {
+        row.style.backgroundColor = 'var(--sl-color-neutral-50)'
+      }
+
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = 'var(--sl-color-neutral-100)'
+      })
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = index % 2 === 1 ? 'var(--sl-color-neutral-50)' : ''
+      })
+
+      const cellStyle = 'padding: 0.75rem 1rem; color: var(--sl-color-neutral-700);'
+
+      const dateCell = document.createElement('td')
+      dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: nowrap;'
+      dateCell.textContent = this.#formatDate(changeNode.getAttribute('when'))
+      row.appendChild(dateCell)
+
+      const descCell = document.createElement('td')
+      descCell.style.cssText = cellStyle
+      const descNode = changeNode.querySelector('desc')
+      descCell.textContent = descNode ? descNode.textContent.trim() : ''
+      row.appendChild(descCell)
+
+      const statusCell = document.createElement('td')
+      statusCell.style.cssText = cellStyle + ' text-transform: capitalize;'
+      const statusAttr = changeNode.getAttribute('status')
+      if (statusAttr) {
+        statusCell.textContent = statusAttr
+        statusCell.style.fontWeight = '500'
+        statusCell.style.color = 'var(--sl-color-primary-600)'
+      }
+      row.appendChild(statusCell)
+
+      const whoCell = document.createElement('td')
+      whoCell.style.cssText = cellStyle
+      const whoAttr = changeNode.getAttribute('who')
+      if (whoAttr) {
+        const whoId = whoAttr.replace('#', '')
+        whoCell.textContent = respStmtMap[whoId] || whoAttr
+      }
+      row.appendChild(whoCell)
+
+      tbody.appendChild(row)
+    })
+
+    ui.teiRevisionHistoryDrawer.show()
+  }
+
+  /**
+   * Formats a date string to YYYY-MM-DD HH:mm:SS format
+   * @param {string|null} dateStr
+   * @returns {string}
+   */
+  #formatDate(dateStr) {
+    if (!dateStr) return ''
+    try {
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          return `${dateStr} 00:00:00`
+        }
+        return dateStr
+      }
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      const seconds = String(date.getSeconds()).padStart(2, '0')
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    } catch (error) {
+      this.getDependency('logger').debug(`Error formatting date: ${String(error)}`)
+      return dateStr
+    }
   }
 }
+
+export default TeiToolsPlugin
+
+export const plugin = TeiToolsPlugin

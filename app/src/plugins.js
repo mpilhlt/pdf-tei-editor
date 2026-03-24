@@ -1,6 +1,6 @@
 /**
  * Plugin imports and configuration
- * 
+ *
  * This file contains all plugin imports and exports for the PDF-TEI-Editor application.
  * It provides the plugins array for registration and individual plugin APIs for backward compatibility.
  */
@@ -10,44 +10,45 @@
  * @import {PluginConfig} from './modules/plugin-manager.js'
  */
 
-// class-based plugins
-import AuthenticationPlugin from './plugins/authentication.js'
-import BackendPluginsPlugin from './plugins/backend-plugins.js'
-import FiledataPlugin from './plugins/filedata.js'
-import HelpPlugin from './plugins/help.js'
-import LoggerPlugin from './plugins/logger.js'
-import { logLevel} from './plugins/logger.js'
-import UserAccountPlugin from './plugins/user-account.js'
-import XslViewerPlugin from './plugins/xsl-viewer.js'
+// class-based plugins (imported via plugin-registry.js)
+import {
+  AccessControlPlugin,
+  AnnotationGuidePlugin,
+  AuthenticationPlugin,
+  BackendPluginsPlugin,
+  ClientPlugin,
+  ConfigEditorPlugin,
+  ConfigPlugin,
+  DialogPlugin,
+  DocumentActionsPlugin,
+  ExtractionPlugin,
+  FiledataPlugin,
+  FileSelectionDrawerPlugin,
+  FileSelectionPlugin,
+  HeartbeatPlugin,
+  InfoPlugin,
+  MoveFilesPlugin,
+  PdfViewerPlugin,
+  PromptEditorPlugin,
+  RbacManagerPlugin,
+  ServicesPlugin,
+  StartPlugin,
+  TeiToolsPlugin,
+  TeiWizardPlugin,
+  ToolbarPlugin,
+  ToolsPlugin,
+  XmlEditorPlugin,
+  HelpPlugin,
+  LoggerPlugin,
+  ProgressPlugin,
+  SsePlugin,
+  TeiValidationPlugin,
+  UrlHashStatePlugin,
+  UserAccountPlugin,
+  XslViewerPlugin,
+} from './plugin-registry.js'
 
-// object-based plugins
-import { plugin as configPlugin, api as config } from './plugins/config.js'
-import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
-import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
-import { plugin as progressPlugin, api as progress } from './plugins/progress.js'
-import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
-import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
-import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
-import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
-import { plugin as clientPlugin, api as client } from './plugins/client.js'
-import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
-import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
-import { plugin as documentActionsPlugin, api as documentActions } from './plugins/document-actions.js'
-import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
-import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
-import { plugin as teiToolsPlugin } from './plugins/tei-tools.js'
-import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
-import { plugin as annotationGuidePlugin, api as annotationGuide } from './plugins/annotation-guide.js'
-import { plugin as moveFilesPlugin } from './plugins/move-files.js'
-import { plugin as startPlugin } from './plugins/start.js'
-import { plugin as toolbarPlugin } from './plugins/toolbar.js'
-import { plugin as toolsPlugin } from './plugins/tools.js'
-import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
-import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
-import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
-import { plugin as configEditorPlugin } from './plugins/config-editor.js'
+
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
@@ -55,82 +56,46 @@ const plugins = [
   AuthenticationPlugin,
   BackendPluginsPlugin,
   LoggerPlugin,
-
-  // modules with config object
-  urlHashStatePlugin,
-  clientPlugin,
-  configPlugin,
-  dialogPlugin,
-  toolbarPlugin,
-  toolsPlugin,
+  UrlHashStatePlugin,
+  ClientPlugin,
+  ConfigPlugin,
+  DialogPlugin,
+  ToolbarPlugin,
+  ToolsPlugin,
 
   // Help plugin (must come before info plugin which depends on it)
   HelpPlugin,
 
   // Toolbar menu items (order matters - determines menu item order)
-  infoPlugin,          // User Manual (first)
-  annotationGuidePlugin, // Annotation Guide
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Tools menu — Administration section (admin only, order determines item order)
   FiledataPlugin,      // Garbage Collection
-  rbacManagerPlugin,   // Manage Users & Roles
-  configEditorPlugin,  // Configuration Editor
+  RbacManagerPlugin,   // Manage Users & Roles
+  ConfigEditorPlugin,  // Configuration Editor
 
   // Other plugins
-  pdfViewerPlugin,
-  xmlEditorPlugin,
+  InfoPlugin,          // User Manual (first)
+  AnnotationGuidePlugin, // Annotation Guide
+  PdfViewerPlugin,
+  XmlEditorPlugin,
   XslViewerPlugin,
-  teiToolsPlugin,
-  fileselectionPlugin,
-  fileSelectionDrawerPlugin,
-  documentActionsPlugin,
-  servicesPlugin,
-  extractionPlugin,
-  promptEditorPlugin,
-  teiWizardPlugin,
-  validationPlugin,
-  moveFilesPlugin,
-  ssePlugin,
-  progressPlugin,
-  accessControlPlugin,
-  heartbeatPlugin,
-  startPlugin
+  TeiToolsPlugin,
+  FileSelectionPlugin,
+  FileSelectionDrawerPlugin,
+  DocumentActionsPlugin,
+  ServicesPlugin,
+  ExtractionPlugin,
+  PromptEditorPlugin,
+  TeiWizardPlugin,
+  TeiValidationPlugin,
+  MoveFilesPlugin,
+  SsePlugin,
+  ProgressPlugin,
+  AccessControlPlugin,
+  HeartbeatPlugin,
+  StartPlugin
 ]
 
 // Export plugins array as default
 export default plugins
-
-// Export individual plugin APIs for backward compatibility
-export {
-  // class-based plugins
-  AuthenticationPlugin,
-  HelpPlugin,
-  UserAccountPlugin,
-  LoggerPlugin,
-
-  // object plugin APIs
-  logLevel,
-  config,
-  urlHash,
-  sse,
-  dialog, 
-  pdfViewer, 
-  xmlEditor, 
-  validation,
-  client,
-  fileselection,
-  fileSelectionDrawer,
-  extraction,
-  documentActions,
-  services,
-  promptEditor,
-  appInfo,
-  annotationGuide,
-  accessControl,
-  heartbeat,
-  progress
-}
-
-// Export Plugin classes for getInstance() access
-export { FiledataPlugin, XslViewerPlugin };

@@ -6,14 +6,15 @@
  */
 
 /**
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { SlButton, SlDialog } from '../ui.js'
+ * @import { ToolsPlugin } from './tools.js'
  */
 
+import { Plugin } from '../modules/plugin-base.js'
 import ui from '../ui.js'
-import { logger, client } from '../app.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { api as tools } from './tools.js'
 import { getEntitySchema, getEntityTypes } from '../modules/rbac/entity-schemas.js'
 import { renderEntityForm, extractFormData, displayFormErrors, clearFormErrors } from '../modules/rbac/form-renderer.js'
 import { createEntityManagers } from '../modules/rbac/entity-manager.js'
@@ -45,17 +46,6 @@ import { notify } from '../modules/sl-utils.js'
  * @property {SlButton} closeBtn - Close dialog button
  */
 
-const plugin = {
-  name: 'rbac-manager',
-  install,
-  start,
-  state: { update },
-  deps: ['client', 'toolbar', 'tools']
-}
-
-export { plugin }
-export default plugin
-
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
 await registerTemplate('rbac-manager-menu-item', 'rbac-manager-menu-item.html')
@@ -69,475 +59,407 @@ await registerTemplate('rbac-manager-menu-item', 'rbac-manager-menu-item.html')
 // <sl-icon name="check"></sl-icon>
 // <sl-icon name="trash"></sl-icon>
 
-// Plugin state
-/** @type {HTMLElement | null} */
-let menuItem = null
-
-/** @type {Record<string, import('../modules/rbac/entity-manager.js').EntityManager>} */
-let entityManagers = {}
-
-/** @type {string} */
-let currentEntityType = 'user'
-
-/** @type {string | null} */
-let selectedEntityId = null
-
-/** @type {boolean} */
-let isNewEntity = false
-
-/** @type {Record<string, any[]>} */
-let optionsData = {}
-
-/**
- * @param {ApplicationState} state
- */
-async function install(_state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
-
-  createSingleFromTemplate('rbac-manager-dialog', document.body)
-  entityManagers = createEntityManagers(client.apiClient)
-  setupDialogListeners()
-}
-
-async function start() {
-  menuItem = createSingleFromTemplate('rbac-manager-menu-item')
-  tools.addMenuItems([menuItem], 'administration')
-  menuItem.addEventListener('click', openDialog)
-  menuItem.style.display = 'none'
-}
-
-/**
- * @param {ApplicationState} state
- */
-async function update(state) {
-  if (menuItem) {
-    menuItem.style.display = userIsAdmin(state.user) ? '' : 'none'
-  }
-}
-
-/**
- * Set up dialog event listeners
- */
-function setupDialogListeners() {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
-
-  // Close dialog
-  dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
-
-  // Tab navigation
-  dialog.querySelector('[name="tabUser"]').addEventListener('click', () => switchTab('user'))
-  dialog.querySelector('[name="tabGroup"]').addEventListener('click', () => switchTab('group'))
-  dialog.querySelector('[name="tabRole"]').addEventListener('click', () => switchTab('role'))
-  dialog.querySelector('[name="tabCollection"]').addEventListener('click', () => switchTab('collection'))
-
-  // Add entity button
-  dialog.querySelector('[name="addEntityBtn"]').addEventListener('click', createNewEntity)
-
-  // Save button
-  dialog.querySelector('[name="saveBtn"]').addEventListener('click', saveEntity)
-
-  // Delete button
-  dialog.querySelector('[name="deleteBtn"]').addEventListener('click', deleteEntity)
-
-  // Search input
-  dialog.querySelector('[name="searchInput"]').addEventListener('input', handleSearch)
-}
-
-/**
- * Open the RBAC manager dialog
- */
-async function openDialog() {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
-
-  try {
-    // Load all entity data
-    await loadAllEntities()
-
-    // Show dialog
-    dialog.show()
-
-    // Switch to default tab (users)
-    await switchTab('user')
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error(`Failed to open RBAC manager: ${errorMessage}`)
-    notify('Failed to load RBAC data', 'danger')
-  }
-}
-
-/**
- * Load all entities from server
- */
-async function loadAllEntities() {
-  const promises = []
-
-  for (const entityType of getEntityTypes()) {
-    promises.push(
-      entityManagers[entityType].loadAll().catch(err => {
-        const errorMessage = err instanceof Error ? err.message : String(err)
-        logger.warn(`Failed to load ${entityType}s: ${errorMessage}`)
-        return []
-      })
-    )
+class RbacManagerPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'rbac-manager', deps: ['client', 'toolbar', 'tools', 'logger'] })
   }
 
-  await Promise.all(promises)
+  /** @type {HTMLElement | null} */
+  #menuItem = null
 
-  // Build options data for multiselect fields
-  optionsData = {
-    user: entityManagers.user.getAll(),
-    group: entityManagers.group.getAll(),
-    role: entityManagers.role.getAll(),
-    collection: entityManagers.collection.getAll()
+  /** @type {Record<string, import('../modules/rbac/entity-manager.js').EntityManager>} */
+  #entityManagers = {}
+
+  /** @type {string} */
+  #currentEntityType = 'user'
+
+  /** @type {string | null} */
+  #selectedEntityId = null
+
+  /** @type {boolean} */
+  #isNewEntity = false
+
+  /** @type {Record<string, any[]>} */
+  #optionsData = {}
+
+  /**
+   * @param {ApplicationState} _state
+   */
+  async install(_state) {
+    await super.install(_state)
+    const logger = this.getDependency('logger')
+    logger.debug(`Installing plugin "rbac-manager"`)
+
+    createSingleFromTemplate('rbac-manager-dialog', document.body)
+    this.#entityManagers = createEntityManagers(this.getDependency('client').apiClient)
+    this.#setupDialogListeners()
   }
-}
 
-/**
- * Switch to a different entity type tab
- * @param {string} entityType
- */
-async function switchTab(entityType) {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
+  async start() {
+    this.#menuItem = createSingleFromTemplate('rbac-manager-menu-item')
+    this.getDependency('tools').addMenuItems([this.#menuItem], 'administration')
+    this.#menuItem.addEventListener('click', () => this.#openDialog())
+    this.#menuItem.style.display = userIsAdmin(this.state.user) ? '' : 'none'
+  }
 
-  currentEntityType = entityType
-  selectedEntityId = null
-  isNewEntity = false
-
-  // Update tab button states
-  const tabs = dialog.querySelectorAll('[name^="tab"]')
-  tabs.forEach(tab => {
-    if (tab.dataset.entityType === entityType) {
-      tab.variant = 'primary'
-    } else {
-      tab.variant = 'default'
+  /**
+   * @param {any} newUser
+   */
+  async onUserChange(newUser) {
+    if (this.#menuItem) {
+      this.#menuItem.style.display = userIsAdmin(newUser) ? '' : 'none'
     }
-  })
+  }
 
-  // Update entity list
-  renderEntityList()
+  /** Set up dialog event listeners */
+  #setupDialogListeners() {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-  // Clear form
-  showEmptyState()
-}
+    dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
 
-/**
- * Render the entity list for current entity type
- * @param {string} [searchTerm] - Optional search term to filter list
- */
-function renderEntityList(searchTerm = '') {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    dialog.querySelector('[name="tabUser"]').addEventListener('click', () => this.#switchTab('user'))
+    dialog.querySelector('[name="tabGroup"]').addEventListener('click', () => this.#switchTab('group'))
+    dialog.querySelector('[name="tabRole"]').addEventListener('click', () => this.#switchTab('role'))
+    dialog.querySelector('[name="tabCollection"]').addEventListener('click', () => this.#switchTab('collection'))
 
-  const schema = getEntitySchema(currentEntityType)
-  if (!schema) return
+    dialog.querySelector('[name="addEntityBtn"]').addEventListener('click', () => this.#createNewEntity())
+    dialog.querySelector('[name="saveBtn"]').addEventListener('click', () => this.#saveEntity())
+    dialog.querySelector('[name="deleteBtn"]').addEventListener('click', () => this.#deleteEntity())
+    dialog.querySelector('[name="searchInput"]').addEventListener('input', e => this.#handleSearch(e))
+  }
 
-  // Update list title
-  dialog.querySelector('[name="entityListTitle"]').textContent = schema.label
+  /** Open the RBAC manager dialog */
+  async #openDialog() {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-  // Get entities
-  let entities = entityManagers[currentEntityType].getAll()
+    try {
+      await this.#loadAllEntities()
+      dialog.show()
+      await this.#switchTab('user')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.getDependency('logger').error(`Failed to open RBAC manager: ${errorMessage}`)
+      notify('Failed to load RBAC data', 'danger')
+    }
+  }
 
-  // Apply search filter if provided
-  if (searchTerm) {
-    const term = searchTerm.toLowerCase()
-    entities = entities.filter(entity => {
-      const idValue = entity[schema.idField]
-      const nameValue = entity.name || entity.roleName || entity.fullname || ''
-      return (
-        idValue?.toLowerCase().includes(term) ||
-        nameValue?.toLowerCase().includes(term)
+  /** Load all entities from server */
+  async #loadAllEntities() {
+    const promises = []
+
+    for (const entityType of getEntityTypes()) {
+      promises.push(
+        this.#entityManagers[entityType].loadAll().catch(err => {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          this.getDependency('logger').warn(`Failed to load ${entityType}s: ${errorMessage}`)
+          return []
+        })
       )
-    })
-  }
-
-  // Clear list
-  const entityListEl = dialog.querySelector('[name="entityList"]')
-  entityListEl.innerHTML = ''
-
-  // Render entity items
-  if (entities.length === 0) {
-    const emptyMessage = document.createElement('div')
-    emptyMessage.style.color = 'var(--sl-color-neutral-500)'
-    emptyMessage.style.fontStyle = 'italic'
-    emptyMessage.style.padding = '1rem'
-    emptyMessage.textContent = searchTerm ? 'No matches found' : `No ${schema.label.toLowerCase()} available`
-    entityListEl.appendChild(emptyMessage)
-    return
-  }
-
-  entities.forEach(entity => {
-    const item = document.createElement('div')
-    item.className = 'entity-list-item'
-    item.style.padding = '0.5rem'
-    item.style.cursor = 'pointer'
-    item.style.borderRadius = 'var(--sl-border-radius-small)'
-    item.style.marginBottom = '0.25rem'
-    item.dataset.entityId = entity[schema.idField]
-
-    // Highlight selected item
-    if (selectedEntityId === entity[schema.idField]) {
-      item.style.backgroundColor = 'var(--sl-color-primary-100)'
     }
 
-    // Item content
-    const idSpan = document.createElement('div')
-    idSpan.style.fontWeight = '600'
-    idSpan.style.fontSize = '0.875rem'
-    idSpan.textContent = entity[schema.idField]
+    await Promise.all(promises)
 
-    const nameSpan = document.createElement('div')
-    nameSpan.style.fontSize = '0.75rem'
-    nameSpan.style.color = 'var(--sl-color-neutral-600)'
-    nameSpan.textContent = entity.name || entity.roleName || entity.fullname || ''
-
-    item.appendChild(idSpan)
-    if (nameSpan.textContent) {
-      item.appendChild(nameSpan)
-    }
-
-    // Hover effect
-    item.addEventListener('mouseenter', () => {
-      if (selectedEntityId !== entity[schema.idField]) {
-        item.style.backgroundColor = 'var(--sl-color-neutral-100)'
-      }
-    })
-    item.addEventListener('mouseleave', () => {
-      if (selectedEntityId !== entity[schema.idField]) {
-        item.style.backgroundColor = ''
-      }
-    })
-
-    // Click to select
-    item.addEventListener('click', () => selectEntity(entity[schema.idField]))
-
-    entityListEl.appendChild(item)
-  })
-}
-
-/**
- * Select an entity from the list
- * @param {string} entityId
- */
-function selectEntity(entityId) {
-  selectedEntityId = entityId
-  isNewEntity = false
-
-  // Refresh list to update highlighting
-  renderEntityList()
-
-  // Show entity form
-  showEntityForm()
-}
-
-/**
- * Create a new entity
- */
-function createNewEntity() {
-  selectedEntityId = null
-  isNewEntity = true
-
-  // Show entity form for new entity
-  showEntityForm()
-}
-
-/**
- * Show the entity form for selected or new entity
- */
-function showEntityForm() {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
-
-  const schema = getEntitySchema(currentEntityType)
-  if (!schema) return
-
-  const formContainer = dialog.querySelector('[name="formContainer"]')
-
-  // Hide empty state if it exists
-  const emptyState = formContainer.querySelector('[name="emptyState"]')
-  if (emptyState) {
-    emptyState.style.display = 'none'
-  }
-
-  // Remove any existing forms
-  const existingForms = formContainer.querySelectorAll('form')
-  existingForms.forEach(form => form.remove())
-
-  // Update form title
-  const formTitle = dialog.querySelector('[name="formTitle"]')
-  if (isNewEntity) {
-    formTitle.textContent = `New ${schema.singularLabel}`
-  } else {
-    formTitle.textContent = `Edit ${schema.singularLabel}: ${selectedEntityId}`
-  }
-
-  // Enable action buttons
-  dialog.querySelector('[name="saveBtn"]').disabled = false
-  dialog.querySelector('[name="deleteBtn"]').disabled = isNewEntity // Can't delete new entity
-
-  // Get entity data
-  let entityData = {}
-  if (!isNewEntity && selectedEntityId) {
-    const entity = entityManagers[currentEntityType].findById(selectedEntityId)
-    if (entity) {
-      entityData = { ...entity }
+    this.#optionsData = {
+      user: this.#entityManagers.user.getAll(),
+      group: this.#entityManagers.group.getAll(),
+      role: this.#entityManagers.role.getAll(),
+      collection: this.#entityManagers.collection.getAll()
     }
   }
 
-  // Render form
-  const form = renderEntityForm(currentEntityType, entityData, optionsData, isNewEntity)
-  formContainer.appendChild(form)
-}
+  /**
+   * Switch to a different entity type tab
+   * @param {string} entityType
+   */
+  async #switchTab(entityType) {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-/**
- * Show empty state (no entity selected)
- */
-function showEmptyState() {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    this.#currentEntityType = entityType
+    this.#selectedEntityId = null
+    this.#isNewEntity = false
 
-  const formContainer = dialog.querySelector('[name="formContainer"]')
+    const tabs = dialog.querySelectorAll('[name^="tab"]')
+    tabs.forEach(tab => {
+      if (tab.dataset.entityType === entityType) {
+        tab.variant = 'primary'
+      } else {
+        tab.variant = 'default'
+      }
+    })
 
-  // Get or create empty state element
-  let emptyState = formContainer.querySelector('[name="emptyState"]')
-  if (!emptyState) {
-    // Re-create empty state if it was removed
-    emptyState = document.createElement('div')
-    emptyState.setAttribute('name', 'emptyState')
-    emptyState.style.display = 'flex'
-    emptyState.style.flexDirection = 'column'
-    emptyState.style.alignItems = 'center'
-    emptyState.style.justifyContent = 'center'
-    emptyState.style.height = '100%'
-    emptyState.style.color = 'var(--sl-color-neutral-500)'
-    emptyState.innerHTML = `
-      <sl-icon name="inbox" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
-      <p style="margin: 0;">Select an item from the list or create a new one</p>
-    `
-    formContainer.appendChild(emptyState)
-  } else {
-    emptyState.style.display = 'flex'
+    this.#renderEntityList()
+    this.#showEmptyState()
   }
 
-  // Remove any form elements
-  const forms = formContainer.querySelectorAll('form')
-  forms.forEach(form => form.remove())
+  /**
+   * Render the entity list for current entity type
+   * @param {string} [searchTerm]
+   */
+  #renderEntityList(searchTerm = '') {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-  // Update UI state
-  dialog.querySelector('[name="formTitle"]').textContent = 'Select an item'
-  dialog.querySelector('[name="saveBtn"]').disabled = true
-  dialog.querySelector('[name="deleteBtn"]').disabled = true
-}
+    const schema = getEntitySchema(this.#currentEntityType)
+    if (!schema) return
 
-/**
- * Save entity (create or update)
- */
-async function saveEntity() {
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    dialog.querySelector('[name="entityListTitle"]').textContent = schema.label
 
-  const form = dialog.querySelector('[name="formContainer"]').querySelector('form')
-  if (!form) return
+    let entities = this.#entityManagers[this.#currentEntityType].getAll()
 
-  try {
-    // Extract form data
-    const data = extractFormData(form)
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      entities = entities.filter(entity => {
+        const idValue = entity[schema.idField]
+        const nameValue = entity.name || entity.roleName || entity.fullname || ''
+        return (
+          idValue?.toLowerCase().includes(term) ||
+          nameValue?.toLowerCase().includes(term)
+        )
+      })
+    }
 
-    // Clear previous errors
-    clearFormErrors(form)
+    const entityListEl = dialog.querySelector('[name="entityList"]')
+    entityListEl.innerHTML = ''
 
-    if (isNewEntity) {
-      // Create new entity
-      await entityManagers[currentEntityType].create(data)
-      notify(`${getEntitySchema(currentEntityType)?.singularLabel} created successfully`, 'success')
+    if (entities.length === 0) {
+      const emptyMessage = document.createElement('div')
+      emptyMessage.style.color = 'var(--sl-color-neutral-500)'
+      emptyMessage.style.fontStyle = 'italic'
+      emptyMessage.style.padding = '1rem'
+      emptyMessage.textContent = searchTerm ? 'No matches found' : `No ${schema.label.toLowerCase()} available`
+      entityListEl.appendChild(emptyMessage)
+      return
+    }
 
-      // Refresh options data
-      await loadAllEntities()
+    entities.forEach(entity => {
+      const item = document.createElement('div')
+      item.className = 'entity-list-item'
+      item.style.padding = '0.5rem'
+      item.style.cursor = 'pointer'
+      item.style.borderRadius = 'var(--sl-border-radius-small)'
+      item.style.marginBottom = '0.25rem'
+      item.dataset.entityId = entity[schema.idField]
 
-      // Select the newly created entity
-      const schema = getEntitySchema(currentEntityType)
-      if (schema) {
-        selectedEntityId = data[schema.idField]
-        isNewEntity = false
+      if (this.#selectedEntityId === entity[schema.idField]) {
+        item.style.backgroundColor = 'var(--sl-color-primary-100)'
       }
+
+      const idSpan = document.createElement('div')
+      idSpan.style.fontWeight = '600'
+      idSpan.style.fontSize = '0.875rem'
+      idSpan.textContent = entity[schema.idField]
+
+      const nameSpan = document.createElement('div')
+      nameSpan.style.fontSize = '0.75rem'
+      nameSpan.style.color = 'var(--sl-color-neutral-600)'
+      nameSpan.textContent = entity.name || entity.roleName || entity.fullname || ''
+
+      item.appendChild(idSpan)
+      if (nameSpan.textContent) {
+        item.appendChild(nameSpan)
+      }
+
+      item.addEventListener('mouseenter', () => {
+        if (this.#selectedEntityId !== entity[schema.idField]) {
+          item.style.backgroundColor = 'var(--sl-color-neutral-100)'
+        }
+      })
+      item.addEventListener('mouseleave', () => {
+        if (this.#selectedEntityId !== entity[schema.idField]) {
+          item.style.backgroundColor = ''
+        }
+      })
+
+      item.addEventListener('click', () => this.#selectEntity(entity[schema.idField]))
+
+      entityListEl.appendChild(item)
+    })
+  }
+
+  /**
+   * Select an entity from the list
+   * @param {string} entityId
+   */
+  #selectEntity(entityId) {
+    this.#selectedEntityId = entityId
+    this.#isNewEntity = false
+    this.#renderEntityList()
+    this.#showEntityForm()
+  }
+
+  /** Create a new entity */
+  #createNewEntity() {
+    this.#selectedEntityId = null
+    this.#isNewEntity = true
+    this.#showEntityForm()
+  }
+
+  /** Show the entity form for selected or new entity */
+  #showEntityForm() {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+
+    const schema = getEntitySchema(this.#currentEntityType)
+    if (!schema) return
+
+    const formContainer = dialog.querySelector('[name="formContainer"]')
+
+    const emptyState = formContainer.querySelector('[name="emptyState"]')
+    if (emptyState) {
+      emptyState.style.display = 'none'
+    }
+
+    const existingForms = formContainer.querySelectorAll('form')
+    existingForms.forEach(form => form.remove())
+
+    const formTitle = dialog.querySelector('[name="formTitle"]')
+    if (this.#isNewEntity) {
+      formTitle.textContent = `New ${schema.singularLabel}`
     } else {
-      // Update existing entity
-      if (selectedEntityId) {
-        await entityManagers[currentEntityType].update(selectedEntityId, data)
-        notify(`${getEntitySchema(currentEntityType)?.singularLabel} updated successfully`, 'success')
+      formTitle.textContent = `Edit ${schema.singularLabel}: ${this.#selectedEntityId}`
+    }
 
-        // Refresh options data
-        await loadAllEntities()
+    dialog.querySelector('[name="saveBtn"]').disabled = false
+    dialog.querySelector('[name="deleteBtn"]').disabled = this.#isNewEntity
+
+    let entityData = {}
+    if (!this.#isNewEntity && this.#selectedEntityId) {
+      const entity = this.#entityManagers[this.#currentEntityType].findById(this.#selectedEntityId)
+      if (entity) {
+        entityData = { ...entity }
       }
     }
 
-    // Refresh list
-    renderEntityList()
+    const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
+    formContainer.appendChild(form)
+  }
 
-    // Refresh form to show updated data
-    showEntityForm()
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error(`Failed to save entity: ${errorMessage}`)
+  /** Show empty state (no entity selected) */
+  #showEmptyState() {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-    // Show validation errors
-    if (error instanceof Error && error.message.startsWith('Validation failed:')) {
-      const errors = error.message.replace('Validation failed: ', '').split(', ')
-      displayFormErrors(form, errors)
-      notify(`Failed to save ${getEntitySchema(currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
+    const formContainer = dialog.querySelector('[name="formContainer"]')
+
+    let emptyState = formContainer.querySelector('[name="emptyState"]')
+    if (!emptyState) {
+      emptyState = document.createElement('div')
+      emptyState.setAttribute('name', 'emptyState')
+      emptyState.style.display = 'flex'
+      emptyState.style.flexDirection = 'column'
+      emptyState.style.alignItems = 'center'
+      emptyState.style.justifyContent = 'center'
+      emptyState.style.height = '100%'
+      emptyState.style.color = 'var(--sl-color-neutral-500)'
+      emptyState.innerHTML = `
+        <sl-icon name="inbox" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
+        <p style="margin: 0;">Select an item from the list or create a new one</p>
+      `
+      formContainer.appendChild(emptyState)
     } else {
-      displayFormErrors(form, [errorMessage])
-      notify(`Failed to save ${getEntitySchema(currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
+      emptyState.style.display = 'flex'
+    }
+
+    const forms = formContainer.querySelectorAll('form')
+    forms.forEach(form => form.remove())
+
+    dialog.querySelector('[name="formTitle"]').textContent = 'Select an item'
+    dialog.querySelector('[name="saveBtn"]').disabled = true
+    dialog.querySelector('[name="deleteBtn"]').disabled = true
+  }
+
+  /** Save entity (create or update) */
+  async #saveEntity() {
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+
+    const form = dialog.querySelector('[name="formContainer"]').querySelector('form')
+    if (!form) return
+
+    try {
+      const data = extractFormData(form)
+      clearFormErrors(form)
+
+      if (this.#isNewEntity) {
+        await this.#entityManagers[this.#currentEntityType].create(data)
+        notify(`${getEntitySchema(this.#currentEntityType)?.singularLabel} created successfully`, 'success')
+
+        await this.#loadAllEntities()
+
+        const schema = getEntitySchema(this.#currentEntityType)
+        if (schema) {
+          this.#selectedEntityId = data[schema.idField]
+          this.#isNewEntity = false
+        }
+      } else {
+        if (this.#selectedEntityId) {
+          await this.#entityManagers[this.#currentEntityType].update(this.#selectedEntityId, data)
+          notify(`${getEntitySchema(this.#currentEntityType)?.singularLabel} updated successfully`, 'success')
+
+          await this.#loadAllEntities()
+        }
+      }
+
+      this.#renderEntityList()
+      this.#showEntityForm()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.getDependency('logger').error(`Failed to save entity: ${errorMessage}`)
+
+      if (error instanceof Error && error.message.startsWith('Validation failed:')) {
+        const errors = error.message.replace('Validation failed: ', '').split(', ')
+        displayFormErrors(form, errors)
+        notify(`Failed to save ${getEntitySchema(this.#currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
+      } else {
+        displayFormErrors(form, [errorMessage])
+        notify(`Failed to save ${getEntitySchema(this.#currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
+      }
     }
   }
-}
 
-/**
- * Delete selected entity
- */
-async function deleteEntity() {
-  if (!selectedEntityId || isNewEntity) return
+  /** Delete selected entity */
+  async #deleteEntity() {
+    if (!this.#selectedEntityId || this.#isNewEntity) return
 
-  /** @type {rbacManagerDialogPart & SlDialog} */
-  const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    /** @type {rbacManagerDialogPart & SlDialog} */
+    const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-  const schema = getEntitySchema(currentEntityType)
-  if (!schema) return
+    const schema = getEntitySchema(this.#currentEntityType)
+    if (!schema) return
 
-  // Confirm deletion
-  const confirmed = confirm(`Are you sure you want to delete ${schema.singularLabel} "${selectedEntityId}"?`)
-  if (!confirmed) return
+    const confirmed = confirm(`Are you sure you want to delete ${schema.singularLabel} "${this.#selectedEntityId}"?`)
+    if (!confirmed) return
 
-  try {
-    await entityManagers[currentEntityType].delete(selectedEntityId)
-    notify(`${schema.singularLabel} deleted successfully`, 'success')
+    try {
+      await this.#entityManagers[this.#currentEntityType].delete(this.#selectedEntityId)
+      notify(`${schema.singularLabel} deleted successfully`, 'success')
 
-    // Refresh options data
-    await loadAllEntities()
+      await this.#loadAllEntities()
 
-    // Clear selection
-    selectedEntityId = null
-    isNewEntity = false
+      this.#selectedEntityId = null
+      this.#isNewEntity = false
 
-    // Refresh list
-    renderEntityList()
+      this.#renderEntityList()
+      this.#showEmptyState()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.getDependency('logger').error(`Failed to delete entity: ${errorMessage}`)
+      notify(`Failed to delete ${schema.singularLabel}: ${errorMessage}`, 'danger')
+    }
+  }
 
-    // Show empty state
-    showEmptyState()
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error(`Failed to delete entity: ${errorMessage}`)
-    notify(`Failed to delete ${schema.singularLabel}: ${errorMessage}`, 'danger')
+  /**
+   * Handle search input
+   * @param {Event} event
+   */
+  #handleSearch(event) {
+    const searchTerm = /** @type {HTMLInputElement} */(event.target).value
+    this.#renderEntityList(searchTerm)
   }
 }
 
-/**
- * Handle search input
- * @param {Event} event
- */
-function handleSearch(event) {
-  const searchTerm = /** @type {HTMLInputElement} */(event.target).value
-  renderEntityList(searchTerm)
-}
+export default RbacManagerPlugin

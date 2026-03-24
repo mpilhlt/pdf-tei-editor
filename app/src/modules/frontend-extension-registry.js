@@ -2,123 +2,69 @@
  * @file Frontend Extension Registration System.
  *
  * Extensions are loaded from backend plugins and integrated into the
- * application's PluginManager lifecycle.
+ * application's PluginManager lifecycle as class-based Plugin instances.
+ *
+ * Each extension is a class that extends FrontendExtensionPlugin and is
+ * delivered as an IIFE that calls window.registerFrontendExtension(ClassName).
  */
 
-import { getSandbox } from './frontend-extension-sandbox.js';
+/** @import { PluginContext } from './plugin-context.js' */
 
-/**
- * @import { FrontendExtensionSandbox } from './frontend-extension-sandbox.js'
- */
-
-/**
- * @typedef {Object} FrontendExtensionDef
- * @property {string} name - Extension name (used as plugin name)
- * @property {string} [description] - Brief description
- * @property {string[]} [deps] - Dependencies on other plugins
- * @property {string} [pluginId] - Backend plugin that provided this extension
- * @property {function(Object, FrontendExtensionSandbox): void} [install] - Install function
- * @property {function(FrontendExtensionSandbox): void} [start] - Start function
- * @property {function(string[], Object, FrontendExtensionSandbox): void} [onStateUpdate] - State update handler
- */
-
-/** @type {FrontendExtensionDef[]} */
+/** @type {Array<{ExtensionClass: Function, pluginId: string}>} */
 const registeredExtensions = [];
 
 /**
- * Register a frontend extension globally.
- * Called by dynamically loaded extension scripts.
- * @param {FrontendExtensionDef} extension
+ * Register a frontend extension class globally.
+ * Called by dynamically loaded extension IIFEs.
+ * @param {Function} ExtensionClass - Class constructor extending FrontendExtensionPlugin
+ * @param {string} [pluginId] - Backend plugin that provided this extension (for logging)
  */
-function registerFrontendExtension(extension) {
-  if (!extension.name) {
-    console.error('Invalid extension: missing name', extension);
+function registerFrontendExtension(ExtensionClass, pluginId = 'unknown') {
+  if (typeof ExtensionClass !== 'function') {
+    console.error('Invalid extension: expected a class constructor', ExtensionClass);
     return;
   }
 
-  const existingIndex = registeredExtensions.findIndex(e => e.name === extension.name);
+  const name = ExtensionClass.name;
+
+  const existingIndex = registeredExtensions.findIndex(
+    e => e.ExtensionClass === ExtensionClass
+  );
   if (existingIndex >= 0) {
-    console.warn(`Extension "${extension.name}" already registered, replacing`);
-    registeredExtensions[existingIndex] = extension;
+    console.warn(`Extension "${name}" already registered, replacing`);
+    registeredExtensions[existingIndex] = { ExtensionClass, pluginId };
     return;
   }
 
-  registeredExtensions.push(extension);
-  console.log(`Registered frontend extension: ${extension.name} (from ${extension.pluginId || 'unknown'})`);
+  registeredExtensions.push({ ExtensionClass, pluginId });
+  console.log(`Registered frontend extension: ${name} (from ${pluginId})`);
 }
 
 /**
- * Get all registered extensions
- * @returns {FrontendExtensionDef[]}
+ * Get all registered extension entries.
+ * @returns {Array<{ExtensionClass: Function, pluginId: string}>}
  */
 function getExtensions() {
   return [...registeredExtensions];
 }
 
 /**
- * Clear all registered extensions (for testing)
+ * Clear all registered extensions (for testing).
  */
 function clearExtensions() {
   registeredExtensions.length = 0;
 }
 
 /**
- * Convert a frontend extension to a PluginManager-compatible plugin object.
- * @param {FrontendExtensionDef} extension
- * @returns {Object} Plugin object for PluginManager
- */
-function wrapExtensionAsPlugin(extension) {
-  const sandbox = getSandbox();
-
-  // Standard lifecycle methods that need sandbox injection
-  const lifecycleMethods = ['install', 'start', 'onStateUpdate'];
-
-  const plugin = {
-    name: extension.name,
-    deps: extension.deps || [],
-  };
-
-  // Wrap lifecycle methods to inject sandbox as last argument
-  if (extension.install) {
-    plugin.install = (state) => extension.install(state, sandbox);
-  }
-
-  if (extension.start) {
-    plugin.start = () => extension.start(sandbox);
-  }
-
-  if (extension.onStateUpdate) {
-    plugin.onStateUpdate = (changedKeys, state) =>
-      extension.onStateUpdate(changedKeys, state, sandbox);
-  }
-
-  // Include custom endpoints with sandbox injection (supports one level of nesting)
-  for (const [key, value] of Object.entries(extension)) {
-    if (lifecycleMethods.includes(key) || key === 'name' || key === 'pluginId' || key === 'description') continue;
-    if (typeof value === 'function') {
-      plugin[key] = (...args) => value(...args, sandbox);
-    } else if (typeof value === 'object' && value !== null) {
-      plugin[key] = {};
-      for (const [nestedKey, nestedValue] of Object.entries(value)) {
-        if (typeof nestedValue === 'function') {
-          plugin[key][nestedKey] = (...args) => nestedValue(...args, sandbox);
-        }
-      }
-    }
-  }
-
-  return plugin;
-}
-
-/**
  * Load frontend extensions from the server and register them with the PluginManager.
- * Fetches the extensions bundle, executes it to register extensions via
- * window.registerFrontendExtension, then wraps and registers them as plugins.
+ * Fetches the extensions bundle, executes it (triggering window.registerFrontendExtension
+ * calls), then instantiates and registers each extension class as a Plugin.
  *
- * @param {Object} pluginManager - PluginManager instance to register extensions with
+ * @param {Object} pluginManager - PluginManager instance
+ * @param {PluginContext} context - PluginContext for instantiating Plugin subclasses
  * @returns {Promise<number>} Number of extensions registered
  */
-async function loadExtensionsFromServer(pluginManager) {
+async function loadExtensionsFromServer(pluginManager, context) {
   try {
     const response = await fetch('/api/v1/plugins/extensions.js');
     if (!response.ok) {
@@ -128,23 +74,22 @@ async function loadExtensionsFromServer(pluginManager) {
 
     const script = await response.text();
 
-    // Execute the script to register extensions via window.registerFrontendExtension
+    // Execute the bundle — each IIFE calls window.registerFrontendExtension(ClassName)
     const scriptEl = document.createElement('script');
     scriptEl.textContent = script;
     document.head.appendChild(scriptEl);
     document.head.removeChild(scriptEl);
 
-    // Get registered extensions and wrap them as plugins
-    const rawExtensions = getExtensions();
+    const extensions = getExtensions();
     let registered = 0;
 
-    for (const extension of rawExtensions) {
+    for (const { ExtensionClass, pluginId } of extensions) {
       try {
-        const extensionPlugin = wrapExtensionAsPlugin(extension);
-        pluginManager.register(extensionPlugin);
+        const instance = ExtensionClass.createInstance(context);
+        pluginManager.register(instance);
         registered++;
       } catch (error) {
-        console.error(`Failed to register extension ${extension.name}:`, error);
+        console.error(`Failed to register extension from ${pluginId}:`, error);
       }
     }
 

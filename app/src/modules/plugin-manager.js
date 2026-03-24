@@ -3,11 +3,7 @@
  * 
  * This is a reimplementation of https://www.npmjs.com/package/js-plugin with additional features,
  * designed as a superset that maintains compatibility with code written for js-plugin.
- * 
- * TODO: In the original js-plugin implementation, invocation targets are called "extension points" 
- * not "endpoints". Consider renaming methods like `invoke()` and `hasEndpoint()` to use 
- * "extensionPoint" terminology for consistency (e.g., `invokeExtensionPoint()`, `hasExtensionPoint()`).
- * 
+ *
  * ## Basic Usage Example
  * 
  * ```javascript
@@ -102,6 +98,9 @@ export class PluginManager {
     /** @type {Map<string, PluginConfig>} */
     this.pluginsByName = new Map();
 
+    /** @type {Map<string, any>} */
+    this.pluginApis = new Map();
+
     /** @type {PluginConfig[]} */
     this.registeredPlugins = [];
 
@@ -165,6 +164,16 @@ export class PluginManager {
     this.pluginsByName.set(pluginConfig.name, normalizedPlugin);
     this.registeredPlugins.push(normalizedPlugin);
 
+    // Store public API: Plugin instances use getApi() (defaults to the instance itself);
+    // object plugins use .api if present
+    if (plugin instanceof Plugin) {
+      this.pluginApis.set(pluginConfig.name, plugin.getApi());
+    } else if (pluginConfig.api !== undefined) {
+      this.pluginApis.set(pluginConfig.name, pluginConfig.api);
+    } else {
+      this.pluginApis.set(pluginConfig.name, pluginConfig);
+    }
+
     // Clear caches
     this.endpointCache.clear();
     this.dependencyOrderedPlugins = [];
@@ -195,6 +204,7 @@ export class PluginManager {
 
     // Remove from all collections
     this.pluginsByName.delete(pluginName);
+    this.pluginApis.delete(pluginName);
     this.registeredPlugins = this.registeredPlugins.filter(p => p.name !== pluginName);
 
     // Clear caches and recompute order
@@ -210,6 +220,17 @@ export class PluginManager {
    */
   getPlugin(pluginName) {
     return this.pluginsByName.get(pluginName);
+  }
+
+  /**
+   * Get the public API for a registered plugin by name.
+   * For class-based plugins this is the Plugin instance; for object plugins it is the
+   * `api` field of the plugin descriptor (or the descriptor itself as a fallback).
+   * @param {string} name - Plugin name
+   * @returns {any} The plugin's public API, or undefined if not registered
+   */
+  getDependency(name) {
+    return this.pluginApis.get(name);
   }
 
   /**
@@ -538,10 +559,9 @@ export class PluginManager {
       deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
     };
 
-    // Check if Plugin instance has getEndpoints method
-    if (typeof pluginInstance.getEndpoints === 'function') {
-      // Use explicit endpoint mapping
-      const endpoints = pluginInstance.getEndpoints();
+    const getPointsFn = pluginInstance.getExtensionPoints ?? pluginInstance.getEndpoints;
+    if (typeof getPointsFn === 'function') {
+      const endpoints = getPointsFn.call(pluginInstance);
 
       // Apply endpoint mappings to plugin object using dot notation
       for (const [endpointPath, method] of Object.entries(endpoints)) {

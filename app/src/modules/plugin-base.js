@@ -133,6 +133,17 @@ export class Plugin {
   //
 
   /**
+   * Returns the public API object for this plugin instance.
+   * By default returns `this` (the instance itself is the API).
+   * Override when the plugin wraps a separate API object and
+   * `getDependency(name)` should return that object instead of the instance.
+   * @returns {object}
+   */
+  getApi() {
+    return this;
+  }
+
+  /**
    * Read-only access to current state
    * @returns {ApplicationState|null}
    */
@@ -178,45 +189,105 @@ export class Plugin {
   }
 
   /**
-   * Get endpoint mappings for this plugin
-   * Override in subclasses to provide custom endpoint mappings.
-   * Use `...super.getEndpoints()` to include the base lifecycle endpoints.
-   * 
+   * Get the public API of another registered plugin by name.
+   * Mirrors the backend `context.get_dependency(id)` pattern.
+   * Use this instead of static imports of other plugins' APIs.
+   * @template {keyof import('../plugin-registry.js').PluginRegistryTypes} N
+   * @param {N} name - Plugin name
+   * @returns {import('../plugin-registry.js').PluginRegistryTypes[N]} The plugin's public API
+   */
+  getDependency(name) {
+    return this.context.getDependency(name);
+  }
+
+  /**
+   * Get extension point mappings for this plugin.
+   *
+   * The base implementation auto-discovers:
+   * - Standard lifecycle methods: `install`, `start`, `shutdown`, `updateInternalState`, `onStateUpdate`
+   * - Methods declared in `static extensionPoints`: each string `'ns.method'` maps to `this.method`
+   * - Per-key state handlers: methods matching `on<Key>Change` are registered as `onStateUpdate.<lowerKey>`
+   *
+   * Override in subclasses to add or replace mappings. Use `...super.getExtensionPoints()` to
+   * include the auto-discovered base mappings.
+   *
    * @example
-   * getEndpoints() {
+   * static extensionPoints = ['validation.inProgress']
+   *
+   * async inProgress(promise) { ... }
+   *
+   * @example
+   * async onXmlChange(newValue, prevValue) { ... }   // called when state.xml changes
+   *
+   * @example
+   * getExtensionPoints() {
    *   return {
-   *     ...super.getEndpoints(),
-   *     'state.update': this.handleStateUpdate.bind(this),
-   *     'validation.validate': this.validate.bind(this)
+   *     ...super.getExtensionPoints(),
+   *     'custom.action': this.handleAction.bind(this)
    *   };
    * }
-   * 
-   * @returns {Record<string, Function>} Mapping of endpoint paths to bound methods
+   *
+   * @returns {Record<string, Function>} Mapping of extension point paths to bound methods
+   */
+  getExtensionPoints() {
+    /** @type {Record<string, Function>} */
+    const pts = {};
+
+    // Standard lifecycle extension points
+    for (const name of ['install', 'ready', 'start', 'shutdown', 'updateInternalState', 'onStateUpdate']) {
+      if (typeof this[name] === 'function') {
+        pts[name] = this[name].bind(this);
+      }
+    }
+
+    // Auto-discover static extensionPoints declarations: ['ns.method', ...]
+    // Convention: the method name is the last path segment (e.g. 'validation.inProgress' → this.inProgress)
+    const staticPoints = /** @type {typeof Plugin} */ (this.constructor).extensionPoints;
+    if (Array.isArray(staticPoints)) {
+      for (const path of staticPoints) {
+        const methodName = path.split('.').pop();
+        if (methodName && typeof this[methodName] === 'function') {
+          pts[path] = this[methodName].bind(this);
+        }
+      }
+    }
+
+    // Auto-discover on<Key>Change methods → register as 'onStateUpdate.<lowerKey>'
+    const onChangeRe = /^on([A-Z][a-zA-Z]*)Change$/;
+    for (const proto of this.#prototypeChain()) {
+      for (const key of Object.getOwnPropertyNames(proto)) {
+        const match = onChangeRe.exec(key);
+        if (match && typeof this[key] === 'function') {
+          const stateKey = match[1].charAt(0).toLowerCase() + match[1].slice(1);
+          const epKey = `onStateUpdate.${stateKey}`;
+          if (!pts[epKey]) {
+            pts[epKey] = this[key].bind(this);
+          }
+        }
+      }
+    }
+
+    return pts;
+  }
+
+  /**
+   * Iterate the prototype chain from this class up to (but not including) Plugin itself.
+   * @returns {Iterable<object>}
+   */
+  * #prototypeChain() {
+    let proto = Object.getPrototypeOf(this);
+    while (proto && proto !== Plugin.prototype) {
+      yield proto;
+      proto = Object.getPrototypeOf(proto);
+    }
+  }
+
+  /**
+   * @deprecated Use getExtensionPoints() instead.
+   * @returns {Record<string, Function>}
    */
   getEndpoints() {
-    /** @type {Record<string, Function>} */
-    const endpoints = {};
-    
-    // Standard lifecycle endpoints
-    if (typeof this.install === 'function') {
-      endpoints['install'] = this.install.bind(this);
-    }
-    if (typeof this.start === 'function') {
-      endpoints['start'] = this.start.bind(this);
-    }
-    if (typeof this.shutdown === 'function') {
-      endpoints['shutdown'] = this.shutdown.bind(this);
-    }
-    
-    // New state management endpoints
-    if (typeof this.updateInternalState === 'function') {
-      endpoints['updateInternalState'] = this.updateInternalState.bind(this);
-    }
-    if (typeof this.onStateUpdate === 'function') {
-      endpoints['onStateUpdate'] = this.onStateUpdate.bind(this);
-    }
-    
-    return endpoints;
+    return this.getExtensionPoints();
   }
 
 }

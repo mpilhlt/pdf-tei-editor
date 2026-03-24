@@ -12,7 +12,6 @@
 
 import { Plugin } from '../modules/plugin-base.js';
 import ui, { updateUi } from '../ui.js';
-import { api as xmlEditor } from './xmleditor.js';
 import { notify } from '../modules/sl-utils.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import { prettyPrintNode } from '../modules/tei-utils.js';
@@ -70,6 +69,9 @@ export class XslViewerPlugin extends Plugin {
     });
   }
 
+  // Cached dependencies
+  #xmlEditor;
+
   /**
    * Get singleton instance
    * @returns {XslViewerPlugin}
@@ -123,6 +125,7 @@ export class XslViewerPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
+    this.#xmlEditor = this.getDependency('xmleditor');
 
     // Add overlay to xmlEditor container
     const overlayElement = createSingleFromTemplate('xsl-viewer-overlay');
@@ -246,7 +249,7 @@ export class XslViewerPlugin extends Plugin {
    * @returns {string|null}
    */
   getCurrentDocumentXmlns() {
-    const xmlTree = xmlEditor.getXmlTree();
+    const xmlTree = this.#xmlEditor.getXmlTree();
     if (!xmlTree || !xmlTree.documentElement) {
       return null;
     }
@@ -274,7 +277,7 @@ export class XslViewerPlugin extends Plugin {
       return;
     }
 
-    const xmlTree = xmlEditor.getXmlTree();
+    const xmlTree = this.#xmlEditor.getXmlTree();
     if (!xmlTree) {
       notify('No XML document loaded', 'warning', 'exclamation-triangle');
       return;

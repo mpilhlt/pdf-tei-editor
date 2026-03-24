@@ -1,101 +1,93 @@
 /**
- * Plugin providing an application configuration related API
- * The configuration is different from the application's state as it is stored on the server and typically 
- * changes only if explicit and relatively permanent changes to the application's behavior are intended.
- * It exposes only a public API and has no install or update lifecycle hooks 
+ * Plugin providing an application configuration API.
+ * Config is stored on the server and changes only when explicit, relatively permanent
+ * changes to the application's behavior are intended.
  */
 
-/** 
- * @import { PluginConfig } from '../modules/plugin-manager.js'
- */
+/** @import { PluginContext } from '../modules/plugin-context.js' */
 
-import { logger, client } from '../app.js';
+import Plugin from '../modules/plugin-base.js';
+
+class ConfigPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, {
+      name: 'config',
+      deps: ['client']
+    });
+    /** @type {Object<string, any>|undefined} */
+    this._configMap = undefined;
+  }
+
+  /**
+   * Fetches the configuration data from the server and updates the local map.
+   * @returns {Promise<void>}
+   */
+  async load() {
+    this.getDependency('logger').debug('Updating configuration data.');
+    this._configMap = await this.getDependency('client').getConfigData();
+  }
+
+  /**
+   * Returns all configuration as a Map.
+   * @returns {Map<string, any>}
+   */
+  toMap() {
+    return new Map(Object.entries(this._configMap));
+  }
+
+  /**
+   * Retrieves a configuration value for a given key.
+   * @param {string} key
+   * @param {any} [defaultValue] Returned if key does not exist (instead of throwing)
+   * @param {boolean} [updateFirst=false] If true, forces a server refresh first
+   * @returns {Promise<any>}
+   */
+  async get(key, defaultValue, updateFirst = false) {
+    if (!this._configMap || updateFirst) {
+      await this.load();
+    }
+    if (this._configMap === undefined) {
+      throw new Error('Configuration data has not been loaded yet');
+    }
+    if (key in this._configMap) {
+      return this._configMap[key];
+    }
+    if (defaultValue !== undefined) {
+      return defaultValue;
+    }
+    throw new TypeError(`No configuration key "${key}" exists`);
+  }
+
+  /**
+   * Sets a configuration value for a given key on the server.
+   * @param {string} key
+   * @param {any} value
+   * @returns {Promise<void>}
+   */
+  async set(key, value) {
+    // Verify key exists first
+    await this.get(key);
+    await this.getDependency('client').setConfigValue(key, value);
+  }
+}
+
+export default ConfigPlugin;
 
 /**
- * The public API of the config plugin.
+ * Lazy-proxy API for backward compatibility — delegates to the singleton instance.
+ * @deprecated Use `getDependency('config')` in plugins, or import `ConfigPlugin` directly.
  * @namespace
  */
-const api = {
-  get,
-  set,
-  load: updateConfigData,
-  /** @return {Map<string, any>} */
-  toMap: () => new Map(Object.entries(configMap))  
-}
+export const api = {
+  /** @type {ConfigPlugin['get']} */
+  get: (...args) => ConfigPlugin.getInstance().get(...args),
+  /** @type {ConfigPlugin['set']} */
+  set: (...args) => ConfigPlugin.getInstance().set(...args),
+  load: () => ConfigPlugin.getInstance().load(),
+  /** @returns {Map<string, any>} */
+  toMap: () => ConfigPlugin.getInstance().toMap(),
+};
 
-/**
- * The configuration plugin definition.
- * @type {PluginConfig}
- */
-const plugin = {
-  name: "config",
-  deps: ['client']
-}
-
-export { api, plugin }
-export default plugin
-
-/**
- * A Map-like object holding the configuration data fetched from the server.
- * @type {Object<string, any> | undefined}
- */
-let configMap;
-
-/**
- * Fetches the configuration data from the server and updates the local `configMap`.
- * @async
- * @returns {Promise<void>} A promise that resolves when the configuration is updated.
- */
-async function updateConfigData () {
-  logger.debug('Updating configuration data.')
-  configMap = await client.getConfigData()
-}
-
-/**
- * Checks if a given key exists in the configuration data and returns it value. If the key does not exist,
- * it either returns a default value if one has been passed, or throws a type error
- * @param {string} key The configuration key to check.
- * @param {string} [defaultValue] The value to return if the key does not exist
- * @throws {TypeError} If the key does not exist in the configuration and no default value hass been passed
- */
-async function _get(key, defaultValue){
-  if (configMap === undefined) {
-    throw new Error("Configuration data has not been loaded yet")
-  }
-  if (key in configMap) {
-    return configMap[key]
-  } 
-  if (defaultValue !== undefined) {
-    return defaultValue
-  }
-  throw new TypeError(`No configuration key "${key}" exists`)
-}
-
-/**
- * Retrieves a configuration value for a given key.
- * @async
- * @param {string} key The key of the configuration value to retrieve.
- * @param {any} [defaultValue] The value to return if the key does not exist
- * @param {boolean} [updateFirst=false] - If true, forces an update from the server before getting the value.
- * @returns {Promise<any>} A promise that resolves with the configuration value.
- * @throws {TypeError} If the key does not exist.
- */
-async function get(key, defaultValue, updateFirst=false) {
-  if (!configMap || updateFirst) {
-    await updateConfigData()
-  }
-  return await _get(key, defaultValue)
-}
-
-/**
- * Sets a configuration value for a given key on the server.
- * @async
- * @param {string} key The key of the configuration value to set.
- * @param {any} value The new value to set.
- * @returns {Promise<void>} A promise that resolves when the value has been set.
- * @throws {TypeError} If the key does not exist.
- */
-async function set(key, value) {
-  await _get(key) // this checks the key 
-  await client.setConfigValue(key, value)
-}
+/** @deprecated Use ConfigPlugin class directly */
+export const plugin = ConfigPlugin;

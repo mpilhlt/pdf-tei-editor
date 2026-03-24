@@ -1,3 +1,7 @@
+/**
+ * @registerModule
+ */
+
 import SlAlert from '@shoelace-style/shoelace/dist/components/alert/alert.js'
 import { escapeHtml } from './browser-utils.js';
 

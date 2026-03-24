@@ -1,254 +1,197 @@
 /**
- * This application plugin implements a dialog registered as the "diaolog" property of the app
+ * Dialog plugin providing modal dialogs for info, error, success, confirm, and prompt.
  */
 
-import { SlButton, SlDialog, registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
-import ui from '../ui.js'
-import { logger } from '../app.js'
+import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
+import ui from '../ui.js';
+import Plugin from '../modules/plugin-base.js';
 
 /**
- * @import { ApplicationState } from '../state.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlInput } from '../ui.js'
  */
 
 /**
- * @typedef {Object} dialogApi 
+ * @typedef {Object} dialogApi
  * @property {(message:string) => void} info
  * @property {(message:string) => void} error
  * @property {(message:string) => void} success
- * @property {(message:string) => Promise<boolean>} confirm
- * @property {(message:string, title:string) => Promise<string>} prompt
+ * @property {(message:string, title?:string) => Promise<boolean>} confirm
+ * @property {(message:string, title?:string, defaultValue?:string, placeholder?:string) => Promise<string|null>} prompt
  */
 
-// Plugin API
-const api = {
-  info,
-  error,
-  success,
-  confirm,
-  prompt
-}
-
-// Plugin object
-const plugin = {
-  name: "dialog",
-  install
-}
-
-export { api, plugin }
-export default plugin
-
-//
-// UI
-//
-
 /**
- * Dialog component navigation properties. The dialog element itself serves as both
- * the SlDialog DOM element and the navigation object for its descendants.
+ * Dialog component navigation properties.
  * @typedef {object} dialogPart
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlInput} promptInput
- * @property {SlButton} closeBtn
- * @property {SlButton} cancelBtn
- * @property {SlButton} confirmBtn
+ * @property {import('../ui.js').SlButton} closeBtn
+ * @property {import('../ui.js').SlButton} cancelBtn
+ * @property {import('../ui.js').SlButton} confirmBtn
  */
-
-//
-// implementation
-//
 
 // Register template at module level
 await registerTemplate('dialog-template', 'dialog.html');
 
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} app The main application
- */
-async function install(app) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
-  createSingleFromTemplate('dialog-template', document.body);
-  updateUi();
-  ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());
-}
+class DialogPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, {
+      name: 'dialog',
+      deps: []
+    });
+  }
 
-/**
- * Shows an informational dialog
- * @param {string} message 
- */
-function info(message) {
-  ui.dialog.setAttribute("label", "Information");
-  ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-  ui.dialog.message.innerHTML = message
-  ui.dialog.show()
-}
+  async install(state) {
+    await super.install(state);
+    this.getDependency('logger').debug(`Installing plugin "${this.name}"`);
+    createSingleFromTemplate('dialog-template', document.body);
+    updateUi();
+    ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());
+  }
 
-/**
- * Shows an error dialog
- * @param {string} message 
- */
-function error(message) {
-  ui.dialog.setAttribute("label", "Error");
-  ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
-  ui.dialog.message.innerHTML = message
-  ui.dialog.show()
-}
-
-/**
- * Shows a success dialog
- * @param {string} message
- */
-function success(message) {
-  ui.dialog.setAttribute("label", "Success");
-  ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
-  ui.dialog.message.innerHTML = message
-  ui.dialog.show()
-}
-
-/**
- * Shows a confirmation dialog and returns a promise that resolves to true/false
- * @param {string} message - The confirmation message
- * @param {string} [title="Confirm"] - The dialog title
- * @returns {Promise<boolean>} Promise that resolves to true if confirmed, false if cancelled
- */
-function confirm(message, title = "Confirm") {
-  return new Promise((resolve) => {
-    // Set up the dialog
-    ui.dialog.setAttribute("label", title);
-    ui.dialog.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
+  /**
+   * @param {string} message
+   */
+  info(message) {
+    ui.dialog.setAttribute('label', 'Information');
+    ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
     ui.dialog.message.innerHTML = message;
-
-    // Hide close button, show cancel/confirm buttons
-    ui.dialog.closeBtn.style.display = 'none';
-    ui.dialog.cancelBtn.style.display = '';
-    ui.dialog.confirmBtn.style.display = '';
-
-    // Set up one-time event handlers
-    const handleConfirm = () => {
-      cleanup();
-      ui.dialog.hide();
-      resolve(true);
-    };
-
-    const handleCancel = () => {
-      cleanup();
-      ui.dialog.hide();
-      resolve(false);
-    };
-
-    const handleHide = () => {
-      // If dialog is closed without clicking a button, treat as cancel
-      cleanup();
-      resolve(false);
-    };
-
-    const cleanup = () => {
-      ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
-      ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
-      ui.dialog.removeEventListener('sl-hide', handleHide);
-      // Restore normal dialog state
-      ui.dialog.closeBtn.style.display = '';
-      ui.dialog.cancelBtn.style.display = 'none';
-      ui.dialog.confirmBtn.style.display = 'none';
-    };
-
-    // Attach event listeners
-    ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
-    ui.dialog.cancelBtn.addEventListener('click', handleCancel);
-    ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
-
-    // Show the dialog
     ui.dialog.show();
-  });
+  }
+
+  /**
+   * @param {string} message
+   */
+  error(message) {
+    ui.dialog.setAttribute('label', 'Error');
+    ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
+    ui.dialog.message.innerHTML = message;
+    ui.dialog.show();
+  }
+
+  /**
+   * @param {string} message
+   */
+  success(message) {
+    ui.dialog.setAttribute('label', 'Success');
+    ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
+    ui.dialog.message.innerHTML = message;
+    ui.dialog.show();
+  }
+
+  /**
+   * @param {string} message
+   * @param {string} [title="Confirm"]
+   * @returns {Promise<boolean>}
+   */
+  confirm(message, title = 'Confirm') {
+    return new Promise((resolve) => {
+      ui.dialog.setAttribute('label', title);
+      ui.dialog.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
+      ui.dialog.message.innerHTML = message;
+
+      ui.dialog.closeBtn.style.display = 'none';
+      ui.dialog.cancelBtn.style.display = '';
+      ui.dialog.confirmBtn.style.display = '';
+
+      const handleConfirm = () => { cleanup(); ui.dialog.hide(); resolve(true); };
+      const handleCancel = () => { cleanup(); ui.dialog.hide(); resolve(false); };
+      const handleHide = () => { cleanup(); resolve(false); };
+
+      const cleanup = () => {
+        ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
+        ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
+        ui.dialog.removeEventListener('sl-hide', handleHide);
+        ui.dialog.closeBtn.style.display = '';
+        ui.dialog.cancelBtn.style.display = 'none';
+        ui.dialog.confirmBtn.style.display = 'none';
+      };
+
+      ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
+      ui.dialog.cancelBtn.addEventListener('click', handleCancel);
+      ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
+      ui.dialog.show();
+    });
+  }
+
+  /**
+   * @param {string} message
+   * @param {string} [title="Input"]
+   * @param {string} [defaultValue=""]
+   * @param {string} [placeholder=""]
+   * @returns {Promise<string|null>}
+   */
+  prompt(message, title = 'Input', defaultValue = '', placeholder = '') {
+    return new Promise((resolve) => {
+      ui.dialog.setAttribute('label', title);
+      ui.dialog.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
+      ui.dialog.message.innerHTML = message;
+
+      ui.dialog.promptInput.style.display = '';
+      ui.dialog.promptInput.value = defaultValue;
+      ui.dialog.promptInput.placeholder = placeholder;
+
+      ui.dialog.closeBtn.style.display = 'none';
+      ui.dialog.cancelBtn.style.display = '';
+      ui.dialog.confirmBtn.style.display = '';
+
+      const handleConfirm = () => {
+        const value = ui.dialog.promptInput.value.trim();
+        ui.dialog.hide();
+        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(value || null); }, { once: true });
+      };
+      const handleCancel = () => {
+        ui.dialog.hide();
+        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
+      };
+      const handleHide = () => {
+        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
+      };
+      const handleEnter = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleConfirm(); }
+      };
+
+      const cleanup = () => {
+        ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
+        ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
+        ui.dialog.removeEventListener('sl-hide', handleHide);
+        ui.dialog.promptInput.removeEventListener('keydown', handleEnter);
+        ui.dialog.closeBtn.style.display = '';
+        ui.dialog.cancelBtn.style.display = 'none';
+        ui.dialog.confirmBtn.style.display = 'none';
+        ui.dialog.promptInput.style.display = 'none';
+        ui.dialog.promptInput.value = '';
+      };
+
+      ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
+      ui.dialog.cancelBtn.addEventListener('click', handleCancel);
+      ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
+      ui.dialog.promptInput.addEventListener('keydown', handleEnter);
+      ui.dialog.show();
+      setTimeout(() => ui.dialog.promptInput.focus(), 100);
+    });
+  }
 }
+
+export default DialogPlugin;
 
 /**
- * Shows a prompt dialog with an input field and returns a promise that resolves to the entered value or null
- * @param {string} message - The prompt message
- * @param {string} [title="Input"] - The dialog title
- * @param {string} [defaultValue=""] - Default value for the input field
- * @param {string} [placeholder=""] - Placeholder text for the input field
- * @returns {Promise<string|null>} Promise that resolves to the entered value, or null if cancelled
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('dialog')` in plugins, or import `DialogPlugin` directly.
  */
-function prompt(message, title = "Input", defaultValue = "", placeholder = "") {
-  return new Promise((resolve) => {
-    // Set up the dialog
-    ui.dialog.setAttribute("label", title);
-    ui.dialog.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-    ui.dialog.message.innerHTML = message;
+export const api = new Proxy({}, {
+  get(_, prop) {
+    const instance = DialogPlugin.getInstance()
+    const value = instance[prop]
+    return typeof value === 'function' ? value.bind(instance) : value
+  },
+  set(_, prop, value) {
+    DialogPlugin.getInstance()[prop] = value
+    return true
+  }
+});
 
-    // Show and configure the input field
-    ui.dialog.promptInput.style.display = '';
-    ui.dialog.promptInput.value = defaultValue;
-    ui.dialog.promptInput.placeholder = placeholder;
-
-    // Hide close button, show cancel/confirm buttons
-    ui.dialog.closeBtn.style.display = 'none';
-    ui.dialog.cancelBtn.style.display = '';
-    ui.dialog.confirmBtn.style.display = '';
-
-    // Set up one-time event handlers
-    const handleConfirm = () => {
-      const value = ui.dialog.promptInput.value.trim();
-      ui.dialog.hide();
-      // Wait for dialog to actually close before cleaning up and resolving
-      ui.dialog.addEventListener('sl-after-hide', () => {
-        cleanup();
-        resolve(value || null);
-      }, { once: true });
-    };
-
-    const handleCancel = () => {
-      ui.dialog.hide();
-      // Wait for dialog to actually close before cleaning up and resolving
-      ui.dialog.addEventListener('sl-after-hide', () => {
-        cleanup();
-        resolve(null);
-      }, { once: true });
-    };
-
-    const handleHide = () => {
-      // If dialog is closed without clicking a button, treat as cancel
-      // Wait for dialog to actually close before cleaning up and resolving
-      ui.dialog.addEventListener('sl-after-hide', () => {
-        cleanup();
-        resolve(null);
-      }, { once: true });
-    };
-
-    const handleEnter = (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleConfirm();
-      }
-    };
-
-    const cleanup = () => {
-      ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
-      ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
-      ui.dialog.removeEventListener('sl-hide', handleHide);
-      ui.dialog.promptInput.removeEventListener('keydown', handleEnter);
-      // Restore normal dialog state
-      ui.dialog.closeBtn.style.display = '';
-      ui.dialog.cancelBtn.style.display = 'none';
-      ui.dialog.confirmBtn.style.display = 'none';
-      ui.dialog.promptInput.style.display = 'none';
-      ui.dialog.promptInput.value = '';
-    };
-
-    // Attach event listeners
-    ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
-    ui.dialog.cancelBtn.addEventListener('click', handleCancel);
-    ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
-    ui.dialog.promptInput.addEventListener('keydown', handleEnter);
-
-    // Show the dialog
-    ui.dialog.show();
-
-    // Focus the input field after a short delay to ensure the dialog is visible
-    setTimeout(() => {
-      ui.dialog.promptInput.focus();
-    }, 100);
-  });
-}
+/** @deprecated Use DialogPlugin class directly */
+export const plugin = DialogPlugin;

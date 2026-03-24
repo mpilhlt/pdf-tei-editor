@@ -9,24 +9,22 @@
 
 /** @import { ApplicationState } from './state.js' */
 
-// plugin invocation endpoints
-import ep from './endpoints.js'
-export { ep as endpoints }
-
 // plugins
-import plugins, { services } from './plugins.js'
-import { logLevel, client, config, sse, AuthenticationPlugin, HelpPlugin, LoggerPlugin, progress } from './plugins.js'
+import plugins from './plugins.js'
+import { logLevel } from './plugins/logger.js'
+import { LoggerPlugin } from './plugin-registry.js'
 import initialState from './state.js'
 
 // core application orchestration classes
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from '../../tests/e2e/tests/helpers/test-logging.js'
+import { configureTestLog, testLog } from './modules/test-log.js'
 
 // frontend extension system
 import { loadExtensionsFromServer } from './modules/frontend-extension-registry.js'
-import { initializeSandbox } from './modules/frontend-extension-sandbox.js'
+import { FrontendExtensionPlugin } from './modules/frontend-extension-plugin.js'
+import { registerModules } from './module-registry.js'
 
 //
 // Application bootstrapping
@@ -43,29 +41,25 @@ const stateManager = new StateManager();
 // Create application instance
 const app = new Application(pluginManager, stateManager)
 
-// Export app early so it's available for dynamic imports during plugin installation
-export { app }
-
 // Register plugins
 app.registerPlugins(plugins)
 
-// Initialize frontend extension sandbox with state getter, invoke function, updateState, and plugin getter
-initializeSandbox(
-  () => app.getCurrentState(),
-  (endpoint, args, options) => pluginManager.invoke(endpoint, args, options),
-  (changes) => app.updateState(changes),
-  (pluginName) => pluginManager.getPlugin(pluginName)
-)
+// Resolve plugin singletons after registration
+const client = pluginManager.getDependency('client')
+const config = pluginManager.getDependency('config')
+const services = pluginManager.getDependency('services')
+
+// Register utility modules so extensions (and other plugins) can access them via getDependency()
+registerModules(pluginManager)
+
+// Expose FrontendExtensionPlugin globally so IIFE extensions can extend it
+window.FrontendExtensionPlugin = FrontendExtensionPlugin
 
 // Load and register frontend extensions from backend plugins
-await loadExtensionsFromServer(pluginManager)
+await loadExtensionsFromServer(pluginManager, app.getPluginContext())
 
-// Create plugin API exports after plugin registration
-export const authentication = AuthenticationPlugin.getInstance()
-export const helpPlugin = HelpPlugin.getInstance()
-export const logger = LoggerPlugin.getInstance()
-
-// Set log level after registration
+// Create logger and set log level
+const logger = LoggerPlugin.getInstance()
 logger.setLogLevel(logLevel.DEBUG)
 
 // Compose initial application state from various sources
@@ -84,9 +78,9 @@ sessionState.hasInternet = serverState.hasInternet
 // Apply session state to current state
 Object.assign(state, sessionState)
 
-// Create test logger based on configuration
+// Configure test logger based on application mode
 const applicationMode = await config.get("application.mode")
-export const testLog = createTestLogger(applicationMode)
+configureTestLog(applicationMode)
 
 // URL hash params override properties 
 const allowSetFromUrl = (await config.get("state.allowSetFromUrl") || [])
@@ -130,9 +124,9 @@ if (applicationMode == 'testing' || applicationMode == 'development' ) {
   // @ts-ignore
   window.testLog = testLog;
   // @ts-ignore
-  window.sse = sse;
+  window.sse = pluginManager.getDependency('sse');
     // @ts-ignore
-  window.progress = progress;
+  window.progress = pluginManager.getDependency('progress');
 }
 // @test-end
 
@@ -142,45 +136,3 @@ await app.updateState({})
 // invoke the "start" endpoint
 await app.start()
 
-//
-// Legacy compatibility functions for old plugin system
-//
-
-/**
- * Legacy updateState function for backward compatibility with old plugins
- * Supports both old API: updateState(currentState, changes) and new API: updateState(changes)
- * @param {ApplicationState|Partial<ApplicationState>} currentStateOrChanges - The current state (old API) or changes (new API)
- * @param {Partial<ApplicationState>} [changes] - Changes to apply (old API only)
- * @returns {Promise<ApplicationState>} New state after changes applied
- * @deprecated Use app.updateState() instead
- */
-export async function updateState(currentStateOrChanges, changes) {
-  // New API: updateState(changes)
-  if (changes === undefined) {
-    return await app.updateState(currentStateOrChanges);
-  }
-  
-  // Old API: updateState(currentState, changes) - ignore currentState, use changes only
-  console.warn('updateState: Using deprecated 2-parameter API. The currentState parameter is ignored. Use updateState(changes) instead.');
-  return await app.updateState(changes);
-}
-
-/**
- * Legacy hasStateChanged function for backward compatibility with old plugins
- * @param {ApplicationState} state - The current state
- * @param {...string} propertyNames - Property names to check for changes
- * @returns {boolean} True if any of the specified properties changed
- * @deprecated Use stateManager.hasStateChanged() instead
- */
-export function hasStateChanged(state, ...propertyNames) {
-  return stateManager.hasStateChanged(state, ...propertyNames);
-}
-
-export {
-  /** @deprecated Don't use the pluginManager in plugins */
-  pluginManager
-}
-
-// Re-export all plugin APIs and plugin objects from plugins.js for import by plugins
-// TODO replace direct calls to a plugin's API with invoking endpoints
-export * from './plugins.js'

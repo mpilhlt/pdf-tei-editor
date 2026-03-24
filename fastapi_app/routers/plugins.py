@@ -126,24 +126,28 @@ async def execute_plugin(
 
 def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> str:
     """
-    Transform ES module extension to self-registering IIFE format.
+    Transform a class-based ES module extension to a self-registering IIFE.
 
-    Input (ES module):
-        export const name = "...";
-        export const deps = [...];
-        export function install(state, sandbox) { ... }
-        export function onStateUpdate(changedKeys, state, sandbox) { ... }
+    Input (ES module with a class extending FrontendExtensionPlugin):
+        export default class MyExtension extends FrontendExtensionPlugin {
+          constructor(context) {
+            super(context, { name: 'my-extension', deps: ['tools'] });
+          }
+          async install(state) { ... }
+          async onXmlChange(newXml) { ... }
+        }
 
     Output (self-registering IIFE):
+        // Frontend extension from plugin: my_plugin (my-extension.js)
         (function() {
-          const name = "...";
-          const deps = [...];
-          function install(state, sandbox) { ... }
-          function onStateUpdate(changedKeys, state, sandbox) { ... }
-          window.registerFrontendExtension({
-            name, deps, install, onStateUpdate,
-            pluginId: "..."
-          });
+          class MyExtension extends window.FrontendExtensionPlugin {
+            constructor(context) {
+              super(context, { name: 'my-extension', deps: ['tools'] });
+            }
+            async install(state) { ... }
+            async onXmlChange(newXml) { ... }
+          }
+          window.registerFrontendExtension(MyExtension, "my_plugin");
         })();
     """
     # Strip block and line comments (includes JSDoc @import annotations)
@@ -153,36 +157,32 @@ def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> 
     # Remove import statements
     content = re.sub(r"^import\s+.*?;?\s*$", "", content, flags=re.MULTILINE)
 
-    # If the content already calls window.registerFrontendExtension directly,
-    # just wrap it in an IIFE for scoping — don't add a second registration.
-    if "window.registerFrontendExtension" in content:
-        return f"""// Frontend extension from plugin: {plugin_id} ({filename})
-(function() {{
-{content.strip()}
-}})();"""
+    # Detect class-based extension
+    class_match = re.search(
+        r"export\s+default\s+class\s+(\w+)\s+extends\s+FrontendExtensionPlugin",
+        content
+    )
+    if not class_match:
+        raise ValueError(
+            f"{filename}: not a valid class-based extension "
+            f"(expected 'export default class <Name> extends FrontendExtensionPlugin')"
+        )
 
-    # Remove 'export' keywords
-    content = re.sub(r"^export\s+const\s+", "const ", content, flags=re.MULTILINE)
-    content = re.sub(r"^export\s+function\s+", "function ", content, flags=re.MULTILINE)
-    content = re.sub(r"^export\s+async\s+function\s+", "async function ", content, flags=re.MULTILINE)
-    content = re.sub(r"^export\s+default\s+.*?;\s*$", "", content, flags=re.MULTILINE)
+    class_name = class_match.group(1)
 
-    # Extract exported names for registration object
-    # Find const declarations
-    const_names = re.findall(r"^const\s+(\w+)\s*=", content, flags=re.MULTILINE)
-    # Find function declarations
-    func_names = re.findall(r"^(?:async\s+)?function\s+(\w+)\s*\(", content, flags=re.MULTILINE)
+    # Strip 'export default' before the class declaration
+    content = re.sub(r"export\s+default\s+(?=class\s)", "", content)
 
-    all_exports = const_names + func_names
-    exports_str = ", ".join(all_exports)
+    # Replace local 'extends FrontendExtensionPlugin' with the global reference
+    content = content.replace(
+        "extends FrontendExtensionPlugin",
+        "extends window.FrontendExtensionPlugin"
+    )
 
     return f"""// Frontend extension from plugin: {plugin_id} ({filename})
 (function() {{
 {content.strip()}
-window.registerFrontendExtension({{
-  {exports_str},
-  pluginId: "{plugin_id}"
-}});
+window.registerFrontendExtension({class_name}, "{plugin_id}");
 }})();"""
 
 

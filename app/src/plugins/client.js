@@ -9,13 +9,11 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { PluginConfig } from '../modules/plugin-manager.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { AuthenticationData } from './authentication.js'
  */
 
-
-
-import { logger, hasStateChanged } from '../app.js';
+import Plugin from '../modules/plugin-base.js';
 import { ApiClientV1 } from '../modules/api-client-v1.js';
 
 /**
@@ -99,18 +97,58 @@ const upload_route = api_base_url + '/files/upload'
 // Create singleton API client instance using the callApi function
 const apiClient = new ApiClientV1(callApi);
 
+
+class ClientPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, {
+      name: 'client',
+      deps: []
+    });
+  }
+
+  /** @param {ApplicationState} initialState */
+  async install(initialState) {
+    await super.install(initialState);
+    if (initialState.sessionId) {
+      sessionId = initialState.sessionId;
+      this.getDependency('logger').debug(`Initialized session id from initial state: ${sessionId}`);
+    }
+  }
+
+  /**
+   * @param {(keyof ApplicationState)[]} changedKeys
+   * @param {ApplicationState} state
+   */
+  onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('sessionId')) {
+      sessionId = state.sessionId;
+      this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
+    }
+  }
+
+  /**
+   * Returns the module-level api object so getDependency('client') returns it
+   * rather than the Plugin instance.
+   */
+  getApi() {
+    return api;
+  }
+}
+
+export default ClientPlugin;
+
 /**
- * plugin API
+ * Lazy-proxy API for backward compatibility.
+ * @deprecated Use `getDependency('client')` in plugins, or import `ClientPlugin` directly.
  */
-const api = {
-  get lastHttpStatus() {
-    return lastHttpStatus
-  },
+export const api = {
+  get lastHttpStatus() { return lastHttpStatus; },
   ApiError,
   LockedError,
   ConnectionError,
   ServerError,
-  apiClient,
+  get apiClient() { return apiClient; },
   callApi,
   getFileList,
   validateXml,
@@ -140,33 +178,10 @@ const api = {
   status,
   getBackendPlugins,
   executeBackendPlugin
-}
+};
 
-
-/**
- * component plugin
- * @type {PluginConfig}
- */
-const plugin = {
-  name: "client",
-  state: {
-    update
-  }
-}
-
-export { api, plugin }
-export default plugin
-
-/**
- * @param {ApplicationState} state 
- */
-async function update(state) {
-  if (hasStateChanged(state, 'sessionId')) {
-    sessionId = state.sessionId;
-    logger.debug(`Setting session id to ${sessionId}`)
-  }
-  return sessionId
-}
+/** @deprecated Use ClientPlugin class directly */
+export const plugin = ClientPlugin;
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -283,7 +298,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        logger.warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
+        LoggerPlugin.getInstance().warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
