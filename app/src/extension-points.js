@@ -113,6 +113,20 @@ const extensionPoints = {
      * Function signature: (state: ApplicationState) => Promise<SyncResult>
      */
     syncFiles: "sync.syncFiles"
+  },
+  toolbar: {
+    /**
+     * Contribute static items to the main toolbar.
+     * Called by ToolbarPlugin.start() on all plugins that declare this extension point.
+     * Function signature: () => Array<{element: HTMLElement, priority?: number, position?: 'left'|'center'|'right'}>
+     */
+    contentItems: "toolbar.contentItems",
+    /**
+     * Contribute static items to the main toolbar dropdown menu.
+     * Called by ToolbarPlugin.start() on all plugins that declare this extension point.
+     * Function signature: () => Array<{element: HTMLElement}>
+     */
+    menuItems: "toolbar.menuItems",
   }
 }
 

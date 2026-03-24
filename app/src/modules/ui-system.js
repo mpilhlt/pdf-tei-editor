@@ -20,6 +20,7 @@ import { updateUi } from '../ui.js';
 
 // Template registry for caching
 const templateRegistry = new Map();
+
 const isDev = new URLSearchParams(window.location.search).has('dev');
 /** @type {object} */
 let templatesJson;
@@ -251,13 +252,17 @@ export async function createHtmlElements(htmlOrFile, parentNode = null) {
  * named nodes are excluded. If duplicate names are found, the first
  * occurrence is used.
  *
- * The "data-name" attribute is useful for Shoelace components like sl-icon-button
- * that use the "name" attribute for their own purposes (e.g., icon name).
+ * `sl-icon` and `sl-icon-button` are never matched via `name` because those
+ * elements use `name` to specify the icon to display, not as a navigation label.
+ * Use `data-name` on such elements when a navigation label is needed.
  *
  * @param {Element|Document} node The starting node to search from.
  * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
  */
 function findNamedDescendants(node) {
+  // Tags that use `name` for element-specific purposes (e.g. icon identifier),
+  // not as a navigation label. Use `data-name` on these when a label is needed.
+  const skipNameAttrTags = ['sl-icon', 'sl-icon-button']
   const results = {};
 
   /**
@@ -275,10 +280,10 @@ function findNamedDescendants(node) {
       const childNode = /** @type {Element} */(currentNode.childNodes[i]);
       // Check if it's an element (important to avoid text nodes)
       if (childNode.nodeType === Node.ELEMENT_NODE) {
+        const tag = childNode.tagName?.toLowerCase()
 
-        // Support both "name" and "data-name" attributes for navigation
-        // "data-name" is useful for Shoelace components that use "name" for their own purposes
-        const nameAttribute = childNode.getAttribute("name") || childNode.getAttribute("data-name");
+        // Support both "name" and "data-name" attributes for navigation.
+        const nameAttribute = (!skipNameAttrTags.includes(tag) && childNode.getAttribute("name")) || childNode.getAttribute("data-name");
 
         if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
           // @ts-ignore

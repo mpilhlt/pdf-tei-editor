@@ -245,7 +245,7 @@ class BasePanel extends HTMLElement {
    * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer
-   * @param {InsertPosition|number|null} where - Position for insertAdjacentElement, or numeric index (0-based, negative counts from end)
+   * @param {'left'|'center'|'right'|InsertPosition|number|null} where - Positional hint ('left', 'center', 'right'), InsertPosition string, or numeric index (0-based, negative counts from end)
    * @param {HTMLElement|null} referenceElement - Reference element for positioning
    * @returns {string} The widget ID
    */
@@ -266,10 +266,14 @@ class BasePanel extends HTMLElement {
       } else {
         this.insertBefore(widget, children[index]);
       }
+    } else if (where === 'left') {
+      this.insertAdjacentElement('afterbegin', widget);
+    } else if (where === 'center' || where === 'right') {
+      this.appendChild(widget);
     } else if (where && referenceElement) {
-      referenceElement.insertAdjacentElement(where, widget);
+      referenceElement.insertAdjacentElement(/** @type {InsertPosition} */ (where), widget);
     } else if (where) {
-      this.insertAdjacentElement(where, widget);
+      this.insertAdjacentElement(/** @type {InsertPosition} */ (where), widget);
     } else {
       this.appendChild(widget);
     }
@@ -305,7 +309,7 @@ class BasePanel extends HTMLElement {
    * Add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
-   * @param {InsertPosition|number} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend') or numeric index (0-based, negative counts from end). Defaults to "beforeend"
+   * @param {'left'|'center'|'right'|InsertPosition|number} [where] - Positional hint: 'left' (start), 'center'/'right' (end), InsertPosition string, or numeric index. Defaults to "beforeend"
    */
   add(widget, priority = 0, where = "beforeend") {
     return this._addWidget(widget, priority, where);

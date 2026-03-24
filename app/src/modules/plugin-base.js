@@ -4,6 +4,8 @@
  * @import { PluginContext } from './plugin-context.js'
  */
 
+import { createNavigableElement } from './ui-system.js'
+
 /**
  * Base class for plugins that provides state management and lifecycle methods
  */
@@ -141,6 +143,24 @@ export class Plugin {
    */
   getApi() {
     return this;
+  }
+
+  /**
+   * Create a scoped navigable UI tree from a root element.
+   * Wraps createNavigableElement() so plugins can access their own DOM elements
+   * without using the global `ui` object:
+   *
+   * @example
+   * const span = createSingleFromTemplate('my-widget')
+   * this.#ui = this.createUi(span)
+   * // this.#ui.myButton, this.#ui.mySelect, …
+   *
+   * @template {Element} T
+   * @param {T} element - Root element created from a plugin template
+   * @returns {T & Record<string, any>} Element with named descendants added as properties
+   */
+  createUi(element) {
+    return createNavigableElement(element);
   }
 
   /**

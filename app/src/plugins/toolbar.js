@@ -20,6 +20,7 @@
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import ep from '../extension-points.js'
 
 // Register template
 await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html')
@@ -87,21 +88,71 @@ class ToolbarPlugin extends Plugin {
 
   /**
    * Moves toolbar menu to end of toolbar after all plugins have installed,
-   * then initialises the toolbar-wide z-index fix for all dropdowns.
+   * collects toolbar content/menu contributions from all plugins via extension
+   * points, then initialises the toolbar-wide z-index fix for all dropdowns.
    * @returns {Promise<void>}
    */
   async start() {
     const logger = this.getDependency('logger')
     logger.debug(`Starting plugin "toolbar"`)
 
+    // Collect toolbar content items from all plugins
+    const contentResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.contentItems, [], { result: 'values', throws: false }
+    )
+    for (const items of contentResults) {
+      if (!Array.isArray(items)) continue
+      for (const { element, priority = 0, position = 'center' } of items) {
+        // Skip elements already added to the toolbar during install() for backward compat
+        if (element instanceof HTMLElement && !element.isConnected) {
+          ui.toolbar.add(element, priority, position)
+        }
+      }
+    }
+
+    // Collect toolbar menu items from all plugins
+    const menuResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.menuItems, [], { result: 'values', throws: false }
+    )
+    for (const items of menuResults) {
+      if (!Array.isArray(items)) continue
+      for (const { element } of items) {
+        if (element instanceof HTMLElement) {
+          ui.toolbar.toolbarMenu.menu.appendChild(element)
+        }
+      }
+    }
+
     // Move the toolbar menu to the end of the toolbar
-    const menuElement = ui.toolbar.toolbarMenu
-    ui.toolbar.appendChild(menuElement)
+    ui.toolbar.appendChild(ui.toolbar.toolbarMenu)
     updateUi()
 
     this.#initToolbarZIndexAutoFix()
 
-    logger.debug('Toolbar menu moved to end of toolbar')
+    logger.debug('Toolbar started: collected plugin contributions, menu moved to end')
+  }
+
+  /**
+   * Add a widget to the toolbar. Use this for dynamic toolbar items
+   * that are added or removed at runtime based on application state.
+   * For static items that exist for the life of the app, use the
+   * `toolbar.contentItems` extension point instead.
+   * @param {HTMLElement} element - The widget element to add
+   * @param {number} [priority=0] - Higher priority widgets stay visible longer
+   * @param {'left'|'center'|'right'} [position='center'] - Where to insert the widget
+   * @returns {string} The widget ID
+   */
+  add(element, priority = 0, position = 'center') {
+    return ui.toolbar.add(element, priority, position)
+  }
+
+  /**
+   * Remove a widget from the toolbar by its ID.
+   * @param {string} widgetId - The ID returned by add()
+   * @returns {boolean} True if the widget was found and removed
+   */
+  remove(widgetId) {
+    return ui.toolbar.removeById(widgetId)
   }
 
   // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton, SlInput, SlDialog, SlCheckbox, SlSelect } from '../ui.js'
+ * @import { SlButton, SlInput, SlCheckbox, SlSelect } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { Artifact } from '../modules/file-data-utils.js'
  */
@@ -16,7 +16,7 @@ import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
 import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
@@ -67,10 +67,18 @@ await registerTemplate('document-action-buttons', 'document-action-buttons.html'
 await registerTemplate('save-document-dialog', 'save-document-dialog.html')
 
 class DocumentActionsPlugin extends Plugin {
+  static extensionPoints = [ep.toolbar.contentItems]
+
   /** @param {PluginContext} context */
   constructor(context) {
     super(context, { name: 'document-actions', deps: ['file-selection', 'authentication', 'access-control', 'config', 'logger', 'dialog'] })
   }
+
+  /** @type {HTMLSpanElement & Record<string, any>} */
+  #ui = null
+
+  /** @type {HTMLElement & Record<string, any>} */
+  #dialogUi = null
 
   /**
    * @param {ApplicationState} _state
@@ -79,17 +87,17 @@ class DocumentActionsPlugin extends Plugin {
     await super.install(_state)
     this.getDependency('logger').debug(`Installing plugin "document-actions"`)
 
-    const documentActionButtons = createFromTemplate('document-action-buttons')
-    createSingleFromTemplate('save-document-dialog', document.body)
-
-    documentActionButtons.forEach(buttonGroup => {
-      if (buttonGroup instanceof HTMLElement) {
-        ui.toolbar.add(buttonGroup, 8)
-      }
-    })
+    const span = createSingleFromTemplate('document-action-buttons')
+    this.#ui = this.createUi(span)
+    // Add to toolbar now so that other plugins installing after this one
+    // can access ui.toolbar.documentActions during their own install() phase.
+    ui.toolbar.add(span, 8)
     updateUi()
 
-    const da = ui.toolbar.documentActions
+    const dialog = createSingleFromTemplate('save-document-dialog', document.body)
+    this.#dialogUi = this.createUi(dialog)
+
+    const da = this.#ui.documentActions
     da.saveRevision.addEventListener('click', () => this.saveRevision())
     da.deleteCurrentVersion.addEventListener('click', () => this.deleteCurrentVersion())
     da.deleteAllVersions.addEventListener('click', () => this.deleteAllVersions())
@@ -97,11 +105,20 @@ class DocumentActionsPlugin extends Plugin {
   }
 
   /**
+   * Contribute toolbar buttons to the main toolbar.
+   * Called by ToolbarPlugin.start() via the toolbar.contentItems extension point.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  contentItems() {
+    return [{ element: this.#ui, priority: 8, position: 'center' }]
+  }
+
+  /**
    * @param {string[]} _changedKeys
    */
   async onStateUpdate(_changedKeys) {
     const state = this.state
-    const da = ui.toolbar.documentActions
+    const da = this.#ui.documentActions
 
     da.childNodes.forEach(el => {
       if (el instanceof HTMLElement && 'disabled' in el) {
@@ -303,8 +320,7 @@ class DocumentActionsPlugin extends Plugin {
    */
   async saveRevision() {
     const state = this.state
-    // @ts-ignore
-    const dlg = ui.saveDocumentDialog
+    const dlg = this.#dialogUi
     const userData = /** @type {any} */ (this.getDependency('authentication').getUser())
 
     try {
@@ -444,7 +460,7 @@ class DocumentActionsPlugin extends Plugin {
 
     const saveAsGold = dlg.options.saveAsGoldSection.saveAsGold.checked
 
-    ui.toolbar.documentActions.saveRevision.disabled = true
+    this.#ui.documentActions.saveRevision.disabled = true
     try {
       if (saveToNewCopy) {
         if (!state.xml) throw new Error('No XML file loaded')
@@ -521,7 +537,7 @@ class DocumentActionsPlugin extends Plugin {
       console.error(error)
       notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon')
     } finally {
-      ui.toolbar.documentActions.saveRevision.disabled = false
+      this.#ui.documentActions.saveRevision.disabled = false
     }
   }
 
