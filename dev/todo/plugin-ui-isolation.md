@@ -36,25 +36,28 @@ Plugins declare `static extensionPoints = [ep.toolbar.contentItems]` and impleme
 
 - **`bin/generate-ui-types.js`** — new build script; 36 type files generated from templates; deletes stale files; excludes `sl-icon`/`sl-icon-button` from navigation detection
 - **`package.json`** — added `"build:ui-types"` script
-- **`app/src/modules/plugin-base.js`** — added `createUi(element)` method
-- **`app/src/extension-points.js`** — added `toolbar.contentItems` and `toolbar.menuItems`
+- **`app/src/modules/plugin-base.js`** — added `createUi(element)` method; `getExtensionPoints()` discovers computed methods via full EP path key; removed deprecated last-segment fallback and `getEndpoints()` shim
+- **`app/src/modules/plugin-manager.js`** — removed `getEndpoints` fallback in `convertPluginInstance()`
+- **`app/src/extension-points.js`** — added `toolbar.contentItems`, `toolbar.menuItems`, `backendPlugins.execute`
 - **`app/src/modules/panels/base-panel.js`** — added `'left'|'center'|'right'` string support to `_addWidget()` `where` parameter
 - **`app/src/plugins/toolbar.js`** — `start()` collects `toolbar.contentItems`/`toolbar.menuItems` from all plugins (skips already-connected elements); added public `add()` and `remove()` methods
 - **`app/src/modules/ui-system.js`** — `findNamedDescendants()` ignores `name` attribute on `sl-icon` and `sl-icon-button` (inline check to avoid circular-import TDZ)
 - **`app/src/plugins/document-actions.js`** — pilot migration (see below)
+- **`app/src/plugins/tei-validation.js`**, **`xmleditor.js`**, **`filedata.js`**, **`file-selection.js`**, **`backend-plugins.js`** — migrated to computed method EP pattern; `static extensionPoints` now uses `ep` constants
+- **`docs/code-assistant/plugin-communication.md`** — new document on inter-plugin communication (state, extension points, `getDependency`)
 
 ---
 
 ## Pilot: document-actions.js — COMPLETE, all tests pass
 
 Changes made:
-- `static extensionPoints = [ep.toolbar.contentItems]`
+
+- `static extensionPoints = [ep.toolbar.contentItems]` with computed method `[ep.toolbar.contentItems]()` returning `[{ element: this.#ui, priority: 8, position: 'center' }]`
 - Private `#ui` (scoped navigable span) and `#dialogUi` (scoped navigable dialog)
 - `install()` calls `this.createUi(span)` and `this.createUi(dialog)`; still calls `ui.toolbar.add(span, 8)` + `updateUi()` for backward compat with `move-files` plugin which appends a button to `ui.toolbar.documentActions` in its own `install()`
-- `contentItems()` returns `[{ element: this.#ui, priority: 8, position: 'center' }]`; `toolbar.start()` skips it because it is already connected
-- All own-element accesses (`da.saveRevision`, `da.deleteBtn`, etc.) use `this.#ui.documentActions.*` instead of `ui.toolbar.documentActions.*`
+- `toolbar.start()` skips already-connected elements
+- All own-element accesses use `this.#ui.documentActions.*` instead of `ui.toolbar.documentActions.*`
 - `saveRevision()` uses `this.#dialogUi` instead of `ui.saveDocumentDialog`
-- Removed `// @ts-ignore` cast that was needed with the global `ui` approach
 
 Backward compat constraint: `move-files.js` calls `ui.toolbar.documentActions.append(this.#moveBtn)` in its `install()`. Until `move-files` is migrated, `document-actions.install()` must keep adding the element to the toolbar and calling `updateUi()`.
 
@@ -82,38 +85,49 @@ While touching any plugin file, also clean up legacy dependency access patterns:
 - Only keep a plugin in `deps` if it must be installed before this plugin's own `install()` runs. Dependencies only needed at action time (button clicks, async operations) do not belong in `deps`.
 
 **Step 1 — Identify cross-plugin `ui` accesses**
+
 - Grep: `ui\.[a-zA-Z]+\.[a-zA-Z]+` in plugin files
 - For each access to another plugin's subtree, choose replacement: state key or `getDependency()` API
 
 **Step 2 — Replace cross-plugin widget mutations with state or API**
+
 - Priority: `access-control.js` — `ui.xmlEditor.headerbar.readOnlyStatus` → add `ext.readOnlyContextText` to state, or `getDependency('xmleditor').setReadOnlyContext({text, icon})`
 
 **Step 3 — Convert static toolbar/menu additions to extension points**
 For each plugin calling `ui.toolbar.add(element)` in `install()`:
-1. Add `static extensionPoints = [ep.toolbar.contentItems]`
-2. Implement a computed property getter returning the contribution function:
 
-   ```js
-   get [ep.toolbar.contentItems]() {
-     return () => [{ element: this.#ui, priority: N, position: 'center' }]
-   }
-   ```
+1. Add `static extensionPoints = [ep.toolbar.contentItems]`
+2. Implement a computed method returning the contribution function:
+
+```javascript
+  /**
+-  * Contribute toolbar buttons to the main toolbar.
+-  * Called by ToolbarPlugin.start() via the toolbar.contentItems extension point.
+-  * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    return [{ element: this.#ui, priority: 8, position: 'center' }]
+  }
+```
 
 3. Once all plugins that depend on `ui.toolbar.<widgetName>` during install are also migrated, remove the direct `ui.toolbar.add()` + `updateUi()` from `install()`
 
 **Step 4 — Convert to scoped `this.#ui`**
+
 1. After creating element from template: `this.#ui = this.createUi(rootElement)`
 2. Replace `ui.pluginName.subElement` with `this.#ui.subElement`
 3. Remove `import ui from '../ui.js'` if no longer needed
 4. Remove `updateUi()` calls that were only needed for own-plugin element access
 
 **Step 5 — Replace hand-written typedefs with generated files**
+
 1. Run `npm run build:ui-types`
 2. Remove `@typedef` blocks in plugin files covered by generated `*.types.js`
 3. Replace `@import { xPart } from './x.js'` with `@import { xPart } from '../templates/x.types.js'`
 4. Update `app/src/ui.js` top-level typedef to import from generated files
 
 **Step 6 — Update docs and tests** (after each migration batch)
+
 - `docs/code-assistant/plugin-development.md`: replace global `ui` examples with `this.createUi()` pattern; add passive toolbar registration section
 - `docs/code-assistant/plugin-migration-guide.md`: add steps for new patterns
 - `docs/code-assistant/architecture-frontend.md`: update inter-plugin communication section with rule table from §A
