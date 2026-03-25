@@ -18,10 +18,15 @@
  * @import { toolsGroupPart } from './tools.js'
  */
 
+/**
+ * @import { PanelContribution } from '../modules/panels/base-panel.js'
+ */
+
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ep from '../extension-points.js'
+import { resolveContributions } from '../modules/panels/base-panel.js'
 
 // Register template
 await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html')
@@ -91,14 +96,12 @@ class ToolbarPlugin extends Plugin {
     const contentResults = await this.context.invokePluginEndpoint(
       ep.toolbar.contentItems, [], { result: 'values', throws: false }
     )
-    for (const items of contentResults) {
-      if (!Array.isArray(items)) continue
-      for (const { element, priority = 0, position = 'center' } of items) {
-        // Skip elements already added to the toolbar during install() for backward compat
-        if (element instanceof HTMLElement && !element.isConnected) {
-          ui.toolbar.add(element, priority, position)
-        }
-      }
+    /** @type {PanelContribution[]} */
+    const allContributions = contentResults
+      .flatMap(items => Array.isArray(items) ? items : [])
+      .filter(({ element }) => element instanceof HTMLElement && !element.isConnected)
+    for (const { element, priority = 0 } of resolveContributions(allContributions)) {
+      ui.toolbar.add(element, priority)
     }
 
     // Collect toolbar menu items from all plugins

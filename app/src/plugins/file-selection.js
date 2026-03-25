@@ -46,7 +46,7 @@ class FileSelectionPlugin extends Plugin {
    * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
    */
   [ep.toolbar.contentItems]() {
-    const priorities = { pdf: 10, xml: 10, collection: 6, variant: 5, diff: 3 }
+    const priorities = { collection: 12, variant: 11, pdf: 10, xml: 10, diff: 3 }
     return [this.#pdf, this.#xml, this.#diff, this.#variant, this.#collection]
       .filter(Boolean)
       .map(el => ({ element: el, priority: priorities[el.getAttribute('name')] || 1, position: 'center' }))

@@ -46,7 +46,7 @@ class ToolsPlugin extends Plugin {
   [ep.toolbar.contentItems]() {
     const buttonElement = createSingleFromTemplate('tools-button')
     this.#ui = this.createUi(buttonElement)
-    return [{ element: buttonElement, priority: 0, position: 'right' }]
+    return [{ element: buttonElement, priority: 0, position: "right" }]
   }
 
   /** @type {HTMLElement & toolsGroupPart} */
