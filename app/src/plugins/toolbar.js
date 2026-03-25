@@ -1,40 +1,35 @@
 /**
  * Toolbar Plugin
- * 
- * This plugin documents the toolbar component structure and will eventually
- * provide a real implementation similar to the statusbar system.
- * Currently, the toolbar is just a container div where other plugins add their controls.
+ *
+ * Creates and manages the main toolbar layout. The toolbar menu is inserted at
+ * the beginning during install() so dependent plugins can add menu items, then
+ * moved to the end in start() after all plugins have run. Also wires up a
+ * toolbar-wide z-index fix for sl-dropdown / sl-select elements.
  */
 
 /**
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlButton, SlButtonGroup, SlDropdown, UIPart } from '../ui.js'
- * @import { documentActionsPart } from './document-actions.js'
+ * @import { documentActionsPart } from '../templates/document-action-buttons.types.js'
+ * @import { toolbarMenuPart } from '../templates/toolbar-menu-button.types.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  * @import { toolsGroupPart } from './tools.js'
  */
 
-import { logger } from '../app.js'
+/**
+ * @import { PanelContribution } from '../modules/panels/base-panel.js'
+ */
+
+import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import ep from '../extension-points.js'
+import { resolveContributions } from '../modules/panels/base-panel.js'
 
 // Register template
-await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
-
-//
-// UI Parts
-//
-
-/**
- * Toolbar menu dropdown structure
- * @typedef {object} toolbarMenuPart
- * @property {SlButton} menuBtn - The menu trigger button
- * @property {object} menu - The menu container
- * @property {import('../ui.js').SlMenuItem} [menu.infoMenuItem] - Info/manual menu item (added by info plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.logoutMenuItem] - Logout menu item (added by user-account plugin)
- */
+await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html')
 
 /**
  * The main toolbar navigation properties.
@@ -53,114 +48,171 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * @property {SlButton} searchBtn - Document search button (added by document-search extension)
  */
 
-/**
- * plugin object
- */
-const plugin = {
-  name: "toolbar",
-  install,
-  start
-}
+class ToolbarPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'toolbar', deps: ['logger'] })
+  }
 
-export { plugin }
-export default plugin
+  get #logger() { return this.getDependency('logger') }
 
-//
-// Implementation
-//
+  /** @type {SlDropdown & toolbarMenuPart} */
+  #menuUi = null
 
-/**
- * @param {ApplicationState} state
- * @returns {Promise<void>}
- */
-async function install(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
+  /** @type {number} */
+  #openDropdownCount = 0
 
-  // Create toolbar menu early so dependent plugins can add menu items during their install phase
-  const menuElement = createSingleFromTemplate('toolbar-menu-button');
-  // Add to toolbar at beginning (will be moved to end in start phase)
-  ui.toolbar.insertAdjacentElement("afterbegin", menuElement);
-  updateUi();
+  /** @type {WeakSet<Element>} */
+  #zIndexFixAttached = new WeakSet()
 
-  logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
-}
+  /**
+   * @param {ApplicationState} state
+   * @returns {Promise<void>}
+   */
+  async install(state) {
+    await super.install(state)
+    this.#logger.debug(`Installing plugin "toolbar"`)
 
-/**
- * Start function - moves toolbar menu to end of toolbar after all plugins have installed,
- * then initialises the toolbar-wide z-index fix for all dropdowns.
- * @returns {Promise<void>}
- */
-async function start() {
-  logger.debug(`Starting plugin "${plugin.name}"`)
+    // Create toolbar menu early so dependent plugins can add menu items during their install phase
+    const menuElement = createSingleFromTemplate('toolbar-menu-button')
+    this.#menuUi = this.createUi(menuElement)
+    // Add to toolbar at beginning (will be moved to end in start phase)
+    ui.toolbar.insertAdjacentElement('afterbegin', menuElement)
+    updateUi()
 
-  // Move the toolbar menu to the end of the toolbar
-  const menuElement = ui.toolbar.toolbarMenu;
-  ui.toolbar.appendChild(menuElement);
-  updateUi();
+    this.#logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
+  }
 
-  _initToolbarZIndexAutoFix();
+  /**
+   * Moves toolbar menu to end of toolbar after all plugins have installed,
+   * collects toolbar content/menu contributions from all plugins via extension
+   * points, then initialises the toolbar-wide z-index fix for all dropdowns.
+   * @returns {Promise<void>}
+   */
+  async start() {
+    this.#logger.debug(`Starting plugin "toolbar"`)
 
-  logger.debug('Toolbar menu moved to end of toolbar')
-}
+    // Collect toolbar content items from all plugins
+    const contentResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.contentItems, [], { result: 'values', throws: false }
+    )
+    /** @type {PanelContribution[]} */
+    const allContributions = contentResults
+      .flatMap(items => Array.isArray(items) ? items : [])
+      .filter(({ element }) => element instanceof HTMLElement && !element.isConnected)
+    for (const { element, priority = 0 } of resolveContributions(allContributions)) {
+      ui.toolbar.add(element, priority)
+    }
 
-// ---------------------------------------------------------------------------
-// Toolbar-wide z-index fix
-//
-// sl-dropdown and sl-select elements inside tool-bar are affected by the
-// toolbar's z-index: 0 stacking context and can appear behind other content
-// when open. The fix elevates the toolbar's z-index via the `dropdown-open`
-// CSS class while any dropdown is open.
-//
-// Listening via event delegation on tool-bar does not work reliably because
-// sl-show / sl-hide events from sl-dropdown elements inside sl-button-group
-// shadow DOM slots do not bubble up consistently. Instead, listeners are
-// attached directly to each sl-dropdown / sl-select element.
-//
-// _initToolbarZIndexAutoFix() scans the toolbar once and then watches for
-// newly added elements with a MutationObserver, so every plugin's dropdowns
-// are covered automatically without any per-plugin wiring.
-// ---------------------------------------------------------------------------
-
-/** @type {number} */
-let _openDropdownCount = 0;
-
-/** @type {WeakSet<Element>} */
-const _zIndexFixAttached = new WeakSet();
-
-/**
- * Attach the z-index fix to all current and future sl-dropdown / sl-select
- * elements in the toolbar's light DOM tree.
- */
-function _initToolbarZIndexAutoFix() {
-  const toolbar = ui.toolbar;
-  toolbar.querySelectorAll('sl-dropdown, sl-select').forEach(_attachZIndexFix);
-  new MutationObserver(mutations => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
-        if (node.matches('sl-dropdown, sl-select')) _attachZIndexFix(node);
-        node.querySelectorAll('sl-dropdown, sl-select').forEach(_attachZIndexFix);
+    // Collect toolbar menu items from all plugins
+    const menuResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.menuItems, [], { result: 'values', throws: false }
+    )
+    for (const items of menuResults) {
+      if (!Array.isArray(items)) continue
+      for (const { element } of items) {
+        if (element instanceof HTMLElement) {
+          this.#menuUi.menu.appendChild(element)
+        }
       }
     }
-  }).observe(toolbar, { childList: true, subtree: true });
+
+    // Move the toolbar menu to the end of the toolbar
+    ui.toolbar.appendChild(this.#menuUi)
+    updateUi()
+
+    this.#initToolbarZIndexAutoFix()
+
+    this.#logger.debug('Toolbar started: collected plugin contributions, menu moved to end')
+  }
+
+  /**
+   * Enable or disable the toolbar menu button.
+   * @param {boolean} disabled
+   */
+  setMenuButtonDisabled(disabled) {
+    this.#menuUi.menuBtn.disabled = disabled
+  }
+
+  /**
+   * Add a widget to the toolbar. Use this for dynamic toolbar items
+   * that are added or removed at runtime based on application state.
+   * For static items that exist for the life of the app, use the
+   * `toolbar.contentItems` extension point instead.
+   * @param {HTMLElement} element - The widget element to add
+   * @param {number} [priority=0] - Higher priority widgets stay visible longer
+   * @param {'left'|'center'|'right'} [position='center'] - Where to insert the widget
+   * @returns {string} The widget ID
+   */
+  add(element, priority = 0, position = 'center') {
+    return ui.toolbar.add(element, priority, position)
+  }
+
+  /**
+   * Remove a widget from the toolbar by its ID.
+   * @param {string} widgetId - The ID returned by add()
+   * @returns {boolean} True if the widget was found and removed
+   */
+  remove(widgetId) {
+    return ui.toolbar.removeById(widgetId)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Toolbar-wide z-index fix
+  //
+  // sl-dropdown and sl-select elements inside tool-bar are affected by the
+  // toolbar's z-index: 0 stacking context and can appear behind other content
+  // when open. The fix elevates the toolbar's z-index via the `dropdown-open`
+  // CSS class while any dropdown is open.
+  //
+  // Listening via event delegation on tool-bar does not work reliably because
+  // sl-show / sl-hide events from sl-dropdown elements inside sl-button-group
+  // shadow DOM slots do not bubble up consistently. Instead, listeners are
+  // attached directly to each sl-dropdown / sl-select element.
+  //
+  // #initToolbarZIndexAutoFix() scans the toolbar once and then watches for
+  // newly added elements with a MutationObserver, so every plugin's dropdowns
+  // are covered automatically without any per-plugin wiring.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Attach the z-index fix to all current and future sl-dropdown / sl-select
+   * elements in the toolbar's light DOM tree.
+   */
+  #initToolbarZIndexAutoFix = () => {
+    const toolbar = ui.toolbar
+    toolbar.querySelectorAll('sl-dropdown, sl-select').forEach(this.#attachZIndexFix)
+    new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue
+          const el = /** @type {Element} */(node)
+          if (el.matches('sl-dropdown, sl-select')) this.#attachZIndexFix(el)
+          el.querySelectorAll('sl-dropdown, sl-select').forEach(this.#attachZIndexFix)
+        }
+      }
+    }).observe(toolbar, { childList: true, subtree: true })
+  }
+
+  /**
+   * Attach sl-show / sl-hide listeners to one element. No-op if already attached.
+   * @param {Element} element
+   */
+  #attachZIndexFix = (element) => {
+    if (this.#zIndexFixAttached.has(element)) return
+    this.#zIndexFixAttached.add(element)
+    element.addEventListener('sl-show', () => {
+      this.#openDropdownCount++
+      element.closest('tool-bar')?.classList.add('dropdown-open')
+    })
+    element.addEventListener('sl-hide', () => {
+      this.#openDropdownCount--
+      if (this.#openDropdownCount <= 0) {
+        this.#openDropdownCount = 0
+        element.closest('tool-bar')?.classList.remove('dropdown-open')
+      }
+    })
+  }
 }
 
-/**
- * Attach sl-show / sl-hide listeners to one element. No-op if already attached.
- * @param {Element} element
- */
-function _attachZIndexFix(element) {
-  if (_zIndexFixAttached.has(element)) return;
-  _zIndexFixAttached.add(element);
-  element.addEventListener('sl-show', () => {
-    _openDropdownCount++;
-    element.closest('tool-bar')?.classList.add('dropdown-open');
-  });
-  element.addEventListener('sl-hide', () => {
-    _openDropdownCount--;
-    if (_openDropdownCount <= 0) {
-      _openDropdownCount = 0;
-      element.closest('tool-bar')?.classList.remove('dropdown-open');
-    }
-  });
-}
+export default ToolbarPlugin

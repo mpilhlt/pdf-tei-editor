@@ -382,22 +382,19 @@ describe('Application', () => {
     it('should register Plugin classes by instantiating them with context', () => {
       // Create a Plugin class
       class TestPluginClass extends Plugin {
+        static extensionPoints = ['custom.customMethod'];
+
         constructor(context) {
-          super(context, { 
+          super(context, {
             name: 'test-class',
-            deps: ['dependency'] 
+            deps: ['dependency']
           });
         }
-        
+
+        ['custom.customMethod'](...args) { return this.customMethod(...args) }
+
         async customMethod() {
           return 'custom result';
-        }
-        
-        getEndpoints() {
-          return {
-            ...super.getEndpoints(),
-            'custom.method': this.customMethod.bind(this)
-          };
         }
       }
       
@@ -412,11 +409,11 @@ describe('Application', () => {
       assert.strictEqual(registered.name, 'test-class');
       assert.deepStrictEqual(registered.deps, ['dependency']);
       
-      // Should have both default and custom endpoints from getEndpoints()
+      // Should have both default and custom endpoints from getExtensionPoints()
       assert.strictEqual(typeof registered.install, 'function');
       assert.strictEqual(typeof registered.start, 'function');
       assert.strictEqual(typeof registered.shutdown, 'function');
-      assert.strictEqual(typeof registered.custom.method, 'function');
+      assert.strictEqual(typeof registered.custom.customMethod, 'function');
     });
   });
 

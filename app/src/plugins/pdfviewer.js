@@ -2,700 +2,607 @@
  * PDF Viewer Plugin
  */
 
-/** @import { ApplicationState } from '../state.js' */
-/** @import { UIPart } from '../ui.js' */
-/** @import { StatusBar } from '../modules/panels/status-bar.js' */
+/**
+ * @import { ApplicationState } from '../state.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
+ */
+
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
-import ui, { updateUi } from '../ui.js'
-import { app, logger, services, xmlEditor, hasStateChanged, client, fileselection } from '../app.js'
+import ui from '../ui.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { SessionStorage } from '../modules/session-storage.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { encodeFilename, decodeFilename } from '../modules/doi-utils.js'
-
-// Session storage for persisting viewer state per PDF
-const storage = new SessionStorage('pdfviewer')
-
-// Flag to prevent saving state during restoration
-let isRestoringState = false
+import Plugin from '../modules/plugin-base.js'
 
 //
 // UI Parts
 //
 
 /**
- * PDF viewer headerbar navigation properties
- * @typedef {object} pdfViewerHeaderbarPart
- * @property {StatusText} titleWidget - The document title widget
- * @property {StatusText} filenameWidget - The widget for displaying the filename (doc_id)
- */
-
-/**
- * PDF viewer toolbar properties
- * @typedef {object} pdfViewerToolbarPart
- * @property {HTMLElement} sidebarToggleBtn - Sidebar toggle button
- * @property {HTMLElement} textSelectBtn - Text selection tool button
- * @property {HTMLElement} handToolBtn - Hand tool button
- * @property {HTMLElement} prevPageBtn - Previous page button
- * @property {HTMLElement} nextPageBtn - Next page button
- * @property {HTMLElement} pageInfoWidget - Page info display
- * @property {HTMLElement} zoomOutBtn - Zoom out button
- * @property {HTMLElement} zoomInBtn - Zoom in button
- * @property {HTMLElement} zoomInfoWidget - Zoom level display
- * @property {HTMLElement} fitPageBtn - Fit page button
- * @property {HTMLElement} downloadBtn - Download PDF button
- */
-
-/**
- * PDF viewer statusbar navigation properties
- * @typedef {object} pdfViewerStatusbarPart
- * @property {HTMLElement} searchSwitch - The autosearch toggle switch
- */
-
-/**
  * PDF viewer navigation properties
  * @typedef {object} pdfViewerPart
- * @property {UIPart<StatusBar, pdfViewerHeaderbarPart>} headerbar - The PDF viewer headerbar
- * @property {UIPart<ToolBar, pdfViewerToolbarPart>} toolbar - The PDF viewer toolbar
- * @property {UIPart<StatusBar, pdfViewerStatusbarPart>} statusbar - The PDF viewer statusbar
+ * @property {import('../modules/panels/status-bar.js').StatusBar} headerbar
+ * @property {import('../modules/panels/tool-bar.js').ToolBar} toolbar
+ * @property {import('../modules/panels/status-bar.js').StatusBar} statusbar
  */
 
-/**
- * Expose the PDFViewer API
- * @type {PDFJSViewer}
- */
-const pdfViewer = new PDFJSViewer('pdf-viewer')
-
-// hide it until ready
-pdfViewer.hide()
-
-// Note: currentFile state tracking now handled via state.previousState instead of local variable
-/** @type {import('../state.js').ApplicationState|null} */
-let currentState = null;
-
-/** @type {StatusText} */
-let titleWidget;
-
-/** @type {StatusText} */
-let filenameWidget;
-
-/**
- * plugin object
- */
-const plugin = {
-  name: "pdfviewer",
-  install,
-  state: { update }
-}
-
-export { plugin, pdfViewer as api }
-export default plugin
-
-//
-// Implementation
-//
-
-/**
- * @param {ApplicationState} state
- * @returns {Promise<void>}
- */
-async function install(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
-  await pdfViewer.isReady()
-  logger.info("PDF Viewer ready.")
-  pdfViewer.show()
-  
-  // Add title and filename widgets to PDF viewer headerbar
-  const headerBar = ui.pdfViewer.headerbar
-  titleWidget = PanelUtils.createText({
-    text: '',
-    // <sl-icon name="file-pdf"></sl-icon>
-    icon: 'file-pdf',
-    variant: 'neutral',
-    name: 'titleWidget'
-  })
-  titleWidget.classList.add('title-widget')
-
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    titleWidget.clickable = true
-    titleWidget.dblclickable = true
-    titleWidget.tooltip = 'Click to copy, doubleclick to edit'
-    titleWidget.addEventListener('widget-click', () => {
-      const title = titleWidget.text
-      if (title) {
-        navigator.clipboard.writeText(title).then(() => {
-          notify(`Document title copied to clipboard`, 'success', 'clipboard-check')
-        }).catch(err => {
-          logger.error('Failed to copy to clipboard: ' + String(err))
-          notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
-        })
-      }
-    })
-    titleWidget.addEventListener('widget-dblclick', () => editTitle())
+class PdfViewerPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, {
+      name: 'pdfviewer',
+      deps: ['logger', 'client']
+    });
+    this.#pdfViewer = new PDFJSViewer('pdf-viewer');
+    this.#pdfViewer.hide();
   }
 
-  headerBar.add(titleWidget, 'left', 1)
+  get #logger() { return this.getDependency('logger') }
+  get #client() { return this.getDependency('client') }
 
-  filenameWidget = PanelUtils.createText({
-    text: '',
-    variant: 'neutral',
-    name: 'filenameWidget'
-  })
+  /** @type {PDFJSViewer} */
+  #pdfViewer;
+  /** @type {SessionStorage} */
+  #storage = new SessionStorage('pdfviewer');
+  #isRestoringState = false;
+  /** @type {StatusText} */
+  #titleWidget;
+  /** @type {StatusText} */
+  #filenameWidget;
+  /** @type {HTMLElement} */
+  #textSelectBtn;
+  /** @type {HTMLElement} */
+  #handToolBtn;
+  /** @type {HTMLElement} */
+  #pageInfoWidget;
+  /** @type {HTMLElement} */
+  #zoomInfoWidget;
+  /** @type {import('../modules/panels/widgets/status-switch.js').StatusSwitch|null} */
+  #autoSearchSwitch = null;
 
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    filenameWidget.clickable = true
-    filenameWidget.dblclickable = true
-    filenameWidget.tooltip = 'Click to copy, doubleclick to edit'
-    filenameWidget.addEventListener('widget-click', () => {
-      const docId = filenameWidget.text
-      if (docId) {
-        navigator.clipboard.writeText(docId).then(() => {
-          notify(`Document id '${docId}' copied to clipboard`, 'success', 'clipboard-check')
-        }).catch(err => {
-          logger.error('Failed to copy to clipboard: ' + String(err))
-          notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
-        })
-      }
-    })
-    filenameWidget.addEventListener('widget-dblclick', () => editDocId())
-  }
-
-  headerBar.add(filenameWidget, 'right', 1)
-
-  // Add PDF navigation controls to the toolbar
-  const toolbar = ui.pdfViewer.toolbar
-
-  // Sidebar toggle button
-  // <sl-icon name="layout-sidebar"></sl-icon>
-  const sidebarToggleBtn = PanelUtils.createButton({
-    icon: 'layout-sidebar',
-    tooltip: 'Toggle sidebar',
-    action: 'pdf-toggle-sidebar',
-    name: 'sidebarToggleBtn'
-  })
-  sidebarToggleBtn.addEventListener('widget-click', () => onToggleSidebar())
-  toolbar.add(sidebarToggleBtn, 110)
-
-  // Separator
-  toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 107)
-
-  // Cursor tool buttons (hand tool / text select)
-  // <sl-icon name="cursor-text"></sl-icon> for text selection
-  const textSelectBtn = PanelUtils.createButton({
-    icon: 'cursor-text',
-    tooltip: 'Text selection',
-    action: 'pdf-text-select-tool',
-    name: 'textSelectBtn',
-    variant: 'primary' // Active by default
-  })
-  textSelectBtn.addEventListener('widget-click', () => onSelectTextTool())
-  toolbar.add(textSelectBtn, 106)
-
-  // <sl-icon name="hand-index"></sl-icon> for hand tool
-  const handToolBtn = PanelUtils.createButton({
-    icon: 'hand-index',
-    tooltip: 'Hand tool (drag to pan)',
-    action: 'pdf-hand-tool',
-    name: 'handToolBtn'
-  })
-  handToolBtn.addEventListener('widget-click', () => onSelectHandTool())
-  toolbar.add(handToolBtn, 105)
-
-  // Separator
-  toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 104)
-
-  // Page navigation - left side
-  // <sl-icon name="chevron-left"></sl-icon>
-  const prevPageBtn = PanelUtils.createButton({
-    icon: 'chevron-left',
-    tooltip: 'Previous page',
-    action: 'pdf-prev-page',
-    name: 'prevPageBtn'
-  })
-  prevPageBtn.addEventListener('widget-click', () => onPageNav(-1))
-  toolbar.add(prevPageBtn, 100)
-
-  const pageInfoWidget = PanelUtils.createText({
-    text: '',
-    tooltip: 'Current page / Total pages',
-    name: 'pageInfoWidget'
-  })
-  toolbar.add(pageInfoWidget, 99)
-
-  // <sl-icon name="chevron-right"></sl-icon>
-  const nextPageBtn = PanelUtils.createButton({
-    icon: 'chevron-right',
-    tooltip: 'Next page',
-    action: 'pdf-next-page',
-    name: 'nextPageBtn'
-  })
-  nextPageBtn.addEventListener('widget-click', () => onPageNav(1))
-  toolbar.add(nextPageBtn, 98)
-
-  // Separator
-  toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 90)
-
-  // Zoom controls
-  // <sl-icon name="dash-lg"></sl-icon>
-  const zoomOutBtn = PanelUtils.createButton({
-    icon: 'dash-lg',
-    tooltip: 'Zoom out',
-    action: 'pdf-zoom-out',
-    name: 'zoomOutBtn'
-  })
-  zoomOutBtn.addEventListener('widget-click', () => onZoom(-0.1))
-  toolbar.add(zoomOutBtn, 80)
-
-  const zoomInfoWidget = PanelUtils.createText({
-    text: '100%',
-    tooltip: 'Zoom level',
-    name: 'zoomInfoWidget'
-  })
-  toolbar.add(zoomInfoWidget, 79)
-
-  // <sl-icon name="plus-lg"></sl-icon>
-  const zoomInBtn = PanelUtils.createButton({
-    icon: 'plus-lg',
-    tooltip: 'Zoom in',
-    action: 'pdf-zoom-in',
-    name: 'zoomInBtn'
-  })
-  zoomInBtn.addEventListener('widget-click', () => onZoom(0.1))
-  toolbar.add(zoomInBtn, 78)
-
-  // <sl-icon name="arrows-angle-contract"></sl-icon>
-  const fitPageBtn = PanelUtils.createButton({
-    icon: 'arrows-angle-contract',
-    tooltip: 'Fit page to width',
-    action: 'pdf-fit-page',
-    name: 'fitPageBtn'
-  })
-  fitPageBtn.addEventListener('widget-click', () => onFitPage())
-  toolbar.add(fitPageBtn, 77)
-
-  // Separator
-  toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 70)
-
-  // Download PDF button
-  // <sl-icon name="download"></sl-icon>
-  const downloadBtn = PanelUtils.createButton({
-    icon: 'download',
-    tooltip: 'Download PDF',
-    action: 'pdf-download',
-    name: 'downloadBtn'
-  })
-  downloadBtn.addEventListener('widget-click', () => onDownloadPdf())
-  toolbar.add(downloadBtn, 60)
-
-  // Add autosearch switch to statusbar
-  const statusBar = ui.pdfViewer.statusbar
-  const savedAutoSearch = storage.getGlobal('autosearch', false)
-  const autoSearchSwitchWidget = PanelUtils.createSwitch({
-    text: 'Autosearch',
-    helpText: savedAutoSearch ? 'on' : 'off',
-    checked: savedAutoSearch,
-    name: 'searchSwitch'
-  })
-
-  autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
-  statusBar.add(autoSearchSwitchWidget, 'left', 10)
-
-
-  // Capture Ctrl/Cmd+S to trigger PDF download instead of browser save
-  const pdfViewerContainer = document.getElementById('pdf-viewer')
-  if (pdfViewerContainer) {
-    pdfViewerContainer.addEventListener('keydown', (evt) => {
-      if ((evt.ctrlKey || evt.metaKey) && evt.key === 's') {
-        evt.preventDefault()
-        evt.stopPropagation()
-        onDownloadPdf()
-      }
-    })
-  }
-
-  // Listen to PDF viewer events to update controls and persist state
-  pdfViewer.eventBus.on('pagechanging', (evt) => {
-    updatePageInfo(evt.pageNumber, pdfViewer.pdfDoc?.numPages || 0)
-    // Persist page number (skip during restoration)
-    if (!isRestoringState) {
-      const pdfId = app.getCurrentState().pdf
-      if (pdfId) {
-        storage.setValue(pdfId, 'page', evt.pageNumber)
-      }
-    }
-  })
-
-  pdfViewer.eventBus.on('scalechanging', (evt) => {
-    updateZoomInfo(evt.scale)
-    // Persist zoom level (skip during restoration)
-    if (!isRestoringState) {
-      const pdfId = app.getCurrentState().pdf
-      if (pdfId) {
-        storage.setValue(pdfId, 'zoom', evt.scale)
-      }
-    }
-  })
-
-  // Listen to scroll events to persist scroll position
-  const viewerContainer = pdfViewer.pdfViewerContainer
-  if (viewerContainer) {
-    let scrollTimeout = null
-    viewerContainer.addEventListener('scroll', () => {
-      // Debounce scroll persistence (skip during restoration)
-      if (isRestoringState) return
-      if (scrollTimeout) clearTimeout(scrollTimeout)
-      scrollTimeout = setTimeout(() => {
-        const pdfId = app.getCurrentState().pdf
-        if (pdfId) {
-          storage.setState(pdfId, {
-            scrollX: viewerContainer.scrollLeft,
-            scrollY: viewerContainer.scrollTop
-          })
+  /**
+   * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
+   * Plugin methods take precedence; all other property accesses fall through to the inner viewer.
+   * TODO: Add a dedciated accessor and refactor consuming plugins's calls accordingly
+   * @returns {PDFJSViewer}
+   */
+  getApi() {
+    const plugin = this;
+    const inner = this.#pdfViewer;
+    const pluginMethods = new Set(['isAutoSearchEnabled']);
+    return /** @type {PDFJSViewer} */ (new Proxy(inner, {
+      get(_target, prop) {
+        if (pluginMethods.has(String(prop))) {
+          return /** @type {any} */ (plugin)[prop].bind(plugin);
         }
-      }, 250)
-    })
+        const val = inner[/** @type {keyof PDFJSViewer} */ (prop)];
+        return typeof val === 'function' ? val.bind(inner) : val;
+      }
+    }));
   }
 
-  // Track when pages are loaded for state restoration
-  pdfViewer.eventBus.on('pagesloaded', () => {
-    pdfViewer._pagesLoaded = true
-  })
-
-  // Update UI to register named elements
-  updateUi()
-
-  // Restore cursor tool mode (hand vs text selection)
-  if (storage.getGlobal('handTool', false)) {
-    pdfViewer.setHandToolMode()
-    // Update button variants to match
-    ui.pdfViewer.toolbar.textSelectBtn.setAttribute('variant', 'default')
-    ui.pdfViewer.toolbar.handToolBtn.setAttribute('variant', 'primary')
+  /**
+   * Whether auto-search is currently enabled.
+   * @returns {boolean}
+   */
+  isAutoSearchEnabled() {
+    return /** @type {any} */ (this.#autoSearchSwitch)?.checked ?? false;
   }
-}
 
-/**
- * @param {ApplicationState} state
- * @returns {Promise<void>}
- */
-async function update(state) {
-  currentState = state
-  if (hasStateChanged(state, 'pdf')) {
-    // Reset pages loaded flag for new PDF
-    pdfViewer._pagesLoaded = false
+  /** @param {ApplicationState} initialState */
+  async install(initialState) {
+    await super.install(initialState);
+    this.#logger.debug(`Installing plugin "${this.name}"`);
 
-    // Clear PDF viewer when no PDF is loaded
-    if (state.pdf === null) {
+    await this.#pdfViewer.isReady();
+    this.#logger.info("PDF Viewer ready.");
+    this.#pdfViewer.show();
+
+    // Add title and filename widgets to PDF viewer headerbar
+    const headerBar = ui.pdfViewer.headerbar;
+    this.#titleWidget = PanelUtils.createText({
+      text: '',
+      icon: 'file-pdf',
+      variant: 'neutral',
+      name: 'titleWidget'
+    });
+    this.#titleWidget.classList.add('title-widget');
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      this.#titleWidget.clickable = true;
+      this.#titleWidget.dblclickable = true;
+      this.#titleWidget.tooltip = 'Click to copy, doubleclick to edit';
+      this.#titleWidget.addEventListener('widget-click', () => {
+        const title = this.#titleWidget.text;
+        if (title) {
+          navigator.clipboard.writeText(title).then(() => {
+            notify(`Document title copied to clipboard`, 'success', 'clipboard-check');
+          }).catch(err => {
+            this.#logger.error('Failed to copy to clipboard: ' + String(err));
+            notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle');
+          });
+        }
+      });
+      this.#titleWidget.addEventListener('widget-dblclick', () => this.#editTitle());
+    }
+
+    headerBar.add(this.#titleWidget, 'left', 1);
+
+    this.#filenameWidget = PanelUtils.createText({
+      text: '',
+      variant: 'neutral',
+      name: 'filenameWidget'
+    });
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      this.#filenameWidget.clickable = true;
+      this.#filenameWidget.dblclickable = true;
+      this.#filenameWidget.tooltip = 'Click to copy, doubleclick to edit';
+      this.#filenameWidget.addEventListener('widget-click', () => {
+        const docId = this.#filenameWidget.text;
+        if (docId) {
+          navigator.clipboard.writeText(docId).then(() => {
+            notify(`Document id '${docId}' copied to clipboard`, 'success', 'clipboard-check');
+          }).catch(err => {
+            this.#logger.error('Failed to copy to clipboard: ' + String(err));
+            notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle');
+          });
+        }
+      });
+      this.#filenameWidget.addEventListener('widget-dblclick', () => this.#editDocId());
+    }
+
+    headerBar.add(this.#filenameWidget, 'right', 1);
+
+    const toolbar = ui.pdfViewer.toolbar;
+
+    const sidebarToggleBtn = PanelUtils.createButton({
+      icon: 'layout-sidebar',
+      tooltip: 'Toggle sidebar',
+      action: 'pdf-toggle-sidebar',
+      name: 'sidebarToggleBtn'
+    });
+    sidebarToggleBtn.addEventListener('widget-click', () => this.#onToggleSidebar());
+    toolbar.add(sidebarToggleBtn, 110);
+
+    toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 107);
+
+    this.#textSelectBtn = PanelUtils.createButton({
+      icon: 'cursor-text',
+      tooltip: 'Text selection',
+      action: 'pdf-text-select-tool',
+      name: 'textSelectBtn',
+      variant: 'primary'
+    });
+    this.#textSelectBtn.addEventListener('widget-click', () => this.#onSelectTextTool());
+    toolbar.add(this.#textSelectBtn, 106);
+
+    this.#handToolBtn = PanelUtils.createButton({
+      icon: 'hand-index',
+      tooltip: 'Hand tool (drag to pan)',
+      action: 'pdf-hand-tool',
+      name: 'handToolBtn'
+    });
+    this.#handToolBtn.addEventListener('widget-click', () => this.#onSelectHandTool());
+    toolbar.add(this.#handToolBtn, 105);
+
+    toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 104);
+
+    const prevPageBtn = PanelUtils.createButton({
+      icon: 'chevron-left',
+      tooltip: 'Previous page',
+      action: 'pdf-prev-page',
+      name: 'prevPageBtn'
+    });
+    prevPageBtn.addEventListener('widget-click', () => this.#onPageNav(-1));
+    toolbar.add(prevPageBtn, 100);
+
+    this.#pageInfoWidget = PanelUtils.createText({
+      text: '',
+      tooltip: 'Current page / Total pages',
+      name: 'pageInfoWidget'
+    });
+    toolbar.add(this.#pageInfoWidget, 99);
+
+    const nextPageBtn = PanelUtils.createButton({
+      icon: 'chevron-right',
+      tooltip: 'Next page',
+      action: 'pdf-next-page',
+      name: 'nextPageBtn'
+    });
+    nextPageBtn.addEventListener('widget-click', () => this.#onPageNav(1));
+    toolbar.add(nextPageBtn, 98);
+
+    toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 90);
+
+    const zoomOutBtn = PanelUtils.createButton({
+      icon: 'dash-lg',
+      tooltip: 'Zoom out',
+      action: 'pdf-zoom-out',
+      name: 'zoomOutBtn'
+    });
+    zoomOutBtn.addEventListener('widget-click', () => this.#onZoom(-0.1));
+    toolbar.add(zoomOutBtn, 80);
+
+    this.#zoomInfoWidget = PanelUtils.createText({
+      text: '100%',
+      tooltip: 'Zoom level',
+      name: 'zoomInfoWidget'
+    });
+    toolbar.add(this.#zoomInfoWidget, 79);
+
+    const zoomInBtn = PanelUtils.createButton({
+      icon: 'plus-lg',
+      tooltip: 'Zoom in',
+      action: 'pdf-zoom-in',
+      name: 'zoomInBtn'
+    });
+    zoomInBtn.addEventListener('widget-click', () => this.#onZoom(0.1));
+    toolbar.add(zoomInBtn, 78);
+
+    const fitPageBtn = PanelUtils.createButton({
+      icon: 'arrows-angle-contract',
+      tooltip: 'Fit page to width',
+      action: 'pdf-fit-page',
+      name: 'fitPageBtn'
+    });
+    fitPageBtn.addEventListener('widget-click', () => this.#onFitPage());
+    toolbar.add(fitPageBtn, 77);
+
+    toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 70);
+
+    const downloadBtn = PanelUtils.createButton({
+      icon: 'download',
+      tooltip: 'Download PDF',
+      action: 'pdf-download',
+      name: 'downloadBtn'
+    });
+    downloadBtn.addEventListener('widget-click', () => this.#onDownloadPdf());
+    toolbar.add(downloadBtn, 60);
+
+    // Add autosearch switch to statusbar
+    const statusBar = ui.pdfViewer.statusbar;
+    const savedAutoSearch = this.#storage.getGlobal('autosearch', false);
+    const autoSearchSwitchWidget = PanelUtils.createSwitch({
+      text: 'Autosearch',
+      helpText: savedAutoSearch ? 'on' : 'off',
+      checked: savedAutoSearch,
+      name: 'searchSwitch'
+    });
+
+    this.#autoSearchSwitch = autoSearchSwitchWidget;
+    autoSearchSwitchWidget.addEventListener('widget-change', (evt) => this.#onAutoSearchSwitchChange(evt));
+    statusBar.add(autoSearchSwitchWidget, 'left', 10);
+
+    // Capture Ctrl/Cmd+S to trigger PDF download
+    const pdfViewerContainer = document.getElementById('pdf-viewer');
+    if (pdfViewerContainer) {
+      pdfViewerContainer.addEventListener('keydown', (evt) => {
+        if ((evt.ctrlKey || evt.metaKey) && evt.key === 's') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          this.#onDownloadPdf();
+        }
+      });
+    }
+
+    // Listen to PDF viewer events to update controls and persist state
+    this.#pdfViewer.eventBus.on('pagechanging', (evt) => {
+      this.#updatePageInfo(evt.pageNumber, this.#pdfViewer.pdfDoc?.numPages || 0);
+      if (!this.#isRestoringState) {
+        const pdfId = this.state?.pdf;
+        if (pdfId) {
+          this.#storage.setValue(pdfId, 'page', evt.pageNumber);
+        }
+      }
+    });
+
+    this.#pdfViewer.eventBus.on('scalechanging', (evt) => {
+      this.#updateZoomInfo(evt.scale);
+      if (!this.#isRestoringState) {
+        const pdfId = this.state?.pdf;
+        if (pdfId) {
+          this.#storage.setValue(pdfId, 'zoom', evt.scale);
+        }
+      }
+    });
+
+    // Listen to scroll events to persist scroll position
+    const viewerContainer = this.#pdfViewer.pdfViewerContainer;
+    if (viewerContainer) {
+      let scrollTimeout = null;
+      viewerContainer.addEventListener('scroll', () => {
+        if (this.#isRestoringState) return;
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          const pdfId = this.state?.pdf;
+          if (pdfId) {
+            this.#storage.setState(pdfId, {
+              scrollX: viewerContainer.scrollLeft,
+              scrollY: viewerContainer.scrollTop
+            });
+          }
+        }, 250);
+      });
+    }
+
+    this.#pdfViewer.eventBus.on('pagesloaded', () => {
+      this.#pdfViewer._pagesLoaded = true;
+    });
+
+    // Restore cursor tool mode
+    if (this.#storage.getGlobal('handTool', false)) {
+      this.#pdfViewer.setHandToolMode();
+      this.#textSelectBtn.setAttribute('variant', 'default');
+      this.#handToolBtn.setAttribute('variant', 'primary');
+    }
+  }
+
+  /**
+   * React to state changes
+   * @param {string[]} changedKeys
+   * @param {ApplicationState} state
+   */
+  async onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('pdf')) {
+      this.#pdfViewer._pagesLoaded = false;
+
+      if (state.pdf === null) {
+        try {
+          await this.#pdfViewer.clear();
+        } catch (error) {
+          this.#logger.warn("Error clearing PDF viewer:" + String(error));
+        }
+      } else {
+        this.#waitForPagesLoaded().then(() => this.#restoreViewerState(state.pdf));
+      }
+    }
+
+    if (state.pdf) {
+      this.#filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || '';
       try {
-        await pdfViewer.clear();
+        const title = getDocumentTitle(state.pdf);
+        this.#titleWidget.text = title || 'PDF Document';
       } catch (error) {
-        logger.warn("Error clearing PDF viewer:" + String(error));
+        this.#titleWidget.text = 'PDF Document';
       }
-    } else {
-      // PDF changed - restore state once pages are loaded
-      waitForPagesLoaded().then(() => restoreViewerState(state.pdf))
+    } else if (this.#titleWidget) {
+      this.#titleWidget.text = '';
+      this.#filenameWidget.text = '';
     }
   }
 
-  // Update title and filename widgets
-  if (state.pdf) {
-    filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || ''
-    try {
-      const title = getDocumentTitle(state.pdf);
-      titleWidget.text = title || 'PDF Document';
-    } catch (error) {
-      titleWidget.text = 'PDF Document';
-    }
-  } else if (titleWidget) {
-    titleWidget.text = '';
-    filenameWidget.text = '';
-  }
-}
+  //
+  // Private methods
+  //
 
-/**
- * Prompt the reviewer to edit the document title and save it via the metadata API.
- * @returns {Promise<void>}
- */
-// <sl-icon name="clipboard-check"></sl-icon>
-// <sl-icon name="exclamation-triangle"></sl-icon>
-// <sl-icon name="exclamation-octagon"></sl-icon>
-// <sl-icon name="check-circle"></sl-icon>
-// <sl-icon name="info-circle"></sl-icon>
-async function editTitle() {
-  if (!currentState?.pdf) return
-  if (!userHasRole(currentState.user, ['admin', 'reviewer'])) {
-    notify('You are not allowed to edit the document title', 'warning', 'exclamation-triangle')
-    return
-  }
-  const currentTitle = titleWidget.text
-  const newTitle = prompt('Edit document label:', currentTitle)
-  if (newTitle === null || newTitle.trim() === currentTitle) return
-  try {
-    await client.apiClient.filesPatchMetadata(currentState.pdf, { label: newTitle.trim() })
-    notify('Document title updated', 'success', 'check-circle')
-    await fileselection.reload({ refresh: true })
-  } catch (error) {
-    logger.error('Failed to update title: ' + String(error))
-    notify('Failed to update title: ' + String(error), 'danger', 'exclamation-octagon')
-  }
-}
-
-/**
- * Prompt the reviewer to edit the document ID and save it via the doc-id API.
- * Requires a gold TEI artifact to be loaded (state.xml).
- * @returns {Promise<void>}
- */
-async function editDocId() {
-  if (!currentState?.pdf) return
-  if (!userHasRole(currentState.user, ['admin', 'reviewer'])) {
-    notify('You are not allowed to edit the document ID', 'warning', 'exclamation-triangle')
-    return
-  }
-  if (!currentState.xml || !isGoldFile(currentState.xml)) {
-    notify('Please load a gold TEI artifact to edit the document ID', 'warning', 'info-circle')
-    return
-  }
-  const currentDocId = filenameWidget.text
-  const newDocId = prompt('Edit document ID:', currentDocId)
-  if (newDocId === null || newDocId.trim() === currentDocId) return
-
-  let finalDocId = newDocId.trim()
-  const decoded = decodeFilename(finalDocId)
-  const encoded = encodeFilename(decoded)
-  if (encoded !== finalDocId) {
-    const useEncoded = confirm(
-      `The document ID contains characters that need encoding.\n\nEntered: ${finalDocId}\nEncoded: ${encoded}\n\nUse the encoded version?`
-    )
-    if (!useEncoded) return
-    finalDocId = encoded
-  }
-
-  try {
-    await client.apiClient.filesDocId(currentState.xml, { doc_id: finalDocId })
-    notify(`Document ID updated to '${finalDocId}'`, 'success', 'check-circle')
-    await fileselection.reload({ refresh: true })
-    await services.load({ xml: currentState.xml })
-  } catch (error) {
-    logger.error('Failed to update doc_id: ' + String(error))
-    notify('Failed to update document ID: ' + String(error), 'danger', 'exclamation-octagon')
-  }
-}
-
-/**
- * Waits for the PDF pages to be loaded
- * @returns {Promise<void>}
- */
-function waitForPagesLoaded() {
-  return new Promise(resolve => {
-    if (pdfViewer._pagesLoaded) {
-      resolve()
-      return
-    }
-    const checkInterval = setInterval(() => {
-      if (pdfViewer._pagesLoaded) {
-        clearInterval(checkInterval)
-        resolve()
-      }
-    }, 50)
-    // Timeout after 5 seconds
-    setTimeout(() => {
-      clearInterval(checkInterval)
-      resolve()
-    }, 5000)
-  })
-}
-
-/**
- * Navigate to previous/next page
- * @param {number} delta - Page delta (-1 for previous, +1 for next)
- */
-async function onPageNav(delta) {
-  if (!pdfViewer.pdfViewer || !pdfViewer.pdfDoc) return;
-
-  const currentPage = pdfViewer.pdfViewer.currentPageNumber;
-  const newPage = currentPage + delta;
-
-  if (newPage >= 1 && newPage <= pdfViewer.pdfDoc.numPages) {
-    await pdfViewer.goToPage(newPage);
-  }
-}
-
-/**
- * Zoom in/out
- * @param {number} delta - Zoom delta (-0.1 for zoom out, +0.1 for zoom in)
- */
-async function onZoom(delta) {
-  if (!pdfViewer.pdfViewer) return;
-
-  const currentScale = pdfViewer.pdfViewer.currentScale;
-  const newScale = Math.max(0.5, Math.min(3.0, currentScale + delta));
-
-  await pdfViewer.setZoom(newScale);
-}
-
-/**
- * Fit page to width
- */
-async function onFitPage() {
-  await pdfViewer.setZoom('page-fit');
-}
-
-/**
- * Toggle sidebar visibility
- */
-function onToggleSidebar() {
-  pdfViewer.toggleSidebar();
-}
-
-/**
- * Activate text selection tool
- */
-function onSelectTextTool() {
-  if (!pdfViewer.isHandTool()) return; // Already in text selection mode
-
-  pdfViewer.setTextSelectMode();
-  storage.setGlobal('handTool', false)
-
-  // Update button variants
-  const textSelectBtn = ui.pdfViewer.toolbar.textSelectBtn;
-  const handToolBtn = ui.pdfViewer.toolbar.handToolBtn;
-
-  textSelectBtn.setAttribute('variant', 'primary');
-  handToolBtn.setAttribute('variant', 'default');
-}
-
-/**
- * Activate hand tool
- */
-function onSelectHandTool() {
-  if (pdfViewer.isHandTool()) return; // Already in hand tool mode
-
-  pdfViewer.setHandToolMode();
-  storage.setGlobal('handTool', true)
-
-  // Update button variants
-  const textSelectBtn = ui.pdfViewer.toolbar.textSelectBtn;
-  const handToolBtn = ui.pdfViewer.toolbar.handToolBtn;
-
-  textSelectBtn.setAttribute('variant', 'default');
-  handToolBtn.setAttribute('variant', 'primary');
-}
-
-/**
- * Download the current PDF
- */
-async function onDownloadPdf() {
-  if (!pdfViewer.pdfDoc) {
-    notify('No PDF loaded', 'warning', 'exclamation-triangle');
-    return;
-  }
-
-  try {
-    const state = app.getCurrentState();
-    const fileData = getFileDataById(state.pdf);
-
-    if (!fileData || !fileData.item) {
-      notify('Cannot find PDF file data', 'danger', 'exclamation-octagon');
+  /**
+   * Prompt the reviewer to edit the document title
+   */
+  async #editTitle() {
+    if (!this.state?.pdf) return;
+    if (!userHasRole(this.state.user, ['admin', 'reviewer'])) {
+      notify('You are not allowed to edit the document title', 'warning', 'exclamation-triangle');
       return;
     }
-
-    // Create a download link using the stable ID from the item
-    const url = `/api/v1/files/${fileData.item.id}`;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileData.item.filename || 'document.pdf';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    notify('PDF download started', 'success', 'check-circle');
-  } catch (error) {
-    logger.error('Failed to download PDF:', error);
-    notify('Failed to download PDF', 'danger', 'exclamation-octagon');
+    const currentTitle = this.#titleWidget.text;
+    const newTitle = prompt('Edit document label:', currentTitle);
+    if (newTitle === null || newTitle.trim() === currentTitle) return;
+    try {
+      await this.#client.apiClient.filesPatchMetadata(this.state.pdf, { label: newTitle.trim() });
+      notify('Document title updated', 'success', 'check-circle');
+      await this.getDependency('file-selection').reload({ refresh: true });
+    } catch (error) {
+      this.#logger.error('Failed to update title: ' + String(error));
+      notify('Failed to update title: ' + String(error), 'danger', 'exclamation-octagon');
+    }
   }
-}
 
-/**
- * Update page info display
- * @param {number} pageNumber - Current page number
- * @param {number} totalPages - Total number of pages
- */
-function updatePageInfo(pageNumber, totalPages) {
-  const pageInfoWidget = ui.pdfViewer.toolbar.pageInfoWidget;
-  if (pageInfoWidget) {
-    pageInfoWidget.setAttribute('text', `${pageNumber} / ${totalPages}`);
-  }
-}
+  /**
+   * Prompt the reviewer to edit the document ID
+   */
+  async #editDocId() {
+    if (!this.state?.pdf) return;
+    if (!userHasRole(this.state.user, ['admin', 'reviewer'])) {
+      notify('You are not allowed to edit the document ID', 'warning', 'exclamation-triangle');
+      return;
+    }
+    if (!this.state.xml || !isGoldFile(this.state.xml)) {
+      notify('Please load a gold TEI artifact to edit the document ID', 'warning', 'info-circle');
+      return;
+    }
+    const currentDocId = this.#filenameWidget.text;
+    const newDocId = prompt('Edit document ID:', currentDocId);
+    if (newDocId === null || newDocId.trim() === currentDocId) return;
 
-/**
- * Update zoom info display
- * @param {number} scale - Current zoom scale
- */
-function updateZoomInfo(scale) {
-  const zoomInfoWidget = ui.pdfViewer.toolbar.zoomInfoWidget;
-  if (zoomInfoWidget) {
-    const percentage = Math.round(scale * 100);
-    zoomInfoWidget.setAttribute('text', `${percentage}%`);
-  }
-}
-
-/**
- * Called when the autosearch switch is toggled
- * @param {Event} evt
- */
-async function onAutoSearchSwitchChange(evt) {
-  const customEvt = /** @type {CustomEvent} */ (evt)
-  const checked = customEvt.detail.checked
-  const autoSearchSwitch = customEvt.detail.widget
-
-  // Update help text and persist state
-  if (autoSearchSwitch) {
-    const newHelpText = checked ? 'on' : 'off'
-    autoSearchSwitch.setAttribute('help-text', newHelpText)
-  }
-  storage.setGlobal('autosearch', checked)
-
-  logger.info(`Auto search is: ${checked}`)
-  if (checked && xmlEditor.selectedNode) {
-    await services.searchNodeContentsInPdf(xmlEditor.selectedNode)
-  }
-}
-
-/**
- * Restores the saved viewer state for a PDF
- * @param {string} pdfId - The PDF stable_id
- */
-async function restoreViewerState(pdfId) {
-  const state = storage.getState(pdfId)
-  if (!state || Object.keys(state).length === 0) return
-
-  isRestoringState = true
-
-  try {
-    // Restore zoom first (affects scroll calculations)
-    if (state.zoom !== undefined) {
-      await pdfViewer.setZoom(state.zoom)
+    let finalDocId = newDocId.trim();
+    const decoded = decodeFilename(finalDocId);
+    const encoded = encodeFilename(decoded);
+    if (encoded !== finalDocId) {
+      const useEncoded = confirm(
+        `The document ID contains characters that need encoding.\n\nEntered: ${finalDocId}\nEncoded: ${encoded}\n\nUse the encoded version?`
+      );
+      if (!useEncoded) return;
+      finalDocId = encoded;
     }
 
-    // Restore page
-    if (state.page !== undefined) {
-      await pdfViewer.goToPage(state.page)
+    try {
+      await this.#client.apiClient.filesDocId(this.state.xml, { doc_id: finalDocId });
+      notify(`Document ID updated to '${finalDocId}'`, 'success', 'check-circle');
+      await this.getDependency('file-selection').reload({ refresh: true });
+      await this.getDependency('services').load({ xml: this.state.xml });
+    } catch (error) {
+      this.#logger.error('Failed to update doc_id: ' + String(error));
+      notify('Failed to update document ID: ' + String(error), 'danger', 'exclamation-octagon');
     }
+  }
 
-    // Restore scroll position after a short delay for rendering
-    if (state.scrollX !== undefined || state.scrollY !== undefined) {
-      await new Promise(resolve => setTimeout(resolve, 150))
-      const container = pdfViewer.pdfViewerContainer
-      if (container) {
-        if (state.scrollX !== undefined) container.scrollLeft = state.scrollX
-        if (state.scrollY !== undefined) container.scrollTop = state.scrollY
+  /**
+   * Waits for the PDF pages to be loaded
+   * @returns {Promise<void>}
+   */
+  #waitForPagesLoaded() {
+    return new Promise(resolve => {
+      if (this.#pdfViewer._pagesLoaded) {
+        resolve();
+        return;
       }
+      const checkInterval = setInterval(() => {
+        if (this.#pdfViewer._pagesLoaded) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 50);
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, 5000);
+    });
+  }
+
+  /**
+   * @param {number} delta
+   */
+  async #onPageNav(delta) {
+    if (!this.#pdfViewer.pdfViewer || !this.#pdfViewer.pdfDoc) return;
+    const currentPage = this.#pdfViewer.pdfViewer.currentPageNumber;
+    const newPage = currentPage + delta;
+    if (newPage >= 1 && newPage <= this.#pdfViewer.pdfDoc.numPages) {
+      await this.#pdfViewer.goToPage(newPage);
     }
-  } finally {
-    // Clear flag after a delay to allow events to settle
-    setTimeout(() => {
-      isRestoringState = false
-    }, 300)
+  }
+
+  /**
+   * @param {number} delta
+   */
+  async #onZoom(delta) {
+    if (!this.#pdfViewer.pdfViewer) return;
+    const currentScale = this.#pdfViewer.pdfViewer.currentScale;
+    const newScale = Math.max(0.5, Math.min(3.0, currentScale + delta));
+    await this.#pdfViewer.setZoom(newScale);
+  }
+
+  async #onFitPage() {
+    await this.#pdfViewer.setZoom('page-fit');
+  }
+
+  #onToggleSidebar() {
+    this.#pdfViewer.toggleSidebar();
+  }
+
+  #onSelectTextTool() {
+    if (!this.#pdfViewer.isHandTool()) return;
+    this.#pdfViewer.setTextSelectMode();
+    this.#storage.setGlobal('handTool', false);
+    this.#textSelectBtn.setAttribute('variant', 'primary');
+    this.#handToolBtn.setAttribute('variant', 'default');
+  }
+
+  #onSelectHandTool() {
+    if (this.#pdfViewer.isHandTool()) return;
+    this.#pdfViewer.setHandToolMode();
+    this.#storage.setGlobal('handTool', true);
+    this.#textSelectBtn.setAttribute('variant', 'default');
+    this.#handToolBtn.setAttribute('variant', 'primary');
+  }
+
+  async #onDownloadPdf() {
+    if (!this.#pdfViewer.pdfDoc) {
+      notify('No PDF loaded', 'warning', 'exclamation-triangle');
+      return;
+    }
+    try {
+      const fileData = getFileDataById(this.state?.pdf);
+      if (!fileData || !fileData.item) {
+        notify('Cannot find PDF file data', 'danger', 'exclamation-octagon');
+        return;
+      }
+      const url = `/api/v1/files/${fileData.item.id}`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileData.item.filename || 'document.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      notify('PDF download started', 'success', 'check-circle');
+    } catch (error) {
+      this.#logger.error('Failed to download PDF:', error);
+      notify('Failed to download PDF', 'danger', 'exclamation-octagon');
+    }
+  }
+
+  /**
+   * @param {number} pageNumber
+   * @param {number} totalPages
+   */
+  #updatePageInfo(pageNumber, totalPages) {
+    this.#pageInfoWidget.setAttribute('text', `${pageNumber} / ${totalPages}`);
+  }
+
+  /**
+   * @param {number} scale
+   */
+  #updateZoomInfo(scale) {
+    this.#zoomInfoWidget.setAttribute('text', `${Math.round(scale * 100)}%`);
+  }
+
+  /**
+   * @param {Event} evt
+   */
+  async #onAutoSearchSwitchChange(evt) {
+    const customEvt = /** @type {CustomEvent} */ (evt);
+    const checked = customEvt.detail.checked;
+    const autoSearchSwitch = customEvt.detail.widget;
+
+    if (autoSearchSwitch) {
+      autoSearchSwitch.setAttribute('help-text', checked ? 'on' : 'off');
+    }
+    this.#storage.setGlobal('autosearch', checked);
+
+    this.#logger.info(`Auto search is: ${checked}`);
+    const xmlEditor = this.getDependency('xmleditor');
+    if (checked && xmlEditor.selectedNode) {
+      await this.getDependency('services').searchNodeContentsInPdf(xmlEditor.selectedNode);
+    }
+  }
+
+  /**
+   * @param {string} pdfId
+   */
+  async #restoreViewerState(pdfId) {
+    const state = this.#storage.getState(pdfId);
+    if (!state || Object.keys(state).length === 0) return;
+
+    this.#isRestoringState = true;
+
+    try {
+      if (state.zoom !== undefined) {
+        await this.#pdfViewer.setZoom(state.zoom);
+      }
+      if (state.page !== undefined) {
+        await this.#pdfViewer.goToPage(state.page);
+      }
+      if (state.scrollX !== undefined || state.scrollY !== undefined) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const container = this.#pdfViewer.pdfViewerContainer;
+        if (container) {
+          if (state.scrollX !== undefined) container.scrollLeft = state.scrollX;
+          if (state.scrollY !== undefined) container.scrollTop = state.scrollY;
+        }
+      }
+    } finally {
+      setTimeout(() => {
+        this.#isRestoringState = false;
+      }, 300);
+    }
   }
 }
+
+export default PdfViewerPlugin;
+
+/** @deprecated Use PdfViewerPlugin class directly */
+export const plugin = PdfViewerPlugin;
+

@@ -2,6 +2,8 @@
  * API Integration Tests for GET /api/v1/plugins/extensions.js
  *
  * Tests frontend extension bundle generation from backend plugins.
+ * Extensions are class-based (extending FrontendExtensionPlugin) and are
+ * delivered as IIFEs that call window.registerFrontendExtension(ClassName).
  */
 
 import { test } from 'node:test';
@@ -41,34 +43,22 @@ test('GET /api/v1/plugins/extensions.js - contains test-plugin hello-world exten
     'Should wrap in IIFE'
   );
 
-  // Should contain the extension name
+  // Should contain the class definition (export default stripped)
   assert.ok(
-    content.includes('const name = "hello-world-test"'),
-    'Should include extension name'
+    content.includes('class HelloWorldExtension extends window.FrontendExtensionPlugin'),
+    'Should contain class extending window.FrontendExtensionPlugin'
   );
 
-  // Should contain the install function (without export keyword)
+  // Should register via window.registerFrontendExtension with class constructor
   assert.ok(
-    content.includes('function install(state, sandbox)'),
-    'Should include install function without export'
+    content.includes('window.registerFrontendExtension(HelloWorldExtension'),
+    'Should call window.registerFrontendExtension with class name'
   );
 
-  // Should contain the greet function (without export keyword)
+  // Registration should include pluginId as second argument
   assert.ok(
-    content.includes('function greet(greeting, sandbox)'),
-    'Should include greet function without export'
-  );
-
-  // Should register via window.registerFrontendExtension
-  assert.ok(
-    content.includes('window.registerFrontendExtension'),
-    'Should call window.registerFrontendExtension'
-  );
-
-  // Registration should include pluginId
-  assert.ok(
-    content.includes('pluginId: "test-plugin"'),
-    'Should include pluginId in registration'
+    content.includes('window.registerFrontendExtension(HelloWorldExtension, "test-plugin")'),
+    'Should pass pluginId as second argument'
   );
 });
 
@@ -78,21 +68,23 @@ test('GET /api/v1/plugins/extensions.js - removes ES module syntax', async () =>
 
   const content = await response.text();
 
-  // Should NOT contain export keywords (they should be stripped)
+  // Should NOT contain export default (stripped before class declaration)
   assert.ok(
-    !content.includes('export const name'),
-    'Should strip "export const" syntax'
-  );
-
-  assert.ok(
-    !content.includes('export function'),
-    'Should strip "export function" syntax'
+    !content.includes('export default class'),
+    'Should strip "export default class" syntax'
   );
 
   // Should NOT contain import statements
   assert.ok(
     !content.includes('import '),
     'Should strip import statements'
+  );
+
+  // Should NOT contain local FrontendExtensionPlugin reference (replaced with window. prefix)
+  assert.ok(
+    !content.includes('extends FrontendExtensionPlugin\n') &&
+    !content.includes('extends FrontendExtensionPlugin {'),
+    'Should replace "extends FrontendExtensionPlugin" with window-prefixed version'
   );
 });
 
@@ -107,15 +99,4 @@ test('GET /api/v1/plugins/extensions.js - bundle structure is valid IIFE', async
     content.includes('})();'),
     'Should close IIFE properly with })();'
   );
-
-  // Registration object should include exported names
-  const registrationMatch = content.match(/window\.registerFrontendExtension\(\{([^}]+)/);
-  assert.ok(registrationMatch, 'Should have registration call');
-
-  const registrationContent = registrationMatch[1];
-  assert.ok(registrationContent.includes('name'), 'Registration should include name');
-  assert.ok(registrationContent.includes('description'), 'Registration should include description');
-  assert.ok(registrationContent.includes('deps'), 'Registration should include deps');
-  assert.ok(registrationContent.includes('install'), 'Registration should include install');
-  assert.ok(registrationContent.includes('greet'), 'Registration should include greet');
 });

@@ -4,40 +4,19 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton, SlInput, SlMenuItem } from '../ui.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { userProfileDialogPart } from '../templates/user-profile-dialog.types.js'
+ * @import { userMenuItemsPart } from '../templates/user-menu-items.types.js'
  */
 
-import ui from '../ui.js';
-import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
+import { registerTemplate, createSingleFromTemplate, createFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
-import { logger, client } from '../app.js';
+import ep from '../extension-points.js';
 import { notify } from '../modules/sl-utils.js';
-import { AuthenticationPlugin } from '../plugins.js';
-
-//
-// UI Type Definitions
-//
-
-/**
- * @typedef {object} userProfileDialog
- * @property {HTMLFormElement} profileForm
- * @property {SlInput} profileForm.fullnameInput
- * @property {SlInput} profileForm.emailInput
- * @property {SlInput} profileForm.passwordInput
- * @property {SlInput} profileForm.repeatPasswordInput
- * @property {HTMLDivElement} profileForm.errorMessage
- * @property {SlButton} cancelBtn
- * @property {SlButton} saveBtn
- */
 
 // Register templates
 await registerTemplate('user-profile-dialog', 'user-profile-dialog.html');
 await registerTemplate('user-menu-items', 'user-menu-items.html');
-
-//
-// User Account Plugin Class
-//
 
 class UserAccountPlugin extends Plugin {
   /**
@@ -50,111 +29,93 @@ class UserAccountPlugin extends Plugin {
     });
   }
 
+  static extensionPoints = [ep.toolbar.menuItems];
+
   /**
-   * Plugin installation - creates UI and sets up event handlers
+   * Extension point handler for `ep.toolbar.menuItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar menu contributions.
+   * @returns {Array<{element: HTMLElement}>}
+   */
+  [ep.toolbar.menuItems]() {
+    return [...this.#menuUi.children].map(element => ({ element }))
+  }
+
+  get #logger() { return this.getDependency('logger') }
+  get #client()  { return this.getDependency('client') }
+
+  /** @type {import('../ui.js').SlDialog & userProfileDialogPart} */
+  #dialogUi = null
+
+  /** @type {HTMLElement & userMenuItemsPart} */
+  #menuUi = null
+
+  /**
    * @param {ApplicationState} initialState
    */
   async install(initialState) {
     await super.install(initialState);
-    logger.debug(`Installing plugin "${this.name}"`);
+    this.#logger.debug(`Installing plugin "${this.name}"`);
 
-    // Create UI elements
-    createFromTemplate('user-profile-dialog', document.body);
+    const dialog = createSingleFromTemplate('user-profile-dialog', document.body);
+    this.#dialogUi = this.createUi(dialog);
 
-    // Prevent dialog from closing on outside click
-    ui.userProfileDialog.addEventListener('sl-request-close', (event) => {
+    this.#dialogUi.addEventListener('sl-request-close', (event) => {
       if (event.detail.source === 'overlay') {
         event.preventDefault();
       }
     });
 
-    // Setup form event handlers
+    const container = document.createElement('div');
+    createFromTemplate('user-menu-items', container);
+    this.#menuUi = this.createUi(container);
+
+    this.#menuUi.profileMenuItem.addEventListener('click', () => this.showProfileDialog());
+    this.#menuUi.logoutMenuItem.addEventListener('click', () => this.logout());
+
     this._setupFormHandlers();
-
-    // Add menu items to the toolbar menu (which was created by toolbar plugin)
-    createFromTemplate('user-menu-items', ui.toolbar.toolbarMenu.menu);
-
-    logger.debug('User account menu items added to toolbar menu');
-
-    // Setup menu item handlers
-    ui.toolbar.toolbarMenu.menu.profileMenuItem.addEventListener('click', () => {
-      this.showProfileDialog();
-    });
-
-    ui.toolbar.toolbarMenu.menu.logoutMenuItem.addEventListener('click', () => {
-      this.logout();
-    });
   }
 
   async start() {
-    // No longer needed - menu items are added during install phase
-    logger.debug(`Starting plugin "${this.name}"`);
+    this.#logger.debug(`Starting plugin "${this.name}"`);
   }
 
   /**
-   * React to state changes
-   * @param {string[]} changedKeys
+   * @param {ApplicationState['user']} user
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      const user = this.state?.user;
-      ui.toolbar.toolbarMenu.menuBtn.disabled = user === null;
-    }
+  onUserChange(user) {
+    this.getDependency('toolbar').setMenuButtonDisabled(user === null);
   }
 
-  /**
-   * Public API methods
-   */
-
-  /**
-   * Shows the user profile dialog
-   */
   async showProfileDialog() {
     const user = this.state?.user;
     if (!user) {
-      logger.error('No user logged in');
+      this.#logger.error('No user logged in');
       return;
     }
 
-    // Populate form with current user data
-    ui.userProfileDialog.profileForm.fullnameInput.value = user.fullname || '';
-    ui.userProfileDialog.profileForm.emailInput.value = user.email || '';
-    ui.userProfileDialog.profileForm.passwordInput.value = '';
-    ui.userProfileDialog.profileForm.repeatPasswordInput.value = '';
-    ui.userProfileDialog.profileForm.errorMessage.style.display = 'none';
+    this.#dialogUi.profileForm.fullnameInput.value = user.fullname || '';
+    this.#dialogUi.profileForm.emailInput.value = user.email || '';
+    this.#dialogUi.profileForm.passwordInput.value = '';
+    this.#dialogUi.profileForm.repeatPasswordInput.value = '';
+    this.#dialogUi.profileForm.errorMessage.style.display = 'none';
 
-    ui.userProfileDialog.show();
+    this.#dialogUi.show();
   }
 
-  /**
-   * Logs the user out by delegating to the authentication plugin
-   */
   async logout() {
-    const authPlugin = AuthenticationPlugin.getInstance();
-    await authPlugin.logout();
+    await this.getDependency('authentication').logout();
   }
 
-  /**
-   * Private methods
-   */
-
-  /**
-   * Setup form event handlers
-   * @private
-   */
   _setupFormHandlers() {
-    // Cancel button
-    ui.userProfileDialog.cancelBtn.addEventListener('click', () => {
-      ui.userProfileDialog.hide();
+    this.#dialogUi.cancelBtn.addEventListener('click', () => {
+      this.#dialogUi.hide();
     });
 
-    // Save button
-    ui.userProfileDialog.saveBtn.addEventListener('click', async () => {
+    this.#dialogUi.saveBtn.addEventListener('click', async () => {
       await this._saveProfile();
     });
 
-    // Allow Enter key to submit
-    ui.userProfileDialog.profileForm.addEventListener('keydown', (event) => {
+    this.#dialogUi.profileForm.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         this._saveProfile();
@@ -162,49 +123,35 @@ class UserAccountPlugin extends Plugin {
     });
   }
 
-  /**
-   * Save profile changes
-   * @private
-   */
   async _saveProfile() {
-    const fullname = ui.userProfileDialog.profileForm.fullnameInput.value.trim();
-    const email = ui.userProfileDialog.profileForm.emailInput.value.trim();
-    const password = ui.userProfileDialog.profileForm.passwordInput.value;
-    const repeatPassword = ui.userProfileDialog.profileForm.repeatPasswordInput.value;
+    const fullname = this.#dialogUi.profileForm.fullnameInput.value.trim();
+    const email = this.#dialogUi.profileForm.emailInput.value.trim();
+    const password = this.#dialogUi.profileForm.passwordInput.value;
+    const repeatPassword = this.#dialogUi.profileForm.repeatPasswordInput.value;
 
-    // Validate passwords match if provided
     if (password || repeatPassword) {
       if (password !== repeatPassword) {
-        ui.userProfileDialog.profileForm.errorMessage.textContent = 'Passwords do not match';
-        ui.userProfileDialog.profileForm.errorMessage.style.display = 'block';
+        this.#dialogUi.profileForm.errorMessage.textContent = 'Passwords do not match';
+        this.#dialogUi.profileForm.errorMessage.style.display = 'block';
         return;
       }
       if (password.length < 6) {
-        ui.userProfileDialog.profileForm.errorMessage.textContent = 'Password must be at least 6 characters';
-        ui.userProfileDialog.profileForm.errorMessage.style.display = 'block';
+        this.#dialogUi.profileForm.errorMessage.textContent = 'Password must be at least 6 characters';
+        this.#dialogUi.profileForm.errorMessage.style.display = 'block';
         return;
       }
     }
 
-    // Hide error message
-    ui.userProfileDialog.profileForm.errorMessage.style.display = 'none';
+    this.#dialogUi.profileForm.errorMessage.style.display = 'none';
 
-    // Prepare update request
-    const updateData = {
-      fullname,
-      email
-    };
-
-    // Add password if provided (server will hash it)
+    const updateData = { fullname, email };
     if (password) {
       updateData.password = password;
     }
 
     try {
-      // Call API to update profile
-      const updatedUser = await client.apiClient.usersMeProfile(updateData);
+      const updatedUser = await this.#client.apiClient.usersMeProfile(updateData);
 
-      // Update state with new user data
       await this.dispatchStateChange({
         user: {
           username: updatedUser.username,
@@ -214,37 +161,15 @@ class UserAccountPlugin extends Plugin {
         }
       });
 
-      // Show success notification
       notify('Profile updated successfully', 'success', 'check-circle');
-
-      // Close dialog
-      ui.userProfileDialog.hide();
-
-      logger.info('User profile updated successfully');
+      this.#dialogUi.hide();
+      this.#logger.info('User profile updated successfully');
     } catch (error) {
-      logger.error('Error updating profile: ' + String(error));
-      ui.userProfileDialog.profileForm.errorMessage.textContent = 'Failed to update profile: ' + String(error);
-      ui.userProfileDialog.profileForm.errorMessage.style.display = 'block';
+      this.#logger.error('Error updating profile: ' + String(error));
+      this.#dialogUi.profileForm.errorMessage.textContent = 'Failed to update profile: ' + String(error);
+      this.#dialogUi.profileForm.errorMessage.style.display = 'block';
     }
   }
-
-  /**
-   * Hashes a password using SHA-256.
-   * @param {string} password
-   * @returns {Promise<string>}
-   * @private
-   */
-  async _hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
 }
-
-//
-// Exports
-//
 
 export default UserAccountPlugin;

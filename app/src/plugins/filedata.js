@@ -12,14 +12,11 @@
  * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
-import { endpoints as ep } from '../app.js'
 import { Plugin } from '../modules/plugin-base.js'
-import { logger, client, dialog, xmlEditor, sse } from '../app.js'
+import ep from '../extension-points.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { api as tools } from './tools.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -46,15 +43,44 @@ class FiledataPlugin extends Plugin {
     this._reloadInProgress = false;
   }
 
+  // Cached dependencies
+  #logger;
+  #client;
+  #dialog;
+  #xmlEditor;
+
+  static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
+
+  /**
+   * Extension point handler for `ep.filedata.reload`.
+   * Called to refresh the file list from the server.
+   * Delegates to {@link FiledataPlugin#reload}.
+   * @param {{refresh: boolean}} [options]
+   * @returns {Promise<void>}
+   */
+  [ep.filedata.reload](...args) { return this.reload(...args) }
+
+  /**
+   * Extension point handler for `ep.filedata.saveXml`.
+   * Called to persist the current XML document to the server.
+   * Delegates to {@link FiledataPlugin#saveXml}.
+   * @returns {Promise<void>}
+   */
+  [ep.filedata.saveXml](...args) { return this.saveXml(...args) }
+
   /**
    * @param {ApplicationState} state
    */
   async install(state) {
     await super.install(state);
-    logger.debug(`Installing plugin "${this.name}"`);
+    this.#logger = this.getDependency('logger');
+    this.#client = this.getDependency('client');
+    this.#dialog = this.getDependency('dialog');
+    this.#xmlEditor = this.getDependency('xmleditor');
+    this.#logger.debug(`Installing plugin "${this.name}"`);
 
     // Initialize empty ID lookup index to prevent errors during plugin initialization
-    logger.debug('Initializing empty ID lookup index during installation');
+    this.#logger.debug('Initializing empty ID lookup index during installation');
     createIdLookupIndex([]);
 
     // Create status widget for save operations
@@ -66,7 +92,7 @@ class FiledataPlugin extends Plugin {
     });
 
     // Listen for SSE events about file data changes
-    sse.addEventListener('fileDataChanged', async (event) => {
+    this.getDependency('sse').addEventListener('fileDataChanged', async (event) => {
       const data = JSON.parse(event.data);
 
       // Only reload for metadata changes, not lock status changes
@@ -79,10 +105,10 @@ class FiledataPlugin extends Plugin {
       if (data.reason === 'files_deleted' && data.stable_ids) {
         const currentXml = this.state.xml;
         if (currentXml && data.stable_ids.includes(currentXml)) {
-          logger.warn(`Currently loaded document ${currentXml} was deleted by another user`);
+          this.#logger.warn(`Currently loaded document ${currentXml} was deleted by another user`);
 
           // Clear the editor
-          xmlEditor.clear();
+          this.#xmlEditor.clear();
 
           // Update state to clear document
           await this.context.updateState({
@@ -100,7 +126,7 @@ class FiledataPlugin extends Plugin {
         }
       }
 
-      logger.debug(`File data changed (reason: ${data.reason}), reloading file data`);
+      this.#logger.debug(`File data changed (reason: ${data.reason}), reloading file data`);
 
       // Reload file data when changes occur from other sessions
       this.reload({ refresh: true });
@@ -110,7 +136,7 @@ class FiledataPlugin extends Plugin {
   async start() {
     const gcElement = createSingleFromTemplate('gc-menu-item');
     this._gcItem = gcElement;
-    tools.addMenuItems([gcElement], 'administration');
+    this.getDependency('tools').addMenuItems([gcElement], 'administration');
 
     gcElement.querySelector('[name="gcMenuItem"]').addEventListener('click', () => {
       this.showGarbageCollectionDialog();
@@ -125,7 +151,7 @@ class FiledataPlugin extends Plugin {
    * @private
    */
   async showGarbageCollectionDialog() {
-    const result = await dialog.confirm(
+    const result = await this.#dialog.confirm(
       'This will permanently delete all files marked for deletion. Continue?',
       'Confirm Garbage Collection'
     );
@@ -139,8 +165,8 @@ class FiledataPlugin extends Plugin {
       // The backend enforces 24-hour minimum for non-admin users
       const deletedBefore = new Date().toISOString();
 
-      logger.info('Running garbage collection...');
-      const response = await client.apiClient.filesGarbageCollect({
+      this.#logger.info('Running garbage collection...');
+      const response = await this.#client.apiClient.filesGarbageCollect({
         deleted_before: deletedBefore
       });
 
@@ -153,25 +179,21 @@ class FiledataPlugin extends Plugin {
         'check-circle'
       );
 
-      logger.info(`GC complete: ${purged_count} records, ${files_deleted} files, ${storageMB} MB freed`);
+      this.#logger.info(`GC complete: ${purged_count} records, ${files_deleted} files, ${storageMB} MB freed`);
 
       // Reload file data to update the UI
       await this.reload({ refresh: true });
     } catch (error) {
-      logger.error('Garbage collection failed: ' + String(error));
+      this.#logger.error('Garbage collection failed: ' + String(error));
       notify('Garbage collection failed: ' + String(error), 'danger', 'exclamation-octagon');
     }
   }
 
   /**
-   * React to state changes
-   * @param {string[]} changedKeys
+   * @param {ApplicationState['user']} user
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      // Only admins can access garbage collection
-      if (this._gcItem) this._gcItem.style.display = userIsAdmin(this.state.user) ? '' : 'none';
-    }
+  onUserChange(user) {
+    if (this._gcItem) this._gcItem.style.display = userIsAdmin(user) ? '' : 'none';
   }
 
   /**
@@ -183,16 +205,16 @@ class FiledataPlugin extends Plugin {
   async reload(options = {}) {
     // Prevent concurrent reload operations
     if (this._reloadInProgress) {
-      logger.debug("Ignoring reload request - reload already in progress");
+      this.#logger.debug("Ignoring reload request - reload already in progress");
       return this.state;
     }
 
     this._reloadInProgress = true;
-    logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+    this.#logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
 
     try {
       // Get file list response - API returns {files: [...]} structure
-      const response = await client.getFileList(null, options.refresh);
+      const response = await this.#client.getFileList(null, options.refresh);
     
       /** @type {DocumentItem[]} */
       let data = response?.files || [];
@@ -202,34 +224,34 @@ class FiledataPlugin extends Plugin {
 
       // Create ID lookup index when fileData is loaded
       if (data && data.length > 0) {
-        logger.debug('Creating ID lookup index for file data');
+        this.#logger.debug('Creating ID lookup index for file data');
         createIdLookupIndex(data);
       } else {
         // Initialize empty ID lookup index to prevent errors
-        logger.debug('Initializing empty ID lookup index');
+        this.#logger.debug('Initializing empty ID lookup index');
         createIdLookupIndex([]);
       }
 
       // Load collections from server
       let collections = [];
       try {
-        collections = await client.getCollections();
-        logger.debug(`Loaded ${collections.length} collections from server`);
+        collections = await this.#client.getCollections();
+        this.#logger.debug(`Loaded ${collections.length} collections from server`);
 
         // Validate that all document collections exist in the collections list
         const collectionIds = new Set(collections.map(c => c.id));
-        data.forEach((doc, index) => {
+        data.forEach((doc) => {
           if (doc.collections && doc.collections.length > 0) {
             const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
             if (invalidCollections.length > 0) {
-              logger.warn(
+              this.#logger.warn(
                 `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
               );
             }
           }
         });
       } catch (error) {
-        logger.error(`Failed to load collections: ${error}`);
+        this.#logger.error(`Failed to load collections: ${error}`);
         // Continue with empty collections list - file operations will still work
       }
 
@@ -252,36 +274,28 @@ class FiledataPlugin extends Plugin {
    * @throws {Error}
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
-    logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
-    if (!xmlEditor.getXmlTree()) {
+    this.#logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+    if (!this.#xmlEditor.getXmlTree()) {
       throw new Error("Cannot save: No XML valid document in the editor");
     }
     try {
       // Show saving status
       if (this.savingStatusWidget) {
-        ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+        this.getDependency('xmleditor').addStatusbarWidget(this.savingStatusWidget, 'left', 10);
       }
-      const xmlContent = xmlEditor.getXML()
-      const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
+      const xmlContent = this.#xmlEditor.getXML()
+      const result = await this.#client.saveXml(xmlContent, fileHash, saveAsNewVersion);
       return /** @type {{file_id: string, status: string}} */ (result);
     } finally {
       // clear status message after 1 second
       setTimeout(() => {
         if (this.savingStatusWidget) {
-          ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+          this.getDependency('xmleditor').removeStatusbarWidget(this.savingStatusWidget.id);
         }
       }, 1000);
     }
   }
 
-  // Override to expose custom endpoints
-  getEndpoints() {
-    return {
-      ...super.getEndpoints(),
-      [ep.filedata.reload]: this.reload.bind(this),
-      [ep.filedata.saveXml]: this.saveXml.bind(this)
-    };
-  }
 }
 
 export default FiledataPlugin;

@@ -1,41 +1,45 @@
 /**
  * @file Frontend Extension: Hello World Test
  * Adds a test button that opens a Hello World dialog.
+ *
+ * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
  */
 
-export const name = "hello-world-test";
-export const description = "Adds Hello World button for testing";
-export const deps = ['dialog'];
+export default class HelloWorldExtension extends FrontendExtensionPlugin {
+  constructor(/** @type {PluginContext} */ context) {
+    super(context, { name: 'hello-world-test', deps: ['dialog'] });
+  }
 
-/**
- * Install the extension.
- * @param {Object} state - Initial application state
- * @param {Object} sandbox - Extension sandbox
- */
-export function install(state, sandbox) {
-  // Create toolbar button
-  const button = document.createElement('sl-button');
-  button.variant = 'text';
-  button.size = 'small';
-  button.innerHTML = '<sl-icon name="info-circle"></sl-icon>';
-  button.title = 'Hello World Test';
-  button.dataset.testId = 'hello-world-toolbar-btn';
+  static extensionPoints = ['hello-world-test.greet'];
 
-  button.addEventListener('click', () => {
-    sandbox.dialog.info('Hello World from frontend extension!');
-  });
+  /**
+   * @param {Object} state - Initial application state
+   */
+  async install(state) {
+    await super.install(state);
 
-  // Add to toolbar
-  sandbox.ui.toolbar.add(button, 0, -1);
-}
+    const button = document.createElement('sl-button');
+    button.variant = 'text';
+    button.size = 'small';
+    button.innerHTML = '<sl-icon name="info-circle"></sl-icon>';
+    button.title = 'Hello World Test';
+    button.dataset.testId = 'hello-world-toolbar-btn';
 
-/**
- * Custom endpoint - can be invoked by other plugins.
- * @param {string} greeting - Custom greeting text
- * @param {Object} sandbox
- * @returns {string}
- */
-export function greet(greeting, sandbox) {
-  sandbox.dialog.info(greeting || 'Hello!');
-  return 'Greeting displayed';
+    button.addEventListener('click', () => {
+      this.getDependency('dialog').info('Hello World from frontend extension!');
+    });
+
+    this.getDependency('ui').toolbar.add(button, 0, -1);
+  }
+
+  /**
+   * Extension point handler for `hello-world-test.greet`.
+   * Called by other plugins via `app.invokePluginEndpoint('hello-world-test.greet', [msg])`.
+   * @param {string} greeting
+   * @returns {string}
+   */
+  ['hello-world-test.greet'](greeting) {
+    this.getDependency('dialog').info(greeting || 'Hello!');
+    return 'Greeting displayed';
+  }
 }

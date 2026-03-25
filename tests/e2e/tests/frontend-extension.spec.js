@@ -2,7 +2,7 @@
  * Frontend Extension System E2E Tests
  *
  * @testCovers app/src/modules/frontend-extension-registry.js
- * @testCovers app/src/modules/frontend-extension-sandbox.js
+ * @testCovers app/src/modules/frontend-extension-plugin.js
  * @testCovers fastapi_app/lib/frontend_extension_registry.py
  * @testCovers fastapi_app/routers/plugins.py
  * @testCovers fastapi_app/plugins/test_plugin/extensions/hello-world.js
@@ -46,17 +46,17 @@ test.describe('Frontend Extension System', () => {
     await dialog.locator('[name="closeBtn"]').first().click();
   });
 
-  test('Extension can invoke other plugin endpoints via sandbox', async ({ page }) => {
+  test('Extension custom endpoint is invocable via plugin manager', async ({ page }) => {
     // Wait for extensions to load
     await page.waitForTimeout(1000);
 
-    // Test that extensions can use sandbox.invoke() via app.invokePluginEndpoint
+    // Test that class-based extensions expose custom endpoints via static extensionPoints
     await page.evaluate(async () => {
       const app = /** @type {any} */(window).app;
       if (!app) throw new Error('No app');
 
-      // Invoke the custom endpoint from the hello-world extension
-      await app.invokePluginEndpoint('greet', ['Custom greeting from test!']);
+      // Invoke the 'hello-world-test.greet' endpoint registered by the class extension
+      await app.invokePluginEndpoint('hello-world-test.greet', ['Custom greeting from test!']);
     });
 
     // Verify the invoke worked (dialog should have shown)
@@ -76,8 +76,9 @@ test.describe('Frontend Extension System', () => {
     expect(response.headers()['content-type']).toContain('javascript');
 
     const content = await response.text();
-    // Should contain the transformed extension with registration call
-    expect(content).toContain('window.registerFrontendExtension');
+    // Should contain class-based IIFE with window.FrontendExtensionPlugin reference
+    expect(content).toContain('window.registerFrontendExtension(HelloWorldExtension');
+    expect(content).toContain('extends window.FrontendExtensionPlugin');
     expect(content).toContain('hello-world-test');
   });
 

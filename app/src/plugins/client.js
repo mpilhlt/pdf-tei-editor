@@ -9,13 +9,11 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { PluginConfig } from '../modules/plugin-manager.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { AuthenticationData } from './authentication.js'
  */
 
-
-
-import { logger, hasStateChanged } from '../app.js';
+import Plugin from '../modules/plugin-base.js';
 import { ApiClientV1 } from '../modules/api-client-v1.js';
 
 /**
@@ -100,73 +98,55 @@ const upload_route = api_base_url + '/files/upload'
 const apiClient = new ApiClientV1(callApi);
 
 /**
- * plugin API
+ * A client for the FastAPI backend, providing 1:1 methods
+ * for each of the API routes via its `getApi()` method, wich returns
+ * methods generated from the OpenAPI data exposed by the FastAPI server.
+ * TODO: remove handwritten methods and update consuming plugin's code to use generated methods 
  */
-const api = {
-  get lastHttpStatus() {
-    return lastHttpStatus
-  },
-  ApiError,
-  LockedError,
-  ConnectionError,
-  ServerError,
-  apiClient,
-  callApi,
-  getFileList,
-  validateXml,
-  getAutocompleteData,
-  saveXml,
-  extract,
-  getExtractorList,
-  loadInstructions,
-  saveInstructions,
-  deleteFiles,
-  createVersionFromUpload,
-  uploadFile,
-  getConfigData,
-  setConfigValue,
-  moveFiles,
-  copyFiles,
-  getCollections,
-  createCollection,
-  state,
-  sendHeartbeat,
-  checkLock,
-  acquireLock,
-  releaseLock,
-  getAllLockedFileIds,
-  login,
-  logout,
-  status,
-  getBackendPlugins,
-  executeBackendPlugin
-}
+class ClientPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, {
+      name: 'client',
+      deps: []
+    });
+  }
 
+  /** @param {ApplicationState} initialState */
+  async install(initialState) {
+    await super.install(initialState);
+    if (initialState.sessionId) {
+      sessionId = initialState.sessionId;
+      this.getDependency('logger').debug(`Initialized session id from initial state: ${sessionId}`);
+    }
+  }
 
-/**
- * component plugin
- * @type {PluginConfig}
- */
-const plugin = {
-  name: "client",
-  state: {
-    update
+  /**
+   * Sync sessionId early (step 2 of updateState), before other plugins' onStateUpdate
+   * handlers fire API requests that require a valid session header.
+   * @param {ApplicationState} state
+   */
+  updateInternalState(state) {
+    if (state.sessionId !== sessionId) {
+      sessionId = state.sessionId;
+      this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
+    }
+  }
+
+  /**
+   * Returns the module-level api object so getDependency('client') returns it
+   * rather than the Plugin instance.
+   */
+  getApi() {
+    return api;
   }
 }
 
-export { api, plugin }
-export default plugin
+export default ClientPlugin;
 
-/**
- * @param {ApplicationState} state 
- */
-async function update(state) {
-  if (hasStateChanged(state, 'sessionId')) {
-    sessionId = state.sessionId;
-    logger.debug(`Setting session id to ${sessionId}`)
-  }
-  return sessionId
-}
+
+/** @deprecated Use ClientPlugin class directly */
+export const plugin = ClientPlugin;
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -283,7 +263,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        logger.warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
+        LoggerPlugin.getInstance().warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
@@ -761,3 +741,41 @@ async function executeBackendPlugin(pluginId, endpoint, params) {
   }
   throw new ApiError(`Plugin execution failed: ${response.error || 'Unknown error'}`);
 }
+
+const api = {
+  get lastHttpStatus() { return lastHttpStatus; },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
+  get apiClient() { return apiClient; },
+  callApi,
+  getFileList,
+  validateXml,
+  getAutocompleteData,
+  saveXml,
+  extract,
+  getExtractorList,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles,
+  createVersionFromUpload,
+  uploadFile,
+  getConfigData,
+  setConfigValue,
+  moveFiles,
+  copyFiles,
+  getCollections,
+  createCollection,
+  state,
+  sendHeartbeat,
+  checkLock,
+  acquireLock,
+  releaseLock,
+  getAllLockedFileIds,
+  login,
+  logout,
+  status,
+  getBackendPlugins,
+  executeBackendPlugin
+};

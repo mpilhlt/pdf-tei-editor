@@ -2,7 +2,6 @@
 LLamore-based reference extraction engine.
 """
 
-import os
 from typing import Dict, Any, Optional
 from lxml import etree
 
@@ -35,15 +34,12 @@ try:
 except ImportError:
     LLAMORE_AVAILABLE = False
 
-GEMINI_MODEL = "gemini-2.0-flash"
-
-
 class LLamoreExtractor(BaseExtractor):
     """LLamore-based reference extraction from PDF files."""
 
     @classmethod
-    def get_models(cls) -> list:
-        return [GEMINI_MODEL]
+    def get_models(cls) -> list[str]:
+        return [get_config().get("plugin.llamore.model", default="gemini-2.0-flash")]
 
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
@@ -62,11 +58,7 @@ class LLamoreExtractor(BaseExtractor):
     @classmethod
     def is_available(cls) -> bool:
         """Check if LLamore and Gemini API key are available."""
-        if not LLAMORE_AVAILABLE:
-            return False
-
-        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        return gemini_api_key != ""
+        return LLAMORE_AVAILABLE and bool(get_config().get("plugin.llamore.api.key"))
 
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Optional[Dict[str, Any]] = None) -> str:
@@ -175,7 +167,8 @@ class LLamoreExtractor(BaseExtractor):
         """Extract references from PDF using LLamore."""
         print(f"Extracting references from {pdf_path} via LLamore/Gemini")
 
-        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
+        model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
 
         class CustomPrompter(LineByLinePrompter):
             def user_prompt(self, text=None, additional_instructions="") -> str:
@@ -184,7 +177,7 @@ class LLamoreExtractor(BaseExtractor):
                     additional_instructions += "In particular, follow these rules:\n\n" + instructions
                 return super().user_prompt(text, additional_instructions)
 
-        extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter(), model=GEMINI_MODEL)
+        extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter(), model=model)
         references = extractor(pdf_path)
         parser = TeiBiblStruct()
 

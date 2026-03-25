@@ -6,396 +6,298 @@
  */
 
 /**
+ * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import MarkdownIt from 'markdown-it'
+ * @import { SlDrawer } from '../ui.js'
+ * @import { infoDrawerPart } from '../templates/info-drawer.types.js'
  */
-import ui, { updateUi } from '../ui.js'
-import { SlButton } from '../ui.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { dialog, logger, config, helpPlugin } from '../app.js'
+
+import { Plugin } from '../modules/plugin-base.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { createMarkdownRenderer } from '../modules/markdown-utils.js'
-
-/**
- * plugin API
- */
-const api = {
-  open,
-  load,
-  goBack,
-  goHome,
-  goForward,
-  close,
-  setEnableCache
-}
-
-/**
- * Plugin object
- */
-const plugin = {
-  name: "info",
-  deps: ['authentication', 'toolbar', 'help'],
-  install
-}
-
-export { api, plugin }
-export default plugin
-
-//
-// UI
-//
-
-/**
- * Help Window
- * @typedef {object} infoDrawerPart
- * @property {HTMLDivElement} content
- * @property {SlButton} backBtn
- * @property {SlButton} homeBtn
- * @property {SlButton} forwardBtn
- * @property {SlButton} editGitHubBtn
- * @property {SlButton} closeBtn
- * @property {HTMLSpanElement} versionInfo
- */
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
 await registerTemplate('about-button', 'about-button.html');
 await registerTemplate('info-menu-item', 'info-menu-item.html');
 
-//
-// Implementation
-//
-
-/**
- * The markdown renderer
- * @see https://github.com/markdown-it/markdown-it
- * @type {MarkdownIt}
- */
-let md;
-const localDocsBasePath = "../../docs"
-
-/**
- * Remote documentation base path (constructed from version)
- * @type {string}
- */
-let remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
-
-/**
- * GitHub edit base path (constructed from version)
- * @type {string}
- */
-let githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
-
-/**
- * Configuration for documentation caching
- * Set to false during development to always fetch fresh content
- * @type {boolean}
- */
-let enableCache = true
-
-/**
- * Loads the application version from version.js
- * @returns {Promise<string|null>} The version string or null if unavailable
- */
-async function loadVersion() {
-  try {
-    const response = await fetch('version.js')
-    if (!response.ok) {
-      return null
-    }
-    const text = await response.text()
-    // Parse the version from: export const version = '0.1.0';
-    const match = text.match(/export\s+const\s+version\s*=\s*['"]([^'"]+)['"]/)
-    return match ? match[1] : null
-  } catch (error) {
-    logger.debug('Could not load version.js:', error)
-    return null
+class InfoPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'info', deps: ['authentication', 'toolbar', 'help', 'logger', 'config', 'dialog'] })
   }
-}
 
-/**
- * Checks if online connectivity is available with a short timeout
- * @param {number} timeout - Timeout in milliseconds (default: 3000)
- * @returns {Promise<boolean>}
- */
-async function checkOnlineConnectivity(timeout = 3000) {
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
-    
-    const response = await fetch(`${remoteDocsBasePath}/index.md`, {
-      method: 'HEAD',
-      signal: controller.signal,
-      cache: 'no-cache'
+  /** @type {SlDrawer & infoDrawerPart} */
+  #ui = null
+
+  /** @type {MarkdownIt | null} */
+  #md = null
+
+  #localDocsBasePath = "../../docs"
+
+  #remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
+
+  #githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
+
+  #enableCache = true
+
+  /** @type {string[]} */
+  #navigationHistory = []
+
+  /** @type {string[]} */
+  #forwardHistory = []
+
+  #currentPage = 'index.md'
+
+  /**
+   * @param {ApplicationState} _state
+   */
+  async install(_state) {
+    await super.install(_state)
+    const logger = this.getDependency('logger')
+    logger.debug(`Installing plugin "info"`)
+
+    this.#ui = this.createUi(createSingleFromTemplate('info-dialog', document.body))
+
+    this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide())
+    this.#ui.backBtn.addEventListener('click', () => this.goBack())
+    this.#ui.homeBtn.addEventListener('click', () => this.goHome())
+    this.#ui.forwardBtn.addEventListener('click', () => this.goForward())
+    this.#ui.editGitHubBtn.addEventListener('click', () => {
+      const githubUrl = `${this.#githubEditBasePath}/${this.#currentPage}`
+      window.open(githubUrl, '_blank')
     })
-    
-    clearTimeout(timeoutId)
-    return response.ok
-  } catch (error) {
-    return false
+
+    const aboutButton = createSingleFromTemplate('about-button')
+    aboutButton.addEventListener('click', () => this.#showHelpFromLoginDialog())
+    this.getDependency('authentication').appendToLoginDialog(aboutButton)
+
+    this.#loadVersion().then(version => {
+      if (version) {
+        this.#ui.versionInfo.textContent = `v${version}`
+        const versionTag = `v${version}`
+        this.#remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
+        this.#githubEditBasePath = `https://github.com/mpilhlt/pdf-tei-editor/edit/${versionTag}/docs`
+        logger.debug(`Remote docs path: ${this.#remoteDocsBasePath}`)
+      }
+    }).catch(error => {
+      logger.debug('Failed to load version:', error)
+    })
+
+    this.getDependency('help').registerTopic(
+      'User Manual',
+      'book',
+      () => this.open()
+    )
+
+    this.#md = createMarkdownRenderer()
+
+    // @ts-ignore
+    window.appInfo = this
   }
-}
 
-/**
- * Navigation history for the back button
- * @type {string[]}
- */
-let navigationHistory = []
-
-/**
- * Forward history for the forward button
- * @type {string[]}
- */
-let forwardHistory = []
-
-/**
- * Currently displayed page for GitHub editing
- * @type {string}
- */
-let currentPage = 'index.md'
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state The main application
- */
-async function install(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
-  
-  // Create UI elements
-  createFromTemplate('info-dialog', document.body);
-
-  // Set up info dialog event listeners
-  ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide());
-  ui.infoDrawer.backBtn.addEventListener('click', goBack);
-  ui.infoDrawer.homeBtn.addEventListener('click', goHome);
-  ui.infoDrawer.forwardBtn.addEventListener('click', goForward);
-  ui.infoDrawer.editGitHubBtn.addEventListener('click', () => {
-    const githubUrl = `${githubEditBasePath}/${currentPage}`
-    window.open(githubUrl, '_blank')
-  });
-
-  // add About button to login dialog footer (left side)
-  const aboutButton = createSingleFromTemplate('about-button');
-  aboutButton.addEventListener('click', showHelpFromLoginDialog)
-
-  // Insert the About button after the Login button
-  ui.loginDialog.insertAdjacentElement("beforeend", aboutButton)
-  updateUi()
-
-  // Load and inject version information, and construct remote paths
-  loadVersion().then(version => {
-    if (version) {
-      ui.infoDrawer.versionInfo.textContent = `v${version}`
-      // Construct remote paths using version tag
-      const versionTag = `v${version}`
-      remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
-      githubEditBasePath = `https://github.com/mpilhlt/pdf-tei-editor/edit/${versionTag}/docs`
-      logger.debug(`Remote docs path: ${remoteDocsBasePath}`)
+  /**
+   * Opens the info dialog
+   */
+  async open() {
+    this.#updateNavigationButtons()
+    this.#ui.show()
+    if (this.#navigationHistory.length === 0) {
+      await this.load('index.md')
     }
-  }).catch(error => {
-    logger.debug('Failed to load version:', error)
-  })
-
-  // Register topic with help plugin
-  helpPlugin.registerTopic(
-    'User Manual',
-    'book',
-    () => api.open()
-  )
-
-  // configure markdown parser
-  md = createMarkdownRenderer()
-
-  // @ts-ignore
-  window.appInfo = api
-}
-
-// API
-
-/**
- * Opens the info dialog
- * todo this needs to always reload the data since it might have changed on the server
- */
-async function open() {
-  updateNavigationButtons()
-  ui.infoDrawer.show()
-  // Load the index page if this is the first time
-  if (navigationHistory.length === 0) {
-    await load('index.md')
   }
-}
 
-/**
- * Loads markdowm and converts it to HTML, replacing links to local content to calls to this method
- * @param {string} mdPath The local path to the md file, relative to the "docs" dir
- * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
- */
-async function load(mdPath, addToHistory = true){
-  // Resolve relative paths based on current page directory (only when adding to history, i.e., new navigation)
-  let resolvedPath = mdPath
-  if (addToHistory && !mdPath.startsWith('/') && !mdPath.startsWith('http') && currentPage && currentPage !== mdPath) {
-    // Get directory of current page
-    const currentDir = currentPage.substring(0, currentPage.lastIndexOf('/'))
-    if (currentDir) {
-      // Resolve relative path
-      const parts = currentDir.split('/').filter(p => p)
-      const pathParts = mdPath.split('/')
-
-      for (const part of pathParts) {
-        if (part === '..') {
-          parts.pop()
-        } else if (part !== '.') {
-          parts.push(part)
+  /**
+   * Loads markdown and converts it to HTML, replacing links to local content
+   * @param {string} mdPath The local path to the md file, relative to the "docs" dir
+   * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
+   */
+  async load(mdPath, addToHistory = true) {
+    let resolvedPath = mdPath
+    if (addToHistory && !mdPath.startsWith('/') && !mdPath.startsWith('http') && this.#currentPage && this.#currentPage !== mdPath) {
+      const currentDir = this.#currentPage.substring(0, this.#currentPage.lastIndexOf('/'))
+      if (currentDir) {
+        const parts = currentDir.split('/').filter(p => p)
+        const pathParts = mdPath.split('/')
+        for (const part of pathParts) {
+          if (part === '..') {
+            parts.pop()
+          } else if (part !== '.') {
+            parts.push(part)
+          }
         }
+        resolvedPath = parts.join('/')
       }
-      resolvedPath = parts.join('/')
     }
-  }
 
-  // Add resolved page to history if we're navigating to a new page
-  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== resolvedPath)) {
-    navigationHistory.push(resolvedPath)
-    // Clear forward history when navigating to a new page
-    forwardHistory = []
-    updateNavigationButtons()
-  }
-
-  // Update current page for GitHub editing
-  currentPage = resolvedPath
-  mdPath = resolvedPath
-  
-  // remove existing content
-  ui.infoDrawer.content.innerHTML = ""
-  
-  // load markdown
-  let markdown
-  let isOnline = false
-  const fetchOptions = enableCache ? {} : { cache: 'no-cache' }
-  const useGitHubDocs = await config.get("docs.from-github")
-
-  if (!useGitHubDocs) {
-    // Local docs: Use local files
-    try {
-      logger.debug(`Loading documentation from local: ${mdPath}`)
-      markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`, fetchOptions)).text()
-    } catch(error) {
-      dialog.error(`Failed to load local documentation: ${error.message}`)
-      return
+    if (addToHistory && (this.#navigationHistory.length === 0 || this.#navigationHistory[this.#navigationHistory.length - 1] !== resolvedPath)) {
+      this.#navigationHistory.push(resolvedPath)
+      this.#forwardHistory = []
+      this.#updateNavigationButtons()
     }
-  } else {
-    // GitHub docs: Try remote first, fallback to local if offline
-    try {
-      isOnline = await checkOnlineConnectivity()
-      if (isOnline) {
-        logger.debug(`Loading documentation from GitHub: ${mdPath}`)
-        markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`, fetchOptions)).text()
-      } else {
-        throw new Error("No online connectivity")
-      }
-    } catch(error) {
-      // Fallback to local filesystem
+
+    this.#currentPage = resolvedPath
+    mdPath = resolvedPath
+
+    this.#ui.content.innerHTML = ""
+
+    let markdown
+    let isOnline = false
+    const fetchOptions = this.#enableCache ? {} : { cache: 'no-cache' }
+    const useGitHubDocs = await this.getDependency('config').get("docs.from-github")
+
+    if (!useGitHubDocs) {
       try {
-        logger.debug(`Falling back to local documentation: ${mdPath}`)
-        markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`, fetchOptions)).text()
-      } catch(localError) {
-        dialog.error(`Failed to load documentation: ${localError.message}`)
+        this.getDependency('logger').debug(`Loading documentation from local: ${mdPath}`)
+        markdown = await (await fetch(`${this.#localDocsBasePath}/${mdPath}`, fetchOptions)).text()
+      } catch(error) {
+        this.getDependency('dialog').error(`Failed to load local documentation: ${error.message}`)
         return
       }
+    } else {
+      try {
+        isOnline = await this.#checkOnlineConnectivity()
+        if (isOnline) {
+          this.getDependency('logger').debug(`Loading documentation from GitHub: ${mdPath}`)
+          markdown = await (await fetch(`${this.#remoteDocsBasePath}/${mdPath}`, fetchOptions)).text()
+        } else {
+          throw new Error("No online connectivity")
+        }
+      } catch(error) {
+        try {
+          this.getDependency('logger').debug(`Falling back to local documentation: ${mdPath}`)
+          markdown = await (await fetch(`${this.#localDocsBasePath}/${mdPath}`, fetchOptions)).text()
+        } catch(localError) {
+          this.getDependency('dialog').error(`Failed to load documentation: ${localError.message}`)
+          return
+        }
+      }
+    }
+
+    const html = /** @type {MarkdownIt} */(this.#md).render(markdown)
+      .replaceAll(
+        /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g,
+        `$1href="#" onclick="appInfo.load('$3'); return false"$4`
+      )
+      .replaceAll(/src="(\.\/)?images\//g, isOnline ?
+        `src="${this.#remoteDocsBasePath}/images/` :
+        'src="docs/images/')
+      .replaceAll(/(href="http)/g, `target="_blank" $1`)
+      .replaceAll(/<!--|-->/gs, '')
+
+    this.#ui.content.innerHTML = html
+  }
+
+  /**
+   * Goes back to the previous page in navigation history
+   */
+  goBack() {
+    if (this.#navigationHistory.length > 1) {
+      const currentPage = this.#navigationHistory.pop()
+      if (currentPage) {
+        this.#forwardHistory.push(currentPage)
+      }
+      const previousPage = this.#navigationHistory[this.#navigationHistory.length - 1]
+      this.load(previousPage, false)
+      this.#updateNavigationButtons()
     }
   }
-  
-  // convert to html
-  const html = md.render(markdown)
-    // replace local links with api calls
-    .replaceAll(
-      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g, 
-      `$1href="#" onclick="appInfo.load('$3'); return false"$4`
-    )
-    // add prefix to relative image source links - use remote or local based on connectivity
-    .replaceAll(/src="(\.\/)?images\//g, isOnline ? 
-      `src="${remoteDocsBasePath}/images/` : 
-      'src="docs/images/')
-    // open remote links in new tabs
-    .replaceAll(/(href="http)/g, `target="_blank" $1`)
-    // remove comment tags that mask the <sl-icon> tags in the markdown
-    .replaceAll(/<!--|-->/gs, '') 
 
-
-  ui.infoDrawer.content.innerHTML = html
-}
-
-
-/**
- * Goes back to the previous page in navigation history
- */
-function goBack() {
-  if (navigationHistory.length > 1) {
-    // Add current page to forward history
-    const currentPage = navigationHistory.pop()
-    if (currentPage) {
-      forwardHistory.push(currentPage)
-    }
-    // Load the previous page without adding to history
-    const previousPage = navigationHistory[navigationHistory.length - 1]
-    load(previousPage, false)
-    updateNavigationButtons()
+  /**
+   * Goes to the home page (index.md)
+   */
+  goHome() {
+    this.#currentPage = ''
+    this.load('index.md')
   }
-}
 
-/**
- * Goes to the home page (index.md)
- */
-function goHome() {
-  // Reset current page so path resolution doesn't happen
-  currentPage = ''
-  load('index.md')
-  // currentPage will be set to 'index.md' by load()
-}
-
-/**
- * Goes forward to the next page in forward history
- */
-function goForward() {
-  if (forwardHistory.length > 0) {
-    // Get the next page from forward history
-    const nextPage = forwardHistory.pop()
-    if (nextPage) {
-      // Load the next page and add to history
-      load(nextPage, true)
-      updateNavigationButtons()
+  /**
+   * Goes forward to the next page in forward history
+   */
+  goForward() {
+    if (this.#forwardHistory.length > 0) {
+      const nextPage = this.#forwardHistory.pop()
+      if (nextPage) {
+        this.load(nextPage, true)
+        this.#updateNavigationButtons()
+      }
     }
   }
-}
 
-/**
- * Updates the navigation button states based on history
- */
-function updateNavigationButtons() {
-  if (ui.infoDrawer && ui.infoDrawer.backBtn && ui.infoDrawer.forwardBtn) {
-    ui.infoDrawer.backBtn.disabled = navigationHistory.length <= 1
-    ui.infoDrawer.forwardBtn.disabled = forwardHistory.length === 0
+  /**
+   * Closes the info drawer
+   */
+  close() {
+    this.#ui.hide()
+  }
+
+  /**
+   * Sets whether to enable browser caching for documentation
+   * @param {boolean} value
+   */
+  setEnableCache(value) {
+    this.#enableCache = value
+    this.getDependency('logger').debug(`Documentation caching ${value ? 'enabled' : 'disabled'}`)
+  }
+
+  /**
+   * Updates the navigation button states based on history
+   */
+  #updateNavigationButtons() {
+    this.#ui.backBtn.disabled = this.#navigationHistory.length <= 1
+    this.#ui.forwardBtn.disabled = this.#forwardHistory.length === 0
+  }
+
+  #showHelpFromLoginDialog() {
+    const auth = this.getDependency('authentication')
+    auth.hideLoginDialog()
+    this.#ui.addEventListener("sl-hide", () => {
+      auth.showLoginDialog()
+    }, { once: true })
+    this.open()
+  }
+
+  /**
+   * Loads the application version from version.js
+   * @returns {Promise<string|null>}
+   */
+  async #loadVersion() {
+    try {
+      const response = await fetch('version.js')
+      if (!response.ok) return null
+      const text = await response.text()
+      const match = text.match(/export\s+const\s+version\s*=\s*['"]([^'"]+)['"]/)
+      return match ? match[1] : null
+    } catch (error) {
+      this.getDependency('logger').debug('Could not load version.js:', error)
+      return null
+    }
+  }
+
+  /**
+   * Checks if online connectivity is available with a short timeout
+   * @param {number} timeout
+   * @returns {Promise<boolean>}
+   */
+  async #checkOnlineConnectivity(timeout = 3000) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+      const response = await fetch(`${this.#remoteDocsBasePath}/index.md`, {
+        method: 'HEAD',
+        signal: controller.signal,
+        cache: 'no-cache'
+      })
+      clearTimeout(timeoutId)
+      return response.ok
+    } catch (error) {
+      return false
+    }
   }
 }
 
-/**
- * Closes the prompt editor
- */
-function close() {
-  ui.infoDrawer.hide()
-}
+export default InfoPlugin
 
-function showHelpFromLoginDialog() {
-  ui.loginDialog.hide()
-  ui.infoDrawer.addEventListener("sl-hide",() => {
-    ui.loginDialog.show()
-  }, {once:true})
-  api.open()
-}
 
-/**
- * Sets whether to enable browser caching for documentation
- * @param {boolean} value - true to enable caching, false to always fetch fresh content
- */
-function setEnableCache(value) {
-  enableCache = value
-  logger.debug(`Documentation caching ${value ? 'enabled' : 'disabled'}`)
-}
+export const plugin = InfoPlugin

@@ -9,6 +9,8 @@
  *   node bin/build.js --skip=step1,step2   # Skip specific steps
  *
  * Available steps:
+ *   - plugins: Generate plugin-registry.js and validate plugins.js
+ *   - modules: Generate module-registry.js from @registerModule-tagged sources
  *   - importmap: Update the importmap
  *   - icons: Compile the app icons
  *   - templates: Bundle templates
@@ -37,7 +39,7 @@ function runCommand(command, description) {
 
 // Parse command line arguments
 const args = process.argv.slice(2);
-let stepsToRun = new Set(['importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle']);
+let stepsToRun = new Set(['plugins', 'modules', 'importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle']);
 let stepsToSkip = new Set();
 
 args.forEach(arg => {
@@ -61,6 +63,8 @@ if (stepsToSkip.size > 0) {
 // Define build steps
 /** @type {Record<string, () => void>} */
 const buildSteps = {
+  plugins: () => runCommand('node bin/generate-plugins.js', 'Generating plugin registry'),
+  modules: () => runCommand('node bin/generate-modules.js', 'Generating module registry'),
   importmap: () => runCommand('node bin/generate-importmap.js', 'Updating the importmap'),
   icons: () => runCommand('uv run python bin/compile-sl-icons.py', 'Compiling the app icons'),
   templates: () => runCommand('node bin/bundle-templates.js', 'Bundling templates'),
@@ -77,7 +81,7 @@ const buildSteps = {
 };
 
 // Execute selected steps in order
-const stepOrder = ['importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle'];
+const stepOrder = ['plugins', 'modules', 'importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle'];
 stepOrder.forEach(step => {
   if (stepsToRun.has(step) && buildSteps[step]) {
     buildSteps[step]();

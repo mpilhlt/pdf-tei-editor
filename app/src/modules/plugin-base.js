@@ -4,6 +4,8 @@
  * @import { PluginContext } from './plugin-context.js'
  */
 
+import { createNavigableElement } from './navigable-element.js'
+
 /**
  * Base class for plugins that provides state management and lifecycle methods
  */
@@ -133,6 +135,35 @@ export class Plugin {
   //
 
   /**
+   * Returns the public API object for this plugin instance.
+   * By default returns `this` (the instance itself is the API).
+   * Override when the plugin wraps a separate API object and
+   * `getDependency(name)` should return that object instead of the instance.
+   * @returns {object}
+   */
+  getApi() {
+    return this;
+  }
+
+  /**
+   * Create a scoped navigable UI tree from a root element.
+   * Wraps createNavigableElement() so plugins can access their own DOM elements
+   * without using the global `ui` object:
+   *
+   * @example
+   * const span = createSingleFromTemplate('my-widget')
+   * this.#ui = this.createUi(span)
+   * // this.#ui.myButton, this.#ui.mySelect, …
+   *
+   * @template {Element} T
+   * @param {T} element - Root element created from a plugin template
+   * @returns {T & Record<string, any>} Element with named descendants added as properties
+   */
+  createUi(element) {
+    return createNavigableElement(element);
+  }
+
+  /**
    * Read-only access to current state
    * @returns {ApplicationState|null}
    */
@@ -178,45 +209,90 @@ export class Plugin {
   }
 
   /**
-   * Get endpoint mappings for this plugin
-   * Override in subclasses to provide custom endpoint mappings.
-   * Use `...super.getEndpoints()` to include the base lifecycle endpoints.
-   * 
-   * @example
-   * getEndpoints() {
-   *   return {
-   *     ...super.getEndpoints(),
-   *     'state.update': this.handleStateUpdate.bind(this),
-   *     'validation.validate': this.validate.bind(this)
-   *   };
-   * }
-   * 
-   * @returns {Record<string, Function>} Mapping of endpoint paths to bound methods
+   * Get the public API of another registered plugin by name.
+   * Mirrors the backend `context.get_dependency(id)` pattern.
+   * Use this instead of static imports of other plugins' APIs.
+   * @template {keyof import('../plugin-registry.js').PluginRegistryTypes} N
+   * @param {N} name - Plugin name
+   * @returns {import('../plugin-registry.js').PluginRegistryTypes[N]} The plugin's public API
    */
-  getEndpoints() {
+  getDependency(name) {
+    return this.context.getDependency(name);
+  }
+
+  /**
+   * Get extension point mappings for this plugin.
+   *
+   * The base implementation auto-discovers:
+   * - Standard lifecycle methods: `install`, `start`, `shutdown`, `updateInternalState`, `onStateUpdate`
+   * - Computed methods declared in `static extensionPoints`: each path must have a corresponding
+   *   computed method `[ep.ns.name](...args) { return this.method(...args) }`
+   * - Per-key state handlers: methods matching `on<Key>Change` are registered as `onStateUpdate.<lowerKey>`
+   *
+   * @example
+   * static extensionPoints = [ep.toolbar.contentItems];
+   *
+   * [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
+   *
+   * @example
+   * async onXmlChange(newValue, prevValue) { ... }   // called when state.xml changes
+   *
+   * @returns {Record<string, Function>} Mapping of extension point paths to bound methods
+   */
+  getExtensionPoints() {
     /** @type {Record<string, Function>} */
-    const endpoints = {};
-    
-    // Standard lifecycle endpoints
-    if (typeof this.install === 'function') {
-      endpoints['install'] = this.install.bind(this);
+    const pts = {};
+
+    // Standard lifecycle extension points
+    for (const name of ['install', 'ready', 'start', 'shutdown', 'updateInternalState', 'onStateUpdate']) {
+      if (typeof this[name] === 'function') {
+        pts[name] = this[name].bind(this);
+      }
     }
-    if (typeof this.start === 'function') {
-      endpoints['start'] = this.start.bind(this);
+
+    // Auto-discover static extensionPoints declarations.
+    // Each path must have a corresponding computed method whose key is the full path string:
+    //   [ep.toolbar.contentItems]() { return [...] }
+    // Methods with dots in their name cannot exist in standard JS, so this[path]
+    // resolves only to computed methods — no naming conflicts between EP namespaces.
+    const staticPoints = /** @type {typeof Plugin} */ (this.constructor).extensionPoints;
+    if (Array.isArray(staticPoints)) {
+      for (const path of staticPoints) {
+        const value = this[path];
+        if (typeof value === 'function') {
+          pts[path] = value.bind(this);
+        }
+      }
     }
-    if (typeof this.shutdown === 'function') {
-      endpoints['shutdown'] = this.shutdown.bind(this);
+
+    // Auto-discover on<Key>Change methods → register as 'onStateUpdate.<lowerKey>'
+    const onChangeRe = /^on([A-Z][a-zA-Z]*)Change$/;
+    for (const proto of this.#prototypeChain()) {
+      for (const key of Object.getOwnPropertyNames(proto)) {
+        const match = onChangeRe.exec(key);
+        if (match && typeof this[key] === 'function') {
+          const stateKey = match[1].charAt(0).toLowerCase() + match[1].slice(1);
+          const epKey = `onStateUpdate.${stateKey}`;
+          if (!pts[epKey]) {
+            pts[epKey] = this[key].bind(this);
+          }
+        }
+      }
     }
-    
-    // New state management endpoints
-    if (typeof this.updateInternalState === 'function') {
-      endpoints['updateInternalState'] = this.updateInternalState.bind(this);
+
+    return pts;
+  }
+
+  /**
+   * Iterate the prototype chain from this class up to (but not including) Plugin itself.
+   * @returns {Iterable<object>}
+   */
+  * #prototypeChain() {
+    let proto = Object.getPrototypeOf(this);
+    while (proto && proto !== Plugin.prototype) {
+      yield proto;
+      proto = Object.getPrototypeOf(proto);
     }
-    if (typeof this.onStateUpdate === 'function') {
-      endpoints['onStateUpdate'] = this.onStateUpdate.bind(this);
-    }
-    
-    return endpoints;
   }
 
 }

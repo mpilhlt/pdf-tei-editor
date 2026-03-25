@@ -6,36 +6,17 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
-import { api } from './client.js';
-import { api as tools } from './tools.js';
+import ep from '../extension-points.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
-import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
-import ui from '../ui.js';
-import { logger } from '../app.js';
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { BackendPlugin } from './client.js'
- */
-
-/**
- * Backend plugins split button added to the tools button group
- * @typedef {object} backendPluginsDropdownPart
- * @property {SlButton} pluginsBtn - The button that triggers the backend plugins dropdown
- * @property {SlMenu} pluginsMenu - The menu containing backend plugin items
- */
-
-/**
- * Backend plugins result dialog UI structure
- * @typedef {object} backendPluginsResultDialogPart
- * @property {HTMLDivElement} icon - Icon container
- * @property {HTMLDivElement} content - Content container
- * @property {SlButton} openWindowBtn - Open in new window button
- * @property {SlButton} exportBtn - Export button
- * @property {SlButton} executeBtn - Execute button
- * @property {SlButton} closeBtn - Close button
+ * @import { SlDialog } from '../ui.js'
+ * @import { pluginResultDialogPart } from '../templates/backend-plugins-result-dialog.types.js'
  */
 
 // Register templates
@@ -63,6 +44,13 @@ export class BackendPluginsPlugin extends Plugin {
     this._dropdown = null;
   }
 
+  get #logger() { return this.getDependency('logger') }
+  get #client() { return this.getDependency('client') }
+  get #tools() { return this.getDependency('tools') }
+
+  /** @type {SlDialog & pluginResultDialogPart} */
+  #dialogUi = null
+
   /**
    * Installs the plugin
    * @param {ApplicationState} initialState
@@ -70,23 +58,19 @@ export class BackendPluginsPlugin extends Plugin {
   async install(initialState) {
     await super.install(initialState);
 
-    // Add result dialog to document body
-    const dialogElement = createSingleFromTemplate('backend-plugins-result-dialog');
-    document.body.appendChild(dialogElement);
-
-    updateUi();
+    const dialogElement = createSingleFromTemplate('backend-plugins-result-dialog', document.body)
+    this.#dialogUi = this.createUi(dialogElement)
 
     // Create plugin sandbox once
-    this.pluginSandbox = new PluginSandbox(this.context, ui.pluginResultDialog);
+    this.pluginSandbox = new PluginSandbox(this.context, this.#dialogUi);
     window.pluginSandbox = this.pluginSandbox;
 
-    // Setup close button handler
-    ui.pluginResultDialog.closeBtn.addEventListener('click', () => ui.pluginResultDialog.hide());
+    this.#dialogUi.closeBtn.addEventListener('click', () => this.#dialogUi.hide());
 
     // Clean up SSE subscriptions when dialog is hidden — only for the iframe,
     // not for popup windows that may still be using their subscriptions
-    ui.pluginResultDialog.addEventListener('sl-hide', () => {
-      const iframe = ui.pluginResultDialog.content?.querySelector('iframe');
+    this.#dialogUi.addEventListener('sl-hide', () => {
+      const iframe = this.#dialogUi.content.querySelector('iframe');
       if (iframe?.contentWindow) {
         this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
       }
@@ -96,7 +80,7 @@ export class BackendPluginsPlugin extends Plugin {
   async start() {
     // Create the backend-plugins split button and add it to the tools button group
     this._dropdown = createSingleFromTemplate('backend-plugins-dropdown');
-    tools.addButton(this._dropdown);
+    this.#tools.addButton(this._dropdown);
 
     // Attach menu selection handler once on this plugin's own menu
     this._dropdown.querySelector('[name="pluginsMenu"]').addEventListener('sl-select', (event) => {
@@ -111,16 +95,10 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
-  /**
-   * Reacts to state updates
-   * @param {Array<String>} changedKeys
-   */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('sessionId')) {
-      await this.discoverPlugins();
-      this._updateDropdownVisibility();
-      this.populateMenu();
-    }
+  async onSessionIdChange() {
+    await this.discoverPlugins();
+    this._updateDropdownVisibility();
+    this.populateMenu();
   }
 
   /**
@@ -130,7 +108,7 @@ export class BackendPluginsPlugin extends Plugin {
   _updateDropdownVisibility() {
     if (!this._dropdown) return;
     this._dropdown.style.display = this.plugins.length > 0 ? '' : 'none';
-    tools.updateVisibility();
+    this.#tools.updateVisibility();
   }
 
   /**
@@ -138,7 +116,7 @@ export class BackendPluginsPlugin extends Plugin {
    */
   async discoverPlugins() {
     try {
-      this.plugins = await api.getBackendPlugins();
+      this.plugins = await this.#client.getBackendPlugins();
     } catch (error) {
       console.error('Failed to discover backend plugins:', error);
       this.plugins = [];
@@ -311,13 +289,13 @@ export class BackendPluginsPlugin extends Plugin {
     try {
      
       // Execute the specified endpoint with provided params
-      const result = await api.executeBackendPlugin(plugin.id, endpointName, params);
+      const result = await this.#client.executeBackendPlugin(plugin.id, endpointName, params);
       // Display the result according to content
       this.displayResult(plugin, result);
 
     } catch (error) {
-      console.error(`Error executing plugin ${plugin.id}:`, error);
-      notify(`Failed to execute ${plugin.name}: ${error.message}`, 'danger', 'exclamation-octagon');
+      console.error(`Error executing plugin ${plugin.id}.${endpointName}:`, error);
+      notify(`Failed to execute endopoint "${endpointName}" of plugin "${plugin.name}", : ${error.message}`, 'danger', 'exclamation-octagon');
     }
   }
 
@@ -327,12 +305,9 @@ export class BackendPluginsPlugin extends Plugin {
    * @param {any} result - Must include outputUrl property
    */
   displayResultInIframe(plugin, result) {
-    const dialog = ui.pluginResultDialog;
-
-    // Configure dialog
-    dialog.setAttribute("label", plugin.name);
-    dialog.style.setProperty("--width", "90vw");
-    dialog.icon.innerHTML = '';
+    this.#dialogUi.setAttribute("label", plugin.name);
+    this.#dialogUi.style.setProperty("--width", "90vw");
+    this.#dialogUi.icon.innerHTML = '';
 
     // Create iframe with authentication
     const iframe = document.createElement('iframe');
@@ -349,16 +324,16 @@ export class BackendPluginsPlugin extends Plugin {
     iframe.style.height = '60vh';
     iframe.style.border = 'none';
 
-    dialog.content.innerHTML = '';
-    dialog.content.appendChild(iframe);
+    this.#dialogUi.content.innerHTML = '';
+    this.#dialogUi.content.appendChild(iframe);
 
-    // Configure "Open in new window" button
-    dialog.openWindowBtn.style.display = 'inline-flex';
-    const newOpenWindowBtn = dialog.openWindowBtn.cloneNode(true);
-    dialog.openWindowBtn.replaceWith(newOpenWindowBtn);
-    updateUi();
+    // Replace button to remove stale listeners, then reassign property
+    this.#dialogUi.openWindowBtn.style.display = 'inline-flex';
+    const newOpenWindowBtn = this.#dialogUi.openWindowBtn.cloneNode(true);
+    this.#dialogUi.openWindowBtn.replaceWith(newOpenWindowBtn);
+    this.#dialogUi.openWindowBtn = newOpenWindowBtn;
 
-    ui.pluginResultDialog.openWindowBtn.addEventListener('click', () => {
+    this.#dialogUi.openWindowBtn.addEventListener('click', () => {
       const childWindow = window.open(fullUrl, '_blank', 'width=1200,height=800');
       const closeChild = () => {
         if (childWindow && !childWindow.closed) {
@@ -367,17 +342,17 @@ export class BackendPluginsPlugin extends Plugin {
       };
       window.addEventListener('beforeunload', closeChild);
       // Clean up iframe SSE subscriptions and remove iframe before closing dialog
-      const iframe = dialog.content.querySelector('iframe');
-      if (iframe?.contentWindow) {
-        this.pluginSandbox._cleanupSSESubscriptions(iframe.contentWindow);
+      const currentIframe = this.#dialogUi.content.querySelector('iframe');
+      if (currentIframe?.contentWindow) {
+        this.pluginSandbox._cleanupSSESubscriptions(currentIframe.contentWindow);
       }
-      dialog.content.innerHTML = '';
-      dialog.hide();
+      this.#dialogUi.content.innerHTML = '';
+      this.#dialogUi.hide();
     });
 
-    this.configureExportButton(dialog, plugin, result);
-    this.configureExecuteButton(dialog, result);
-    dialog.show();
+    this.configureExportButton(this.#dialogUi, plugin, result);
+    this.configureExecuteButton(this.#dialogUi, result);
+    this.#dialogUi.show();
   }
 
   /**
@@ -392,9 +367,9 @@ export class BackendPluginsPlugin extends Plugin {
 
       const newExportBtn = dialog.exportBtn.cloneNode(true);
       dialog.exportBtn.replaceWith(newExportBtn);
-      updateUi();
+      dialog.exportBtn = newExportBtn;
 
-      ui.pluginResultDialog.exportBtn.addEventListener('click', async () => {
+      dialog.exportBtn.addEventListener('click', async () => {
         try {
           let exportUrl;
 
@@ -460,9 +435,9 @@ export class BackendPluginsPlugin extends Plugin {
 
       const newExecuteBtn = dialog.executeBtn.cloneNode(true);
       dialog.executeBtn.replaceWith(newExecuteBtn);
-      updateUi();
+      dialog.executeBtn = newExecuteBtn;
 
-      ui.pluginResultDialog.executeBtn.addEventListener('click', async () => {
+      dialog.executeBtn.addEventListener('click', async () => {
         try {
           // Build execute URL with authentication
           const executeUrl = new URL(result.executeUrl, window.location.origin);
@@ -473,13 +448,13 @@ export class BackendPluginsPlugin extends Plugin {
           }
 
           // Load execute result in the same iframe
-          const iframe = ui.pluginResultDialog.content.querySelector('iframe');
+          const iframe = dialog.content.querySelector('iframe');
           if (iframe) {
             iframe.src = executeUrl.toString();
           }
 
           // Hide execute button after clicking
-          ui.pluginResultDialog.executeBtn.style.display = 'none';
+          dialog.executeBtn.style.display = 'none';
 
           notify('Executing...', 'primary', 'info-circle');
         } catch (error) {
@@ -513,7 +488,7 @@ export class BackendPluginsPlugin extends Plugin {
       if (!response.ok) {
         // Status 499 = cancelled by user, don't show error (notification already sent via SSE)
         if (response.status === 499) {
-          logger.info('Download cancelled by user');
+          this.#logger.info('Download cancelled by user');
           return;
         }
         throw new Error(`Download failed: ${response.statusText}`);
@@ -549,7 +524,7 @@ export class BackendPluginsPlugin extends Plugin {
    * @param {any} result
    */
   displayResult(plugin, result) {
-    const dialog = ui.pluginResultDialog;
+    const dialog = this.#dialogUi;
 
     // Check if result contains downloadUrl for direct file download
     if (result && result.downloadUrl) {
@@ -614,30 +589,33 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
+  static extensionPoints = [ep.backendPlugins.execute];
+
   /**
-   * Execute a backend plugin by ID. Exposed as a PluginManager endpoint so
+   * Extension point handler for `ep.backendPlugins.execute`.
+   * Called by frontend sandbox extensions to trigger execution of a specific
+   * backend plugin endpoint by ID. Delegates to {@link BackendPluginsPlugin#execute}.
+   * @param {string} pluginId
+   * @param {string} endpointName
+   * @param {Object} params
+   * @returns {Promise<void>}
+   */
+  [ep.backendPlugins.execute](...args) { return this.execute(...args) }
+
+  /**
+   * Execute a backend plugin by ID. Exposed as an extension point so
    * frontend extensions can trigger plugin execution via sandbox.invoke().
    * @param {string} pluginId
    * @param {string} endpointName
    * @param {Object} params
    */
-  async executePluginById(pluginId, endpointName, params) {
+  async execute(pluginId, endpointName, params) {
     const plugin = this.plugins.find(p => p.id === pluginId);
     if (!plugin) {
-      logger.warn(`executePluginById: plugin '${pluginId}' not found`);
+      this.#logger.warn(`execute: plugin '${pluginId}' not found`);
       return;
     }
     await this.executePlugin(plugin, endpointName, params);
-  }
-
-  /**
-   * @override
-   */
-  getEndpoints() {
-    return {
-      ...super.getEndpoints(),
-      'backend-plugins.execute': this.executePluginById.bind(this),
-    };
   }
 }
 
