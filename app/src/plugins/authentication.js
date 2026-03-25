@@ -269,7 +269,7 @@ class AuthenticationPlugin extends Plugin {
           resolve(authData);
         } catch (error) {
           this.#ui.message.textContent = 'Wrong username or password';
-          this.#logger.error('Login failed: ' + String(error))
+          this.#logger.info('Login failed: ' + String(error))
           reject(error);
         } finally {
           this.#ui.password.value = "";

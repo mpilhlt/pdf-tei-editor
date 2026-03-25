@@ -141,7 +141,10 @@ describe('PluginManager', () => {
       
       // Create a Plugin instance with custom endpoints
       class CustomPlugin extends Plugin {
-        static extensionPoints = ['validation.validate', 'state.update']
+        static extensionPoints = ['validation.validate', 'state.update'];
+
+        ['validation.validate'](...args) { return this.validate(...args) }
+        ['state.update'](...args) { return this.update(...args) }
 
         async validate(options) {
           return { valid: true };

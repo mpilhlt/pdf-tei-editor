@@ -4,7 +4,7 @@
  * @import { PluginContext } from './plugin-context.js'
  */
 
-import { createNavigableElement } from './ui-system.js'
+import { createNavigableElement } from './navigable-element.js'
 
 /**
  * Base class for plugins that provides state management and lifecycle methods
@@ -230,7 +230,7 @@ export class Plugin {
    * - Per-key state handlers: methods matching `on<Key>Change` are registered as `onStateUpdate.<lowerKey>`
    *
    * @example
-   * static extensionPoints = [ep.toolbar.contentItems]
+   * static extensionPoints = [ep.toolbar.contentItems];
    *
    * [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
    *

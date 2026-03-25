@@ -8,6 +8,7 @@
  */
 
 import { updateUi } from '../ui.js';
+import { createNavigableElement } from './navigable-element.js';
 
 /**
  * @typedef {object} Template
@@ -246,78 +247,7 @@ export async function createHtmlElements(htmlOrFile, parentNode = null) {
   return nodes;
 }
 
-/**
- * Finds all descendants of a given node that have a "name" or "data-name" attribute,
- * but does not recurse into those nodes. This means descendants of the
- * named nodes are excluded. If duplicate names are found, the first
- * occurrence is used.
- *
- * `sl-icon` and `sl-icon-button` are never matched via `name` because those
- * elements use `name` to specify the icon to display, not as a navigation label.
- * Use `data-name` on such elements when a navigation label is needed.
- *
- * @param {Element|Document} node The starting node to search from.
- * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
- */
-function findNamedDescendants(node) {
-  // Tags that use `name` for element-specific purposes (e.g. icon identifier),
-  // not as a navigation label. Use `data-name` on these when a label is needed.
-  const skipNameAttrTags = ['sl-icon', 'sl-icon-button']
-  const results = {};
-
-  /**
-   * Recursive function that adds to the results object
-   * @param {Element|Document} currentNode
-   * @returns {void}
-   */
-  function traverse(currentNode) {
-    if (!currentNode || !currentNode.childNodes) {
-      return;
-    }
-
-    for (let i = 0; i < currentNode.childNodes.length; i++) {
-      /** @type {Element} */
-      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
-      // Check if it's an element (important to avoid text nodes)
-      if (childNode.nodeType === Node.ELEMENT_NODE) {
-        const tag = childNode.tagName?.toLowerCase()
-
-        // Support both "name" and "data-name" attributes for navigation.
-        const nameAttribute = (!skipNameAttrTags.includes(tag) && childNode.getAttribute("name")) || childNode.getAttribute("data-name");
-
-        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
-          // @ts-ignore
-          results[nameAttribute] = childNode;
-        } else {
-          // Only recurse if the current node doesn't have a name attribute
-          // or if the name is already in the results. This prevents
-          // recursion into named nodes.
-          traverse(childNode);
-        }
-      }
-    }
-  }
-  traverse(node);
-  return /** @type {{ [x: string]: Element }} */(results);
-}
-
-/**
- * Creates a navigable element by adding named descendant elements as properties.
- * Each property gives direct access to the DOM element (which is also the navigation object).
- * You must be careful to use names that do not override existing properties.
- *
- * @template {Element|Document} T
- * @param {T} node The element to enhance with navigation
- * @returns {T & Record<string, any>} The element with added navigation properties
- */
-export function createNavigableElement(node) {
-  const namedDescendants = findNamedDescendants(node);
-  for (let name in namedDescendants) {
-    namedDescendants[name] = createNavigableElement(namedDescendants[name]);
-  }
-  const modifiedObj = Object.assign(node, namedDescendants);
-  return modifiedObj;
-}
+export { createNavigableElement } from './navigable-element.js';
 
 /**
  * Gets all registered template IDs

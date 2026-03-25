@@ -152,7 +152,7 @@ All other extension points: declare in `static extensionPoints` and implement a 
 import ep from '../extension-points.js'
 
 class MyPlugin extends Plugin {
-  static extensionPoints = [ep.toolbar.contentItems]
+  static extensionPoints = [ep.toolbar.contentItems];
 
   /**
    * Extension point handler for `ep.toolbar.contentItems`.

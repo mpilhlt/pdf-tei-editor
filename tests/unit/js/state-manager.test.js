@@ -206,15 +206,25 @@ describe('StateManager', () => {
     it('should handle storage errors gracefully', () => {
       // Mock storage error
       global.sessionStorage.setItem = () => { throw new Error('Storage full'); };
-      
-      stateManager.preserveState(true);
-      
-      // Should not throw
-      const { newState } = stateManager.applyStateChanges(initialState, {
-        pdf: 'doc1.pdf'
-      });
-      
-      assert.strictEqual(newState.pdf, 'doc1.pdf');
+
+      // Suppress and capture the expected console.warn
+      const warnings = [];
+      const origWarn = console.warn;
+      console.warn = (...args) => warnings.push(args.join(' '));
+
+      try {
+        stateManager.preserveState(true);
+
+        // Should not throw
+        const { newState } = stateManager.applyStateChanges(initialState, {
+          pdf: 'doc1.pdf'
+        });
+
+        assert.strictEqual(newState.pdf, 'doc1.pdf');
+        assert.ok(warnings.some(w => w.includes('Storage full')), 'expected warn about storage failure');
+      } finally {
+        console.warn = origWarn;
+      }
     });
   });
 

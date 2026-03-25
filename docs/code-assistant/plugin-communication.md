@@ -72,7 +72,7 @@ export default {
 import ep from '../extension-points.js'
 
 class MyPlugin extends Plugin {
-  static extensionPoints = [ep.toolbar.contentItems]
+  static extensionPoints = [ep.toolbar.contentItems];
 
   /**
    * Extension point handler for `ep.toolbar.contentItems`.
@@ -89,6 +89,8 @@ class MyPlugin extends Plugin {
 ```
 
 The base class discovers the computed method automatically. The key is the full EP path string (`"toolbar.contentItems"`), so there are no naming conflicts between different namespaces.
+
+> **ASI hazard**: always end `static extensionPoints = [...]` with a semicolon. Without it, the parser treats the following `[ep.X.Y](...)` computed method as a subscript access on the array, causing a `SyntaxError: Unexpected token '{'`.
 
 Extension point handler methods MUST be documented with JSDoc: state the EP being handled, which host plugin invokes them and when, the `Delegates to` link, and `@param`/`@returns` tags.
 

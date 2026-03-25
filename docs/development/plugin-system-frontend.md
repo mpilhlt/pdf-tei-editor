@@ -192,7 +192,7 @@ Declare `static extensionPoints` and implement a computed method that delegates 
 import ep from '../extension-points.js'
 
 class MyPlugin extends Plugin {
-  static extensionPoints = [ep.toolbar.contentItems]
+  static extensionPoints = [ep.toolbar.contentItems];
 
   /**
    * Extension point handler for `ep.toolbar.contentItems`.
