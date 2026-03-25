@@ -66,6 +66,7 @@ class PdfViewerPlugin extends Plugin {
   /**
    * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
    * Plugin methods take precedence; all other property accesses fall through to the inner viewer.
+   * TODO: Add a dedciated accessor and refactor consuming plugins's calls accordingly
    * @returns {PDFJSViewer}
    */
   getApi() {
@@ -605,15 +606,3 @@ export default PdfViewerPlugin;
 /** @deprecated Use PdfViewerPlugin class directly */
 export const plugin = PdfViewerPlugin;
 
-/** Lazy-proxy API for backward compatibility — exposes PDFJSViewer instance */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = PdfViewerPlugin.getInstance().getApi();
-    const value = instance[prop];
-    return typeof value === 'function' ? value.bind(instance) : value;
-  },
-  set(_, prop, value) {
-    PdfViewerPlugin.getInstance().getApi()[prop] = value;
-    return true;
-  }
-});

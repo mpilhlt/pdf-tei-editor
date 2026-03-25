@@ -138,47 +138,6 @@ class ClientPlugin extends Plugin {
 
 export default ClientPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('client')` in plugins, or import `ClientPlugin` directly.
- */
-export const api = {
-  get lastHttpStatus() { return lastHttpStatus; },
-  ApiError,
-  LockedError,
-  ConnectionError,
-  ServerError,
-  get apiClient() { return apiClient; },
-  callApi,
-  getFileList,
-  validateXml,
-  getAutocompleteData,
-  saveXml,
-  extract,
-  getExtractorList,
-  loadInstructions,
-  saveInstructions,
-  deleteFiles,
-  createVersionFromUpload,
-  uploadFile,
-  getConfigData,
-  setConfigValue,
-  moveFiles,
-  copyFiles,
-  getCollections,
-  createCollection,
-  state,
-  sendHeartbeat,
-  checkLock,
-  acquireLock,
-  releaseLock,
-  getAllLockedFileIds,
-  login,
-  logout,
-  status,
-  getBackendPlugins,
-  executeBackendPlugin
-};
 
 /** @deprecated Use ClientPlugin class directly */
 export const plugin = ClientPlugin;
@@ -776,3 +735,41 @@ async function executeBackendPlugin(pluginId, endpoint, params) {
   }
   throw new ApiError(`Plugin execution failed: ${response.error || 'Unknown error'}`);
 }
+
+const api = {
+  get lastHttpStatus() { return lastHttpStatus; },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
+  get apiClient() { return apiClient; },
+  callApi,
+  getFileList,
+  validateXml,
+  getAutocompleteData,
+  saveXml,
+  extract,
+  getExtractorList,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles,
+  createVersionFromUpload,
+  uploadFile,
+  getConfigData,
+  setConfigValue,
+  moveFiles,
+  copyFiles,
+  getCollections,
+  createCollection,
+  state,
+  sendHeartbeat,
+  checkLock,
+  acquireLock,
+  releaseLock,
+  getAllLockedFileIds,
+  login,
+  logout,
+  status,
+  getBackendPlugins,
+  executeBackendPlugin
+};

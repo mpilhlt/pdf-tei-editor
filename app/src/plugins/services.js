@@ -463,21 +463,6 @@ class ServicesPlugin extends Plugin {
 
 export default ServicesPlugin
 
-/**
- * Lazy-proxy for backward compatibility.
- * @deprecated Use `getDependency('services')` in plugins, or import `ServicesPlugin` directly.
- */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = ServicesPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    ServicesPlugin.getInstance()[prop] = value
-    return true
-  }
-})
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node

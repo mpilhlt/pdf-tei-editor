@@ -1061,11 +1061,6 @@ class FileSelectionDrawerPlugin extends Plugin {
 
 export default FileSelectionDrawerPlugin;
 
-/** Lazy-proxy API for backward compatibility */
-export const api = {
-  open: () => FileSelectionDrawerPlugin.getInstance().open(),
-  close: () => FileSelectionDrawerPlugin.getInstance().close()
-};
 
 /** @deprecated Use FileSelectionDrawerPlugin class directly */
 export const plugin = FileSelectionDrawerPlugin;

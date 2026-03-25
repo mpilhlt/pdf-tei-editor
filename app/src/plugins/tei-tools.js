@@ -6,12 +6,12 @@
  * @import { ApplicationState } from '../state.js'
  * @import { SlDrawer } from '../ui.js'
  * @import { teiRevisionHistoryDrawerPart } from '../templates/tei-revision-history-drawer.types.js'
+ * @import { teiToolsStatusbarPart } from '../templates/tei-tools-statusbar.types.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 
@@ -75,12 +75,16 @@ class TeiToolsPlugin extends Plugin {
     await super.install(_state)
     this.getDependency('logger').debug(`Installing plugin "tei-tools"`)
 
+    const xmlEditorApi = this.getDependency('xmleditor')
+
     const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
-    statusbarWidgets.forEach(widget => {
-      if (widget instanceof HTMLElement) {
-        ui.xmlEditor.statusbar.add(widget, 'left', 2)
-      }
-    })
+    const tooltipEl = /** @type {HTMLElement} */ ([...statusbarWidgets].find(w => w instanceof HTMLElement))
+    if (tooltipEl) {
+      const tooltipUi = /** @type {teiToolsStatusbarPart} */ (this.createUi(tooltipEl))
+      this.#teiHeaderToggleWidget = tooltipUi.teiHeaderToggleWidget
+      this.#teiHeaderLabel = tooltipUi.teiHeaderLabel
+      xmlEditorApi.addStatusbarWidget(tooltipEl, 'left', 2)
+    }
 
     this.#revisionHistoryBtn = PanelUtils.createButton({
       icon: 'clock-history',
@@ -88,14 +92,9 @@ class TeiToolsPlugin extends Plugin {
       name: 'revisionHistoryBtn'
     })
     this.#revisionHistoryBtn.style.display = 'none'
-    ui.xmlEditor.toolbar.add(this.#revisionHistoryBtn, 1)
+    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 1)
 
     this.#ui = this.createUi(createSingleFromTemplate('tei-revision-history-drawer', document.body))
-    updateUi()
-
-    // Capture statusbar widget refs added by this plugin
-    this.#teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
-    this.#teiHeaderLabel = ui.xmlEditor.statusbar.teiHeaderLabel
 
     this.#xmlEditorApi.on('editorAfterLoad', () => {
       this.#xmlEditorApi.whenReady().then(() => {

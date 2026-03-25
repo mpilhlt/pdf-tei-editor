@@ -635,18 +635,3 @@ export default ExtractionPlugin
 
 export const plugin = ExtractionPlugin
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('extraction')` in plugins.
- */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = ExtractionPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    ExtractionPlugin.getInstance()[prop] = value
-    return true
-  }
-})

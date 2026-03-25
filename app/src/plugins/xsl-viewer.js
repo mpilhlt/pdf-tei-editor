@@ -12,7 +12,6 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
-import ui from '../ui.js';
 import { notify } from '../modules/sl-utils.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import { prettyPrintNode } from '../modules/tei-utils.js';
@@ -117,14 +116,16 @@ export class XslViewerPlugin extends Plugin {
   async install(initialState) {
     await super.install(initialState);
 
+    const xmlEditorApi = this.getDependency('xmleditor');
+
     // Add overlay to xmlEditor container
     const overlayElement = createSingleFromTemplate('xsl-viewer-overlay');
-    ui.xmlEditor.appendChild(overlayElement);
+    xmlEditorApi.appendToEditor(overlayElement);
     this.#overlay = /** @type {HTMLDivElement & xslViewerOverlayPart} */ (this.createUi(overlayElement));
 
     // Add button to toolbar (priority 50.5 - between TEI buttons and spacer)
     const buttonElement = createSingleFromTemplate('xsl-viewer-button');
-    ui.xmlEditor.toolbar.add(buttonElement, 50.5);
+    xmlEditorApi.addToolbarWidget(buttonElement, 50.5);
 
     // Store direct references to nested elements (sl-dropdown doesn't expose them via name navigation)
     this.#xslViewerBtn = /** @type {import('../ui.js').SlButton} */ (buttonElement.querySelector('[name="xslViewerBtn"]'));

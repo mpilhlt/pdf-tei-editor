@@ -74,20 +74,6 @@ class ConfigPlugin extends Plugin {
 
 export default ConfigPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility — delegates to the singleton instance.
- * @deprecated Use `getDependency('config')` in plugins, or import `ConfigPlugin` directly.
- * @namespace
- */
-export const api = {
-  /** @type {ConfigPlugin['get']} */
-  get: (...args) => ConfigPlugin.getInstance().get(...args),
-  /** @type {ConfigPlugin['set']} */
-  set: (...args) => ConfigPlugin.getInstance().set(...args),
-  load: () => ConfigPlugin.getInstance().load(),
-  /** @returns {Map<string, any>} */
-  toMap: () => ConfigPlugin.getInstance().toMap(),
-};
 
 /** @deprecated Use ConfigPlugin class directly */
 export const plugin = ConfigPlugin;

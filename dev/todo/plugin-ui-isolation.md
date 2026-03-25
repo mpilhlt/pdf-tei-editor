@@ -70,6 +70,37 @@ Backward compat note: `document-actions.install()` still calls `ui.toolbar.add(s
 - **`app/src/plugins/services.js`** — removed redundant `editorReady` handler that set `ui.toolbar.documentActions.saveRevision.disabled = false` (covered by `document-actions.onStateUpdate`)
 - **`app/src/plugins/document-actions.js`** — replaced all `ui.toolbar.xml/pdf/diff.*` accesses with `state.xml`/`state.pdf` and `getDependency('file-selection').getOptionValues(type)`
 - **`app/src/plugins/start.js`** — replaced `ui.pdfViewer.statusbar.searchSwitch.checked` with `getDependency('pdfviewer').isAutoSearchEnabled()`
+- **`app/src/plugins/xmleditor.js`** — added `addToolbarWidget(widget, priority)` and `appendToEditor(element)` public methods; both exposed via the existing Proxy in `getApi()`; removed `export const api` and `export { api as xmlEditor }` shims
+- **`app/src/plugins/tei-tools.js`** — replaced `ui.xmlEditor.statusbar.add()` with `getDependency('xmleditor').addStatusbarWidget()`; replaced `ui.xmlEditor.toolbar.add()` with `getDependency('xmleditor').addToolbarWidget()`; replaced `ui.xmlEditor.statusbar.teiHeaderToggleWidget/teiHeaderLabel` read-back with `createUi(tooltipEl)` scoped refs; added `teiToolsStatusbarPart` import; removed `import ui, { updateUi }`
+- **`app/src/plugins/xsl-viewer.js`** — replaced `ui.xmlEditor.appendChild()` with `getDependency('xmleditor').appendToEditor()`; replaced `ui.xmlEditor.toolbar.add()` with `getDependency('xmleditor').addToolbarWidget()`; removed `import ui` (xmleditor already in deps)
+- **`app/src/plugins/tei-wizard.js`** — replaced `ui.xmlEditor.toolbar.add()` with `getDependency('xmleditor').addToolbarWidget()`; added `xmleditor` to deps
+- **`app/src/plugins/document-actions.js`** — removed BC `ui.toolbar.add(span, 8)` + `updateUi()` + `import ui` (move-files only needs `addButton()` which works on unattached DOM subtree); element now contributed solely via `toolbar.contentItems` EP
+- **All 15 plugin files** — removed `export const api` shims and JSDoc comments; exception: `client.js` retains `const api` (non-exported) because `ClientPlugin.getApi()` returns it as the functional API surface
+- **`app/src/plugins/annotation-guide.js`** — removed `import { api as extraction }` and `import { api as clientApi }`; replaced with `get #extraction()` / `get #client()` lazy getters
+
+---
+
+## Session summary and remaining issues
+
+### Toolbar passive invocation — COMPLETE
+
+`toolbar.js:start()` already collects `toolbar.contentItems` and `toolbar.menuItems` from all plugins via EP. Elements already connected to the toolbar during `install()` are skipped (already-connected check). No further work needed here.
+
+### Remaining own-plugin `ui.*` accesses (low priority, cosmetic)
+
+Not architectural violations, but prevent removing `import ui` entirely from these files:
+
+| Plugin | Access | Notes |
+| --- | --- | --- |
+| `file-selection.js` | `ui.toolbar.add(control, priority)` (line 75) | Redundant — EP already handles this; toolbar.start() skips already-connected elements |
+| `file-selection.js` | `ui.toolbar.pdf/xml/diff/variant/collection` (lines 80–84) | Read-back of own elements after adding; should store refs at creation time instead |
+| `extraction.js` | `ui.toolbar.add(extractionBtnGroup, 7)` (line 137) | Redundant — EP already handles this |
+
+To remove: for `file-selection.js`, capture element refs directly from created elements (before DOM insertion), remove `ui.toolbar.add()`, rely purely on EP. Same for `extraction.js`.
+
+### `client.js` API pattern
+
+`ClientPlugin.getApi()` returns a module-level `const api` object exposing all client functions. This is intentional — `getDependency('client')` returns the functions object, not the plugin instance. The `const api` is not exported. Changing this (removing `getApi()` override) would require all consumers to call plugin methods directly — a larger refactor outside this migration's scope.
 
 ---
 
@@ -149,7 +180,7 @@ For each plugin calling `ui.toolbar.add(element)` in `install()`:
 
 | Plugin | Notes |
 | --- | --- |
-| `document-actions.js` | Pilot; still calls `ui.toolbar.add()` in `install()` for backward compat with `move-files.js` |
+| `document-actions.js` | Pilot; BC `ui.toolbar.add()` removed; element contributed via EP only; removed `export const api` |
 | `extraction.js` | `toolbar.contentItems` EP; `addButton()` public API |
 | `tools.js` | `toolbar.contentItems` EP |
 | `file-selection.js` | `toolbar.contentItems` EP; private fields for select refs |
@@ -164,10 +195,10 @@ For each plugin calling `ui.toolbar.add(element)` in `install()`:
 | `help.js` | Multi-root template: wrapper `div` appended to body used as `createUi` root |
 | `info.js` | Cross-plugin `ui.loginDialog` replaced with `getDependency('authentication').hideLoginDialog()`, `.appendToLoginDialog()`, `.showLoginDialog()` — those three methods added to `AuthenticationPlugin` |
 | `pdfviewer.js` | No template; widget refs stored as private fields; `ui.pdfViewer.headerbar/toolbar/statusbar` kept as local vars in `install()` (own panels) |
-| `xmleditor.js` | No template; panel refs captured early via `ui.xmlEditor.headerbar/toolbar/statusbar`; all subsequent accesses use private fields; added public `addStatusbarWidget`, `removeStatusbarWidget`, `setReadOnlyContext` methods |
-| `tei-tools.js` | `this.#ui` for own drawer; `#revisionHistoryBtn`/`#teiHeaderToggleWidget`/`#teiHeaderLabel` as private fields; `api as xmlEditorApi` → `getDependency` getter; cross-plugin panel adds (`ui.xmlEditor.statusbar/toolbar.add()`) retained |
-| `xsl-viewer.js` | `this.#overlay` (createUi); `#xslViewerBtn`/`#xslViewerMenu` via querySelector (in sl-dropdown); cross-plugin panel adds retained |
-| `tei-wizard.js` | `this.#ui` for own dialog; `#teiWizardBtn` as private field; `configApi`/`xmlEditorApi` → lazy getters; `ui.spinner.*` retained (legitimately global); cross-plugin panel add retained |
+| `xmleditor.js` | No template; panel refs captured early via `ui.xmlEditor.headerbar/toolbar/statusbar`; all subsequent accesses use private fields; added public `addStatusbarWidget`, `removeStatusbarWidget`, `setReadOnlyContext`, `addToolbarWidget`, `appendToEditor` methods; removed `export const api` |
+| `tei-tools.js` | `this.#ui` for own drawer; `#teiHeaderToggleWidget`/`#teiHeaderLabel` captured via `createUi(tooltipEl)`; all `ui.xmlEditor.*` cross-plugin adds replaced with `addStatusbarWidget`/`addToolbarWidget` API |
+| `xsl-viewer.js` | `this.#overlay` (createUi); `appendToEditor()`/`addToolbarWidget()` APIs for xmleditor adds; `#xslViewerBtn`/`#xslViewerMenu` via querySelector (in sl-dropdown) |
+| `tei-wizard.js` | `this.#ui` for own dialog; `#teiWizardBtn` as private field; `addToolbarWidget()` API; `ui.spinner.*` retained (legitimately global); `xmleditor` added to deps |
 | `rbac-manager.js` | `this.#ui` for own dialog; removed `import ui`; imports fixed to `ui-system.js`; hand-written typedef removed |
 | `access-control.js` | `addStatusbarWidget` API for statusbar additions; `setReadOnlyContext` API instead of direct widget access; added `xmleditor` to deps; removed `import ui` |
 | `filedata.js` | `addStatusbarWidget`/`removeStatusbarWidget` APIs; fixed imports from `ui-system.js`; removed `import ui` |
@@ -175,8 +206,9 @@ For each plugin calling `ui.toolbar.add(element)` in `install()`:
 | `services.js` | Removed redundant `editorReady` handler (covered by `document-actions.onStateUpdate`) |
 | `document-actions.js` | `state.xml`/`state.pdf` and `file-selection.getOptionValues(type)` instead of direct select element access |
 | `start.js` | `pdfviewer.isAutoSearchEnabled()` instead of `ui.pdfViewer.statusbar.searchSwitch.checked` |
-| `pdfviewer.js` | Added `isAutoSearchEnabled()` public method |
-| `file-selection.js` | Added `getOptionValues(type)` public method |
+| `pdfviewer.js` | Added `isAutoSearchEnabled()` public method; removed `export const api` |
+| `file-selection.js` | Added `getOptionValues(type)` public method; removed `export const api` |
+| All 15 plugins | Removed `export const api` shims (no active consumers in codebase) |
 
 #### Not yet migrated — own-plugin `ui` access (low risk, cosmetic)
 

@@ -197,15 +197,3 @@ class ToolsPlugin extends Plugin {
 
 export default ToolsPlugin
 
-/** @deprecated Use getDependency('tools') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = ToolsPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    ToolsPlugin.getInstance()[prop] = value
-    return true
-  }
-})

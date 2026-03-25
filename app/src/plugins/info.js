@@ -299,17 +299,5 @@ class InfoPlugin extends Plugin {
 
 export default InfoPlugin
 
-/** @deprecated Use getDependency('info') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = InfoPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    InfoPlugin.getInstance()[prop] = value
-    return true
-  }
-})
 
 export const plugin = InfoPlugin

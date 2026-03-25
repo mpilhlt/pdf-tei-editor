@@ -12,7 +12,6 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
 import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
@@ -65,9 +64,6 @@ class DocumentActionsPlugin extends Plugin {
 
     const span = createSingleFromTemplate('document-action-buttons')
     this.#ui = this.createUi(span)
-    ui.toolbar.add(span, 8)
-    updateUi()
-
     const dialog = createSingleFromTemplate('save-document-dialog', document.body)
     this.#dialogUi = this.createUi(dialog)
 
@@ -538,17 +534,5 @@ class DocumentActionsPlugin extends Plugin {
 
 export default DocumentActionsPlugin
 
-/** @deprecated Use getDependency('document-actions') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = DocumentActionsPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    DocumentActionsPlugin.getInstance()[prop] = value
-    return true
-  }
-})
 
 export const plugin = DocumentActionsPlugin

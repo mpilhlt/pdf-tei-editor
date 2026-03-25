@@ -513,17 +513,5 @@ class AccessControlPlugin extends Plugin {
 
 export default AccessControlPlugin
 
-/** @deprecated Use getDependency('access-control') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = AccessControlPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    AccessControlPlugin.getInstance()[prop] = value
-    return true
-  }
-})
 
 export const plugin = AccessControlPlugin

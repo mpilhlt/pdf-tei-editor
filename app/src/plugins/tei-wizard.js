@@ -27,7 +27,7 @@ await registerTemplate('tei-wizard-dialog', 'tei-wizard-dialog.html')
 class TeiWizardPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'tei-wizard', deps: ['services', 'logger'] })
+    super(context, { name: 'tei-wizard', deps: ['services', 'logger', 'xmleditor'] })
   }
 
   get #configApi() { return this.getDependency('config') }
@@ -48,7 +48,7 @@ class TeiWizardPlugin extends Plugin {
     this.#teiWizardBtn = createSingleFromTemplate('tei-wizard-button')
     this.#ui = this.createUi(createSingleFromTemplate('tei-wizard-dialog', document.body))
 
-    ui.xmlEditor.toolbar.add(this.#teiWizardBtn, 51.5)
+    this.#xmlEditorApi.addToolbarWidget(this.#teiWizardBtn, 51.5)
 
     this.#teiWizardBtn.addEventListener('widget-click', () => this.#runTeiWizard())
 

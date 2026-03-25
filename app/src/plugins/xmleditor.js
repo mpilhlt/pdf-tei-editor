@@ -182,12 +182,13 @@ class XmlEditorPlugin extends Plugin {
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
    * Plugin methods take precedence; all other property accesses fall through to the inner editor.
+   * TODO: Add a dedciated accessor and refactor consuming plugins's calls accordingly
    * @returns {NavXmlEditor}
    */
   getApi() {
     const plugin = this;
     const inner = this.#xmlEditor;
-    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'setReadOnlyContext', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
     return /** @type {NavXmlEditor} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -756,6 +757,23 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
+   * Add a widget to the XML editor toolbar.
+   * @param {HTMLElement} widget
+   * @param {number} priority
+   */
+  addToolbarWidget(widget, priority) {
+    this.#toolbar.add(widget, priority)
+  }
+
+  /**
+   * Append an element as a direct child of the XML editor panel (e.g. overlays).
+   * @param {HTMLElement} element
+   */
+  appendToEditor(element) {
+    this.#xmlEditorEl.appendChild(element)
+  }
+
+  /**
    * Open document and scroll to line
    * @param {string} stableId - Document stable ID
    * @param {number} lineNumber - Line number (1-based)
@@ -1049,21 +1067,6 @@ export default XmlEditorPlugin;
 /** @deprecated Use XmlEditorPlugin class directly */
 export const plugin = XmlEditorPlugin;
 
-/** Lazy-proxy API for backward compatibility — exposes NavXmlEditor instance */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = XmlEditorPlugin.getInstance().getApi();
-    const value = instance[prop];
-    return typeof value === 'function' ? value.bind(instance) : value;
-  },
-  set(_, prop, value) {
-    XmlEditorPlugin.getInstance().getApi()[prop] = value;
-    return true;
-  }
-});
-
-// Named export for backward compatibility (api === xmlEditor instance via proxy)
-export { api as xmlEditor };
 
 // Re-export XMLEditor class (used by external code)
 export { XMLEditor };

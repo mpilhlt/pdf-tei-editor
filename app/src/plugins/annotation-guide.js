@@ -20,8 +20,6 @@ import {
   fetchMarkdown,
   renderMarkdown
 } from '../modules/markdown-utils.js'
-import { api as extraction } from './extraction.js'
-import { api as clientApi } from './client.js'
 
 /**
  * Annotation guide information from extractor plugins
@@ -39,6 +37,9 @@ class AnnotationGuidePlugin extends Plugin {
   constructor(context) {
     super(context, { name: 'annotation-guide', deps: ['help', 'extraction', 'dialog', 'logger'] })
   }
+
+  get #extraction() { return this.getDependency('extraction') }
+  get #client() { return this.getDependency('client') }
 
   /** @type {SlDrawer & annotationGuideDrawerPart} */
   #ui = null
@@ -82,9 +83,9 @@ class AnnotationGuidePlugin extends Plugin {
     this.#ui.show()
 
     if (this.#annotationGuides.length === 0) {
-      let extractors = extraction.extractorInfo()
+      let extractors = this.#extraction.extractorInfo()
       if (!extractors) {
-        extractors = await clientApi.getExtractorList()
+        extractors = await this.#client.getExtractorList()
       }
       if (extractors) {
         this.#annotationGuides = extractors.flatMap(e => e.annotationGuides || [])
@@ -204,17 +205,5 @@ class AnnotationGuidePlugin extends Plugin {
 
 export default AnnotationGuidePlugin
 
-/** @deprecated Use getDependency('annotation-guide') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = AnnotationGuidePlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    AnnotationGuidePlugin.getInstance()[prop] = value
-    return true
-  }
-})
 
 export const plugin = AnnotationGuidePlugin
