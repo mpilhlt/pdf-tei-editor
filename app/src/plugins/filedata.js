@@ -16,8 +16,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -272,7 +271,7 @@ class FiledataPlugin extends Plugin {
     try {
       // Show saving status
       if (this.savingStatusWidget) {
-        ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+        this.getDependency('xmleditor').addStatusbarWidget(this.savingStatusWidget, 'left', 10);
       }
       const xmlContent = this.#xmlEditor.getXML()
       const result = await this.#client.saveXml(xmlContent, fileHash, saveAsNewVersion);
@@ -281,7 +280,7 @@ class FiledataPlugin extends Plugin {
       // clear status message after 1 second
       setTimeout(() => {
         if (this.savingStatusWidget) {
-          ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+          this.getDependency('xmleditor').removeStatusbarWidget(this.savingStatusWidget.id);
         }
       }, 1000);
     }

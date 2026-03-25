@@ -6,33 +6,19 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton } from '../ui.js'
+ * @import { SlDialog } from '../ui.js'
+ * @import { teiWizardDialogPart } from '../templates/tei-wizard-dialog.types.js'
+ * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- */
-
-//
-// UI Parts
-//
-
-/**
- * TEI Wizard dialog navigation properties
- * @typedef {object} teiWizardDialogPart
- * @property {HTMLDivElement} enhancementList - Container for enhancement checkboxes
- * @property {SlButton} selectAll - Select all checkboxes button
- * @property {SlButton} selectNone - Select none checkboxes button
- * @property {SlButton} executeBtn - Execute wizard button
- * @property {SlButton} cancel - Cancel button
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { getEnhancements } from '../modules/enhancement-registry.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
-import { api as configApi } from './config.js'
 import { encodeXmlEntities, escapeXml } from '../modules/tei-utils.js'
-import { api as xmlEditorApi } from './xmleditor.js'
 
 // Register templates
 await registerTemplate('tei-wizard-button', 'tei-wizard-button.html')
@@ -44,6 +30,14 @@ class TeiWizardPlugin extends Plugin {
     super(context, { name: 'tei-wizard', deps: ['services', 'logger'] })
   }
 
+  get #configApi() { return this.getDependency('config') }
+  get #xmlEditorApi() { return this.getDependency('xmleditor') }
+
+  /** @type {SlDialog & teiWizardDialogPart} */
+  #ui = null
+  /** @type {StatusButton} */
+  #teiWizardBtn = null
+
   /** @param {ApplicationState} _state */
   async install(_state) {
     await super.install(_state)
@@ -51,25 +45,21 @@ class TeiWizardPlugin extends Plugin {
 
     await this.#loadEnhancements()
 
-    const teiWizardButton = createSingleFromTemplate('tei-wizard-button')
-    createSingleFromTemplate('tei-wizard-dialog', document.body)
+    this.#teiWizardBtn = createSingleFromTemplate('tei-wizard-button')
+    this.#ui = this.createUi(createSingleFromTemplate('tei-wizard-dialog', document.body))
 
-    ui.xmlEditor.toolbar.add(teiWizardButton, 51.5)
-    updateUi()
+    ui.xmlEditor.toolbar.add(this.#teiWizardBtn, 51.5)
 
-    ui.xmlEditor.toolbar.teiWizardBtn.addEventListener('widget-click', () => this.#runTeiWizard())
-
-    /** @type {teiWizardDialogPart & import('../ui.js').SlDialog} */
-    const dialog = /** @type {any} */(ui.teiWizardDialog)
+    this.#teiWizardBtn.addEventListener('widget-click', () => this.#runTeiWizard())
 
     this.#populateEnhancementList()
 
-    dialog.selectAll.addEventListener('click', () => {
-      const checkboxes = dialog.enhancementList.querySelectorAll('sl-checkbox')
+    this.#ui.selectAll.addEventListener('click', () => {
+      const checkboxes = this.#ui.enhancementList.querySelectorAll('sl-checkbox')
       checkboxes.forEach(checkbox => checkbox.checked = true)
     })
-    dialog.selectNone.addEventListener('click', () => {
-      const checkboxes = dialog.enhancementList.querySelectorAll('sl-checkbox')
+    this.#ui.selectNone.addEventListener('click', () => {
+      const checkboxes = this.#ui.enhancementList.querySelectorAll('sl-checkbox')
       checkboxes.forEach(checkbox => checkbox.checked = false)
     })
   }
@@ -78,7 +68,7 @@ class TeiWizardPlugin extends Plugin {
     const state = this.state
     const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator'])
     const isReviewer = userHasRole(state.user, ['admin', 'reviewer'])
-    ui.xmlEditor.toolbar.teiWizardBtn.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
+    this.#teiWizardBtn.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
   }
 
   async #loadEnhancements() {
@@ -99,9 +89,7 @@ class TeiWizardPlugin extends Plugin {
   }
 
   #populateEnhancementList() {
-    /** @type {teiWizardDialogPart & import('../ui.js').SlDialog} */
-    const dialog = /** @type {any} */(ui.teiWizardDialog)
-    dialog.enhancementList.innerHTML = ''
+    this.#ui.enhancementList.innerHTML = ''
 
     const enhancements = getEnhancements()
     enhancements.forEach(enhancement => {
@@ -113,29 +101,27 @@ class TeiWizardPlugin extends Plugin {
       <sl-checkbox data-enhancement="${escapedNameForAttr}" size="medium">${escapedNameForText}</sl-checkbox>
     </sl-tooltip>
     <br />`
-      dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml)
+      this.#ui.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml)
     })
   }
 
   async #getSelectedEnhancements() {
-    /** @type {teiWizardDialogPart & import('../ui.js').SlDialog} */
-    const dialog = /** @type {any} */(ui.teiWizardDialog)
-    dialog.show()
+    this.#ui.show()
     return new Promise((resolve) => {
-      dialog.cancel.addEventListener('click', () => dialog.hide() && resolve([]))
-      dialog.executeBtn.addEventListener('click', () => {
+      this.#ui.cancel.addEventListener('click', () => { this.#ui.hide(); resolve([]) })
+      this.#ui.executeBtn.addEventListener('click', () => {
         const enhancements = getEnhancements()
-        const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
+        const enhancementFunctions = Array.from(this.#ui.enhancementList.querySelectorAll('sl-checkbox'))
           .filter(checkbox => checkbox.checked)
           .map(checkbox => enhancements.find(e => e.name === checkbox.dataset.enhancement))
-        dialog.hide()
+        this.#ui.hide()
         resolve(enhancementFunctions)
       })
     })
   }
 
   async #runTeiWizard() {
-    let teiDoc = xmlEditorApi.getXmlTree()
+    let teiDoc = this.#xmlEditorApi.getXmlTree()
     if (!teiDoc) {
       console.error('TEI document not available.')
       return
@@ -149,7 +135,7 @@ class TeiWizardPlugin extends Plugin {
     }
     console.log(`Running ${selectedEnhancements.length} TEI enhancement(s)...`)
 
-    const configMap = configApi.toMap()
+    const configMap = this.#configApi.toMap()
 
     for (const enhancement of selectedEnhancements) {
       try {
@@ -174,12 +160,12 @@ class TeiWizardPlugin extends Plugin {
     let xmlstring = (new XMLSerializer()).serializeToString(teiDoc)
     xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '')
 
-    if (await configApi.get('xml.encode-entities.client')) {
-      const encodeQuotes = await configApi.get('xml.encode-quotes', false)
+    if (await this.#configApi.get('xml.encode-entities.client')) {
+      const encodeQuotes = await this.#configApi.get('xml.encode-quotes', false)
       xmlstring = encodeXmlEntities(xmlstring, { encodeQuotes })
     }
 
-    xmlEditorApi.showMergeView(xmlstring)
+    this.#xmlEditorApi.showMergeView(xmlstring)
 
     notify(`${selectedEnhancements.length} TEI enhancements applied successfully.`, 'success')
   }

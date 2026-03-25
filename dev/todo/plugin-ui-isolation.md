@@ -61,6 +61,16 @@ Changes made:
 
 Backward compat note: `document-actions.install()` still calls `ui.toolbar.add(span, 8)` + `updateUi()` so that the element is in the DOM before `move-files.install()` runs and calls `addButton()`. This can be removed once `document-actions` itself contributes passively (no longer needs early placement).
 
+- **`app/src/plugins/xmleditor.js`** — added `addStatusbarWidget(widget, position, priority)`, `removeStatusbarWidget(widgetId)`, `setReadOnlyContext(text)` public methods
+- **`app/src/plugins/file-selection.js`** — added `getOptionValues(type)` returning `{value, label}[]` for 'xml', 'pdf', 'diff'
+- **`app/src/plugins/pdfviewer.js`** — added `#autoSearchSwitch` private field and `isAutoSearchEnabled()` public method
+- **`app/src/plugins/access-control.js`** — replaced `ui.xmlEditor.statusbar.add(...)` with `getDependency('xmleditor').addStatusbarWidget(...)`; replaced `ui.xmlEditor.headerbar.readOnlyStatus` widget access with `getDependency('xmleditor').setReadOnlyContext(text)`; added `xmleditor` to deps; removed `import ui`
+- **`app/src/plugins/filedata.js`** — replaced `ui.xmlEditor.statusbar.add/removeById(...)` with `getDependency('xmleditor').addStatusbarWidget/removeStatusbarWidget(...)`; fixed imports to use `ui-system.js` instead of `ui.js`; removed `import ui`
+- **`app/src/plugins/heartbeat.js`** — replaced `ui.toolbar.xml.value` with `this.state.xml` (×2); removed `import ui`
+- **`app/src/plugins/services.js`** — removed redundant `editorReady` handler that set `ui.toolbar.documentActions.saveRevision.disabled = false` (covered by `document-actions.onStateUpdate`)
+- **`app/src/plugins/document-actions.js`** — replaced all `ui.toolbar.xml/pdf/diff.*` accesses with `state.xml`/`state.pdf` and `getDependency('file-selection').getOptionValues(type)`
+- **`app/src/plugins/start.js`** — replaced `ui.pdfViewer.statusbar.searchSwitch.checked` with `getDependency('pdfviewer').isAutoSearchEnabled()`
+
 ---
 
 ## Migration Guide (Stage 2) — PENDING
@@ -154,27 +164,29 @@ For each plugin calling `ui.toolbar.add(element)` in `install()`:
 | `help.js` | Multi-root template: wrapper `div` appended to body used as `createUi` root |
 | `info.js` | Cross-plugin `ui.loginDialog` replaced with `getDependency('authentication').hideLoginDialog()`, `.appendToLoginDialog()`, `.showLoginDialog()` — those three methods added to `AuthenticationPlugin` |
 | `pdfviewer.js` | No template; widget refs stored as private fields; `ui.pdfViewer.headerbar/toolbar/statusbar` kept as local vars in `install()` (own panels) |
-| `xmleditor.js` | No template; panel refs captured early via `ui.xmlEditor.headerbar/toolbar/statusbar`; all subsequent accesses use private fields; both `updateUi()` calls retained for access-control backward compat |
+| `xmleditor.js` | No template; panel refs captured early via `ui.xmlEditor.headerbar/toolbar/statusbar`; all subsequent accesses use private fields; added public `addStatusbarWidget`, `removeStatusbarWidget`, `setReadOnlyContext` methods |
+| `tei-tools.js` | `this.#ui` for own drawer; `#revisionHistoryBtn`/`#teiHeaderToggleWidget`/`#teiHeaderLabel` as private fields; `api as xmlEditorApi` → `getDependency` getter; cross-plugin panel adds (`ui.xmlEditor.statusbar/toolbar.add()`) retained |
+| `xsl-viewer.js` | `this.#overlay` (createUi); `#xslViewerBtn`/`#xslViewerMenu` via querySelector (in sl-dropdown); cross-plugin panel adds retained |
+| `tei-wizard.js` | `this.#ui` for own dialog; `#teiWizardBtn` as private field; `configApi`/`xmlEditorApi` → lazy getters; `ui.spinner.*` retained (legitimately global); cross-plugin panel add retained |
+| `rbac-manager.js` | `this.#ui` for own dialog; removed `import ui`; imports fixed to `ui-system.js`; hand-written typedef removed |
+| `access-control.js` | `addStatusbarWidget` API for statusbar additions; `setReadOnlyContext` API instead of direct widget access; added `xmleditor` to deps; removed `import ui` |
+| `filedata.js` | `addStatusbarWidget`/`removeStatusbarWidget` APIs; fixed imports from `ui-system.js`; removed `import ui` |
+| `heartbeat.js` | `this.state.xml` instead of `ui.toolbar.xml.value`; removed `import ui` |
+| `services.js` | Removed redundant `editorReady` handler (covered by `document-actions.onStateUpdate`) |
+| `document-actions.js` | `state.xml`/`state.pdf` and `file-selection.getOptionValues(type)` instead of direct select element access |
+| `start.js` | `pdfviewer.isAutoSearchEnabled()` instead of `ui.pdfViewer.statusbar.searchSwitch.checked` |
+| `pdfviewer.js` | Added `isAutoSearchEnabled()` public method |
+| `file-selection.js` | Added `getOptionValues(type)` public method |
 
 #### Not yet migrated — own-plugin `ui` access (low risk, cosmetic)
 
 | Plugin | Own `ui.*` namespace |
 | --- | --- |
-| `tei-tools.js` | `ui.teiRevisionHistoryDrawer.*` + `ui.xmlEditor.*` as host |
-| `xsl-viewer.js` | `ui.xmlEditor.appendChild(...)`, `ui.xmlEditor.toolbar.add(...)` |
-| `tei-wizard.js` | `ui.xmlEditor.toolbar.add(...)`, `ui.spinner.*` |
-| `rbac-manager.js` | Check needed |
 
 #### Not yet migrated — cross-plugin `ui` access (architectural violations, higher priority)
 
 | Plugin | Violation | Recommended fix |
 | --- | --- | --- |
-| `access-control.js` | `ui.xmlEditor.headerbar.readOnlyStatus`, `ui.xmlEditor.statusbar.add(...)` | Add `getDependency('xmleditor').setReadOnlyContext(...)` API or state key |
-| `document-actions.js` | `ui.toolbar.xml/pdf/diff` reads file-selection's selects | Expose accessor on `file-selection` plugin API or via state |
-| `heartbeat.js` | `ui.toolbar.xml.value` | Same as above |
-| `services.js` | `ui.toolbar.documentActions.saveRevision.disabled` | `getDependency('document-actions').setSaveRevisionDisabled(bool)` |
-| `filedata.js` | `ui.xmlEditor.statusbar.add(...)` | `getDependency('xmleditor').addStatusbarWidget(...)` (already exists?) |
-| `start.js` | `ui.pdfViewer.statusbar.searchSwitch` | `getDependency('pdfviewer').setSearchSwitchState(bool)` or state key |
 
 #### Uses `ui.spinner.*` only (legitimately global, not a violation)
 

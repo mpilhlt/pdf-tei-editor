@@ -8,43 +8,18 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton, SlDialog } from '../ui.js'
+ * @import { SlDialog } from '../ui.js'
+ * @import { rbacManagerDialogPart } from '../templates/rbac-manager-dialog.types.js'
  * @import { ToolsPlugin } from './tools.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { getEntitySchema, getEntityTypes } from '../modules/rbac/entity-schemas.js'
 import { renderEntityForm, extractFormData, displayFormErrors, clearFormErrors } from '../modules/rbac/form-renderer.js'
 import { createEntityManagers } from '../modules/rbac/entity-manager.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-
-/**
- * RBAC Manager dialog navigation properties
- * @typedef {object} rbacManagerDialogPart
- * @property {HTMLDivElement} tabContainer - Tab navigation container
- * @property {SlButton} tabUser - Users tab button
- * @property {SlButton} tabGroup - Groups tab button
- * @property {SlButton} tabRole - Roles tab button
- * @property {SlButton} tabCollection - Collections tab button
- * @property {HTMLDivElement} contentArea - Main content area
- * @property {HTMLDivElement} entityListPanel - Left panel for entity list
- * @property {HTMLElement} entityListTitle - Entity list title
- * @property {SlButton} addEntityBtn - Add entity button
- * @property {HTMLInputElement} searchInput - Search input
- * @property {HTMLDivElement} entityList - Entity list container
- * @property {HTMLDivElement} formPanel - Right panel for form
- * @property {HTMLDivElement} formHeader - Form header
- * @property {HTMLElement} formTitle - Form title
- * @property {HTMLDivElement} formActions - Form action buttons container
- * @property {SlButton} saveBtn - Save button
- * @property {SlButton} deleteBtn - Delete button
- * @property {HTMLDivElement} formContainer - Form container
- * @property {HTMLDivElement} emptyState - Empty state message
- * @property {SlButton} closeBtn - Close dialog button
- */
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -64,6 +39,9 @@ class RbacManagerPlugin extends Plugin {
   constructor(context) {
     super(context, { name: 'rbac-manager', deps: ['client', 'toolbar', 'tools', 'logger'] })
   }
+
+  /** @type {SlDialog & rbacManagerDialogPart} */
+  #ui = null
 
   /** @type {HTMLElement | null} */
   #menuItem = null
@@ -91,7 +69,7 @@ class RbacManagerPlugin extends Plugin {
     const logger = this.getDependency('logger')
     logger.debug(`Installing plugin "rbac-manager"`)
 
-    createSingleFromTemplate('rbac-manager-dialog', document.body)
+    this.#ui = this.createUi(createSingleFromTemplate('rbac-manager-dialog', document.body))
     this.#entityManagers = createEntityManagers(this.getDependency('client').apiClient)
     this.#setupDialogListeners()
   }
@@ -114,8 +92,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Set up dialog event listeners */
   #setupDialogListeners() {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
 
@@ -132,8 +109,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Open the RBAC manager dialog */
   async #openDialog() {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     try {
       await this.#loadAllEntities()
@@ -175,8 +151,7 @@ class RbacManagerPlugin extends Plugin {
    * @param {string} entityType
    */
   async #switchTab(entityType) {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     this.#currentEntityType = entityType
     this.#selectedEntityId = null
@@ -200,8 +175,7 @@ class RbacManagerPlugin extends Plugin {
    * @param {string} [searchTerm]
    */
   #renderEntityList(searchTerm = '') {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     const schema = getEntitySchema(this.#currentEntityType)
     if (!schema) return
@@ -300,8 +274,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Show the entity form for selected or new entity */
   #showEntityForm() {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     const schema = getEntitySchema(this.#currentEntityType)
     if (!schema) return
@@ -340,8 +313,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Show empty state (no entity selected) */
   #showEmptyState() {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     const formContainer = dialog.querySelector('[name="formContainer"]')
 
@@ -374,8 +346,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Save entity (create or update) */
   async #saveEntity() {
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     const form = dialog.querySelector('[name="formContainer"]').querySelector('form')
     if (!form) return
@@ -425,8 +396,7 @@ class RbacManagerPlugin extends Plugin {
   async #deleteEntity() {
     if (!this.#selectedEntityId || this.#isNewEntity) return
 
-    /** @type {rbacManagerDialogPart & SlDialog} */
-    const dialog = /** @type {any} */(ui.rbacManagerDialog)
+    const dialog = this.#ui
 
     const schema = getEntitySchema(this.#currentEntityType)
     if (!schema) return

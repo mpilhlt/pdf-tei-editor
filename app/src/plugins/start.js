@@ -192,10 +192,9 @@ class StartPlugin extends Plugin {
       // workaround for the node selection not being updated immediately
       await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
       // trigger auto-search if enabled and if a new node has been selected
-      const autoSearchSwitch = /** @type {any} */ (ui.pdfViewer.statusbar.searchSwitch)
       const node = this.#xmlEditor.selectedNode
 
-      if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
+      if (this.getDependency('pdfviewer').isAutoSearchEnabled() && node && node !== lastNode) {
         await this.#services.searchNodeContentsInPdf(node)
         lastNode = node
       }

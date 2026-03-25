@@ -107,7 +107,7 @@ class DocumentActionsPlugin extends Plugin {
 
     if (isAnnotator || isReviewer) {
       da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || !isReviewer
-      da.deleteAllVersions.disabled = !isReviewer || ui.toolbar.xml.querySelectorAll("sl-option").length < 2
+      da.deleteAllVersions.disabled = !isReviewer || this.getDependency('file-selection').getOptionValues('xml').length < 2
       da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(state.xml) && !isReviewer)
     } else {
       for (const btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion]) {
@@ -128,13 +128,9 @@ class DocumentActionsPlugin extends Plugin {
    */
   async deleteCurrentVersion() {
     const state = this.state
-    let xmlValue = ui.toolbar.xml.value
-    let selectedOption = ui.toolbar.xml.selectedOptions[0]
-
-    if (!xmlValue && state.xml && !state.pdf) {
-      xmlValue = state.xml
-      selectedOption = ui.toolbar.pdf.selectedOptions[0]
-    }
+    const xmlValue = state.xml || ''
+    const fileSelection = this.getDependency('file-selection')
+    const versionLabel = fileSelection.getOptionValues('xml').find(o => o.value === xmlValue)?.label
 
     if (!xmlValue) {
       this.getDependency('dialog').error("No file selected for deletion")
@@ -150,7 +146,7 @@ class DocumentActionsPlugin extends Plugin {
 
     const filePathsToDelete = [xmlValue]
     if (filePathsToDelete.length > 0) {
-      const versionName = selectedOption ? selectedOption.textContent : 'current version'
+      const versionName = versionLabel || 'current version'
       const msg = `Are you sure you want to delete the current version "${versionName}"?`
       if (!confirm(msg)) return
 
@@ -159,8 +155,7 @@ class DocumentActionsPlugin extends Plugin {
       try {
         await this.dispatchStateChange({ xml: null })
         await this.getDependency('file-selection').reload()
-        // @ts-ignore
-        const xml = ui.toolbar.xml.firstChild?.value
+        const xml = this.getDependency('file-selection').getOptionValues('xml')[0]?.value
         await this.#services.load({ xml })
         notify(`Version "${versionName}" has been deleted.`)
         this.context.invokePluginEndpoint(ep.sync.syncFiles, state)
@@ -180,7 +175,7 @@ class DocumentActionsPlugin extends Plugin {
     const state = this.state
     if (!state?.fileData) throw new Error("No file data")
 
-    const currentSource = ui.toolbar.pdf.value
+    const currentSource = state.pdf
     const selectedFile = state.fileData.find(file => file.source?.id === currentSource)
 
     if (!selectedFile || !selectedFile.artifacts) return
@@ -253,17 +248,16 @@ class DocumentActionsPlugin extends Plugin {
   async deleteAll() {
     const state = this.state
 
-    if (ui.toolbar.pdf.childElementCount < 2) {
+    const fileSelection = this.getDependency('file-selection')
+    if (fileSelection.getOptionValues('pdf').length < 2) {
       throw new Error("Cannot delete all files, at least one PDF must be present")
     }
 
-    // @ts-ignore
-    const filePathsToDelete = Array.from(new Set([ui.toolbar.pdf.value]
-      // @ts-ignore
-      .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
-      // @ts-ignore
-      .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))))
-      .filter(Boolean)
+    const filePathsToDelete = Array.from(new Set(
+      [state.pdf]
+        .concat(fileSelection.getOptionValues('xml').map(o => o.value))
+        .concat(fileSelection.getOptionValues('diff').map(o => o.value))
+    )).filter(Boolean)
 
     if (filePathsToDelete.length > 0) {
       const msg = `Are you sure you want to delete ${filePathsToDelete.length} files? This cannot be undone.`

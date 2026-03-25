@@ -59,9 +59,6 @@ class ServicesPlugin extends Plugin {
     this.#validation = this.getDependency('tei-validation')
     this.#fileSelection = this.getDependency('file-selection')
 
-    // enable save button on dirty editor
-    this.#xmlEditor.on("editorReady", () => { ui.toolbar.documentActions.saveRevision.disabled = false })
-
     // Listen for maintenance mode events
     SsePlugin.getInstance().addEventListener('maintenanceOn', async (event) => {
       const data = JSON.parse(event.data)

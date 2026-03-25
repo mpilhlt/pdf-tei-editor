@@ -86,6 +86,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 
 /**
  * XML editor navigation properties
+ * TODO This has become very complex and needs to be refactored into separate components
  * @typedef {object} xmlEditorPart
  * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
  * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
@@ -179,11 +180,23 @@ class XmlEditorPlugin extends Plugin {
   #hashBeingSaved = null;
 
   /**
-   * Return the NavXmlEditor instance as the plugin API
+   * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
+   * Plugin methods take precedence; all other property accesses fall through to the inner editor.
    * @returns {NavXmlEditor}
    */
   getApi() {
-    return this.#xmlEditor;
+    const plugin = this;
+    const inner = this.#xmlEditor;
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'setReadOnlyContext', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
+    return /** @type {NavXmlEditor} */ (new Proxy(inner, {
+      get(_target, prop) {
+        if (pluginMethods.has(String(prop))) {
+          return /** @type {any} */ (plugin)[prop].bind(plugin);
+        }
+        const val = inner[/** @type {keyof NavXmlEditor} */ (prop)];
+        return typeof val === 'function' ? val.bind(inner) : val;
+      }
+    }));
   }
 
   /** @param {ApplicationState} initialState */
@@ -712,6 +725,34 @@ class XmlEditorPlugin extends Plugin {
    */
   async saveIfDirty() {
     return this.#saveIfDirty();
+  }
+
+  /**
+   * Add a widget to the XML editor statusbar.
+   * @param {HTMLElement} widget
+   * @param {'left'|'center'|'right'} position
+   * @param {number} priority
+   */
+  addStatusbarWidget(widget, position, priority) {
+    this.#statusbar.add(widget, position, priority)
+  }
+
+  /**
+   * Remove a widget from the XML editor statusbar by ID.
+   * @param {string} widgetId
+   */
+  removeStatusbarWidget(widgetId) {
+    this.#statusbar.removeById(widgetId)
+  }
+
+  /**
+   * Set the context text on the read-only status widget.
+   * @param {string} text
+   */
+  setReadOnlyContext(text) {
+    if (this.#readOnlyStatusWidget) {
+      this.#readOnlyStatusWidget.text = text
+    }
   }
 
   /**

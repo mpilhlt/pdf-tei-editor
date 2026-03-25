@@ -163,6 +163,20 @@ class FileSelectionPlugin extends Plugin {
     await this.getDependency('filedata').reload(options);
   }
 
+  /**
+   * Returns the current options for the given select element.
+   * @param {'xml'|'pdf'|'diff'} type
+   * @returns {{value: string, label: string}[]}
+   */
+  getOptionValues(type) {
+    const select = { xml: this.#xml, pdf: this.#pdf, diff: this.#diff }[type]
+    if (!select) return []
+    return Array.from(select.querySelectorAll('sl-option')).map(opt => ({
+      value: /** @type {any} */ (opt).value,
+      label: opt.textContent?.trim() || ''
+    }))
+  }
+
   //
   // Private methods
   //

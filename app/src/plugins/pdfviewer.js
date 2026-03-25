@@ -60,13 +60,35 @@ class PdfViewerPlugin extends Plugin {
   #pageInfoWidget;
   /** @type {HTMLElement} */
   #zoomInfoWidget;
+  /** @type {import('../modules/panels/widgets/status-switch.js').StatusSwitch|null} */
+  #autoSearchSwitch = null;
 
   /**
-   * Return the PDFJSViewer instance as the plugin API
+   * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
+   * Plugin methods take precedence; all other property accesses fall through to the inner viewer.
    * @returns {PDFJSViewer}
    */
   getApi() {
-    return this.#pdfViewer;
+    const plugin = this;
+    const inner = this.#pdfViewer;
+    const pluginMethods = new Set(['isAutoSearchEnabled']);
+    return /** @type {PDFJSViewer} */ (new Proxy(inner, {
+      get(_target, prop) {
+        if (pluginMethods.has(String(prop))) {
+          return /** @type {any} */ (plugin)[prop].bind(plugin);
+        }
+        const val = inner[/** @type {keyof PDFJSViewer} */ (prop)];
+        return typeof val === 'function' ? val.bind(inner) : val;
+      }
+    }));
+  }
+
+  /**
+   * Whether auto-search is currently enabled.
+   * @returns {boolean}
+   */
+  isAutoSearchEnabled() {
+    return /** @type {any} */ (this.#autoSearchSwitch)?.checked ?? false;
   }
 
   /** @param {ApplicationState} initialState */
@@ -250,6 +272,7 @@ class PdfViewerPlugin extends Plugin {
       name: 'searchSwitch'
     });
 
+    this.#autoSearchSwitch = autoSearchSwitchWidget;
     autoSearchSwitchWidget.addEventListener('widget-change', (evt) => this.#onAutoSearchSwitchChange(evt));
     statusBar.add(autoSearchSwitchWidget, 'left', 10);
 

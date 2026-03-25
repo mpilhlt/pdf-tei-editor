@@ -18,7 +18,6 @@
 
 import { Plugin } from '../modules/plugin-base.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
 import {
@@ -59,7 +58,7 @@ import {
 class AccessControlPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'access-control', deps: ['client', 'logger'] })
+    super(context, { name: 'access-control', deps: ['client', 'logger', 'xmleditor'] })
   }
 
   /** @type {AccessControlModeResponse | null} */
@@ -107,8 +106,9 @@ class AccessControlPlugin extends Plugin {
     this.#editabilitySwitch = this.#createEditabilitySwitch()
     this.#permissionsDropdown = this.#createPermissionsDropdown()
 
-    ui.xmlEditor.statusbar.add(this.#permissionInfoWidget, 'left', 1)
-    ui.xmlEditor.statusbar.add(this.#permissionsDropdown, 'left', 2)
+    const xmlEditor = this.getDependency('xmleditor')
+    xmlEditor.addStatusbarWidget(this.#permissionInfoWidget, 'left', 1)
+    xmlEditor.addStatusbarWidget(this.#permissionsDropdown, 'left', 2)
 
     this.#hideAccessControlWidgets()
   }
@@ -491,14 +491,6 @@ class AccessControlPlugin extends Plugin {
    */
   #updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
     if (!editorReadOnly || !accessControlReadOnly) return
-    this.#updateReadOnlyWidgetText(ui.xmlEditor.headerbar.readOnlyStatus)
-  }
-
-  /**
-   * @param {StatusText} readOnlyWidget
-   */
-  #updateReadOnlyWidgetText(readOnlyWidget) {
-    if (!readOnlyWidget) return
     const mode = this.#accessControlConfig?.mode || 'role-based'
     const { owner } = this.#currentPermissions
     const currentUser = this.getDependency('authentication').getUser()
@@ -514,7 +506,7 @@ class AccessControlPlugin extends Plugin {
         contextText = `Read-only (owned by ${owner})`
       }
     }
-    readOnlyWidget.text = contextText
+    this.getDependency('xmleditor').setReadOnlyContext(contextText)
     this.getDependency('logger').debug(`Updated read-only context: ${contextText}`)
   }
 }
