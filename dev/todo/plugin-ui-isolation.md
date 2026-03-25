@@ -86,17 +86,10 @@ Backward compat note: `document-actions.install()` still calls `ui.toolbar.add(s
 
 `toolbar.js:start()` already collects `toolbar.contentItems` and `toolbar.menuItems` from all plugins via EP. Elements already connected to the toolbar during `install()` are skipped (already-connected check). No further work needed here.
 
-### Remaining own-plugin `ui.*` accesses (low priority, cosmetic)
+### Remaining own-plugin `ui.*` accesses — RESOLVED
 
-Not architectural violations, but prevent removing `import ui` entirely from these files:
-
-| Plugin | Access | Notes |
-| --- | --- | --- |
-| `file-selection.js` | `ui.toolbar.add(control, priority)` (line 75) | Redundant — EP already handles this; toolbar.start() skips already-connected elements |
-| `file-selection.js` | `ui.toolbar.pdf/xml/diff/variant/collection` (lines 80–84) | Read-back of own elements after adding; should store refs at creation time instead |
-| `extraction.js` | `ui.toolbar.add(extractionBtnGroup, 7)` (line 137) | Redundant — EP already handles this |
-
-To remove: for `file-selection.js`, capture element refs directly from created elements (before DOM insertion), remove `ui.toolbar.add()`, rely purely on EP. Same for `extraction.js`.
+- **`file-selection.js`** — added `ep.toolbar.contentItems` EP; refs captured directly in install() via `switch` on `name` attribute; removed `ui.toolbar.add()`, `updateUi()`, `import ui`, `import { updateUi }`
+- **`extraction.js`** — removed `ui.toolbar.add(extractionBtnGroup, 7)`, `updateUi()`, `import { updateUi }`; EP already handled placement
 
 ### `client.js` API pattern
 

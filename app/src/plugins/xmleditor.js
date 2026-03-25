@@ -97,6 +97,13 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 class XmlEditorPlugin extends Plugin {
   static extensionPoints = [ep.validation.inProgress];
 
+  /**
+   * Extension point handler for `ep.validation.inProgress`.
+   * Called when a validation cycle begins so the editor can defer save operations
+   * until the in-flight validation promise settles.
+   * Delegates to {@link XmlEditorPlugin#inProgress}.
+   * @param {Promise<import('@codemirror/lint').Diagnostic[]>} promise
+   */
   [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   /** @param {PluginContext} context */

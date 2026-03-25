@@ -12,7 +12,7 @@
 import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
-import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
+import { SlSelect, SlOption, SlInput } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
 import { extractDoi } from '../modules/doi-utils.js'
@@ -108,6 +108,11 @@ class ExtractionPlugin extends Plugin {
 
   static extensionPoints = [ep.toolbar.contentItems];
 
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
   [ep.toolbar.contentItems]() {
     return [{ element: this.#ui, priority: 7, position: 'center' }]
   }
@@ -133,9 +138,6 @@ class ExtractionPlugin extends Plugin {
     const dialog = createSingleFromTemplate('extraction-dialog', document.body)
     this.#ui = this.createUi(extractionBtnGroup)
     this.#dialogUi = this.createUi(dialog)
-
-    ui.toolbar.add(extractionBtnGroup, 7)
-    updateUi()
 
     this.#ui.extractNew.addEventListener('click', () => this.extractFromNewPdf())
     this.#ui.extractCurrent.addEventListener('click', () => this.extractFromCurrentPDF())

@@ -85,9 +85,7 @@ The `Plugin` base class ([app/src/modules/plugin-base.js](../../app/src/modules/
 
 **Manually mounted extension points** — require explicit registration:
 
-- `static extensionPoints = [ep.path]` with `get [ep.path]() { return fn }` — computed getter; key is the full EP path string, conflict-free (primary pattern)
-- `static extensionPoints = ['ns.method']` with `this.method()` — deprecated fallback; last path segment maps to a method name, can conflict if two EPs share the same last segment
-- `getExtensionPoints()` override — for arbitrary path→function mappings
+- `static extensionPoints = [ep.path]` with `[ep.path](...args) { return this.method(...args) }` — computed method delegating to a named method; key is the full EP path string, conflict-free
 
 See [plugin-communication.md](../code-assistant/plugin-communication.md) for when and how to use each mechanism.
 
@@ -188,7 +186,7 @@ Per-key handlers receive `(newValue, prevValue)`. Use `this.state` to access oth
 
 #### Custom Extension Points
 
-Use a computed property getter with the full EP path as the key (primary pattern):
+Declare `static extensionPoints` and implement a computed method that delegates to a named method:
 
 ```javascript
 import ep from '../extension-points.js'
@@ -196,19 +194,16 @@ import ep from '../extension-points.js'
 class MyPlugin extends Plugin {
   static extensionPoints = [ep.toolbar.contentItems]
 
-  get [ep.toolbar.contentItems]() {
-    return () => [{ element: this.#ui, priority: 5, position: 'center' }]
-  }
-}
-```
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
+   * Delegates to {@link MyPlugin#getToolbarContentItems}.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
 
-For one-off extension points, override `getExtensionPoints()`:
-
-```javascript
-getExtensionPoints() {
-  return {
-    ...super.getExtensionPoints(),
-    'filedata.loading': this.setLoadingState.bind(this)
+  getToolbarContentItems() {
+    return [{ element: this.#ui, priority: 5, position: 'center' }]
   }
 }
 ```

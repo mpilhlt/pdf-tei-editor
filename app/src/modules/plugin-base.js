@@ -225,30 +225,17 @@ export class Plugin {
    *
    * The base implementation auto-discovers:
    * - Standard lifecycle methods: `install`, `start`, `shutdown`, `updateInternalState`, `onStateUpdate`
-   * - Methods declared in `static extensionPoints`: each string `'ns.method'` maps to `this.method`
+   * - Computed methods declared in `static extensionPoints`: each path must have a corresponding
+   *   computed method `[ep.ns.name](...args) { return this.method(...args) }`
    * - Per-key state handlers: methods matching `on<Key>Change` are registered as `onStateUpdate.<lowerKey>`
    *
-   * Override in subclasses to add or replace mappings. Use `...super.getExtensionPoints()` to
-   * include the auto-discovered base mappings.
-   *
    * @example
-   * // Primary pattern: computed method (conflict-free, full EP path as key)
    * static extensionPoints = [ep.toolbar.contentItems]
    *
-   * [ep.toolbar.contentItems]() {
-   *   return [{ element: this.#ui, priority: 8, position: 'center' }]
-   * }
+   * [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
    *
    * @example
    * async onXmlChange(newValue, prevValue) { ... }   // called when state.xml changes
-   *
-   * @example
-   * getExtensionPoints() {
-   *   return {
-   *     ...super.getExtensionPoints(),
-   *     'custom.action': this.handleAction.bind(this)
-   *   };
-   * }
    *
    * @returns {Record<string, Function>} Mapping of extension point paths to bound methods
    */

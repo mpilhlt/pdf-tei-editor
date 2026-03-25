@@ -51,7 +51,21 @@ class FiledataPlugin extends Plugin {
 
   static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
 
+  /**
+   * Extension point handler for `ep.filedata.reload`.
+   * Called to refresh the file list from the server.
+   * Delegates to {@link FiledataPlugin#reload}.
+   * @param {{refresh: boolean}} [options]
+   * @returns {Promise<void>}
+   */
   [ep.filedata.reload](...args) { return this.reload(...args) }
+
+  /**
+   * Extension point handler for `ep.filedata.saveXml`.
+   * Called to persist the current XML document to the server.
+   * Delegates to {@link FiledataPlugin#saveXml}.
+   * @returns {Promise<void>}
+   */
   [ep.filedata.saveXml](...args) { return this.saveXml(...args) }
 
   /**

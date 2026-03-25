@@ -74,15 +74,23 @@ import ep from '../extension-points.js'
 class MyPlugin extends Plugin {
   static extensionPoints = [ep.toolbar.contentItems]
 
-  // Computed property getter: key is the full EP path string.
-  // Returns the function that ToolbarPlugin.start() will call.
-  get [ep.toolbar.contentItems]() {
-    return () => [{ element: this.#ui, priority: 5, position: 'center' }]
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
+   * Delegates to {@link MyPlugin#getToolbarContentItems}.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
+
+  getToolbarContentItems() {
+    return [{ element: this.#ui, priority: 5, position: 'center' }]
   }
 }
 ```
 
-The base class discovers the getter automatically via `getExtensionPoints()`. The key is the full EP path string (`"toolbar.contentItems"`), so there are no naming conflicts between different namespaces.
+The base class discovers the computed method automatically. The key is the full EP path string (`"toolbar.contentItems"`), so there are no naming conflicts between different namespaces.
+
+Extension point handler methods MUST be documented with JSDoc: state the EP being handled, which host plugin invokes them and when, the `Delegates to` link, and `@param`/`@returns` tags.
 
 ### Invoking an extension point (host side)
 
@@ -106,20 +114,7 @@ The base class auto-mounts these without any declaration:
 - **Lifecycle methods**: `install`, `ready`, `start`, `shutdown`, `onStateUpdate` — just define the method.
 - **Per-key state handlers**: `on<Key>Change` — follow the naming convention, e.g. `onXmlChange`, `onUserChange`.
 
-All other extension points require `static extensionPoints` or a `getExtensionPoints()` override.
-
-### One-off extension points
-
-For an extension point that doesn't fit the computed-getter pattern, override `getExtensionPoints()`:
-
-```javascript
-getExtensionPoints() {
-  return {
-    ...super.getExtensionPoints(),
-    'filedata.loading': this.setLoadingState.bind(this)
-  }
-}
-```
+All other extension points require `static extensionPoints` with a corresponding computed handler method.
 
 ---
 

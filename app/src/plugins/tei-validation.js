@@ -63,7 +63,21 @@ class TeiValidationPlugin extends Plugin {
 
   static extensionPoints = [ep.validation.validate, ep.validation.inProgress];
 
+  /**
+   * Extension point handler for `ep.validation.validate`.
+   * Called by the plugin system to trigger XML validation.
+   * Delegates to {@link TeiValidationPlugin#validate}.
+   * @returns {Promise<import('@codemirror/lint').Diagnostic[]>}
+   */
   [ep.validation.validate](...args) { return this.validate(...args) }
+
+  /**
+   * Extension point handler for `ep.validation.inProgress`.
+   * Called when a validation cycle begins, passing the in-flight promise so this
+   * plugin can defer conflicting operations until validation completes.
+   * Delegates to {@link TeiValidationPlugin#inProgress}.
+   * @param {Promise<import('@codemirror/lint').Diagnostic[]>} promise
+   */
   [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   //

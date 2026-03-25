@@ -47,8 +47,8 @@ class DocumentActionsPlugin extends Plugin {
   get #xmlEditor() { return this.getDependency('xmleditor') }
 
   /**
-   * Contribute toolbar buttons to the main toolbar.
-   * Called by ToolbarPlugin.start() via the toolbar.contentItems extension point.
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
    * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
    */
   [ep.toolbar.contentItems]() {

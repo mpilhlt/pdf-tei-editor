@@ -37,6 +37,12 @@ class ToolsPlugin extends Plugin {
 
   static extensionPoints = [ep.toolbar.contentItems];
 
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
+   * Creates the tools button and wires the scoped UI on first call.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
   [ep.toolbar.contentItems]() {
     const buttonElement = createSingleFromTemplate('tools-button')
     this.#ui = this.createUi(buttonElement)

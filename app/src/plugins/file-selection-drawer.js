@@ -49,6 +49,11 @@ class FileSelectionDrawerPlugin extends Plugin {
 
   static extensionPoints = [ep.toolbar.contentItems];
 
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
   [ep.toolbar.contentItems]() {
     return [{ element: this.#triggerUi, priority: 10, position: 'left' }]
   }

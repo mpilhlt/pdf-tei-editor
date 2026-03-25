@@ -146,7 +146,7 @@ Auto-discovered without any declaration:
 - **Lifecycle methods**: `install`, `ready`, `start`, `shutdown`, `onStateUpdate` — just define the method
 - **Per-key state handlers**: `on<Key>Change` — follow the naming convention (see below)
 
-All other extension points: declare in `static extensionPoints` and implement via a computed property getter:
+All other extension points: declare in `static extensionPoints` and implement a computed method that delegates to a named method:
 
 ```javascript
 import ep from '../extension-points.js'
@@ -154,22 +154,21 @@ import ep from '../extension-points.js'
 class MyPlugin extends Plugin {
   static extensionPoints = [ep.toolbar.contentItems]
 
-  get [ep.toolbar.contentItems]() {
-    return () => [{ element: this.#ui, priority: 5, position: 'center' }]
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
+   * Delegates to {@link MyPlugin#getToolbarContentItems}.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
+
+  getToolbarContentItems() {
+    return [{ element: this.#ui, priority: 5, position: 'center' }]
   }
 }
 ```
 
-For one-off extension points, override `getExtensionPoints()`:
-
-```javascript
-getExtensionPoints() {
-  return {
-    ...super.getExtensionPoints(),
-    'filedata.loading': this.setLoadingState.bind(this)
-  }
-}
-```
+Always document the computed handler method with JSDoc (see the CLAUDE.md rule).
 
 ## Accessing Dependencies
 

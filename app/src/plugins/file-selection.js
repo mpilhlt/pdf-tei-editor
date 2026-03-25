@@ -9,8 +9,7 @@
  * @import { DocumentItem, Artifact } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
-import ui from '../ui.js'
-import { SlOption, SlDivider, updateUi } from '../ui.js'
+import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
@@ -28,9 +27,30 @@ class FileSelectionPlugin extends Plugin {
     });
   }
 
-  static extensionPoints = [ep.filedata.loading];
+  static extensionPoints = [ep.filedata.loading, ep.toolbar.contentItems];
 
+  /**
+   * Extension point handler for `ep.filedata.loading`.
+   * Called when a file load operation starts or ends, so the select boxes
+   * can be put into / taken out of loading state and repopulated on completion.
+   * Delegates to {@link FileSelectionPlugin#loading}.
+   * @param {boolean} isLoading
+   * @returns {Promise<void>}
+   */
   [ep.filedata.loading](...args) { return this.loading(...args) }
+
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
+   * Returns all five file-selection controls with their individual priorities.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    const priorities = { pdf: 10, xml: 10, collection: 6, variant: 5, diff: 3 }
+    return [this.#pdf, this.#xml, this.#diff, this.#variant, this.#collection]
+      .filter(Boolean)
+      .map(el => ({ element: el, priority: priorities[el.getAttribute('name')] || 1, position: 'center' }))
+  }
 
   get #logger() { return this.getDependency('logger') }
   get #dialog() { return this.getDependency('dialog') }
@@ -57,31 +77,16 @@ class FileSelectionPlugin extends Plugin {
     await super.install(initialState);
     this.#logger.debug(`Installing plugin "${this.name}"`);
 
-    const fileSelectionControls = createFromTemplate('file-selection');
-
-    /** @type {Record<string, Number>} */
-    const controlPriorities = {
-      'pdf': 10,
-      'xml': 10,
-      'collection': 6,
-      'variant': 5,
-      'diff': 3
-    };
-
-    fileSelectionControls.forEach(control => {
-      if (control instanceof HTMLElement) {
-        const name = control.getAttribute('name');
-        const priority = (name && controlPriorities[name]) || 1;
-        ui.toolbar.add(control, priority);
+    for (const control of createFromTemplate('file-selection')) {
+      if (!(control instanceof HTMLElement)) continue
+      switch (control.getAttribute('name')) {
+        case 'pdf':        this.#pdf        = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'xml':        this.#xml        = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'diff':       this.#diff       = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'variant':    this.#variant    = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'collection': this.#collection = /** @type {import('../ui.js').SlSelect} */ (control); break
       }
-    });
-    updateUi();
-
-    this.#pdf        = ui.toolbar.pdf
-    this.#xml        = ui.toolbar.xml
-    this.#diff       = ui.toolbar.diff
-    this.#variant    = ui.toolbar.variant
-    this.#collection = ui.toolbar.collection
+    }
 
     /** @type {[SlSelect, function][]} */
     const handlers = [

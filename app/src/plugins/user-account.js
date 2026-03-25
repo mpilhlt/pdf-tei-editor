@@ -31,6 +31,11 @@ class UserAccountPlugin extends Plugin {
 
   static extensionPoints = [ep.toolbar.menuItems];
 
+  /**
+   * Extension point handler for `ep.toolbar.menuItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar menu contributions.
+   * @returns {Array<{element: HTMLElement}>}
+   */
   [ep.toolbar.menuItems]() {
     return [...this.#menuUi.children].map(element => ({ element }))
   }

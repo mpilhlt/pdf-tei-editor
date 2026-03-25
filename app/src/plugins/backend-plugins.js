@@ -597,6 +597,15 @@ export class BackendPluginsPlugin extends Plugin {
 
   static extensionPoints = [ep.backendPlugins.execute];
 
+  /**
+   * Extension point handler for `ep.backendPlugins.execute`.
+   * Called by frontend sandbox extensions to trigger execution of a specific
+   * backend plugin endpoint by ID. Delegates to {@link BackendPluginsPlugin#execute}.
+   * @param {string} pluginId
+   * @param {string} endpointName
+   * @param {Object} params
+   * @returns {Promise<void>}
+   */
   [ep.backendPlugins.execute](...args) { return this.execute(...args) }
 
   /**
