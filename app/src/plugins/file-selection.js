@@ -9,10 +9,10 @@
  * @import { DocumentItem, Artifact } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
-import ui from '../ui.js'
-import { SlOption, SlDivider, updateUi } from '../ui.js'
+import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
 
 // Register templates
@@ -27,11 +27,40 @@ class FileSelectionPlugin extends Plugin {
     });
   }
 
-  static extensionPoints = ['filedata.loading'];
+  static extensionPoints = [ep.filedata.loading, ep.toolbar.contentItems];
 
-  // Cached dependencies
-  #logger;
-  #dialog;
+  /**
+   * Extension point handler for `ep.filedata.loading`.
+   * Called when a file load operation starts or ends, so the select boxes
+   * can be put into / taken out of loading state and repopulated on completion.
+   * Delegates to {@link FileSelectionPlugin#loading}.
+   * @param {boolean} isLoading
+   * @returns {Promise<void>}
+   */
+  [ep.filedata.loading](...args) { return this.loading(...args) }
+
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
+   * Returns all five file-selection controls with their individual priorities.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    const priorities = { collection: 12, variant: 11, pdf: 10, xml: 10, diff: 3 }
+    return [this.#pdf, this.#xml, this.#diff, this.#variant, this.#collection]
+      .filter(Boolean)
+      .map(el => ({ element: el, priority: priorities[el.getAttribute('name')] || 1, position: 'center' }))
+  }
+
+  get #logger() { return this.getDependency('logger') }
+  get #dialog() { return this.getDependency('dialog') }
+
+  // Own toolbar elements — set during install()
+  /** @type {import('../ui.js').SlSelect} */ #pdf
+  /** @type {import('../ui.js').SlSelect} */ #xml
+  /** @type {import('../ui.js').SlSelect} */ #diff
+  /** @type {import('../ui.js').SlSelect} */ #variant
+  /** @type {import('../ui.js').SlSelect} */ #collection
 
   // Private state
   /** @type {Set<string>} */
@@ -46,37 +75,26 @@ class FileSelectionPlugin extends Plugin {
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState);
-    this.#logger = this.getDependency('logger');
-    this.#dialog = this.getDependency('dialog');
     this.#logger.debug(`Installing plugin "${this.name}"`);
 
-    const fileSelectionControls = createFromTemplate('file-selection');
-
-    /** @type {Record<string, Number>} */
-    const controlPriorities = {
-      'pdf': 10,
-      'xml': 10,
-      'collection': 6,
-      'variant': 5,
-      'diff': 3
-    };
-
-    fileSelectionControls.forEach(control => {
-      if (control instanceof HTMLElement) {
-        const name = control.getAttribute('name');
-        const priority = (name && controlPriorities[name]) || 1;
-        ui.toolbar.add(control, priority);
+    for (const control of createFromTemplate('file-selection')) {
+      if (!(control instanceof HTMLElement)) continue
+      switch (control.getAttribute('name')) {
+        case 'pdf':        this.#pdf        = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'xml':        this.#xml        = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'diff':       this.#diff       = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'variant':    this.#variant    = /** @type {import('../ui.js').SlSelect} */ (control); break
+        case 'collection': this.#collection = /** @type {import('../ui.js').SlSelect} */ (control); break
       }
-    });
-    updateUi();
+    }
 
     /** @type {[SlSelect, function][]} */
     const handlers = [
-      [ui.toolbar.collection, () => this.#onChangeCollectionSelection()],
-      [ui.toolbar.variant,    () => this.#onChangeVariantSelection()],
-      [ui.toolbar.pdf,        () => this.#onChangePdfSelection()],
-      [ui.toolbar.xml,        () => this.#onChangeXmlSelection()],
-      [ui.toolbar.diff,       () => this.#onChangeDiffSelection()]
+      [this.#collection, () => this.#onChangeCollectionSelection()],
+      [this.#variant,    () => this.#onChangeVariantSelection()],
+      [this.#pdf,        () => this.#onChangePdfSelection()],
+      [this.#xml,        () => this.#onChangeXmlSelection()],
+      [this.#diff,       () => this.#onChangeDiffSelection()]
     ];
 
     for (const [select, handler] of handlers) {
@@ -150,6 +168,20 @@ class FileSelectionPlugin extends Plugin {
     await this.getDependency('filedata').reload(options);
   }
 
+  /**
+   * Returns the current options for the given select element.
+   * @param {'xml'|'pdf'|'diff'} type
+   * @returns {{value: string, label: string}[]}
+   */
+  getOptionValues(type) {
+    const select = { xml: this.#xml, pdf: this.#pdf, diff: this.#diff }[type]
+    if (!select) return []
+    return Array.from(select.querySelectorAll('sl-option')).map(opt => ({
+      value: /** @type {any} */ (opt).value,
+      label: opt.textContent?.trim() || ''
+    }))
+  }
+
   //
   // Private methods
   //
@@ -180,10 +212,10 @@ class FileSelectionPlugin extends Plugin {
           sourceValue = state.xml;
         }
       }
-      ui.toolbar.pdf.value = sourceValue;
-      ui.toolbar.xml.value = state.xml || "";
-      ui.toolbar.diff.value = state.diff || "";
-      ui.toolbar.collection.value = state.collectionFilter || "";
+      this.#pdf.value = sourceValue;
+      this.#xml.value = state.xml || "";
+      this.#diff.value = state.diff || "";
+      this.#collection.value = state.collectionFilter || "";
     } finally {
       this.#isUpdatingProgrammatically = false;
     }
@@ -192,8 +224,8 @@ class FileSelectionPlugin extends Plugin {
   /** @param {boolean} isLoading */
   #setSelectboxLoadingState(isLoading) {
     const selectboxes = [
-      ui.toolbar.pdf, ui.toolbar.xml, ui.toolbar.diff,
-      ui.toolbar.variant, ui.toolbar.collection
+      this.#pdf, this.#xml, this.#diff,
+      this.#variant, this.#collection
     ];
     for (const select of selectboxes) {
       if (isLoading) {
@@ -210,14 +242,14 @@ class FileSelectionPlugin extends Plugin {
   async #populateCollectionSelectbox(state) {
     if (!state.collections) return;
 
-    ui.toolbar.collection.innerHTML = "";
+    this.#collection.innerHTML = "";
 
     const allOption = new SlOption();
     allOption.value = "";
     allOption.textContent = "All";
     // @ts-ignore
     allOption.size = "small";
-    ui.toolbar.collection.appendChild(allOption);
+    this.#collection.appendChild(allOption);
 
     const sortedCollections = [...state.collections].sort((a, b) => a.name.localeCompare(b.name));
     for (const collection of sortedCollections) {
@@ -226,12 +258,12 @@ class FileSelectionPlugin extends Plugin {
       option.textContent = collection.name;
       // @ts-ignore
       option.size = "small";
-      ui.toolbar.collection.appendChild(option);
+      this.#collection.appendChild(option);
     }
 
     this.#isUpdatingProgrammatically = true;
     try {
-      ui.toolbar.collection.value = state.collectionFilter || "";
+      this.#collection.value = state.collectionFilter || "";
     } finally {
       this.#isUpdatingProgrammatically = false;
     }
@@ -241,7 +273,7 @@ class FileSelectionPlugin extends Plugin {
   async #populateVariantSelectbox(state) {
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
 
-    ui.toolbar.variant.innerHTML = "";
+    this.#variant.innerHTML = "";
     this.#variants = new Set();
     state.fileData.forEach(file => {
       if (file.artifacts) {
@@ -256,14 +288,14 @@ class FileSelectionPlugin extends Plugin {
     allOption.textContent = "All";
     // @ts-ignore
     allOption.size = "small";
-    ui.toolbar.variant.appendChild(allOption);
+    this.#variant.appendChild(allOption);
 
     const noneOption = new SlOption();
     noneOption.value = "none";
     noneOption.textContent = "None";
     // @ts-ignore
     noneOption.size = "small";
-    ui.toolbar.variant.appendChild(noneOption);
+    this.#variant.appendChild(noneOption);
 
     [...this.#variants].sort().forEach(variant => {
       const option = new SlOption();
@@ -271,12 +303,12 @@ class FileSelectionPlugin extends Plugin {
       option.textContent = variant;
       // @ts-ignore
       option.size = "small";
-      ui.toolbar.variant.appendChild(option);
+      this.#variant.appendChild(option);
     });
 
     this.#isUpdatingProgrammatically = true;
     try {
-      ui.toolbar.variant.value = state.variant || "";
+      this.#variant.value = state.variant || "";
     } finally {
       this.#isUpdatingProgrammatically = false;
     }
@@ -301,9 +333,8 @@ class FileSelectionPlugin extends Plugin {
     try {
       await this.#populateVariantSelectbox(state);
 
-      for (const name of ["pdf", "xml", "diff"]) {
-        // @ts-ignore
-        ui.toolbar[name].innerHTML = "";
+      for (const select of [this.#pdf, this.#xml, this.#diff]) {
+        select.innerHTML = "";
       }
 
       if (state.fileData.length === 0) {
@@ -339,13 +370,13 @@ class FileSelectionPlugin extends Plugin {
         if (b === "__unfiled") return 1;
         return a.localeCompare(b);
       });
-      ui.toolbar.pdf.dataset.collections = JSON.stringify(this.#collections);
+      this.#pdf.dataset.collections = JSON.stringify(this.#collections);
 
       let hasPopulatedVersionsForSelectedFile = false;
 
       for (const collection_name of this.#collections) {
         const displayName = getCollectionName(collection_name, state.collections);
-        await createHtmlElements(`<small>${displayName}</small>`, ui.toolbar.pdf);
+        await createHtmlElements(`<small>${displayName}</small>`, this.#pdf);
 
         const files = grouped_files[collection_name].sort((a, b) => {
           const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
@@ -373,8 +404,8 @@ class FileSelectionPlugin extends Plugin {
           });
           option.dataset.doc_id = file.doc_id;
           option.dataset.collections = JSON.stringify(file.collections);
-          ui.toolbar.pdf.hoist = true;
-          ui.toolbar.pdf.appendChild(option);
+          this.#pdf.hoist = true;
+          this.#pdf.appendChild(option);
 
           const isSelectedFile = (fileIdentifier === state.pdf) ||
             (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
@@ -394,8 +425,8 @@ class FileSelectionPlugin extends Plugin {
               const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
 
               if (goldToShow.length > 0) {
-                await createHtmlElements(`<small>Gold</small>`, ui.toolbar.xml);
-                await createHtmlElements(`<small>Gold</small>`, ui.toolbar.diff);
+                await createHtmlElements(`<small>Gold</small>`, this.#xml);
+                await createHtmlElements(`<small>Gold</small>`, this.#diff);
 
                 goldToShow.forEach(gold => {
                   const variantSuffix = (!variant || variant === "") ? gold.variant : undefined;
@@ -404,24 +435,24 @@ class FileSelectionPlugin extends Plugin {
                   opt.size = "small";
                   opt.value = gold.id;
                   opt.innerHTML = this.#createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
-                  ui.toolbar.xml.appendChild(opt);
+                  this.#xml.appendChild(opt);
                   opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = gold.id;
                   opt.innerHTML = this.#createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
-                  ui.toolbar.diff.appendChild(opt);
+                  this.#diff.appendChild(opt);
                 });
 
                 if (versionsToShow.length > 0) {
-                  ui.toolbar.xml.appendChild(new SlDivider());
-                  ui.toolbar.diff.appendChild(new SlDivider());
+                  this.#xml.appendChild(new SlDivider());
+                  this.#diff.appendChild(new SlDivider());
                 }
               }
 
               if (versionsToShow.length > 0) {
-                await createHtmlElements(`<small>Versions</small>`, ui.toolbar.xml);
-                await createHtmlElements(`<small>Versions</small>`, ui.toolbar.diff);
+                await createHtmlElements(`<small>Versions</small>`, this.#xml);
+                await createHtmlElements(`<small>Versions</small>`, this.#diff);
 
                 versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
 
@@ -432,19 +463,19 @@ class FileSelectionPlugin extends Plugin {
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  ui.toolbar.xml.appendChild(opt);
+                  this.#xml.appendChild(opt);
                   opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  ui.toolbar.diff.appendChild(opt);
+                  this.#diff.appendChild(opt);
                 });
               }
             }
           }
         }
-        ui.toolbar.pdf.appendChild(new SlDivider());
+        this.#pdf.appendChild(new SlDivider());
       }
     } finally {
       this.#isPopulatingSelectboxes = false;
@@ -456,7 +487,7 @@ class FileSelectionPlugin extends Plugin {
     const state = this.state;
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
 
-    const selectedIdentifier = ui.toolbar.pdf.value;
+    const selectedIdentifier = this.#pdf.value;
     const selectedFile = state.fileData.find(file => {
       if (file.source && file.source.id === selectedIdentifier) return true;
       if (file.artifacts && file.artifacts.some(a => a.id === selectedIdentifier)) return true;
@@ -517,7 +548,7 @@ class FileSelectionPlugin extends Plugin {
   async #onChangeXmlSelection() {
     const state = this.state;
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
-    const xml = ui.toolbar.xml.value;
+    const xml = this.#xml.value;
     if (xml && typeof xml === "string" && xml !== state.xml) {
       try {
         for (const file of state.fileData) {
@@ -540,8 +571,8 @@ class FileSelectionPlugin extends Plugin {
 
   async #onChangeDiffSelection() {
     const state = this.state;
-    const diff = String(ui.toolbar.diff.value);
-    if (diff && typeof diff === "string" && diff !== ui.toolbar.xml.value) {
+    const diff = String(this.#diff.value);
+    if (diff && typeof diff === "string" && diff !== this.#xml.value) {
       try {
         await this.getDependency('services').showMergeView(diff);
       } catch (error) {
@@ -554,13 +585,13 @@ class FileSelectionPlugin extends Plugin {
   }
 
   async #onChangeVariantSelection() {
-    const variant = String(ui.toolbar.variant.value);
+    const variant = String(this.#variant.value);
     await this.dispatchStateChange({ variant, xml: null });
   }
 
   async #onChangeCollectionSelection() {
     const state = this.state;
-    const collectionFilter = String(ui.toolbar.collection.value);
+    const collectionFilter = String(this.#collection.value);
     const collection = collectionFilter || null;
 
     let shouldClearSelection = false;
@@ -584,14 +615,6 @@ class FileSelectionPlugin extends Plugin {
 
 export default FileSelectionPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('file-selection')` in plugins, or import `FileSelectionPlugin` directly.
- */
-export const api = {
-  reload: (options) => FileSelectionPlugin.getInstance().reload(options),
-  get fileData() { return FileSelectionPlugin.getInstance().state?.fileData || []; }
-};
 
 /** @deprecated Use FileSelectionPlugin class directly */
 export const plugin = FileSelectionPlugin;

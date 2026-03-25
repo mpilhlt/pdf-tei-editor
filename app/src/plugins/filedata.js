@@ -13,10 +13,10 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import ui from '../ui.js'
-import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -49,7 +49,24 @@ class FiledataPlugin extends Plugin {
   #dialog;
   #xmlEditor;
 
-  static extensionPoints = ['filedata.reload', 'filedata.saveXml'];
+  static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
+
+  /**
+   * Extension point handler for `ep.filedata.reload`.
+   * Called to refresh the file list from the server.
+   * Delegates to {@link FiledataPlugin#reload}.
+   * @param {{refresh: boolean}} [options]
+   * @returns {Promise<void>}
+   */
+  [ep.filedata.reload](...args) { return this.reload(...args) }
+
+  /**
+   * Extension point handler for `ep.filedata.saveXml`.
+   * Called to persist the current XML document to the server.
+   * Delegates to {@link FiledataPlugin#saveXml}.
+   * @returns {Promise<void>}
+   */
+  [ep.filedata.saveXml](...args) { return this.saveXml(...args) }
 
   /**
    * @param {ApplicationState} state
@@ -173,14 +190,10 @@ class FiledataPlugin extends Plugin {
   }
 
   /**
-   * React to state changes
-   * @param {string[]} changedKeys
+   * @param {ApplicationState['user']} user
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      // Only admins can access garbage collection
-      if (this._gcItem) this._gcItem.style.display = userIsAdmin(this.state.user) ? '' : 'none';
-    }
+  onUserChange(user) {
+    if (this._gcItem) this._gcItem.style.display = userIsAdmin(user) ? '' : 'none';
   }
 
   /**
@@ -268,7 +281,7 @@ class FiledataPlugin extends Plugin {
     try {
       // Show saving status
       if (this.savingStatusWidget) {
-        ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+        this.getDependency('xmleditor').addStatusbarWidget(this.savingStatusWidget, 'left', 10);
       }
       const xmlContent = this.#xmlEditor.getXML()
       const result = await this.#client.saveXml(xmlContent, fileHash, saveAsNewVersion);
@@ -277,7 +290,7 @@ class FiledataPlugin extends Plugin {
       // clear status message after 1 second
       setTimeout(() => {
         if (this.savingStatusWidget) {
-          ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+          this.getDependency('xmleditor').removeStatusbarWidget(this.savingStatusWidget.id);
         }
       }, 1000);
     }

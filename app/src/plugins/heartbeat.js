@@ -3,7 +3,6 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { Plugin } from '../modules/plugin-base.js'
 
@@ -58,7 +57,7 @@ class HeartbeatPlugin extends Plugin {
         return
       }
 
-      const filePath = String(ui.toolbar.xml.value)
+      const filePath = this.state.xml || ''
       const reasonsToSkip = {
         'Maintenance mode is active': this.state.maintenanceMode,
         'No user is logged in': this.state.user === null,
@@ -148,7 +147,7 @@ class HeartbeatPlugin extends Plugin {
       logger.debug('Heartbeat stopped.')
     }
 
-    const filePath = ui.toolbar.xml.value
+    const filePath = this.state.xml
     if (filePath) {
       this.getDependency('client').releaseLock(filePath).catch(() => {})
     }

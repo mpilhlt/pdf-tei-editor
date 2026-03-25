@@ -11,32 +11,25 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlButton, SlButtonGroup, SlDropdown, UIPart } from '../ui.js'
- * @import { documentActionsPart } from './document-actions.js'
+ * @import { documentActionsPart } from '../templates/document-action-buttons.types.js'
+ * @import { toolbarMenuPart } from '../templates/toolbar-menu-button.types.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  * @import { toolsGroupPart } from './tools.js'
  */
 
+/**
+ * @import { PanelContribution } from '../modules/panels/base-panel.js'
+ */
+
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import ep from '../extension-points.js'
+import { resolveContributions } from '../modules/panels/base-panel.js'
 
 // Register template
 await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html')
-
-//
-// UI Parts
-//
-
-/**
- * Toolbar menu dropdown structure
- * @typedef {object} toolbarMenuPart
- * @property {SlButton} menuBtn - The menu trigger button
- * @property {object} menu - The menu container
- * @property {import('../ui.js').SlMenuItem} [menu.infoMenuItem] - Info/manual menu item (added by info plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.logoutMenuItem] - Logout menu item (added by user-account plugin)
- */
 
 /**
  * The main toolbar navigation properties.
@@ -61,6 +54,11 @@ class ToolbarPlugin extends Plugin {
     super(context, { name: 'toolbar', deps: ['logger'] })
   }
 
+  get #logger() { return this.getDependency('logger') }
+
+  /** @type {SlDropdown & toolbarMenuPart} */
+  #menuUi = null
+
   /** @type {number} */
   #openDropdownCount = 0
 
@@ -73,35 +71,90 @@ class ToolbarPlugin extends Plugin {
    */
   async install(state) {
     await super.install(state)
-    const logger = this.getDependency('logger')
-    logger.debug(`Installing plugin "toolbar"`)
+    this.#logger.debug(`Installing plugin "toolbar"`)
 
     // Create toolbar menu early so dependent plugins can add menu items during their install phase
     const menuElement = createSingleFromTemplate('toolbar-menu-button')
+    this.#menuUi = this.createUi(menuElement)
     // Add to toolbar at beginning (will be moved to end in start phase)
     ui.toolbar.insertAdjacentElement('afterbegin', menuElement)
     updateUi()
 
-    logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
+    this.#logger.debug('Toolbar menu created at beginning of toolbar (will be moved to end in start phase)')
   }
 
   /**
    * Moves toolbar menu to end of toolbar after all plugins have installed,
-   * then initialises the toolbar-wide z-index fix for all dropdowns.
+   * collects toolbar content/menu contributions from all plugins via extension
+   * points, then initialises the toolbar-wide z-index fix for all dropdowns.
    * @returns {Promise<void>}
    */
   async start() {
-    const logger = this.getDependency('logger')
-    logger.debug(`Starting plugin "toolbar"`)
+    this.#logger.debug(`Starting plugin "toolbar"`)
+
+    // Collect toolbar content items from all plugins
+    const contentResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.contentItems, [], { result: 'values', throws: false }
+    )
+    /** @type {PanelContribution[]} */
+    const allContributions = contentResults
+      .flatMap(items => Array.isArray(items) ? items : [])
+      .filter(({ element }) => element instanceof HTMLElement && !element.isConnected)
+    for (const { element, priority = 0 } of resolveContributions(allContributions)) {
+      ui.toolbar.add(element, priority)
+    }
+
+    // Collect toolbar menu items from all plugins
+    const menuResults = await this.context.invokePluginEndpoint(
+      ep.toolbar.menuItems, [], { result: 'values', throws: false }
+    )
+    for (const items of menuResults) {
+      if (!Array.isArray(items)) continue
+      for (const { element } of items) {
+        if (element instanceof HTMLElement) {
+          this.#menuUi.menu.appendChild(element)
+        }
+      }
+    }
 
     // Move the toolbar menu to the end of the toolbar
-    const menuElement = ui.toolbar.toolbarMenu
-    ui.toolbar.appendChild(menuElement)
+    ui.toolbar.appendChild(this.#menuUi)
     updateUi()
 
     this.#initToolbarZIndexAutoFix()
 
-    logger.debug('Toolbar menu moved to end of toolbar')
+    this.#logger.debug('Toolbar started: collected plugin contributions, menu moved to end')
+  }
+
+  /**
+   * Enable or disable the toolbar menu button.
+   * @param {boolean} disabled
+   */
+  setMenuButtonDisabled(disabled) {
+    this.#menuUi.menuBtn.disabled = disabled
+  }
+
+  /**
+   * Add a widget to the toolbar. Use this for dynamic toolbar items
+   * that are added or removed at runtime based on application state.
+   * For static items that exist for the life of the app, use the
+   * `toolbar.contentItems` extension point instead.
+   * @param {HTMLElement} element - The widget element to add
+   * @param {number} [priority=0] - Higher priority widgets stay visible longer
+   * @param {'left'|'center'|'right'} [position='center'] - Where to insert the widget
+   * @returns {string} The widget ID
+   */
+  add(element, priority = 0, position = 'center') {
+    return ui.toolbar.add(element, priority, position)
+  }
+
+  /**
+   * Remove a widget from the toolbar by its ID.
+   * @param {string} widgetId - The ID returned by add()
+   * @returns {boolean} True if the widget was found and removed
+   */
+  remove(widgetId) {
+    return ui.toolbar.removeById(widgetId)
   }
 
   // ---------------------------------------------------------------------------

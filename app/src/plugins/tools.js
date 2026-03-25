@@ -19,30 +19,38 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlDropdown, SlButton, SlMenu } from '../ui.js'
+ * @import { toolsGroupPart } from '../templates/tools-button.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
+import ep from '../extension-points.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 
 // Register template
 await registerTemplate('tools-button', 'tools-button.html')
-
-/**
- * Tools button group UI structure (native split button only).
- * Additional buttons added by other plugins are not typed here.
- * @typedef {object} toolsGroupPart
- * @property {SlDropdown} toolsDropdown - Native frontend dropdown (hidden when menu is empty)
- * @property {SlButton} toolsBtn - Trigger button for the native dropdown
- * @property {SlMenu} toolsMenu - Menu populated by frontend plugins
- */
 
 class ToolsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
     super(context, { name: 'tools', deps: ['logger'] })
   }
+
+  static extensionPoints = [ep.toolbar.contentItems];
+
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
+   * Creates the tools button and wires the scoped UI on first call.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    const buttonElement = createSingleFromTemplate('tools-button')
+    this.#ui = this.createUi(buttonElement)
+    return [{ element: buttonElement, priority: 0, position: "right" }]
+  }
+
+  /** @type {HTMLElement & toolsGroupPart} */
+  #ui = null
 
   /** @type {HTMLElement[]} */
   #uncategorizedItems = []
@@ -61,7 +69,7 @@ class ToolsPlugin extends Plugin {
 
   /** @returns {Element} The native frontend tools menu element */
   get menu() {
-    return ui.toolbar.toolsGroup.querySelector('[name="toolsMenu"]')
+    return this.#ui.toolsDropdown.toolsMenu
   }
 
   /**
@@ -73,16 +81,8 @@ class ToolsPlugin extends Plugin {
     logger.debug(`Installing plugin "tools"`)
   }
 
-  /**
-   * Adds the tools button group to the toolbar.
-   */
   async start() {
-    const logger = this.getDependency('logger')
-    logger.debug(`Starting plugin "tools"`)
-
-    const buttonElement = createSingleFromTemplate('tools-button')
-    ui.toolbar.add(buttonElement, 0, -2)
-    updateUi()
+    this.getDependency('logger').debug(`Starting plugin "tools"`)
   }
 
   /**
@@ -92,7 +92,7 @@ class ToolsPlugin extends Plugin {
    *   automatically and hidden via MutationObserver when all its items are hidden.
    */
   addMenuItems(elements, category) {
-    const menu = ui.toolbar.toolsGroup.querySelector('[name="toolsMenu"]')
+    const menu = this.#ui.toolsDropdown.toolsMenu
 
     if (category) {
       let group = this.#categoryGroups.get(category)
@@ -130,7 +130,7 @@ class ToolsPlugin extends Plugin {
    */
   clearMenuItems() {
     this.#observer.disconnect()
-    const menu = ui.toolbar.toolsGroup.querySelector('[name="toolsMenu"]')
+    const menu = this.#ui.toolsDropdown.toolsMenu
     menu.innerHTML = ''
     this.#uncategorizedItems.length = 0
     this.#categoryGroups.clear()
@@ -142,7 +142,7 @@ class ToolsPlugin extends Plugin {
    * @param {HTMLElement} element
    */
   addButton(element) {
-    ui.toolbar.toolsGroup.appendChild(element)
+    this.#ui.appendChild(element)
     this.#updateGroupVisibility()
   }
 
@@ -151,8 +151,8 @@ class ToolsPlugin extends Plugin {
    * @param {HTMLElement} element
    */
   removeButton(element) {
-    if (element.parentNode === ui.toolbar.toolsGroup) {
-      ui.toolbar.toolsGroup.removeChild(element)
+    if (element.parentNode === this.#ui) {
+      this.#ui.removeChild(element)
     }
     this.#updateGroupVisibility()
   }
@@ -175,7 +175,7 @@ class ToolsPlugin extends Plugin {
 
   /** Show/hide the native dropdown based on whether any tracked menu item is visible. */
   #updateNativeDropdown() {
-    const dropdown = ui.toolbar.toolsGroup.querySelector('[name="toolsDropdown"]')
+    const dropdown = this.#ui.toolsDropdown
     const allItems = [...this.#uncategorizedItems, ...[...this.#categoryGroups.values()].flatMap(g => g.items)]
     const hasVisibleItem = allItems.some(el => el.style.display !== 'none')
     dropdown.style.display = hasVisibleItem ? '' : 'none'
@@ -184,9 +184,8 @@ class ToolsPlugin extends Plugin {
 
   /** Show the button group when at least one child is visible; hide it otherwise. */
   #updateGroupVisibility() {
-    const group = ui.toolbar.toolsGroup
-    const hasVisibleChild = Array.from(group.children).some(el => el.style.display !== 'none')
-    group.style.display = hasVisibleChild ? 'inline-flex' : 'none'
+    const hasVisibleChild = Array.from(this.#ui.children).some(el => el.style.display !== 'none')
+    this.#ui.style.display = hasVisibleChild ? 'inline-flex' : 'none'
   }
 
   /**
@@ -204,15 +203,3 @@ class ToolsPlugin extends Plugin {
 
 export default ToolsPlugin
 
-/** @deprecated Use getDependency('tools') instead */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = ToolsPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    ToolsPlugin.getInstance()[prop] = value
-    return true
-  }
-})

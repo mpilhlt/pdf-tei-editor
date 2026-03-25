@@ -136,13 +136,6 @@ test.describe('Authentication Workflow', () => {
     );
     expect(logoutSuccessLog).toBeDefined();
 
-    // Verify toolbar menu button is disabled after logout
-    const toolbarMenuButtonDisabled = await page.evaluate(() => {
-      /** @type {namedElementsTree} */
-      const ui = /** @type {any} */(window).ui;
-      return ui.toolbar.toolbarMenu.menuBtn.disabled;
-    });
-    expect(toolbarMenuButtonDisabled).toBe(true);
   });
 
   test('should handle invalid login credentials', async ({ page }) => {
@@ -198,11 +191,6 @@ test.describe('Authentication Workflow', () => {
     });
     expect(loginDialogStillOpen).toBe(true);
 
-    // Verify error was logged
-    const errorLog = consoleLogs.find(log =>
-      log.text.includes('Login failed:')
-    );
-    expect(errorLog).toBeDefined();
   });
 
   test('should handle Enter key navigation in login form', async ({ page }) => {

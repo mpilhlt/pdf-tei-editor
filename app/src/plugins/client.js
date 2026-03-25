@@ -97,7 +97,12 @@ const upload_route = api_base_url + '/files/upload'
 // Create singleton API client instance using the callApi function
 const apiClient = new ApiClientV1(callApi);
 
-
+/**
+ * A client for the FastAPI backend, providing 1:1 methods
+ * for each of the API routes via its `getApi()` method, wich returns
+ * methods generated from the OpenAPI data exposed by the FastAPI server.
+ * TODO: remove handwritten methods and update consuming plugin's code to use generated methods 
+ */
 class ClientPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
@@ -117,11 +122,12 @@ class ClientPlugin extends Plugin {
   }
 
   /**
-   * @param {(keyof ApplicationState)[]} changedKeys
+   * Sync sessionId early (step 2 of updateState), before other plugins' onStateUpdate
+   * handlers fire API requests that require a valid session header.
    * @param {ApplicationState} state
    */
-  onStateUpdate(changedKeys, state) {
-    if (changedKeys.includes('sessionId')) {
+  updateInternalState(state) {
+    if (state.sessionId !== sessionId) {
       sessionId = state.sessionId;
       this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
     }
@@ -138,47 +144,6 @@ class ClientPlugin extends Plugin {
 
 export default ClientPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('client')` in plugins, or import `ClientPlugin` directly.
- */
-export const api = {
-  get lastHttpStatus() { return lastHttpStatus; },
-  ApiError,
-  LockedError,
-  ConnectionError,
-  ServerError,
-  get apiClient() { return apiClient; },
-  callApi,
-  getFileList,
-  validateXml,
-  getAutocompleteData,
-  saveXml,
-  extract,
-  getExtractorList,
-  loadInstructions,
-  saveInstructions,
-  deleteFiles,
-  createVersionFromUpload,
-  uploadFile,
-  getConfigData,
-  setConfigValue,
-  moveFiles,
-  copyFiles,
-  getCollections,
-  createCollection,
-  state,
-  sendHeartbeat,
-  checkLock,
-  acquireLock,
-  releaseLock,
-  getAllLockedFileIds,
-  login,
-  logout,
-  status,
-  getBackendPlugins,
-  executeBackendPlugin
-};
 
 /** @deprecated Use ClientPlugin class directly */
 export const plugin = ClientPlugin;
@@ -776,3 +741,41 @@ async function executeBackendPlugin(pluginId, endpoint, params) {
   }
   throw new ApiError(`Plugin execution failed: ${response.error || 'Unknown error'}`);
 }
+
+const api = {
+  get lastHttpStatus() { return lastHttpStatus; },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
+  get apiClient() { return apiClient; },
+  callApi,
+  getFileList,
+  validateXml,
+  getAutocompleteData,
+  saveXml,
+  extract,
+  getExtractorList,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles,
+  createVersionFromUpload,
+  uploadFile,
+  getConfigData,
+  setConfigValue,
+  moveFiles,
+  copyFiles,
+  getCollections,
+  createCollection,
+  state,
+  sendHeartbeat,
+  checkLock,
+  acquireLock,
+  releaseLock,
+  getAllLockedFileIds,
+  login,
+  logout,
+  status,
+  getBackendPlugins,
+  executeBackendPlugin
+};

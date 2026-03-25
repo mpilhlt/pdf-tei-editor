@@ -4,24 +4,16 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
+ * @import { SlDrawer } from '../ui.js'
+ * @import { teiRevisionHistoryDrawerPart } from '../templates/tei-revision-history-drawer.types.js'
+ * @import { teiToolsStatusbarPart } from '../templates/tei-tools-statusbar.types.js'
+ * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-/**
- * TEI revision history drawer navigation properties
- * @typedef {object} teiRevisionHistoryDrawerPart
- * @property {HTMLDivElement} content - The drawer content container
- * @property {HTMLTableElement} revisionTable - The revision history table
- * @property {HTMLTableSectionElement} revisionTableBody - The table body element
- * @property {SlButton} closeBtn - The close button
- */
-
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { updateUi } from '../ui.js'
-import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { api as xmlEditorApi } from './xmleditor.js'
 
 // Register templates
 await registerTemplate('tei-tools-statusbar', 'tei-tools-statusbar.html')
@@ -68,31 +60,44 @@ class TeiToolsPlugin extends Plugin {
     super(context, { name: 'tei-tools', deps: ['xmleditor', 'logger'] })
   }
 
+  get #xmlEditorApi() { return this.getDependency('xmleditor') }
+
+  /** @type {SlDrawer & teiRevisionHistoryDrawerPart} */
+  #ui = null
+
+  /** @type {StatusButton} */
+  #revisionHistoryBtn;
+  #teiHeaderToggleWidget;
+  #teiHeaderLabel;
+
   /** @param {ApplicationState} _state */
   async install(_state) {
     await super.install(_state)
     this.getDependency('logger').debug(`Installing plugin "tei-tools"`)
 
-    const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
-    statusbarWidgets.forEach(widget => {
-      if (widget instanceof HTMLElement) {
-        ui.xmlEditor.statusbar.add(widget, 'left', 2)
-      }
-    })
+    const xmlEditorApi = this.getDependency('xmleditor')
 
-    const revisionHistoryBtn = PanelUtils.createButton({
+    const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
+    const tooltipEl = /** @type {HTMLElement} */ ([...statusbarWidgets].find(w => w instanceof HTMLElement))
+    if (tooltipEl) {
+      const tooltipUi = /** @type {teiToolsStatusbarPart} */ (this.createUi(tooltipEl))
+      this.#teiHeaderToggleWidget = tooltipUi.teiHeaderToggleWidget
+      this.#teiHeaderLabel = tooltipUi.teiHeaderLabel
+      xmlEditorApi.addStatusbarWidget(tooltipEl, 'left', 2)
+    }
+
+    this.#revisionHistoryBtn = PanelUtils.createButton({
       icon: 'clock-history',
       tooltip: 'Show revision history',
       name: 'revisionHistoryBtn'
     })
-    revisionHistoryBtn.style.display = 'none'
-    ui.xmlEditor.toolbar.add(revisionHistoryBtn, 1)
+    this.#revisionHistoryBtn.style.display = 'none'
+    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 1)
 
-    createFromTemplate('tei-revision-history-drawer', document.body)
-    updateUi()
+    this.#ui = this.createUi(createSingleFromTemplate('tei-revision-history-drawer', document.body))
 
-    xmlEditorApi.on('editorAfterLoad', () => {
-      xmlEditorApi.whenReady().then(() => {
+    this.#xmlEditorApi.on('editorAfterLoad', () => {
+      this.#xmlEditorApi.whenReady().then(() => {
         this.#updateTeiHeaderToggle()
         this.#updateRevisionHistoryButton()
       })
@@ -103,34 +108,34 @@ class TeiToolsPlugin extends Plugin {
   async start(_state) {
     this.getDependency('logger').debug(`Starting plugin "tei-tools"`)
 
-    ui.xmlEditor.statusbar.teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
+    this.#teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
       const isChecked = event.target.checked
       this.#toggleTeiHeaderVisibility(isChecked)
     })
 
-    ui.xmlEditor.toolbar.revisionHistoryBtn.addEventListener('widget-click', () => {
+    this.#revisionHistoryBtn.addEventListener('widget-click', () => {
       this.#showRevisionHistory()
     })
 
-    ui.teiRevisionHistoryDrawer.closeBtn.addEventListener('click', () => {
-      ui.teiRevisionHistoryDrawer.hide()
+    this.#ui.closeBtn.addEventListener('click', () => {
+      this.#ui.hide()
     })
   }
 
   async onStateUpdate(_changedKeys) {
     const hasDocument = !!this.state.xml
-    ui.xmlEditor.statusbar.teiHeaderToggleWidget.disabled = !hasDocument
-    ui.xmlEditor.statusbar.teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
+    this.#teiHeaderToggleWidget.disabled = !hasDocument
+    this.#teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
 
     if (!hasDocument) {
-      ui.xmlEditor.toolbar.revisionHistoryBtn.style.display = 'none'
+      this.#revisionHistoryBtn.style.display = 'none'
     }
   }
 
   #updateTeiHeaderToggle() {
-    const teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
-    const teiHeaderLabel = ui.xmlEditor.statusbar.teiHeaderLabel
-    const hasTeiHeader = !!xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
+    const teiHeaderToggleWidget = this.#teiHeaderToggleWidget
+    const teiHeaderLabel = this.#teiHeaderLabel
+    const hasTeiHeader = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
 
     teiHeaderToggleWidget.disabled = !hasTeiHeader
     teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
@@ -139,9 +144,9 @@ class TeiToolsPlugin extends Plugin {
       const preferredVisible = getTeiHeaderVisibilityPreference()
       try {
         if (preferredVisible) {
-          xmlEditorApi.unfoldByXpath('//tei:teiHeader')
+          this.#xmlEditorApi.unfoldByXpath('//tei:teiHeader')
         } else {
-          xmlEditorApi.foldByXpath('//tei:teiHeader')
+          this.#xmlEditorApi.foldByXpath('//tei:teiHeader')
         }
         teiHeaderToggleWidget.checked = preferredVisible
       } catch (error) {
@@ -151,23 +156,22 @@ class TeiToolsPlugin extends Plugin {
   }
 
   #updateRevisionHistoryButton() {
-    const revisionHistoryBtn = ui.xmlEditor.toolbar.revisionHistoryBtn
-    const hasRevisionDesc = !!xmlEditorApi.getDomNodeByXpath('//tei:revisionDesc')
-    revisionHistoryBtn.style.display = hasRevisionDesc ? 'inline-flex' : 'none'
+    const hasRevisionDesc = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:revisionDesc')
+    this.#revisionHistoryBtn.style.display = hasRevisionDesc ? 'inline-flex' : 'none'
   }
 
   /**
    * @param {boolean} show
    */
   #toggleTeiHeaderVisibility(show) {
-    if (!xmlEditorApi.isReady()) return
+    if (!this.#xmlEditorApi.isReady()) return
     try {
       if (show) {
-        xmlEditorApi.unfoldByXpath('//tei:teiHeader')
-        xmlEditorApi.selectByXpath('//tei:teiHeader')
+        this.#xmlEditorApi.unfoldByXpath('//tei:teiHeader')
+        this.#xmlEditorApi.selectByXpath('//tei:teiHeader')
         this.getDependency('logger').debug('Unfolded teiHeader')
       } else {
-        xmlEditorApi.foldByXpath('//tei:teiHeader')
+        this.#xmlEditorApi.foldByXpath('//tei:teiHeader')
         this.getDependency('logger').debug('Folded teiHeader')
       }
       setTeiHeaderVisibilityPreference(show)
@@ -177,8 +181,8 @@ class TeiToolsPlugin extends Plugin {
   }
 
   #showRevisionHistory() {
-    if (!xmlEditorApi.isReady()) return
-    const xmlTree = xmlEditorApi.getXmlTree()
+    if (!this.#xmlEditorApi.isReady()) return
+    const xmlTree = this.#xmlEditorApi.getXmlTree()
     if (!xmlTree) {
       this.getDependency('logger').warn('No XML tree available')
       return
@@ -197,7 +201,7 @@ class TeiToolsPlugin extends Plugin {
     })
 
     const respStmtMap = buildRespStmtMap(xmlTree)
-    const tbody = ui.teiRevisionHistoryDrawer.revisionTable.revisionTableBody
+    const tbody = this.#ui.revisionTable.revisionTableBody
     tbody.innerHTML = ''
 
     changeNodes.forEach((changeNode, index) => {
@@ -250,7 +254,7 @@ class TeiToolsPlugin extends Plugin {
       tbody.appendChild(row)
     })
 
-    ui.teiRevisionHistoryDrawer.show()
+    this.#ui.show()
   }
 
   /**

@@ -5,28 +5,11 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem, SlCheckbox, SlDropdown, SlMenu, SlMenuItem, UIPart } from '../ui.js'
+ * @import { SlTreeItem } from '../ui.js'
  * @import { DocumentItem } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- */
-
-/**
- * The button to trigger the file drawer
- * @typedef {object} fileDrawerTriggerPart
- */
-
-/**
- * @typedef {object} selectAllContainerPart
- * @property {SlCheckbox} selectAllCheckbox
- */
-
-/**
- * @typedef {object} exportMenuPart
- * @property {SlMenuItem} exportDefault
- * @property {SlMenuItem} exportWithVersions
- * @property {SlMenuItem} exportTeiOnly
- * @property {SlMenuItem} exportTeiAllVersions
- * @property {HTMLDivElement} exportFormatCheckboxes
+ * @import { fileDrawerPart } from '../templates/file-selection-drawer.types.js'
+ * @import { fileDrawerButtonPart } from '../templates/file-drawer-button.types.js'
  */
 
 /**
@@ -36,29 +19,9 @@
  * @property {string} url - URL to the XSLT stylesheet
  */
 
-/**
- * @typedef {object} exportDropdownPart
- * @property {SlButton} exportButton
- * @property {UIPart<SlMenu, exportMenuPart>} exportMenu
- */
-
-/**
- * The file drawer
- * @typedef {object} fileDrawerPart
- * @property {SlSelect} variantSelect
- * @property {SlInput} labelFilter
- * @property {UIPart<HTMLDivElement, selectAllContainerPart>} selectAllContainer
- * @property {SlTree} fileTree
- * @property {SlButton} importButton
- * @property {HTMLInputElement} importFileInput
- * @property {UIPart<SlDropdown, exportDropdownPart>} exportDropdown
- * @property {SlButton} deleteButton
- * @property {SlButton} newCollectionButton
- * @property {SlButton} closeDrawer
- */
-
-import ui, { updateUi, SlOption } from '../ui.js'
-import { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { SlOption } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import ep from '../extension-points.js'
 import {
   extractVariants,
   filterFileDataByVariant,
@@ -84,10 +47,25 @@ class FileSelectionDrawerPlugin extends Plugin {
     });
   }
 
-  // Cached dependencies
-  #logger;
-  #dialog;
-  #client;
+  static extensionPoints = [ep.toolbar.contentItems];
+
+  /**
+   * Extension point handler for `ep.toolbar.contentItems`.
+   * Called by ToolbarPlugin during start() to collect this plugin's toolbar contribution.
+   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   */
+  [ep.toolbar.contentItems]() {
+    return [{ element: this.#triggerUi, priority: 10, position: 'left' }]
+  }
+
+  get #logger() { return this.getDependency('logger') }
+  get #dialog() { return this.getDependency('dialog') }
+  get #client() { return this.getDependency('client') }
+
+  /** @type {HTMLElement & fileDrawerButtonPart} */
+  #triggerUi = null
+  /** @type {import('../ui.js').SlDrawer & fileDrawerPart} */
+  #drawerUi = null
 
   // Private state
   #currentLabelFilter = '';
@@ -103,70 +81,48 @@ class FileSelectionDrawerPlugin extends Plugin {
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState);
-    this.#logger = this.getDependency('logger');
-    this.#dialog = this.getDependency('dialog');
-    this.#client = this.getDependency('client');
     this.#logger.debug(`Installing plugin "${this.name}"`);
 
-    // Create and add trigger button to toolbar
     const triggerButton = createSingleFromTemplate('file-drawer-button');
-    ui.toolbar.add(triggerButton, 10, "afterbegin");
+    this.#triggerUi = this.createUi(triggerButton);
 
-    // Create and add drawer to document body
     const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
+    this.#drawerUi = this.createUi(drawer);
 
-    // Update UI to register new elements
-    updateUi();
+    this.#triggerUi.addEventListener('click', () => this.open());
 
-    // Wire up event handlers
-    triggerButton.addEventListener('click', () => {
-      this.open();
-    });
+    this.#drawerUi.closeDrawer.addEventListener('click', () => this.close());
+    this.#drawerUi.addEventListener('sl-request-close', () => this.close());
 
-    // Close drawer when close button is clicked
-    ui.fileDrawer.closeDrawer.addEventListener('click', () => {
-      this.close();
-    });
-
-    // Close drawer when clicking outside or pressing escape (built into SlDrawer)
-    drawer.addEventListener('sl-request-close', () => {
-      this.close();
-    });
-
-    // Handle variant selection changes
-    ui.fileDrawer.variantSelect.addEventListener('sl-change', () => {
+    this.#drawerUi.variantSelect.addEventListener('sl-change', () => {
       if (this.#isUpdatingSelect) return;
       if (this.state) {
         this.#onVariantChange(this.state);
       } else {
-        console.warn("Variant change ignored: no current state available");
+        this.#logger.warn("Variant change ignored: no current state available");
       }
     });
 
-    // Handle label filter changes
-    ui.fileDrawer.labelFilter.addEventListener('sl-input', () => {
+    this.#drawerUi.labelFilter.addEventListener('sl-input', () => {
       if (this.state) {
         this.#onLabelFilterChange(this.state);
       } else {
-        console.warn("Label filter change ignored: no current state available");
+        this.#logger.warn("Label filter change ignored: no current state available");
       }
     });
 
-    // Handle tree selection changes
-    drawer.addEventListener('sl-selection-change', (event) => {
+    this.#drawerUi.addEventListener('sl-selection-change', (event) => {
       if (this.#isInitializing || this.#isUpdatingTree) return;
       if (this.state) {
         this.#onFileTreeSelection(event, this.state);
       }
     });
 
-    // Handle select all/none checkbox
-    ui.fileDrawer.selectAllContainer.selectAllCheckbox.addEventListener('sl-change', () => {
+    this.#drawerUi.selectAllContainer.selectAllCheckbox.addEventListener('sl-change', () => {
       this.#onSelectAllChange();
     });
 
-    // Handle export menu selection
-    ui.fileDrawer.exportDropdown.exportMenu.addEventListener('sl-select', async (event) => {
+    this.#drawerUi.exportDropdown.exportMenu.addEventListener('sl-select', async (event) => {
       if (!this.state) return;
       // @ts-ignore - detail.item exists on SlMenu sl-select events
       const item = event.detail.item;
@@ -182,27 +138,23 @@ class FileSelectionDrawerPlugin extends Plugin {
       }
     });
 
-    // Handle delete button
-    ui.fileDrawer.deleteButton.addEventListener('click', async () => {
+    this.#drawerUi.deleteButton.addEventListener('click', async () => {
       if (this.state) {
         await this.#handleDelete(this.state);
       }
     });
 
-    // Handle import button
-    ui.fileDrawer.importButton.addEventListener('click', () => {
-      ui.fileDrawer.importFileInput.click();
+    this.#drawerUi.importButton.addEventListener('click', () => {
+      this.#drawerUi.importFileInput.click();
     });
 
-    // Handle file input change (user selected a file)
-    ui.fileDrawer.importFileInput.addEventListener('change', async () => {
+    this.#drawerUi.importFileInput.addEventListener('change', async () => {
       if (this.state) {
         await this.#handleImport(this.state);
       }
     });
 
-    // Handle new collection button
-    ui.fileDrawer.newCollectionButton.addEventListener('click', async () => {
+    this.#drawerUi.newCollectionButton.addEventListener('click', async () => {
       this.#logger.debug("New collection button clicked");
       if (this.state) {
         await this.#handleNewCollection(this.state);
@@ -224,7 +176,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     if (['xml', 'pdf', 'variant', 'fileData', 'collections'].some(k => changedKeys.includes(k)) && state.fileData) {
       await this.#populateVariantSelect(state);
 
-      const drawer = ui.fileDrawer;
+      const drawer = this.#drawerUi;
       if (drawer && drawer.open) {
         await this.#populateFileTree(state);
       } else {
@@ -232,10 +184,10 @@ class FileSelectionDrawerPlugin extends Plugin {
       }
     }
 
-    if (ui.fileDrawer?.variantSelect) {
+    if (this.#drawerUi?.variantSelect) {
       this.#isUpdatingSelect = true;
       try {
-        ui.fileDrawer.variantSelect.value = state.variant || "";
+        this.#drawerUi.variantSelect.value = state.variant || "";
       } finally {
         setTimeout(() => { this.#isUpdatingSelect = false; }, 0);
       }
@@ -249,7 +201,7 @@ class FileSelectionDrawerPlugin extends Plugin {
    */
   async open() {
     this.#logger.debug("Opening file selection drawer");
-    ui.fileDrawer?.show();
+    this.#drawerUi?.show();
 
     await this.#fetchExportFormats();
     this.#populateExportFormats();
@@ -267,7 +219,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     this.#logger.debug("Closing file selection drawer");
     this.#selectedCollections.clear();
     this.#updateExportButtonState();
-    ui.fileDrawer.hide();
+    this.#drawerUi.hide();
   }
 
   //
@@ -300,8 +252,8 @@ class FileSelectionDrawerPlugin extends Plugin {
    * Populates the export format checkboxes in the export menu
    */
   #populateExportFormats() {
-    const container = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatCheckboxes"]');
-    const divider = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatsDivider"]');
+    const container = this.#drawerUi.exportDropdown.exportMenu.exportFormatCheckboxes;
+    const divider = this.#drawerUi.exportDropdown.exportMenu.exportFormatsDivider;
 
     if (!container) return;
 
@@ -335,7 +287,7 @@ class FileSelectionDrawerPlugin extends Plugin {
    * @returns {Array<{id: string, url: string}>}
    */
   #getCheckedExportFormats() {
-    const container = ui.fileDrawer.exportDropdown.exportMenu.querySelector('[name="exportFormatCheckboxes"]');
+    const container = this.#drawerUi.exportDropdown.exportMenu.exportFormatCheckboxes;
     if (!container) return [];
 
     const checked = container.querySelectorAll('sl-checkbox[checked]');
@@ -364,10 +316,10 @@ class FileSelectionDrawerPlugin extends Plugin {
       user.roles.includes('reviewer')
     );
 
-    const importButton = ui.fileDrawer.importButton;
-    const exportDropdown = ui.fileDrawer.exportDropdown;
-    const deleteButton = ui.fileDrawer.deleteButton;
-    const newCollectionButton = ui.fileDrawer.newCollectionButton;
+    const importButton = this.#drawerUi.importButton;
+    const exportDropdown = this.#drawerUi.exportDropdown;
+    const deleteButton = this.#drawerUi.deleteButton;
+    const newCollectionButton = this.#drawerUi.newCollectionButton;
 
     if (hasReviewerRole) {
       importButton.style.display = '';
@@ -389,7 +341,7 @@ class FileSelectionDrawerPlugin extends Plugin {
   async #populateVariantSelect(state) {
     if (!state.fileData) return;
 
-    const variantSelect = ui.fileDrawer?.variantSelect;
+    const variantSelect = this.#drawerUi?.variantSelect;
     if (!variantSelect) return;
 
     variantSelect.innerHTML = "";
@@ -434,7 +386,7 @@ class FileSelectionDrawerPlugin extends Plugin {
   async #populateFileTree(state) {
     if (!state.fileData) return;
 
-    const fileTree = ui.fileDrawer?.fileTree;
+    const fileTree = this.#drawerUi?.fileTree;
     if (!fileTree) return;
 
     let filteredData = filterFileDataByVariant(state.fileData, state.variant);
@@ -479,7 +431,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       return false;
     };
 
-    const selectAllContainer = ui.fileDrawer.selectAllContainer;
+    const selectAllContainer = this.#drawerUi.selectAllContainer;
     selectAllContainer.style.display = collections.length > 0 ? 'block' : 'none';
 
     for (const collectionName of collections) {
@@ -630,7 +582,7 @@ class FileSelectionDrawerPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async #onVariantChange(state) {
-    const variant = /** @type {string|null} */ (ui.fileDrawer?.variantSelect?.value);
+    const variant = /** @type {string|null} */ (this.#drawerUi?.variantSelect?.value);
     await this.dispatchStateChange({ variant, xml: null });
   }
 
@@ -638,7 +590,7 @@ class FileSelectionDrawerPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async #onLabelFilterChange(state) {
-    this.#currentLabelFilter = ui.fileDrawer?.labelFilter?.value || '';
+    this.#currentLabelFilter = this.#drawerUi?.labelFilter?.value || '';
     await this.#populateFileTree(state);
   }
 
@@ -726,8 +678,8 @@ class FileSelectionDrawerPlugin extends Plugin {
   }
 
   #onSelectAllChange() {
-    const selectAllCheckbox = ui.fileDrawer.selectAllContainer.selectAllCheckbox;
-    const fileTree = ui.fileDrawer.fileTree;
+    const selectAllCheckbox = this.#drawerUi.selectAllContainer.selectAllCheckbox;
+    const fileTree = this.#drawerUi.fileTree;
     const checked = selectAllCheckbox.checked;
 
     const collectionItems = fileTree.querySelectorAll('.collection-item');
@@ -749,8 +701,8 @@ class FileSelectionDrawerPlugin extends Plugin {
   }
 
   #updateExportButtonState() {
-    const exportButton = ui.fileDrawer.exportDropdown.exportButton;
-    const deleteButton = ui.fileDrawer.deleteButton;
+    const exportButton = this.#drawerUi.exportDropdown.exportButton;
+    const deleteButton = this.#drawerUi.deleteButton;
     const hasSelection = this.#selectedCollections.size > 0;
     exportButton.disabled = !hasSelection;
     deleteButton.disabled = !hasSelection;
@@ -774,7 +726,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       collections: collections
     });
 
-    const variantSelect = ui.fileDrawer.variantSelect;
+    const variantSelect = this.#drawerUi.variantSelect;
     const selectedVariant = variantSelect.value;
     if (selectedVariant && selectedVariant !== '') {
       params.append('variants', selectedVariant);
@@ -791,7 +743,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     this.#logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}${includeVersions ? ' (with versions)' : ''}${teiOnly ? ' (TEI only)' : ''}`);
 
-    const exportButton = ui.fileDrawer.exportDropdown.exportButton;
+    const exportButton = this.#drawerUi.exportDropdown.exportButton;
     exportButton.disabled = true;
     exportButton.loading = true;
 
@@ -853,7 +805,7 @@ class FileSelectionDrawerPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async #handleImport(state) {
-    const fileInput = ui.fileDrawer.importFileInput;
+    const fileInput = this.#drawerUi.importFileInput;
     const file = fileInput.files?.[0];
 
     if (!file) {
@@ -869,7 +821,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     this.#logger.info(`Importing file: ${file.name} (${file.size} bytes)`);
 
-    const importButton = ui.fileDrawer.importButton;
+    const importButton = this.#drawerUi.importButton;
     importButton.disabled = true;
     importButton.loading = true;
 
@@ -972,7 +924,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     this.#logger.info(`Creating new collection: ${newCollectionId}`);
 
-    const newCollectionButton = ui.fileDrawer.newCollectionButton;
+    const newCollectionButton = this.#drawerUi.newCollectionButton;
     newCollectionButton.disabled = true;
     newCollectionButton.loading = true;
 
@@ -1035,7 +987,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     this.#logger.info(`Deleting collections: ${collectionIds.join(', ')}`);
 
-    const deleteButton = ui.fileDrawer.deleteButton;
+    const deleteButton = this.#drawerUi.deleteButton;
     deleteButton.disabled = true;
     deleteButton.loading = true;
 
@@ -1114,11 +1066,6 @@ class FileSelectionDrawerPlugin extends Plugin {
 
 export default FileSelectionDrawerPlugin;
 
-/** Lazy-proxy API for backward compatibility */
-export const api = {
-  open: () => FileSelectionDrawerPlugin.getInstance().open(),
-  close: () => FileSelectionDrawerPlugin.getInstance().close()
-};
 
 /** @deprecated Use FileSelectionDrawerPlugin class directly */
 export const plugin = FileSelectionDrawerPlugin;

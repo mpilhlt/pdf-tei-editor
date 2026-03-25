@@ -46,7 +46,7 @@ import './modules/panels/index.js';
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
- * @import {saveDocumentDialogPart} from './plugins/document-actions.js'
+ * @import {saveDocumentDialogPart} from './templates/save-document-dialog.types.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'

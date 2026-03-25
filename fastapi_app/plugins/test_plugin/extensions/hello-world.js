@@ -33,11 +33,12 @@ export default class HelloWorldExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Custom endpoint — can be invoked by other plugins via 'hello-world-test.greet'.
+   * Extension point handler for `hello-world-test.greet`.
+   * Called by other plugins via `app.invokePluginEndpoint('hello-world-test.greet', [msg])`.
    * @param {string} greeting
    * @returns {string}
    */
-  greet(greeting) {
+  ['hello-world-test.greet'](greeting) {
     this.getDependency('dialog').info(greeting || 'Hello!');
     return 'Greeting displayed';
   }

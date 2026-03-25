@@ -382,7 +382,7 @@ describe('Application', () => {
     it('should register Plugin classes by instantiating them with context', () => {
       // Create a Plugin class
       class TestPluginClass extends Plugin {
-        static extensionPoints = ['custom.customMethod']
+        static extensionPoints = ['custom.customMethod'];
 
         constructor(context) {
           super(context, {
@@ -390,6 +390,8 @@ describe('Application', () => {
             deps: ['dependency']
           });
         }
+
+        ['custom.customMethod'](...args) { return this.customMethod(...args) }
 
         async customMethod() {
           return 'custom result';

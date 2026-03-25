@@ -61,7 +61,24 @@ class TeiValidationPlugin extends Plugin {
     }
   }
 
-  static extensionPoints = ['validation.validate', 'validation.inProgress'];
+  static extensionPoints = [ep.validation.validate, ep.validation.inProgress];
+
+  /**
+   * Extension point handler for `ep.validation.validate`.
+   * Called by the plugin system to trigger XML validation.
+   * Delegates to {@link TeiValidationPlugin#validate}.
+   * @returns {Promise<import('@codemirror/lint').Diagnostic[]>}
+   */
+  [ep.validation.validate](...args) { return this.validate(...args) }
+
+  /**
+   * Extension point handler for `ep.validation.inProgress`.
+   * Called when a validation cycle begins, passing the in-flight promise so this
+   * plugin can defer conflicting operations until validation completes.
+   * Delegates to {@link TeiValidationPlugin#inProgress}.
+   * @param {Promise<import('@codemirror/lint').Diagnostic[]>} promise
+   */
+  [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   //
   // Public API
@@ -276,16 +293,6 @@ class TeiValidationPlugin extends Plugin {
 
 export default TeiValidationPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('tei-validation')` in plugins, or import `TeiValidationPlugin` directly.
- */
-export const api = {
-  configure: (...args) => TeiValidationPlugin.getInstance().configure(...args),
-  validate: () => TeiValidationPlugin.getInstance().validate(),
-  isValidDocument: () => TeiValidationPlugin.getInstance().isValidDocument(),
-  isDisabled: () => TeiValidationPlugin.getInstance().isDisabled()
-};
 
 /** @deprecated Use TeiValidationPlugin class directly */
 export const plugin = TeiValidationPlugin;

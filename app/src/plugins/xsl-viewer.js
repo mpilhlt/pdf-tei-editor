@@ -7,11 +7,11 @@
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
- * @import { SlIconButton, SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
+ * @import { SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
+ * @import { xslViewerOverlayPart } from '../templates/xsl-viewer-overlay.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js';
-import ui, { updateUi } from '../ui.js';
 import { notify } from '../modules/sl-utils.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import { prettyPrintNode } from '../modules/tei-utils.js';
@@ -29,14 +29,6 @@ await registerTemplate('xsl-viewer-overlay', 'xsl-viewer-overlay.html');
  */
 
 /**
- * XSL viewer overlay UI structure
- * @typedef {object} xslViewerOverlayPart
- * @property {HTMLSpanElement} overlayTitle - Title text
- * @property {SlIconButton} closeBtn - Close button
- * @property {HTMLDivElement} content - Content container
- */
-
-/**
  * XSL viewer toolbar UI elements (added to xmlEditorToolbarPart)
  * @typedef {object} xslViewerToolbarPart
  * @property {SlDropdown} xslViewerDropdown - The dropdown
@@ -46,14 +38,6 @@ await registerTemplate('xsl-viewer-overlay', 'xsl-viewer-overlay.html');
 
 /** @type {XslStylesheetRegistration[]} */
 const registeredStylesheets = [];
-
-// Direct references to UI elements (since nested in sl-dropdown)
-/** @type {import('../ui.js').SlButton|null} */
-let xslViewerBtn = null;
-/** @type {SlMenu|null} */
-let xslViewerMenu = null;
-/** @type {HTMLDivElement|null} */
-let xslViewerOverlay = null;
 
 /**
  * XSL Transformation Viewer Plugin
@@ -69,8 +53,14 @@ export class XslViewerPlugin extends Plugin {
     });
   }
 
-  // Cached dependencies
-  #xmlEditor;
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+
+  /** @type {HTMLDivElement & xslViewerOverlayPart} */
+  #overlay = null;
+  /** @type {import('../ui.js').SlButton|null} */
+  #xslViewerBtn = null;
+  /** @type {SlMenu|null} */
+  #xslViewerMenu = null;
 
   /**
    * Get singleton instance
@@ -125,20 +115,21 @@ export class XslViewerPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
-    this.#xmlEditor = this.getDependency('xmleditor');
+
+    const xmlEditorApi = this.getDependency('xmleditor');
 
     // Add overlay to xmlEditor container
     const overlayElement = createSingleFromTemplate('xsl-viewer-overlay');
-    ui.xmlEditor.appendChild(overlayElement);
-    xslViewerOverlay = overlayElement;
+    xmlEditorApi.appendToEditor(overlayElement);
+    this.#overlay = /** @type {HTMLDivElement & xslViewerOverlayPart} */ (this.createUi(overlayElement));
 
     // Add button to toolbar (priority 50.5 - between TEI buttons and spacer)
     const buttonElement = createSingleFromTemplate('xsl-viewer-button');
-    ui.xmlEditor.toolbar.add(buttonElement, 50.5);
+    xmlEditorApi.addToolbarWidget(buttonElement, 50.5);
 
-    // Store direct references to nested elements (sl-dropdown doesn't expose them via updateUi)
-    xslViewerBtn = /** @type {import('../ui.js').SlButton} */ (buttonElement.querySelector('[name="xslViewerBtn"]'));
-    xslViewerMenu = /** @type {SlMenu} */ (buttonElement.querySelector('[name="xslViewerMenu"]'));
+    // Store direct references to nested elements (sl-dropdown doesn't expose them via name navigation)
+    this.#xslViewerBtn = /** @type {import('../ui.js').SlButton} */ (buttonElement.querySelector('[name="xslViewerBtn"]'));
+    this.#xslViewerMenu = /** @type {SlMenu} */ (buttonElement.querySelector('[name="xslViewerMenu"]'));
 
     // Fix z-index stacking context: toggle dropdown-open class on toolbar
     // This ensures the dropdown menu appears above the editor content
@@ -155,18 +146,14 @@ export class XslViewerPlugin extends Plugin {
       });
     }
 
-    updateUi();
-
     // Setup event handlers
-    const closeBtn = /** @type {SlIconButton} */ (overlayElement.querySelector('[data-name="closeBtn"]'));
-    closeBtn.addEventListener('click', () => {
+    this.#overlay.closeBtn.addEventListener('click', () => {
       this.hideOverlay();
     });
 
     // Copy button handler - copies as rich HTML for pasting into documents
-    const copyBtn = /** @type {SlIconButton} */ (overlayElement.querySelector('[data-name="copyBtn"]'));
-    copyBtn.addEventListener('click', async () => {
-      const content = overlayElement.querySelector('[name="content"]');
+    this.#overlay.copyBtn.addEventListener('click', async () => {
+      const content = this.#overlay.content;
       if (content) {
         try {
           const html = content.innerHTML;
@@ -190,7 +177,7 @@ export class XslViewerPlugin extends Plugin {
     });
 
     // Menu selection handler
-    xslViewerMenu.addEventListener('sl-select', (event) => {
+    this.#xslViewerMenu.addEventListener('sl-select', (event) => {
       const item = /** @type {SlMenuItem} */ (event.detail.item);
       const label = item.dataset.label;
       if (label) {
@@ -206,9 +193,9 @@ export class XslViewerPlugin extends Plugin {
    * Update menu items based on registered stylesheets and current document
    */
   updateMenu() {
-    if (!xslViewerMenu) return;
+    if (!this.#xslViewerMenu) return;
 
-    xslViewerMenu.innerHTML = '';
+    this.#xslViewerMenu.innerHTML = '';
 
     const currentXmlns = this.getCurrentDocumentXmlns();
 
@@ -216,7 +203,7 @@ export class XslViewerPlugin extends Plugin {
       const item = document.createElement('sl-menu-item');
       item.textContent = 'No stylesheets registered';
       item.disabled = true;
-      xslViewerMenu.appendChild(item);
+      this.#xslViewerMenu.appendChild(item);
       return;
     }
 
@@ -225,7 +212,7 @@ export class XslViewerPlugin extends Plugin {
       item.textContent = stylesheet.label;
       item.dataset.label = stylesheet.label;
       item.disabled = !currentXmlns || stylesheet.xmlns !== currentXmlns;
-      xslViewerMenu.appendChild(item);
+      this.#xslViewerMenu.appendChild(item);
     });
   }
 
@@ -233,15 +220,11 @@ export class XslViewerPlugin extends Plugin {
    * Update button enabled state based on available stylesheets
    */
   updateButtonState() {
-    if (!xslViewerBtn) {
-      return;
-    }
+    if (!this.#xslViewerBtn) return;
 
     const hasStylesheets = registeredStylesheets.length > 0;
     const hasMatchingXmlns = this.hasMatchingStylesheet();
-    const shouldBeDisabled = !hasStylesheets || !hasMatchingXmlns;
-
-    xslViewerBtn.disabled = shouldBeDisabled;
+    this.#xslViewerBtn.disabled = !hasStylesheets || !hasMatchingXmlns;
   }
 
   /**
@@ -331,12 +314,10 @@ export class XslViewerPlugin extends Plugin {
    * @param {Document} resultDoc
    */
   showOverlay(title, resultDoc) {
-    if (!xslViewerOverlay) return;
+    if (!this.#overlay) return;
 
-    const overlayTitle = xslViewerOverlay.querySelector('[name="overlayTitle"]');
-    const content = xslViewerOverlay.querySelector('[name="content"]');
-
-    if (overlayTitle) overlayTitle.textContent = title;
+    this.#overlay.overlayTitle.textContent = title;
+    const content = this.#overlay.content;
     if (!content) return;
 
     content.innerHTML = '';
@@ -394,32 +375,22 @@ export class XslViewerPlugin extends Plugin {
       content.appendChild(pre);
     }
 
-    xslViewerOverlay.style.display = 'flex';
+    this.#overlay.style.display = 'flex';
   }
 
   /**
    * Hide the overlay
    */
   hideOverlay() {
-    if (!xslViewerOverlay) return;
-    xslViewerOverlay.style.display = 'none';
-    const content = xslViewerOverlay.querySelector('[name="content"]');
-    if (content) content.innerHTML = '';
+    if (!this.#overlay) return;
+    this.#overlay.style.display = 'none';
+    this.#overlay.content.innerHTML = '';
   }
 
-  /**
-   * React to state changes
-   * @param {string[]} changedKeys
-   */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('xml')) {
-      // Update button enabled state and menu items
-      this.updateButtonState();
-      this.updateMenu();
-
-      // Hide overlay when document changes
-      this.hideOverlay();
-    }
+  onXmlChange() {
+    this.updateButtonState();
+    this.updateMenu();
+    this.hideOverlay();
   }
 }
 

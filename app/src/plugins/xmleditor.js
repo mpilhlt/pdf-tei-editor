@@ -31,6 +31,7 @@ import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import Plugin from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -85,6 +86,7 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 
 /**
  * XML editor navigation properties
+ * TODO This has become very complex and needs to be refactored into separate components
  * @typedef {object} xmlEditorPart
  * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
  * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
@@ -93,7 +95,16 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  */
 
 class XmlEditorPlugin extends Plugin {
-  static extensionPoints = ['validation.inProgress'];
+  static extensionPoints = [ep.validation.inProgress];
+
+  /**
+   * Extension point handler for `ep.validation.inProgress`.
+   * Called when a validation cycle begins so the editor can defer save operations
+   * until the in-flight validation promise settles.
+   * Delegates to {@link XmlEditorPlugin#inProgress}.
+   * @param {Promise<import('@codemirror/lint').Diagnostic[]>} promise
+   */
+  [ep.validation.inProgress](...args) { return this.inProgress(...args) }
 
   /** @param {PluginContext} context */
   constructor(context) {
@@ -104,13 +115,42 @@ class XmlEditorPlugin extends Plugin {
     this.#xmlEditor = new NavXmlEditor('codemirror-container');
   }
 
-  // Cached dependencies
-  #logger;
-  #client;
+  get #logger() { return this.getDependency('logger') }
+  get #client() { return this.getDependency('client') }
 
   // The NavXmlEditor instance
   /** @type {NavXmlEditor} */
   #xmlEditor;
+
+  // Panel references (captured early in install())
+  /** @type {UIPart<import('../modules/panels/status-bar.js').StatusBar, xmlEditorHeaderbarPart>} */
+  #headerbar;
+  /** @type {UIPart<import('../modules/panels/tool-bar.js').ToolBar, xmlEditorToolbarPart>} */
+  #toolbar;
+  /** @type {UIPart<import('../modules/panels/status-bar.js').StatusBar, xmlEditorStatusbarPart>} */
+  #statusbar;
+  /** @type {HTMLElement} */
+  #xmlEditorEl;
+
+  // Toolbar widget references
+  /** @type {StatusButton} */
+  #prevDiffBtn;
+  /** @type {StatusButton} */
+  #nextDiffBtn;
+  /** @type {StatusButton} */
+  #rejectAllBtn;
+  /** @type {StatusButton} */
+  #acceptAllBtn;
+  /** @type {StatusButton} */
+  #validateBtn;
+  /** @type {StatusButton} */
+  #uploadBtn;
+  /** @type {StatusButton} */
+  #downloadBtn;
+
+  // Statusbar widget references
+  /** @type {StatusSwitch} */
+  #lineWrappingSwitch;
 
   // Status widgets
   /** @type {StatusText} */
@@ -147,32 +187,49 @@ class XmlEditorPlugin extends Plugin {
   #hashBeingSaved = null;
 
   /**
-   * Return the NavXmlEditor instance as the plugin API
+   * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
+   * Plugin methods take precedence; all other property accesses fall through to the inner editor.
+   * TODO: Add a dedciated accessor and refactor consuming plugins's calls accordingly
    * @returns {NavXmlEditor}
    */
   getApi() {
-    return this.#xmlEditor;
+    const plugin = this;
+    const inner = this.#xmlEditor;
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
+    return /** @type {NavXmlEditor} */ (new Proxy(inner, {
+      get(_target, prop) {
+        if (pluginMethods.has(String(prop))) {
+          return /** @type {any} */ (plugin)[prop].bind(plugin);
+        }
+        const val = inner[/** @type {keyof NavXmlEditor} */ (prop)];
+        return typeof val === 'function' ? val.bind(inner) : val;
+      }
+    }));
   }
 
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState);
-    this.#logger = this.getDependency('logger');
-    this.#client = this.getDependency('client');
     this.#logger.debug(`Installing plugin "${this.name}"`);
+
+    // Capture panel references (panels are pre-existing DOM elements)
+    this.#headerbar = ui.xmlEditor.headerbar;
+    this.#toolbar = ui.xmlEditor.toolbar;
+    this.#statusbar = ui.xmlEditor.statusbar;
+    this.#xmlEditorEl = ui.xmlEditor;
 
     // Create headerbar widgets from templates and add to headerbar
     const headerbarLeftWidgets = createFromTemplate('xmleditor-headerbar');
     headerbarLeftWidgets.forEach(widget => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.headerbar.add(widget, 'left', 1);
+        this.#headerbar.add(widget, 'left', 1);
       }
     });
 
     const headerbarRightWidgets = createFromTemplate('xmleditor-headerbar-right');
     headerbarRightWidgets.forEach(widget => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.headerbar.add(widget, 'right', 1);
+        this.#headerbar.add(widget, 'right', 1);
       }
     });
 
@@ -180,14 +237,14 @@ class XmlEditorPlugin extends Plugin {
     const statusbarLeftWidgets = createFromTemplate('xmleditor-statusbar');
     statusbarLeftWidgets.forEach(widget => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.statusbar.add(widget, 'left', 1);
+        this.#statusbar.add(widget, 'left', 1);
       }
     });
 
     const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right');
     statusbarRightWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.statusbar.add(widget, 'right', index + 1);
+        this.#statusbar.add(widget, 'right', index + 1);
       }
     });
 
@@ -196,7 +253,7 @@ class XmlEditorPlugin extends Plugin {
     const toolbarPriorities = [104, 103, 102, 101, 100, 99]; // separator, prevDiff, nextDiff, separator, reject, accept
     toolbarWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.toolbar.add(widget, toolbarPriorities[index] || 1);
+        this.#toolbar.add(widget, toolbarPriorities[index] || 1);
       }
     });
 
@@ -205,7 +262,7 @@ class XmlEditorPlugin extends Plugin {
     const teiButtonsPriorities = [52, 51]; // separator, validateBtn
     teiButtons.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.toolbar.add(widget, teiButtonsPriorities[index] || 1);
+        this.#toolbar.add(widget, teiButtonsPriorities[index] || 1);
       }
     });
 
@@ -214,7 +271,7 @@ class XmlEditorPlugin extends Plugin {
     const importExportPriorities = [50, 3, 2]; // spacer, upload, download
     importExportButtons.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        ui.xmlEditor.toolbar.add(widget, importExportPriorities[index] || 1);
+        this.#toolbar.add(widget, importExportPriorities[index] || 1);
       }
     });
 
@@ -226,13 +283,13 @@ class XmlEditorPlugin extends Plugin {
       name: 'readOnlyStatus'
     });
 
-    // Update UI to register named widgets
+    // Update UI to register named widgets (kept for cross-plugin ui access in access-control.js)
     updateUi();
 
-    // Store references to widgets for later use
-    this.#titlePrefixWidget = ui.xmlEditor.headerbar.titlePrefixWidget;
-    this.#titleWidget = ui.xmlEditor.headerbar.titleWidget;
-    this.#lastUpdatedWidget = ui.xmlEditor.headerbar.lastUpdatedWidget;
+    // Store headerbar widget references
+    this.#titlePrefixWidget = this.#headerbar.titlePrefixWidget;
+    this.#titleWidget = this.#headerbar.titleWidget;
+    this.#lastUpdatedWidget = this.#headerbar.lastUpdatedWidget;
 
     // Make title widget clickable/dblclickable for copy and edit
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -252,36 +309,46 @@ class XmlEditorPlugin extends Plugin {
       });
       this.#titleWidget.addEventListener('widget-dblclick', () => this.#editArtifactLabel());
     }
-    this.#indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget;
-    this.#cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget;
+    this.#indentationStatusWidget = this.#statusbar.indentationStatusWidget;
+    this.#cursorPositionWidget = this.#statusbar.cursorPositionWidget;
+    this.#lineWrappingSwitch = this.#statusbar.lineWrappingSwitch;
+
+    // Store toolbar widget references
+    this.#prevDiffBtn = this.#toolbar.prevDiffBtn;
+    this.#nextDiffBtn = this.#toolbar.nextDiffBtn;
+    this.#rejectAllBtn = this.#toolbar.rejectAllBtn;
+    this.#acceptAllBtn = this.#toolbar.acceptAllBtn;
+    this.#validateBtn = this.#toolbar.validateBtn;
+    this.#uploadBtn = this.#toolbar.uploadBtn;
+    this.#downloadBtn = this.#toolbar.downloadBtn;
 
     // Initialize line wrapping switch from stored preference
     const lineWrappingEnabled = this.#getLineWrappingPreference();
-    ui.xmlEditor.statusbar.lineWrappingSwitch.checked = lineWrappingEnabled;
+    this.#lineWrappingSwitch.checked = lineWrappingEnabled;
 
     // Attach event listeners to toolbar buttons
-    ui.xmlEditor.toolbar.prevDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToPreviousDiff());
-    ui.xmlEditor.toolbar.nextDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToNextDiff());
-    ui.xmlEditor.toolbar.rejectAllBtn.addEventListener('widget-click', () => {
+    this.#prevDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToPreviousDiff());
+    this.#nextDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToNextDiff());
+    this.#rejectAllBtn.addEventListener('widget-click', () => {
       this.#xmlEditor.rejectAllDiffs();
       this.getDependency('services').removeMergeView();
     });
-    ui.xmlEditor.toolbar.acceptAllBtn.addEventListener('widget-click', () => {
+    this.#acceptAllBtn.addEventListener('widget-click', () => {
       this.#xmlEditor.acceptAllDiffs();
       this.getDependency('services').removeMergeView();
     });
 
     // Attach event listeners to import/export buttons
-    ui.xmlEditor.toolbar.uploadBtn.addEventListener('widget-click', () => {
+    this.#uploadBtn.addEventListener('widget-click', () => {
       if (this.state) this.getDependency('services').uploadXml(this.state);
     });
-    ui.xmlEditor.toolbar.downloadBtn.addEventListener('widget-click', () => {
+    this.#downloadBtn.addEventListener('widget-click', () => {
       if (this.state) this.getDependency('services').downloadXml(this.state);
     });
 
     // Attach event listener to validate button
-    ui.xmlEditor.toolbar.validateBtn.addEventListener('widget-click', async () => {
-      ui.xmlEditor.toolbar.validateBtn.disabled = true;
+    this.#validateBtn.addEventListener('widget-click', async () => {
+      this.#validateBtn.disabled = true;
       const diagnostics = await this.getDependency('tei-validation').validate();
       notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`);
     });
@@ -351,7 +418,7 @@ class XmlEditorPlugin extends Plugin {
     });
 
     // Add change handler for line wrapping toggle
-    ui.xmlEditor.statusbar.lineWrappingSwitch.addEventListener('widget-change', (e) => {
+    this.#lineWrappingSwitch.addEventListener('widget-change', (e) => {
       const enabled = e.detail.checked;
       this.#setLineWrappingPreference(enabled);
       this.#xmlEditor.setLineWrapping(enabled);
@@ -396,10 +463,10 @@ class XmlEditorPlugin extends Plugin {
     });
 
     // Add navigation widgets to statusbar center section
-    ui.xmlEditor.statusbar.add(this.#prevNodeBtn, 'center', 0);
-    ui.xmlEditor.statusbar.add(this.#xpathDropdown, 'center', 0);
-    ui.xmlEditor.statusbar.add(this.#nextNodeBtn, 'center', 0);
-    ui.xmlEditor.statusbar.add(this.#nodeCounterWidget, 'center', 0);
+    this.#statusbar.add(this.#prevNodeBtn, 'center', 0);
+    this.#statusbar.add(this.#xpathDropdown, 'center', 0);
+    this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
+    this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
 
     // Update UI to register navigation widgets
     updateUi();
@@ -461,31 +528,31 @@ class XmlEditorPlugin extends Plugin {
       }
 
       if (validationStatusWidget && !validationStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
+        this.#statusbar.add(validationStatusWidget, 'left', 5);
       }
       // @ts-ignore
-      ui.xmlEditor.querySelector('.cm-content').classList.add('invalid-xml');
+      this.#xmlEditorEl.querySelector('.cm-content').classList.add('invalid-xml');
     });
 
     this.#xmlEditor.on('editorXmlWellFormed', async () => {
       // @ts-ignore
-      ui.xmlEditor.querySelector('.cm-content').classList.remove('invalid-xml');
+      this.#xmlEditorEl.querySelector('.cm-content').classList.remove('invalid-xml');
       try {
         this.#xmlEditor.getView().dispatch(setDiagnostics(this.#xmlEditor.getView().state, []));
       } catch (error) {
         this.#logger.warn('Error clearing diagnostics on well-formed XML: ' + String(error));
       }
       if (validationStatusWidget && validationStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeById(validationStatusWidget.id);
+        this.#statusbar.removeById(validationStatusWidget.id);
       }
     });
 
     // dis/enable diff buttons
     const diffBtns = [
-      ui.xmlEditor.toolbar.prevDiffBtn,
-      ui.xmlEditor.toolbar.nextDiffBtn,
-      ui.xmlEditor.toolbar.rejectAllBtn,
-      ui.xmlEditor.toolbar.acceptAllBtn
+      this.#prevDiffBtn,
+      this.#nextDiffBtn,
+      this.#rejectAllBtn,
+      this.#acceptAllBtn
     ];
     const enableDiffButtons = (value) => {
       for (let btn of diffBtns) {
@@ -558,7 +625,7 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // Keep line wrapping switch always visible but disable when no document
-    ui.xmlEditor.statusbar.lineWrappingSwitch.disabled = !state.xml;
+    this.#lineWrappingSwitch.disabled = !state.xml;
 
     // Hide other statusbar widgets when no document
     ;[this.#cursorPositionWidget, this.#indentationStatusWidget]
@@ -586,9 +653,9 @@ class XmlEditorPlugin extends Plugin {
     if (!state.xml) {
       this.#xmlEditor.clear();
       this.#xmlEditor.setReadOnly(true);
-      ui.xmlEditor.classList.remove('editor-readonly');
+      this.#xmlEditorEl.classList.remove('editor-readonly');
       if (this.#readOnlyStatusWidget && this.#readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.headerbar.removeById(this.#readOnlyStatusWidget.id);
+        this.#headerbar.removeById(this.#readOnlyStatusWidget.id);
       }
       return;
     }
@@ -601,33 +668,33 @@ class XmlEditorPlugin extends Plugin {
 
     // Update visual indicators based on state
     if (state.editorReadOnly) {
-      if (!ui.xmlEditor.classList.contains('editor-readonly')) {
-        ui.xmlEditor.classList.add('editor-readonly');
+      if (!this.#xmlEditorEl.classList.contains('editor-readonly')) {
+        this.#xmlEditorEl.classList.add('editor-readonly');
       }
       if (this.#readOnlyStatusWidget) {
         this.#readOnlyStatusWidget.text = state.connectionLost ? 'Connection lost' : 'Read-only';
         this.#readOnlyStatusWidget.icon = state.connectionLost ? 'wifi-off' : 'lock-fill';
         if (!this.#readOnlyStatusWidget.isConnected) {
-          ui.xmlEditor.headerbar.add(this.#readOnlyStatusWidget, 'right', 5);
+          this.#headerbar.add(this.#readOnlyStatusWidget, 'right', 5);
         }
       }
     } else {
-      if (ui.xmlEditor.classList.contains('editor-readonly')) {
-        ui.xmlEditor.classList.remove('editor-readonly');
+      if (this.#xmlEditorEl.classList.contains('editor-readonly')) {
+        this.#xmlEditorEl.classList.remove('editor-readonly');
       }
       if (this.#readOnlyStatusWidget && this.#readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.headerbar.removeById(this.#readOnlyStatusWidget.id);
+        this.#headerbar.removeById(this.#readOnlyStatusWidget.id);
       }
     }
 
     // Update import/export button states based on user role and state
     const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator']);
     if (isAnnotator) {
-      ui.xmlEditor.toolbar.downloadBtn.disabled = !Boolean(state.xml);
-      ui.xmlEditor.toolbar.uploadBtn.disabled = state.editorReadOnly || state.offline;
+      this.#downloadBtn.disabled = !Boolean(state.xml);
+      this.#uploadBtn.disabled = state.editorReadOnly || state.offline;
     } else {
-      ui.xmlEditor.toolbar.downloadBtn.disabled = true;
-      ui.xmlEditor.toolbar.uploadBtn.disabled = true;
+      this.#downloadBtn.disabled = true;
+      this.#uploadBtn.disabled = true;
     }
 
     // xpath state => selection
@@ -652,9 +719,9 @@ class XmlEditorPlugin extends Plugin {
    * @param {Promise<any>} validationPromise
    */
   async inProgress(validationPromise) {
-    ui.xmlEditor.toolbar.validateBtn.disabled = true;
+    this.#validateBtn.disabled = true;
     await validationPromise;
-    ui.xmlEditor.toolbar.validateBtn.disabled = false;
+    this.#validateBtn.disabled = false;
   }
 
   //
@@ -666,6 +733,51 @@ class XmlEditorPlugin extends Plugin {
    */
   async saveIfDirty() {
     return this.#saveIfDirty();
+  }
+
+  /**
+   * Add a widget to the XML editor statusbar.
+   * @param {HTMLElement} widget
+   * @param {'left'|'center'|'right'} position
+   * @param {number} priority
+   */
+  addStatusbarWidget(widget, position, priority) {
+    this.#statusbar.add(widget, position, priority)
+  }
+
+  /**
+   * Remove a widget from the XML editor statusbar by ID.
+   * @param {string} widgetId
+   */
+  removeStatusbarWidget(widgetId) {
+    this.#statusbar.removeById(widgetId)
+  }
+
+  /**
+   * Set the context text on the read-only status widget.
+   * @param {string} text
+   */
+  setReadOnlyContext(text) {
+    if (this.#readOnlyStatusWidget) {
+      this.#readOnlyStatusWidget.text = text
+    }
+  }
+
+  /**
+   * Add a widget to the XML editor toolbar.
+   * @param {HTMLElement} widget
+   * @param {number} priority
+   */
+  addToolbarWidget(widget, priority) {
+    this.#toolbar.add(widget, priority)
+  }
+
+  /**
+   * Append an element as a direct child of the XML editor panel (e.g. overlays).
+   * @param {HTMLElement} element
+   */
+  appendToEditor(element) {
+    this.#xmlEditorEl.appendChild(element)
   }
 
   /**
@@ -962,21 +1074,6 @@ export default XmlEditorPlugin;
 /** @deprecated Use XmlEditorPlugin class directly */
 export const plugin = XmlEditorPlugin;
 
-/** Lazy-proxy API for backward compatibility — exposes NavXmlEditor instance */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = XmlEditorPlugin.getInstance().getApi();
-    const value = instance[prop];
-    return typeof value === 'function' ? value.bind(instance) : value;
-  },
-  set(_, prop, value) {
-    XmlEditorPlugin.getInstance().getApi()[prop] = value;
-    return true;
-  }
-});
-
-// Named export for backward compatibility (api === xmlEditor instance via proxy)
-export { api as xmlEditor };
 
 // Re-export XMLEditor class (used by external code)
 export { XMLEditor };

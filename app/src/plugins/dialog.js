@@ -2,14 +2,14 @@
  * Dialog plugin providing modal dialogs for info, error, success, confirm, and prompt.
  */
 
-import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
-import ui from '../ui.js';
-import Plugin from '../modules/plugin-base.js';
-
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { SlInput } from '../ui.js'
+ * @import { SlDialog } from '../ui.js'
+ * @import { dialogPart } from '../templates/dialog.types.js'
  */
+
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import Plugin from '../modules/plugin-base.js';
 
 /**
  * @typedef {Object} dialogApi
@@ -18,17 +18,6 @@ import Plugin from '../modules/plugin-base.js';
  * @property {(message:string) => void} success
  * @property {(message:string, title?:string) => Promise<boolean>} confirm
  * @property {(message:string, title?:string, defaultValue?:string, placeholder?:string) => Promise<string|null>} prompt
- */
-
-/**
- * Dialog component navigation properties.
- * @typedef {object} dialogPart
- * @property {HTMLSpanElement} message
- * @property {HTMLDivElement} icon
- * @property {SlInput} promptInput
- * @property {import('../ui.js').SlButton} closeBtn
- * @property {import('../ui.js').SlButton} cancelBtn
- * @property {import('../ui.js').SlButton} confirmBtn
  */
 
 // Register template at module level
@@ -43,42 +32,44 @@ class DialogPlugin extends Plugin {
     });
   }
 
+  /** @type {SlDialog & dialogPart} */
+  #ui = null
+
   async install(state) {
     await super.install(state);
     this.getDependency('logger').debug(`Installing plugin "${this.name}"`);
-    createSingleFromTemplate('dialog-template', document.body);
-    updateUi();
-    ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());
+    this.#ui = this.createUi(createSingleFromTemplate('dialog-template', document.body))
+    this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide());
   }
 
   /**
    * @param {string} message
    */
   info(message) {
-    ui.dialog.setAttribute('label', 'Information');
-    ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-    ui.dialog.message.innerHTML = message;
-    ui.dialog.show();
+    this.#ui.setAttribute('label', 'Information');
+    this.#ui.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
+    this.#ui.message.innerHTML = message;
+    this.#ui.show();
   }
 
   /**
    * @param {string} message
    */
   error(message) {
-    ui.dialog.setAttribute('label', 'Error');
-    ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
-    ui.dialog.message.innerHTML = message;
-    ui.dialog.show();
+    this.#ui.setAttribute('label', 'Error');
+    this.#ui.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
+    this.#ui.message.innerHTML = message;
+    this.#ui.show();
   }
 
   /**
    * @param {string} message
    */
   success(message) {
-    ui.dialog.setAttribute('label', 'Success');
-    ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
-    ui.dialog.message.innerHTML = message;
-    ui.dialog.show();
+    this.#ui.setAttribute('label', 'Success');
+    this.#ui.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
+    this.#ui.message.innerHTML = message;
+    this.#ui.show();
   }
 
   /**
@@ -88,31 +79,31 @@ class DialogPlugin extends Plugin {
    */
   confirm(message, title = 'Confirm') {
     return new Promise((resolve) => {
-      ui.dialog.setAttribute('label', title);
-      ui.dialog.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
-      ui.dialog.message.innerHTML = message;
+      this.#ui.setAttribute('label', title);
+      this.#ui.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
+      this.#ui.message.innerHTML = message;
 
-      ui.dialog.closeBtn.style.display = 'none';
-      ui.dialog.cancelBtn.style.display = '';
-      ui.dialog.confirmBtn.style.display = '';
+      this.#ui.closeBtn.style.display = 'none';
+      this.#ui.cancelBtn.style.display = '';
+      this.#ui.confirmBtn.style.display = '';
 
-      const handleConfirm = () => { cleanup(); ui.dialog.hide(); resolve(true); };
-      const handleCancel = () => { cleanup(); ui.dialog.hide(); resolve(false); };
+      const handleConfirm = () => { cleanup(); this.#ui.hide(); resolve(true); };
+      const handleCancel = () => { cleanup(); this.#ui.hide(); resolve(false); };
       const handleHide = () => { cleanup(); resolve(false); };
 
       const cleanup = () => {
-        ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
-        ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
-        ui.dialog.removeEventListener('sl-hide', handleHide);
-        ui.dialog.closeBtn.style.display = '';
-        ui.dialog.cancelBtn.style.display = 'none';
-        ui.dialog.confirmBtn.style.display = 'none';
+        this.#ui.confirmBtn.removeEventListener('click', handleConfirm);
+        this.#ui.cancelBtn.removeEventListener('click', handleCancel);
+        this.#ui.removeEventListener('sl-hide', handleHide);
+        this.#ui.closeBtn.style.display = '';
+        this.#ui.cancelBtn.style.display = 'none';
+        this.#ui.confirmBtn.style.display = 'none';
       };
 
-      ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
-      ui.dialog.cancelBtn.addEventListener('click', handleCancel);
-      ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
-      ui.dialog.show();
+      this.#ui.confirmBtn.addEventListener('click', handleConfirm);
+      this.#ui.cancelBtn.addEventListener('click', handleCancel);
+      this.#ui.addEventListener('sl-hide', handleHide, { once: true });
+      this.#ui.show();
     });
   }
 
@@ -125,73 +116,58 @@ class DialogPlugin extends Plugin {
    */
   prompt(message, title = 'Input', defaultValue = '', placeholder = '') {
     return new Promise((resolve) => {
-      ui.dialog.setAttribute('label', title);
-      ui.dialog.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-      ui.dialog.message.innerHTML = message;
+      this.#ui.setAttribute('label', title);
+      this.#ui.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
+      this.#ui.message.innerHTML = message;
 
-      ui.dialog.promptInput.style.display = '';
-      ui.dialog.promptInput.value = defaultValue;
-      ui.dialog.promptInput.placeholder = placeholder;
+      this.#ui.promptInput.style.display = '';
+      this.#ui.promptInput.value = defaultValue;
+      this.#ui.promptInput.placeholder = placeholder;
 
-      ui.dialog.closeBtn.style.display = 'none';
-      ui.dialog.cancelBtn.style.display = '';
-      ui.dialog.confirmBtn.style.display = '';
+      this.#ui.closeBtn.style.display = 'none';
+      this.#ui.cancelBtn.style.display = '';
+      this.#ui.confirmBtn.style.display = '';
 
       const handleConfirm = () => {
-        const value = ui.dialog.promptInput.value.trim();
-        ui.dialog.hide();
-        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(value || null); }, { once: true });
+        const value = this.#ui.promptInput.value.trim();
+        this.#ui.hide();
+        this.#ui.addEventListener('sl-after-hide', () => { cleanup(); resolve(value || null); }, { once: true });
       };
       const handleCancel = () => {
-        ui.dialog.hide();
-        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
+        this.#ui.hide();
+        this.#ui.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
       };
       const handleHide = () => {
-        ui.dialog.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
+        this.#ui.addEventListener('sl-after-hide', () => { cleanup(); resolve(null); }, { once: true });
       };
       const handleEnter = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleConfirm(); }
       };
 
       const cleanup = () => {
-        ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
-        ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
-        ui.dialog.removeEventListener('sl-hide', handleHide);
-        ui.dialog.promptInput.removeEventListener('keydown', handleEnter);
-        ui.dialog.closeBtn.style.display = '';
-        ui.dialog.cancelBtn.style.display = 'none';
-        ui.dialog.confirmBtn.style.display = 'none';
-        ui.dialog.promptInput.style.display = 'none';
-        ui.dialog.promptInput.value = '';
+        this.#ui.confirmBtn.removeEventListener('click', handleConfirm);
+        this.#ui.cancelBtn.removeEventListener('click', handleCancel);
+        this.#ui.removeEventListener('sl-hide', handleHide);
+        this.#ui.promptInput.removeEventListener('keydown', handleEnter);
+        this.#ui.closeBtn.style.display = '';
+        this.#ui.cancelBtn.style.display = 'none';
+        this.#ui.confirmBtn.style.display = 'none';
+        this.#ui.promptInput.style.display = 'none';
+        this.#ui.promptInput.value = '';
       };
 
-      ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
-      ui.dialog.cancelBtn.addEventListener('click', handleCancel);
-      ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
-      ui.dialog.promptInput.addEventListener('keydown', handleEnter);
-      ui.dialog.show();
-      setTimeout(() => ui.dialog.promptInput.focus(), 100);
+      this.#ui.confirmBtn.addEventListener('click', handleConfirm);
+      this.#ui.cancelBtn.addEventListener('click', handleCancel);
+      this.#ui.addEventListener('sl-hide', handleHide, { once: true });
+      this.#ui.promptInput.addEventListener('keydown', handleEnter);
+      this.#ui.show();
+      setTimeout(() => this.#ui.promptInput.focus(), 100);
     });
   }
 }
 
 export default DialogPlugin;
 
-/**
- * Lazy-proxy API for backward compatibility.
- * @deprecated Use `getDependency('dialog')` in plugins, or import `DialogPlugin` directly.
- */
-export const api = new Proxy({}, {
-  get(_, prop) {
-    const instance = DialogPlugin.getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_, prop, value) {
-    DialogPlugin.getInstance()[prop] = value
-    return true
-  }
-});
 
 /** @deprecated Use DialogPlugin class directly */
 export const plugin = DialogPlugin;

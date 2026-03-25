@@ -245,7 +245,7 @@ class BasePanel extends HTMLElement {
    * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer
-   * @param {InsertPosition|number|null} where - Position for insertAdjacentElement, or numeric index (0-based, negative counts from end)
+   * @param {'left'|'center'|'right'|InsertPosition|number|null} where - Positional hint ('left', 'center', 'right'), InsertPosition string, or numeric index (0-based, negative counts from end)
    * @param {HTMLElement|null} referenceElement - Reference element for positioning
    * @returns {string} The widget ID
    */
@@ -266,10 +266,14 @@ class BasePanel extends HTMLElement {
       } else {
         this.insertBefore(widget, children[index]);
       }
+    } else if (where === 'left') {
+      this.insertAdjacentElement('afterbegin', widget);
+    } else if (where === 'center' || where === 'right') {
+      this.appendChild(widget);
     } else if (where && referenceElement) {
-      referenceElement.insertAdjacentElement(where, widget);
+      referenceElement.insertAdjacentElement(/** @type {InsertPosition} */ (where), widget);
     } else if (where) {
-      this.insertAdjacentElement(where, widget);
+      this.insertAdjacentElement(/** @type {InsertPosition} */ (where), widget);
     } else {
       this.appendChild(widget);
     }
@@ -305,7 +309,7 @@ class BasePanel extends HTMLElement {
    * Add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
-   * @param {InsertPosition|number} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend') or numeric index (0-based, negative counts from end). Defaults to "beforeend"
+   * @param {'left'|'center'|'right'|InsertPosition|number} [where] - Positional hint: 'left' (start), 'center'/'right' (end), InsertPosition string, or numeric index. Defaults to "beforeend"
    */
   add(widget, priority = 0, where = "beforeend") {
     return this._addWidget(widget, priority, where);
@@ -396,4 +400,90 @@ class BasePanel extends HTMLElement {
   }
 }
 
-export { BasePanel };
+/**
+ * A single toolbar/panel contribution from a plugin.
+ * @typedef {Object} PanelContribution
+ * @property {HTMLElement} element - The element to add to the panel.
+ * @property {number} [priority] - Higher values stay visible longer during overflow. Default: 0.
+ * @property {'left'|'center'|'right'|number} [position] - Placement hint. Default: 'center'.
+ */
+
+/**
+ * Resolves an array of panel contributions into display order.
+ *
+ * Position semantics:
+ * - `'left'`   — left zone; higher-priority items appear furthest left.
+ * - `'center'` — center zone (default); higher-priority items appear leftmost in zone.
+ * - `'right'`  — right zone; higher-priority items appear furthest right.
+ * - `1`, `2`   — absolute positions from the start (1 = first, 2 = second).
+ * - `-1`, `-2` — absolute positions from the end (−1 = last, −2 = second-to-last).
+ *
+ * Conflict resolution for absolute positions: when two items claim the same slot,
+ * the higher-priority item keeps it; the lower-priority item moves one step toward
+ * center (right for start-edge items, left for end-edge items).
+ *
+ * @param {PanelContribution[]} contributions
+ * @returns {PanelContribution[]} Contributions sorted into resolved display order
+ */
+function resolveContributions(contributions) {
+  const prio = c => c.priority ?? 0;
+
+  // Separate absolute-edge items (numeric position) from zone items (string position)
+  const edgeItems = contributions.filter(c => typeof c.position === 'number');
+  const zoneItems = contributions.filter(c => typeof c.position !== 'number');
+
+  // Within each zone, sort by priority:
+  //   left/center → high priority first (= furthest left / leftmost in zone)
+  //   right       → low priority first (so high priority ends up furthest right)
+  const left = zoneItems
+    .filter(c => c.position === 'left')
+    .sort((a, b) => prio(b) - prio(a));
+
+  const center = zoneItems
+    .filter(c => !c.position || c.position === 'center')
+    .sort((a, b) => prio(b) - prio(a));
+
+  const right = zoneItems
+    .filter(c => c.position === 'right')
+    .sort((a, b) => prio(a) - prio(b));
+
+  const ordered = [...left, ...center, ...right];
+
+  // Insert start-edge items (1, 2, …) in ascending position order
+  const startEdge = edgeItems
+    .filter(c => c.position > 0)
+    .sort((a, b) => a.position - b.position);
+
+  for (const item of startEdge) {
+    const idx = Math.min(item.position - 1, ordered.length);
+    const existing = ordered[idx];
+    if (!existing || prio(item) >= prio(existing)) {
+      ordered.splice(idx, 0, item);
+    } else {
+      // Yield: move one step toward center (right)
+      ordered.splice(idx + 1, 0, item);
+    }
+  }
+
+  // Insert end-edge items in ascending order (most-negative first, e.g. -2 before -1)
+  // so that as length grows each subsequent item still lands at the correct end position.
+  const endEdge = edgeItems
+    .filter(c => c.position < 0)
+    .sort((a, b) => a.position - b.position);
+
+  for (const item of endEdge) {
+    // position -1 → last slot (index = length), -2 → second-to-last, etc.
+    const idx = Math.max(0, ordered.length + item.position + 1);
+    const existing = ordered[idx];
+    if (!existing || prio(item) >= prio(existing)) {
+      ordered.splice(idx, 0, item);
+    } else {
+      // Yield: move one step toward center (left)
+      ordered.splice(Math.max(0, idx - 1), 0, item);
+    }
+  }
+
+  return ordered;
+}
+
+export { BasePanel, resolveContributions };

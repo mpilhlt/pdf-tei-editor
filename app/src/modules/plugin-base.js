@@ -4,6 +4,8 @@
  * @import { PluginContext } from './plugin-context.js'
  */
 
+import { createNavigableElement } from './navigable-element.js'
+
 /**
  * Base class for plugins that provides state management and lifecycle methods
  */
@@ -144,6 +146,24 @@ export class Plugin {
   }
 
   /**
+   * Create a scoped navigable UI tree from a root element.
+   * Wraps createNavigableElement() so plugins can access their own DOM elements
+   * without using the global `ui` object:
+   *
+   * @example
+   * const span = createSingleFromTemplate('my-widget')
+   * this.#ui = this.createUi(span)
+   * // this.#ui.myButton, this.#ui.mySelect, …
+   *
+   * @template {Element} T
+   * @param {T} element - Root element created from a plugin template
+   * @returns {T & Record<string, any>} Element with named descendants added as properties
+   */
+  createUi(element) {
+    return createNavigableElement(element);
+  }
+
+  /**
    * Read-only access to current state
    * @returns {ApplicationState|null}
    */
@@ -205,27 +225,17 @@ export class Plugin {
    *
    * The base implementation auto-discovers:
    * - Standard lifecycle methods: `install`, `start`, `shutdown`, `updateInternalState`, `onStateUpdate`
-   * - Methods declared in `static extensionPoints`: each string `'ns.method'` maps to `this.method`
+   * - Computed methods declared in `static extensionPoints`: each path must have a corresponding
+   *   computed method `[ep.ns.name](...args) { return this.method(...args) }`
    * - Per-key state handlers: methods matching `on<Key>Change` are registered as `onStateUpdate.<lowerKey>`
    *
-   * Override in subclasses to add or replace mappings. Use `...super.getExtensionPoints()` to
-   * include the auto-discovered base mappings.
-   *
    * @example
-   * static extensionPoints = ['validation.inProgress']
+   * static extensionPoints = [ep.toolbar.contentItems];
    *
-   * async inProgress(promise) { ... }
+   * [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
    *
    * @example
    * async onXmlChange(newValue, prevValue) { ... }   // called when state.xml changes
-   *
-   * @example
-   * getExtensionPoints() {
-   *   return {
-   *     ...super.getExtensionPoints(),
-   *     'custom.action': this.handleAction.bind(this)
-   *   };
-   * }
    *
    * @returns {Record<string, Function>} Mapping of extension point paths to bound methods
    */
@@ -240,14 +250,17 @@ export class Plugin {
       }
     }
 
-    // Auto-discover static extensionPoints declarations: ['ns.method', ...]
-    // Convention: the method name is the last path segment (e.g. 'validation.inProgress' → this.inProgress)
+    // Auto-discover static extensionPoints declarations.
+    // Each path must have a corresponding computed method whose key is the full path string:
+    //   [ep.toolbar.contentItems]() { return [...] }
+    // Methods with dots in their name cannot exist in standard JS, so this[path]
+    // resolves only to computed methods — no naming conflicts between EP namespaces.
     const staticPoints = /** @type {typeof Plugin} */ (this.constructor).extensionPoints;
     if (Array.isArray(staticPoints)) {
       for (const path of staticPoints) {
-        const methodName = path.split('.').pop();
-        if (methodName && typeof this[methodName] === 'function') {
-          pts[path] = this[methodName].bind(this);
+        const value = this[path];
+        if (typeof value === 'function') {
+          pts[path] = value.bind(this);
         }
       }
     }
@@ -280,14 +293,6 @@ export class Plugin {
       yield proto;
       proto = Object.getPrototypeOf(proto);
     }
-  }
-
-  /**
-   * @deprecated Use getExtensionPoints() instead.
-   * @returns {Record<string, Function>}
-   */
-  getEndpoints() {
-    return this.getExtensionPoints();
   }
 
 }

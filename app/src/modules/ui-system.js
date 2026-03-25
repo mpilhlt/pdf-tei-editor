@@ -8,6 +8,7 @@
  */
 
 import { updateUi } from '../ui.js';
+import { createNavigableElement } from './navigable-element.js';
 
 /**
  * @typedef {object} Template
@@ -20,6 +21,7 @@ import { updateUi } from '../ui.js';
 
 // Template registry for caching
 const templateRegistry = new Map();
+
 const isDev = new URLSearchParams(window.location.search).has('dev');
 /** @type {object} */
 let templatesJson;
@@ -245,74 +247,7 @@ export async function createHtmlElements(htmlOrFile, parentNode = null) {
   return nodes;
 }
 
-/**
- * Finds all descendants of a given node that have a "name" or "data-name" attribute,
- * but does not recurse into those nodes. This means descendants of the
- * named nodes are excluded. If duplicate names are found, the first
- * occurrence is used.
- *
- * The "data-name" attribute is useful for Shoelace components like sl-icon-button
- * that use the "name" attribute for their own purposes (e.g., icon name).
- *
- * @param {Element|Document} node The starting node to search from.
- * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
- */
-function findNamedDescendants(node) {
-  const results = {};
-
-  /**
-   * Recursive function that adds to the results object
-   * @param {Element|Document} currentNode
-   * @returns {void}
-   */
-  function traverse(currentNode) {
-    if (!currentNode || !currentNode.childNodes) {
-      return;
-    }
-
-    for (let i = 0; i < currentNode.childNodes.length; i++) {
-      /** @type {Element} */
-      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
-      // Check if it's an element (important to avoid text nodes)
-      if (childNode.nodeType === Node.ELEMENT_NODE) {
-
-        // Support both "name" and "data-name" attributes for navigation
-        // "data-name" is useful for Shoelace components that use "name" for their own purposes
-        const nameAttribute = childNode.getAttribute("name") || childNode.getAttribute("data-name");
-
-        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
-          // @ts-ignore
-          results[nameAttribute] = childNode;
-        } else {
-          // Only recurse if the current node doesn't have a name attribute
-          // or if the name is already in the results. This prevents
-          // recursion into named nodes.
-          traverse(childNode);
-        }
-      }
-    }
-  }
-  traverse(node);
-  return /** @type {{ [x: string]: Element }} */(results);
-}
-
-/**
- * Creates a navigable element by adding named descendant elements as properties.
- * Each property gives direct access to the DOM element (which is also the navigation object).
- * You must be careful to use names that do not override existing properties.
- *
- * @template {Element|Document} T
- * @param {T} node The element to enhance with navigation
- * @returns {T & Record<string, any>} The element with added navigation properties
- */
-export function createNavigableElement(node) {
-  const namedDescendants = findNamedDescendants(node);
-  for (let name in namedDescendants) {
-    namedDescendants[name] = createNavigableElement(namedDescendants[name]);
-  }
-  const modifiedObj = Object.assign(node, namedDescendants);
-  return modifiedObj;
-}
+export { createNavigableElement } from './navigable-element.js';
 
 /**
  * Gets all registered template IDs
