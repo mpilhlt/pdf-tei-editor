@@ -30,19 +30,29 @@ def get_grobid_server_url() -> str | None:
 VARIANT_MODEL_PATHS: dict[str, str] = {
     "grobid.training.header.affiliation": "affiliation-address",
     "grobid.training.header.authors": "name/header",
+    "grobid.training.header.date": "date",
+    "grobid.training.header": "header",
     "grobid.training.segmentation": "segmentation",
     "grobid.training.references": "citation",
+    "grobid.training.references.authors": "name/citation",
     "grobid.training.references.referenceSegmenter": "reference-segmenter",
+    "grobid.training.table": "table",
+    "grobid.training.figure": "figure",
 }
 
 # Supported variants - training data and service endpoints
 SUPPORTED_VARIANTS = [
     # Training variants (use /api/createTraining endpoint)
     "grobid.training.header.affiliation",
-    "grobid.training.header.authors",    
+    "grobid.training.header.authors",
+    "grobid.training.header.date",
+    "grobid.training.header",
     "grobid.training.segmentation",
-    "grobid.training.references.referenceSegmenter",
     "grobid.training.references",
+    "grobid.training.references.authors",
+    "grobid.training.references.referenceSegmenter",
+    "grobid.training.table",
+    "grobid.training.figure",
     
     # Service variants (use direct API endpoints)
     "grobid.service.fulltext",
