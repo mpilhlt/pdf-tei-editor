@@ -97,7 +97,12 @@ const upload_route = api_base_url + '/files/upload'
 // Create singleton API client instance using the callApi function
 const apiClient = new ApiClientV1(callApi);
 
-
+/**
+ * A client for the FastAPI backend, providing 1:1 methods
+ * for each of the API routes via its `getApi()` method, wich returns
+ * methods generated from the OpenAPI data exposed by the FastAPI server.
+ * TODO: remove handwritten methods and update consuming plugin's code to use generated methods 
+ */
 class ClientPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
@@ -117,14 +122,11 @@ class ClientPlugin extends Plugin {
   }
 
   /**
-   * @param {(keyof ApplicationState)[]} changedKeys
-   * @param {ApplicationState} state
+   * @param {ApplicationState['sessionId']} newSessionId
    */
-  onStateUpdate(changedKeys, state) {
-    if (changedKeys.includes('sessionId')) {
-      sessionId = state.sessionId;
-      this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
-    }
+  onSessionIdChange(newSessionId) {
+    sessionId = newSessionId;
+    this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
   }
 
   /**

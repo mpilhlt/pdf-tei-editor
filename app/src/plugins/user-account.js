@@ -80,13 +80,10 @@ class UserAccountPlugin extends Plugin {
   }
 
   /**
-   * @param {string[]} changedKeys
+   * @param {ApplicationState['user']} user
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      const user = this.state?.user;
-      this.getDependency('toolbar').setMenuButtonDisabled(user === null);
-    }
+  onUserChange(user) {
+    this.getDependency('toolbar').setMenuButtonDisabled(user === null);
   }
 
   async showProfileDialog() {

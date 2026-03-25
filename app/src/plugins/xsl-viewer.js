@@ -387,19 +387,10 @@ export class XslViewerPlugin extends Plugin {
     this.#overlay.content.innerHTML = '';
   }
 
-  /**
-   * React to state changes
-   * @param {string[]} changedKeys
-   */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('xml')) {
-      // Update button enabled state and menu items
-      this.updateButtonState();
-      this.updateMenu();
-
-      // Hide overlay when document changes
-      this.hideOverlay();
-    }
+  onXmlChange() {
+    this.updateButtonState();
+    this.updateMenu();
+    this.hideOverlay();
   }
 }
 

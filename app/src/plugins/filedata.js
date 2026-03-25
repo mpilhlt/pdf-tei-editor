@@ -190,14 +190,10 @@ class FiledataPlugin extends Plugin {
   }
 
   /**
-   * React to state changes
-   * @param {string[]} changedKeys
+   * @param {ApplicationState['user']} user
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      // Only admins can access garbage collection
-      if (this._gcItem) this._gcItem.style.display = userIsAdmin(this.state.user) ? '' : 'none';
-    }
+  onUserChange(user) {
+    if (this._gcItem) this._gcItem.style.display = userIsAdmin(user) ? '' : 'none';
   }
 
   /**

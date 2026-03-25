@@ -95,16 +95,10 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
-  /**
-   * Reacts to state updates
-   * @param {Array<String>} changedKeys
-   */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('sessionId')) {
-      await this.discoverPlugins();
-      this._updateDropdownVisibility();
-      this.populateMenu();
-    }
+  async onSessionIdChange() {
+    await this.discoverPlugins();
+    this._updateDropdownVisibility();
+    this.populateMenu();
   }
 
   /**
