@@ -122,11 +122,15 @@ class ClientPlugin extends Plugin {
   }
 
   /**
-   * @param {ApplicationState['sessionId']} newSessionId
+   * Sync sessionId early (step 2 of updateState), before other plugins' onStateUpdate
+   * handlers fire API requests that require a valid session header.
+   * @param {ApplicationState} state
    */
-  onSessionIdChange(newSessionId) {
-    sessionId = newSessionId;
-    this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
+  updateInternalState(state) {
+    if (state.sessionId !== sessionId) {
+      sessionId = state.sessionId;
+      this.getDependency('logger').debug(`Setting session id to ${sessionId}`);
+    }
   }
 
   /**
