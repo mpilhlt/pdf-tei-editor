@@ -61,7 +61,6 @@ const plugins = [
   ConfigPlugin,
   DialogPlugin,
   ToolbarPlugin,
-  ToolsPlugin,
 
   // Help plugin (must come before info plugin which depends on it)
   HelpPlugin,
@@ -86,6 +85,7 @@ const plugins = [
   DocumentActionsPlugin,
   ServicesPlugin,
   ExtractionPlugin,
+  ToolsPlugin,
   PromptEditorPlugin,
   TeiWizardPlugin,
   TeiValidationPlugin,
