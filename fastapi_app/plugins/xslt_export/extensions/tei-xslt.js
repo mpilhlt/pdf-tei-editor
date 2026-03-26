@@ -62,18 +62,19 @@ export default class TeiXsltExtension extends FrontendExtensionPlugin {
 
         const parseError = xslDoc.querySelector('parsererror');
         if (parseError) {
-          console.error('TEI XSLT parse error:', parseError.textContent);
+          console.error(`tei-xslt: parse error in ${t.url}:`, parseError.textContent);
           return;
         }
 
-        this.getDependency('xsl-viewer').register({
+        const xslViewer = this.getDependency('xsl-viewer');
+        xslViewer.register({
           label: t.label,
           xmlns: TEI_NAMESPACE,
           xslDoc
         });
       }
     } catch (error) {
-      console.error('Failed to initialize TEI XSLT viewer:', error);
+      console.error('tei-xslt: Failed to initialize TEI XSLT viewer:', error);
     }
   }
 }

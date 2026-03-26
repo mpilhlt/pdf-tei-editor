@@ -279,7 +279,7 @@ export class PluginManager {
     let current = plugin;
 
     for (const part of pathParts) {
-      if (!current || typeof current !== 'object' || !(part in current)) {
+      if (current == null || !(part in current)) {
         return false;
       }
       current = current[part];
@@ -300,7 +300,7 @@ export class PluginManager {
     let current = plugin;
 
     for (const part of pathParts) {
-      if (!current || typeof current !== 'object' || !(part in current)) {
+      if (current == null || !(part in current)) {
         return undefined;
       }
       current = current[part];

@@ -29,14 +29,16 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
 
   async install(state) {
     await super.install(state);
+  }
+
+
+  async start() {
     try {
       this._annotators = await this.callPluginApi('/api/plugins/tei-annotator/annotators', 'GET');
     } catch (err) {
       console.warn('tei-annotator: could not load annotators from backend:', err.message);
-    }
-  }
-
-  async start() {
+      return;
+    }    
     if (!this._annotators || this._annotators.length === 0) return;
 
     const parentItem = document.createElement('sl-menu-item');
