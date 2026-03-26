@@ -19,38 +19,38 @@ import warnings
 
 def setup_imports():
     """Setup imports for the utility modules."""
-    # Add the fastapi_app directory to the Python path for imports
-    fastapi_app_path = Path(__file__).resolve().parent.parent / 'fastapi_app'
-    if str(fastapi_app_path) not in sys.path:
-        sys.path.insert(0, str(fastapi_app_path))
+    # Add the project root directory to the Python path for imports
+    project_root = Path(__file__).resolve().parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 # Setup imports
 setup_imports()
 
 # Import utility modules
 # type: ignore comments help Pylance understand these are valid imports
-from lib.data_utils import get_project_paths  # type: ignore
-from lib.user_utils import (  # type: ignore
+from fastapi_app.lib.utils.data_utils import get_project_paths  # type: ignore
+from fastapi_app.lib.permissions.user_utils import (  # type: ignore
     add_user as user_add_user, remove_user as user_remove_user,
     update_user_password, add_role_to_user, remove_role_from_user,
     add_group_to_user, remove_group_from_user,
     set_user_property as user_set_property, list_users as user_list_users
 )
-from lib.role_utils import get_roles_with_details, get_available_roles  # type: ignore
-from lib.group_utils import (  # type: ignore
+from fastapi_app.lib.permissions.role_utils import get_roles_with_details, get_available_roles  # type: ignore
+from fastapi_app.lib.permissions.group_utils import (  # type: ignore
     add_group as group_add_group, remove_group as group_remove_group,
     set_group_property as group_set_property, list_groups as group_list_groups,
     add_collection_to_group, remove_collection_from_group, get_groups_with_details
 )
-from lib.collection_utils import (  # type: ignore
+from fastapi_app.lib.utils.collection_utils import (  # type: ignore
     add_collection as collection_add_collection, remove_collection as collection_remove_collection,
     set_collection_property as collection_set_property, list_collections as collection_list_collections,
     get_collections_with_details
 )
-from lib.config_utils import (  # type: ignore
+from fastapi_app.lib.utils.config_utils import (  # type: ignore
     get_config_value, set_config_value, delete_config_value
 )
-from lib.cache_utils import clear_schema_cache  # type: ignore
+from fastapi_app.lib.utils.cache_utils import clear_schema_cache  # type: ignore
 
 def list_available_roles(db_dir):
     """Lists all available roles with their descriptions."""
