@@ -16,6 +16,7 @@ from fastapi_app.lib.services.metadata_extraction import get_metadata_for_docume
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_form_options,
+    get_grobid_server_timeout,
     get_grobid_server_url,
     get_model_path,
     get_navigation_xpath,
@@ -365,7 +366,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         """Check GROBID server health and raise RuntimeError if not ready."""
         session = get_retry_session(retries=1, backoff_factor=0)
         try:
-            response = session.get(f"{grobid_server_url}/api/health", timeout=10)
+            response = session.get(f"{grobid_server_url}/api/health", timeout=get_grobid_server_timeout())
             health = response.json()
         except Exception as e:
             raise RuntimeError(f"Could not reach GROBID server: {e}") from e
@@ -384,7 +385,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         """Get GROBID version information from the server with retry logic."""
         session = get_retry_session(retries=3, backoff_factor=2.0)
         try:
-            response = session.get(f"{grobid_server_url}/api/version", timeout=30)
+            response = session.get(f"{grobid_server_url}/api/version", timeout=get_grobid_server_timeout())
             response.raise_for_status()
             version_info = response.json()
             return version_info.get("version", "unknown"), version_info.get("revision", "unknown")

@@ -12,7 +12,7 @@ from requests.exceptions import ConnectionError, RequestException, RetryError  #
 from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import get_retry_session
 from fastapi_app.plugins.grobid.handlers.base import GrobidHandler
-from fastapi_app.plugins.grobid.config import get_supported_variants
+from fastapi_app.plugins.grobid.config import get_grobid_extraction_timeout, get_supported_variants
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class TrainingHandler(GrobidHandler):
                     'flavor': ('', flavor)
                 }
 
-                response = session.post(url, files=files, timeout=300)  # 5 minute timeout
+                response = session.post(url, files=files, timeout=get_grobid_extraction_timeout())
                 response.raise_for_status()
         except (ConnectionError, RetryError, RequestException) as e:
             reason = str(e.__cause__ or e).split('\n')[0]
