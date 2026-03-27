@@ -70,10 +70,8 @@ class ExtractorRegistry:
         """
         extractors = []
 
-        logger.debug(f"DEBUG list_extractors: registry has {len(self._extractors)} extractor(s): {list(self._extractors.keys())}")
         for extractor_id, extractor_class in self._extractors.items():
             available = extractor_class.is_available()
-            logger.debug(f"DEBUG list_extractors: {extractor_id} is_available={available}")
             # Check availability if requested
             if available_only and not available:
                 continue

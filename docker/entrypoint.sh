@@ -54,34 +54,44 @@ fi
 # Create or update admin user if APP_ADMIN_PASSWORD is set
 if [ -n "$APP_ADMIN_PASSWORD" ]; then
     echo "Setting up admin user from environment variable..."
-    if .venv/bin/python bin/manage.py \
+    # Create user if it doesn't exist (ignore failure if already exists)
+    .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
             user add admin \
             --password "$APP_ADMIN_PASSWORD" \
             --fullname "Administrator" \
             --roles "admin" \
-            --email "admin@localhost";
+            --email "admin@localhost" 2>/dev/null || true
+    # Always update the password to ensure the env var takes effect even if the user already existed
+    if .venv/bin/python bin/manage.py \
+            --db-path /app/data/db \
+            user update-password admin "$APP_ADMIN_PASSWORD";
     then
-        echo "Admin user created successfully"
+        echo "Admin user configured successfully"
     else
-        echo "Warning: Failed to create admin user"
+        echo "Warning: Failed to configure admin user"
     fi
 fi
 
 # Create or update demo user if APP_DEMO_PASSWORD is set
 if [ -n "$APP_DEMO_PASSWORD" ]; then
-    echo "Creating new demo user..."
-    if .venv/bin/python bin/manage.py \
+    echo "Setting up demo user from environment variable..."
+    # Create user if it doesn't exist (ignore failure if already exists)
+    .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
             user add demo \
             --password "$APP_DEMO_PASSWORD" \
             --fullname "Demo User" \
             --roles "user,annotator,reviewer" \
-            --email "demo@localhost";
+            --email "demo@localhost" 2>/dev/null || true
+    # Always update the password to ensure the env var takes effect even if the user already existed
+    if .venv/bin/python bin/manage.py \
+            --db-path /app/data/db \
+            user update-password demo "$APP_DEMO_PASSWORD";
     then
-        echo "Demo user created successfully"
+        echo "Demo user configured successfully"
     else
-        echo "Warning: Failed to create demo user"
+        echo "Warning: Failed to configure demo user"
     fi
 fi
 

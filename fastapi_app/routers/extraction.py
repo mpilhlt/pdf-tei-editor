@@ -52,9 +52,6 @@ def list_available_extractors(
         List of extractor information including input/output types and availability
     """
     try:
-        from ..lib.extraction.registry import ExtractorRegistry
-        registry = ExtractorRegistry.get_instance()
-        logger.debug(f"DEBUG /extract/list: registry id={id(registry)}, registered={list(registry._extractors.keys())}")
         extractors_data = list_extractors(available_only=True)
 
         # Convert to Pydantic models - add 'available' field since list_extractors

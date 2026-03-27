@@ -113,13 +113,15 @@ class PluginRegistry:
                 logger.warning(f"No Plugin subclass found in {plugin_file}")
                 return None
 
-            # Check availability before instantiating
+            # Instantiate first so __init__ can populate config (e.g. via get_plugin_config),
+            # then check availability which may depend on that config being written.
+            plugin_instance = plugin_class()
+
             if not plugin_class.is_available():
                 logger.info(f"Plugin in {plugin_file} is not available, skipping")
                 return None
 
-            # Instantiate plugin
-            return plugin_class()
+            return plugin_instance
 
         except Exception as e:
             logger.error(f"Error loading plugin from {plugin_file}: {e}")
