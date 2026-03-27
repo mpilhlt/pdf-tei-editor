@@ -209,6 +209,7 @@ async def download_training_package(
         # Get GROBID version info for cache key
         from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
         from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
+        from fastapi_app.plugins.grobid.handlers.training import denormalize_grobid_content
         extractor = GrobidTrainingExtractor()
         training_handler = TrainingHandler()
         _, grobid_revision = extractor._get_grobid_version(grobid_server_url)
@@ -313,7 +314,7 @@ async def download_training_package(
                     try:
                         for variant in variants_to_process:
                             grobid_suffix = variant.removeprefix("grobid.")
-                            tei_content = gold_by_variant[variant]
+                            tei_content = denormalize_grobid_content(gold_by_variant[variant], variant)
                             base_path = _corpus_base_path(tei_content, variant, flavor)
                             model_name = variant.removeprefix("grobid.")
 

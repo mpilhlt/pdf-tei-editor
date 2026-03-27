@@ -119,6 +119,25 @@ FORM_OPTIONS = {
     }
 }
 
+# Maps variant_id to the XPath locations of training content.
+# "grobid_path": element path in raw GROBID output (relative to root TEI element)
+# "annotation_path": element path in stored document (relative to root TEI element)
+# Variants not listed here use the default: content is in <text> in both contexts.
+VARIANT_CONTENT_LOCATIONS: dict[str, dict[str, str]] = {
+    "grobid.training.header.affiliation": {
+        "grobid_path": "teiHeader",
+        "annotation_path": "text/front",
+    },
+    "grobid.training.header.authors": {
+        "grobid_path": "teiHeader",
+        "annotation_path": "text/front",
+    },
+    "grobid.training.header.date": {
+        "grobid_path": "teiHeader",
+        "annotation_path": "text/front",
+    },
+}
+
 # Navigation XPath expressions for each variant
 NAVIGATION_XPATH = {
     "grobid.training.segmentation": [
@@ -154,7 +173,25 @@ NAVIGATION_XPATH = {
             "value": "//tei:bibl",
             "label": "&lt;bibl&gt;"
         }
-    ]
+    ],
+    "grobid.training.header.affiliation": [
+        {
+            "value": "//tei:affiliation",
+            "label": "&lt;affiliation&gt;"
+        }
+    ],
+    "grobid.training.header.authors": [
+        {
+            "value": "//tei:author",
+            "label": "&lt;author&gt;"
+        }
+    ],
+    "grobid.training.header.date": [
+        {
+            "value": "//tei:date",
+            "label": "&lt;date&gt;"
+        }
+    ],
 }
 
 # Annotation guide URLs for each variant
@@ -211,6 +248,12 @@ def get_model_path(variant_id: str) -> str:
         return VARIANT_MODEL_PATHS[variant_id]
     # Fallback: strip prefix and replace dots with slashes
     return variant_id.removeprefix("grobid.training.").replace(".", "/")
+
+
+def get_variant_content_locations() -> dict[str, dict[str, str]]:
+    """Return the content location mapping for all variants with non-default content placement."""
+    import copy
+    return copy.deepcopy(VARIANT_CONTENT_LOCATIONS)
 
 
 def get_annotation_guides() -> list[dict]:

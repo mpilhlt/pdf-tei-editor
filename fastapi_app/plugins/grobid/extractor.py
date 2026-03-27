@@ -188,6 +188,11 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Log raw GROBID response for debugging
         log_extraction_response("grobid", pdf_path, raw_tei_content, ".raw.xml")
 
+        # For training variants with non-standard content location, move content to <text>
+        if is_training_variant:
+            from fastapi_app.plugins.grobid.handlers.training import normalize_grobid_content
+            raw_tei_content = normalize_grobid_content(raw_tei_content, variant_id)
+
         # Clean invalid XML attributes before parsing
         raw_tei_content = self._clean_invalid_xml_attributes(raw_tei_content)
 

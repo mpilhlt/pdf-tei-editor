@@ -12,9 +12,120 @@ from requests.exceptions import ConnectionError, RequestException, RetryError  #
 from fastapi_app.config import get_settings
 from fastapi_app.lib.extraction import get_retry_session
 from fastapi_app.plugins.grobid.handlers.base import GrobidHandler
-from fastapi_app.plugins.grobid.config import get_grobid_extraction_timeout, get_supported_variants
+from fastapi_app.plugins.grobid.config import get_grobid_extraction_timeout, get_supported_variants, get_variant_content_locations
 
 logger = logging.getLogger(__name__)
+
+_NS = "http://www.tei-c.org/ns/1.0"
+
+
+def _get_element_at_path(root: "etree._Element", path: str) -> "etree._Element | None":
+    """Find an element by a slash-separated tag path, trying namespaced and plain names."""
+    from lxml import etree
+    current = root
+    for tag in path.split("/"):
+        child = current.find(f"{{{_NS}}}{tag}") or current.find(tag)
+        if child is None:
+            return None
+        current = child
+    return current
+
+
+def _ensure_element_at_path(root: "etree._Element", path: str) -> "etree._Element":
+    """Find or create nested elements along a slash-separated tag path."""
+    from lxml import etree
+    current = root
+    for tag in path.split("/"):
+        child = current.find(f"{{{_NS}}}{tag}") or current.find(tag)
+        if child is None:
+            child = etree.SubElement(current, f"{{{_NS}}}{tag}")
+        current = child
+    return current
+
+
+def normalize_grobid_content(xml_str: str, variant_id: str) -> str:
+    """Move training content from its GROBID location to the annotation location.
+
+    For variants whose GROBID output places content in a non-standard element
+    (e.g. teiHeader instead of text), this moves the children of the source
+    element into the annotation target path and removes the now-empty source.
+    """
+    from lxml import etree
+    locations = get_variant_content_locations()
+    if variant_id not in locations:
+        return xml_str
+    loc = locations[variant_id]
+    grobid_path = loc["grobid_path"]
+    annotation_path = loc["annotation_path"]
+    if grobid_path == annotation_path:
+        return xml_str
+
+    parser = etree.XMLParser(recover=True)
+    root = etree.fromstring(xml_str.encode("utf-8"), parser)
+
+    source = _get_element_at_path(root, grobid_path)
+    if source is None:
+        return xml_str
+
+    target = _ensure_element_at_path(root, annotation_path)
+    for child in list(source):
+        target.append(child)
+
+    parent_path = "/".join(grobid_path.split("/")[:-1])
+    if parent_path:
+        parent = _get_element_at_path(root, parent_path)
+        if parent is not None:
+            parent.remove(source)
+    else:
+        root.remove(source)
+
+    return etree.tostring(root, encoding="unicode", xml_declaration=False)
+
+
+def denormalize_grobid_content(xml_str: str, variant_id: str) -> str:
+    """Reverse normalization: move training content from annotation location back to GROBID location.
+
+    Used during training export to reconstruct the original GROBID TEI structure
+    expected by the GROBID trainer.
+    """
+    from lxml import etree
+    locations = get_variant_content_locations()
+    if variant_id not in locations:
+        return xml_str
+    loc = locations[variant_id]
+    grobid_path = loc["grobid_path"]
+    annotation_path = loc["annotation_path"]
+    if grobid_path == annotation_path:
+        return xml_str
+
+    parser = etree.XMLParser(recover=True)
+    root = etree.fromstring(xml_str.encode("utf-8"), parser)
+
+    source = _get_element_at_path(root, annotation_path)
+    if source is None:
+        return xml_str
+
+    # Remove the app-generated element at grobid_path top-level (e.g. teiHeader with metadata)
+    top_grobid_tag = grobid_path.split("/")[0]
+    for existing in root.findall(f"{{{_NS}}}{top_grobid_tag}") + root.findall(top_grobid_tag):
+        root.remove(existing)
+
+    target = _ensure_element_at_path(root, grobid_path)
+    for child in list(source):
+        target.append(child)
+
+    # Move the reconstructed grobid_path root element to position 0
+    grobid_root_elem = root.find(f"{{{_NS}}}{top_grobid_tag}") or root.find(top_grobid_tag)
+    if grobid_root_elem is not None:
+        root.remove(grobid_root_elem)
+        root.insert(0, grobid_root_elem)
+
+    # Remove the now-empty annotation path top-level element
+    ann_top_tag = annotation_path.split("/")[0]
+    for elem in root.findall(f"{{{_NS}}}{ann_top_tag}") + root.findall(ann_top_tag):
+        root.remove(elem)
+
+    return etree.tostring(root, encoding="unicode", xml_declaration=False)
 
 
 class TrainingHandler(GrobidHandler):
@@ -53,9 +164,10 @@ class TrainingHandler(GrobidHandler):
             if not training_file:
                 raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
 
-            # Read the training file content
+            # Read the training file content and normalize content location
             with open(training_file, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()
+            return normalize_grobid_content(content, variant_id)
 
         finally:
             # Clean up temp directory in production mode
