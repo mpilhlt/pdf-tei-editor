@@ -82,7 +82,14 @@ class GrobidTrainingExtractor(BaseExtractor):
     @classmethod
     def is_available(cls) -> bool:
         """Check if GROBID server URL is configured."""
-        return get_grobid_server_url() is not None
+        from fastapi_app.lib.utils.config_utils import get_config
+        config = get_config()
+        config_value = config.get("plugin.grobid.server.url")
+        all_keys = list(config.load().keys())
+        logger.debug(f"DEBUG GrobidTrainingExtractor.is_available: plugin.grobid.server.url={config_value!r}, total config keys={len(all_keys)}, has_grobid_key={'plugin.grobid.server.url' in all_keys}")
+        url = get_grobid_server_url()
+        logger.debug(f"DEBUG GrobidTrainingExtractor.is_available: get_grobid_server_url()={url!r}, returning {url is not None}")
+        return url is not None
 
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Optional[Dict[str, Any]] = None) -> str:

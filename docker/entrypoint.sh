@@ -27,7 +27,7 @@ for config_file in /app/config/*.json; do
 done
 
 
-# Create default accounts if no environment variables are set
+# Show demo warning and set login message only when neither password is customized
 if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
     echo "No custom passwords provided, setting up default demo accounts..."
 
@@ -36,11 +36,11 @@ if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
     # Use Python to properly escape the message for JSON
     ESCAPED_DEFAULT_MESSAGE=$(.venv/bin/python -c "import json, os; print(json.dumps(os.environ.get('APP_LOGIN_MESSAGE', '')))")
     .venv/bin/python bin/manage.py config set application.login-message "$ESCAPED_DEFAULT_MESSAGE" 2>/dev/null || echo "Warning: Failed to set default login message"
-
-    # Create default admin and demo user
-    export APP_ADMIN_PASSWORD="admin"
-    export APP_DEMO_PASSWORD="demo"
 fi
+
+# Fall back to defaults for any password not explicitly provided
+APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD:-admin}
+APP_DEMO_PASSWORD=${APP_DEMO_PASSWORD:-demo}
 
 # Set login message if APP_LOGIN_MESSAGE is provided
 if [ -n "$APP_LOGIN_MESSAGE" ]; then
