@@ -11,6 +11,36 @@ def get_schema_url(variant_id: str) -> str:
     return f"{SCHEMA_BASE_URL}/{variant_id}.rng"
 
 
+def get_grobid_server_timeout() -> int:
+    """
+    Get the GROBID server health-check timeout in seconds from config.
+
+    The config value is initialized from the GROBID_SERVER_TIMEOUT environment
+    variable by the plugin's __init__() method.
+
+    Returns:
+        Timeout in seconds (default: 10).
+    """
+    config = get_config()
+    value = config.get("plugin.grobid.server.timeout", default=10)
+    return int(value)
+
+
+def get_grobid_extraction_timeout() -> int:
+    """
+    Get the GROBID extraction request timeout in seconds from config.
+
+    The config value is initialized from the GROBID_EXTRACTION_TIMEOUT environment
+    variable by the plugin's __init__() method.
+
+    Returns:
+        Timeout in seconds (default: 300).
+    """
+    config = get_config()
+    value = config.get("plugin.grobid.extraction.timeout", default=300)
+    return int(value)
+
+
 def get_grobid_server_url() -> str | None:
     """
     Get the GROBID server URL from config.

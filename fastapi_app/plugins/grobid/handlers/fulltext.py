@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from requests.exceptions import ConnectionError, RequestException, RetryError  # type: ignore[import-untyped]
 
 from fastapi_app.lib.extraction import get_retry_session
+from fastapi_app.plugins.grobid.config import get_grobid_extraction_timeout
 from fastapi_app.plugins.grobid.handlers.base import GrobidHandler
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class FulltextHandler(GrobidHandler):
                     'includeRawAffiliations': '1',
                 }
 
-                response = session.post(url, files=files, data=data, timeout=300)
+                response = session.post(url, files=files, data=data, timeout=get_grobid_extraction_timeout())
                 response.raise_for_status()
                 return response.text
 

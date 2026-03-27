@@ -6,7 +6,7 @@ import logging
 import os
 import datetime
 from pathlib import Path
-from typing import Optional
+from typing import IO, Optional
 
 from fastapi_app.config import get_settings
 
@@ -31,8 +31,8 @@ def create_debug_log_dir(extractor_name: Optional[str] = None) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
-def write_comment(f, comment, prefix = "# ", suffix = ""):
-    f.write(f'{prefix}{comment}{suffix}')
+def write_comment(f: IO[str], comment: str, prefix: Optional[str] = None, suffix: Optional[str] = None) -> None:
+    f.write(f'{prefix if prefix is not None else "# "}{comment}{suffix if suffix is not None else ""}')
 
 def log_extraction_response(
     extractor_name: str,
@@ -71,7 +71,7 @@ def log_extraction_response(
     
     # define comment prefix/suffix according to file suffix
     prefix = suffix = None # defaults to "# "
-    if file_suffix == ".xml":
+    if file_suffix.endswith(".xml"):
         # create a valid xml file by putting comments into <!-- ... -->
         prefix = "<!-- "
         suffix = " -->"
