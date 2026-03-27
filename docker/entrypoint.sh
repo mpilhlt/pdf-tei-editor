@@ -54,8 +54,9 @@ fi
 # Create or update admin user if APP_ADMIN_PASSWORD is set
 if [ -n "$APP_ADMIN_PASSWORD" ]; then
     echo "Setting up admin user from environment variable..."
-    if .venv/bin/python bin/manage.py user add admin \
+    if .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
+            user add admin \
             --password "$APP_ADMIN_PASSWORD" \
             --fullname "Administrator" \
             --roles "admin" \
@@ -70,8 +71,9 @@ fi
 # Create or update demo user if APP_DEMO_PASSWORD is set
 if [ -n "$APP_DEMO_PASSWORD" ]; then
     echo "Creating new demo user..."
-    if .venv/bin/python bin/manage.py user add demo \
+    if .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
+            user add demo \
             --password "$APP_DEMO_PASSWORD" \
             --fullname "Demo User" \
             --roles "user,annotator,reviewer" \
