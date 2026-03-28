@@ -27,7 +27,7 @@ from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.utils.auth import AuthManager
 from fastapi_app.lib.sse.sse_service import SSEService
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
-from fastapi_app.lib.permissions.acl_utils import user_is_admin
+from fastapi_app.lib.permissions.acl_utils import user_is_admin, user_has_role
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
 from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path, get_grobid_server_timeout, is_grobid_cache_disabled
 
@@ -318,8 +318,7 @@ async def download_training_package(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    user_roles = user.get("roles", [])
-    if "reviewer" not in user_roles and "admin" not in user_roles:
+    if not user_has_role(user, ["reviewer", "admin"]):
         raise HTTPException(status_code=403, detail="Reviewer role required")
 
     # Check collection access
