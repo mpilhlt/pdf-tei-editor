@@ -412,6 +412,68 @@ sudo cat /var/log/letsencrypt/letsencrypt.log
 podman run --rm -it -p 8080:8000 pdf-tei-editor:latest
 ```
 
+### Container Cannot Reach External HTTPS Endpoints
+
+**Symptoms:** The container can establish TCP connections to external hosts on port 443, but TLS handshakes time out. Small requests (DNS, health checks with tiny responses) may succeed while larger transfers (TLS certificate exchange, API calls with substantial responses) hang until timeout. The non-containerized application on the same host has no such issues.
+
+**Cause:** Cloud providers route VM traffic through overlay networks (VXLAN, GRE, or proprietary encapsulation) that consume 50–100 bytes of each Ethernet frame for tunnel headers. The physical NIC's effective MTU is therefore reduced (commonly to 1450). The container runtime's virtual bridge defaults to MTU 1500, so the container advertises TCP MSS=1460. External servers send TCP segments up to 1460 bytes; these become 1500-byte IP packets that the cloud network cannot carry, and they are silently dropped. Small SYN/ACK packets fit through, explaining why the TCP connection appears to succeed.
+
+**Diagnosis:**
+
+```bash
+# Compare host NIC MTU against container interface MTU
+ip link show | awk '/mtu/ {print $2, $4, $5}'
+# If ens3 (or similar) shows mtu 1450 but cni-podman0 / the container shows mtu 1500, this is the cause.
+
+# Confirm by checking the container's eth0
+PID=$(sudo podman inspect <container-name> --format '{{.State.Pid}}')
+sudo nsenter -t $PID -n ip link show eth0
+```
+
+**Immediate fix (survives until container is recreated):**
+
+```bash
+PID=$(sudo podman inspect <container-name> --format '{{.State.Pid}}')
+sudo nsenter -t $PID -n ip link set eth0 mtu 1440
+```
+
+Use 1440 rather than matching the host NIC exactly (1450) to leave margin for IP/TCP header overhead on the overlay network.
+
+**Permanent fix — patch the CNI bridge config:**
+
+```bash
+sudo python3 -c "
+import json, glob
+
+for path in glob.glob('/etc/cni/net.d/*.conflist'):
+    with open(path) as f:
+        cfg = json.load(f)
+    changed = False
+    for plugin in cfg.get('plugins', []):
+        if plugin.get('type') == 'bridge':
+            plugin['mtu'] = 1440
+            changed = True
+    if changed:
+        with open(path, 'w') as f:
+            json.dump(cfg, f, indent=2)
+        print(f'Patched {path}')
+"
+```
+
+The MTU is applied to new containers automatically. Existing running containers need the `nsenter` fix applied manually (or can be restarted after patching).
+
+**Verification:** use the GROBID diagnostics endpoint (if the GROBID plugin is installed) or run:
+
+```bash
+sudo podman exec <container-name> python3 -c "
+import socket, ssl
+ctx = ssl.create_default_context()
+with socket.create_connection(('one.one.one.one', 443), timeout=15) as raw:
+    with ctx.wrap_socket(raw, server_hostname='one.one.one.one') as tls:
+        print('TLS OK:', tls.version())
+"
+```
+
 ### Permission Issues
 
 ```bash
