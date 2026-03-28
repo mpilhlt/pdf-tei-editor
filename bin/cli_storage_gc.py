@@ -129,6 +129,15 @@ def main():
 
     stats = run_garbage_collection(storage_root, db_path, dry_run=args.dry_run, logger_inst=logger)
 
+    # Purge stale edit log entries
+    edit_log_purged = 0
+    if not args.dry_run:
+        from fastapi_app.lib.core.dependencies import _DatabaseManagerSingleton
+        from fastapi_app.lib.repository.file_repository import FileRepository
+        db_manager = _DatabaseManagerSingleton.get_instance(str(db_path))
+        repo = FileRepository(db_manager, logger)
+        edit_log_purged = repo.purge_edit_log_for_deleted_files()
+
     # Print results
     print("\n" + "=" * 60)
     print("RESULTS")
@@ -143,6 +152,12 @@ def main():
     print(f"  Checked: {stats['orphaned']['checked']}")
     print(f"  Deleted: {stats['orphaned']['deleted']}")
     print(f"  Errors:  {stats['orphaned']['errors']}")
+
+    print("\nEdit log:")
+    if args.dry_run:
+        print("  (skipped in dry-run mode)")
+    else:
+        print(f"  Stale entries purged: {edit_log_purged}")
 
     total_deleted = stats['zero_refs']['deleted'] + stats['orphaned']['deleted']
     total_errors = stats['zero_refs']['errors'] + stats['orphaned']['errors']

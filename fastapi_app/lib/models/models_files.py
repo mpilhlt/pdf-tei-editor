@@ -232,3 +232,4 @@ class GarbageCollectResponse(BaseModel):
     files_deleted: int  # Number of physical files deleted
     storage_freed: int  # Total bytes freed from storage
     orphaned_xml_deleted: int = 0  # Number of orphaned XML files deleted (XML with no PDF)
+    edit_log_purged: int = 0  # Number of edit log entries removed for deleted files

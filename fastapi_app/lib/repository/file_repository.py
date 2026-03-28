@@ -302,6 +302,20 @@ class FileRepository:
 
         # Handle reference counting for hash change
         if hash_changed:
+            # Record the old content in the edit log before releasing the reference.
+            # log_file_edit increments the ref for file_id so the subsequent
+            # decrement_reference call below keeps the physical file alive.
+            from fastapi_app.lib.utils.config_utils import get_config
+            max_entries = int(
+                get_config().get("plugin.version-history.edit-log.max-entries", default=20)
+            )
+            self.log_file_edit(
+                stable_id=old_file.stable_id,
+                content_hash=file_id,
+                file_type=file_type,
+                saved_by=None,
+                max_entries=max_entries,
+            )
             # Increment ref for new hash
             self.ref_manager.increment_reference(new_hash, file_type)
             # Decrement ref for old hash and delete physical file if needed
@@ -806,6 +820,136 @@ class FileRepository:
             rows = cursor.fetchall()
 
             return [self._row_to_model(row) for row in rows]
+
+    # Edit Log
+
+    def _evict_oldest_edit_log_entry(self, stable_id: str, max_entries: int) -> None:
+        """
+        Remove the oldest edit log entry for stable_id if the count is at or above
+        max_entries, decrementing the storage reference and deleting the physical file
+        when the ref count reaches zero.
+
+        Args:
+            stable_id: Stable ID of the file whose log is being capped
+            max_entries: Maximum number of log entries to retain
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, content_hash, file_type FROM file_edit_log"
+                " WHERE stable_id = ? ORDER BY saved_at ASC LIMIT 1 OFFSET ?",
+                (stable_id, max_entries - 1)
+            )
+            row = cursor.fetchone()
+
+        if row:
+            with self.db.transaction() as conn:
+                conn.execute("DELETE FROM file_edit_log WHERE id = ?", (row["id"],))
+            old_count, should_delete = self.ref_manager.decrement_reference(row["content_hash"])
+            if should_delete:
+                from fastapi_app.lib.storage.file_storage import FileStorage
+                from fastapi_app.config import get_settings
+                settings = get_settings()
+                storage = FileStorage(settings.data_root / "files", self.db, self.logger)
+                deleted = storage.delete_file(row["content_hash"], row["file_type"], decrement_ref=False)
+                if deleted:
+                    self.ref_manager.remove_reference_entry(row["content_hash"])
+                if self.logger:
+                    self.logger.info(
+                        f"Evicted oldest edit log entry for {stable_id}: {row['content_hash'][:8]}..."
+                    )
+
+    def log_file_edit(
+        self,
+        stable_id: str,
+        content_hash: str,
+        file_type: str,
+        saved_by: str | None,
+        max_entries: int = 20,
+    ) -> None:
+        """
+        Append an entry to the edit log for a file and keep its physical content alive.
+
+        Increments the storage reference for content_hash so the file is retained
+        even after the in-place update decrements the original reference.  If the log
+        for this stable_id already holds max_entries the oldest entry is evicted first.
+
+        Args:
+            stable_id: Stable ID of the file being edited
+            content_hash: Content hash of the file *before* the edit (old hash)
+            file_type: File type ('tei', 'pdf', …)
+            saved_by: Username of the editor (may be None)
+            max_entries: Maximum number of log entries to keep per stable_id
+        """
+        self._evict_oldest_edit_log_entry(stable_id, max_entries)
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO file_edit_log (stable_id, content_hash, file_type, saved_by)"
+                " VALUES (?, ?, ?, ?)",
+                (stable_id, content_hash, file_type, saved_by),
+            )
+        self.ref_manager.increment_reference(content_hash, file_type)
+        if self.logger:
+            self.logger.debug(
+                f"Logged edit for {stable_id}: {content_hash[:8]}... (by {saved_by})"
+            )
+
+    def get_edit_log(self, stable_id: str) -> list[dict]:
+        """
+        Return edit log entries for a stable_id, ordered by saved_at DESC.
+
+        Args:
+            stable_id: Stable ID of the file
+
+        Returns:
+            List of dicts with keys: content_hash, file_type, saved_at, saved_by
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT content_hash, file_type, saved_at, saved_by"
+                " FROM file_edit_log WHERE stable_id = ? ORDER BY saved_at DESC",
+                (stable_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def purge_edit_log_for_deleted_files(self) -> int:
+        """
+        Remove all edit log entries whose stable_id no longer exists in the files
+        table (deleted or never created).  Decrements storage references and deletes
+        physical files when the ref count reaches zero.
+
+        Returns:
+            Number of log entries removed
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT el.id, el.content_hash, el.file_type
+                FROM file_edit_log el
+                LEFT JOIN files f ON f.stable_id = el.stable_id AND f.deleted = 0
+                WHERE f.stable_id IS NULL
+            """)
+            stale = cursor.fetchall()
+
+        removed = 0
+        for row in stale:
+            with self.db.transaction() as conn:
+                conn.execute("DELETE FROM file_edit_log WHERE id = ?", (row["id"],))
+            old_count, should_delete = self.ref_manager.decrement_reference(row["content_hash"])
+            if should_delete:
+                from fastapi_app.lib.storage.file_storage import FileStorage
+                from fastapi_app.config import get_settings
+                settings = get_settings()
+                storage = FileStorage(settings.data_root / "files", self.db, self.logger)
+                deleted = storage.delete_file(row["content_hash"], row["file_type"], decrement_ref=False)
+                if deleted:
+                    self.ref_manager.remove_reference_entry(row["content_hash"])
+            removed += 1
+
+        if self.logger and removed:
+            self.logger.info(f"Purged {removed} stale edit log entries for deleted files")
+        return removed
 
     # Metadata Inheritance
 

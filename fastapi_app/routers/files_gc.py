@@ -351,9 +351,22 @@ def garbage_collect_files(
     else:
         logger.info("Tmp directory does not exist or is empty")
 
+    # Purge edit log entries for files that no longer exist
+    logger.info("Purging edit log entries for deleted/missing files...")
+    try:
+        edit_log_purged = repo.purge_edit_log_for_deleted_files()
+        if edit_log_purged > 0:
+            logger.info(f"Purged {edit_log_purged} stale edit log entry/entries")
+        else:
+            logger.info("No stale edit log entries found")
+    except Exception as e:
+        logger.error(f"Failed to purge stale edit log entries: {e}")
+        edit_log_purged = 0
+
     return GarbageCollectResponse(
         purged_count=purged_count,
         files_deleted=files_deleted,
         storage_freed=storage_freed,
-        orphaned_xml_deleted=orphaned_xml_deleted
+        orphaned_xml_deleted=orphaned_xml_deleted,
+        edit_log_purged=edit_log_purged,
     )
