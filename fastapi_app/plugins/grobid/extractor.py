@@ -21,6 +21,7 @@ from fastapi_app.plugins.grobid.config import (
     get_model_path,
     get_navigation_xpath,
     get_schema_url,
+    is_grobid_cache_disabled,
 )
 from fastapi_app.plugins.grobid.handlers import (
     GrobidHandler,
@@ -142,7 +143,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                 doc_id = os.path.splitext(pdf_name)[0]
 
             # Check cache
-            cached_data = check_cache(doc_id, grobid_revision)
+            cached_data = check_cache(doc_id, grobid_revision, force_refresh=is_grobid_cache_disabled())
 
             if cached_data:
                 # Use cached data - find the specific variant file

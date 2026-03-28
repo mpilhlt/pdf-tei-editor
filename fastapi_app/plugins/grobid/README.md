@@ -10,7 +10,7 @@ The plugin provides two complementary workflows:
 
 **Full-text / reference extraction** — submits a PDF to GROBID's fulltext or references service endpoints and stores the result as a TEI document.
 
-Extracted training data is cached per document and GROBID revision so that subsequent extractions for the same document are served from cache without re-contacting the server (see [Cache](#cache) below). The cache is invalidated automatically when a PDF is deleted.
+Extracted training data is cached per document and GROBID revision so that subsequent extractions for the same document are served from cache without re-contacting the server (see [Cache](#cache-cachepy) below). The cache is invalidated automatically when a PDF is deleted.
 
 Reviewers can download a complete training package for a collection as a ZIP file that mirrors the `grobid-trainer/resources/dataset/` directory structure and can be dropped directly into that directory.
 
@@ -19,7 +19,7 @@ The plugin also registers a `split-bibl` enhancement with the TEI Wizard plugin,
 ### Supported variants
 
 | Variant ID | GROBID model path |
-|---|---|
+| --- | --- |
 | `grobid.training.header` | `header` |
 | `grobid.training.header.affiliation` | `affiliation-address` |
 | `grobid.training.header.authors` | `name/header` |
@@ -48,22 +48,23 @@ A running GROBID instance accessible from the application server. The plugin is 
 ### Environment variables
 
 | Variable | Required | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `GROBID_SERVER_URL` | Yes | — | Base URL of the GROBID server, e.g. `http://localhost:8070` |
 | `GROBID_SERVER_TIMEOUT` | No | `10` | Timeout in seconds for health and version checks |
 | `GROBID_EXTRACTION_TIMEOUT` | No | `300` | Timeout in seconds for extraction requests (PDF processing can be slow) |
+| `GROBID_DISABLE_CACHE` | No | `false` | Set to `true` to always fetch fresh data from GROBID, bypassing the training data cache |
 
-These map to the config keys `plugin.grobid.server.url`, `plugin.grobid.server.timeout`, and `plugin.grobid.extraction.timeout`.
+These map to the config keys `plugin.grobid.server.url`, `plugin.grobid.server.timeout`, `plugin.grobid.extraction.timeout`, and `plugin.grobid.cache.disabled`.
 
 ### Cache location
 
 Raw GROBID output (the ZIP returned by `/api/createTraining`) is cached at:
 
-```
+```text
 data/plugins/grobid/extractions/{doc_id}_{grobid_revision}/
 ```
 
-The directory is created automatically. To force a fresh extraction for a document, delete its cache directory or use the `force_refresh=true` query parameter on the download endpoint.
+The directory is created automatically. To force a fresh extraction for a document, delete its cache directory, set `GROBID_DISABLE_CACHE=true` to disable caching globally, or use the `force_refresh=true` query parameter on the download endpoint.
 
 ---
 
@@ -78,7 +79,7 @@ The directory is created automatically. To force a fresh extraction for a docume
 **Checks performed (in order):**
 
 | Check | What it tells you |
-|---|---|
+| --- | --- |
 | `environment` | Python/platform info, configured GROBID URL, timeout, proxy env vars |
 | `dns_resolution:<host>` | Whether the server's DNS resolver can reach the GROBID hostname |
 | `tcp_connect:<host>:443` | Whether a TCP socket can reach port 443 (firewall / routing) |
@@ -159,7 +160,7 @@ The resulting ZIP mirrors `grobid-trainer/resources/dataset/` and can be unpacke
 **Query parameters:**
 
 | Parameter | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `collection` | required | Collection ID |
 | `flavor` | `default` | Processing flavor |
 | `force_refresh` | `false` | Bypass cache and re-fetch from GROBID |

@@ -26,6 +26,24 @@ def get_grobid_server_timeout() -> int:
     return int(value)
 
 
+def is_grobid_cache_disabled() -> bool:
+    """
+    Return True if the GROBID training data cache is disabled.
+
+    When True, every extraction fetches fresh data from the GROBID server,
+    equivalent to always passing force_refresh=True. Controlled by the
+    GROBID_DISABLE_CACHE environment variable.
+
+    Returns:
+        True if caching is disabled (default: False).
+    """
+    config = get_config()
+    value = config.get("plugin.grobid.cache.disabled", default=False)
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in ("1", "true", "yes", "on")
+
+
 def get_grobid_extraction_timeout() -> int:
     """
     Get the GROBID extraction request timeout in seconds from config.

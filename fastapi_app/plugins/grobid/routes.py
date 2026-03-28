@@ -29,7 +29,7 @@ from fastapi_app.lib.sse.sse_service import SSEService
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 from fastapi_app.lib.permissions.acl_utils import user_is_admin
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
-from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path, get_grobid_server_timeout
+from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path, get_grobid_server_timeout, is_grobid_cache_disabled
 
 logger = logging.getLogger(__name__)
 
@@ -429,7 +429,7 @@ async def download_training_package(
                     variants_to_process = list(gold_by_variant.keys())
 
                     # Check cache first
-                    cached_data = check_cache(doc_id, grobid_revision, force_refresh)
+                    cached_data = check_cache(doc_id, grobid_revision, force_refresh or is_grobid_cache_disabled())
 
                     if cached_data:
                         temp_dir = cached_data["temp_dir"]
