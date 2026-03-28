@@ -23,6 +23,9 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
 )
+from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.sse.sse_service import SSEService
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 from fastapi_app.lib.permissions.acl_utils import user_is_admin
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
@@ -135,8 +138,8 @@ async def cancel_progress(progress_id: str):
 async def grobid_diagnostics(
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
 ):
     """
     Run connectivity diagnostics for the GROBID server.
@@ -240,7 +243,8 @@ async def grobid_diagnostics(
                 with socket.create_connection((host, port), timeout=10) as raw:
                     with ctx.wrap_socket(raw, server_hostname=host) as tls:
                         cert = tls.getpeercert()
-                        return {"cipher": tls.cipher(), "subject": dict(x[0] for x in (cert.get("subject") or []))}
+                        subject = {k: v for rdn in ((cert or {}).get("subject") or ()) for k, v in rdn}
+                        return {"cipher": tls.cipher(), "subject": subject}
 
             results.append(_check(f"tls_handshake:{host}:{port}", _tls))
 
@@ -270,9 +274,9 @@ async def download_training_package(
     no_progress: bool = Query(True, description="Suppress SSE progress events (for programmatic API use)"),
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
-    sse_service=Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    sse_service: SSEService = Depends(get_sse_service),
 ):
     """
     Download GROBID training package for all documents in a collection as ZIP.
