@@ -4,15 +4,18 @@
  * Debug API - Call any API endpoint with authentication
  *
  * Usage:
- *   node bin/debug-api.js <method> <path> [json-params]
+ *   node bin/debug-api.js [--env-path <file>] <method> <path> [json-params]
+ *
+ * Options:
+ *   --env-path <file>  Path to a custom .env file (default: .env)
  *
  * Examples:
  *   node bin/debug-api.js GET /api/v1/plugins
  *   node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
  *   node bin/debug-api.js GET /api/v1/collections/test/files
+ *   node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
  */
 
-import { readFile } from 'fs/promises';
 import { createHash } from 'crypto';
 import dotenv from 'dotenv';
 
@@ -104,11 +107,24 @@ async function callApi(baseUrl, sessionId, method, path, params) {
 async function main() {
   const args = process.argv.slice(2);
 
+  // Extract --env-path option
+  let envPath = '.env';
+  const envPathIdx = args.indexOf('--env-path');
+  if (envPathIdx !== -1) {
+    if (envPathIdx + 1 >= args.length) {
+      console.error('Error: --env-path requires a file argument');
+      process.exit(1);
+    }
+    envPath = args[envPathIdx + 1];
+    args.splice(envPathIdx, 2);
+  }
+
   if (args.length < 2) {
-    console.error('Usage: node bin/debug-api.js <method> <path> [json-params]');
+    console.error('Usage: node bin/debug-api.js [--env-path <file>] <method> <path> [json-params]');
     console.error('\nExamples:');
     console.error('  node bin/debug-api.js GET /api/v1/plugins');
     console.error('  node bin/debug-api.js POST /api/v1/extract \'{"extractor":"grobid","file_id":"abc"}\'');
+    console.error('  node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics');
     process.exit(1);
   }
 
@@ -116,7 +132,7 @@ async function main() {
   const params = paramsJson ? JSON.parse(paramsJson) : null;
 
   // Load environment
-  dotenv.config();
+  dotenv.config({ path: envPath });
 
   const baseUrl = process.env.API_BASE_URL || 'http://localhost:8000';
   const username = process.env.API_USER;
