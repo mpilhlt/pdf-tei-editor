@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-03-20T09:44:04.602Z
+ * Generated from OpenAPI schema at 2026-03-28T18:06:12.181Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -283,6 +283,7 @@
  * @property {number} files_deleted
  * @property {number} storage_freed
  * @property {number=} orphaned_xml_deleted
+ * @property {number=} edit_log_purged
  */
 
 /**
@@ -399,6 +400,18 @@
  * @property {boolean} success
  * @property {Array<FieldResult>} results
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RevertEditRequest
+ * @property {string} stable_id
+ * @property {string} content_hash
+ */
+
+/**
+ * @typedef {Object} RevertRequest
+ * @property {string} stable_id
+ * @property {string} target_stable_id
  */
 
 /**
