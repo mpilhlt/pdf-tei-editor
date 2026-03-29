@@ -1,7 +1,8 @@
 """
 Custom routes for GROBID plugin.
 
-Provides download endpoint for GROBID training data packages.
+Provides download endpoint for GROBID training data packages and a diagnostics
+endpoint for debugging connectivity issues with the GROBID server.
 """
 
 import asyncio
@@ -22,9 +23,13 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
 )
+from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.sse.sse_service import SSEService
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
+from fastapi_app.lib.permissions.acl_utils import user_is_admin, user_has_role
 from fastapi_app.plugins.grobid.cache import check_cache, cache_training_data
-from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path
+from fastapi_app.plugins.grobid.config import get_grobid_server_url, get_model_path, get_grobid_server_timeout, is_grobid_cache_disabled
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +134,138 @@ async def cancel_progress(progress_id: str):
     return {"status": "not_found"}
 
 
+@router.get("/diagnostics")
+async def grobid_diagnostics(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+):
+    """
+    Run connectivity diagnostics for the GROBID server.
+
+    Performs layered checks to distinguish between general network outages,
+    DNS failures, TLS issues, and GROBID-specific problems:
+
+    1. Environment: proxy env vars and configured GROBID URL.
+    2. DNS resolution of the GROBID hostname.
+    3. TCP connection to port 443.
+    4. TLS handshake.
+    5. HTTPS GET to a neutral public URL (https://1.1.1.1) to verify general
+       internet access independent of the GROBID host.
+    6. GROBID /api/health request with the configured timeout.
+
+    Admin role required.
+    """
+    import platform
+    import socket
+    import ssl
+    import sys
+    import time
+    from urllib.parse import urlparse
+
+    import requests as _requests
+
+    from fastapi_app.config import get_settings
+
+    # Auth
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    if not user_is_admin(user):
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    def _check(label: str, fn):
+        """Run fn(), return a result dict with status/duration/detail."""
+        t0 = time.monotonic()
+        try:
+            detail = fn()
+            return {"check": label, "status": "ok", "duration_ms": round((time.monotonic() - t0) * 1000), "detail": detail}
+        except Exception as exc:
+            return {"check": label, "status": "fail", "duration_ms": round((time.monotonic() - t0) * 1000), "detail": str(exc)}
+
+    results: list[dict] = []
+
+    # 1 – Environment
+    grobid_url = get_grobid_server_url()
+    timeout = get_grobid_server_timeout()
+    proxy_vars = {k: os.environ.get(k) for k in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy") if os.environ.get(k)}
+    results.append({
+        "check": "environment",
+        "status": "ok",
+        "detail": {
+            "python": sys.version,
+            "platform": platform.platform(),
+            "grobid_url": grobid_url,
+            "grobid_timeout_s": timeout,
+            "proxy_env": proxy_vars,
+        },
+    })
+
+    if not grobid_url:
+        results.append({"check": "grobid_url_configured", "status": "fail", "detail": "GROBID_SERVER_URL is not set"})
+        return {"checks": results}
+
+    parsed = urlparse(grobid_url)
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    # 2 – DNS
+    def _dns():
+        addrs = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+        return [a[4][0] for a in addrs]
+
+    dns_result = _check(f"dns_resolution:{host}", _dns)
+    results.append(dns_result)
+
+    # 3 – TCP (only if DNS succeeded)
+    if dns_result["status"] == "ok":
+        def _tcp():
+            with socket.create_connection((host, port), timeout=10) as s:
+                return f"connected to {s.getpeername()}"
+
+        tcp_result = _check(f"tcp_connect:{host}:{port}", _tcp)
+        results.append(tcp_result)
+
+        # 4 – TLS (only if TCP succeeded and scheme is https)
+        if tcp_result["status"] == "ok" and parsed.scheme == "https":
+            def _tls():
+                ctx = ssl.create_default_context()
+                with socket.create_connection((host, port), timeout=10) as raw:
+                    with ctx.wrap_socket(raw, server_hostname=host) as tls:
+                        cert = tls.getpeercert()
+                        subject = {k: v for rdn in ((cert or {}).get("subject") or ()) for k, v in rdn}
+                        return {"cipher": tls.cipher(), "subject": subject}
+
+            results.append(_check(f"tls_handshake:{host}:{port}", _tls))
+
+    # 5 – General internet access (neutral URL, bypasses GROBID host issues)
+    def _internet():
+        resp = _requests.get("https://1.1.1.1", timeout=10, allow_redirects=False)
+        return {"status_code": resp.status_code, "elapsed_ms": round(resp.elapsed.total_seconds() * 1000)}
+
+    results.append(_check("internet_access:1.1.1.1", _internet))
+
+    # 6 – GROBID health endpoint
+    def _grobid_health():
+        health_url = grobid_url.rstrip("/") + "/api/health"
+        resp = _requests.get(health_url, timeout=timeout)
+        return {"status_code": resp.status_code, "elapsed_ms": round(resp.elapsed.total_seconds() * 1000), "body": resp.text[:500]}
+
+    results.append(_check("grobid_health", _grobid_health))
+
+    return {"checks": results}
+
+
 @router.get("/download")
 async def download_training_package(
     collection: str = Query(..., description="Collection ID"),
@@ -137,9 +274,9 @@ async def download_training_package(
     no_progress: bool = Query(True, description="Suppress SSE progress events (for programmatic API use)"),
     session_id: str | None = Query(None),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
-    sse_service=Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    sse_service: SSEService = Depends(get_sse_service),
 ):
     """
     Download GROBID training package for all documents in a collection as ZIP.
@@ -181,8 +318,7 @@ async def download_training_package(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    user_roles = user.get("roles", [])
-    if "reviewer" not in user_roles and "admin" not in user_roles:
+    if not user_has_role(user, ["reviewer", "admin"]):
         raise HTTPException(status_code=403, detail="Reviewer role required")
 
     # Check collection access
@@ -209,6 +345,7 @@ async def download_training_package(
         # Get GROBID version info for cache key
         from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
         from fastapi_app.plugins.grobid.handlers.training import TrainingHandler
+        from fastapi_app.plugins.grobid.handlers.training import denormalize_grobid_content
         extractor = GrobidTrainingExtractor()
         training_handler = TrainingHandler()
         _, grobid_revision = extractor._get_grobid_version(grobid_server_url)
@@ -291,7 +428,7 @@ async def download_training_package(
                     variants_to_process = list(gold_by_variant.keys())
 
                     # Check cache first
-                    cached_data = check_cache(doc_id, grobid_revision, force_refresh)
+                    cached_data = check_cache(doc_id, grobid_revision, force_refresh or is_grobid_cache_disabled())
 
                     if cached_data:
                         temp_dir = cached_data["temp_dir"]
@@ -313,7 +450,7 @@ async def download_training_package(
                     try:
                         for variant in variants_to_process:
                             grobid_suffix = variant.removeprefix("grobid.")
-                            tei_content = gold_by_variant[variant]
+                            tei_content = denormalize_grobid_content(gold_by_variant[variant], variant)
                             base_path = _corpus_base_path(tei_content, variant, flavor)
                             model_name = variant.removeprefix("grobid.")
 

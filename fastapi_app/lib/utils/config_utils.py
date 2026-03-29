@@ -185,7 +185,10 @@ def get_config_value(key: str, db_dir: Path, default: Any = None) -> Any:
 
 def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
     """
-    Set a configuration value with thread-safe file locking.
+    Set a configuration value with atomic write and file locking.
+
+    Uses a lock file + atomic rename (write to temp file then os.replace) so
+    concurrent readers never observe a truncated or partially-written config file.
 
     Args:
         key: The configuration key
@@ -195,58 +198,66 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, message: str)
     """
+    import tempfile
+
     try:
         config_file = get_data_file_path(db_dir, 'config')
         config_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = config_file.with_suffix('.lock')
 
-        # Use file locking for thread safety
-        with open(config_file, 'r+' if config_file.exists() else 'w+', encoding='utf-8') as f:
-            _lock_file(f)
-
-            f.seek(0)
+        with open(lock_file, 'a', encoding='utf-8') as lf:
+            _lock_file(lf)
             try:
-                content = f.read()
-                if not content:
-                    config_data = {}
+                # Read current config while holding the lock
+                if config_file.exists():
+                    try:
+                        with open(config_file, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        config_data = json.loads(content) if content else {}
+                    except (IOError, json.JSONDecodeError):
+                        config_data = {}
                 else:
-                    config_data = json.loads(content)
-            except json.JSONDecodeError:
-                config_data = {}
+                    config_data = {}
 
-            # Special validation for *.values keys
-            if key.endswith(".values") and not isinstance(value, list):
-                _unlock_file(f)
-                return False, "Values keys must be arrays"
+                # Special validation for *.values keys
+                if key.endswith(".values") and not isinstance(value, list):
+                    return False, "Values keys must be arrays"
 
-            # Special validation for *.type keys
-            if key.endswith(".type"):
-                valid_types = ["string", "number", "boolean", "array", "object", "null"]
-                if value not in valid_types:
-                    _unlock_file(f)
-                    return False, f"Type must be one of {valid_types}"
+                # Special validation for *.type keys
+                if key.endswith(".type"):
+                    valid_types = ["string", "number", "boolean", "array", "object", "null"]
+                    if value not in valid_types:
+                        return False, f"Type must be one of {valid_types}"
 
-            # Validate against existing constraints
-            if not _validate_config_value(config_data, key, value):
-                _unlock_file(f)
-                return False, "Value does not meet validation constraints"
+                # Validate against existing constraints
+                if not _validate_config_value(config_data, key, value):
+                    return False, "Value does not meet validation constraints"
 
-            # Set the value
-            config_data[key] = value
+                # Set the value
+                config_data[key] = value
 
-            # Auto-set type for new keys (not ending in .values or .type)
-            if not key.endswith(".values") and not key.endswith(".type"):
-                type_key = f"{key}.type"
-                if type_key not in config_data:
-                    config_data[type_key] = _get_json_type(value)
+                # Auto-set type for new keys (not ending in .values or .type)
+                if not key.endswith(".values") and not key.endswith(".type"):
+                    type_key = f"{key}.type"
+                    if type_key not in config_data:
+                        config_data[type_key] = _get_json_type(value)
 
-            # Write back to file
-            f.seek(0)
-            f.truncate()
-            json.dump(config_data, f, indent=2)
-            f.flush()  # Ensure data is written to disk
-            os.fsync(f.fileno())  # Force OS-level flush
-
-            _unlock_file(f)
+                # Atomic write: write to temp file then rename
+                tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')
+                try:
+                    with os.fdopen(tmp_fd, 'w', encoding='utf-8') as tf:
+                        json.dump(config_data, tf, indent=2)
+                        tf.flush()
+                        os.fsync(tf.fileno())
+                    os.replace(tmp_path, config_file)
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            finally:
+                _unlock_file(lf)
 
         return True, f"Set {key} to {json.dumps(value)}"
 
@@ -271,30 +282,40 @@ def delete_config_value(key: str, db_dir: Path) -> tuple[bool, str]:
         if not config_file.exists():
             return False, f"Configuration file not found"
 
-        with open(config_file, 'r+', encoding='utf-8') as f:
-            _lock_file(f)
+        import tempfile
+        lock_file = config_file.with_suffix('.lock')
 
-            f.seek(0)
+        with open(lock_file, 'a', encoding='utf-8') as lf:
+            _lock_file(lf)
             try:
-                config_data = json.load(f)
-            except json.JSONDecodeError:
-                config_data = {}
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                except (IOError, json.JSONDecodeError):
+                    config_data = {}
 
-            if key in config_data:
+                if key not in config_data:
+                    return False, f"Key '{key}' not found"
+
                 del config_data[key]
 
-                # Write back to file
-                f.seek(0)
-                f.truncate()
-                json.dump(config_data, f, indent=2)
-                f.flush()  # Ensure data is written to disk
-                os.fsync(f.fileno())  # Force OS-level flush
+                tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')
+                try:
+                    with os.fdopen(tmp_fd, 'w', encoding='utf-8') as tf:
+                        json.dump(config_data, tf, indent=2)
+                        tf.flush()
+                        os.fsync(tf.fileno())
+                    os.replace(tmp_path, config_file)
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            finally:
+                _unlock_file(lf)
 
-                _unlock_file(f)
-                return True, f"Deleted key '{key}'"
-            else:
-                _unlock_file(f)
-                return False, f"Key '{key}' not found"
+        return True, f"Deleted key '{key}'"
 
     except (FileNotFoundError, ValueError) as e:
         return False, str(e)

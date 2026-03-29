@@ -18,6 +18,7 @@ from ..lib.repository.file_repository import FileRepository
 from ..lib.utils.logging_utils import get_logger
 from ..lib.permissions.user_utils import user_has_collection_access
 from ..lib.permissions.access_control import check_file_access
+from ..lib.permissions.acl_utils import user_has_role
 from ..lib.models import FileMetadata
 from ..config import get_settings
 
@@ -179,9 +180,8 @@ async def set_gold_standard(
     logger_inst = get_logger(__name__)
     settings = get_settings()
 
-    # Check if user has reviewer role
-    user_roles = user.get('roles', [])
-    if not any(role in ['admin', 'reviewer'] for role in user_roles):
+    # Check if user has reviewer or admin role
+    if not user_has_role(user, ['admin', 'reviewer']):
         raise HTTPException(
             status_code=403,
             detail="Only reviewers and admins can set gold standard"
@@ -251,9 +251,8 @@ async def update_doc_id(
     logger_inst = get_logger(__name__)
     settings = get_settings()
 
-    # Check if user has reviewer role
-    user_roles = user.get('roles', [])
-    if not any(role in ['admin', 'reviewer'] for role in user_roles):
+    # Check if user has reviewer or admin role
+    if not user_has_role(user, ['admin', 'reviewer']):
         raise HTTPException(
             status_code=403,
             detail="Only reviewers and admins can update document ID"

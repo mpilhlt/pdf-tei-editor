@@ -71,8 +71,9 @@ class ExtractorRegistry:
         extractors = []
 
         for extractor_id, extractor_class in self._extractors.items():
+            available = extractor_class.is_available()
             # Check availability if requested
-            if available_only and not extractor_class.is_available():
+            if available_only and not available:
                 continue
 
             try:

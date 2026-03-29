@@ -579,26 +579,14 @@ class XmlEditorPlugin extends Plugin {
       await this.#xmlEditor.hideMergeView();
     }
 
-    // Cache extractor list when user changes
-    let extractorsJustCached = false;
-    if (this.#currentUser !== state.user && state.user !== null) {
-      const previousUser = this.#currentUser;
+    // Invalidate extractor cache when user changes so it is refreshed lazily
+    if (this.#currentUser !== state.user) {
       this.#currentUser = state.user;
-
-      if (!this.#cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
-        try {
-          this.#cachedExtractors = await this.#client.getExtractorList();
-          extractorsJustCached = true;
-          this.#logger.debug('Cached extractor list for node navigation');
-        } catch (error) {
-          this.#logger.warn('Failed to load extractor list: ' + String(error));
-          this.#cachedExtractors = [];
-        }
-      }
+      this.#cachedExtractors = null;
     }
 
     // Check if variant has changed, repopulate xpath dropdown
-    if (this.#currentVariant !== state.variant || extractorsJustCached) {
+    if (this.#currentVariant !== state.variant) {
       this.#currentVariant = state.variant;
       await this.#populateXpathDropdown(state);
     }
@@ -1039,9 +1027,15 @@ class XmlEditorPlugin extends Plugin {
       return;
     }
 
-    if (!this.#cachedExtractors) {
-      this.#xpathDropdown.setItems([{ value: '', text: 'Error loading navigation paths', disabled: true }]);
-      return;
+    if (this.#cachedExtractors === null) {
+      try {
+        this.#cachedExtractors = await this.#client.getExtractorList();
+        this.#logger.debug('Loaded extractor list for node navigation');
+      } catch (error) {
+        this.#logger.warn('Failed to load extractor list: ' + String(error));
+        this.#xpathDropdown.setItems([{ value: '', text: 'Error loading navigation paths', disabled: true }]);
+        return;
+      }
     }
 
     let navigationXpathList = null;

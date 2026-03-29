@@ -118,10 +118,23 @@ def _merge_config_defaults(template_path: Path, db_path: Path) -> None:
                 added_keys.append(key)
                 logger.info(f"Added missing default config value for '{key}'")
 
-        # Write back if we made changes
+        # Write back atomically if we made changes
         if added_keys:
-            with open(db_path, 'w') as f:
-                json.dump(db_config, f, indent=2)
+            import os
+            import tempfile
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=db_path.parent, suffix='.tmp')
+            try:
+                with os.fdopen(tmp_fd, 'w', encoding='utf-8') as tf:
+                    json.dump(db_config, tf, indent=2)
+                    tf.flush()
+                    os.fsync(tf.fileno())
+                os.replace(tmp_path, db_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             logger.info(f"Merged {len(added_keys)} missing config keys into {db_path}")
         else:
             logger.debug("No missing config keys to merge")
