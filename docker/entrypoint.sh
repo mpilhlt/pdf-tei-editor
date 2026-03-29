@@ -27,7 +27,7 @@ for config_file in /app/config/*.json; do
 done
 
 
-# Create default accounts if no environment variables are set
+# Show demo warning and set login message only when neither password is customized
 if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
     echo "No custom passwords provided, setting up default demo accounts..."
 
@@ -36,11 +36,11 @@ if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
     # Use Python to properly escape the message for JSON
     ESCAPED_DEFAULT_MESSAGE=$(.venv/bin/python -c "import json, os; print(json.dumps(os.environ.get('APP_LOGIN_MESSAGE', '')))")
     .venv/bin/python bin/manage.py config set application.login-message "$ESCAPED_DEFAULT_MESSAGE" 2>/dev/null || echo "Warning: Failed to set default login message"
-
-    # Create default admin and demo user
-    export APP_ADMIN_PASSWORD="admin"
-    export APP_DEMO_PASSWORD="demo"
 fi
+
+# Fall back to defaults for any password not explicitly provided
+APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD:-admin}
+APP_DEMO_PASSWORD=${APP_DEMO_PASSWORD:-demo}
 
 # Set login message if APP_LOGIN_MESSAGE is provided
 if [ -n "$APP_LOGIN_MESSAGE" ]; then
@@ -54,34 +54,44 @@ fi
 # Create or update admin user if APP_ADMIN_PASSWORD is set
 if [ -n "$APP_ADMIN_PASSWORD" ]; then
     echo "Setting up admin user from environment variable..."
-    if .venv/bin/python bin/manage.py \
+    # Create user if it doesn't exist (ignore failure if already exists)
+    .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
             user add admin \
             --password "$APP_ADMIN_PASSWORD" \
             --fullname "Administrator" \
             --roles "admin" \
-            --email "admin@localhost";
+            --email "admin@localhost" 2>/dev/null || true
+    # Always update the password to ensure the env var takes effect even if the user already existed
+    if .venv/bin/python bin/manage.py \
+            --db-path /app/data/db \
+            user update-password admin "$APP_ADMIN_PASSWORD";
     then
-        echo "Admin user created successfully"
+        echo "Admin user configured successfully"
     else
-        echo "Warning: Failed to create admin user"
+        echo "Warning: Failed to configure admin user"
     fi
 fi
 
 # Create or update demo user if APP_DEMO_PASSWORD is set
 if [ -n "$APP_DEMO_PASSWORD" ]; then
-    echo "Creating new demo user..."
-    if .venv/bin/python bin/manage.py \
+    echo "Setting up demo user from environment variable..."
+    # Create user if it doesn't exist (ignore failure if already exists)
+    .venv/bin/python bin/manage.py \
             --db-path /app/data/db \
             user add demo \
             --password "$APP_DEMO_PASSWORD" \
             --fullname "Demo User" \
             --roles "user,annotator,reviewer" \
-            --email "demo@localhost";
+            --email "demo@localhost" 2>/dev/null || true
+    # Always update the password to ensure the env var takes effect even if the user already existed
+    if .venv/bin/python bin/manage.py \
+            --db-path /app/data/db \
+            user update-password demo "$APP_DEMO_PASSWORD";
     then
-        echo "Demo user created successfully"
+        echo "Demo user configured successfully"
     else
-        echo "Warning: Failed to create demo user"
+        echo "Warning: Failed to configure demo user"
     fi
 fi
 

@@ -27,6 +27,7 @@ class GrobidPlugin(Plugin):
         get_plugin_config("plugin.grobid.server.url", "GROBID_SERVER_URL", default="")
         get_plugin_config("plugin.grobid.server.timeout", "GROBID_SERVER_TIMEOUT", default=10)
         get_plugin_config("plugin.grobid.extraction.timeout", "GROBID_EXTRACTION_TIMEOUT", default=300)
+        get_plugin_config("plugin.grobid.cache.disabled", "GROBID_DISABLE_CACHE", default=False)
 
     @property
     def metadata(self) -> dict[str, Any]:

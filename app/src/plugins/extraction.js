@@ -339,7 +339,7 @@ class ExtractionPlugin extends Plugin {
 
     let availableExtractors = []
     try {
-      if (!this.#extractors) {
+      if (!this.#extractors?.length) {
         this.#extractors = await this.#client.getExtractorList()
       }
 

@@ -21,6 +21,7 @@ from fastapi_app.plugins.grobid.config import (
     get_model_path,
     get_navigation_xpath,
     get_schema_url,
+    is_grobid_cache_disabled,
 )
 from fastapi_app.plugins.grobid.handlers import (
     GrobidHandler,
@@ -142,7 +143,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                 doc_id = os.path.splitext(pdf_name)[0]
 
             # Check cache
-            cached_data = check_cache(doc_id, grobid_revision)
+            cached_data = check_cache(doc_id, grobid_revision, force_refresh=is_grobid_cache_disabled())
 
             if cached_data:
                 # Use cached data - find the specific variant file
@@ -187,6 +188,11 @@ class GrobidTrainingExtractor(BaseExtractor):
 
         # Log raw GROBID response for debugging
         log_extraction_response("grobid", pdf_path, raw_tei_content, ".raw.xml")
+
+        # For training variants with non-standard content location, move content to <text>
+        if is_training_variant:
+            from fastapi_app.plugins.grobid.handlers.training import normalize_grobid_content
+            raw_tei_content = normalize_grobid_content(raw_tei_content, variant_id)
 
         # Clean invalid XML attributes before parsing
         raw_tei_content = self._clean_invalid_xml_attributes(raw_tei_content)
