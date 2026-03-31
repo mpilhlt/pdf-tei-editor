@@ -102,6 +102,15 @@ async def view_progress(
                 f for f in tei_files if getattr(f, "variant", None) == variant
             ]
 
+        # Build map of doc_id -> PDF stable_id (first PDF found per doc_id)
+        pdf_files = [f for f in all_files if f.file_type == "pdf"]
+        doc_pdf_stable_id: dict[str, str] = {}
+        for f in pdf_files:
+            if f.doc_id and f.stable_id:
+                normalized = normalize_legacy_encoding(f.doc_id)
+                if normalized not in doc_pdf_stable_id:
+                    doc_pdf_stable_id[normalized] = f.stable_id
+
         # Group annotations by doc_id
         doc_annotations = defaultdict(list)
         for file_metadata in tei_files:
@@ -194,8 +203,15 @@ async def view_progress(
             if newest_timestamp:
                 date_cell = newest_timestamp.strftime("%Y-%m-%d %H:%M")
 
+            # Make doc_id clickable if a PDF exists for it
+            pdf_stable_id = doc_pdf_stable_id.get(doc_id)
+            if pdf_stable_id:
+                doc_id_cell = f'<a href="#" onclick="sandbox.load({{pdf:\'{pdf_stable_id}\'}}); return false;" class="version-link">{escape_html(doc_id)}</a>'
+            else:
+                doc_id_cell = escape_html(doc_id)
+
             rows.append([
-                escape_html(doc_id),
+                doc_id_cell,
                 annotations_cell,
                 last_change_cell,
                 last_annotator_cell,

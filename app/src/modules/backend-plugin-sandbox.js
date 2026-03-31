@@ -186,6 +186,30 @@ export class PluginSandbox {
   }
 
   /**
+   * Open a PDF file without loading any TEI document
+   * @param {string} stableId - PDF file stable ID
+   * @param {boolean} [closeDialog] - Closes the dialog after loading (default true)
+   */
+  async openPdf(stableId, closeDialog = true) {
+    await this.context.getDependency('services').load({ pdf: stableId });
+    if (closeDialog) {
+      this.closeDialog();
+    }
+  }
+
+  /**
+   * Load a PDF and/or TEI document by stable ID
+   * @param {{xml?: string, pdf?: string}} files - Object with optional `xml` and/or `pdf` stable IDs
+   * @param {boolean} [closeDialog] - Closes the dialog after loading (default true)
+   */
+  async load(files, closeDialog = true) {
+    await this.context.getDependency('services').load(files);
+    if (closeDialog) {
+      this.closeDialog();
+    }
+  }
+
+  /**
    * Open diff view between two documents
    * @param {string} stableId1 - First document stable ID
    * @param {string} stableId2 - Second document stable ID
