@@ -22,7 +22,10 @@ from fastapi_app.lib.utils.collection_utils import (
     add_collection,
     remove_collection,
     set_collection_property,
-    list_collections
+    list_collections,
+    get_collection_owner,
+    is_collection_owner,
+    can_delete_collection
 )
 from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
 from fastapi_app.lib.core.database import DatabaseManager
@@ -274,6 +277,84 @@ class TestCollectionUtils(unittest.TestCase):
         self.assertIsNotNone(file3)
         self.assertEqual(file3.doc_collections, ['other-collection'])
         self.assertFalse(file3.deleted)
+
+
+class TestCollectionOwnership(unittest.TestCase):
+    """Test collection ownership utility functions."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_dir = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _user(self, username, roles=None):
+        return {'username': username, 'roles': roles or ['user']}
+
+    def test_add_collection_stores_owner(self):
+        success, _ = add_collection(self.db_dir, 'col1', 'Col 1', owner='alice')
+        self.assertTrue(success)
+        col = list_collections(self.db_dir)[0]
+        self.assertEqual(col['owner'], 'alice')
+
+    def test_add_collection_no_owner(self):
+        success, _ = add_collection(self.db_dir, 'col1', 'Col 1')
+        self.assertTrue(success)
+        col = list_collections(self.db_dir)[0]
+        self.assertIsNone(col['owner'])
+
+    def test_get_collection_owner_with_owner(self):
+        self.assertEqual(get_collection_owner({'id': 'c', 'owner': 'bob'}), 'bob')
+
+    def test_get_collection_owner_none(self):
+        self.assertIsNone(get_collection_owner({'id': 'c'}))
+        self.assertIsNone(get_collection_owner({'id': 'c', 'owner': None}))
+
+    def test_is_collection_owner_true(self):
+        user = self._user('alice')
+        col = {'id': 'c', 'owner': 'alice'}
+        self.assertTrue(is_collection_owner(user, col))
+
+    def test_is_collection_owner_false_wrong_user(self):
+        user = self._user('bob')
+        col = {'id': 'c', 'owner': 'alice'}
+        self.assertFalse(is_collection_owner(user, col))
+
+    def test_is_collection_owner_false_no_owner(self):
+        user = self._user('alice')
+        col = {'id': 'c'}
+        self.assertFalse(is_collection_owner(user, col))
+
+    def test_can_delete_collection_admin(self):
+        admin = self._user('admin_user', roles=['admin'])
+        col = {'id': 'c', 'owner': 'someone_else'}
+        self.assertTrue(can_delete_collection(admin, col))
+
+    def test_can_delete_collection_wildcard_role(self):
+        superuser = self._user('super', roles=['*'])
+        col = {'id': 'c'}
+        self.assertTrue(can_delete_collection(superuser, col))
+
+    def test_can_delete_collection_reviewer(self):
+        reviewer = self._user('reviewer_user', roles=['reviewer'])
+        col = {'id': 'c', 'owner': 'someone_else'}
+        self.assertTrue(can_delete_collection(reviewer, col))
+
+    def test_can_delete_collection_owner(self):
+        owner = self._user('alice', roles=['user'])
+        col = {'id': 'c', 'owner': 'alice'}
+        self.assertTrue(can_delete_collection(owner, col))
+
+    def test_can_delete_collection_plain_user_not_owner(self):
+        user = self._user('bob', roles=['user'])
+        col = {'id': 'c', 'owner': 'alice'}
+        self.assertFalse(can_delete_collection(user, col))
+
+    def test_can_delete_collection_unowned_plain_user(self):
+        user = self._user('bob', roles=['user'])
+        col = {'id': 'c'}
+        self.assertFalse(can_delete_collection(user, col))
 
 
 if __name__ == '__main__':

@@ -33,6 +33,7 @@ import {
 } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import Plugin from '../modules/plugin-base.js'
+import { canDeleteCollection, isCollectionOwner } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
@@ -315,6 +316,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       user.roles.includes('admin') ||
       user.roles.includes('reviewer')
     );
+    const ownsAnyCollection = (state.collections || []).some(col => isCollectionOwner(user, col));
 
     const importButton = this.#drawerUi.importButton;
     const exportDropdown = this.#drawerUi.exportDropdown;
@@ -329,7 +331,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     } else {
       importButton.style.display = 'none';
       exportDropdown.style.display = 'none';
-      deleteButton.style.display = 'none';
+      deleteButton.style.display = ownsAnyCollection ? '' : 'none';
       newCollectionButton.style.display = 'none';
     }
   }
@@ -705,7 +707,12 @@ class FileSelectionDrawerPlugin extends Plugin {
     const deleteButton = this.#drawerUi.deleteButton;
     const hasSelection = this.#selectedCollections.size > 0;
     exportButton.disabled = !hasSelection;
-    deleteButton.disabled = !hasSelection;
+
+    const allSelectedDeletable = hasSelection && [...this.#selectedCollections].every(id => {
+      const col = (this.state.collections || []).find(c => c.id === id);
+      return col && canDeleteCollection(this.state.user, col);
+    });
+    deleteButton.disabled = !allSelectedDeletable;
   }
 
   /**

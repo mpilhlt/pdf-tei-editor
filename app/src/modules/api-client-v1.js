@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-03-20T09:44:04.602Z
+ * Generated from OpenAPI schema at 2026-04-13T10:57:45.158Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -17,13 +17,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnnotateRequest
- * @property {string} stable_id
- * @property {string} xpath
- * @property {string} annotator_id
  */
 
 /**
@@ -93,6 +86,7 @@
  * @property {string} id - Unique collection identifier
  * @property {string} name - Display name for the collection
  * @property {string=} description - Collection description
+ * @property {string=} owner - Username of the collection owner
  */
 
 /**
@@ -204,6 +198,20 @@
  * @typedef {Object} ExecuteResponse
  * @property {boolean} success
  * @property {any} result
+ */
+
+/**
+ * @typedef {Object} ExtractRequest
+ * @property {string} extractor - ID of the extractor to use
+ * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
+ * @property {Object<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
+ */
+
+/**
+ * @typedef {Object} ExtractResponse
+ * @property {string=} id - Document ID (for PDF-based extractions)
+ * @property {string=} pdf - PDF file hash (if applicable)
+ * @property {string} xml - Extracted/generated XML file hash
  */
 
 /**
@@ -533,42 +541,6 @@
  */
 
 /**
- * @typedef {Object} fastapi_app__lib__models__models_extraction__ExtractRequest
- * @property {string} extractor - ID of the extractor to use
- * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
- * @property {Object<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
- */
-
-/**
- * @typedef {Object} fastapi_app__lib__models__models_extraction__ExtractResponse
- * @property {string=} id - Document ID (for PDF-based extractions)
- * @property {string=} pdf - PDF file hash (if applicable)
- * @property {string} xml - Extracted/generated XML file hash
- */
-
-/**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractRequest
- * @property {string} model
- * @property {string} prompt
- * @property {string=} stable_id
- * @property {string=} text_input
- * @property {Object<string, any>=} json_schema
- * @property {number=} temperature
- * @property {number=} max_retries
- */
-
-/**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractResponse
- * @property {boolean} success
- * @property {Object<string, any>=} data
- * @property {string=} error
- * @property {string=} raw_response
- * @property {string} model
- * @property {string} extractor
- * @property {number=} retries
- */
-
-/**
  * API Client for FastAPI v1 endpoints
  *
  * This client wraps the callApi function to provide typed methods for all API endpoints.
@@ -771,7 +743,7 @@ export class ApiClientV1 {
    * Returns:
    * CollectionDeleteResponse with deletion statistics
    * Raises:
-   * HTTPException: 404 if collection not found
+   * HTTPException: 403 if user lacks permission, 404 if collection not found
    *
    * @param {string} collection_id
    * @returns {Promise<CollectionDeleteResponse>}
@@ -1090,8 +1062,8 @@ export class ApiClientV1 {
    * Returns:
    * Response with PDF hash (if applicable) and extracted XML hash
    *
-   * @param {fastapi_app__lib__models__models_extraction__ExtractRequest} requestBody
-   * @returns {Promise<fastapi_app__lib__models__models_extraction__ExtractResponse>}
+   * @param {ExtractRequest} requestBody
+   * @returns {Promise<ExtractResponse>}
    */
   async extract(requestBody) {
     const endpoint = `/extract`
