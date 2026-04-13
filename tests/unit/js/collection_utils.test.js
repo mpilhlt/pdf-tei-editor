@@ -12,24 +12,27 @@ import {
   canDeleteCollection
 } from '../../../app/src/modules/collection-utils.js'
 
-const user = (username, roles = ['user']) => ({ username, roles })
-const col = (owner = undefined) => ({ id: 'test', name: 'Test', owner })
+/** @param {string} username @param {string[]} [roles] @returns {import('../../../app/src/plugins/authentication.js').UserData} */
+const user = (username, roles = ['user']) => ({ username, fullname: username, roles })
+
+/** @param {string|null} [owner] @returns {import('../../../app/src/modules/collection-utils.js').CollectionData} */
+const col = (owner = undefined) => ({ id: 'test', name: 'Test', owner: owner ?? undefined })
 
 describe('getCollectionOwner', () => {
   it('returns owner string when present', () => {
-    assert.strictEqual(getCollectionOwner(col('alice')), 'alice')
+    assert.strictEqual(getCollectionOwner({ id: 'c', name: 'C', owner: 'alice' }), 'alice')
   })
 
-  it('returns null when owner is null', () => {
-    assert.strictEqual(getCollectionOwner(col(null)), null)
-  })
-
-  it('returns null when owner field is absent', () => {
+  it('returns null when owner is absent', () => {
     assert.strictEqual(getCollectionOwner({ id: 'c', name: 'C' }), null)
   })
 
+  it('returns null when owner is undefined', () => {
+    assert.strictEqual(getCollectionOwner({ id: 'c', name: 'C', owner: undefined }), null)
+  })
+
   it('returns null for null collection', () => {
-    assert.strictEqual(getCollectionOwner(null), null)
+    assert.strictEqual(getCollectionOwner(/** @type {any} */ (null)), null)
   })
 })
 
@@ -43,7 +46,7 @@ describe('isCollectionOwner', () => {
   })
 
   it('returns false when collection has no owner', () => {
-    assert.ok(!isCollectionOwner(user('alice'), col(null)))
+    assert.ok(!isCollectionOwner(user('alice'), col()))
   })
 
   it('returns false for null user', () => {
@@ -51,7 +54,7 @@ describe('isCollectionOwner', () => {
   })
 
   it('returns false for null collection', () => {
-    assert.ok(!isCollectionOwner(user('alice'), null))
+    assert.ok(!isCollectionOwner(user('alice'), /** @type {any} */ (null)))
   })
 })
 
@@ -64,8 +67,12 @@ describe('canDeleteCollection', () => {
     assert.ok(canDeleteCollection(user('super', ['*']), col()))
   })
 
-  it('returns true for reviewer role', () => {
-    assert.ok(canDeleteCollection(user('rev', ['reviewer']), col('someone_else')))
+  it('returns true for reviewer who owns the collection', () => {
+    assert.ok(canDeleteCollection(user('rev', ['reviewer']), col('rev')))
+  })
+
+  it('returns false for reviewer who does not own the collection', () => {
+    assert.ok(!canDeleteCollection(user('rev', ['reviewer']), col('someone_else')))
   })
 
   it('returns true for collection owner (plain user)', () => {
@@ -77,7 +84,7 @@ describe('canDeleteCollection', () => {
   })
 
   it('returns false for plain user on unowned collection', () => {
-    assert.ok(!canDeleteCollection(user('bob', ['user']), col(null)))
+    assert.ok(!canDeleteCollection(user('bob', ['user']), col()))
   })
 
   it('returns false for null user', () => {

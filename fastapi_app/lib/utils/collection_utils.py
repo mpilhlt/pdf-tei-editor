@@ -129,7 +129,7 @@ def is_collection_owner(user: Dict[str, Any], collection: Dict[str, Any]) -> boo
 def can_delete_collection(user: Dict[str, Any], collection: Dict[str, Any]) -> bool:
     """Checks if a user is allowed to delete a collection.
 
-    Deletion is allowed for admins, reviewers, and the collection owner.
+    Deletion is allowed for admins and the collection owner.
 
     Args:
         user: User dictionary
@@ -138,8 +138,8 @@ def can_delete_collection(user: Dict[str, Any], collection: Dict[str, Any]) -> b
     Returns:
         True if the user may delete the collection
     """
-    from fastapi_app.lib.permissions.acl_utils import user_is_admin, user_has_reviewer_role
-    return user_is_admin(user) or user_has_reviewer_role(user) or is_collection_owner(user, collection)
+    from fastapi_app.lib.permissions.acl_utils import user_is_admin
+    return user_is_admin(user) or is_collection_owner(user, collection)
 
 
 def add_collection(db_dir: Path, collection_id: str, name: str, description: str = "", owner: Optional[str] = None) -> tuple[bool, str]:

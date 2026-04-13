@@ -3,7 +3,7 @@
  * @import { UserData } from '../plugins/authentication.js'
  */
 
-import { userIsAdmin, userHasReviewerRole } from './acl-utils.js'
+import { userIsAdmin } from './acl-utils.js'
 
 /**
  * @typedef {object} CollectionData
@@ -37,12 +37,12 @@ export function isCollectionOwner(user, collection) {
 /**
  * Checks if a user may delete a collection.
  *
- * Deletion is allowed for admins, reviewers, and the collection owner.
+ * Deletion is allowed for admins and the collection owner.
  * @param {UserData|null} user - User object
  * @param {CollectionData} collection - Collection object
  * @returns {boolean}
  */
 export function canDeleteCollection(user, collection) {
   if (!user) return false
-  return userIsAdmin(user) || userHasReviewerRole(user) || isCollectionOwner(user, collection)
+  return userIsAdmin(user) || isCollectionOwner(user, collection)
 }

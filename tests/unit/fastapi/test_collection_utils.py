@@ -336,10 +336,15 @@ class TestCollectionOwnership(unittest.TestCase):
         col = {'id': 'c'}
         self.assertTrue(can_delete_collection(superuser, col))
 
-    def test_can_delete_collection_reviewer(self):
+    def test_can_delete_collection_reviewer_owns(self):
+        reviewer = self._user('reviewer_user', roles=['reviewer'])
+        col = {'id': 'c', 'owner': 'reviewer_user'}
+        self.assertTrue(can_delete_collection(reviewer, col))
+
+    def test_can_delete_collection_reviewer_not_owner(self):
         reviewer = self._user('reviewer_user', roles=['reviewer'])
         col = {'id': 'c', 'owner': 'someone_else'}
-        self.assertTrue(can_delete_collection(reviewer, col))
+        self.assertFalse(can_delete_collection(reviewer, col))
 
     def test_can_delete_collection_owner(self):
         owner = self._user('alice', roles=['user'])
