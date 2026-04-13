@@ -3,10 +3,17 @@
 Pre-commit hook to check if FastAPI router changes require API client regeneration.
 Cross-platform implementation using Python.
 """
+import io
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+# Force UTF-8 output on Windows where the default console encoding may not support Unicode
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding and sys.stderr.encoding.lower() != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 def check_client_outdated():
