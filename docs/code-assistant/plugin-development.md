@@ -101,7 +101,7 @@ The application uses **immutable state management**:
 - **React to changes**: `onStateUpdate(changedKeys, state)` or per-key handlers (see below)
 - **Read current state**: `this.state` — read-only property
 - **Plugin-specific state**: store in `state.ext[this.name]` to avoid key collisions
-- **Never call `dispatchStateChange` inside `onStateUpdate`** — creates infinite loops; only call it from event handlers or async operations
+- **Never call `dispatchStateChange` inside `onStateUpdate`** — state propagation is locked during observer notification; doing so throws an error. Use `scheduleStateChange` when async work triggered by `onStateUpdate` produces a result that must be written back to state (see below).
 
 ## Per-Key State Handlers
 
@@ -273,11 +273,11 @@ import { state } from '../app.js';  // WRONG
 this.state.user = newUser;  // WRONG
 ```
 
-❌ **DO NOT** update state in `onStateUpdate`:
+❌ **DO NOT** call `dispatchStateChange` inside `onStateUpdate`:
 
 ```javascript
 async onStateUpdate(changedKeys) {
-  await this.dispatchStateChange({ ... });  // WRONG - creates infinite loop
+  await this.dispatchStateChange({ ... });  // WRONG — throws, propagation is locked
 }
 ```
 
@@ -294,7 +294,21 @@ async handleButtonClick() {
 ```javascript
 async onStateUpdate(changedKeys) {
   if (changedKeys.includes('user')) {
-    this.updateUI();  // CORRECT - observe and react
+    this.updateUI();  // CORRECT — observe and react, no state mutation
   }
 }
 ```
+
+✅ **DO** use `scheduleStateChange` when async work inside `onStateUpdate` produces a result that must go back into state:
+
+```javascript
+async onXmlChange(newXml) {
+  // Async API call triggered by a state change
+  const permissions = await this.fetchPermissions(newXml);
+  // dispatchStateChange would throw here — propagation may still be active.
+  // scheduleStateChange flushes after the current cycle completes.
+  await this.scheduleStateChange({ editorReadOnly: !permissions.canEdit });
+}
+```
+
+`scheduleStateChange` is an explicit opt-in for this one legitimate pattern. It is **not** a general escape hatch from the observer rule — synchronous reactions must always remain pure observers.

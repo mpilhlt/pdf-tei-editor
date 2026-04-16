@@ -34,6 +34,20 @@ export class PluginContext {
   }
 
   /**
+   * Schedule a state change to run after the current propagation cycle completes.
+   *
+   * Use this only from async work triggered by onStateUpdate (e.g. after an API call
+   * whose result affects state). Synchronous onStateUpdate handlers must remain pure
+   * observers and use dispatchStateChange() via their Plugin base class.
+   *
+   * @param {Partial<ApplicationState>} changes
+   * @returns {Promise<ApplicationState>}
+   */
+  scheduleStateChange(changes) {
+    return this.#application.scheduleStateChange(changes);
+  }
+
+  /**
    * Update extension properties in state
    * @param {Object} extChanges - Extension properties to update
    * @returns {Promise<ApplicationState>} New state after changes applied
