@@ -5,7 +5,7 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlTreeItem } from '../ui.js'
+ * @import { SlTreeItem, SlCheckbox, SlDrawer } from '../ui.js'
  * @import { DocumentItem } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { fileDrawerPart } from '../templates/file-selection-drawer.types.js'
@@ -33,6 +33,7 @@ import {
 } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import Plugin from '../modules/plugin-base.js'
+import { canDeleteCollection, isCollectionOwner } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
@@ -63,9 +64,9 @@ class FileSelectionDrawerPlugin extends Plugin {
   get #client() { return this.getDependency('client') }
 
   /** @type {HTMLElement & fileDrawerButtonPart} */
-  #triggerUi = null
-  /** @type {import('../ui.js').SlDrawer & fileDrawerPart} */
-  #drawerUi = null
+  #triggerUi = /** @type {any} */ (null)
+  /** @type {SlDrawer & fileDrawerPart} */
+  #drawerUi = /** @type {any} */ (null)
 
   // Private state
   #currentLabelFilter = '';
@@ -84,10 +85,10 @@ class FileSelectionDrawerPlugin extends Plugin {
     this.#logger.debug(`Installing plugin "${this.name}"`);
 
     const triggerButton = createSingleFromTemplate('file-drawer-button');
-    this.#triggerUi = this.createUi(triggerButton);
+    this.#triggerUi = /** @type {HTMLElement & fileDrawerButtonPart} */ (/** @type {any} */ (this.createUi(triggerButton)));
 
     const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
-    this.#drawerUi = this.createUi(drawer);
+    this.#drawerUi = /** @type {SlDrawer & fileDrawerPart} */ (/** @type {any} */ (this.createUi(drawer)));
 
     this.#triggerUi.addEventListener('click', () => this.open());
 
@@ -170,9 +171,11 @@ class FileSelectionDrawerPlugin extends Plugin {
   /**
    * React to state changes
    * @param {string[]} changedKeys
-   * @param {ApplicationState} state
    */
-  async onStateUpdate(changedKeys, state) {
+  async onStateUpdate(changedKeys) {
+    const state = this.state;
+    if (!state) return;
+
     if (['xml', 'pdf', 'variant', 'fileData', 'collections'].some(k => changedKeys.includes(k)) && state.fileData) {
       await this.#populateVariantSelect(state);
 
@@ -291,10 +294,11 @@ class FileSelectionDrawerPlugin extends Plugin {
     if (!container) return [];
 
     const checked = container.querySelectorAll('sl-checkbox[checked]');
+    /** @type {ExportFormatInfo[]} */
     const results = [];
 
     checked.forEach(checkbox => {
-      const formatId = checkbox.value;
+      const formatId = /** @type {HTMLInputElement} */ (checkbox).value;
       const format = this.#availableExportFormats.find(f => f.id === formatId);
       if (format) {
         results.push(format);
@@ -315,6 +319,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       user.roles.includes('admin') ||
       user.roles.includes('reviewer')
     );
+    const ownsAnyCollection = (state.collections || []).some(col => isCollectionOwner(user, col));
 
     const importButton = this.#drawerUi.importButton;
     const exportDropdown = this.#drawerUi.exportDropdown;
@@ -324,14 +329,14 @@ class FileSelectionDrawerPlugin extends Plugin {
     if (hasReviewerRole) {
       importButton.style.display = '';
       exportDropdown.style.display = '';
-      deleteButton.style.display = '';
       newCollectionButton.style.display = '';
     } else {
       importButton.style.display = 'none';
       exportDropdown.style.display = 'none';
-      deleteButton.style.display = 'none';
       newCollectionButton.style.display = 'none';
     }
+    const isAdmin = user && user.roles && (user.roles.includes('*') || user.roles.includes('admin'));
+    deleteButton.style.display = isAdmin || ownsAnyCollection ? '' : 'none';
   }
 
   /**
@@ -435,7 +440,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     selectAllContainer.style.display = collections.length > 0 ? 'block' : 'none';
 
     for (const collectionName of collections) {
-      const collectionDisplayName = getCollectionName(collectionName, state.collections);
+      const collectionDisplayName = getCollectionName(collectionName, state.collections || []);
 
       const collectionItem = document.createElement('sl-tree-item');
       collectionItem.expanded = shouldExpandCollection(collectionName);
@@ -501,7 +506,7 @@ class FileSelectionDrawerPlugin extends Plugin {
           goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
 
           goldToShow.forEach(gold => {
-            const variantSuffix = (!state.variant || state.variant === "") ? gold.variant : undefined;
+            const variantSuffix = (!state.variant || state.variant === "") ? gold.variant ?? undefined : undefined;
             const goldItem = document.createElement('sl-tree-item');
             goldItem.className = 'gold-item';
             goldItem.dataset.type = 'gold';
@@ -522,7 +527,7 @@ class FileSelectionDrawerPlugin extends Plugin {
           versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
 
           versionsToShow.forEach(version => {
-            const variantSuffix = (!state.variant || state.variant === "") ? version.variant : undefined;
+            const variantSuffix = (!state.variant || state.variant === "") ? version.variant ?? undefined : undefined;
             const versionItem = document.createElement('sl-tree-item');
             versionItem.className = 'version-item';
             versionItem.dataset.type = 'version';
@@ -554,7 +559,7 @@ class FileSelectionDrawerPlugin extends Plugin {
   /**
    * Selects the tree item that corresponds to the current state
    * @param {ApplicationState} state
-   * @param {SlTree} fileTree
+   * @param {HTMLElement} fileTree
    */
   async #selectCurrentStateItem(state, fileTree) {
     if (!state.pdf && !state.xml) return;
@@ -568,8 +573,8 @@ class FileSelectionDrawerPlugin extends Plugin {
     }
 
     if (itemToSelect) {
-      const currentSelection = fileTree.querySelectorAll('sl-tree-item[selected]');
-      currentSelection.forEach(item => /** @type {SlTreeItem} */ (item).selected = false);
+      const currentSelection = /** @type {NodeListOf<SlTreeItem>} */ (fileTree.querySelectorAll('sl-tree-item[selected]'));
+      currentSelection.forEach(item => { item.selected = false; });
       /** @type {SlTreeItem} */ (itemToSelect).selected = true;
     }
   }
@@ -686,7 +691,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     collectionItems.forEach(item => {
       const checkbox = /** @type {SlCheckbox} */ (item.querySelector('sl-checkbox'));
-      const collectionName = item.dataset.collection;
+      const collectionName = /** @type {HTMLElement} */ (item).dataset.collection;
       if (checkbox && collectionName) {
         checkbox.checked = checked;
         if (checked) {
@@ -705,7 +710,13 @@ class FileSelectionDrawerPlugin extends Plugin {
     const deleteButton = this.#drawerUi.deleteButton;
     const hasSelection = this.#selectedCollections.size > 0;
     exportButton.disabled = !hasSelection;
-    deleteButton.disabled = !hasSelection;
+
+    const currentState = this.state;
+    const allSelectedDeletable = hasSelection && currentState !== null && [...this.#selectedCollections].every(id => {
+      const col = (currentState.collections || []).find(c => c.id === id);
+      return col && canDeleteCollection(currentState.user, col);
+    });
+    deleteButton.disabled = !allSelectedDeletable;
   }
 
   /**
@@ -727,7 +738,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     });
 
     const variantSelect = this.#drawerUi.variantSelect;
-    const selectedVariant = variantSelect.value;
+    const selectedVariant = /** @type {string} */ (variantSelect.value);
     if (selectedVariant && selectedVariant !== '') {
       params.append('variants', selectedVariant);
     }
@@ -794,7 +805,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       this.#logger.info(`Export completed: ${stats.files_exported} files exported`);
     } catch (error) {
       this.#logger.error("Export failed: " + String(error));
-      notify(error.message || "Export failed", "danger", "exclamation-octagon");
+      notify(/** @type {Error} */ (error).message || "Export failed", "danger", "exclamation-octagon");
     } finally {
       exportButton.disabled = this.#selectedCollections.size === 0;
       exportButton.loading = false;
@@ -852,7 +863,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       if (stats.errors && stats.errors.length > 0) {
         message += `, ${stats.errors.length} errors`;
         notify(message, "warning", "exclamation-triangle");
-        stats.errors.forEach(err => {
+        stats.errors.forEach(/** @param {{ doc_id: string, error: string }} err */ err => {
           this.#logger.error(`Import error for ${err.doc_id}: ${err.error}`);
         });
       } else {
@@ -865,7 +876,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     } catch (error) {
       this.#logger.error("Import failed: " + String(error));
-      notify(`Import failed: ${error.message}`, "danger", "exclamation-octagon");
+      notify(`Import failed: ${/** @type {Error} */ (error).message}`, "danger", "exclamation-octagon");
       fileInput.value = '';
     } finally {
       importButton.disabled = false;
@@ -929,7 +940,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     newCollectionButton.loading = true;
 
     try {
-      const result = await this.#client.createCollection(
+      const result = await (/** @type {any} */ (this.#client)).createCollection(
         newCollectionId,
         newCollectionName || newCollectionId
       );
@@ -941,7 +952,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       }
     } catch (error) {
       this.#logger.error("Failed to create collection: " + String(error));
-      notify(`Failed to create collection: ${error.message || String(error)}`, "danger", "exclamation-octagon");
+      notify(`Failed to create collection: ${/** @type {Error} */ (error).message || String(error)}`, "danger", "exclamation-octagon");
     } finally {
       newCollectionButton.disabled = false;
       newCollectionButton.loading = false;
@@ -961,12 +972,12 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     let confirmMessage;
     if (collectionIds.length === 1) {
-      const collectionName = getCollectionName(collectionIds[0], state.collections);
+      const collectionName = getCollectionName(collectionIds[0], state.collections || []);
       confirmMessage =
         `Do you really want to delete collection '${collectionName}' and its content?\n\n` +
         `This will remove the collection and mark all files that are only in this collection as deleted.`;
     } else {
-      const collectionNames = collectionIds.map(id => getCollectionName(id, state.collections)).join(', ');
+      const collectionNames = collectionIds.map(id => getCollectionName(id, state.collections || [])).join(', ');
       confirmMessage =
         `Do you really want to delete ${collectionIds.length} collections (${collectionNames}) and their content?\n\n` +
         `This will remove the collections and mark all files that are only in these collections as deleted.`;
@@ -1021,14 +1032,14 @@ class FileSelectionDrawerPlugin extends Plugin {
           );
         } catch (error) {
           this.#logger.error(`Failed to delete collection '${collectionId}': ${error}`);
-          errors.push({ collectionId, error: error.message });
+          errors.push({ collectionId, error: /** @type {Error} */ (error).message });
         }
       }
 
       if (errors.length === 0) {
         let message;
         if (collectionIds.length === 1) {
-          const collectionName = getCollectionName(collectionIds[0], state.collections);
+          const collectionName = getCollectionName(collectionIds[0], state.collections || []);
           message = `Collection '${collectionName}' deleted successfully.`;
         } else {
           message = `${collectionIds.length} collections deleted successfully.`;
@@ -1039,7 +1050,7 @@ class FileSelectionDrawerPlugin extends Plugin {
         notify(message, "success", "check-circle");
       } else if (errors.length < collectionIds.length) {
         const successCount = collectionIds.length - errors.length;
-        const errorCollections = errors.map(e => getCollectionName(e.collectionId, state.collections)).join(', ');
+        const errorCollections = errors.map(e => getCollectionName(e.collectionId, state.collections || [])).join(', ');
         notify(
           `${successCount} collections deleted, but ${errors.length} failed: ${errorCollections}`,
           "warning",
@@ -1056,7 +1067,7 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     } catch (error) {
       this.#logger.error("Delete failed: " + String(error));
-      notify(`Delete failed: ${error.message}`, "danger", "exclamation-octagon");
+      notify(`Delete failed: ${/** @type {Error} */ (error).message}`, "danger", "exclamation-octagon");
     } finally {
       deleteButton.disabled = this.#selectedCollections.size === 0;
       deleteButton.loading = false;

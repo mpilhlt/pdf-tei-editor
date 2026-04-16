@@ -80,15 +80,15 @@ class FileImporter:
                 a directory named 'tei' (platform-independent).
                 Examples:
                   - '/tei/' - files in 'tei' directory (default behavior)
-                  - r'\.gold\.' - files with '.gold.' in name (e.g., 'xyz.gold.tei.xml')
+                  - r'\\.gold\\.' - files with '.gold.' in name (e.g., 'xyz.gold.tei.xml')
                   - '_gold_' - files with '_gold_' in name
             version_pattern: Regular expression pattern to detect and strip version markers
                 from filenames for matching purposes. If matched in filename, the pattern
                 is stripped before matching with PDF files.
                 Examples:
-                  - r'\.v\d+\.' - matches '.v1.', '.v2.', etc. (default)
-                  - r'\.version\d+\.' - matches '.version1.', '.version2.', etc.
-                Default: r'\.v\d+\.' (matches .v1., .v2., etc.)
+                  - r'\\.v\\d+\\.' - matches '.v1.', '.v2.', etc. (default)
+                  - r'\\.version\\d+\\.' - matches '.version1.', '.version2.', etc.
+                Default: r'\\.v\\d+\\.' (matches .v1., .v2., etc.)
         """
         self.db = db
         self.storage = storage

@@ -74,14 +74,12 @@ export class NavXmlEditor extends XMLEditor {
       return
     }
     
-    // If no parent path is set, we can still update the selected node but skip xpath navigation
+    // If no parent path is set, no normative xpath is active — skip state propagation
     if (!this.parentPath) {
-      // No parent path set, skip xpath navigation but allow selection update
-      // Just update the selected node without xpath navigation
       const range = ranges[0]
       if (range.node && range.node !== this.selectedNode) {
         this.selectedNode = range.node
-        this.selectedXpath = this.getXPathForNode(range.node)
+        this.selectedXpath = null
       }
       return
     }
@@ -97,24 +95,50 @@ export class NavXmlEditor extends XMLEditor {
       return;
     }
 
-    // we'll "bubble up" to the parent path by comparing tagnames (cheating)
+    // Bubble up from the cursor position until we find an ancestor whose local tag name
+    // matches the leaf element of the normative parentPath (e.g. "bibl" for "//tei:listBibl/tei:bibl")
     const parentTagName = parseXPath(this.parentPath).tagName.toLowerCase()
+    const originalNode = selectedNode;
     while (selectedNode) {
       if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
       selectedNode = selectedNode.parentNode
     }
+    console.log(`DEBUG handeSelectionChange: clicked tag="${originalNode?.tagName}", bubbled to="${selectedNode?.tagName}", parentTagName="${parentTagName}"`);
 
-    // the xpath of the current cursor position
-    const newCursorXpath = selectedNode && this.getXPathForNode(selectedNode)
-
-    // do nothing if we cannot find a matching parent, or the parent is the same as before
-    if (!selectedNode || this.selectedNode === selectedNode || newCursorXpath === this.selectedXpath) {
+    if (!selectedNode) {
+      console.log(`DEBUG handeSelectionChange: no matching ancestor found, ignoring`);
+      return;
+    }
+    if (this.selectedNode === selectedNode) {
+      console.log(`DEBUG handeSelectionChange: same node as before (this.selectedNode === selectedNode), ignoring. currentIndex=${this.currentIndex}`);
       return;
     }
 
-    // remember new (parent) node
+    // Find the 1-based index of the bubbled-up node among all nodes matching parentPath.
+    // This gives us `parentPath[index]` — the canonical normative xpath for state.
+    const xmlTree = this.getXmlTree();
+    const snapshot = xmlTree.evaluate(
+      this.parentPath, xmlTree, this.namespaceResolver,
+      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
+    );
+    console.log(`DEBUG handeSelectionChange: snapshot has ${snapshot.snapshotLength} nodes for parentPath="${this.parentPath}"`);
+    let nodeIndex = -1;
+    for (let i = 0; i < snapshot.snapshotLength; i++) {
+      if (snapshot.snapshotItem(i) === selectedNode) {
+        nodeIndex = i + 1; // 1-based
+        break;
+      }
+    }
+
+    if (nodeIndex < 0) {
+      console.log(`DEBUG handeSelectionChange: bubbled node not found in snapshot, ignoring`);
+      return;
+    }
+
+    console.log(`DEBUG handeSelectionChange: setting currentIndex=${nodeIndex}, selectedXpath="${this.parentPath}[${nodeIndex}]"`);
+    this.currentIndex = nodeIndex;
     this.selectedNode = selectedNode;
-    this.selectedXpath = newCursorXpath
+    this.selectedXpath = `${this.parentPath}[${nodeIndex}]`;
   }
 
   /**
@@ -143,6 +167,8 @@ export class NavXmlEditor extends XMLEditor {
       throw new Error(`Index out of bounds: ${index} of ${size} items`);
     }
     this.currentIndex = index;
+    console.log(`DEBUG selectByIndex: index=${index}, selectedNode reset to null`);
+    this.selectedNode = null; // reset so the next handeSelectionChange doesn't skip as "same node"
 
     const newXpath = `${this.parentPath}[${this.currentIndex}]`
 

@@ -77,11 +77,12 @@ class GrobidPlugin(Plugin):
         # todo: create auto-discover reusable utility func
         tei_wizard = context.get_dependency("tei-wizard")
         if isinstance(tei_wizard, TeiWizardPlugin):
-            enhancement_file = Path(__file__).parent / "enhancements" / "split-bibl.js"
-            if enhancement_file.exists():
-                tei_wizard.register_enhancement(enhancement_file, self.metadata["id"])
-            else:
-                logger.warning(f"Enhancement file not found: {enhancement_file}")
+            for enhancement_filename in ["split-bibl.js", "segment-footnotes.js", "desegment-footnotes.js"]:
+                enhancement_file = Path(__file__).parent / "enhancements" / enhancement_filename
+                if enhancement_file.exists():
+                    tei_wizard.register_enhancement(enhancement_file, self.metadata["id"])
+                else:
+                    logger.warning(f"Enhancement file not found: {enhancement_file}")
         else:
             logger.debug("tei-wizard dependency not available")
 

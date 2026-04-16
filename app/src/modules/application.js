@@ -49,6 +49,13 @@ export class Application {
   /** @type {boolean} */
   #isUpdatingState = false;
 
+  /**
+   * State changes explicitly scheduled via scheduleStateChange() to run after the
+   * current propagation cycle completes. Each entry is { changes, resolve, reject }.
+   * @type {Array<{changes: Partial<ApplicationState>, resolve: (s: ApplicationState)=>void, reject: (e: Error)=>void}>}
+   */
+  #scheduledStateChanges = [];
+
   //
   // Application bootstrapping methods
   //
@@ -163,9 +170,10 @@ export class Application {
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
   async updateState(changes = {}) {
-    // Prevent nested state changes during plugin notification
+    // Prevent accidental re-entrant state changes during plugin notification.
+    // If you need to dispatch after async work triggered by onStateUpdate, use scheduleStateChange().
     if (this.#isUpdatingState) {
-      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators. Use scheduleStateChange() to dispatch after async work.');
     }
 
     // Use current state as base for changes
@@ -223,9 +231,42 @@ export class Application {
       
       return newState;
     } finally {
-      // Always release the lock
       this.#isUpdatingState = false;
+      this.#flushScheduledStateChanges();
     }
+  }
+
+  /**
+   * Schedule a state change to run after the current propagation cycle completes.
+   *
+   * Use this only when a plugin needs to dispatch state changes as a result of async
+   * work that was triggered by onStateUpdate (e.g. an API call whose result affects
+   * state). Do NOT use it to work around the observer-only rule for synchronous work —
+   * synchronous onStateUpdate handlers must remain pure observers.
+   *
+   * @param {Partial<ApplicationState>} changes
+   * @returns {Promise<ApplicationState>}
+   */
+  scheduleStateChange(changes) {
+    if (!this.#isUpdatingState) {
+      return this.updateState(changes);
+    }
+    return new Promise((resolve, reject) => {
+      this.#scheduledStateChanges.push({ changes, resolve, reject });
+    });
+  }
+
+  /**
+   * Flush state changes that were explicitly scheduled via scheduleStateChange().
+   * Merges all pending changes into one update to avoid chained re-renders.
+   */
+  #flushScheduledStateChanges() {
+    if (this.#scheduledStateChanges.length === 0) return;
+    const pending = this.#scheduledStateChanges.splice(0);
+    const merged = Object.assign({}, ...pending.map(p => p.changes));
+    this.updateState(merged)
+      .then(state => pending.forEach(p => p.resolve(state)))
+      .catch(err => pending.forEach(p => p.reject(err)));
   }
 
   /**
@@ -234,9 +275,8 @@ export class Application {
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
   async updateStateExt(extChanges = {}) {
-    // Prevent nested state changes during plugin notification
     if (this.#isUpdatingState) {
-      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+      throw new Error('State changes are not allowed during state update propagation. Use scheduleStateChange() to dispatch after async work.');
     }
 
     // Use current state as base for changes
@@ -254,26 +294,28 @@ export class Application {
         this.#checkForStateChangeErrors(results);
       } finally {
         this.#isUpdatingState = false;
+        this.#flushScheduledStateChanges();
       }
       return currentState;
     }
-    
+
     this.#isUpdatingState = true;
     try {
       const results = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(results);
-      
+
       // Update current state after successful plugin notification
       this.#currentState = newState;
-      
+
       return newState;
     } finally {
       this.#isUpdatingState = false;
+      this.#flushScheduledStateChanges();
     }
   }
 
   /**
-   * Check plugin invocation results for state change errors and rethrow them
+   * Check plugin invocation results for errors and rethrow them.
    * @param {Array} results - Results from plugin manager invoke
    */
   #checkForStateChangeErrors(results) {

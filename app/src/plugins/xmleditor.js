@@ -354,12 +354,14 @@ class XmlEditorPlugin extends Plugin {
     });
 
     // selection => xpath state
+    // Use setTimeout so the dispatchStateChange never fires inside an active state-update
+    // propagation cycle (e.g. when selectByXpath triggers CodeMirror's synchronous update).
     this.#xmlEditor.on('selectionChanged', _data => {
-      this.#xmlEditor.whenReady().then(() => {
+      setTimeout(() => {
         if (this.state) {
           this.#onSelectionChange(this.state);
         }
-      });
+      }, 0);
       this.#updateCursorPosition();
     });
 
@@ -821,14 +823,22 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Called when the selection in the editor changes to update the cursor xpath
+   * Called when the selection in the editor changes to update the xpath state.
+   * Only dispatches when a normative parentPath is active (i.e. the user has
+   * selected a navigation path in the statusbar dropdown), so that random clicks
+   * without a selected xpath type do not overwrite state.
    * @param {ApplicationState} state
    */
   async #onSelectionChange(state) {
-    if (!(this.#xmlEditor.selectedXpath && state.xpath)) {
+    if (!this.#xmlEditor.parentPath) return;
+    const selectedXpath = this.#xmlEditor.selectedXpath;
+    if (!selectedXpath) {
       this.#logger.debug('Could not determine xpath of last selected node');
+      return;
     }
-    // todo: use isXPathsubset() and update state when cursor index changes
+    if (selectedXpath !== state.xpath) {
+      await this.dispatchStateChange({ xpath: selectedXpath });
+    }
   }
 
   /**
@@ -1003,13 +1013,17 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Called when the user clicks on the counter to enter the node index
+   * Called when the user clicks on the counter to enter the node index.
+   * Dispatches a state change so the counter, dropdown, and editor stay in sync.
    */
-  #onClickSelectionIndex() {
+  async #onClickSelectionIndex() {
     const index = prompt('Enter node index');
     if (!index) return;
+    const parsedIndex = parseInt(index, 10);
+    if (isNaN(parsedIndex) || !this.state?.xpath) return;
     try {
-      this.#xmlEditor.selectByIndex(parseInt(index));
+      const { pathBeforePredicates, nonIndexPredicates } = parseXPath(this.state.xpath);
+      await this.dispatchStateChange({ xpath: `${pathBeforePredicates}${nonIndexPredicates}[${parsedIndex}]` });
     } catch (error) {
       this.#logger.warn('Failed to select by index: ' + String(error));
     }

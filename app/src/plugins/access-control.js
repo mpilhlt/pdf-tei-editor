@@ -87,7 +87,6 @@ class AccessControlPlugin extends Plugin {
   /** @type {string | null} */
   #xmlCache = null
 
-  #isUpdatingState = false
 
   /**
    * @param {ApplicationState} _state
@@ -160,18 +159,14 @@ class AccessControlPlugin extends Plugin {
 
     const shouldBeReadOnly = !this.canEditDocument(state.user)
 
-    if (shouldBeReadOnly && !state.editorReadOnly && !this.#isUpdatingState) {
+    if (shouldBeReadOnly && !state.editorReadOnly) {
       this.getDependency('logger').debug(`Setting editor read-only based on access control`)
-      this.#isUpdatingState = true
-      setTimeout(async () => {
-        try {
-          if (this.state && !this.state.editorReadOnly) {
-            await this.dispatchStateChange({ editorReadOnly: true })
-          }
-        } finally {
-          this.#isUpdatingState = false
-        }
-      }, 0)
+      // scheduleStateChange() defers the dispatch until after the current propagation
+      // cycle completes, which is required here because we're inside onStateUpdate and
+      // the read-only decision depends on async permission data fetched above.
+      this.scheduleStateChange({ editorReadOnly: true }).catch(err =>
+        this.getDependency('logger').error(`Failed to set editorReadOnly: ${err}`)
+      )
     }
 
     this.#updateReadOnlyContext(state.editorReadOnly, shouldBeReadOnly)

@@ -604,12 +604,15 @@ describe('Application', () => {
         name: 'error-plugin',
         install: () => { throw new Error('Installation failed'); }
       };
-      
+
       application.registerPlugins([errorPlugin]);
-      
+
+      const originalConsoleError = console.error;
+      console.error = () => {};
       // Should not throw - errors are handled by PluginManager
       const results = await application.installPlugins(mockState);
-      
+      console.error = originalConsoleError;
+
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].status, 'rejected');
       assert(results[0].reason instanceof Error); // Error preserved in reason
@@ -620,12 +623,15 @@ describe('Application', () => {
         name: 'error-plugin',
         shutdown: () => { throw new Error('Shutdown failed'); }
       };
-      
+
       application.registerPlugins([errorPlugin]);
-      
+
+      const originalConsoleError = console.error;
+      console.error = () => {};
       // Should not throw
       const results = await application.shutdown();
-      
+      console.error = originalConsoleError;
+
       assert.strictEqual(Array.isArray(results), true);
     });
   });

@@ -428,6 +428,10 @@ class TestExample(unittest.TestCase):
       console.log('Skipping git integration test (no git available)');
       return;
     }
+    if (process.platform === 'win32') {
+      console.log('Skipping git integration test (not supported on Windows)');
+      return;
+    }
 
     // Make a small change to a source file
     const sourceFile = join(projectRoot, 'app', 'src', 'modules', 'application.js');
