@@ -202,7 +202,7 @@ function insertBiblTags(str, startNumber) {
   //   - followed by whitespace or an opening XML tag (<)
   // This covers numbers at the start of serialized XML content and numbers that follow
   // self-closing elements such as <lb/>, e.g. "\n123<lb/>" or "> 5 <lb/>".
-  const anyNumber = /(?:^|(?<=[\s>]))(\d+)(?=[\s<])/g;
+  const anyNumber = /(?:^|(?<=[\s>\[.]))(\d+)(?=[\s<\].])/g;
 
   let result = str;
   let offset = 0;
