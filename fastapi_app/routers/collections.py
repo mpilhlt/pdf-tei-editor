@@ -19,7 +19,8 @@ from ..lib.utils.collection_utils import (
     find_collection,
     remove_collection,
     set_collection_property,
-    grant_user_collection_access
+    grant_user_collection_access,
+    can_delete_collection
 )
 from ..lib.core.dependencies import get_current_user, get_file_repository
 from ..lib.repository.file_repository import FileRepository
@@ -35,6 +36,7 @@ class Collection(BaseModel):
     id: str = Field(..., description="Unique collection identifier")
     name: str = Field(..., description="Display name for the collection")
     description: Optional[str] = Field(default="", description="Collection description")
+    owner: Optional[str] = Field(default=None, description="Username of the collection owner")
 
 
 class CollectionFileItem(BaseModel):
@@ -121,7 +123,8 @@ def list_all_collections(
                 Collection(
                     id=col.get('id', ''),
                     name=col.get('name', col.get('id', '')),
-                    description=col.get('description', '')
+                    description=col.get('description', ''),
+                    owner=col.get('owner')
                 )
                 for col in all_collections # type: ignore
                 if col.get('id') in accessible_collection_ids
@@ -132,7 +135,8 @@ def list_all_collections(
                 Collection(
                     id=col.get('id', ''),
                     name=col.get('name', col.get('id', '')),
-                    description=col.get('description', '')
+                    description=col.get('description', ''),
+                    owner=col.get('owner')
                 )
                 for col in all_collections # type: ignore
             ]
@@ -179,7 +183,8 @@ def get_collection(
         return Collection(
             id=collection.get('id', ''),
             name=collection.get('name', collection.get('id', '')),
-            description=collection.get('description', '')
+            description=collection.get('description', ''),
+            owner=collection.get('owner')
         )
     except HTTPException:
         raise
@@ -221,7 +226,8 @@ def create_collection_rest(
             db_dir=settings.db_dir,
             collection_id=collection.id,
             name=collection.name,
-            description=collection.description or ""
+            description=collection.description or "",
+            owner=current_user.get('username') or None
         )
 
         if success:
@@ -383,7 +389,7 @@ def list_collection_files(
 @router.delete("/{collection_id}", response_model=CollectionDeleteResponse)
 def delete_collection(
     collection_id: str,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     Delete a collection and clean up file metadata.
@@ -400,11 +406,25 @@ def delete_collection(
         CollectionDeleteResponse with deletion statistics
 
     Raises:
-        HTTPException: 404 if collection not found
+        HTTPException: 403 if user lacks permission, 404 if collection not found
     """
     settings = get_settings()
 
     try:
+        all_collections = get_collections_with_details(settings.db_dir)
+        if all_collections is None:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        collection = find_collection(collection_id, all_collections)
+        if not collection:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        if not can_delete_collection(current_user, collection):
+            raise HTTPException(
+                status_code=403,
+                detail="Only the collection owner, reviewers, or admins can delete this collection."
+            )
+
         success, message, stats = remove_collection(settings.db_dir, collection_id)
 
         if success:

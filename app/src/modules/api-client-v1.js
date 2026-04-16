@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-03-20T09:44:04.602Z
+ * Generated from OpenAPI schema at 2026-04-16T08:50:48.157Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -93,6 +93,7 @@
  * @property {string} id - Unique collection identifier
  * @property {string} name - Display name for the collection
  * @property {string=} description - Collection description
+ * @property {string=} owner - Username of the collection owner
  */
 
 /**
@@ -771,7 +772,7 @@ export class ApiClientV1 {
    * Returns:
    * CollectionDeleteResponse with deletion statistics
    * Raises:
-   * HTTPException: 404 if collection not found
+   * HTTPException: 403 if user lacks permission, 404 if collection not found
    *
    * @param {string} collection_id
    * @returns {Promise<CollectionDeleteResponse>}

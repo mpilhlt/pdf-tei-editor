@@ -41,7 +41,7 @@
  *   version: number|null,
  *   is_gold_standard: boolean,
  *   is_locked: boolean,
- *   access_control: object|null,
+ *   metadata?: { access_control: AccessControl | null },
  *   created_by: string|null
  * }} Artifact
  */
@@ -64,11 +64,7 @@
 
 /**
  * Lookup item for index
- * @typedef {object} LookupItem
- * @property {"source" | "artifact"} type - Type of item
- * @property {FileItem | Artifact} item - The file or artifact item
- * @property {DocumentItem} file - Parent document
- * @property {string} label - Display label
+ * @typedef {{ type: 'source', item: FileItem, file: DocumentItem, label: string } | { type: 'artifact', item: Artifact, file: DocumentItem, label: string }} LookupItem
  */
 
 // Global lookup index for efficient ID-based queries

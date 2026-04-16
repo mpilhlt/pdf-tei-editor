@@ -97,8 +97,7 @@ export function getUserRoles(user) {
  * @returns {boolean}
  */
 export function userHasAnyRole(user) {
-  // @ts-ignore
-  return user?.roles?.length > 0
+  return (user?.roles?.length ?? 0) > 0
 }
 
 /**

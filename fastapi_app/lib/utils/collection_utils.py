@@ -100,7 +100,49 @@ def validate_collection(collection_id: str, db_dir: Path) -> bool:
         return False
 
 
-def add_collection(db_dir: Path, collection_id: str, name: str, description: str = "") -> tuple[bool, str]:
+def get_collection_owner(collection: Dict[str, Any]) -> Optional[str]:
+    """Returns the owner username of a collection, or None if unowned.
+
+    Args:
+        collection: Collection dictionary
+
+    Returns:
+        Owner username string, or None
+    """
+    return collection.get('owner') or None
+
+
+def is_collection_owner(user: Dict[str, Any], collection: Dict[str, Any]) -> bool:
+    """Checks if a user is the owner of a collection.
+
+    Args:
+        user: User dictionary with 'username' key
+        collection: Collection dictionary
+
+    Returns:
+        True if the user's username matches the collection owner
+    """
+    owner = get_collection_owner(collection)
+    return bool(owner and user.get('username') == owner)
+
+
+def can_delete_collection(user: Dict[str, Any], collection: Dict[str, Any]) -> bool:
+    """Checks if a user is allowed to delete a collection.
+
+    Deletion is allowed for admins and the collection owner.
+
+    Args:
+        user: User dictionary
+        collection: Collection dictionary
+
+    Returns:
+        True if the user may delete the collection
+    """
+    from fastapi_app.lib.permissions.acl_utils import user_is_admin
+    return user_is_admin(user) or is_collection_owner(user, collection)
+
+
+def add_collection(db_dir: Path, collection_id: str, name: str, description: str = "", owner: Optional[str] = None) -> tuple[bool, str]:
     """Adds a new collection to the collections.json file.
 
     Args:
@@ -108,6 +150,7 @@ def add_collection(db_dir: Path, collection_id: str, name: str, description: str
         collection_id: The collection ID
         name: The collection name
         description: The collection description (optional)
+        owner: Username of the collection owner (optional)
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -122,7 +165,8 @@ def add_collection(db_dir: Path, collection_id: str, name: str, description: str
     new_collection = {
         "id": collection_id,
         "name": name,
-        "description": description
+        "description": description,
+        "owner": owner
     }
     collections_data.append(new_collection)
 
