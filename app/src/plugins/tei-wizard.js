@@ -68,7 +68,7 @@ class TeiWizardPlugin extends Plugin {
     const state = this.state
     const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator'])
     const isReviewer = userHasRole(state.user, ['admin', 'reviewer'])
-    this.#teiWizardBtn.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
+    this.#teiWizardBtn.disabled = !state.xml || state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
   }
 
   async #loadEnhancements() {
@@ -121,6 +121,7 @@ class TeiWizardPlugin extends Plugin {
   }
 
   async #runTeiWizard() {
+    if (this.state?.editorReadOnly) return
     let teiDoc = this.#xmlEditorApi.getXmlTree()
     if (!teiDoc) {
       console.error('TEI document not available.')
