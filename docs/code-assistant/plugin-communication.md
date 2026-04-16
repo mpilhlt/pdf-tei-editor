@@ -46,8 +46,20 @@ get preferences() {
 ```
 
 **Rules:**
-- Never call `dispatchStateChange` inside `onStateUpdate` — creates infinite loops.
-- Only call it from event handlers or async operations (API responses, timers).
+
+- `onStateUpdate` handlers are **observers only** — calling `dispatchStateChange` from inside one throws an error because state propagation is locked during notification.
+- Call `dispatchStateChange` from event handlers, UI callbacks, or top-level async operations.
+- When `onStateUpdate` triggers async work (e.g. an API call) whose result must be written back to state, use `scheduleStateChange` instead:
+
+```javascript
+async onXmlChange(newXml) {
+  const permissions = await this.fetchPermissions(newXml);
+  // scheduleStateChange defers the dispatch until propagation is fully done
+  await this.scheduleStateChange({ editorReadOnly: !permissions.canEdit });
+}
+```
+
+`scheduleStateChange` is the only legitimate way to write state as a consequence of `onStateUpdate`. It is not a general escape hatch — synchronous handlers must remain pure observers.
 
 ---
 

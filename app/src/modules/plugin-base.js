@@ -172,7 +172,9 @@ export class Plugin {
   }
 
   /**
-   * Dispatch state changes through the plugin context
+   * Dispatch state changes through the plugin context.
+   * Must NOT be called from within an onStateUpdate handler. Use scheduleStateChange()
+   * when dispatching is needed after async work triggered by onStateUpdate.
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
@@ -181,6 +183,22 @@ export class Plugin {
       throw new Error("State hasn't been initialized")
     }
     const newState = await this.context.updateState(changes);
+    this.#state = newState;
+    return newState;
+  }
+
+  /**
+   * Schedule a state change to run after the current propagation cycle completes.
+   * Use this when async work triggered by onStateUpdate produces a result that must
+   * be reflected in state (e.g. an API call that determines editorReadOnly).
+   * @param {Partial<ApplicationState>} changes
+   * @returns {Promise<ApplicationState>}
+   */
+  async scheduleStateChange(changes) {
+    if (!this.#state) {
+      throw new Error("State hasn't been initialized")
+    }
+    const newState = await this.context.scheduleStateChange(changes);
     this.#state = newState;
     return newState;
   }
