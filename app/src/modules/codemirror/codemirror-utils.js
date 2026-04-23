@@ -20,17 +20,23 @@ import { EditorView, ViewPlugin } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 
 /**
- * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
- * parsed by DOMParser by traversing both trees recursively and storing references to each other in 
- * two Maps. Enhanced to handle XML processing instructions and other non-element nodes.
+ * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM
+ * elements parsed by DOMParser by traversing both trees in lockstep and storing cross-references
+ * in two Maps. Processing instructions, comments, and text nodes between elements are skipped
+ * transparently on both sides.
+ *
+ * Algorithm: walks both trees with a pair of sibling cursors; at each element pair it validates
+ * the tag names match and recurses into their first element child. Per-element memory is O(1) —
+ * no intermediate arrays of children are materialised.
  *
  * @param {EditorView} view The CodeMirror EditorView instance.
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
  * @param {Element|Document} domNode The (root) DOM element parsed by DOMParser.
- * @throws {Error} If the tags of the syntax tree node and the DOM node do not match.
- * @returns {{syntaxToDom: Map<number, Node>, domToSyntax: Map<Node, number> }} An object containing two WeakMaps: syntaxToDom and domToSyntax.
- *                  - syntaxToDom: Maps the position of syntax tree nodes to DOM nodes.
- *                  - domToSyntax: Maps DOM nodes to syntax tree nodes' positions.
+ * @throws {Error} If the root nodes are not Document/DOCUMENT_NODE, if a root element cannot be
+ *   found on either side, if tag names mismatch, or if the two trees have a different number of
+ *   element children at any level.
+ * @returns {{syntaxToDom: Map<number, Node>, domToSyntax: Map<Node, number> }} Two Maps linking
+ *   syntax tree node positions to DOM nodes and vice versa.
  */
 export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
   /** @type {Map<number, Node>} */
@@ -40,153 +46,112 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
 
   /**
    * @param {SyntaxNode} node
+   * @returns {string}
    */
   const getText = node => view.state.doc.sliceString(node.from, node.to);
 
   /**
-   * Helper to find the first element node in a tree
-   * @param {SyntaxNode|Node} node Starting node
-   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
-   * @returns {SyntaxNode|Element|null} First element node found or null
+   * Advance along a syntax-node sibling chain until the first Element is found.
+   * @param {SyntaxNode | null} node
+   * @returns {SyntaxNode | null}
    */
-  function findFirstElement(node, isDOM = false) {
+  function findFirstSyntaxElement(node) {
     while (node) {
-      if (isDOM) {
-        /** @type {Node} */
-        const domNode = /** @type {Node} */ (node);
-        if (domNode.nodeType === Node.ELEMENT_NODE) return /** @type {Element} */ (domNode);
-      } else {
-        /** @type {SyntaxNode} */
-        const syntaxNode = /** @type {SyntaxNode} */ (node);
-        if (syntaxNode.name === "Element") return syntaxNode;
-      }
-      const nextNode = node.nextSibling;
-      if (!nextNode) break;
-      node = nextNode;
+      if (node.name === "Element") return node;
+      node = node.nextSibling;
     }
     return null;
   }
 
   /**
-   * Collects all element children from a parent node
-   * @param {SyntaxNode|Node} parent Parent node
-   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
-   * @returns {Array<SyntaxNode|Element>} Array of element nodes
+   * Advance along a DOM sibling chain until the first Element is found.
+   * @param {Node | null} node
+   * @returns {Element | null}
    */
-  function collectElementChildren(parent, isDOM = false) {
-    const elements = [];
-    let child = parent.firstChild;
-    
-    while (child) {
-      const element = findFirstElement(child, isDOM);
-      if (element) {
-        elements.push(element);
-        child = element.nextSibling;
-      } else {
-        break;
-      }
+  function findFirstDomElement(node) {
+    while (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) return /** @type {Element} */ (node);
+      node = node.nextSibling;
     }
-    return elements;
+    return null;
   }
 
   /**
-   * @param {SyntaxNode} syntaxNode
-   * @param {Element} domNode
+   * Resolve the TagName syntax node under an Element. Lezer's XML grammar shapes Elements as
+   * `Element -> (OpenTag | SelfClosingTag) ...`, where the start tag's children are `<`, TagName,
+   * attributes..., `>`. Returns the TagName node or null when the grammar shape is broken (e.g.
+   * during partial parsing of malformed input).
+   * @param {SyntaxNode} element
+   * @returns {SyntaxNode | null}
    */
-  function recursiveLink(syntaxNode, domNode) {
+  function resolveTagNameNode(element) {
+    const tag = element.firstChild?.firstChild?.nextSibling;
+    return tag && tag.name === "TagName" ? tag : null;
+  }
 
-    if (!syntaxNode || !domNode) {
-      throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
-    }
-
-    // Enhanced: Find the first element in each tree, handling processing instructions
-    const syntaxElement = /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode, false));
-    const domElement = /** @type {Element|null} */ (findFirstElement(domNode, true));
-
-    // If we couldn't find matching element nodes, return empty maps
-    if (!syntaxElement || !domElement) {
-      return {
-        syntaxToDom: new Map(),
-        domToSyntax: new Map()
-      };
-    }
-
-    // Check if the found elements are valid
-    if (!syntaxElement || syntaxElement.name !== "Element") {
-      throw new Error(`Unexpected node type: ${syntaxElement?.name}. Expected "Element".`);
-    }
-
-    // make sure we have a tag name child
-    let syntaxTagNode = syntaxElement.firstChild?.firstChild?.nextSibling;
-    if (!syntaxTagNode || syntaxTagNode.name !== "TagName") {
-      const text = getText(syntaxElement);
-      if (text === "<") {
-        // hack
-        syntaxTagNode = syntaxTagNode?.nextSibling
-      } else {
-        throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
-      }
-    }
-
+  /**
+   * Link one element pair and recurse into their element children using parallel sibling cursors.
+   * Side-effect only: writes into the outer syntaxToDom / domToSyntax maps.
+   * @param {SyntaxNode} syntaxElement
+   * @param {Element} domElement
+   */
+  function linkPair(syntaxElement, domElement) {
+    const syntaxTagNode = resolveTagNameNode(syntaxElement);
     if (!syntaxTagNode) {
-      throw new Error('Could not find TagName node after processing');
+      throw new Error(`Expected a TagName child node in syntax tree. Found: ${getText(syntaxElement)}`);
     }
     const syntaxTagName = getText(syntaxTagNode);
-    const domTagName = /** @type {Element} */ (domElement).tagName;
-
-    // Verify that the tag names match
+    const domTagName = domElement.tagName;
     if (syntaxTagName !== domTagName) {
       throw new Error(`Tag mismatch: Syntax tree has ${syntaxTagName}, DOM has ${domTagName}`);
     }
 
-    // Store references to each other - since the syntax tree is regenerated on each lookup,
-    // we need to store the unique positions of each node as reference
-    syntaxToDom.set(/** @type {SyntaxNode} */ (syntaxElement).from, domElement);
-    domToSyntax.set(domElement, /** @type {SyntaxNode} */ (syntaxElement).from);
+    // Store references. The syntax tree is regenerated on each lookup, so we key by position.
+    syntaxToDom.set(syntaxElement.from, domElement);
+    domToSyntax.set(domElement, syntaxElement.from);
 
-    // Enhanced: Use robust child collection and pairing
-    const syntaxChildren = collectElementChildren(syntaxElement, false);
-    const domChildren = collectElementChildren(domElement, true);
-
-    // Recursively link the children by pairs
-    const minChildren = Math.min(syntaxChildren.length, domChildren.length);
-    for (let i = 0; i < minChildren; i++) {
-      recursiveLink(/** @type {SyntaxNode} */ (syntaxChildren[i]), /** @type {Element} */ (domChildren[i]));
+    // Two-cursor walk: advance both sides element-by-element without building arrays.
+    let syntaxChild = findFirstSyntaxElement(syntaxElement.firstChild);
+    let domChild = findFirstDomElement(domElement.firstChild);
+    while (syntaxChild && domChild) {
+      linkPair(syntaxChild, domChild);
+      syntaxChild = findFirstSyntaxElement(syntaxChild.nextSibling);
+      domChild = findFirstDomElement(domChild.nextSibling);
     }
 
-    // Check for mismatched child counts
-    if (syntaxChildren.length > domChildren.length) {
-      const extraSyntax = syntaxChildren.slice(domChildren.length);
-      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.map(n => getText(/** @type {SyntaxNode} */ (n))).join(', ')}`);
+    // One side has more element children than the other.
+    if (syntaxChild && !domChild) {
+      const extras = [];
+      for (let n = syntaxChild; n; n = findFirstSyntaxElement(n.nextSibling)) {
+        extras.push(getText(n));
+      }
+      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extras.join(', ')}`);
     }
-    if (domChildren.length > syntaxChildren.length) {
-      const extraDOM = domChildren.slice(syntaxChildren.length);
-      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => /** @type {Element} */ (n).tagName).join(', ')}`);
+    if (domChild && !syntaxChild) {
+      const extras = [];
+      for (let n = domChild; n; n = findFirstDomElement(n.nextSibling)) {
+        extras.push(n.tagName);
+      }
+      throw new Error(`DOM tree has more child elements than the syntax tree: ${extras.join(', ')}`);
     }
-    return {
-      syntaxToDom,
-      domToSyntax
-    };
   }
 
   if (syntaxNode.name !== "Document" || domNode.nodeType !== Node.DOCUMENT_NODE) {
     throw new Error("Invalid arguments. The root syntax node must be the top Document node and the DOM node must be a document. Received: " +
       `syntaxNode: ${syntaxNode.name}, domNode: ${Object.keys(Node)[domNode.nodeType - 1]}`);
   }
-  
-  // Enhanced: Find root elements, skipping processing instructions and other non-element nodes
-  const syntaxRoot = syntaxNode.firstChild ? /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode.firstChild, false)) : null;
-  const domRoot = domNode.firstChild ? /** @type {Element|null} */ (findFirstElement(domNode.firstChild, true)) : null;
-  
+
+  // Locate the root Element on each side, skipping PIs, comments, and whitespace text nodes.
+  const syntaxRoot = findFirstSyntaxElement(syntaxNode.firstChild);
+  const domRoot = findFirstDomElement(domNode.firstChild);
+
   if (!syntaxRoot || !domRoot) {
     console.warn("Could not find root elements in one or both trees");
-    return {
-      syntaxToDom: new Map(),
-      domToSyntax: new Map()
-    };
+    return { syntaxToDom, domToSyntax };
   }
-  
-  return recursiveLink(syntaxRoot, domRoot);
+
+  linkPair(syntaxRoot, domRoot);
+  return { syntaxToDom, domToSyntax };
 }
 
 /**

@@ -1,565 +1,390 @@
 #!/usr/bin/env node
 
 /**
- * Test suite for XML Editor syntax tree <-> DOM synchronization algorithm
- * Uses Node.js built-in test runner (available in Node 18+)
+ * Test suite for XmlEditorDomSync — the class that encapsulates the DOM <->
+ * syntax tree synchronisation algorithm used by the XML editor.
+ *
+ * Uses a real CodeMirror EditorView (backed by jsdom) so the tests exercise the
+ * real `linkSyntaxTreeWithDOM` implementation, real DOMParser, and real Lezer
+ * syntax tree — no inlined algorithm copy.
+ *
+ * The key behaviours under test:
+ *   1. Successful sync populates the last-good tree and maps and marks the
+ *      instance as synced.
+ *   2. A malformed edit is reported via `status: 'malformed'` and preserves the
+ *      previous last-good tree and maps (so navigation does not break).
+ *   3. Recovery: when the content becomes well-formed again, sync returns
+ *      `status: 'wellFormed'` and updates the maps to reflect the new text.
+ *   4. An empty document returns `status: 'empty'` and clears state.
+ *   5. Processing-instruction handling: xml-stylesheet / xml-model PIs before the
+ *      root element do not break the sync and are reported via
+ *      `getProcessingInstructions()`.
  *
  * @testCovers app/src/modules/xml-editor-dom-sync.js
  */
 
-import { test, describe } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
 
-// Mock CodeMirror structures and imports since we're testing in Node.js
-const mockLezerCommon = {
-  // Mock SyntaxNode structure
-  createMockSyntaxNode: (name, from = 0, to = 10, children = []) => ({
-    name,
-    from,
-    to,
-    firstChild: children[0] || null,
-    nextSibling: null,
-    parent: null,
-    type: { name }
-  })
-};
-
-// Mock EditorView for testing
-const createMockView = (content) => ({
-  state: {
-    doc: {
-      sliceString: (from, to) => content.substring(from, to),
-      toString: () => content
-    }
-  }
-});
-
-// Setup JSDOM environment
-const dom = new JSDOM();
+// Set up jsdom globals BEFORE importing CodeMirror (it probes for `document`).
+const dom = new JSDOM('<!DOCTYPE html><html><body><div id="editor"></div></body></html>');
+dom.window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+dom.window.cancelAnimationFrame = (id) => clearTimeout(id);
 global.window = dom.window;
 global.document = dom.window.document;
 global.Node = dom.window.Node;
 global.DOMParser = dom.window.DOMParser;
+global.MutationObserver = dom.window.MutationObserver;
+global.requestAnimationFrame = dom.window.requestAnimationFrame;
+global.cancelAnimationFrame = dom.window.cancelAnimationFrame;
 
-// Import the function under test
-// Since we can't directly import ES modules in this test setup, we'll implement the core logic inline
-// In a real scenario, you'd set up proper ES module loading
+if (!global.window.getSelection) {
+  global.window.getSelection = () => ({
+    rangeCount: 0,
+    addRange() {},
+    removeAllRanges() {},
+    getRangeAt() { return { startContainer: null, startOffset: 0, endContainer: null, endOffset: 0 }; }
+  });
+}
+if (!global.document.getSelection) {
+  global.document.getSelection = global.window.getSelection;
+}
+if (!global.Range) global.Range = dom.window.Range;
+if (!global.StaticRange) global.StaticRange = dom.window.StaticRange;
+
+const { EditorState } = await import('@codemirror/state');
+const { EditorView } = await import('@codemirror/view');
+const { xml } = await import('@codemirror/lang-xml');
+const { ensureSyntaxTree } = await import('@codemirror/language');
+const { XmlEditorDomSync } = await import('../../../app/src/modules/xml-editor-dom-sync.js');
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /**
- * Simplified version of the linkSyntaxTreeWithDOM function for testing
- * This tests the core logic without CodeMirror dependencies
+ * Create a real EditorView containing the given XML.
+ * @param {string} doc
+ * @returns {EditorView}
  */
-function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
-  const syntaxToDom = new Map();
-  const domToSyntax = new Map();
-
-  const getText = node => view.state.doc.sliceString(node.from, node.to);
-
-  function findFirstElement(node, isDOM = false) {
-    while (node) {
-      if (isDOM) {
-        if (node.nodeType === Node.ELEMENT_NODE) return node;
-      } else {
-        if (node.name === "Element") return node;
-      }
-      node = node.nextSibling;
-    }
-    return null;
-  }
-
-  function collectElementChildren(parent, isDOM = false) {
-    const elements = [];
-    let child = parent.firstChild;
-    
-    while (child) {
-      const element = findFirstElement(child, isDOM);
-      if (element) {
-        elements.push(element);
-        child = element.nextSibling;
-      } else {
-        break;
-      }
-    }
-    return elements;
-  }
-
-  function recursiveLink(syntaxNode, domNode) {
-    if (!syntaxNode || !domNode) {
-      throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
-    }
-
-    const syntaxElement = findFirstElement(syntaxNode, false);
-    const domElement = findFirstElement(domNode, true);
-
-    if (!syntaxElement || !domElement) {
-      return { syntaxToDom: new Map(), domToSyntax: new Map() };
-    }
-
-    if (syntaxElement.name !== "Element") {
-      throw new Error(`Unexpected node type: ${syntaxElement.name}. Expected "Element".`);
-    }
-
-    // Mock tag name extraction for testing
-    const syntaxTagName = syntaxElement.tagName || 'root';
-    const domTagName = domElement.tagName;
-
-    if (syntaxTagName !== domTagName) {
-      throw new Error(`Tag mismatch: Syntax tree has ${syntaxTagName}, DOM has ${domTagName}`);
-    }
-
-    syntaxToDom.set(syntaxElement.from, domElement);
-    domToSyntax.set(domElement, syntaxElement.from);
-
-    const syntaxChildren = collectElementChildren(syntaxElement, false);
-    const domChildren = collectElementChildren(domElement, true);
-
-    const minChildren = Math.min(syntaxChildren.length, domChildren.length);
-    for (let i = 0; i < minChildren; i++) {
-      const childResult = recursiveLink(syntaxChildren[i], domChildren[i]);
-      for (const [key, value] of childResult.syntaxToDom) {
-        syntaxToDom.set(key, value);
-      }
-      for (const [key, value] of childResult.domToSyntax) {
-        domToSyntax.set(key, value);
-      }
-    }
-
-    if (syntaxChildren.length > domChildren.length) {
-      const extraSyntax = syntaxChildren.slice(domChildren.length);
-      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.length} extra`);
-    }
-    if (domChildren.length > syntaxChildren.length) {
-      const extraDOM = domChildren.slice(syntaxChildren.length);
-      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => n.tagName).join(', ')}`);
-    }
-
-    return { syntaxToDom, domToSyntax };
-  }
-
-  if (syntaxNode.name !== "Document" || domNode.nodeType !== Node.DOCUMENT_NODE) {
-    throw new Error("Invalid arguments. The root syntax node must be the top Document node and the DOM node must be a document.");
-  }
-  
-  const syntaxRoot = syntaxNode.firstChild ? findFirstElement(syntaxNode.firstChild, false) : null;
-  const domRoot = domNode.firstChild ? findFirstElement(domNode.firstChild, true) : null;
-  
-  if (!syntaxRoot || !domRoot) {
-    console.warn("Could not find root elements in one or both trees");
-    return { syntaxToDom: new Map(), domToSyntax: new Map() };
-  }
-  
-  return recursiveLink(syntaxRoot, domRoot);
+function createView(doc) {
+  const parent = document.getElementById('editor');
+  parent.innerHTML = '';
+  const state = EditorState.create({
+    doc,
+    extensions: [xml()]
+  });
+  return new EditorView({ state, parent });
 }
 
-describe('XML Syntax Tree <-> DOM Synchronization', () => {
-  
-  describe('Processing Instructions Handling', () => {
-    
-    test('should handle XML with processing instructions before root element', () => {
-      const xmlWithPI = `<?xml-stylesheet type="text/xsl" href="transform.xsl"?>
-<?custom-pi data="test"?>
-<root>
-    <child>content</child>
-</root>`;
+/**
+ * Force the Lezer syntax tree to be fully parsed so that
+ * `syntaxTree(view.state)` returns a finalised tree.
+ * @param {EditorView} view
+ */
+function forceParse(view) {
+  ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+}
 
-      const view = createMockView(xmlWithPI);
-      const domDoc = new DOMParser().parseFromString(xmlWithPI, "application/xml");
-      
-      // Create mock syntax tree that represents the parsed structure
-      const childSyntaxNode = {
-        name: "Element",
-        tagName: "child",
-        from: 120,
-        to: 140,
-        firstChild: null,
-        nextSibling: null
-      };
+/**
+ * Dispatch a change to the editor and force re-parse.
+ * @param {EditorView} view
+ * @param {{ from: number, to: number, insert: string }} change
+ */
+function applyChange(view, change) {
+  view.dispatch({ changes: change });
+  forceParse(view);
+}
 
-      const rootSyntaxNode = {
-        name: "Element", 
-        tagName: "root",
-        from: 100,
-        to: 150,
-        firstChild: childSyntaxNode,
-        nextSibling: null
-      };
+/**
+ * Silent logger used to keep test output clean when testing error paths.
+ */
+const silentLogger = {
+  debug() {},
+  warn() {},
+  error() {}
+};
 
-      const piNode1 = {
-        name: "ProcessingInstruction",
-        from: 0,
-        to: 40,
-        nextSibling: null
-      };
+/**
+ * Run `fn` with `console.warn` silenced. jsdom's XML parsererror format is not
+ * recognised by `parseXmlError`, which logs a `console.warn` on every malformed
+ * parse; that is expected and not a test failure — suppress it so the test
+ * output stays clean.
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withSilencedConsoleWarn(fn) {
+  const original = console.warn;
+  console.warn = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.warn = original;
+  }
+}
 
-      const piNode2 = {
-        name: "ProcessingInstruction", 
-        from: 41,
-        to: 95,
-        nextSibling: rootSyntaxNode
-      };
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
-      piNode1.nextSibling = piNode2;
+describe('XmlEditorDomSync', () => {
 
-      const documentSyntaxNode = {
-        name: "Document",
-        firstChild: piNode1,
-        nextSibling: null
-      };
+  describe('successful sync', () => {
 
-      // Test that synchronization works despite processing instructions
-      const result = linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc);
-      
-      assert.ok(result.syntaxToDom instanceof Map, 'Should return syntaxToDom Map');
-      assert.ok(result.domToSyntax instanceof Map, 'Should return domToSyntax Map');
-      
-      // Verify root element is found and linked
-      const domRoot = domDoc.documentElement;
-      assert.strictEqual(domRoot.tagName, 'root', 'DOM root should be found');
-      assert.ok(result.domToSyntax.has(domRoot), 'Root element should be in domToSyntax map');
+    it('parses and links a simple well-formed document', async () => {
+      const view = createView('<root><child>hello</child></root>');
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+      const result = await sync.sync(view);
+
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.status, 'wellFormed');
+      assert.strictEqual(sync.isSynced(), true);
+      assert.strictEqual(sync.getLastSyncError(), null);
+
+      const tree = sync.getXmlTree();
+      assert.ok(tree, 'xml tree should be available');
+      assert.strictEqual(tree.documentElement.tagName, 'root');
+
+      const s2d = sync.getSyntaxToDom();
+      const d2s = sync.getDomToSyntax();
+      assert.ok(s2d instanceof Map && s2d.size > 0, 'syntaxToDom populated');
+      assert.ok(d2s instanceof Map && d2s.size > 0, 'domToSyntax populated');
+      assert.ok(d2s.has(tree.documentElement), 'root element linked');
     });
 
-    test('should detect processing instructions in DOM', () => {
-      const xmlWithPI = `<?xml-stylesheet href="style.xsl"?>
-<?custom-instruction data="value"?>
-<root><child/></root>`;
+    it('populates editor content cache', async () => {
+      const text = '<root><a/></root>';
+      const view = createView(text);
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const domDoc = new DOMParser().parseFromString(xmlWithPI, "application/xml");
-      
-      const processingInstructions = [];
-      for (let i = 0; i < domDoc.childNodes.length; i++) {
-        const node = domDoc.childNodes[i];
-        if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
-          // @ts-ignore - node is a ProcessingInstruction when nodeType matches
-          const piNode = node;
-          processingInstructions.push({
-            target: piNode.target,
-            data: piNode.data,
-            position: i
-          });
-        }
-      }
+      await sync.sync(view);
 
-      assert.strictEqual(processingInstructions.length, 2, 'Should find 2 processing instructions');
-      assert.strictEqual(processingInstructions[0].target, 'xml-stylesheet', 'First PI should be stylesheet');
-      assert.strictEqual(processingInstructions[1].target, 'custom-instruction', 'Second PI should be custom instruction');
+      assert.strictEqual(sync.getEditorContent(), text);
     });
 
-    test('should handle mixed content (PIs, comments, elements)', () => {
-      const mixedXml = `<!-- A comment -->
-<?xml-stylesheet href="style.xsl"?>  
-<!-- Another comment -->
-<?another-pi?>
-<root>
-    <child>content</child>
-</root>`;
+    it('handles nested elements correctly', async () => {
+      const view = createView('<a><b><c><d/></c></b></a>');
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const domDoc = new DOMParser().parseFromString(mixedXml, "application/xml");
-      
-      let elementCount = 0;
-      let piCount = 0;
-      let commentCount = 0;
-      
-      for (let i = 0; i < domDoc.childNodes.length; i++) {
-        const node = domDoc.childNodes[i];
-        if (node.nodeType === Node.ELEMENT_NODE) elementCount++;
-        else if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) piCount++;
-        else if (node.nodeType === Node.COMMENT_NODE) commentCount++;
-      }
-      
-      assert.strictEqual(elementCount, 1, 'Should find exactly one root element');
-      assert.strictEqual(piCount, 2, 'Should find exactly two processing instructions');
-      assert.strictEqual(commentCount, 2, 'Should find exactly two comments');
-      
-      // Test that root element can still be found
-      const rootElement = domDoc.documentElement;
-      assert.strictEqual(rootElement.tagName, 'root', 'Should find root element despite mixed content');
-    });
+      const result = await sync.sync(view);
 
-    test('should handle real-world XML with xml-model processing instruction', () => {
-      const realWorldXml = `<?xml version="1.0" encoding="UTF-8"?>
-<?xml-model href="https://raw.githubusercontent.com/kermitt2/grobid/refs/heads/master/grobid-home/schemas/rng/Grobid.rng" 
-              type="application/xml" 
-              schematypens="http://relaxng.org/ns/structure/1.0"?>
-<TEI xmlns="http://www.tei-c.org/ns/1.0">
-    <teiHeader>
-        <fileDesc>
-            <titleStmt>
-                <title>Test Document</title>
-            </titleStmt>
-        </fileDesc>
-    </teiHeader>
-    <text>
-        <body>
-            <p>Content</p>
-        </body>
-    </text>
-</TEI>`;
-
-      const view = createMockView(realWorldXml);
-      const domDoc = new DOMParser().parseFromString(realWorldXml, "application/xml");
-      
-      // Verify parsing succeeded
-      assert.ok(!domDoc.querySelector("parsererror"), 'XML should parse without errors');
-      
-      // Count different node types
-      let elementCount = 0;
-      let piCount = 0;
-      let textNodes = 0;
-      
-      for (let i = 0; i < domDoc.childNodes.length; i++) {
-        const node = domDoc.childNodes[i];
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          elementCount++;
-        } else if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
-          piCount++;
-          // @ts-ignore - node is a ProcessingInstruction when nodeType matches
-          const piNode = node;
-          console.log(`Found PI: ${piNode.target} with data: ${piNode.data.substring(0, 50)}...`);
-        } else if (node.nodeType === Node.TEXT_NODE) {
-          textNodes++;
-        }
-      }
-      
-      // Should find the xml-model processing instruction (xml declaration is not counted as PI)
-      assert.strictEqual(piCount, 1, 'Should find exactly one processing instruction (xml-model)');
-      assert.strictEqual(elementCount, 1, 'Should find exactly one root element');
-      
-      // Verify root element is TEI
-      const rootElement = domDoc.documentElement;
-      assert.strictEqual(rootElement.tagName, 'TEI', 'Root element should be TEI');
-      assert.strictEqual(rootElement.namespaceURI, 'http://www.tei-c.org/ns/1.0', 'Should have correct namespace');
-      
-      // Test synchronization with mock syntax tree that matches the DOM structure
-      const pElement = {
-        name: "Element",
-        tagName: "p",
-        from: 540,
-        to: 550,
-        firstChild: null,
-        nextSibling: null
-      };
-
-      const bodyElement = {
-        name: "Element",
-        tagName: "body",
-        from: 520,
-        to: 560,
-        firstChild: pElement,
-        nextSibling: null
-      };
-
-      const textElement = {
-        name: "Element", 
-        tagName: "text",
-        from: 500,
-        to: 570,
-        firstChild: bodyElement,
-        nextSibling: null
-      };
-
-      const titleElement = {
-        name: "Element",
-        tagName: "title",
-        from: 300,
-        to: 315,
-        firstChild: null,
-        nextSibling: null
-      };
-
-      const titleStmtElement = {
-        name: "Element",
-        tagName: "titleStmt",
-        from: 280,
-        to: 320,
-        firstChild: titleElement,
-        nextSibling: null
-      };
-
-      const fileDescElement = {
-        name: "Element",
-        tagName: "fileDesc", 
-        from: 260,
-        to: 350,
-        firstChild: titleStmtElement,
-        nextSibling: null
-      };
-
-      const teiHeaderElement = {
-        name: "Element",
-        tagName: "teiHeader", 
-        from: 240,
-        to: 370,
-        firstChild: fileDescElement,
-        nextSibling: textElement
-      };
-
-      const teiRootElement = {
-        name: "Element",
-        tagName: "TEI",
-        from: 200,
-        to: 580,
-        firstChild: teiHeaderElement,
-        nextSibling: null
-      };
-
-      const piNode = {
-        name: "ProcessingInstruction",
-        from: 0,
-        to: 149,
-        nextSibling: teiRootElement
-      };
-
-      const documentSyntaxNode = {
-        name: "Document",
-        firstChild: piNode,
-        nextSibling: null
-      };
-
-      // Test that synchronization works despite processing instructions
-      const result = linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc);
-      
-      assert.ok(result.syntaxToDom instanceof Map, 'Should return syntaxToDom Map');
-      assert.ok(result.domToSyntax instanceof Map, 'Should return domToSyntax Map');
-      assert.ok(result.domToSyntax.has(rootElement), 'TEI root element should be in domToSyntax map');
+      assert.strictEqual(result.ok, true);
+      const tree = sync.getXmlTree();
+      // There are 4 elements (a/b/c/d) — each should be in the domToSyntax map.
+      assert.strictEqual(sync.getDomToSyntax().size, 4);
+      assert.strictEqual(tree.documentElement.tagName, 'a');
     });
   });
 
-  describe('Basic Synchronization', () => {
-    
-    test('should synchronize simple XML without processing instructions', () => {
-      const simpleXml = `<root><child>content</child></root>`;
-      
-      const view = createMockView(simpleXml);
-      const domDoc = new DOMParser().parseFromString(simpleXml, "application/xml");
-      
-      const childSyntaxNode = {
-        name: "Element",
-        tagName: "child", 
-        from: 6,
-        to: 26,
-        firstChild: null,
-        nextSibling: null
-      };
+  describe('malformed input preserves last-good tree', () => {
 
-      const rootSyntaxNode = {
-        name: "Element",
-        tagName: "root",
-        from: 0,
-        to: 33,
-        firstChild: childSyntaxNode,
-        nextSibling: null
-      };
+    it('reports malformed status without discarding previous tree', async () => {
+      await withSilencedConsoleWarn(async () => {
+        const view = createView('<root><child>hello</child></root>');
+        forceParse(view);
+        const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const documentSyntaxNode = {
-        name: "Document",
-        firstChild: rootSyntaxNode,
-        nextSibling: null
-      };
+        // First sync — valid document populates the last-good tree.
+        const firstResult = await sync.sync(view);
+        assert.strictEqual(firstResult.status, 'wellFormed');
+        const firstTree = sync.getXmlTree();
+        const firstMap = sync.getDomToSyntax();
+        assert.ok(firstTree);
+        assert.ok(firstMap);
 
-      const result = linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc);
-      
-      assert.ok(result.syntaxToDom.size > 0, 'Should create mappings');
-      assert.ok(result.domToSyntax.size > 0, 'Should create reverse mappings');
+        // Break the document by deleting the closing `>` of the opening tag.
+        // "<root><child>hello</child></root>" → "<root<child>hello</child></root>"
+        applyChange(view, { from: 5, to: 6, insert: '' });
+        const secondResult = await sync.sync(view);
+
+        assert.strictEqual(secondResult.ok, false);
+        assert.strictEqual(secondResult.status, 'malformed');
+        assert.ok(secondResult.diagnostic, 'diagnostic should be reported');
+        assert.strictEqual(typeof secondResult.diagnostic.message, 'string');
+        assert.strictEqual(sync.isSynced(), false);
+
+        // The last-good tree and maps MUST be preserved.
+        assert.strictEqual(
+          sync.getXmlTree(),
+          firstTree,
+          'last-good xml tree should be preserved after malformed edit'
+        );
+        assert.strictEqual(
+          sync.getDomToSyntax(),
+          firstMap,
+          'last-good domToSyntax map should be preserved after malformed edit'
+        );
+
+        const err = sync.getLastSyncError();
+        assert.ok(err, 'lastSyncError should be recorded');
+        assert.strictEqual(err.stage, 'parse');
+      });
     });
 
-    test('should throw error on tag mismatch', () => {
-      const xml = `<root></root>`;
-      
-      const view = createMockView(xml);
-      const domDoc = new DOMParser().parseFromString(xml, "application/xml");
-      
-      const rootSyntaxNode = {
-        name: "Element",
-        tagName: "different", // Intentional mismatch
-        from: 0,
-        to: 13,
-        firstChild: null,
-        nextSibling: null
-      };
+    it('recovers when the document becomes well-formed again', async () => {
+      await withSilencedConsoleWarn(async () => {
+        const view = createView('<root><child>hello</child></root>');
+        forceParse(view);
+        const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const documentSyntaxNode = {
-        name: "Document", 
-        firstChild: rootSyntaxNode,
-        nextSibling: null
-      };
+        await sync.sync(view);
 
-      assert.throws(
-        () => linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc),
-        /Tag mismatch/,
-        'Should throw error on tag name mismatch'
-      );
+        // Break it.
+        applyChange(view, { from: 5, to: 6, insert: '' });
+        const malformed = await sync.sync(view);
+        assert.strictEqual(malformed.status, 'malformed');
+        assert.strictEqual(sync.isSynced(), false);
+
+        // Re-insert the `>` to repair the document.
+        applyChange(view, { from: 5, to: 5, insert: '>' });
+        const recovered = await sync.sync(view);
+
+        assert.strictEqual(recovered.ok, true);
+        assert.strictEqual(recovered.status, 'wellFormed');
+        assert.strictEqual(sync.isSynced(), true);
+        assert.strictEqual(sync.getLastSyncError(), null);
+        const tree = sync.getXmlTree();
+        assert.ok(tree);
+        assert.strictEqual(tree.documentElement.tagName, 'root');
+      });
+    });
+
+    it('keeps maps available for navigation queries while malformed', async () => {
+      await withSilencedConsoleWarn(async () => {
+        const view = createView('<root><child>hello</child></root>');
+        forceParse(view);
+        const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+        await sync.sync(view);
+        const preserved = sync.getXmlTree();
+
+        // Break the document.
+        applyChange(view, { from: 5, to: 6, insert: '' });
+        await sync.sync(view);
+
+        // Navigation-style queries still work off the last-good tree.
+        assert.ok(sync.getXmlTree() === preserved);
+        const rootEl = sync.getXmlTree().documentElement;
+        assert.ok(sync.getDomToSyntax().has(rootEl));
+      });
     });
   });
 
-  describe('Edge Cases', () => {
-    
-    test('should handle empty documents gracefully', () => {
-      const emptyXml = `<root></root>`;
-      
-      const view = createMockView(emptyXml);
-      const domDoc = new DOMParser().parseFromString(emptyXml, "application/xml");
-      
-      const rootSyntaxNode = {
-        name: "Element",
-        tagName: "root",
-        from: 0,
-        to: 13,
-        firstChild: null,
-        nextSibling: null
-      };
+  describe('empty document', () => {
 
-      const documentSyntaxNode = {
-        name: "Document",
-        firstChild: rootSyntaxNode,
-        nextSibling: null
-      };
+    it('returns status: empty and clears state', async () => {
+      const view = createView('<root/>');
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const result = linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc);
-      
-      assert.ok(result.syntaxToDom instanceof Map, 'Should return Map for empty document');
-      assert.ok(result.domToSyntax instanceof Map, 'Should return reverse Map for empty document');
+      await sync.sync(view);
+      assert.ok(sync.getXmlTree());
+
+      // Clear editor content.
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+      forceParse(view);
+
+      const result = await sync.sync(view);
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.status, 'empty');
+      assert.strictEqual(sync.getXmlTree(), null);
+      assert.strictEqual(sync.getDomToSyntax(), null);
+      assert.strictEqual(sync.getSyntaxToDom(), null);
+      assert.strictEqual(sync.getProcessingInstructions().length, 0);
+      assert.strictEqual(sync.isSynced(), false);
+    });
+  });
+
+  describe('clear()', () => {
+
+    it('resets all state', async () => {
+      const view = createView('<root><a/></root>');
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+      await sync.sync(view);
+      assert.ok(sync.getXmlTree());
+      assert.strictEqual(sync.isSynced(), true);
+
+      sync.clear();
+
+      assert.strictEqual(sync.getXmlTree(), null);
+      assert.strictEqual(sync.getSyntaxTree(), null);
+      assert.strictEqual(sync.getDomToSyntax(), null);
+      assert.strictEqual(sync.getSyntaxToDom(), null);
+      assert.strictEqual(sync.getEditorContent(), '');
+      assert.strictEqual(sync.isSynced(), false);
+      assert.strictEqual(sync.getLastSyncError(), null);
+      assert.strictEqual(sync.getProcessingInstructions().length, 0);
+    });
+  });
+
+  describe('processing instructions', () => {
+
+    it('detects PIs before the root element', async () => {
+      const text =
+        '<?xml-stylesheet href="style.xsl"?>' +
+        '<?custom-pi data="test"?>' +
+        '<root><child>content</child></root>';
+      const view = createView(text);
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+      const result = await sync.sync(view);
+      assert.strictEqual(result.status, 'wellFormed');
+
+      const pis = sync.getProcessingInstructions();
+      assert.strictEqual(pis.length, 2);
+      assert.strictEqual(pis[0].target, 'xml-stylesheet');
+      assert.strictEqual(pis[1].target, 'custom-pi');
     });
 
-    test('should handle documents with only processing instructions', () => {
-      const piOnlyXml = `<?xml-stylesheet href="style.xsl"?><?custom-pi?>`;
-      
-      const view = createMockView(piOnlyXml + '<root></root>'); // Add root for valid XML
-      const domDoc = new DOMParser().parseFromString(piOnlyXml + '<root></root>', "application/xml");
-      
-      // Mock syntax tree with only PIs and a root
-      const rootSyntaxNode = {
-        name: "Element",
-        tagName: "root",
-        from: 55,
-        to: 68,
-        firstChild: null,
-        nextSibling: null
-      };
+    it('handles real-world TEI xml-model PI', async () => {
+      const text =
+        '<?xml-model href="https://example.org/tei.rng" ' +
+        'type="application/xml" ' +
+        'schematypens="http://relaxng.org/ns/structure/1.0"?>' +
+        '<TEI xmlns="http://www.tei-c.org/ns/1.0">' +
+        '<teiHeader><fileDesc><titleStmt><title>T</title></titleStmt>' +
+        '<publicationStmt><p>P</p></publicationStmt>' +
+        '<sourceDesc><p>S</p></sourceDesc></fileDesc></teiHeader>' +
+        '<text><body><p>Content</p></body></text>' +
+        '</TEI>';
+      const view = createView(text);
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
 
-      const piNode = {
-        name: "ProcessingInstruction",
-        from: 0,
-        to: 54,
-        nextSibling: rootSyntaxNode
-      };
+      const result = await sync.sync(view);
 
-      const documentSyntaxNode = {
-        name: "Document",
-        firstChild: piNode,
-        nextSibling: null
-      };
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.status, 'wellFormed');
+      const tree = sync.getXmlTree();
+      assert.strictEqual(tree.documentElement.tagName, 'TEI');
+      const pis = sync.getProcessingInstructions();
+      assert.strictEqual(pis.length, 1);
+      assert.strictEqual(pis[0].target, 'xml-model');
+    });
 
-      const result = linkSyntaxTreeWithDOM(view, documentSyntaxNode, domDoc);
-      
-      // Should still work - finds the root element despite PIs
-      assert.ok(result.syntaxToDom instanceof Map, 'Should handle PI-only start');
-      assert.ok(result.domToSyntax.has(domDoc.documentElement), 'Should map root element');
+    it('handles mixed content (comments + PIs + elements)', async () => {
+      const text =
+        '<!-- leading comment -->' +
+        '<?xml-stylesheet href="s.xsl"?>' +
+        '<!-- another comment -->' +
+        '<root><c/></root>';
+      const view = createView(text);
+      forceParse(view);
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+      const result = await sync.sync(view);
+      assert.strictEqual(result.status, 'wellFormed');
+      assert.strictEqual(sync.getProcessingInstructions().length, 1);
+      assert.strictEqual(sync.getXmlTree().documentElement.tagName, 'root');
     });
   });
 });
-
-// Helper function to run tests
-if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log('🧪 Running XML Synchronization Algorithm Tests...\n');
-}

@@ -24,6 +24,20 @@ import { notify } from '../modules/sl-utils.js'
 await registerTemplate('gc-menu-item', 'gc-menu-item.html')
 
 /**
+ * Thrown by {@link FiledataPlugin#saveXml} when the editor's XML is not well-formed.
+ * Callers can use `error instanceof NoValidXmlError` to distinguish this from transport
+ * or server-side errors and avoid presenting a generic "Save failed" message for what is
+ * really a client-side validation problem.
+ */
+export class NoValidXmlError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = 'NoValidXmlError';
+  }
+}
+
+/**
  * File data management plugin
  */
 class FiledataPlugin extends Plugin {
@@ -267,21 +281,30 @@ class FiledataPlugin extends Plugin {
   }
 
   /**
-   * Saves the current XML content to a file
+   * Saves the current XML content to a file.
+   *
+   * If the editor contains malformed XML this method throws a {@link NoValidXmlError} so
+   * callers can distinguish it from a transport or server error. Callers that auto-save
+   * (e.g. XmlEditorPlugin.#saveIfDirty) should pre-check `xmlEditor.getXmlTree()` and keep
+   * the user's content in a local draft instead of attempting the save.
+   *
    * @param {string} fileHash The hash identifying the XML file on the server
    * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
    * @returns {Promise<{file_id:string, status:string}>} An object with file_id (stable file identifier) and status
-   * @throws {Error}
+   * @throws {NoValidXmlError} when the editor has no parseable XML tree
+   * @throws {Error} on transport/server failures
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
     this.#logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
     if (!this.#xmlEditor.getXmlTree()) {
-      throw new Error("Cannot save: No XML valid document in the editor");
+      throw new NoValidXmlError(
+        'Cannot save: the XML in the editor is not well-formed. Fix XML errors and try again.'
+      );
     }
     try {
-      // Show saving status
+      // Show saving status in the headerbar (right-aligned).
       if (this.savingStatusWidget) {
-        this.getDependency('xmleditor').addStatusbarWidget(this.savingStatusWidget, 'left', 10);
+        this.getDependency('xmleditor').addHeaderbarWidget(this.savingStatusWidget, 'right', 3);
       }
       const xmlContent = this.#xmlEditor.getXML()
       const result = await this.#client.saveXml(xmlContent, fileHash, saveAsNewVersion);
@@ -290,7 +313,7 @@ class FiledataPlugin extends Plugin {
       // clear status message after 1 second
       setTimeout(() => {
         if (this.savingStatusWidget) {
-          this.getDependency('xmleditor').removeStatusbarWidget(this.savingStatusWidget.id);
+          this.getDependency('xmleditor').removeHeaderbarWidget(this.savingStatusWidget.id);
         }
       }, 1000);
     }

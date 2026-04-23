@@ -32,6 +32,14 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
+import XmlEditorDraftStore from '../modules/xml-editor-draft-store.js'
+
+/**
+ * Adaptive draft save throttle (ms): well-formed typing is flushed less often, malformed
+ * typing is flushed more aggressively so no keystroke is lost before the save can complete.
+ */
+const DRAFT_THROTTLE_MS_WELL_FORMED = 500;
+const DRAFT_THROTTLE_MS_MALFORMED = 200;
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
@@ -113,6 +121,7 @@ class XmlEditorPlugin extends Plugin {
       deps: ['logger', 'client']
     });
     this.#xmlEditor = new NavXmlEditor('codemirror-container');
+    this.#draftStore = new XmlEditorDraftStore({ logger: console });
   }
 
   get #logger() { return this.getDependency('logger') }
@@ -186,6 +195,20 @@ class XmlEditorPlugin extends Plugin {
   /** @type {string|null} */
   #hashBeingSaved = null;
 
+  // Draft persistence and save-status reporting
+  /** @type {XmlEditorDraftStore} */
+  #draftStore;
+  /** @type {ReturnType<typeof setTimeout>|null} */
+  #draftSaveTimeout = null;
+  /** @type {StatusText|null} */
+  #saveStatusWidget = null;
+  /** @type {boolean} */
+  #saveBlockedShownToUser = false;
+  /** @type {string|null} */
+  #lastLoadedStableId = null;
+  /** @type {string} */
+  #originalDocumentTitle = document.title;
+
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
    * Plugin methods take precedence; all other property accesses fall through to the inner editor.
@@ -195,7 +218,7 @@ class XmlEditorPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#xmlEditor;
-    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
     return /** @type {NavXmlEditor} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -281,6 +304,29 @@ class XmlEditorPlugin extends Plugin {
       icon: 'lock-fill',
       variant: 'warning',
       name: 'readOnlyStatus'
+    });
+
+    // Save status widget (persistent visible indicator when auto-save cannot reach the server).
+    // It is added to the headerbar (right) whenever auto-save is blocked (malformed XML, network
+    // failure, save still in flight after long malformed edits, etc.) and removed once a
+    // successful server save occurs. It replaces the earlier silent debug-level "Not saving" log.
+    this.#saveStatusWidget = PanelUtils.createText({
+      text: 'Unsaved changes',
+      icon: 'exclamation-triangle-fill',
+      variant: 'warning',
+      name: 'saveStatus'
+    });
+    // Make it clickable so the user can see a concise explanation if they ask.
+    this.#saveStatusWidget.clickable = true;
+    this.#saveStatusWidget.tooltip = 'Auto-save is blocked. Click for details.';
+    this.#saveStatusWidget.addEventListener('widget-click', () => {
+      notify(
+        'Auto-save is currently blocked, usually because the XML is not well-formed. ' +
+        'Your edits are buffered locally (draft). Fix the XML errors or use File → Download ' +
+        'to export a copy.',
+        'warning',
+        'exclamation-triangle'
+      );
     });
 
     // Update UI to register named widgets (kept for cross-plugin ui access in access-control.js)
@@ -391,6 +437,10 @@ class XmlEditorPlugin extends Plugin {
     // Update cursor position on editor updates (typing, etc.)
     this.#xmlEditor.on('editorUpdate', () => this.#updateCursorPosition());
 
+    // Schedule a local-draft save on every editor update so no typed content is lost
+    // even while the server save is blocked (e.g. malformed XML, connection lost).
+    this.#xmlEditor.on('editorUpdate', () => this.#scheduleDraftSave());
+
     // Handle indentation detection before loading XML
     this.#xmlEditor.on('editorBeforeLoad', (xml) => {
       const indentUnit = detectXmlIndentation(xml);
@@ -403,8 +453,17 @@ class XmlEditorPlugin extends Plugin {
     this.#xmlEditor.on('editorAfterLoad', () => {
       testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
-      this.#xmlEditor.whenReady().then(() => {
+      this.#xmlEditor.whenReady().then(async () => {
         this.#xmlEditor.setLineWrapping(this.#getLineWrappingPreference());
+
+        // Offer to restore a local draft if one exists for this stable id and differs from
+        // the freshly loaded server content. Drafts arise when a previous session ended while
+        // auto-save was blocked (typically because the XML was malformed).
+        const currentStableId = this.state?.xml ?? null;
+        this.#lastLoadedStableId = currentStableId;
+        if (currentStableId) {
+          await this.#maybeRestoreDraft(currentStableId);
+        }
 
         setTimeout(async () => {
           if (!this.state?.xpath && this.state?.variant) {
@@ -440,6 +499,22 @@ class XmlEditorPlugin extends Plugin {
         }
       });
     }
+
+    // Guard navigation when the editor has unsaved work or a buffered draft. This shows the
+    // browser's built-in "Leave site?" confirmation. The actual wording is controlled by the
+    // browser; we only need to assign a non-empty returnValue and preventDefault().
+    window.addEventListener('beforeunload', (evt) => {
+      const dirty = this.#xmlEditor.isDirty();
+      const blocked = this.#saveStatusWidget?.isConnected;
+      // Only prompt when there is risk of losing unsaved work. A clean editor never prompts.
+      if (!dirty && !blocked) return;
+      // Flush the draft synchronously so whatever is in the editor is recoverable on reload
+      // even if the user chooses to leave. This is best-effort; localStorage writes are fast.
+      this.#flushDraftNow();
+      evt.preventDefault();
+      // Legacy browsers require returnValue to be set to a non-empty string.
+      evt.returnValue = 'You have unsaved changes in the XML editor.';
+    });
 
     // Create node navigation widgets for statusbar center section
     this.#prevNodeBtn = PanelUtils.createButton({
@@ -530,7 +605,7 @@ class XmlEditorPlugin extends Plugin {
       }
 
       if (validationStatusWidget && !validationStatusWidget.isConnected) {
-        this.#statusbar.add(validationStatusWidget, 'left', 5);
+        this.#headerbar.add(validationStatusWidget, 'right', 2);
       }
       // @ts-ignore
       this.#xmlEditorEl.querySelector('.cm-content').classList.add('invalid-xml');
@@ -545,7 +620,7 @@ class XmlEditorPlugin extends Plugin {
         this.#logger.warn('Error clearing diagnostics on well-formed XML: ' + String(error));
       }
       if (validationStatusWidget && validationStatusWidget.isConnected) {
-        this.#statusbar.removeById(validationStatusWidget.id);
+        this.#headerbar.removeById(validationStatusWidget.id);
       }
     });
 
@@ -579,6 +654,15 @@ class XmlEditorPlugin extends Plugin {
     // When diff is cleared externally (e.g. logout), hide the merge view
     if (!state.diff && this.#xmlEditor.isMergeViewActive()) {
       await this.#xmlEditor.hideMergeView();
+    }
+
+    // Track the currently loaded document so draft-save knows which key to write to.
+    // We explicitly avoid clearing this on a null state.xml because `clear()` is called
+    // during the transition — keep the last id until editorAfterLoad for the next document
+    // reassigns it. The draft of the departed document remains on disk for later restore.
+    if (state.xml && state.xml !== this.#lastLoadedStableId) {
+      // Will be re-set in editorAfterLoad once load completes; defensively update here too.
+      this.#lastLoadedStableId = state.xml;
     }
 
     // Invalidate extractor cache when user changes so it is refreshed lazily
@@ -744,6 +828,24 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
+   * Add a widget to the XML editor headerbar.
+   * @param {HTMLElement} widget
+   * @param {'left'|'center'|'right'} position
+   * @param {number} priority
+   */
+  addHeaderbarWidget(widget, position, priority) {
+    this.#headerbar.add(widget, position, priority)
+  }
+
+  /**
+   * Remove a widget from the XML editor headerbar by ID.
+   * @param {string} widgetId
+   */
+  removeHeaderbarWidget(widgetId) {
+    this.#headerbar.removeById(widgetId)
+  }
+
+  /**
    * Set the context text on the read-only status widget.
    * @param {string} text
    */
@@ -842,7 +944,16 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Save the current XML file if the editor is "dirty"
+   * Save the current XML file if the editor is "dirty".
+   *
+   * The method is guarded against several failure modes that previously caused silent data
+   * loss (see issue #358):
+   *   - If the editor has no valid XML tree (malformed content), the server save is SKIPPED
+   *     but the user is informed via a persistent headerbar widget, and the current editor
+   *     content is still buffered to localStorage as a draft.
+   *   - If the editor was mutated while a save was in flight (documentVersion changed), the
+   *     editor is NOT marked clean, so the next delayed-update cycle will save again.
+   *   - On save errors the user is notified via toast AND the persistent widget.
    */
   async #saveIfDirty() {
     const fileHash = this.state?.xml;
@@ -850,15 +961,40 @@ class XmlEditorPlugin extends Plugin {
     const hasXmlTree = !!this.#xmlEditor.getXmlTree();
     const isDirty = this.#xmlEditor.isDirty();
 
-    if (isHashBeingSaved || !fileHash || !hasXmlTree || !isDirty) {
-      let reason;
-      if (isHashBeingSaved) reason = 'Already saving document';
-      if (!fileHash) reason = 'No document';
-      if (!hasXmlTree) reason = 'No valid xml document';
-      if (!isDirty) reason = "Document hasn't changed";
-      this.#logger.debug(`Not saving: ${reason}`);
+    if (!fileHash) {
+      // No document loaded – nothing to save, nothing to warn about.
+      this.#setSaveBlocked(false);
       return;
     }
+    if (isHashBeingSaved) {
+      // A save is already in flight for this file hash; the delayed-update cycle will retry
+      // once it completes. This is not a user-visible problem.
+      this.#logger.debug('Not saving: Already saving document');
+      return;
+    }
+    if (!isDirty) {
+      this.#logger.debug("Not saving: Document hasn't changed");
+      // Anything previously flagged blocked was user-facing; clear it on a clean state.
+      this.#setSaveBlocked(false);
+      return;
+    }
+    if (!hasXmlTree) {
+      // This is the CRITICAL path for issue #358: the editor content is malformed so the
+      // server cannot be reached without risking data corruption. The local draft save
+      // (scheduled from editorUpdate) keeps the typed content safe. Tell the user.
+      this.#logger.warn('Not saving to server: XML is not well-formed. ' +
+        'Edits are buffered as a local draft until the XML can be parsed again.');
+      this.#setSaveBlocked(true,
+        'Unsaved – fix XML errors', 'exclamation-triangle-fill', 'warning');
+      // Force a synchronous draft flush so nothing is in limbo if the tab is closed now.
+      this.#flushDraftNow();
+      return;
+    }
+
+    // Capture the document version BEFORE the save so we can detect edits that happened
+    // during the await and avoid the race where we would otherwise mark a dirty editor
+    // clean (dropping unsaved keystrokes).
+    const versionAtStart = this.#xmlEditor.getDocumentVersion();
 
     try {
       this.#hashBeingSaved = fileHash;
@@ -866,6 +1002,7 @@ class XmlEditorPlugin extends Plugin {
       const result = await filedata.saveXml(fileHash);
       if (!result || typeof result != 'object' || !result.status) {
         this.#logger.warn('Invalid result from filedata.saveXml: ' + result);
+        this.#setSaveBlocked(true, 'Unsaved – server error', 'exclamation-octagon-fill', 'danger');
         return;
       }
       if (result.status == 'unchanged') {
@@ -876,13 +1013,179 @@ class XmlEditorPlugin extends Plugin {
           await this.dispatchStateChange({ xml: result.file_id });
         }
       }
-      this.#xmlEditor.markAsClean();
+
+      const versionAtEnd = this.#xmlEditor.getDocumentVersion();
+      if (versionAtEnd === versionAtStart) {
+        // No edits happened during the save — safe to mark clean.
+        this.#xmlEditor.markAsClean();
+        // Server has an authoritative copy; drop the local draft to avoid stale restore prompts.
+        if (this.#lastLoadedStableId) {
+          this.#draftStore.clearDraft(this.#lastLoadedStableId);
+        }
+      } else {
+        // Something was typed while saving; next delayed update will trigger another save.
+        this.#logger.debug(
+          `Document version advanced during save (${versionAtStart} -> ${versionAtEnd}); ` +
+          'leaving dirty flag set so the next save cycle covers the new edits.'
+        );
+      }
+      // Successful server save clears any previously shown warning.
+      this.#setSaveBlocked(false);
     } catch (error) {
       this.#logger.error(error);
       notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon');
+      this.#setSaveBlocked(true, 'Unsaved – save failed', 'exclamation-octagon-fill', 'danger');
+      // Make sure a local draft exists in case the user reloads before the next retry.
+      this.#flushDraftNow();
     } finally {
       this.#hashBeingSaved = null;
     }
+  }
+
+  /**
+   * Toggle the persistent "unsaved" headerbar widget.
+   * @param {boolean} blocked
+   * @param {string} [text]
+   * @param {string} [icon]
+   * @param {'default'|'warning'|'danger'|'success'} [variant]
+   */
+  #setSaveBlocked(blocked, text = 'Unsaved changes', icon = 'exclamation-triangle-fill', variant = 'warning') {
+    if (!this.#saveStatusWidget) return;
+    if (blocked) {
+      this.#saveStatusWidget.text = text;
+      this.#saveStatusWidget.icon = icon;
+      // StatusText variant attribute drives the CSS colour. Typed as string at runtime.
+      /** @type {any} */ (this.#saveStatusWidget).variant = variant;
+      if (!this.#saveStatusWidget.isConnected) {
+        this.#headerbar.add(this.#saveStatusWidget, 'right', 1);
+      }
+      if (!this.#saveBlockedShownToUser) {
+        this.#saveBlockedShownToUser = true;
+        notify(
+          'Auto-save is blocked. Your recent edits are buffered locally but not saved to the server. ' +
+          'Fix XML errors or use File → Download to export a copy.',
+          'warning',
+          'exclamation-triangle'
+        );
+      }
+    } else {
+      if (this.#saveStatusWidget.isConnected) {
+        this.#headerbar.removeById(this.#saveStatusWidget.id);
+      }
+      this.#saveBlockedShownToUser = false;
+    }
+    this.#updateBrowserTitle();
+  }
+
+  /**
+   * Schedules a local-draft save with adaptive throttle: malformed content is flushed more
+   * eagerly so no keystroke is lost before the next save can complete.
+   */
+  #scheduleDraftSave() {
+    const stableId = this.#lastLoadedStableId ?? this.state?.xml ?? null;
+    if (!stableId) return;
+    const wellFormed = !!this.#xmlEditor.getXmlTree();
+    const delay = wellFormed ? DRAFT_THROTTLE_MS_WELL_FORMED : DRAFT_THROTTLE_MS_MALFORMED;
+    if (this.#draftSaveTimeout) clearTimeout(this.#draftSaveTimeout);
+    this.#draftSaveTimeout = setTimeout(() => {
+      this.#draftSaveTimeout = null;
+      this.#flushDraftNow();
+    }, delay);
+    // Keep the tab title in sync with the dirty state.
+    this.#updateBrowserTitle();
+  }
+
+  /**
+   * Persists the current editor content to localStorage immediately. Safe to call at any time;
+   * silently no-ops when there is no loaded document.
+   */
+  #flushDraftNow() {
+    const stableId = this.#lastLoadedStableId ?? this.state?.xml ?? null;
+    if (!stableId) return;
+    try {
+      const content = this.#xmlEditor.getEditorContent();
+      if (!content) return;
+      const wellFormed = !!this.#xmlEditor.getXmlTree();
+      this.#draftStore.saveDraft(
+        stableId,
+        content,
+        this.#xmlEditor.getDocumentVersion(),
+        wellFormed
+      );
+    } catch (error) {
+      this.#logger.warn('Failed to write local draft: ' + String(error));
+    }
+  }
+
+  /**
+   * If a local draft exists for the freshly loaded document and differs from the server
+   * content, offer the user a chance to restore it. Declined drafts are discarded.
+   * @param {string} stableId
+   */
+  async #maybeRestoreDraft(stableId) {
+    let record;
+    try {
+      record = this.#draftStore.loadDraft(stableId);
+    } catch (error) {
+      this.#logger.warn('Failed to read local draft: ' + String(error));
+      return;
+    }
+    if (!record) return;
+
+    const serverContent = this.#xmlEditor.getEditorContent();
+    if (record.content === serverContent) {
+      // Draft matches server state – nothing to restore, clear the record.
+      this.#draftStore.clearDraft(stableId);
+      return;
+    }
+
+    const savedAt = new Date(record.savedAt).toLocaleString();
+    const wellFormedTag = record.wellFormed ? 'well-formed' : 'MALFORMED';
+    const shouldRestore = confirm(
+      `A locally-buffered draft of this document was found from ${savedAt} (${wellFormedTag}).\n\n` +
+      'This draft was created because auto-save could not reach the server. ' +
+      'Restore the draft into the editor?\n\n' +
+      'OK = restore draft (you can still save to the server once the XML is valid).\n' +
+      'Cancel = discard draft and use the server version.'
+    );
+
+    if (!shouldRestore) {
+      this.#draftStore.clearDraft(stableId);
+      return;
+    }
+
+    try {
+      await this.#xmlEditor.loadXml(record.content);
+      notify('Local draft restored. Fix any XML errors and the document will auto-save.',
+        'primary', 'info-circle');
+      // The editor will re-emit editorUpdate events once the user types again; mark dirty
+      // so the save cycle kicks in if the restored draft is itself well-formed.
+      if (record.wellFormed) {
+        // loadXml resets dirty to false; force a dirty save cycle by scheduling a draft flush.
+        this.#scheduleDraftSave();
+      } else {
+        this.#setSaveBlocked(true, 'Unsaved – fix XML errors', 'exclamation-triangle-fill', 'warning');
+      }
+    } catch (error) {
+      this.#logger.error('Failed to restore draft: ' + String(error));
+      notify('Failed to restore draft: ' + String(error), 'danger', 'exclamation-octagon');
+    }
+  }
+
+  /**
+   * Updates the browser tab title to reflect unsaved/error state. Prefixes the original
+   * document title with "● " when there is unsaved work, or with "⚠ " when auto-save is
+   * actively blocked, so users can notice from other tabs.
+   */
+  #updateBrowserTitle() {
+    const base = this.#originalDocumentTitle;
+    let prefix = '';
+    const dirty = this.#xmlEditor.isDirty();
+    const blocked = this.#saveStatusWidget?.isConnected;
+    if (blocked) prefix = '⚠ ';
+    else if (dirty) prefix = '● ';
+    const newTitle = prefix + base;
+    if (document.title !== newTitle) document.title = newTitle;
   }
 
   /**
@@ -892,6 +1195,18 @@ class XmlEditorPlugin extends Plugin {
     if (!this.state?.xml) return;
     if (this.state.editorReadOnly) {
       notify('You are not allowed to edit this artifact', 'warning', 'exclamation-triangle');
+      return;
+    }
+    // Refuse to mutate the in-memory DOM when it is stale relative to the editor buffer.
+    // Overwriting the editor from a stale DOM tree would silently discard the user's
+    // latest keystrokes (one of the root causes traced in issue #358).
+    if (!this.#xmlEditor.isSynced()) {
+      notify(
+        'Cannot rename the artifact right now because the XML in the editor is not well-formed. ' +
+        'Please fix the XML errors and try again.',
+        'warning',
+        'exclamation-triangle'
+      );
       return;
     }
     const currentLabel = this.#titleWidget.text;
