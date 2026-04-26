@@ -54,6 +54,10 @@ class ExtractorInfo(BaseModel):
         None,
         description="Configuration options supported by the extractor"
     )
+    variants: Optional[List[str]] = Field(
+        None,
+        description="List of supported variant identifiers"
+    )
     navigation_xpath: Optional[Dict[str, Any]] = Field(
         None,
         description="XPath expressions for navigation, keyed by variant_id"

@@ -24,6 +24,7 @@ from fastapi_app.plugins.llamore.config import (
     get_form_options,
     get_navigation_xpath,
     get_schema_url,
+    get_supported_variants,
 )
 import datetime
 
@@ -50,6 +51,7 @@ class LLamoreExtractor(BaseExtractor):
             "description": "Extract bibliographic references from PDF using LLamore library with Gemini AI",
             "input": ["pdf"],
             "output": ["tei-document"],
+            "variants": get_supported_variants(),
             "options": get_form_options(),
             "navigation_xpath": get_navigation_xpath(),
             "annotationGuides": get_annotation_guides()

@@ -126,5 +126,41 @@ class TestExtractionRevisionDesc(unittest.IsolatedAsyncioTestCase):
         self.assertIn("mock extractor", desc_elem.text.lower(), "desc text should mention mock extractor")
 
 
+class TestMockExtractorVariants(unittest.TestCase):
+    """Test that MockExtractor exposes variants correctly in get_info()."""
+
+    def test_variants_field_present(self):
+        """get_info() must include a top-level 'variants' list."""
+        info = MockExtractor.get_info()
+        self.assertIn('variants', info)
+        self.assertIsInstance(info['variants'], list)
+
+    def test_variants_not_empty(self):
+        """variants list must contain at least one entry."""
+        info = MockExtractor.get_info()
+        self.assertGreater(len(info['variants']), 0)
+
+    def test_variants_match_options(self):
+        """variants must equal options.variant_id.options."""
+        info = MockExtractor.get_info()
+        option_variants = info['options']['variant_id']['options']
+        self.assertEqual(info['variants'], option_variants)
+
+    def test_all_variants_have_string_ids(self):
+        """Every variant id must be a non-empty string."""
+        info = MockExtractor.get_info()
+        for v in info['variants']:
+            self.assertIsInstance(v, str)
+            self.assertTrue(v, f"variant id must not be empty, got {v!r}")
+
+    def test_navigation_xpath_is_subset_of_variants(self):
+        """navigation_xpath keys must be a subset of variants."""
+        info = MockExtractor.get_info()
+        xpath_keys = set(info.get('navigation_xpath', {}).keys())
+        variant_ids = set(info['variants'])
+        self.assertTrue(xpath_keys.issubset(variant_ids),
+                        f"navigation_xpath keys {xpath_keys - variant_ids} not in variants")
+
+
 if __name__ == '__main__':
     unittest.main()
