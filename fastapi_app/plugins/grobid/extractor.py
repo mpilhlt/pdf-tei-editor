@@ -21,6 +21,7 @@ from fastapi_app.plugins.grobid.config import (
     get_model_path,
     get_navigation_xpath,
     get_schema_url,
+    get_supported_variants,
     is_grobid_cache_disabled,
 )
 from fastapi_app.plugins.grobid.handlers import (
@@ -75,6 +76,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             "description": "Extract TEI from PDF using remote GROBID server (training data or full documents)",
             "input": ["pdf"],
             "output": ["tei-document"],
+            "variants": get_supported_variants(),
             "options": get_form_options(),
             "navigation_xpath": get_navigation_xpath(),
             "annotationGuides": get_annotation_guides()

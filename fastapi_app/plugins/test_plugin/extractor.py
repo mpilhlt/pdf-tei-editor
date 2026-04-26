@@ -22,6 +22,12 @@ from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 class MockExtractor(BaseExtractor):
     """Mock extractor for testing without external dependencies."""
 
+    SUPPORTED_VARIANTS = [
+        "mock-default",
+        "mock-variant-a",
+        "mock-variant-b",
+    ]
+
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the mock extractor."""
@@ -31,6 +37,7 @@ class MockExtractor(BaseExtractor):
             "description": "Mock extractor for testing without external dependencies (available in testing mode only)",
             "input": ["pdf", "xml"],
             "output": ["tei-document"],
+            "variants": list(cls.SUPPORTED_VARIANTS),
             "options": {
                 "doi": {
                     "type": "string",
@@ -43,9 +50,7 @@ class MockExtractor(BaseExtractor):
                     "label": "Variant identifier",
                     "description": "Variant identifier for the mock extraction",
                     "required": False,
-                    "options": [
-                        "mock-default"
-                    ]
+                    "options": list(cls.SUPPORTED_VARIANTS)
                 }
             },
             "navigation_xpath": {

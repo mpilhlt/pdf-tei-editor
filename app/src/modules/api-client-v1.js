@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-04-16T08:50:48.157Z
+ * Generated from OpenAPI schema at 2026-04-26T13:03:52.235Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -216,6 +216,7 @@
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
  * @property {Object<string, any>=} options - Configuration options supported by the extractor
+ * @property {Array<string>=} variants - List of supported variant identifiers
  * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  */
