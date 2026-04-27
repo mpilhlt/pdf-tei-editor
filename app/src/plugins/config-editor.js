@@ -92,7 +92,7 @@ class ConfigEditorPlugin extends Plugin {
   async #openDialog() {
     try {
       await this.#loadConfig()
-      this.#renderConfigList()
+      this.#renderConfigList(this.#dialogUi.searchInput.value)
       this.#dialogUi.show()
     } catch (error) {
       this.#logger.error('Failed to open config editor:', String(error))
