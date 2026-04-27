@@ -158,6 +158,7 @@ export class XMLEditor extends EventEmitter {
   #updateListenerCompartment = new Compartment()
   #selectionChangeCompartment = new Compartment()
   #lineWrappingCompartment = new Compartment()
+  #horizontalScrollbarCompartment = new Compartment()
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
@@ -193,6 +194,7 @@ export class XMLEditor extends EventEmitter {
       this.#mergeViewCompartment.of([]),
       this.#autocompleteCompartment.of([]),
       this.#lineWrappingCompartment.of([]),
+      this.#horizontalScrollbarCompartment.of([]),
       keymap.of([indentWithTab]),
       this.#tabSizeCompartment.of([]),
       this.#indentationCompartment.of([]),
@@ -707,9 +709,12 @@ export class XMLEditor extends EventEmitter {
    */
   setLineWrapping(value) {
     this.#view.dispatch({
-      effects: [this.#lineWrappingCompartment.reconfigure(
-        value ? EditorView.lineWrapping : []
-      )]
+      effects: [
+        this.#lineWrappingCompartment.reconfigure(value ? EditorView.lineWrapping : []),
+        this.#horizontalScrollbarCompartment.reconfigure(
+          value ? [] : EditorView.theme({ ".cm-scroller": { overflowX: "scroll" } })
+        )
+      ]
     });
   }
 
