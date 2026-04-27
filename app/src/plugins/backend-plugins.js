@@ -526,6 +526,12 @@ export class BackendPluginsPlugin extends Plugin {
   displayResult(plugin, result) {
     const dialog = this.#dialogUi;
 
+    // Check if result signals a notification-only error (no dialog)
+    if (result && result.error && result.notify) {
+      notify(result.error, 'warning', 'exclamation-triangle');
+      return;
+    }
+
     // Check if result contains downloadUrl for direct file download
     if (result && result.downloadUrl) {
       this.triggerDownload(plugin, result.downloadUrl);

@@ -60,20 +60,25 @@ class AnnotationProgressPlugin(Plugin):
         collection_id = params.get("collection")
         if not collection_id:
             return {
-                "error": "No collection selected",
-                "html": "<p>Please select a collection first.</p>",
+                "error": "Please select a collection first.",
+                "notify": True,
             }
 
         variant_filter = params.get("variant")
 
+        if not variant_filter or variant_filter in ("all", "none"):
+            return {
+                "error": "Please select a specific variant before generating the annotation progress report.",
+                "notify": True,
+            }
+
         # Build URLs
-        variant_param = f"&variant={variant_filter}" if variant_filter else ""
-        view_url = f"/api/plugins/annotation-progress/view?collection={collection_id}{variant_param}"
-        export_url = f"/api/plugins/annotation-progress/export?collection={collection_id}{variant_param}"
+        view_url = f"/api/plugins/annotation-progress/view?collection={collection_id}&variant={variant_filter}"
+        export_url = f"/api/plugins/annotation-progress/export?collection={collection_id}&variant={variant_filter}"
 
         return {
             "outputUrl": view_url,
             "exportUrl": export_url,
             "collection": collection_id,
-            "variant": variant_filter or "all",
+            "variant": variant_filter,
         }
