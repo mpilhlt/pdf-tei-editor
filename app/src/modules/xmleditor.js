@@ -48,6 +48,7 @@ import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
+import { linter, lintGutter, forceLinting } from "@codemirror/lint"
 
 // custom modules
 
@@ -285,7 +286,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Add one or more linter extensions to the editor
-   * @param {Extension} extension 
+   * @param {Extension} extension
    */
   addLinter(extension) {
     if (!isExtension(extension)) {
@@ -296,6 +297,27 @@ export class XMLEditor extends EventEmitter {
     this.#view.dispatch({
       effects: this.#linterCompartment.reconfigure([extensions, extension])
     });
+  }
+
+  /**
+   * Register a lint source function as a CodeMirror linter with a gutter.
+   * Wraps the function in the CodeMirror `linter()` and `lintGutter()` extensions
+   * so callers do not need to import from `@codemirror/lint` directly.
+   * Note: linter config options (delay, etc.) are not forwarded because the
+   * `linterConfig` facet is shared across all linters and cannot have conflicting
+   * per-field values. The effective delay is determined by whichever linter sets it.
+   * @param {(view: import('@codemirror/view').EditorView) => import('@codemirror/lint').Diagnostic[] | Promise<import('@codemirror/lint').Diagnostic[]>} fn
+   */
+  registerLintSource(fn) {
+    this.addLinter([linter(fn), lintGutter()]);
+  }
+
+  /**
+   * Force an immediate re-run of all registered linters.
+   * Useful after an async data fetch that linters depend on.
+   */
+  refreshLinting() {
+    forceLinting(this.#view);
   }
 
   /**

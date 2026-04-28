@@ -66,6 +66,16 @@ class GrobidPlugin(Plugin):
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the GROBID extractor and event handlers."""
+        from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
+        ext_registry = FrontendExtensionRegistry.get_instance()
+        extension_file = Path(__file__).parent / "extensions" / "grobid-sync.js"
+        logger.debug("DEBUG grobid-sync extension file path: %s (exists=%s)", extension_file, extension_file.exists())
+        if extension_file.exists():
+            ext_registry.register_extension(extension_file, self.metadata["id"])
+            logger.info("Registered grobid-sync frontend extension")
+        else:
+            logger.warning("grobid-sync extension file not found: %s", extension_file)
+
         registry = ExtractorRegistry.get_instance()
         registry.register(GrobidTrainingExtractor)
 
