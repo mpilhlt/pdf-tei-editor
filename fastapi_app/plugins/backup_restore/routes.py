@@ -101,7 +101,7 @@ def _is_supervised() -> bool:
             pass
 
     # macOS: launchd is always PID 1
-    if os.uname().sysname == "Darwin" and ppid == 1:
+    if hasattr(os, "uname") and os.uname().sysname == "Darwin" and ppid == 1:
         return True
 
     return False
