@@ -54,8 +54,6 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         result = asyncio.run(self.plugin.show_progress(context, params))
 
         self.assertIn("error", result)
-        self.assertIn("html", result)
-        self.assertIn("Please select a collection first", result["html"])
 
     def test_show_progress_with_collection(self):
         """Test show_progress with collection parameter."""

@@ -23,7 +23,9 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
 )
+from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.utils.auth import AuthManager
 from fastapi_app.lib.sse.sse_service import SSEService
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
@@ -115,6 +117,82 @@ class CancellationToken:
     def cleanup(self):
         """Remove token from registry."""
         _cancellation_tokens.pop(self.progress_id, None)
+
+
+@router.get("/feature-tokens")
+async def get_feature_tokens(
+    stable_id: str = Query(..., description="Stable ID of the GROBID training TEI file"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+):
+    """
+    Return the ordered feature token list for a GROBID training file.
+
+    Reads the gold-standard TEI to find the cached extraction (via encodingDesc
+    labels), then opens the training ZIP and extracts the first column of each
+    non-blank line from the feature file matching the variant's model.
+
+    Used by the frontend sync-check linter so it can perform the comparison
+    client-side without a round-trip on every keystroke.
+
+    Returns:
+        ``{"status": "ok", "tokens": [...], "count": N}`` on success, or
+        ``{"status": "no_feature_file", "tokens": [], "count": 0}`` when the
+        cache is missing or the TEI lacks extractable labels.
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.plugins.grobid.cache import get_cache_dir
+    from fastapi_app.plugins.grobid.config import get_feature_suffix
+    from fastapi_app.plugins.grobid.sync import extract_feature_tokens, parse_encoding_labels
+
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    file_repo = FileRepository(db)
+    file_meta = file_repo.get_file_by_stable_id(stable_id)
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content_bytes = file_storage.read_file(file_meta.id, "tei")
+    if not content_bytes:
+        raise HTTPException(status_code=404, detail="File content not found")
+
+    labels = parse_encoding_labels(content_bytes.decode("utf-8"))
+    variant_id = labels.get("variant-id")
+    revision = labels.get("revision")
+    doc_id = file_meta.doc_id
+
+    if not variant_id or not revision or not doc_id:
+        return {"status": "no_feature_file", "tokens": [], "count": 0}
+
+    cache_key = f"{doc_id}_{revision}" if revision != "unknown" else doc_id
+    zip_path = get_cache_dir() / cache_key / "training.zip"
+    suffix = get_feature_suffix(variant_id)
+
+    logger.debug(
+        "feature-tokens: stable_id=%s variant_id=%s suffix=%s zip=%s exists=%s",
+        stable_id, variant_id, suffix, zip_path, zip_path.exists()
+    )
+
+    tokens = extract_feature_tokens(zip_path, suffix)
+    if tokens is None:
+        return {"status": "no_feature_file", "tokens": [], "count": 0}
+
+    return {"status": "ok", "tokens": tokens, "count": len(tokens)}
 
 
 @router.post("/cancel/{progress_id}")

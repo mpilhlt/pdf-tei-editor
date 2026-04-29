@@ -212,7 +212,7 @@ async def get_extensions_bundle():
 
     for js_file, plugin_id in registry.get_extension_files():
         try:
-            content = js_file.read_text()
+            content = js_file.read_text(encoding="utf-8")
 
             # Validate content for dangerous patterns
             is_valid, warnings = validate_javascript_content(content, js_file.name)
@@ -228,6 +228,7 @@ async def get_extensions_bundle():
             transformed = transform_extension_to_iife(content, js_file.name, plugin_id)
             bundle_parts.append(transformed)
         except Exception as e:
+            logger.error("Failed to load extension %s from %s: %s", js_file.name, plugin_id, e)
             bundle_parts.append(
                 f"// Error loading {js_file.name} from {plugin_id}: {e}\n"
             )

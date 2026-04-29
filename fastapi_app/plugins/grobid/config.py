@@ -74,6 +74,20 @@ def get_grobid_server_url() -> str | None:
     return url if url else None
 
 
+# Mapping from training variant ID to the suffix used in training ZIP entries.
+# Each feature file entry is named `{hash}.training.{suffix}` (no extension).
+# For most variants the suffix equals variant_id.removeprefix("grobid.training."),
+# so only exceptions need to be listed here.
+VARIANT_FEATURE_SUFFIXES: dict[str, str] = {}
+
+
+def get_feature_suffix(variant_id: str) -> str:
+    """Return the ZIP entry suffix for a training variant's feature file."""
+    if variant_id in VARIANT_FEATURE_SUFFIXES:
+        return VARIANT_FEATURE_SUFFIXES[variant_id]
+    return variant_id.removeprefix("grobid.training.")
+
+
 # Mapping from training variant ID to GROBID model path
 VARIANT_MODEL_PATHS: dict[str, str] = {
     "grobid.training.header.affiliation": "affiliation-address",
