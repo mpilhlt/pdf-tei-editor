@@ -166,6 +166,22 @@ The resulting ZIP mirrors `grobid-trainer/resources/dataset/` and can be unpacke
 | `force_refresh` | `false` | Bypass cache and re-fetch from GROBID |
 | `no_progress` | `true` | Suppress SSE progress events (set to `false` for UI usage) |
 
+### Frontend extension (`extensions/grobid-sync.js`)
+
+`GrobidSyncExtension` is a `FrontendExtensionPlugin` registered automatically when the plugin initialises. It depends on the `xmleditor` plugin and registers a **CodeMirror lint source** that highlights token-sequence mismatches between the current TEI document and the corresponding GROBID feature file.
+
+**How it works:**
+
+1. When a new document is loaded (`onXmlChange`), the extension fetches feature tokens from `GET /api/plugins/grobid/feature-tokens?stable_id=<id>`. Results are cached in memory by `stable_id` so subsequent edits to the same file skip the network round-trip.
+2. The lint source (`#lintSource`) runs on every CodeMirror document update. It retrieves the cached token list and calls `#extractXmlTokens` to tokenise the text content of the `<text>` element using the same rules as GROBID's `GrobidDefaultAnalyzer`. Tokens are extracted with exact character offsets so they can be reported directly as CodeMirror diagnostic positions.
+3. `#diffTokens` performs a forward-scan diff with a lookahead window of 10 tokens to recover alignment after a mismatch. It emits:
+   - `warning` — when the feature file has tokens absent from the XML (missing tokens) or the XML has extra tokens not in the feature file.
+   - `error` — when neither side recovers alignment within the window.
+
+**Tokenisation rules:** a token is either a maximal run of non-delimiter, non-whitespace characters, or a single non-whitespace delimiter character, where the delimiter set matches `TextUtilities.fullPunctuations` from `grobid-core`. XML entity references (`&amp;`, `&#60;`, `&#x3c;`) are decoded before tokenisation so that `&amp;` produces one token `&` and `&lt;www` produces one token `<www`.
+
+**Feature-tokens endpoint** (`GET /api/plugins/grobid/feature-tokens`): reads the TEI's `encodingDesc` labels (`variant-id`, `revision`, `doc_id`) to locate the cached training ZIP, then extracts the first column of each non-blank line from the matching feature file. Returns `{"status": "ok", "tokens": [...], "count": N}` on success or `{"status": "no_feature_file", "tokens": [], "count": 0}` when the cache is missing or the labels are absent. Requires an authenticated session.
+
 ### Cache (`cache.py`)
 
 Raw GROBID training packages (the ZIP from `/api/createTraining`) are stored in `data/plugins/grobid/extractions/` keyed by `{doc_id}_{grobid_revision}`. The revision string comes from GROBID's `/api/version` endpoint, ensuring that a model update invalidates existing cache entries. When the GROBID version cannot be determined, the key falls back to `{doc_id}` alone.

@@ -176,18 +176,20 @@ async process(args) {
 
 ## Registering Extensions from Backend Plugins
 
-In the plugin class `__init__()` method (not `__init__.py`):
+In the plugin's `initialize()` method:
 
 ```python
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from pathlib import Path
 
-def __init__(self):
+async def initialize(self, context: PluginContext) -> None:
     registry = FrontendExtensionRegistry.get_instance()
     extension_file = Path(__file__).parent / "extensions" / "my-extension.js"
     if extension_file.exists():
         registry.register_extension(extension_file, self.metadata["id"])
 ```
+
+`__init__()` runs before `is_available()` is checked — plugins that are unavailable are discarded after `__init__()` returns, so any registrations made there are wasted. `initialize()` is only called for plugins that passed availability checks.
 
 ### Directory Structure
 
