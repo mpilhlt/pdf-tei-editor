@@ -3,12 +3,24 @@
  * @import { Diagnostic } from '@codemirror/lint'
  */
 
-// Tokenizer that approximates GROBID's analyzer. A token is either:
-//   - An optional leading "<", one or more letters/digits (including extended Latin
-//     U+00C0–U+024F), and an optional trailing ">" — this handles URL bracket
-//     patterns like <www or uk> which GROBID keeps as single tokens; or
-//   - Any single non-whitespace, non-word character.
-const TOKEN_RE = /<?[a-zA-Z0-9À-ɏ]+>?|[^\s\w]/g;
+// Tokenizer matching GROBID's GrobidDefaultAnalyzer (StringTokenizer with
+// TextUtilities.delimiters from grobid-core). A token is either a maximal run of
+// non-delimiter non-whitespace characters, or a single non-whitespace delimiter
+// character. Delimiter set = TextUtilities.fullPunctuations + whitespace.
+// Characters NOT in the delimiter set (§, <, >, & etc.) attach to adjacent chars,
+// producing tokens like §2, <www, uk>.
+//
+// fullPunctuations (verbatim from TextUtilities.java):
+//   ( （ [ space • * , : ; ? . ! / ) ） - − – ‐
+//   « » „ “ ” " ‘ ’ ' ` $ # @ ] * ♦ ♥ ♣ ♠ NBSP 。 、 ， ・
+const _DELIM_CLASS =
+  '(\\uff08\\[\\u2022*,:;?.!/)\\uff09\\-\\u2212\\u2013\\u2010«»' +
+  '„“”"‘’\'`$#@\\]♦♥♣♠' +
+  ' 。、，・ \\t\\n\\r\\f‌';
+const TOKEN_RE = new RegExp(
+  `[^${_DELIM_CLASS}]+|[^ \\t\\n\\r\\f ‌]`,
+  'g'
+);
 
 // Matches XML character and named entity references: &amp; &#60; &#x3c;
 const ENTITY_RE = /&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]*));/g;
@@ -119,46 +131,57 @@ export default class GrobidSyncExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Tokenize a single text segment (already outside XML tags), decoding entity
-   * references so that `&amp;` produces one token `&` spanning the full `&amp;`
-   * in the raw XML rather than three tokens `&`, `amp`, `;`.
+   * Tokenize a text segment (between XML tags), decoding entity references so
+   * that `&amp;` produces one token `&` and `&lt;www` produces one token `<www`.
+   *
+   * Builds a decoded string with a parallel raw-position table, then applies
+   * TOKEN_RE to the decoded string so that entity chars merge correctly with
+   * adjacent plain-text chars before token boundaries are computed.
+   *
    * @param {string} seg - Raw XML text segment (may contain entity refs)
    * @param {number} absStart - Absolute offset of `seg[0]` in the full XML string
    * @param {Array<{token: string, from: number, to: number}>} out - Accumulator
    */
   #tokenizeSegment(seg, absStart, out) {
+    // Build decoded text and a parallel table of raw XML spans.
+    // rawSpans[i] = [rawFrom, rawTo] for the i-th decoded character.
+    const decoded = [];
+    const rawSpans = [];
+
     ENTITY_RE.lastIndex = 0;
     let plainAt = 0;
     let em;
     while ((em = ENTITY_RE.exec(seg)) !== null) {
-      // Tokenize plain text before the entity reference
-      if (em.index > plainAt) {
-        TOKEN_RE.lastIndex = 0;
-        const plain = seg.slice(plainAt, em.index);
-        let tm;
-        while ((tm = TOKEN_RE.exec(plain)) !== null) {
-          out.push({ token: tm[0], from: absStart + plainAt + tm.index, to: absStart + plainAt + tm.index + tm[0].length });
-        }
+      // Plain chars before this entity
+      for (let i = plainAt; i < em.index; i++) {
+        decoded.push(seg[i]);
+        rawSpans.push([absStart + i, absStart + i + 1]);
       }
-      // Decode the entity and emit its token(s), spanning the full &xxx; in the raw XML
-      const decoded = em[1] ? String.fromCodePoint(parseInt(em[1], 10))
+      // Decode entity; all its chars map to the full &xxx; span in the raw XML
+      const rawFrom = absStart + em.index;
+      const rawTo = absStart + em.index + em[0].length;
+      const decodedStr = em[1] ? String.fromCodePoint(parseInt(em[1], 10))
         : em[2] ? String.fromCodePoint(parseInt(em[2], 16))
         : (NAMED_ENTITIES[em[3]] ?? em[0]);
-      TOKEN_RE.lastIndex = 0;
-      let tm;
-      while ((tm = TOKEN_RE.exec(decoded)) !== null) {
-        out.push({ token: tm[0], from: absStart + em.index, to: absStart + em.index + em[0].length });
+      for (const ch of decodedStr) {
+        decoded.push(ch);
+        rawSpans.push([rawFrom, rawTo]);
       }
       plainAt = em.index + em[0].length;
     }
-    // Tokenize remaining plain text after the last entity reference
-    if (plainAt < seg.length) {
-      TOKEN_RE.lastIndex = 0;
-      const rest = seg.slice(plainAt);
-      let tm;
-      while ((tm = TOKEN_RE.exec(rest)) !== null) {
-        out.push({ token: tm[0], from: absStart + plainAt + tm.index, to: absStart + plainAt + tm.index + tm[0].length });
-      }
+    // Remaining plain chars
+    for (let i = plainAt; i < seg.length; i++) {
+      decoded.push(seg[i]);
+      rawSpans.push([absStart + i, absStart + i + 1]);
+    }
+
+    const decodedText = decoded.join('');
+    TOKEN_RE.lastIndex = 0;
+    let m;
+    while ((m = TOKEN_RE.exec(decodedText)) !== null) {
+      const from = rawSpans[m.index][0];
+      const to = rawSpans[m.index + m[0].length - 1][1];
+      out.push({ token: m[0], from, to });
     }
   }
 
