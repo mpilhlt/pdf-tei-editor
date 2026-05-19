@@ -8,6 +8,7 @@ This file provides guidance to code assistants when working with code in this re
 - **Python string literals** - Write long strings as single contiguous string literals (readable in soft-wrap mode), not as multiple adjacent string literals implicitly concatenated across lines.
 - If you think there might be a problem with the user's idea, push back. Don't assume the user's ideas are necessarily correct. Ask if you should go with their idea, but also suggest alternatives.
 - Your effort is precious, and you know how to write shell scripts. If you identify a repetitive workflow that requires you to parse text with a low signal-to-noise ratio, take the time to write helper scripts to automate or filter what can be automated or filtered.
+- **Markdown linting** — ignore all markdown linter warnings in files under `dev/` or `.claude/plans/`. These are working documents, not published documentation.
 
 ## Detailed Documentation
 
