@@ -107,7 +107,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             raise ValueError("PDF path is required for GROBID extraction")
 
         if not self.is_available():
-            raise RuntimeError("GROBID extractor is not available - configure grobid.server.url or GROBID_SERVER_URL")
+            raise RuntimeError("GROBID extractor is not available - configure plugin.grobid.server.url or GROBID_SERVER_URL")
 
         if options is None:
             options = {}
