@@ -33,6 +33,9 @@ class BaseAnnotator(ABC):
     #: Local name of the XML element this annotator targets (default: "bibl").
     target_tag: str = "bibl"
 
+    #: Variant IDs this annotator applies to. ``None`` means all variants.
+    target_variants: list[str] | None = None
+
     @property
     def provider(self) -> str:
         """LLM provider id, from config key ``tei-annotator.provider``."""
