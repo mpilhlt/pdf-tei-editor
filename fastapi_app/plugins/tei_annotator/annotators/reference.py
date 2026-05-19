@@ -229,6 +229,10 @@ class ReferenceAnnotator(BaseAnnotator):
         "Tags the content of a <bibl> element with bibliographic fields: "
         "author, title, date, publisher, place of publication, etc."
     )
+    target_variants = [
+        "grobid.training.references",
+        "llamore-default",
+    ]
 
     def get_schema(self) -> dict:
         """Return the annotation schema dict sent to the webservice."""

@@ -33,6 +33,7 @@ import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import XmlEditorDraftStore from '../modules/xml-editor-draft-store.js'
+import { XmlEditorContextMenu } from '../modules/codemirror/xml-editor-context-menu.js'
 
 /**
  * Adaptive draft save throttle (ms): well-formed typing is flushed less often, malformed
@@ -198,6 +199,9 @@ class XmlEditorPlugin extends Plugin {
   // Draft persistence and save-status reporting
   /** @type {XmlEditorDraftStore} */
   #draftStore;
+
+  /** @type {XmlEditorContextMenu} */
+  #contextMenu;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #draftSaveTimeout = null;
   /** @type {StatusText|null} */
@@ -218,7 +222,7 @@ class XmlEditorPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#xmlEditor;
-    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress']);
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress', 'addContextMenuItem']);
     return /** @type {NavXmlEditor} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -567,6 +571,10 @@ class XmlEditorPlugin extends Plugin {
 
     // Counter click handler (allow direct index input)
     this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
+
+    // Context menu — self-contained, mounts to the editor panel
+    this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
+    this.#contextMenu.mount(this.#xmlEditorEl);
   }
 
   /**
@@ -644,6 +652,18 @@ class XmlEditorPlugin extends Plugin {
       enableDiffButtons(false);
     });
     enableDiffButtons(false);
+
+    // Collect context menu contributions from all plugins that declare ep.xmlEditor.contextMenuItems
+    const contributions = await this.context.invokePluginEndpoint(
+      ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'full' }
+    );
+    for (const results of (contributions || [])) {
+      for (const item of (results || [])) {
+        if (item?.element instanceof HTMLElement) {
+          this.#contextMenu.addItem(item.element);
+        }
+      }
+    }
   }
 
   /**
@@ -870,6 +890,15 @@ class XmlEditorPlugin extends Plugin {
    */
   appendToEditor(element) {
     this.#xmlEditorEl.appendChild(element)
+  }
+
+  /**
+   * Add a contributed item to the XML editor right-click context menu.
+   * @param {HTMLElement} element - An <sl-menu-item> or <sl-divider>
+   * @param {string} [_group] - Reserved for future group-label support
+   */
+  addContextMenuItem(element, _group) {
+    this.#contextMenu.addItem(element);
   }
 
   /**

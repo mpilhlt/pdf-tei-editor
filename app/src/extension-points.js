@@ -131,6 +131,14 @@ const extensionPoints = {
      * Function signature: () => Array<{element: HTMLElement}>
      */
     menuItems: "toolbar.menuItems",
+  },
+  xmlEditor: {
+    /**
+     * Contribute items to the XML editor right-click context menu.
+     * Called by XmlEditorPlugin.start() on all plugins that declare this extension point.
+     * Function signature: () => Array<{element: HTMLElement, group?: string}>
+     */
+    contextMenuItems: "xmlEditor.contextMenuItems",
   }
 }
 

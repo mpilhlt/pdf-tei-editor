@@ -155,6 +155,7 @@ async def list_annotators(
             "display_name": ann.display_name,
             "description": ann.description,
             "target_tag": ann.target_tag,
+            "target_variants": ann.target_variants,
         }
         for ann in get_annotators()
     ]

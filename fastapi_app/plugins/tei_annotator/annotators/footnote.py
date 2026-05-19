@@ -162,6 +162,10 @@ class FootnoteAnnotator(BaseAnnotator):
         "Splits a <bibl> element containing multiple references into separate <bibl> elements. "
         "If the bibl contains only one reference, it is returned unchanged."
     )
+    target_variants = [
+        "grobid.training.references.referenceSegmenter",
+        "llamore-default",
+    ]
 
     def get_schema(self) -> dict:
         """Return the annotation schema dict sent to the webservice."""
@@ -201,6 +205,12 @@ class FootnoteAnnotator(BaseAnnotator):
                 if wrapper.text:
                     parts.append(wrapper.text)
                 for child in wrapper:
+                    local = etree.QName(child.tag).localname if isinstance(child.tag, str) else None
+                    if local == "bibl":
+                        first = next(iter(child), None)
+                        first_local = etree.QName(first.tag).localname if first is not None and isinstance(first.tag, str) else None
+                        if first_local == "label":
+                            parts.append("\n")
                     parts.append(etree.tostring(child, encoding="unicode", with_tail=True))
                 return ["".join(parts)]
         except etree.XMLSyntaxError as exc:

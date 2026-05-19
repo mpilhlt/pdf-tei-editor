@@ -1,9 +1,12 @@
 /**
  * TEI Annotator frontend extension.
  *
- * Adds a "TEI Annotator" submenu to the Tools menu. Each sub-item corresponds to
- * a registered annotator. Sub-items are enabled only when a <bibl> element is
- * selected in the XML editor (state.xpath points to a bibl element).
+ * Adds a "TEI Annotator" submenu to the Tools menu and contributes the same
+ * commands to the XML editor right-click context menu.
+ *
+ * Items are enabled when a <bibl> element is selected (state.xpath) AND the
+ * annotator's target_variants (if set) includes the current variant.
+ * The same condition applies to both the Tools menu and the context menu.
  *
  * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
  */
@@ -16,21 +19,33 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Annotator metadata fetched from the backend, stored for use in start().
-   * @type {Array<{id: string, display_name: string, description: string}>|null}
+   * Annotator metadata fetched from the backend, including optional target_variants.
+   * @type {Array<{id: string, display_name: string, description: string, target_variants: string[]|null}>|null}
    */
   _annotators = null;
 
   /**
-   * Map of annotator id → sl-menu-item element, populated during start.
+   * The "TEI Annotator" parent sl-menu-item in the Tools submenu, stored so its
+   * visibility can be toggled when no annotator applies to the current variant.
+   * @type {HTMLElement|null}
+   */
+  _toolsParentItem = null;
+
+  /**
+   * Map of annotator id → sl-menu-item in the Tools submenu.
    * @type {Record<string, HTMLElement>}
    */
   _menuItems = {};
 
+  /**
+   * Map of annotator id → sl-menu-item in the right-click context menu.
+   * @type {Record<string, HTMLElement>}
+   */
+  _contextMenuItems = {};
+
   async install(state) {
     await super.install(state);
   }
-
 
   async start() {
     try {
@@ -38,11 +53,13 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
     } catch (err) {
       console.warn('tei-annotator: could not load annotators from backend:', err.message);
       return;
-    }    
+    }
     if (!this._annotators || this._annotators.length === 0) return;
 
+    // Tools menu
     const parentItem = document.createElement('sl-menu-item');
     parentItem.textContent = 'TEI Annotator';
+    this._toolsParentItem = parentItem;
 
     const submenu = document.createElement('sl-menu');
     submenu.slot = 'submenu';
@@ -59,13 +76,57 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
 
     parentItem.appendChild(submenu);
     this.getDependency('tools').addMenuItems([parentItem], 'annotation');
+
+    // Context menu — push items directly since xmleditor is already started
+    const xmleditor = this.getDependency('xmleditor');
+    for (const ann of this._annotators) {
+      const item = document.createElement('sl-menu-item');
+      item.textContent = ann.display_name;
+      item.title = ann.description;
+      item.disabled = true;
+      item.addEventListener('click', () => this._runAnnotator(ann));
+      this._contextMenuItems[ann.id] = item;
+      xmleditor.addContextMenuItem(item, 'annotation');
+    }
   }
 
   async onXpathChange(newXpath) {
-    const enabled = _isBiblXpath(newXpath);
-    for (const item of Object.values(this._menuItems)) {
-      item.disabled = !enabled;
+    const isBibl = _isBiblXpath(newXpath);
+    for (const [id, item] of Object.entries(this._menuItems)) {
+      item.disabled = !(isBibl && this._variantAllowed(id));
     }
+    for (const [id, item] of Object.entries(this._contextMenuItems)) {
+      item.disabled = !(isBibl && this._variantAllowed(id));
+    }
+  }
+
+  async onVariantChange(newVariant) {
+    for (const [id, item] of Object.entries(this._menuItems)) {
+      item.style.display = this._variantAllowed(id, newVariant) ? '' : 'none';
+    }
+    for (const [id, item] of Object.entries(this._contextMenuItems)) {
+      item.style.display = this._variantAllowed(id, newVariant) ? '' : 'none';
+    }
+    // Hide the Tools parent item when no annotator applies to this variant
+    if (this._toolsParentItem) {
+      const anyVisible = this._annotators?.some(ann => this._variantAllowed(ann.id, newVariant)) ?? false;
+      this._toolsParentItem.style.display = anyVisible ? '' : 'none';
+    }
+    await this.onXpathChange(this.state?.xpath ?? null);
+  }
+
+  /**
+   * Returns true when the given annotator applies to the current (or given) variant.
+   * An annotator with target_variants === null applies to all variants.
+   * @param {string} annotatorId
+   * @param {string|null} [variant]
+   * @returns {boolean}
+   */
+  _variantAllowed(annotatorId, variant) {
+    const v = variant ?? this.state?.variant ?? null;
+    const ann = this._annotators?.find(a => a.id === annotatorId);
+    if (!ann || !ann.target_variants) return true;
+    return v !== null && ann.target_variants.includes(v);
   }
 
   /**
@@ -100,6 +161,14 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
       if (await this.getDependency('config').get('xml.encode-entities.server', false)) {
         const encodeQuotes = await this.getDependency('config').get('xml.encode-quotes', false);
         modifiedXml = this.getDependency('tei-utils').encodeXmlEntities(modifiedXml, { encodeQuotes });
+      }
+      if (modifiedXml === xmleditorApi.getEditorContent()) {
+        this.getDependency('sl-utils').notify(
+          `${ann.display_name}: no annotations added.`,
+          'primary',
+          'info-circle'
+        );
+        return;
       }
       await xmleditorApi.showMergeView(modifiedXml);
     } catch (err) {
