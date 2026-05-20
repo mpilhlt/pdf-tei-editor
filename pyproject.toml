@@ -9,6 +9,7 @@ dependencies = [
     "flask>=3.1.0",
     "jsonschema>=4.23.0",
     "llamore>=0.2.0",
+    "tei-annotator>=1.7.0",
     "lxml>=5.3.1",
     "pdf2image>=1.17.0",
     "pydantic-settings>=2.10.1",
@@ -26,6 +27,7 @@ dependencies = [
 
 [tool.uv.sources]
 llamore = { git = "https://github.com/mpilhlt/llamore.git" }
+tei-annotator = { git = "https://github.com/cboulanger/tei-annotator" }
 
 [dependency-groups]
 dev = [
