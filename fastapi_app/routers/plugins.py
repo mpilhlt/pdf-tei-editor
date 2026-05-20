@@ -170,8 +170,9 @@ def transform_extension_to_iife(content: str, filename: str, plugin_id: str) -> 
 
     class_name = class_match.group(1)
 
-    # Strip 'export default' before the class declaration
+    # Strip 'export default' before the class declaration and 'export' before named declarations
     content = re.sub(r"export\s+default\s+(?=class\s)", "", content)
+    content = re.sub(r"^export\s+(?=(?:function|class|const|let|var)\s)", "", content, flags=re.MULTILINE)
 
     # Replace local 'extends FrontendExtensionPlugin' with the global reference
     content = content.replace(
