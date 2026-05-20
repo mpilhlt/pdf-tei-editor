@@ -184,6 +184,46 @@ export default class TeiAnnotatorExtension extends FrontendExtensionPlugin {
 }
 
 /**
+ * Return the indentation whitespace that precedes *element* in the document.
+ *
+ * Looks at the immediately preceding sibling. If it is a text node containing
+ * a newline, returns the characters after the last newline (the indentation
+ * prefix). Returns an empty string when no indentation can be determined.
+ *
+ * @param {Element} element
+ * @returns {string}
+ */
+export function getIndentation(element) {
+  const prev = element.previousSibling;
+  if (prev && prev.nodeType === Node.TEXT_NODE) {
+    const text = prev.textContent ?? '';
+    const idx = text.lastIndexOf('\n');
+    if (idx !== -1) return text.slice(idx + 1);
+  }
+  return '';
+}
+
+/**
+ * Normalise newlines inside an XML fragment string to match a given indentation.
+ *
+ * Every `\n` that is **not** at position 0 of *fragXml* is replaced with
+ * `\n` + *indent*, so that sibling elements within the fragment align with the
+ * surrounding document. A leading newline (position 0) is left untouched
+ * because it belongs to the whitespace text node that precedes the fragment,
+ * not to the fragment's internal structure.
+ *
+ * @param {string} fragXml - Serialised XML fragment from the backend
+ * @param {string} indent - Whitespace string to insert after each inner newline
+ * @returns {string}
+ */
+export function adjustFragmentIndentation(fragXml, indent) {
+  // Strip leading newline — the preceding indentation whitespace already contains one
+  const stripped = fragXml.startsWith('\n') ? fragXml.slice(1) : fragXml;
+  if (!indent) return stripped;
+  return stripped.replace(/\n/g, '\n' + indent);
+}
+
+/**
  * Return true when *xpath* ends with a bibl element step.
  * Matches patterns like: tei:bibl, tei:bibl[3], bibl, bibl[1]
  * @param {string|null|undefined} xpath
@@ -224,10 +264,12 @@ function _substituteAtXpath(xmleditorApi, xpath, fragments) {
   }
 
   const parent = element.parentNode;
+  const indent = getIndentation(element);
 
   for (const fragXml of fragments) {
+    const adjusted = adjustFragmentIndentation(fragXml, indent);
     const wrapper = new DOMParser().parseFromString(
-      `<w xmlns="${_TEI_NS}">${fragXml}</w>`, 'text/xml'
+      `<w xmlns="${_TEI_NS}">${adjusted}</w>`, 'text/xml'
     );
     for (const child of Array.from(wrapper.documentElement.childNodes)) {
       parent.insertBefore(doc.importNode(child, true), element);
