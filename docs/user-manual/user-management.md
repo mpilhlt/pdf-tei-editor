@@ -4,11 +4,11 @@ This guide covers authentication, user account management, and access control fo
 
 ## Authentication System
 
-The PDF-TEI Editor uses a simple, file-based authentication system. User data is stored in `db/users.json` and `db/groups.json`. If you know what you are doing, you can edit the data directly. However, in normal operation, user and group data is managed via the "RBAC Management" tool in the Editor, or via `npm run manage-remote` (using the http API).
+User, group, and collection data is managed via the ["RBAC Management" tool](./rbac-manager.md), or via [`npm run manage-remote`](./cli-manage-remote.md) (using the http API).
 
 ## User Roles
 
-The application currently supports two user roles:
+The application currently supports four user roles:
 
 ### User Role
 
