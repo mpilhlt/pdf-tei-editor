@@ -2,6 +2,20 @@
 
 The PDF-TEI Editor uses a layered access control system to manage who can view and edit documents.
 
+## Access Control Model
+
+The system implements a three-level access control model:
+
+```
+User → Group → Collection
+```
+
+- **Users** belong to one or more **Groups**
+- **Groups** have access to one or more **Collections**
+- **Collections** contain documents
+
+This model allows fine-grained access control where users can only access documents in collections that their groups have access to.
+
 ## Access Control Layers
 
 ### 1. Collection-Based Access

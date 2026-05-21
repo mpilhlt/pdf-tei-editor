@@ -17,7 +17,7 @@ Default credentials:
 - Admin: `admin` / `admin`
 - Demo user: `demo` / `demo`
 
-The container includes demo data and is ready to use immediately.
+The container includes demo data and is ready to use immediately to test the annotation workflow. The demo cannot run any extractions as this requires configuring an extraction backend and API keys.
 
 ## Custom Passwords
 

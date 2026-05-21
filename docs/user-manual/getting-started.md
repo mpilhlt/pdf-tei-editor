@@ -12,31 +12,15 @@ The PDF-TEI Editor requires user authentication to access documents and manage p
 
 ### Logging In
 
-When you first access the application, you'll be automatically prompted to log in:
-
-1. Enter your **username**
-2. Enter your **password**
-3. Click **Login**
-
-Each browser tab maintains its own session, so you can have multiple sessions open with different users if needed.
-
-### Default Accounts
-
-For initial setup or testing, default accounts may be available (check with your administrator):
-
-- **admin** - Full administrative access
-- **reviewer** - Can create and edit gold standard files
-- **annotator** - Can create and edit version files
-
-**Note**: Change default passwords immediately in production environments.
+When you first access the application, you'll be automatically prompted to log in. Each browser tab maintains its own session, so you can have multiple sessions open with different users (or the same user) if needed.
 
 ## Main Interface
 
-After logging in, you'll see the main three-panel interface:
+After logging in, you'll see the main two-panel interface:
 
 - **Left Panel**: PDF document viewer
 - **Right Panel**: XML editor with syntax highlighting and validation
-- **Floating Panel**: Navigation and verification tools
+
 
 See [Interface Overview](interface-overview.md) for detailed information about the interface.
 
@@ -44,19 +28,22 @@ See [Interface Overview](interface-overview.md) for detailed information about t
 
 A typical workflow in the PDF-TEI Editor involves:
 
-1. **Select a PDF** - Choose a document from the file selector
+1. **Select or load a PDF** - Choose a document from the file selector or upload a new one
 2. **Extract TEI** - Use automatic extraction to create initial TEI markup (see [Extraction Workflow](extraction-workflow.md))
-3. **Edit & Validate** - Refine the TEI markup using the XML editor (see [Editing Workflow](editing-workflow.md))
-4. **Save** - Save your work as a new version
-5. **Review** - Mark gold standard files when ready for production
+3. **Save your personal version**: Depending on your project's workflow, you either work on the extracted document directly or create your own personal version. Keeping the original extraction unaltered and editing a copy is recommended particularly in scenarios with multiple annotators.
+4. **Edit & Validate** - Refine the TEI markup using the XML editor (see [Editing Workflow](editing-workflow.md)). The application automatically saves the document content after each change. 
+5. **Save a revision record** - Save the state of the document and what you have changed as a revision record that is included in the TEI document header. This records your contribution to the annotation and leaves and makes it easy to attribute changes to individual annotators.  
+6. **Review** - The reviewers then check your annotations and mark gold standard files when ready for production
 
-## Key Features
+## Key Concepts
+
+The application uses a number of concepts in its user interface that need to be clarified. 
 
 ### Document Management
 
-- **Collections**: Organize documents into collections
-- **Versions**: Create and manage multiple versions of documents
-- **Variants**: Support for different extraction engines and document variants
+- **Collections**: Documents are organized into "collections" which are shown in the "Collections & Files" Drawer and the Collection dropdown in the toolbar. Access to collections is granted by administrators via the groups users belong to. A typical use case for collections is for batches of documents which need to be edited in one round of annotations. 
+- **Variants**: The model "variant" denotes a particular XML schema or specialized use case that acts a filter for all the TEI documents that belong to a particular PDF. This can mean different things for specific extraction backends. For example, [Grobid](https://grobid.readthedocs.io) works with a number of different models which all need a particular XML annotation schema, each constituting a "variant" in the context of this application. 
+- **Versions**: For each PDF and variant, a number of "versions" can exist. Typically, the first version is the extraction as returned by the extraction backend used. This version should not be edited but be kept to be able to compare annotations against it. It can be deleted safely later. In a mulit-annotator setup, each annotator should create their own version (this is enforced in owner-based mode)
 
 ### Editing Tools
 
