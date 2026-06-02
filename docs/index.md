@@ -10,19 +10,15 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Editing Workflow](user-manual/editing-workflow.md)** - Editing and validating TEI
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
-- **[Sync Workflow](user-manual/sync-workflow.md)** - WebDAV synchronization
-- **[User Management](user-manual/user-management.md)** - Managing users and permissions
 
 ## Administration
 
-- **Install the application** - [Installation](./development/installation.md)
-- **Manage Users** - [User Management](user-manual/user-management.md)
-- **Import and Export Files** - [Import & Export](user-manual/import-export.md)
-- **Configure Sync** - [Sync Workflow](user-manual/sync-workflow.md)
+Information on setting up, configuring , and maintaining  the editor can be found in the dedicated [Admin Guide](./user-manual/admin-guide.md).
+
 
 ## Developer Information
 
-Information on how to add new features or fix program bugs, please consult the [developer documentation](./development/index.md).
+Information on how to add new features or fix program bugs, please consult the [Developer Documentation](./development/index.md).
 
 ## About
 

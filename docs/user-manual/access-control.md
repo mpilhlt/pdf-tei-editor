@@ -2,6 +2,20 @@
 
 The PDF-TEI Editor uses a layered access control system to manage who can view and edit documents.
 
+## Access Control Model
+
+The system implements a three-level access control model:
+
+```
+User → Group → Collection
+```
+
+- **Users** belong to one or more **Groups**
+- **Groups** have access to one or more **Collections**
+- **Collections** contain documents
+
+This model allows fine-grained access control where users can only access documents in collections that their groups have access to.
+
 ## Access Control Layers
 
 ### 1. Collection-Based Access
@@ -116,28 +130,10 @@ Legacy documents without an owner can only be deleted by reviewers and admins.
 3. **Check permissions first**: If you can't edit, check the status bar for the reason
 4. **Ask reviewers**: If you need to edit a protected document, ask a reviewer to adjust permissions
 
-## Troubleshooting
-
-### "I can't see any documents"
-
-- Check that you're logged in
-- Verify you belong to at least one group
-- Ask your administrator to confirm your group has collection access
-
-### "I can see a document but can't edit it"
-
-- Check your role (annotators can edit versions, reviewers can edit gold files)
-- In owner-based mode, check if you're the document owner
-- In granular mode, check if editability is set to "owner"
-
-### "The permission switches aren't showing"
-
-- Permission switches only appear in granular mode
-- You must be the document owner or a reviewer to see them
-- Make sure a document is loaded in the editor
-
 ## For Administrators
 
 To change the access control mode, modify the "access-control.mode" config setting.
+
+## For Developers
 
 See the [developer documentation](../development/access-control.md) for technical details.

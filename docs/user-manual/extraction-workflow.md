@@ -1,7 +1,5 @@
 # PDF-TEI Editor Workflow for Training/Evaluation Datasets
 
-![](../images/4e00d137-4d2b-4559-8c3f-cb04a4bdf2ed.png)
-
 For the creation of datasets that are to be used to train models or evaluate their performance, the basic workflow of the PDF-TEI Editor is this:
 
 1. Extract data from PDF into first "gold" draft
