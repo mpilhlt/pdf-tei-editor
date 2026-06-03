@@ -2,18 +2,18 @@
 
 A comprehensive viewer/editor web application for comparing PDF sources with TEI extraction and annotation results, specifically designed for creating gold standard datasets of TEI documents from legal and humanities literature.
 
-![grafik](https://github.com/user-attachments/assets/864185f5-864a-439f-806c-537267470c46)
+![grafik](docs/images/interface-overview.png)
 
 ## Key Features
 
 - **Dual-pane interface** with synchronized PDF viewer and XML editor
-- **AI-powered extraction** supporting multiple extraction engines (GROBID, etc.)
+- **AI-powered extraction** supporting multiple extraction engines (GROBID, etc.) via frontier and open LLMs
 - **Version management** with branching, merging, and comparison tools
 - **Schema validation** with automatic TEI compliance checking
 - **Access control** with role-based permissions and collection management
 - **Collection organization** for managing document sets
-- **WebDAV synchronization** for external system integration
 - **Revision tracking** with detailed change documentation
+- **Modular architecture** - easily add new features and behavior with frontend and backend plugins 
 
 ## Target Use Cases
 
@@ -22,16 +22,6 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 - Collaborative annotation of legal and humanities literature
 - Training data preparation for machine learning models
 - Quality assurance for large-scale digitization projects
-
-
-## About
-
-This repository is part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) at the Max Planck Institute of Legal History and Legal Theory.
-
-Related repositories:
-
-- [llamore](https://github.com/mpilhlt/llamore)
-- [bibliographic-tei](https://github.com/mpilhlt/bibliographic-tei)
 
 ## 🚀 Quick Start
 
@@ -111,9 +101,9 @@ Visit: **<http://localhost:8000>**
 
 ## Technology Stack
 
-**Backend:** FastAPI (Python 3.13+), SQLite, lxml
-**Frontend:** ES6 modules, CodeMirror 6, PDF.js, Shoelace
-**Testing:** Playwright (E2E), pytest (backend), Node.js test runner (API)
+- **Backend:** FastAPI (Python 3.13+), SQLite, lxml
+- **Frontend:** ES6 modules, CodeMirror 6, PDF.js, Shoelace
+- **Testing:** Playwright (E2E), pytest (backend), Node.js test runner (API)
 
 ## License
 
@@ -127,6 +117,16 @@ Developers interested in contributing should:
 2. Follow [Coding Standards](docs/code-assistant/coding-standards.md)
 3. Write tests following the [Testing Guide](docs/development/testing.md)
 4. Submit pull requests with proper documentation
+
+## About
+
+This repository is part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) at the Max Planck Institute of Legal History and Legal Theory.
+
+Related repositories:
+
+- [llamore](https://github.com/mpilhlt/llamore)
+- [bibliographic-tei](https://github.com/mpilhlt/bibliographic-tei)
+
 
 ---
 

@@ -1,5 +1,7 @@
 # Coding Standards and Best Practices
 
+The project uses plain JavaScript with JSDOC-embedded TypeScript annotations. 
+
 ## 🚨 CRITICAL: JSDoc Type Annotation Requirements
 
 **ALWAYS create comprehensive JSDoc headers for ALL functions and use specific types instead of generic "object".**
