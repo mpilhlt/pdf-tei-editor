@@ -47,6 +47,7 @@ dev = [
 pythonpath = [
   "."
 ]
+addopts = "--import-mode=importlib"
 markers = [
   "integration: marks tests as integration tests that check actual project structure (deselect with '-m \"not integration\"')"
 ]

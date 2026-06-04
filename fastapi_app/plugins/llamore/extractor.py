@@ -29,8 +29,13 @@ from fastapi_app.plugins.llamore.config import (
 import datetime
 
 # Try to import LLamore dependencies
+GeminiExtractor = None
+LineByLinePrompter = None
+TeiBiblStruct = None
+genai = None
 try:
     from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
+    from google import genai  # type: ignore[import-untyped]
     LLAMORE_AVAILABLE = True
 except ImportError:
     LLAMORE_AVAILABLE = False
@@ -38,13 +43,61 @@ except ImportError:
 class LLamoreExtractor(BaseExtractor):
     """LLamore-based reference extraction from PDF files."""
 
+    _models_cache: list[str] | None = None
+    _models_cache_time: float = 0
+    _CACHE_TTL: int = 86400  # 24 hours
+
+    @classmethod
+    def _fetch_available_models(cls) -> list[str]:
+        """Return available Gemini models from API with 24-hour caching."""
+        import time
+        import logging
+        logger = logging.getLogger(__name__)
+
+        configured_model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
+        api_key = get_config().get("plugin.llamore.api.key", default="")
+
+        if not api_key:
+            return [configured_model]
+
+        now = time.time()
+        if cls._models_cache is not None and (now - cls._models_cache_time) < cls._CACHE_TTL:
+            return cls._models_cache
+
+        try:
+            client = genai.Client(api_key=api_key)
+            models = [
+                m.name.replace("models/", "")
+                for m in client.models.list()
+                if m.name.startswith("models/gemini-")
+                and "generateContent" in (m.supported_actions or [])
+            ]
+            if models:
+                if configured_model in models:
+                    models = [configured_model] + [m for m in models if m != configured_model]
+                cls._models_cache = models
+                cls._models_cache_time = now
+                return models
+        except Exception as exc:
+            logger.warning("Could not fetch Gemini model list: %s", exc)
+
+        return [configured_model]
+
     @classmethod
     def get_models(cls) -> list[str]:
-        return [get_config().get("plugin.llamore.model", default="gemini-2.0-flash")]
+        return cls._fetch_available_models()
 
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the LLamore extractor."""
+        options = get_form_options()
+        options["model"] = {
+            "type": "string",
+            "label": "Model",
+            "description": "Gemini model to use for extraction",
+            "required": False,
+            "options": cls._fetch_available_models()
+        }
         return {
             "id": "llamore-gemini",
             "name": "LLamore + Gemini",
@@ -52,7 +105,7 @@ class LLamoreExtractor(BaseExtractor):
             "input": ["pdf"],
             "output": ["tei-document"],
             "variants": get_supported_variants(),
-            "options": get_form_options(),
+            "options": options,
             "navigation_xpath": get_navigation_xpath(),
             "annotationGuides": get_annotation_guides()
         }
@@ -170,7 +223,7 @@ class LLamoreExtractor(BaseExtractor):
         print(f"Extracting references from {pdf_path} via LLamore/Gemini")
 
         gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
-        model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
+        model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
 
         class CustomPrompter(LineByLinePrompter):
             def user_prompt(self, text=None, additional_instructions="") -> str:
