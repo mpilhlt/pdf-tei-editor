@@ -4,6 +4,8 @@
 /**
  * @typedef {object} xmleditorTeiButtonsPart
  * @property {HTMLElement} validateBtn
+ * @property {HTMLElement} undoBtn
+ * @property {HTMLElement} redoBtn
  */
 
 export {}
