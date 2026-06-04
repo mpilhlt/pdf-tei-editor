@@ -38,15 +38,24 @@ class TestUploadDocId(unittest.TestCase):
         self.assertEqual(doc_id, "My_Document_With_Spaces")
 
     def test_doc_id_preserves_doi_format(self):
-        """Test that DOI-like filenames are preserved."""
+        """Test that DOI-like filenames are decoded to the actual DOI as doc_id."""
         filename = "10.1111__eulj.12049.pdf"
         original_name = filename.rsplit('.', 1)[0]
-        # Note: DOI underscores are NOT replaced (only whitespace)
-        doc_id = re.sub(r'\s+', '_', original_name)
+        label = original_name.replace("__", "/")
+        label = re.sub(r'^(10\.\d{4,9})_(?!_)', r'\1/', label)
+        doc_id = re.sub(r'\s+', '_', label)
 
-        # The label conversion happens separately: original_name.replace("__", "/")
-        # But doc_id keeps the original format
-        self.assertEqual(doc_id, "10.1111__eulj.12049")
+        self.assertEqual(doc_id, "10.1111/eulj.12049")
+
+    def test_doc_id_single_underscore_doi(self):
+        """Test that a single underscore after the DOI numeric prefix is decoded as /."""
+        filename = "10.1111_eulj.12049.pdf"
+        original_name = filename.rsplit('.', 1)[0]
+        label = original_name.replace("__", "/")
+        label = re.sub(r'^(10\.\d{4,9})_(?!_)', r'\1/', label)
+        doc_id = re.sub(r'\s+', '_', label)
+
+        self.assertEqual(doc_id, "10.1111/eulj.12049")
 
     def test_doc_id_for_xml_file(self):
         """Test that XML files also get doc_id from filename."""
@@ -121,8 +130,8 @@ class TestUploadDuplicateDocIdUpdate(unittest.TestCase):
             updated = repo.get_file_by_id(file_hash)
             self.assertEqual(
                 updated.doc_id,
-                "10.1628__rabelsz-2021-0049",
-                "doc_id should be updated to the DOI-based value from the new filename",
+                "10.1628/rabelsz-2021-0049",
+                "doc_id should be updated to the decoded DOI from the new filename",
             )
             self.assertEqual(
                 updated.label,

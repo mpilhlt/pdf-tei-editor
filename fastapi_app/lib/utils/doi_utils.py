@@ -5,6 +5,7 @@ Provides:
 - DOI validation and normalization
 - Filesystem-safe encoding/decoding for doc_ids
 - Metadata fetching from CrossRef and DataCite APIs
+- DOI extraction from PDF text content
 """
 
 import re
@@ -22,6 +23,9 @@ BibliographicMetadata = Dict[str, Any]
 # Matches: 10.{4-9 digits}/{suffix with allowed characters}
 # Allowed suffix characters: A-Z 0-9 -._;()/
 DOI_REGEX = r"^10\.\d{4,9}/[-._;()/:A-Z0-9]+$"
+
+# Non-anchored pattern for searching DOIs within text
+DOI_SEARCH_PATTERN = re.compile(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', re.IGNORECASE)
 
 
 def validate_doi(doi: str) -> bool:
@@ -45,6 +49,39 @@ def validate_doi(doi: str) -> bool:
     if not doi:
         return False
     return bool(re.match(DOI_REGEX, doi, flags=re.IGNORECASE))
+
+
+def extract_doi_from_pdf(content: bytes, max_pages: int = 2) -> Optional[str]:
+    """
+    Extract the first valid DOI from the text layer of a PDF.
+
+    Scans only the first ``max_pages`` pages to avoid false positives from
+    footnote or bibliography DOIs that appear later in the document.
+
+    Args:
+        content: Raw PDF bytes.
+        max_pages: Number of leading pages to scan (default: 2).
+
+    Returns:
+        The first valid DOI found (normalised, without URL prefix), or None.
+    """
+    try:
+        from pypdf import PdfReader
+        from io import BytesIO
+
+        reader = PdfReader(BytesIO(content))
+        text = ""
+        for page in reader.pages[:max_pages]:
+            text += page.extract_text() or ""
+
+        for match in DOI_SEARCH_PATTERN.finditer(text):
+            candidate = match.group(0).rstrip('.')  # strip trailing punctuation
+            if validate_doi(candidate):
+                return candidate
+    except Exception as e:
+        logger.warning(f"Could not extract DOI from PDF: {e}")
+
+    return None
 
 
 def fetch_doi_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:

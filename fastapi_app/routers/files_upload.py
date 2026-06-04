@@ -35,6 +35,7 @@ from ..lib.core.dependencies import (
     get_current_user
 )
 from ..lib.utils.logging_utils import get_logger
+from ..lib.utils.doi_utils import validate_doi, extract_doi_from_pdf
 
 
 logger = get_logger(__name__)
@@ -128,11 +129,23 @@ async def upload_file(
     import os
     import re
     original_name = os.path.splitext(file.filename)[0]
-    # Convert underscores used for DOIs back to slashes/dots for display
-    # e.g., "10.1111__eulj.12049" -> "10.1111/eulj.12049"
+    # Decode filesystem-safe DOI encoding back to display form:
+    # "10.1111__eulj.12049" -> "10.1111/eulj.12049" (double underscore)
     label = original_name.replace("__", "/")
-    # Use filename (without extension) as doc_id, replacing whitespace with underscores
-    doc_id = re.sub(r'\s+', '_', original_name)
+    # Also accept a single underscore as the DOI prefix/suffix separator:
+    # "10.1111_eulj.12049" -> "10.1111/eulj.12049"
+    label = re.sub(r'^(10\.\d{4,9})_(?!_)', r'\1/', label)
+    # Derive doc_id from the decoded label (replace remaining whitespace with _)
+    doc_id = re.sub(r'\s+', '_', label)
+
+    # For PDFs whose filename is not already a valid DOI, try to extract one
+    # from the text layer (first two pages only, to avoid bibliography DOIs).
+    if file_type == 'pdf' and not validate_doi(doc_id):
+        extracted_doi = extract_doi_from_pdf(content)
+        if extracted_doi:
+            logger.info(f"Extracted DOI from PDF content: {extracted_doi}")
+            doc_id = extracted_doi
+            label = extracted_doi
 
     # Save to hash-sharded storage
     file_hash, storage_path = storage.save_file(content, file_type)
@@ -154,7 +167,8 @@ async def upload_file(
             return UploadResponse(
                 type=file_type,
                 filename=updated_file.stable_id, # deprecated
-                stable_id=updated_file.stable_id
+                stable_id=updated_file.stable_id,
+                doc_id=doc_id
             )
         else:
             # File exists and is not deleted - update doc_id/label if the
@@ -171,7 +185,8 @@ async def upload_file(
             return UploadResponse(
                 type=file_type,
                 filename=existing_file.stable_id, # deprecated
-                stable_id=existing_file.stable_id
+                stable_id=existing_file.stable_id,
+                doc_id=doc_id
             )
 
     # Save metadata to database — assign uploaded files to "_inbox" collection by default
@@ -201,7 +216,8 @@ async def upload_file(
         return UploadResponse(
             type=file_type,
             filename=created_file.stable_id, # deprecated
-            stable_id=created_file.stable_id
+            stable_id=created_file.stable_id,
+            doc_id=doc_id
         )
     except Exception as e:
         logger.error(f"Error inserting file metadata: {e}")
@@ -213,7 +229,8 @@ async def upload_file(
             return UploadResponse(
                 type=file_type,
                 filename=existing_file.stable_id, # deprecated
-                stable_id=existing_file.stable_id
+                stable_id=existing_file.stable_id,
+                doc_id=doc_id
             )
         # If we still can't find it, this is an actual error
         raise HTTPException(
