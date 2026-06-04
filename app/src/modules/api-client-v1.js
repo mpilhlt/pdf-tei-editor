@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-04T12:12:52.353Z
+ * Generated from OpenAPI schema at 2026-06-04T14:58:52.327Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1548,11 +1548,10 @@ export class ApiClientV1 {
   /**
    * Update document ID for all files belonging to a document.
    * Only users with reviewer or admin role can update doc_id.
-   * Only gold standard files can have their doc_id updated.
    * Updates doc_id for all files (PDF and artifacts) with the same doc_id.
    * Also updates the fileref in all TEI XML files.
    * Args:
-   * stable_id: The stable_id of the gold file
+   * stable_id: The stable_id of any file belonging to the document
    * request: Request body with new doc_id
    * user: Authenticated user
    * file_repo: File repository instance
@@ -1560,7 +1559,7 @@ export class ApiClientV1 {
    * Returns:
    * Success message
    * Raises:
-   * HTTPException: If file not found, not gold standard, user doesn't have access, or lacks reviewer role
+   * HTTPException: If file not found, user doesn't have access, or lacks reviewer role
    *
    * @param {string} stable_id
    * @param {UpdateDocIdRequest} requestBody
