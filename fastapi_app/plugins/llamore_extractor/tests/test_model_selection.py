@@ -6,7 +6,7 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from fastapi_app.plugins.llamore.extractor import LLamoreExtractor
+from fastapi_app.plugins.llamore_extractor.extractor import LLamoreExtractor
 
 
 def _make_mock_model(name: str, actions: list[str]) -> MagicMock:
@@ -49,8 +49,8 @@ class TestFetchAvailableModels(unittest.TestCase):
         mock_client.models.list.return_value = models if models is not None else GEMINI_MODELS
         return mock_client
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.genai")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.genai")
     def test_returns_only_gemini_generate_content_models(self, mock_genai, mock_get_config):
         self._setup_config_mock(mock_get_config)
         mock_genai.Client.return_value = self._mock_client()
@@ -64,8 +64,8 @@ class TestFetchAvailableModels(unittest.TestCase):
         # Gemma models should be excluded (don't start with gemini-)
         self.assertNotIn("gemma-4-26b-a4b-it", result)
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.genai")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.genai")
     def test_configured_model_is_first(self, mock_genai, mock_get_config):
         self._setup_config_mock(mock_get_config, model="gemini-2.5-pro")
         mock_genai.Client.return_value = self._mock_client()
@@ -74,8 +74,8 @@ class TestFetchAvailableModels(unittest.TestCase):
 
         self.assertEqual(result[0], "gemini-2.5-pro")
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.genai")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.genai")
     def test_cache_is_used_within_ttl(self, mock_genai, mock_get_config):
         self._setup_config_mock(mock_get_config)
         mock_genai.Client.return_value = self._mock_client()
@@ -86,8 +86,8 @@ class TestFetchAvailableModels(unittest.TestCase):
         # Client should only have been constructed once
         self.assertEqual(mock_genai.Client.call_count, 1)
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.genai")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.genai")
     def test_cache_is_refreshed_after_ttl(self, mock_genai, mock_get_config):
         self._setup_config_mock(mock_get_config)
         mock_genai.Client.return_value = self._mock_client()
@@ -99,8 +99,8 @@ class TestFetchAvailableModels(unittest.TestCase):
 
         self.assertEqual(mock_genai.Client.call_count, 2)
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.genai")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.genai")
     def test_fallback_to_config_model_on_api_error(self, mock_genai, mock_get_config):
         self._setup_config_mock(mock_get_config)
         mock_genai.Client.side_effect = Exception("API error")
@@ -109,7 +109,7 @@ class TestFetchAvailableModels(unittest.TestCase):
 
         self.assertEqual(result, ["gemini-2.0-flash"])
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
     def test_fallback_when_no_api_key(self, mock_get_config):
         self._setup_config_mock(mock_get_config, api_key="")
 
@@ -145,10 +145,10 @@ class TestExtractUsesModelFromOptions(unittest.TestCase):
         LLamoreExtractor._models_cache = None
         LLamoreExtractor._models_cache_time = 0
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.LineByLinePrompter")
-    @patch("fastapi_app.plugins.llamore.extractor.GeminiExtractor")
-    @patch("fastapi_app.plugins.llamore.extractor.TeiBiblStruct")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.LineByLinePrompter")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.GeminiExtractor")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.TeiBiblStruct")
     def test_extract_uses_model_from_options(
         self, mock_parser_cls, mock_extractor_cls, mock_prompter_cls, mock_get_config
     ):
@@ -173,10 +173,10 @@ class TestExtractUsesModelFromOptions(unittest.TestCase):
         call_kwargs = mock_extractor_cls.call_args.kwargs
         self.assertEqual(call_kwargs.get("model"), "gemini-2.5-flash")
 
-    @patch("fastapi_app.plugins.llamore.extractor.get_config")
-    @patch("fastapi_app.plugins.llamore.extractor.LineByLinePrompter")
-    @patch("fastapi_app.plugins.llamore.extractor.GeminiExtractor")
-    @patch("fastapi_app.plugins.llamore.extractor.TeiBiblStruct")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.get_config")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.LineByLinePrompter")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.GeminiExtractor")
+    @patch("fastapi_app.plugins.llamore_extractor.extractor.TeiBiblStruct")
     def test_extract_falls_back_to_config_model_when_not_in_options(
         self, mock_parser_cls, mock_extractor_cls, mock_prompter_cls, mock_get_config
     ):

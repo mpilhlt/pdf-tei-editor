@@ -21,7 +21,7 @@ from fastapi_app.lib.utils.tei_utils import (
 from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 from fastapi_app.lib.utils.config_utils import get_config
-from fastapi_app.plugins.llamore.config import (
+from .config import (
     get_annotation_guides,
     get_form_options,
     get_navigation_xpath,
@@ -32,17 +32,8 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
-# Try to import LLamore dependencies
-GeminiExtractor = None
-LineByLinePrompter = None
-TeiBiblStruct = None
-genai = None
-try:
-    from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
-    from google import genai  # type: ignore[import-untyped]
-    LLAMORE_AVAILABLE = True
-except ImportError:
-    LLAMORE_AVAILABLE = False
+from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
+from google import genai  # type: ignore[import-untyped]
 
 class LLamoreExtractor(BaseExtractor):
     """LLamore-based reference extraction from PDF files."""
@@ -55,21 +46,21 @@ class LLamoreExtractor(BaseExtractor):
     def _fetch_available_models(cls) -> list[str]:
         """Return available Gemini models from API with 24-hour caching."""
         configured_model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
-        api_key = get_config().get("plugin.llamore.api.key", default="")
-
-        if not api_key:
-            return [configured_model]
 
         now = time.time()
         if cls._models_cache is not None and (now - cls._models_cache_time) < cls._CACHE_TTL:
             return cls._models_cache
+
+        api_key = get_config().get("plugin.llamore.api.key", default="")
+        if not api_key:
+            return [configured_model]
 
         try:
             client = genai.Client(api_key=api_key)
             models = [
                 m.name.replace("models/", "")
                 for m in client.models.list()
-                if m.name.startswith("models/gemini-")
+                if m.name and m.name.startswith("models/gemini-")
                 and "generateContent" in (m.supported_actions or [])
             ]
             if models:
@@ -112,8 +103,8 @@ class LLamoreExtractor(BaseExtractor):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Check if LLamore and Gemini API key are available."""
-        return LLAMORE_AVAILABLE and bool(get_config().get("plugin.llamore.api.key"))
+        """Check if Gemini API key is configured."""
+        return bool(get_config().get("plugin.llamore.api.key"))
 
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Optional[Dict[str, Any]] = None) -> str:
@@ -168,6 +159,8 @@ class LLamoreExtractor(BaseExtractor):
         default_variant_id = info["options"]["variant_id"]["options"][0]  # "llamore-default"
         variant_id = options.get("variant_id", default_variant_id)
 
+        model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
+
         schema_url = get_schema_url(variant_id)
         encodingDesc = create_encoding_desc_with_extractor(
             timestamp=timestamp,
@@ -177,6 +170,7 @@ class LLamoreExtractor(BaseExtractor):
             variant_id=variant_id,
             additional_labels=[
                 ("prompter", "LineByLinePrompter"),
+                ("model", model),
             ],
             refs=[
                 "https://github.com/mpilhlt/llamore",

@@ -5,7 +5,7 @@ Tests that extractors set the correct fileref (doc_id) in extracted TEI.
 
 @testCovers fastapi_app/plugins/test_plugin/extractor.py
 @testCovers fastapi_app/plugins/grobid/extractor.py
-@testCovers fastapi_app/plugins/llamore/extractor.py
+@testCovers fastapi_app/plugins/llamore_extractor/extractor.py
 """
 
 import unittest
