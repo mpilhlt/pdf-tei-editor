@@ -27,7 +27,7 @@ except (ImportError, OSError) as e:
 from ..lib.storage.file_storage import FileStorage
 from ..lib.repository.file_repository import FileRepository
 from ..lib.models.models_files import UploadResponse
-from ..lib.models import FileCreate
+from ..lib.models import FileCreate, FileUpdate
 from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
@@ -122,6 +122,18 @@ async def upload_file(
 
     logger.debug(f"Detected file type: {file_type}")
 
+    # Compute doc_id and label from filename before duplicate check so they can
+    # be applied to existing files when the same content is re-uploaded with a
+    # different (e.g. DOI-based) name.
+    import os
+    import re
+    original_name = os.path.splitext(file.filename)[0]
+    # Convert underscores used for DOIs back to slashes/dots for display
+    # e.g., "10.1111__eulj.12049" -> "10.1111/eulj.12049"
+    label = original_name.replace("__", "/")
+    # Use filename (without extension) as doc_id, replacing whitespace with underscores
+    doc_id = re.sub(r'\s+', '_', original_name)
+
     # Save to hash-sharded storage
     file_hash, storage_path = storage.save_file(content, file_type)
 
@@ -131,47 +143,38 @@ async def upload_file(
     existing_file = repo.get_file_by_id(file_hash, include_deleted=True)
     if existing_file:
         if existing_file.deleted:
-            # File was soft-deleted - undelete it and update label
+            # File was soft-deleted - undelete it and update doc_id/label from
+            # the new filename so that subsequent extractions use the correct id.
             logger.info(f"Undeleting previously deleted file: {file_hash[:16]}...")
-
-            # Extract label from filename
-            import os
-            original_name = os.path.splitext(file.filename)[0]
-            label = original_name.replace("__", "/")
-
-            # Undelete the file and update label
             updated_file = repo.undelete_file(file_hash, label=label)
+            if doc_id != updated_file.doc_id:
+                repo.update_file(updated_file.id, FileUpdate(doc_id=doc_id))
+                logger.info(f"Updated doc_id for undeleted file {file_hash[:16]}: {doc_id}")
             logger.info(f"Undeleted file: {file_hash[:16]}... -> {updated_file.stable_id}")
-
             return UploadResponse(
                 type=file_type,
                 filename=updated_file.stable_id, # deprecated
                 stable_id=updated_file.stable_id
             )
         else:
-            # File exists and is not deleted
+            # File exists and is not deleted - update doc_id/label if the
+            # new filename provides different values (e.g. DOI-based rename).
             logger.info(f"File already exists in database: {file_hash[:16]}...")
+            updates: dict = {}
+            if doc_id != existing_file.doc_id:
+                updates['doc_id'] = doc_id
+            if label != existing_file.label:
+                updates['label'] = label
+            if updates:
+                repo.update_file(existing_file.id, FileUpdate(**updates))
+                logger.info(f"Updated doc_id/label for existing file {file_hash[:16]}: doc_id={doc_id}")
             return UploadResponse(
                 type=file_type,
                 filename=existing_file.stable_id, # deprecated
                 stable_id=existing_file.stable_id
             )
 
-    # Extract a label from the original filename
-    # Remove extension and use as initial label
-    import os
-    import re
-    original_name = os.path.splitext(file.filename)[0]
-    # Convert underscores used for DOIs back to slashes/dots
-    # e.g., "10.1111__eulj.12049" -> "10.1111/eulj.12049"
-    label = original_name.replace("__", "/")
-
-    # Use filename (without extension) as doc_id, replacing whitespace with underscores
-    # This ensures the fileref in extracted/saved TEI matches the file's doc_id
-    doc_id = re.sub(r'\s+', '_', original_name)
-
-    # Save metadata to database
-    # Assign uploaded files to "_inbox" collection by default
+    # Save metadata to database — assign uploaded files to "_inbox" collection by default
     file_create = FileCreate(
         id=file_hash,
         filename=f"{file_hash}.{file_type}",
