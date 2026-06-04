@@ -47,6 +47,8 @@ dev = [
 pythonpath = [
   "."
 ]
+# importlib mode prevents namespace conflicts between installed 'llamore' package
+# and the fastapi_app/plugins/llamore/tests/ directory during pytest discovery
 addopts = "--import-mode=importlib"
 markers = [
   "integration: marks tests as integration tests that check actual project structure (deselect with '-m \"not integration\"')"

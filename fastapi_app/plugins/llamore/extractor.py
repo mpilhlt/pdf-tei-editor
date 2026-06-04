@@ -3,6 +3,8 @@ LLamore-based reference extraction engine.
 """
 
 from typing import Dict, Any, Optional
+import logging
+import time
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor
@@ -28,6 +30,8 @@ from fastapi_app.plugins.llamore.config import (
 )
 import datetime
 
+logger = logging.getLogger(__name__)
+
 # Try to import LLamore dependencies
 GeminiExtractor = None
 LineByLinePrompter = None
@@ -50,10 +54,6 @@ class LLamoreExtractor(BaseExtractor):
     @classmethod
     def _fetch_available_models(cls) -> list[str]:
         """Return available Gemini models from API with 24-hour caching."""
-        import time
-        import logging
-        logger = logging.getLogger(__name__)
-
         configured_model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
         api_key = get_config().get("plugin.llamore.api.key", default="")
 
