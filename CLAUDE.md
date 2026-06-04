@@ -67,7 +67,7 @@ Before using any method on a class or module:
 
 ### Debugging Live Application
 
-When debugging the live application, use `bin/debug-api.js` to test API endpoints directly:
+When debugging, you can also use a running instance of the application and use `bin/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
 
 ```bash
 # Authenticate and call any endpoint
@@ -221,8 +221,8 @@ timeout = config.get('session.timeout', default=3600)
 
 The application writes to two separate log files:
 
-- `log/app.log` - Application-level logs (Python logging, consistent format)
-- `log/server.log` - Uvicorn server logs (access logs, startup messages)
+- `app.log` - Application-level logs (Python logging, consistent format)
+- `server.log` - Uvicorn server logs (access logs, startup messages)
 
 **Log Directory Configuration:**
 
@@ -253,10 +253,6 @@ app_log = settings.app_log_file      # Path to app.log
 server_log = settings.server_log_file  # Path to server.log
 log_dir = settings.log_dir            # Log directory
 ```
-
-**Log Viewer Plugin:**
-
-The log viewer plugin (`fastapi_app/plugins/log_viewer/`) provides real-time log viewing for admins. It reads from `app_log_file` and streams new entries via SSE.
 
 ### Test Filtering: --grep Behavior
 
