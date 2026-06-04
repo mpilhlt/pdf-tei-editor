@@ -575,6 +575,23 @@ class XmlEditorPlugin extends Plugin {
     // Context menu — self-contained, mounts to the editor panel
     this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
     this.#contextMenu.mount(this.#xmlEditorEl);
+
+    // Built-in: insert tag boundary based on selected xpath navigation tag
+    const tagBoundaryItem = document.createElement('sl-menu-item');
+    tagBoundaryItem.addEventListener('click', () => {
+      const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
+      if (!tagName) return;
+      const view = this.#xmlEditor.getView();
+      const { head } = view.state.selection.main;
+      view.dispatch({ changes: { from: head, to: head, insert: `</${tagName}><${tagName}>` }, userEvent: 'input' });
+    });
+    this.#contextMenu.addItem(tagBoundaryItem, {
+      onBeforeShow: ({ readOnly }) => {
+        const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
+        tagBoundaryItem.disabled = readOnly || !tagName;
+        tagBoundaryItem.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary';
+      }
+    });
   }
 
   /**
@@ -917,6 +934,19 @@ class XmlEditorPlugin extends Plugin {
   //
   // Private methods
   //
+
+  /**
+   * Extracts the local element name from an XPath expression (last step, no predicates).
+   * E.g. `//body/listBibl/bibl[@type="cited"]` → `bibl`
+   * @param {string} xpath
+   * @returns {string|null}
+   */
+  #tagNameFromXpath(xpath) {
+    if (!xpath) return null;
+    const steps = xpath.split('/').filter(Boolean);
+    const lastStep = steps[steps.length - 1];
+    return lastStep?.replace(/\[.*$/, '').replace(/^[^:]+:/, '') || null;
+  }
 
   /**
    * @returns {boolean}
