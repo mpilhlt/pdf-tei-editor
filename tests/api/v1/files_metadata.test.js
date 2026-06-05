@@ -14,7 +14,7 @@
  * - Update document ID (doc_id)
  * - Document ID update for all files in document
  * - Document ID role-based access control (reviewer only)
- * - Document ID gold file requirement
+ * - Document ID update allowed for non-gold files
  * - Document ID validation (empty, encoded formats)
  * - Fileref update in XML content for all TEI files
  */
@@ -412,8 +412,8 @@ describe('Files Metadata API E2E Tests', () => {
     logger.success('All document files have updated doc_id');
   });
 
-  // Test 13: Error - non-gold file cannot update doc_id
-  test('PATCH /api/v1/files/{stable_id}/doc-id should reject non-gold files', async () => {
+  // Test 13: Non-gold file can update doc_id (gold standard requirement removed)
+  test('PATCH /api/v1/files/{stable_id}/doc-id should allow non-gold files', async () => {
     // Create a new version to test with
     const xmlContent = createTeiXml(testState.docId, 'Version for Non-Gold Test').replace(
       '<p>Test content</p>',
@@ -435,22 +435,27 @@ describe('Files Metadata API E2E Tests', () => {
     const nonGoldFileId = versionData.file_id;
     assert.ok(nonGoldFileId, 'Should have created non-gold version');
 
-    // Try to update doc_id of the non-gold file
-    try {
-      await authenticatedApiCall(
-        reviewerSession.sessionId,
-        `/files/${nonGoldFileId}/doc-id`,
-        'PATCH',
-        { doc_id: 'should-fail' },
-        BASE_URL
-      );
-      assert.fail('Should have thrown an error');
-    } catch (error) {
-      // Should throw 400 error with message about gold standard files
-      assert.ok(error.message.match(/400/i) || error.message.match(/Only gold standard files/i),
-        `Expected error about gold standard requirement, got: ${error.message}`);
-      logger.success('Non-gold file rejection enforced');
-    }
+    // Update doc_id using the non-gold file stable_id - should succeed
+    const tempDocId = `non-gold-test-${Date.now()}`;
+    const data = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/${nonGoldFileId}/doc-id`,
+      'PATCH',
+      { doc_id: tempDocId },
+      BASE_URL
+    );
+    assert.strictEqual(data.message, 'Document ID updated successfully');
+    logger.success('Non-gold file doc_id update allowed as expected');
+
+    // Restore original doc_id via the non-gold file (now has tempDocId)
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/${nonGoldFileId}/doc-id`,
+      'PATCH',
+      { doc_id: testState.docId },
+      BASE_URL
+    );
+    logger.success('Restored original doc_id after non-gold test');
   });
 
   // Test 14: Error - non-reviewer cannot update doc_id
