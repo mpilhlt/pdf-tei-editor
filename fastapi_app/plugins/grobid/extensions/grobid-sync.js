@@ -36,9 +36,9 @@ export default class GrobidSyncExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Cache: stable_id → feature token array, or null when the file has no
+   * Cache: stable_id → {tokens, lineBased}, or null when the file has no
    * associated feature file (non-GROBID or cache missing).
-   * @type {Map<string, string[]|null>}
+   * @type {Map<string, {tokens: string[], lineBased: boolean}|null>}
    */
   #cache = new Map();
 
@@ -68,7 +68,9 @@ export default class GrobidSyncExtension extends FrontendExtensionPlugin {
       const result = await this.callPluginApi(
         `/api/plugins/grobid/feature-tokens?stable_id=${encodeURIComponent(newStableId)}`
       );
-      this.#cache.set(newStableId, result.status === 'ok' ? result.tokens : null);
+      this.#cache.set(newStableId, result.status === 'ok'
+        ? { tokens: result.tokens, lineBased: result.line_based === true }
+        : null);
     } catch (_) {
       this.#cache.set(newStableId, null);
     }
@@ -83,10 +85,13 @@ export default class GrobidSyncExtension extends FrontendExtensionPlugin {
    * @returns {Diagnostic[]}
    */
   #lintSource(view) {
-    const featureTokens = this.#cache.get(this.#currentStableId);
-    if (!featureTokens) return [];
+    const cached = this.#cache.get(this.#currentStableId);
+    if (!cached) return [];
+    const { tokens: featureTokens, lineBased } = cached;
     const xmlText = view.state.doc.toString();
-    const xmlTokens = this.#extractXmlTokens(xmlText);
+    const xmlTokens = lineBased
+      ? this.#extractFirstLineTokens(xmlText)
+      : this.#extractXmlTokens(xmlText);
     return this.#diffTokens(featureTokens, xmlTokens);
   }
 
@@ -128,6 +133,99 @@ export default class GrobidSyncExtension extends FrontendExtensionPlugin {
     }
 
     return result;
+  }
+
+  /**
+   * Extract tokens from the XML restricted to the `<text>` element, yielding
+   * exactly one token per `<lb/>`-delimited segment: the first *whitespace-
+   * delimited* word of each segment.  Used for line-based feature files (e.g.
+   * segmentation) where each feature entry represents a full PDF layout line
+   * and the "token" is its first whitespace-split word — including any attached
+   * punctuation such as `Author(s):` or `854-875`.
+   *
+   * @param {string} xmlText
+   * @returns {Array<{token: string, from: number, to: number}>}
+   */
+  #extractFirstLineTokens(xmlText) {
+    const openMatch = /<text[\s>\/]/.exec(xmlText);
+    if (!openMatch) return [];
+    const closeIdx = xmlText.lastIndexOf('</text>');
+    const slice = closeIdx !== -1
+      ? xmlText.slice(openMatch.index, closeIdx)
+      : xmlText.slice(openMatch.index);
+    const base = openMatch.index;
+
+    const result = [];
+    let lineSegs = [];
+    let inTag = false;
+    let tagStart = -1;
+    let segStart = 0;
+
+    for (let i = 0; i < slice.length; i++) {
+      if (slice[i] === '<') {
+        if (!inTag && i > segStart) {
+          lineSegs.push({ seg: slice.slice(segStart, i), absStart: base + segStart });
+        }
+        inTag = true;
+        tagStart = i;
+      } else if (slice[i] === '>') {
+        if (inTag && tagStart >= 0 && /^<lb[\s\/]|^<lb>/.test(slice.slice(tagStart, i + 1))) {
+          const token = this.#firstWordOfLine(lineSegs);
+          if (token) result.push(token);
+          lineSegs = [];
+        }
+        inTag = false;
+        segStart = i + 1;
+        tagStart = -1;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Find the first whitespace-delimited word across a sequence of raw XML text
+   * segments, decoding entity references so the result matches the feature file
+   * token (which is also decoded).
+   *
+   * @param {{seg: string, absStart: number}[]} segs
+   * @returns {{token: string, from: number, to: number}|null}
+   */
+  #firstWordOfLine(segs) {
+    const decoded = [];
+    const rawSpans = [];
+    for (const { seg, absStart } of segs) {
+      ENTITY_RE.lastIndex = 0;
+      let plainAt = 0;
+      let em;
+      while ((em = ENTITY_RE.exec(seg)) !== null) {
+        for (let i = plainAt; i < em.index; i++) {
+          decoded.push(seg[i]);
+          rawSpans.push([absStart + i, absStart + i + 1]);
+        }
+        const rawFrom = absStart + em.index;
+        const rawTo = absStart + em.index + em[0].length;
+        const decodedStr = em[1] ? String.fromCodePoint(parseInt(em[1], 10))
+          : em[2] ? String.fromCodePoint(parseInt(em[2], 16))
+          : (NAMED_ENTITIES[em[3]] ?? em[0]);
+        for (const c of decodedStr) {
+          decoded.push(c);
+          rawSpans.push([rawFrom, rawTo]);
+        }
+        plainAt = em.index + em[0].length;
+      }
+      for (let i = plainAt; i < seg.length; i++) {
+        decoded.push(seg[i]);
+        rawSpans.push([absStart + i, absStart + i + 1]);
+      }
+    }
+    const m = /\S+/.exec(decoded.join(''));
+    if (!m) return null;
+    return {
+      token: m[0],
+      from: rawSpans[m.index][0],
+      to: rawSpans[m.index + m[0].length - 1][1],
+    };
   }
 
   /**

@@ -67,6 +67,8 @@ export class XmlEditorContextMenu {
   #unwrapItem = null;
   /** @type {number} */
   #clickDocPos = 0;
+  /** @type {Array<(ctx: {readOnly: boolean}) => void>} */
+  #beforeShowCallbacks = [];
 
   /**
    * Build the DOM and attach to *parent*. Call exactly once after construction.
@@ -192,10 +194,12 @@ export class XmlEditorContextMenu {
    * Append a contributed item (sl-menu-item or sl-divider) to the plugin section.
    * Automatically reveals the section divider on first call.
    * @param {HTMLElement} element
+   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean}) => void }} [options]
    */
-  addItem(element) {
+  addItem(element, options) {
     this.#menu?.appendChild(element);
     if (this.#pluginDivider) this.#pluginDivider.style.display = '';
+    if (options?.onBeforeShow) this.#beforeShowCallbacks.push(options.onBeforeShow);
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -206,6 +210,9 @@ export class XmlEditorContextMenu {
     const { from, to } = view.state.selection.main;
     const hasSelection = from !== to;
     const readOnly     = this.#editor.isReadOnly();
+
+    // Give contributed items a chance to update themselves before the menu appears
+    for (const cb of this.#beforeShowCallbacks) cb({ readOnly });
 
     // Record click position for deferred commands (unwrap, accept/reject)
     this.#clickDocPos = view.posAtCoords({ x, y }, false) ?? view.state.selection.main.head;

@@ -22,6 +22,7 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
+import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
@@ -72,6 +73,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
  * @property {StatusButton} validateBtn - Validate XML button
+ * @property {StatusButton} undoBtn - Undo button
+ * @property {StatusButton} redoBtn - Redo button
  * @property {StatusButton} teiWizardBtn - TEI Wizard button (added by tei-wizard plugin)
  * @property {SlDropdown} xslViewerDropdown - XSL viewer dropdown (added by xsl-viewer plugin)
  * @property {StatusButton} xslViewerBtn - XSL viewer button (added by xsl-viewer plugin)
@@ -153,6 +156,10 @@ class XmlEditorPlugin extends Plugin {
   #acceptAllBtn;
   /** @type {StatusButton} */
   #validateBtn;
+  /** @type {StatusButton} */
+  #undoBtn;
+  /** @type {StatusButton} */
+  #redoBtn;
   /** @type {StatusButton} */
   #uploadBtn;
   /** @type {StatusButton} */
@@ -286,7 +293,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Create TEI action buttons and add to toolbar (to the left of upload/download)
     const teiButtons = createFromTemplate('xmleditor-tei-buttons');
-    const teiButtonsPriorities = [52, 51]; // separator, validateBtn
+    const teiButtonsPriorities = [54, 53, 52, 51]; // separator, validateBtn, undoBtn, redoBtn
     teiButtons.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
         this.#toolbar.add(widget, teiButtonsPriorities[index] || 1);
@@ -369,6 +376,8 @@ class XmlEditorPlugin extends Plugin {
     this.#rejectAllBtn = this.#toolbar.rejectAllBtn;
     this.#acceptAllBtn = this.#toolbar.acceptAllBtn;
     this.#validateBtn = this.#toolbar.validateBtn;
+    this.#undoBtn = this.#toolbar.undoBtn;
+    this.#redoBtn = this.#toolbar.redoBtn;
     this.#uploadBtn = this.#toolbar.uploadBtn;
     this.#downloadBtn = this.#toolbar.downloadBtn;
 
@@ -394,6 +403,18 @@ class XmlEditorPlugin extends Plugin {
     });
     this.#downloadBtn.addEventListener('widget-click', () => {
       if (this.state) this.getDependency('services').downloadXml(this.state);
+    });
+
+    // Attach event listeners to undo/redo buttons (initially disabled; enabled by history depth)
+    this.#undoBtn.disabled = true;
+    this.#redoBtn.disabled = true;
+    this.#undoBtn.addEventListener('widget-click', () => {
+      const view = this.#xmlEditor.getView();
+      if (view) undo(view);
+    });
+    this.#redoBtn.addEventListener('widget-click', () => {
+      const view = this.#xmlEditor.getView();
+      if (view) redo(view);
     });
 
     // Attach event listener to validate button
@@ -441,6 +462,9 @@ class XmlEditorPlugin extends Plugin {
     // Update cursor position on editor updates (typing, etc.)
     this.#xmlEditor.on('editorUpdate', () => this.#updateCursorPosition());
 
+    // Sync undo/redo button enabled state with the CodeMirror history
+    this.#xmlEditor.on('editorUpdate', () => this.#updateUndoRedoButtons());
+
     // Schedule a local-draft save on every editor update so no typed content is lost
     // even while the server save is blocked (e.g. malformed XML, connection lost).
     this.#xmlEditor.on('editorUpdate', () => this.#scheduleDraftSave());
@@ -451,6 +475,12 @@ class XmlEditorPlugin extends Plugin {
       this.#logger.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
       this.#xmlEditor.configureIntenation(indentUnit, 4);
       this.#updateIndentationStatus(indentUnit);
+    });
+
+    // Reset undo/redo buttons on document load (history is cleared)
+    this.#xmlEditor.on('editorAfterLoad', () => {
+      this.#undoBtn.disabled = true;
+      this.#redoBtn.disabled = true;
     });
 
     // Restore line wrapping and xpath after XML is loaded
@@ -575,6 +605,23 @@ class XmlEditorPlugin extends Plugin {
     // Context menu — self-contained, mounts to the editor panel
     this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
     this.#contextMenu.mount(this.#xmlEditorEl);
+
+    // Built-in: insert tag boundary based on selected xpath navigation tag
+    const tagBoundaryItem = document.createElement('sl-menu-item');
+    tagBoundaryItem.addEventListener('click', () => {
+      const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
+      if (!tagName) return;
+      const view = this.#xmlEditor.getView();
+      const { head } = view.state.selection.main;
+      view.dispatch({ changes: { from: head, to: head, insert: `</${tagName}><${tagName}>` }, userEvent: 'input' });
+    });
+    this.#contextMenu.addItem(tagBoundaryItem, {
+      onBeforeShow: ({ readOnly }) => {
+        const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
+        tagBoundaryItem.disabled = readOnly || !tagName;
+        tagBoundaryItem.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary';
+      }
+    });
   }
 
   /**
@@ -917,6 +964,19 @@ class XmlEditorPlugin extends Plugin {
   //
   // Private methods
   //
+
+  /**
+   * Extracts the local element name from an XPath expression (last step, no predicates).
+   * E.g. `//body/listBibl/bibl[@type="cited"]` → `bibl`
+   * @param {string} xpath
+   * @returns {string|null}
+   */
+  #tagNameFromXpath(xpath) {
+    if (!xpath) return null;
+    const steps = xpath.split('/').filter(Boolean);
+    const lastStep = steps[steps.length - 1];
+    return lastStep?.replace(/\[.*$/, '').replace(/^[^:]+:/, '') || null;
+  }
 
   /**
    * @returns {boolean}
@@ -1271,6 +1331,16 @@ class XmlEditorPlugin extends Plugin {
       this.#logger.error('Failed to update artifact label: ' + String(error));
       notify('Failed to update artifact label: ' + String(error), 'danger', 'exclamation-octagon');
     }
+  }
+
+  /**
+   * Updates the undo/redo toolbar buttons based on the current CodeMirror history depth.
+   */
+  #updateUndoRedoButtons() {
+    if (!this.#xmlEditor.isReady()) return;
+    const state = this.#xmlEditor.getView().state;
+    this.#undoBtn.disabled = undoDepth(state) === 0;
+    this.#redoBtn.disabled = redoDepth(state) === 0;
   }
 
   /**

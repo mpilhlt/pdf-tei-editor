@@ -2,6 +2,8 @@
 
 This file provides guidance to code assistants when working with code in this repository.
 
+Domain-specific rules are in subdirectory CLAUDE.md files: [app/CLAUDE.md](app/CLAUDE.md) (frontend), [fastapi_app/CLAUDE.md](fastapi_app/CLAUDE.md) (backend), [tests/CLAUDE.md](tests/CLAUDE.md) (testing).
+
 ## General rules
 
 - ALWAYS be concise. Only include information that is relevant to the implementation. Omit any kind of motivational or congratulatory language. Do NOT use vocabulary such as "excellent", "brilliant", "great", etc.
@@ -17,7 +19,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Frontend Architecture](docs/code-assistant/architecture-frontend.md)** - Frontend plugin system, UI components, templates
 - **[Backend Architecture](docs/code-assistant/architecture-backend.md)** - FastAPI structure, lib/ modules, import patterns
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
-- **[API Reference](docs/development/api-reference.md) - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
+- **[API Reference](docs/development/api-reference.md)** - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
 - **[Class Dependencies](docs/development/class-dependencies.md)** - FastAPI dependency injection system, available dependencies
 - **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
 - **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
@@ -27,7 +29,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
 - **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
 - **[Database Connections](docs/code-assistant/database-connections.md)** - SQLite connection pooling, WAL mode, and transaction handling
-- **[CLI](docs/user-manual/cli.md) - Command Line Interface reference
+- **[CLI](docs/user-manual/cli.md)** - Command Line Interface reference
 - **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
 ### Key Directories
@@ -67,7 +69,7 @@ Before using any method on a class or module:
 
 ### Debugging Live Application
 
-When debugging the live application, use `bin/debug-api.js` to test API endpoints directly:
+When debugging, you can also use a running instance of the application and use `bin/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
 
 ```bash
 # Authenticate and call any endpoint
@@ -89,214 +91,13 @@ The script:
 
 See the OpenAPI specification at `http://localhost:8000/openapi.json` for all available endpoints and their parameters.
 
-### Database Access
-
-- **ALWAYS use API methods** from `fastapi_app/lib/repository/file_repository.py`, `fastapi_app/lib/core/database.py`, and related modules to read and mutate database items
-- **AVOID raw SQL queries** except in exceptional cases where no API method exists
-- **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
-- **ALWAYS pass `DatabaseManager` instances** to classes that need database access, do not pass file paths or create new `DatabaseManager` instances. This ensures connection pooling works correctly.
-- **Use `db.transaction()`** for write operations to ensure atomicity and proper locking.
-- This prevents breaking changes when the database schema evolves
-
-### Database Migrations
-
-- **ALWAYS use the migration infrastructure** when database schema changes are needed - see [docs/development/migrations.md](docs/development/migrations.md)
-- **NEVER modify the database schema directly** - create a versioned migration instead
-- Migrations provide automatic backups, rollback support, and version tracking
-- See `fastapi_app/lib/core/migrations/versions/m001_locks_file_id.py` for a complete example
-- **When adding a new database**, use the centralized migration runner - see [docs/development/adding-new-databases.md](docs/development/adding-new-databases.md)
-  - Call `run_migrations_if_needed()` from `fastapi_app/lib/core/migration_runner.py` in your database initialization
-  - This ensures migrations run automatically on application startup for all databases
-- **Migration tests location** - ALWAYS place migration tests in `fastapi_app/lib/core/migrations/tests/` directory (not in the main test suite). These tests are for manual verification and should not run automatically in CI/CD. Name test files as `test_migration_XXX.py` where XXX is the migration number
-
-### TEI Document Processing
-
-- **ALWAYS use utility functions** from `fastapi_app/lib/utils/tei_utils.py` when working with TEI XML documents
-- **Use `extract_tei_metadata()`** to extract metadata (title, authors, DOI, variant, etc.) from TEI documents instead of manual XPath queries
-- **Use lxml** (not xml.etree) for TEI processing - it's what `tei_utils.py` uses and ensures consistency
-- **Add new utility functions** to `tei_utils.py` when you need TEI processing functionality that doesn't exist yet
-- This ensures consistent TEI handling across the codebase and prevents duplication
-
-### User Authentication and Access Control
-
-**Authentication Pattern for Custom Routes:**
-
-When implementing authenticated routes (e.g., plugin routes), use dependency injection:
-
-```python
-from fastapi import APIRouter, Depends, Header, Query
-from fastapi_app.lib.core.dependencies import (
-    get_auth_manager,
-    get_db,
-    get_session_manager,
-)
-
-@router.get("/endpoint")
-async def my_endpoint(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
-):
-    from fastapi_app.config import get_settings
-
-    # Extract session ID (header takes precedence)
-    session_id_value = x_session_id or session_id
-    if not session_id_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    # Validate session
-    settings = get_settings()
-    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    # Get user
-    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-```
-
-**Access Control Pattern for Documents/Files:**
-
-Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/permissions/user_utils.py`:
-
-```python
-from fastapi_app.lib.permissions.user_utils import user_has_collection_access
-
-# Check if user has access to a document via its collections
-file = file_repo.get_file_by_stable_id(stable_id)
-user_has_access = False
-
-for collection_id in file.doc_collections or []:
-    if user_has_collection_access(user, collection_id, settings.db_dir):
-        user_has_access = True
-        break
-
-if not user_has_access:
-    raise HTTPException(status_code=403, detail="Access denied")
-```
-
-**Key Points:**
-
-- Users access documents through **collection membership**, not direct user-document links
-- Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
-- Use `get_user_collections(user, db_dir)` from `fastapi_app.lib.permissions.user_utils` to get all collections a user can access (returns `None` if user has wildcard access)
-- Admin users and users with wildcard (`*`) in their groups have access to all collections
-- Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
-- See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
-
-### Configuration Access
-
-**ALWAYS use the high-level config API** to retrieve configuration values. Do NOT use `ConfigManager` directly.
-
-```python
-from fastapi_app.lib.utils.config_utils import get_config
-
-# Get config instance
-config = get_config()
-
-# Get configuration values with defaults
-value = config.get('annotation.lifecycle.order', default=[])
-timeout = config.get('session.timeout', default=3600)
-```
-
-**Key Points:**
-
-- Use `get_config()` to get the config instance (lazy initialization)
-- Use `config.get(key, default)` to retrieve any configuration value
-- The config instance handles initialization and caching automatically
-- Never instantiate `ConfigManager` directly - use `get_config()` instead
-
-**Backend Plugin Configuration:**
-
-- **CRITICAL**: Initialize plugin config in the plugin class `__init__()` method, NOT in `__init__.py`
-- Plugin `__init__.py` files are NEVER executed during plugin discovery (plugins are loaded directly via `importlib`)
-- Use `get_plugin_config()` in the plugin class `__init__()` to create config keys from environment variables
-- Access config everywhere else using `get_config()` (retrieves existing keys)
-- See [Backend Plugins - Plugin Configuration](docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
-
-### Logging Configuration
-
-**Log Files:**
-
-The application writes to two separate log files:
-
-- `log/app.log` - Application-level logs (Python logging, consistent format)
-- `log/server.log` - Uvicorn server logs (access logs, startup messages)
-
-**Log Directory Configuration:**
-
-The log directory can be configured via the `LOG_DIR` environment variable:
-
-```bash
-# In .env.fastapi or environment
-LOG_DIR=/var/log/pdf-tei-editor
-```
-
-Default: `project_root/log`
-
-**Log Format:**
-
-Application logs use the format:
-
-```text
-2026-02-06 21:06:30.036 [INFO    ] logger.name - message
-```
-
-**Accessing Log Paths in Code:**
-
-```python
-from fastapi_app.config import get_settings
-
-settings = get_settings()
-app_log = settings.app_log_file      # Path to app.log
-server_log = settings.server_log_file  # Path to server.log
-log_dir = settings.log_dir            # Log directory
-```
-
-**Log Viewer Plugin:**
-
-The log viewer plugin (`fastapi_app/plugins/log_viewer/`) provides real-time log viewing for admins. It reads from `app_log_file` and streams new entries via SSE.
-
-### Test Filtering: --grep Behavior
-
-**CRITICAL for debugging tests efficiently:**
-
-The `--grep` parameter works **differently** for API vs E2E tests:
-
-- **API tests** (`npm run test:api -- --grep "xxx"`): Matches **file paths**
-  - Example: `--grep "files_save"` runs `tests/api/v1/files_save.test.js`
-  - Example: `--grep "caching"` runs `tests/api/v1/files_serve_caching.test.js`
-  - Use file name patterns when debugging API tests
-  - Implementation: backend-test-runner filters files before passing to Node.js
-
-- **E2E tests** (`npm run test:e2e -- --grep "xxx"`): Matches **test names** (test descriptions)
-  - Example: `--grep "should upload"` runs all tests with "upload" in the test name
-  - Example: `--grep "new version"` runs tests like `test('should create new version', ...)`
-  - Use test description patterns when debugging E2E tests
-  - Implementation: Playwright receives the grep pattern directly and matches against test descriptions
-  - **To run specific test files**, pass file paths as positional arguments: `node tests/e2e-runner.js tests/e2e/tests/auth-workflow.spec.js`
-
-**Quick rule:**
-
-- `*.test.js` (API) → grep by **file path**
-- `*.spec.js` (E2E) → grep by **test name** OR pass file paths directly
-
-**Smart test runner:**
-
-The smart-test-runner automatically uses the correct approach:
-
-- For API tests: constructs `--grep` with file path patterns
-- For E2E tests: passes test file paths as positional arguments (not via --grep)
-
 ## Important Reminders
 
 ### Development Workflow
 
-1. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
-2. Backend changes: Server auto-reloads automatically (FastAPI dev server detects changes)
-3. Schema updates: Delete `schema/cache/` to refresh XSD cache
-4. Building is only needed for production and is handled by pre-push git hooks
+1. Backend changes: Server auto-reloads automatically (FastAPI dev server detects changes)
+2. Schema updates: Delete `schema/cache/` to refresh XSD cache
+3. Building is only needed for production and is handled by pre-push git hooks
 
 ### Critical Rules
 
@@ -308,44 +109,14 @@ The smart-test-runner automatically uses the correct approach:
 - **Check generated documentation before adding new code** - Before implementing new functionality, ALWAYS check available documentation to prevent reinventing existing APIs: (1) For backend Python: check `docs/api/backend-api.json` for class/function signatures, or read the source module directly; (2) For frontend JavaScript: read the module exports directly; (3) For REST endpoints: check FastAPI docs at `/docs` or the OpenAPI schema. See [docs/development/api-reference.md](docs/development/api-reference.md) for complete documentation overview. If functionality already exists, use it instead of creating duplicates
 - **NEVER make up non-existing APIs** - Before using any method on a class or module instance, ALWAYS verify that the method exists with the exact signature you're using. Read the class definition or module exports first. If a needed API doesn't exist, implement it rather than assuming it exists
 - **Python type annotations** - ALWAYS use precise types in function signatures: never use `Any` when the actual type is known, never use unparameterized `tuple` or `dict` (use `tuple[X, ...]` / `dict[str, X]`), and annotate all FastAPI dependency parameters (e.g. `session_manager: SessionManager = Depends(get_session_manager)`). Resolve all type errors before finishing a task.
-- **File identifiers on the client** - ALWAYS use `stable_id` (nanoid) when referencing files in client-side code (frontend plugins, HTML output, JavaScript). NEVER use `file_id` (content hash) on the client. The `stable_id` is the permanent identifier for files, while `file_id` is only used internally for storage and deduplication
-- **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing). For Python unit tests of FastAPI routes, see the section on dependency overrides vs @patch decorators
-- **Testing authenticated routes** - When writing tests for routes that use `Depends(get_session_manager)` and `Depends(get_auth_manager)`, ALWAYS use `app.dependency_overrides` in `setUp()` to mock these dependencies with valid authentication by default, and include `session_id` parameter in test requests. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) Authentication Testing Pattern section
-- **Backend plugin tests location** - Plugin tests MUST be placed in the plugin's `tests/` directory (e.g., `fastapi_app/plugins/<plugin-name>/tests/`). To run plugin tests, use `--test-dir` parameter: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/<plugin-name>/tests`. This keeps tests colocated with the plugin code
-- **Writing plugin integration tests** - ALWAYS consult the "Plugin Integration Tests" section in [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing integration tests for backend plugins. It covers: required `.env.test` configuration (DATA_ROOT, DB_DIR, LOG_DIR paths), authentication patterns (login returns object not string), testing custom routes, and working with fixtures
-- **FastAPI routes must use dependency injection** - ALWAYS use `Depends(get_db)` and `Depends(get_file_storage)` as route parameters, NEVER call `db = get_db()` or `file_storage = get_file_storage()` inside route functions. This enables proper test mocking via `app.dependency_overrides` and prevents CI failures when databases don't exist. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for details
-- **Check backend plugin guide when creating backend plugins** - ALWAYS consult [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) before creating or modifying backend plugins. It contains the plugin architecture, patterns, and Shadow DOM handling requirements
-- **Backend plugins must not add frontend code to `app/`** - NEVER add files to `app/` (plugins, templates, modules) for functionality that belongs to a backend plugin. All frontend code for a backend plugin MUST be implemented as a frontend extension in `fastapi_app/plugins/<name>/extensions/<name>.js` and registered via `FrontendExtensionRegistry` in the plugin's `initialize()` method. See [docs/development/frontend-extensions.md](docs/development/frontend-extensions.md) for the pattern. Architectural changes to `app/` (e.g., exposing a new PluginManager endpoint) are acceptable when the extension mechanism itself is insufficient.
-- **Backend plugin HTML templates** - NEVER inline long HTML strings in route files. Place HTML in the plugin's `static/` directory (e.g., `fastapi_app/plugins/<name>/static/view.html`) and load it with `load_plugin_html(__file__, "view.html")` from `fastapi_app.lib.plugin_tools`. This function looks in `static/` first (falling back to the deprecated `html/` for backwards compatibility) and injects the sandbox client script automatically. NEVER put significant JavaScript inline in HTML templates — place it in a separate `.js` file in `static/` (auto-served at `/api/plugins/<name>/static/<file>.js`) and reference it with `<script type="module" src="...">`. This enables IDE type-checking and JSDoc type resolution
 - **CI/CD Workflow Changes** - ALWAYS consult [docs/development/ci-cd-pipeline.md](docs/development/ci-cd-pipeline.md) before modifying GitHub Actions workflows. The document describes the test execution strategy, release process, and dependencies between workflows
-- **Suppress expected error output in tests** - When tests validate error handling that logs errors or warnings, ALWAYS use `assertLogs` context manager to suppress console output. This keeps test output clean and verifies the error is logged. Example: `with self.assertLogs('module.name', level='ERROR') as cm:` wrapping the code that produces expected errors. Never let expected errors pollute test output.
-- **Plugin endpoints are observers, not mutators** - Never call `dispatchStateChange` from inside `onStateUpdate` or any per-key handler (`on<Key>Change`). State propagation is locked during notification and the call will throw. If async work triggered by `onStateUpdate` produces a result that must be written back to state (e.g. an API call that determines `editorReadOnly`), use `await this.scheduleStateChange({ ... })` instead — it flushes after the current propagation cycle completes. This is the only legitimate exception; synchronous handlers must remain pure observers.
-- **Always document extension point handler methods** - Every `[ep.X.Y](...args)` computed method MUST have a JSDoc comment with: (1) the phrase "Extension point handler for `ep.X.Y`.", (2) a sentence describing when it is called and by which plugin/mechanism, (3) `Delegates to {@link ClassName#methodName}.`, and (4) `@param` and `@returns` tags matching the underlying method's signature.
-- **`static extensionPoints` needs a semicolon** - Always terminate `static extensionPoints = [...]` with a semicolon. Without it, the parser treats the following `[ep.X.Y](...)` computed method as a subscript access on the array, causing `SyntaxError: Unexpected token '{'`.
-- **Class-based plugins use `dispatchStateChange`** - In class-based plugins, ALWAYS use `await this.dispatchStateChange({ key: value })` instead of `app.updateState(...)`. `dispatchStateChange` is defined on the `Plugin` base class and is the correct way to trigger state updates from within a class plugin.
-- **Circular dependency detection in plugin migrations** - Before declaring a dep in a class plugin, verify the full dep chain does not lead back to the current plugin. Common pattern: if plugin A depends on B, and B (transitively) depends on A, declare neither as a dep — use lazy `getDependency()` calls at call time instead. Always check each new dep's `deps` field (and its deps' deps) before adding it to the `deps` array.
-- **Template registration pattern** - ALWAYS register templates at module level using `await registerTemplate('template-name', 'template-file.html')` BEFORE the plugin class definition, then use `createFromTemplate('template-name', parentElement)` in the `install()` method. Never use direct `fetch()` and `insertAdjacentHTML()` - this bypasses the template system and prevents proper logging and UI registration.
-- **ALWAYS use UI navigation via the `ui` object** - Never use `querySelector()` or `querySelectorAll()` to access UI elements. Use the `ui` object hierarchy instead (e.g., `ui.toolbar.logoutButton` instead of `ui.toolbar.querySelector('[name="logoutButton"]')`). This ensures alignment with runtime UI structure and documentation
-- **UI element hierarchy** - Named elements inside other named elements create a hierarchy. Access nested elements via `ui.parent.child.grandchild`, not `ui.parent.grandchild`. Example: if a checkbox with `name="myCheckbox"` is inside a div with `name="myContainer"`, access it as `ui.parent.myContainer.myCheckbox`. When asked to refactor the UI (i.e., move a button from one location to another), **always** also update references to the UI hierarchy. For example, if during a refactoring, the UI element referenced by `ui.parent.myContainer.myCheckbox` is moved to `ui.parent.otherContainer`, its reference **must** be renamed to `ui.parent.otherContainer.myCheckbox` throughout the application.
-- **ALWAYS add UI typedefs for plugin UI elements** - When a plugin adds UI elements, MUST add a `@typedef` documenting the structure (see `app/src/plugins/toolbar.js` for pattern), import it in `app/src/ui.js`, and add the property to the parent typedef (e.g., `toolbarPart`). This enables autocomplete and eliminates need for defensive checks. During refactoring, **always** also update all of the affected typedefs.
-- **UI elements are always available after `updateUi()`** - After calling `updateUi()`, assume all UI elements are properly registered in the ui object. NEVER use defensive optional chaining (`ui.foo?.bar`), existence checks (`if (ui.foo)`), or nullish coalescing (`ui.foo ?? fallback`) when accessing UI elements defined in typedefs - if elements are missing, it indicates a logic error that needs fixing. The app should fail hard, not silently continue.
-- **Tooltip wrappers don't need names** - SlTooltip components are wrappers and don't need `name` attributes. Only the element inside (like a button) needs a name
-- **Programmatic checkbox changes don't fire events** - Setting `checkbox.checked` programmatically does NOT trigger `sl-change` events in Shoelace components. Must manually update state when programmatically changing checkbox states
-- **Shoelace dialog button clicks require delay** - ALWAYS add `await page.waitForTimeout(500)` before clicking buttons in Shoelace dialogs. Shoelace dialogs use Shadow DOM and animations, and clicking too quickly results in the click being ignored. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for the pattern
-- **Shoelace dropdown z-index in toolbars** - When adding `sl-dropdown` to toolbars, the dropdown menu may appear behind other content due to z-index stacking contexts. Fix: (1) Add `sl-show`/`sl-hide` event listeners to toggle `dropdown-open` class on the parent `tool-bar` element, (2) CSS rule `tool-bar.dropdown-open { z-index: var(--sl-z-index-dropdown) !important; }` overrides the base `z-index: 0` rule.
-- **Debugging editor/CodeMirror issues** - When debugging issues in the XML editor (`xmlTagSync` or other CodeMirror extensions), prefer the isolated harness tests (`npm run test:e2e:xmleditor-browsers`) over full E2E tests. The harness isolates editor behaviour without a login sequence, fixture loading, or application state, and runs across all three browser engines. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md#isolated-component-harness-tests) for details.
-- **Use testLog() for E2E test validation** - Don't rely on DOM queries
-- **E2E tests: use client.apiClient, not fetch()** - In `page.evaluate()`, NEVER use manual `fetch()` calls to API endpoints. Always use `window.client.apiClient` which provides typed methods for all endpoints. Check `app/src/modules/api-client-v1.js` for available methods (auto-generated from OpenAPI schema). See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md#using-api-client-in-browser-context-e2e-tests)
-- **User notifications** - Use `notify(message, variant, icon)` from `app/src/modules/sl-utils.js` for toast notifications. Variants: "primary", "success", "warning", "danger". Common icons: "check-circle", "exclamation-triangle", "exclamation-octagon", "info-circle"
-- **Reload file data** - Use `FiledataPlugin.getInstance().reload({ refresh: true })` to reload file data from the server. Import `FiledataPlugin` from `../plugins.js`
 - **Prefer empirical debugging over theoretical analysis** - When analysis of a problem starts to take longer than roughly two minutes, stop and consider whether adding debug statements would be faster. If so, add the debug output, ask the user to run the program, and use the actual output to guide the fix. Do not reconstruct program behavior theoretically when empirical data is available.
 - **Verify system behavior with unit tests, not theoretical tracing** - When unsure how a system works (e.g., how a plugin framework discovers methods, how a state manager dispatches events), write a focused unit test and run it to get ground truth. Theoretically tracing through multiple layers of code wastes tokens and is error-prone. A test gives definitive answers in seconds.
-- ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
+- **When inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message** so that these commands can be found and removed later.
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
-- When asked to create a github issue or other github mainenance issues, use the `gh` tool and ask the user to install it if it is not available
+- When asked to create a github issue or other github maintenance issues, use the `gh` tool and ask the user to install it if it is not available
 - **Markdown formatting** — follow these rules in all `.md` files: (1) Table cells must have spaces around the content: `| value |`, not `|value|`; separator rows must be `| --- |`, not `|---|`. (2) Fenced code blocks must always specify a language identifier (bash, python, text, etc.) — never use a bare triple-backtick fence. (3) Anchor links must exactly match a heading in the file after lowercasing and replacing spaces/punctuation with hyphens; verify the target heading exists before writing the link.
 - **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
-- **Use Settings for path resolution** - NEVER use `Path(__file__).parent.parent...` chains to navigate to well-known application directories. Always use the canonical properties from `get_settings()` in `fastapi_app/config.py`: `project_root_dir` (project root), `app_root_dir` (`fastapi_app/`), `plugins_code_dir` (`fastapi_app/plugins/`), `plugins_data_dir` (`data/plugins/`). Only use `Path(__file__).parent` when referencing files local to the current file's own directory (e.g., within a plugin's own subdirectory).
 
 ## Planning documents, todo documents, github issues, documentation
 
@@ -375,8 +146,6 @@ When implementing a new feature, follow this workflow:
 - When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
 - This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
 - Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
-
-See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
 
 ### Completion documents and summaries
 

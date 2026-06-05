@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-04-28T10:18:22.086Z
+ * Generated from OpenAPI schema at 2026-06-04T14:58:52.327Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -126,6 +126,32 @@
 /**
  * @typedef {Object} ConfigSetResponse
  * @property {string} result
+ */
+
+/**
+ * @typedef {Object} ConflictInfo
+ * @property {string} file_id
+ * @property {string} stable_id
+ * @property {string} filename
+ * @property {string} doc_id
+ * @property {string} local_modified_at
+ * @property {string} local_hash
+ * @property {string} remote_modified_at
+ * @property {string} remote_hash
+ * @property {string} conflict_type
+ */
+
+/**
+ * @typedef {Object} ConflictListResponse
+ * @property {Array<ConflictInfo>} conflicts
+ * @property {number} total
+ */
+
+/**
+ * @typedef {Object} ConflictResolution
+ * @property {string} file_id
+ * @property {string} resolution
+ * @property {string=} new_variant - Variant name when using 'keep_both' resolution
  */
 
 /**
@@ -450,6 +476,36 @@
  */
 
 /**
+ * @typedef {Object} SyncRequest
+ * @property {boolean=} force - Force sync even if quick check indicates no changes needed
+ */
+
+/**
+ * @typedef {Object} SyncStatusResponse
+ * @property {boolean} needs_sync
+ * @property {number} local_version
+ * @property {number} remote_version
+ * @property {number} unsynced_count
+ * @property {string=} last_sync_time
+ * @property {boolean=} sync_in_progress
+ */
+
+/**
+ * @typedef {Object} SyncSummary
+ * @property {boolean=} skipped
+ * @property {number=} uploaded
+ * @property {number=} downloaded
+ * @property {number=} deleted_local
+ * @property {number=} deleted_remote
+ * @property {number=} metadata_synced
+ * @property {number=} conflicts
+ * @property {number=} errors
+ * @property {number=} new_version
+ * @property {number=} duration_ms
+ * @property {string=} message
+ */
+
+/**
  * @typedef {Object} UpdateDocIdRequest
  * @property {string} doc_id
  */
@@ -497,6 +553,7 @@
  * @property {string} type
  * @property {string} filename
  * @property {string} stable_id
+ * @property {string} doc_id
  */
 
 /**
@@ -1491,11 +1548,10 @@ export class ApiClientV1 {
   /**
    * Update document ID for all files belonging to a document.
    * Only users with reviewer or admin role can update doc_id.
-   * Only gold standard files can have their doc_id updated.
    * Updates doc_id for all files (PDF and artifacts) with the same doc_id.
    * Also updates the fileref in all TEI XML files.
    * Args:
-   * stable_id: The stable_id of the gold file
+   * stable_id: The stable_id of any file belonging to the document
    * request: Request body with new doc_id
    * user: Authenticated user
    * file_repo: File repository instance
@@ -1503,7 +1559,7 @@ export class ApiClientV1 {
    * Returns:
    * Success message
    * Raises:
-   * HTTPException: If file not found, not gold standard, user doesn't have access, or lacks reviewer role
+   * HTTPException: If file not found, user doesn't have access, or lacks reviewer role
    *
    * @param {string} stable_id
    * @param {UpdateDocIdRequest} requestBody

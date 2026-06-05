@@ -71,7 +71,10 @@ class DocumentActionsPlugin extends Plugin {
     da.saveRevision.addEventListener('click', () => this.saveRevision())
     da.deleteCurrentVersion.addEventListener('click', () => this.deleteCurrentVersion())
     da.deleteAllVersions.addEventListener('click', () => this.deleteAllVersions())
-    da.deleteAll.addEventListener('click', () => this.deleteAll())
+    da.deleteAll.addEventListener('click', () => this.deleteAll().catch(e => {
+      console.error(e)
+      notify(String(e), "danger", "exclamation-octagon")
+    }))
   }
 
   /**
@@ -100,9 +103,12 @@ class DocumentActionsPlugin extends Plugin {
 
     const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
     const isAnnotator = userHasRole(state.user, ["admin", "reviewer", "annotator"])
+    const userData = this.getDependency('authentication').getUser()
+    const pdfData = state.fileData?.find(/** @param {any} f */ f => f.source?.id === state.pdf)
+    const isPdfOwner = Boolean(userData?.username && pdfData?.source?.created_by === userData.username)
 
-    if (isAnnotator || isReviewer) {
-      da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || !isReviewer
+    if (isAnnotator || isReviewer || isPdfOwner) {
+      da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || (!isReviewer && !isPdfOwner)
       da.deleteAllVersions.disabled = !isReviewer || this.getDependency('file-selection').getOptionValues('xml').length < 2
       da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(state.xml) && !isReviewer)
     } else {
@@ -243,11 +249,17 @@ class DocumentActionsPlugin extends Plugin {
    */
   async deleteAll() {
     const state = this.state
+    const userData = this.getDependency('authentication').getUser()
+    const pdfData = state.fileData?.find(/** @param {any} f */ f => f.source?.id === state.pdf)
+    const isOwner = Boolean(userData?.username && pdfData?.source?.created_by === userData.username)
+    const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
+
+    if (!isReviewer && !isOwner) {
+      notify("You can only delete documents you own.", "warning", "exclamation-triangle")
+      return
+    }
 
     const fileSelection = this.getDependency('file-selection')
-    if (fileSelection.getOptionValues('pdf').length < 2) {
-      throw new Error("Cannot delete all files, at least one PDF must be present")
-    }
 
     const filePathsToDelete = Array.from(new Set(
       [state.pdf]

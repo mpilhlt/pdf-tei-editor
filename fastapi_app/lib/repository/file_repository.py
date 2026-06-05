@@ -1545,24 +1545,20 @@ class FileRepository:
         - The fileref in all TEI XML files
 
         Args:
-            stable_id: The stable_id of the gold file to update
+            stable_id: The stable_id of any file belonging to the document
             new_doc_id: New document ID value
             file_storage: Optional FileStorage instance for updating XML content
 
         Raises:
-            ValueError: If file not found, file is not gold standard, or new_doc_id is empty
+            ValueError: If file not found or new_doc_id is empty
             sqlite3.Error: If database operation fails
         """
         if not new_doc_id:
             raise ValueError("new_doc_id cannot be empty")
 
-        # Get the file to verify it's a gold standard
         file = self.get_file_by_stable_id(stable_id)
         if not file:
             raise ValueError(f"File not found: {stable_id}")
-
-        if not file.is_gold_standard:
-            raise ValueError(f"File {stable_id} is not a gold standard file")
 
         old_doc_id = file.doc_id
         if not old_doc_id:

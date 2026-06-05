@@ -15,8 +15,8 @@ from fastapi_app.lib.plugins.plugin_base import PluginContext
 # Import plugins
 from fastapi_app.plugins.grobid.plugin import GrobidPlugin
 from fastapi_app.plugins.grobid.extractor import GrobidTrainingExtractor
-from fastapi_app.plugins.llamore.plugin import LLamorePlugin
-from fastapi_app.plugins.llamore.extractor import LLamoreExtractor
+from fastapi_app.plugins.llamore_extractor.plugin import LLamorePlugin
+from fastapi_app.plugins.llamore_extractor.extractor import LLamoreExtractor
 from fastapi_app.plugins.kisski.plugin import KisskiPlugin
 from fastapi_app.plugins.kisski.extractor import KisskiExtractor
 from fastapi_app.plugins.test_plugin.plugin import TestPlugin

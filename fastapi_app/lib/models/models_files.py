@@ -114,6 +114,7 @@ class UploadResponse(BaseModel):
     type: str           # 'pdf' or 'xml'
     filename: str       # Deprecated: use stable_id instead
     stable_id: str      # The stable id of the file in the metadata databae
+    doc_id: str         # The document identifier (DOI or other), used for metadata lookup
 
 
 class SaveFileRequest(BaseModel):

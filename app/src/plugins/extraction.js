@@ -173,13 +173,15 @@ class ExtractionPlugin extends Plugin {
    */
   async extractFromNewPdf() {
     try {
-      const { type, filename, originalFilename } = await this.#client.uploadFile()
+      const { type, filename, originalFilename, doc_id } = await this.#client.uploadFile()
       if (type !== 'pdf') {
         this.getDependency('dialog').error('Extraction is only possible from PDF files')
         return
       }
       testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type })
-      const doi = getDoiFromFilename(originalFilename)
+      // Prefer the server-resolved doc_id (may include DOI extracted from PDF content)
+      // over the DOI parsed from the original filename.
+      const doi = (doc_id ? extractDoi(doc_id) : null) || getDoiFromFilename(originalFilename)
       await this.extractFromPDF({ doi, filename })
     } catch (error) {
       throw error

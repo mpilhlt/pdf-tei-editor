@@ -13,7 +13,7 @@ import ui from '../ui.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { SessionStorage } from '../modules/session-storage.js'
-import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { userHasRole } from '../modules/acl-utils.js'
 import { encodeFilename, decodeFilename } from '../modules/doi-utils.js'
 import Plugin from '../modules/plugin-base.js'
 
@@ -410,10 +410,6 @@ class PdfViewerPlugin extends Plugin {
       notify('You are not allowed to edit the document ID', 'warning', 'exclamation-triangle');
       return;
     }
-    if (!this.state.xml || !isGoldFile(this.state.xml)) {
-      notify('Please load a gold TEI artifact to edit the document ID', 'warning', 'info-circle');
-      return;
-    }
     const currentDocId = this.#filenameWidget.text;
     const newDocId = prompt('Edit document ID:', currentDocId);
     if (newDocId === null || newDocId.trim() === currentDocId) return;
@@ -430,7 +426,7 @@ class PdfViewerPlugin extends Plugin {
     }
 
     try {
-      await this.#client.apiClient.filesDocId(this.state.xml, { doc_id: finalDocId });
+      await this.#client.apiClient.filesDocId(this.state.pdf, { doc_id: finalDocId });
       notify(`Document ID updated to '${finalDocId}'`, 'success', 'check-circle');
       await this.getDependency('file-selection').reload({ refresh: true });
       await this.getDependency('services').load({ xml: this.state.xml });

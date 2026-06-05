@@ -23,6 +23,7 @@ dependencies = [
     "waitress>=3.0.2",
     "webdav4[fsspec]>=0.10.0",
     "xmlschema>=3.4.5",
+    "pypdf>=6.12.2",
 ]
 
 [tool.uv.sources]

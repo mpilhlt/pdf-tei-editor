@@ -15,6 +15,11 @@ def get_cache_dir() -> Path:
     return settings.plugins_data_dir / "grobid" / "extractions"
 
 
+def _safe_doc_id(doc_id: str) -> str:
+    """Return a filesystem-safe version of doc_id (replace path separators)."""
+    return doc_id.replace("/", "_").replace("\\", "_")
+
+
 def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict | None:
     """
     Check if cached training data exists for doc_id and revision.
@@ -31,7 +36,8 @@ def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict
         return None
 
     cache_dir = get_cache_dir()
-    cache_key = f"{doc_id}_{revision}" if revision != "unknown" else doc_id
+    safe_id = _safe_doc_id(doc_id)
+    cache_key = f"{safe_id}_{revision}" if revision != "unknown" else safe_id
     cache_path = cache_dir / cache_key
 
     zip_path = cache_path / "training.zip"
@@ -39,7 +45,7 @@ def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict
         return None
 
     # Extract to temp location
-    temp_dir = tempfile.mkdtemp(prefix=f"grobid_cache_{doc_id}_")
+    temp_dir = tempfile.mkdtemp(prefix=f"grobid_cache_{safe_id}_")
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(temp_dir)
 
@@ -58,7 +64,8 @@ def cache_training_data(doc_id: str, revision: str, temp_dir: str, files: list[s
         files: List of files in temp_dir
     """
     cache_dir = get_cache_dir()
-    cache_key = f"{doc_id}_{revision}" if revision != "unknown" else doc_id
+    safe_id = _safe_doc_id(doc_id)
+    cache_key = f"{safe_id}_{revision}" if revision != "unknown" else safe_id
     cache_path = cache_dir / cache_key
     cache_path.mkdir(parents=True, exist_ok=True)
 
@@ -94,15 +101,16 @@ def delete_cache_for_doc(doc_id: str) -> bool:
     import shutil
 
     cache_dir = get_cache_dir()
+    safe_id = _safe_doc_id(doc_id)
     deleted = False
 
     # Find all cache entries for this doc_id (any revision)
-    # Pattern: {doc_id} or {doc_id}_{revision}
-    for cache_path in cache_dir.glob(f"{doc_id}*"):
+    # Pattern: {safe_id} or {safe_id}_{revision}
+    for cache_path in cache_dir.glob(f"{safe_id}*"):
         if cache_path.is_dir():
             # Verify it's actually for this doc_id (not a prefix match of another doc)
             folder_name = cache_path.name
-            if folder_name == doc_id or folder_name.startswith(f"{doc_id}_"):
+            if folder_name == safe_id or folder_name.startswith(f"{safe_id}_"):
                 shutil.rmtree(cache_path, ignore_errors=True)
                 deleted = True
 
