@@ -80,6 +80,10 @@ def get_grobid_server_url() -> str | None:
 # so only exceptions need to be listed here.
 VARIANT_FEATURE_SUFFIXES: dict[str, str] = {}
 
+# Variants whose feature files have one entry per PDF layout line (first word of
+# the line as token), rather than one entry per individual token.
+LINE_BASED_VARIANTS: set[str] = {"grobid.training.segmentation"}
+
 
 def get_feature_suffix(variant_id: str) -> str:
     """Return the ZIP entry suffix for a training variant's feature file."""

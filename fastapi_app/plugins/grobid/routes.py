@@ -147,7 +147,7 @@ async def get_feature_tokens(
     from fastapi_app.config import get_settings
     from fastapi_app.lib.repository.file_repository import FileRepository
     from fastapi_app.plugins.grobid.cache import get_cache_dir
-    from fastapi_app.plugins.grobid.config import get_feature_suffix
+    from fastapi_app.plugins.grobid.config import get_feature_suffix, LINE_BASED_VARIANTS
     from fastapi_app.plugins.grobid.sync import extract_feature_tokens, parse_encoding_labels
 
     session_id_value = x_session_id or session_id
@@ -190,9 +190,10 @@ async def get_feature_tokens(
 
     tokens = extract_feature_tokens(zip_path, suffix)
     if tokens is None:
-        return {"status": "no_feature_file", "tokens": [], "count": 0}
+        return {"status": "no_feature_file", "tokens": [], "count": 0, "line_based": False}
 
-    return {"status": "ok", "tokens": tokens, "count": len(tokens)}
+    line_based = variant_id in LINE_BASED_VARIANTS
+    return {"status": "ok", "tokens": tokens, "count": len(tokens), "line_based": line_based}
 
 
 @router.post("/cancel/{progress_id}")
