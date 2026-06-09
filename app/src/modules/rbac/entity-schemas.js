@@ -98,7 +98,7 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Groups',
         options: 'group',
-        helpText: 'Groups determine collection access'
+        helpText: 'Groups this user belongs to (organisational label only)'
       },
       {
         name: 'session_id',

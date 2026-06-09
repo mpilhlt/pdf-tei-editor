@@ -189,8 +189,11 @@ class RbacManagerPlugin extends Plugin {
       }
     })
 
-    const section = this.#ui.querySelector('[name="entityConfigSection"]')
-    if (section) section.style.display = 'none'
+    const configSection = this.#ui.querySelector('[name="entityConfigSection"]')
+    if (configSection) configSection.style.display = 'none'
+
+    const membersSection = this.#ui.querySelector('[name="groupMembersSection"]')
+    if (membersSection) membersSection.style.display = 'none'
 
     this.#renderEntityList()
     this.#showEmptyState()
@@ -342,6 +345,13 @@ class RbacManagerPlugin extends Plugin {
       const section = this.#ui.querySelector('[name="entityConfigSection"]')
       if (section) section.style.display = 'none'
     }
+
+    if (this.#currentEntityType === 'group' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderGroupMembers(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="groupMembersSection"]')
+      if (section) section.style.display = 'none'
+    }
   }
 
   /** Show empty state (no entity selected) */
@@ -376,8 +386,11 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="saveBtn"]').disabled = true
     dialog.querySelector('[name="deleteBtn"]').disabled = true
 
-    const section = dialog.querySelector('[name="entityConfigSection"]')
-    if (section) section.style.display = 'none'
+    const configSection = dialog.querySelector('[name="entityConfigSection"]')
+    if (configSection) configSection.style.display = 'none'
+
+    const membersSection = dialog.querySelector('[name="groupMembersSection"]')
+    if (membersSection) membersSection.style.display = 'none'
   }
 
   /** Save entity (create or update) */
@@ -626,6 +639,65 @@ class RbacManagerPlugin extends Plugin {
       this.#renderCollectionConfigList(entityId)
     } catch (err) {
       notify(`Failed to save config override: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Render the group members section for a given group.
+   * Members are derived from the cached user list — users whose groups[] includes groupId.
+   * @param {string} groupId
+   */
+  #renderGroupMembers(groupId) {
+    const section = this.#ui.querySelector('[name="groupMembersSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="groupMembersList"]')
+    listEl.innerHTML = ''
+
+    const members = this.#entityManagers.user.getAll().filter(u => (u.groups || []).includes(groupId))
+
+    if (members.length === 0) {
+      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.25rem;">No members</div>'
+      return
+    }
+
+    for (const user of members) {
+      const username = user.username
+      const label = user.fullname ? `${user.fullname} (${username})` : username
+
+      const row = document.createElement('div')
+      row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0;'
+
+      const nameSpan = document.createElement('span')
+      nameSpan.style.cssText = 'flex: 1; font-size: 0.9em;'
+      nameSpan.textContent = label
+      row.appendChild(nameSpan)
+
+      const removeBtn = document.createElement('sl-icon-button')
+      removeBtn.setAttribute('name', 'person-dash')
+      removeBtn.setAttribute('label', `Remove ${username} from group`)
+      removeBtn.addEventListener('click', () => this.#removeUserFromGroup(username, groupId))
+      row.appendChild(removeBtn)
+
+      listEl.appendChild(row)
+    }
+  }
+
+  /**
+   * Remove a user from a group by updating the user's groups[] on the server.
+   * @param {string} username
+   * @param {string} groupId
+   */
+  async #removeUserFromGroup(username, groupId) {
+    const user = this.#entityManagers.user.findById(username)
+    if (!user) return
+    const updatedGroups = (user.groups || []).filter(g => g !== groupId)
+    try {
+      await this.#entityManagers.user.update(username, { ...user, groups: updatedGroups })
+      this.#renderGroupMembers(groupId)
+    } catch (err) {
+      notify(`Failed to remove user from group: ${err}`, 'danger', 'exclamation-octagon')
     }
   }
 
