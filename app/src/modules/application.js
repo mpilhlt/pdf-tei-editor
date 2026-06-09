@@ -193,23 +193,25 @@ export class Application {
       } finally {
         this.#isUpdatingState = false;
       }
+      await this.#flushScheduledStateChanges();
       return currentState;
     }
-    
+
     // Set lock to prevent nested state changes
     this.#isUpdatingState = true;
-    
+    let stateToReturn;
+
     try {
       // Invoke all state update endpoints by convention:
-      
+
       // 1. Legacy system: state.update with full state
       const legacyResults = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(legacyResults);
-      
+
       // 2. New system: updateInternalState with full state (silent)
       const internalResults = await this.#pluginManager.invoke(ep.state.updateInternal, newState, { result: 'full' });
       this.#checkForStateChangeErrors(internalResults);
-      
+
       // 3. New system: onStateUpdate with changed keys (catch-all)
       const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
       this.#checkForStateChangeErrors(changeResults);
@@ -228,12 +230,13 @@ export class Application {
 
       // Update current state after successful plugin notification
       this.#currentState = newState;
-      
-      return newState;
+      stateToReturn = newState;
     } finally {
       this.#isUpdatingState = false;
-      this.#flushScheduledStateChanges();
     }
+
+    await this.#flushScheduledStateChanges();
+    return stateToReturn;
   }
 
   /**
@@ -259,14 +262,18 @@ export class Application {
   /**
    * Flush state changes that were explicitly scheduled via scheduleStateChange().
    * Merges all pending changes into one update to avoid chained re-renders.
+   * Must be called only after #isUpdatingState has been set back to false.
    */
-  #flushScheduledStateChanges() {
+  async #flushScheduledStateChanges() {
     if (this.#scheduledStateChanges.length === 0) return;
     const pending = this.#scheduledStateChanges.splice(0);
     const merged = Object.assign({}, ...pending.map(p => p.changes));
-    this.updateState(merged)
-      .then(state => pending.forEach(p => p.resolve(state)))
-      .catch(err => pending.forEach(p => p.reject(err)));
+    try {
+      const state = await this.updateState(merged);
+      pending.forEach(p => p.resolve(state));
+    } catch (err) {
+      pending.forEach(p => p.reject(err));
+    }
   }
 
   /**
@@ -294,24 +301,26 @@ export class Application {
         this.#checkForStateChangeErrors(results);
       } finally {
         this.#isUpdatingState = false;
-        this.#flushScheduledStateChanges();
       }
+      await this.#flushScheduledStateChanges();
       return currentState;
     }
 
     this.#isUpdatingState = true;
+    let stateToReturn;
     try {
       const results = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(results);
 
       // Update current state after successful plugin notification
       this.#currentState = newState;
-
-      return newState;
+      stateToReturn = newState;
     } finally {
       this.#isUpdatingState = false;
-      this.#flushScheduledStateChanges();
     }
+
+    await this.#flushScheduledStateChanges();
+    return stateToReturn;
   }
 
   /**

@@ -505,7 +505,7 @@ class XmlEditorPlugin extends Plugin {
             const items = this.#xpathDropdown.items || [];
             const savedXpathInItems = savedXpath && items.some(item => item.value === savedXpath);
             if (savedXpathInItems) {
-              await this.dispatchStateChange({ xpath: `${savedXpath}[1]` });
+              await this.scheduleStateChange({ xpath: `${savedXpath}[1]` });
             }
           }
         }, 0);

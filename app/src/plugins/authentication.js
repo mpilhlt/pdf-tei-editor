@@ -148,7 +148,7 @@ class AuthenticationPlugin extends Plugin {
       stateUpdate.sessionId = authData.sessionId;
     }
 
-    await this.dispatchStateChange(stateUpdate);
+    await this.scheduleStateChange(stateUpdate);
 
     // Reload file data after authentication to get user-specific files
     try {
