@@ -337,7 +337,8 @@ class RbacManagerPlugin extends Plugin {
     }
 
     const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
-    formContainer.appendChild(form)
+    const firstSection = formContainer.querySelector('[name="entityConfigSection"]') || formContainer.querySelector('[name="groupMembersSection"]')
+    formContainer.insertBefore(form, firstSection)
 
     if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && !this.#isNewEntity && this.#selectedEntityId) {
       this.#loadAndRenderCollectionConfig(this.#selectedEntityId)
@@ -658,30 +659,49 @@ class RbacManagerPlugin extends Plugin {
     const members = this.#entityManagers.user.getAll().filter(u => (u.groups || []).includes(groupId))
 
     if (members.length === 0) {
-      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.25rem;">No members</div>'
+      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;">No members</div>'
       return
     }
 
+    const table = document.createElement('table')
+    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
+    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Username</th>
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Full Name</th>
+      <th style="width: 2rem;"></th>
+    </tr></thead>`
+    const tbody = document.createElement('tbody')
+
     for (const user of members) {
       const username = user.username
-      const label = user.fullname ? `${user.fullname} (${username})` : username
+      const tr = document.createElement('tr')
+      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
 
-      const row = document.createElement('div')
-      row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0;'
+      const tdUser = document.createElement('td')
+      tdUser.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
+      tdUser.textContent = username
 
-      const nameSpan = document.createElement('span')
-      nameSpan.style.cssText = 'flex: 1; font-size: 0.9em;'
-      nameSpan.textContent = label
-      row.appendChild(nameSpan)
+      const tdName = document.createElement('td')
+      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
+      tdName.textContent = user.fullname || ''
 
+      const tdAction = document.createElement('td')
+      tdAction.style.cssText = 'padding: 0.1rem 0; text-align: right;'
       const removeBtn = document.createElement('sl-icon-button')
       removeBtn.setAttribute('name', 'person-dash')
       removeBtn.setAttribute('label', `Remove ${username} from group`)
+      removeBtn.style.fontSize = '0.9rem'
       removeBtn.addEventListener('click', () => this.#removeUserFromGroup(username, groupId))
-      row.appendChild(removeBtn)
+      tdAction.appendChild(removeBtn)
 
-      listEl.appendChild(row)
+      tr.appendChild(tdUser)
+      tr.appendChild(tdName)
+      tr.appendChild(tdAction)
+      tbody.appendChild(tr)
     }
+
+    table.appendChild(tbody)
+    listEl.appendChild(table)
   }
 
   /**
