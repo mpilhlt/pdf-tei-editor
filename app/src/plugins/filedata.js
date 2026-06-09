@@ -269,10 +269,20 @@ class FiledataPlugin extends Plugin {
         // Continue with empty collections list - file operations will still work
       }
 
-      // Store fileData and collections in state and propagate them
+      // Load projects from server
+      let projects = [];
+      try {
+        projects = await this.#client.listProjects();
+        this.#logger.debug(`Loaded ${projects.length} projects from server`);
+      } catch (error) {
+        this.#logger.error(`Failed to load projects: ${error}`);
+      }
+
+      // Store fileData, collections, and projects in state and propagate them
       const newState = await this.dispatchStateChange({
         fileData: data,
-        collections
+        collections,
+        projects
       });
       return newState;
     } finally {

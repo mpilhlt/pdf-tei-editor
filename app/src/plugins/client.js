@@ -491,6 +491,14 @@ async function getCollections() {
 }
 
 /**
+ * Returns all projects accessible to the current user.
+ * @returns {Promise<import('../state.js').ProjectInfo[]>}
+ */
+async function listProjects() {
+  return await apiClient.listProjects();
+}
+
+/**
  * Creates a new collection
  * @param {string} id - Collection ID (only letters, numbers, hyphens, underscores)
  * @param {string} [name] - Display name (defaults to id if not provided)
@@ -768,6 +776,7 @@ const api = {
   moveFiles,
   copyFiles,
   getCollections,
+  listProjects,
   createCollection,
   state,
   sendHeartbeat,
