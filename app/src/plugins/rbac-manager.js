@@ -793,6 +793,60 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
+   * Render a read-only table of groups the selected user belongs to.
+   * @param {string} username
+   */
+  #renderUserGroupsSection(username) {
+    const section = this.#ui.querySelector('[name="userGroupsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="userGroupsList"]')
+    listEl.innerHTML = ''
+
+    const user = this.#entityManagers.user.findById(username)
+    const userGroups = (user?.groups || [])
+      .map(groupId => this.#entityManagers.group.findById(groupId))
+      .filter(Boolean)
+
+    if (userGroups.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;'
+      empty.textContent = 'No groups assigned'
+      listEl.appendChild(empty)
+      return
+    }
+
+    const table = document.createElement('table')
+    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
+    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Group ID</th>
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Name</th>
+    </tr></thead>`
+    const tbody = document.createElement('tbody')
+
+    for (const group of userGroups) {
+      const tr = document.createElement('tr')
+      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
+
+      const tdId = document.createElement('td')
+      tdId.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
+      tdId.textContent = group.id
+
+      const tdName = document.createElement('td')
+      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
+      tdName.textContent = group.name || ''
+
+      tr.appendChild(tdId)
+      tr.appendChild(tdName)
+      tbody.appendChild(tr)
+    }
+
+    table.appendChild(tbody)
+    listEl.appendChild(table)
+  }
+
+  /**
    * Add a user to a group by appending groupId to the user's groups[] on the server.
    * @param {string} username
    * @param {string} groupId
