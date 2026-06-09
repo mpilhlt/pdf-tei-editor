@@ -23,6 +23,7 @@ Low-level API (for advanced use):
 
     get_config_value(key, db_dir, default)
     set_config_value(key, value, db_dir)
+    get_config_metadata(key, db_dir)
 """
 
 import json
@@ -108,7 +109,7 @@ class Config:
         key: str,
         value: Any,
         value_type: str | None = None,
-        allowed_values: list | None = None,
+        allowed_values: list[Any] | None = None,
         description: str | None = None,
     ) -> tuple[bool, str]:
         """
@@ -223,7 +224,7 @@ def set_config_value(
     value: Any,
     db_dir: Path,
     value_type: str | None = None,
-    allowed_values: list | None = None,
+    allowed_values: list[Any] | None = None,
     description: str | None = None,
 ) -> tuple[bool, str]:
     """
@@ -236,6 +237,10 @@ def set_config_value(
         key: The configuration key
         value: The value to set
         db_dir: Path to the database directory containing config.json
+        value_type: Optional explicit type name ("string", "number", "boolean", "array", "object", "null").
+            Overrides inferred type. Ignored for metadata sub-keys.
+        allowed_values: Optional list of permitted values. Written as key.values. Ignored for metadata sub-keys.
+        description: Optional human-readable description. Written as key.description. Ignored for metadata sub-keys.
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -271,6 +276,10 @@ def set_config_value(
                     if value not in valid_types:
                         return False, f"Type must be one of {valid_types}"
 
+                # Validate against incoming allowed_values (before they are persisted)
+                if allowed_values is not None and value not in allowed_values:
+                    return False, f"Value {json.dumps(value)} is not in allowed values {json.dumps(allowed_values)}"
+
                 # Validate against existing constraints
                 if not _validate_config_value(config_data, key, value):
                     return False, "Value does not meet validation constraints"
@@ -281,7 +290,10 @@ def set_config_value(
                 # Auto-set type (explicit takes priority over inferred)
                 if not key.endswith(".values") and not key.endswith(".type") and not key.endswith(".description"):
                     type_key = f"{key}.type"
-                    resolved_type = value_type if value_type is not None else (_get_json_type(value) if type_key not in config_data else None)
+                    if value_type is not None:
+                        resolved_type = value_type
+                    else:
+                        resolved_type = _get_json_type(value) if type_key not in config_data else None
                     if resolved_type:
                         config_data[type_key] = resolved_type
 

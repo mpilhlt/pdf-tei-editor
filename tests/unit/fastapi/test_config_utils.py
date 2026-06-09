@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.utils.config_utils import Config
+from fastapi_app.lib.utils.config_utils import Config, get_config_metadata
 
 
 class TestConfigUtils(unittest.TestCase):
@@ -198,11 +198,12 @@ class TestConfigUtils(unittest.TestCase):
                         value_type='string',
                         allowed_values=['foo', 'bar'],
                         description='A test key')
-        from fastapi_app.lib.utils.config_utils import get_config_metadata
         meta = get_config_metadata('some.key', self.db_dir)
         self.assertEqual(meta['type'], 'string')
         self.assertEqual(meta['values'], ['foo', 'bar'])
         self.assertEqual(meta['description'], 'A test key')
+        # Also verify the Config class method delegates correctly
+        self.assertEqual(self.config.get_metadata('some.key'), meta)
 
     def test_set_values_via_parameter(self):
         """Test that allowed_values parameter writes the .values key."""
@@ -210,6 +211,21 @@ class TestConfigUtils(unittest.TestCase):
         self.assertTrue(success)
         config_data = self.config.load()
         self.assertEqual(config_data['some.key.values'], ['foo', 'bar'])
+
+    def test_set_with_allowed_values_validates_value(self):
+        """Test that set() rejects values not in allowed_values even on first set."""
+        success, msg = self.config.set('some.key', 'bad_value', allowed_values=['foo', 'bar'])
+        self.assertFalse(success)
+        self.assertIn('not in allowed values', msg)
+
+    def test_set_with_explicit_type_overwrites_existing(self):
+        """Test that explicit value_type overwrites an already-stored type."""
+        self.config.set('some.key', 42)  # infers 'number'
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'number')
+        self.config.set('some.key', 42, value_type='string')
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'string')
 
 
 if __name__ == '__main__':
