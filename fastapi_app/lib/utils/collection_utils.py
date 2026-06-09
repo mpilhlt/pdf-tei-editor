@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
+from fastapi_app.lib.utils.config_utils import get_config_value
 
 
 def find_collection(collection_id: str, collections_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -374,7 +375,6 @@ def collection_config_get(
     if key in overrides:
         return overrides[key]
     if use_default:
-        from fastapi_app.lib.utils.config_utils import get_config_value
         return get_config_value(key, db_dir, default)
     return default
 
@@ -401,8 +401,7 @@ def collection_config_set(
     if not collection:
         return False, f"Collection '{collection_id}' not found"
 
-    if 'config' not in collection or collection['config'] is None:
-        collection['config'] = {}
+    collection['config'] = collection.get('config') or {}
     collection['config'][key] = value
 
     save_entity_data(db_dir, 'collections', collections_data)
