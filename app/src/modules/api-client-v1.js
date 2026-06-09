@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-04T14:58:52.327Z
+ * Generated from OpenAPI schema at 2026-06-09T06:56:34.543Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -97,6 +97,24 @@
  */
 
 /**
+ * @typedef {Object} CollectionConfigItem
+ * @property {string} key - Config key
+ * @property {any} value - Config value
+ */
+
+/**
+ * @typedef {Object} CollectionConfigResponse
+ * @property {string} collection_id - Collection ID
+ * @property {Object<string, any>} config - Collection-specific config overrides
+ */
+
+/**
+ * @typedef {Object} CollectionConfigSetRequest
+ * @property {string} key - Config key (must exist in global config or any key is accepted)
+ * @property {any} value - Config value
+ */
+
+/**
  * @typedef {Object} CollectionDeleteResponse
  * @property {boolean} success - Whether deletion was successful
  * @property {string} collection_id - ID of the deleted collection
@@ -118,9 +136,20 @@
  */
 
 /**
+ * @typedef {Object} ConfigMetadataResponse
+ * @property {string} key
+ * @property {string=} type
+ * @property {Array<any>=} values
+ * @property {string=} description
+ */
+
+/**
  * @typedef {Object} ConfigSetRequest
  * @property {string} key
  * @property {any} value
+ * @property {string=} value_type
+ * @property {Array<any>=} allowed_values
+ * @property {string=} description
  */
 
 /**
@@ -680,14 +709,16 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all configuration values.
-   * Returns complete configuration object.
+   * List all configuration values, optionally merged with collection-specific overrides.
+   * If collection is provided, collection-level config keys override global defaults.
    *
+   * @param {Object=} params - Query parameters
+   * @param {(string | null)=} params.collection
    * @returns {Promise<Object<string, any>>}
    */
-  async configList() {
+  async configList(params) {
     const endpoint = `/config/list`
-    return this.callApi(endpoint);
+    return this.callApi(endpoint, 'GET', params);
   }
 
   /**
@@ -699,6 +730,17 @@ export class ApiClientV1 {
    */
   async configGet(key) {
     const endpoint = `/config/get/${key}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Get metadata (type, allowed values, description) for a config key.
+   *
+   * @param {string} key
+   * @returns {Promise<ConfigMetadataResponse>}
+   */
+  async configMetadata(key) {
+    const endpoint = `/config/metadata/${key}`
     return this.callApi(endpoint);
   }
 
@@ -860,6 +902,41 @@ export class ApiClientV1 {
   async collectionsFiles(collection_id) {
     const endpoint = `/collections/${collection_id}/files`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * List all collection-specific config overrides for a collection.
+   *
+   * @param {string} collection_id
+   * @returns {Promise<CollectionConfigResponse>}
+   */
+  async collectionsGetConfig(collection_id) {
+    const endpoint = `/collections/${collection_id}/config`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Set a collection-specific config override.
+   *
+   * @param {string} collection_id
+   * @param {CollectionConfigSetRequest} requestBody
+   * @returns {Promise<CollectionConfigItem>}
+   */
+  async collectionsCreateConfig(collection_id, requestBody) {
+    const endpoint = `/collections/${collection_id}/config`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete a collection-specific config override.
+   *
+   * @param {string} collection_id
+   * @param {string} key
+   * @returns {Promise<any>}
+   */
+  async collectionsConfig(collection_id, key) {
+    const endpoint = `/collections/${collection_id}/config/${key}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**
