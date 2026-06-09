@@ -101,6 +101,32 @@ class TestProjectUtils(unittest.TestCase):
         p = get_projects_with_details(self.db_dir)[0]
         self.assertNotIn('alice', p['members'])
 
+    def test_add_member_duplicate(self):
+        from fastapi_app.lib.utils.project_utils import create_project, add_member_to_project
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', ['alice'], [])])
+        ok, msg = add_member_to_project(self.db_dir, 'p1', 'alice')
+        self.assertFalse(ok)
+        self.assertIn('already', msg)
+
+    def test_remove_member_nonexistent(self):
+        from fastapi_app.lib.utils.project_utils import create_project, remove_member_from_project
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        ok, msg = remove_member_from_project(self.db_dir, 'p1', 'nobody')
+        self.assertFalse(ok)
+        self.assertIn('not a member', msg)
+
+    def test_add_member_project_not_found(self):
+        from fastapi_app.lib.utils.project_utils import add_member_to_project
+        save_entity_data(self.db_dir, 'projects', [])
+        ok, msg = add_member_to_project(self.db_dir, 'ghost', 'alice')
+        self.assertFalse(ok)
+        self.assertIn('not found', msg)
+
+    def test_get_user_projects_with_none_user(self):
+        from fastapi_app.lib.utils.project_utils import get_user_projects
+        result = get_user_projects(None, self.db_dir)
+        self.assertEqual(result, [])
+
 
 if __name__ == '__main__':
     unittest.main()
