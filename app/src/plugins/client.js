@@ -506,11 +506,13 @@ async function createCollection(id, name, description = "") {
 }
 
 /**
- * Returns all server-side configuration values for this application
+ * Returns all server-side configuration values for this application,
+ * optionally filtered by collection-specific overrides.
+ * @param {string|null} [collection] - Collection name to apply overrides for
  * @returns {Promise<Object>}
  */
-async function getConfigData() {
-  return await apiClient.configList();
+async function getConfigData(collection) {
+  return await apiClient.configList(collection ? { collection } : {});
 }
 
 /**

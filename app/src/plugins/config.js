@@ -60,6 +60,22 @@ class ConfigPlugin extends Plugin {
   }
 
   /**
+   * Called when the active collection filter changes.
+   * Reloads configuration with collection-specific overrides applied.
+   * @param {string|null} newCollection
+   * @returns {Promise<void>}
+   */
+  async onCollectionFilterChange(newCollection) {
+    this.getDependency('logger').debug(`Reloading config for collection: ${newCollection}`);
+    try {
+      const response = await this.getDependency('client').getConfigData(newCollection || null);
+      this._configMap = response || {};
+    } catch (error) {
+      this.getDependency('logger').error('Failed to reload config for collection:', String(error));
+    }
+  }
+
+  /**
    * Sets a configuration value for a given key on the server.
    * @param {string} key
    * @param {any} value
