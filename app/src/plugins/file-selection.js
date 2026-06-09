@@ -126,7 +126,7 @@ class FileSelectionPlugin extends Plugin {
   async onStateUpdate(changedKeys, state) {
     this.#isInStateUpdateCycle = true;
     try {
-      if (changedKeys.includes('collections') && state.collections) {
+      if ((changedKeys.includes('collections') || changedKeys.includes('projects')) && state.collections) {
         await this.#populateCollectionSelectbox(state);
       }
 
@@ -251,8 +251,43 @@ class FileSelectionPlugin extends Plugin {
     allOption.size = "small";
     this.#collection.appendChild(allOption);
 
-    const sortedCollections = [...state.collections].sort((a, b) => a.name.localeCompare(b.name));
-    for (const collection of sortedCollections) {
+    const projects = state.projects || [];
+    const assignedCollectionIds = new Set(
+      projects.flatMap(p => p.collections || [])
+    );
+
+    // Render each project header followed by its collections
+    for (const project of projects) {
+      const header = new SlOption();
+      header.value = `__project__${project.id}`;
+      header.disabled = true;
+      header.innerHTML = `<small>${project.name}</small>`;
+      this.#collection.appendChild(header);
+
+      const projectCollections = (project.collections || [])
+        .map(colId => (state.collections || []).find(c => c.id === colId))
+        .filter(Boolean);
+
+      for (const collection of projectCollections) {
+        const option = new SlOption();
+        option.value = collection.id;
+        option.textContent = collection.name;
+        // @ts-ignore
+        option.size = "small";
+        this.#collection.appendChild(option);
+      }
+    }
+
+    // Render orphan collections (not in any project) at the end
+    const orphans = (state.collections || []).filter(c => !assignedCollectionIds.has(c.id));
+    if (orphans.length > 0 && projects.length > 0) {
+      const otherHeader = new SlOption();
+      otherHeader.value = '__other__';
+      otherHeader.disabled = true;
+      otherHeader.innerHTML = '<small>Other</small>';
+      this.#collection.appendChild(otherHeader);
+    }
+    for (const collection of orphans) {
       const option = new SlOption();
       option.value = collection.id;
       option.textContent = collection.name;
@@ -553,7 +588,14 @@ class FileSelectionPlugin extends Plugin {
       try {
         for (const file of state.fileData) {
           if (file.artifacts && file.artifacts.some(a => a.id === xml)) {
-            await this.dispatchStateChange({ collection: file.collections[0] });
+            const _selCollection = file.collections[0];
+            const _selProject = (state.projects || []).find(
+              p => p.collections && p.collections.includes(_selCollection)
+            );
+            await this.dispatchStateChange({
+              collection: _selCollection,
+              project: _selProject ? _selProject.id : null
+            });
             break;
           }
         }
@@ -593,6 +635,10 @@ class FileSelectionPlugin extends Plugin {
     const state = this.state;
     const collectionFilter = String(this.#collection.value);
     const collection = collectionFilter || null;
+    const matchedProject = (state.projects || []).find(
+      p => p.collections && p.collections.includes(collectionFilter)
+    );
+    const project = matchedProject ? matchedProject.id : null;
 
     let shouldClearSelection = false;
     if (collectionFilter && state.pdf && state.fileData) {
@@ -606,9 +652,9 @@ class FileSelectionPlugin extends Plugin {
 
     if (shouldClearSelection) {
       await this.getDependency('services').removeMergeView();
-      await this.dispatchStateChange({ collectionFilter, collection, pdf: null, xml: null, diff: null });
+      await this.dispatchStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
     } else {
-      await this.dispatchStateChange({ collectionFilter, collection });
+      await this.dispatchStateChange({ collectionFilter, collection, project });
     }
   }
 }
