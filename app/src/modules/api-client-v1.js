@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-09T06:56:34.543Z
+ * Generated from OpenAPI schema at 2026-06-09T08:03:35.851Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1650,11 +1650,13 @@ export class ApiClientV1 {
   /**
    * Get current access control mode and defaults.
    *
+   * @param {Object=} params - Query parameters
+   * @param {(string | null)=} params.collection
    * @returns {Promise<AccessControlModeResponse>}
    */
-  async filesAccessControlMode() {
+  async filesAccessControlMode(params) {
     const endpoint = `/files/access_control_mode`
-    return this.callApi(endpoint);
+    return this.callApi(endpoint, 'GET', params);
   }
 
   /**
