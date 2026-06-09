@@ -21,6 +21,7 @@ import { createEntityManagers } from '../modules/rbac/entity-manager.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { createValueEditor } from '../modules/config-value-editor.js'
+import { createMemberPicker } from '../modules/rbac/member-picker.js'
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -348,7 +349,7 @@ class RbacManagerPlugin extends Plugin {
     }
 
     if (this.#currentEntityType === 'group' && !this.#isNewEntity && this.#selectedEntityId) {
-      this.#renderGroupMembers(this.#selectedEntityId)
+      this.#renderGroupMembersWidget(this.#selectedEntityId)
     } else {
       const section = this.#ui.querySelector('[name="groupMembersSection"]')
       if (section) section.style.display = 'none'
@@ -644,11 +645,10 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
-   * Render the group members section for a given group.
-   * Members are derived from the cached user list — users whose groups[] includes groupId.
+   * Render the group members section as an interactive member picker widget.
    * @param {string} groupId
    */
-  #renderGroupMembers(groupId) {
+  #renderGroupMembersWidget(groupId) {
     const section = this.#ui.querySelector('[name="groupMembersSection"]')
     if (!section) return
     section.style.display = 'block'
@@ -656,52 +656,48 @@ class RbacManagerPlugin extends Plugin {
     const listEl = this.#ui.querySelector('[name="groupMembersList"]')
     listEl.innerHTML = ''
 
-    const members = this.#entityManagers.user.getAll().filter(u => (u.groups || []).includes(groupId))
+    const allUsers = this.#entityManagers.user.getAll()
+    const members = allUsers.filter(u => (u.groups || []).includes(groupId))
+    const nonMembers = allUsers.filter(u => !(u.groups || []).includes(groupId))
 
-    if (members.length === 0) {
-      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;">No members</div>'
-      return
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [
+        { key: 'username', label: 'Username', monospace: true },
+        { key: 'fullname', label: 'Full Name' }
+      ],
+      items: members,
+      availableOptions: nonMembers.map(u => ({
+        value: u.username,
+        primaryLabel: u.username,
+        secondaryLabel: u.fullname || ''
+      })),
+      onAdd: async (username) => {
+        await this.#addUserToGroup(username, groupId)
+      },
+      onRemove: async (item) => {
+        await this.#removeUserFromGroup(item.username, groupId)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Add a user to a group by appending groupId to the user's groups[] on the server.
+   * @param {string} username
+   * @param {string} groupId
+   */
+  async #addUserToGroup(username, groupId) {
+    const user = this.#entityManagers.user.findById(username)
+    if (!user) return
+    const updatedGroups = [...(user.groups || []), groupId]
+    try {
+      await this.#entityManagers.user.update(username, { ...user, groups: updatedGroups })
+      this.#renderGroupMembersWidget(groupId)
+    } catch (err) {
+      notify(`Failed to add user to group: ${err}`, 'danger', 'exclamation-octagon')
     }
-
-    const table = document.createElement('table')
-    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
-    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
-      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Username</th>
-      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Full Name</th>
-      <th style="width: 2rem;"></th>
-    </tr></thead>`
-    const tbody = document.createElement('tbody')
-
-    for (const user of members) {
-      const username = user.username
-      const tr = document.createElement('tr')
-      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
-
-      const tdUser = document.createElement('td')
-      tdUser.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
-      tdUser.textContent = username
-
-      const tdName = document.createElement('td')
-      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
-      tdName.textContent = user.fullname || ''
-
-      const tdAction = document.createElement('td')
-      tdAction.style.cssText = 'padding: 0.1rem 0; text-align: right;'
-      const removeBtn = document.createElement('sl-icon-button')
-      removeBtn.setAttribute('name', 'person-dash')
-      removeBtn.setAttribute('label', `Remove ${username} from group`)
-      removeBtn.style.fontSize = '0.9rem'
-      removeBtn.addEventListener('click', () => this.#removeUserFromGroup(username, groupId))
-      tdAction.appendChild(removeBtn)
-
-      tr.appendChild(tdUser)
-      tr.appendChild(tdName)
-      tr.appendChild(tdAction)
-      tbody.appendChild(tr)
-    }
-
-    table.appendChild(tbody)
-    listEl.appendChild(table)
   }
 
   /**
@@ -715,7 +711,7 @@ class RbacManagerPlugin extends Plugin {
     const updatedGroups = (user.groups || []).filter(g => g !== groupId)
     try {
       await this.#entityManagers.user.update(username, { ...user, groups: updatedGroups })
-      this.#renderGroupMembers(groupId)
+      this.#renderGroupMembersWidget(groupId)
     } catch (err) {
       notify(`Failed to remove user from group: ${err}`, 'danger', 'exclamation-octagon')
     }
