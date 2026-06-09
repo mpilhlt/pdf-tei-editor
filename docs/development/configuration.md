@@ -9,7 +9,6 @@ For programmatic use, see [Configuration Processing Architecture](#configuration
 - **`data/db/config.json`** - Runtime configuration (user-specific, gitignored)
 - **`config/config.json`** - Default configuration (version-controlled)
 
-
 ## Configuration Processing Architecture
 
 ### Backend Processing
@@ -203,6 +202,5 @@ The config plugin provides client-side access to configuration:
      - Releases file lock
 
 4. **CLI Usage**:
-   - CLI calls Python functions from `bin/manage.py`
-   - Uses low-level `config_utils.py` functions directly
-   - No authentication required for CLI access
+   - CLI uses `bin/manage-remote.js` via the HTTP API (`npm run manage-remote -- config get/set`)
+   - Requires the server to be running and valid credentials
