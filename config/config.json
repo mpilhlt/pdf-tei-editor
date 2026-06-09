@@ -16,7 +16,6 @@
   "heartbeat.interval.description": "Interval in seconds between client heartbeat requests to keep the session alive",
   "session.timeout": 86400,
   "session.timeout.description": "Session timeout in seconds; users are logged out after this period of inactivity",
-  "session.timeout.type": "number",
   "state.showInUrl": [
     "pdf",
     "xml",
