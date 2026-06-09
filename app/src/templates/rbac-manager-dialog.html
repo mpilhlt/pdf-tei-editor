@@ -85,10 +85,21 @@
           </div>
           <!-- Group members section (shown when a group is selected) -->
           <div name="groupMembersSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
-            <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--sl-color-neutral-700); text-transform: uppercase; letter-spacing: 0.04em;">Members</h4>
-            <p style="margin: 0 0 0.5rem; font-size: 0.8em; color: var(--sl-color-neutral-500);">To add users to this group, edit their profile in the Users tab.</p>
             <div name="groupMembersList">
-              <!-- Member table inserted here -->
+              <!-- createMemberPicker element inserted here -->
+            </div>
+          </div>
+          <!-- Project members section (shown when a project is selected) -->
+          <div name="projectMembersSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <div name="projectMembersList">
+              <!-- createMemberPicker element inserted here -->
+            </div>
+          </div>
+          <!-- User groups section (shown when a user is selected — read-only) -->
+          <div name="userGroupsSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--sl-color-neutral-700); text-transform: uppercase; letter-spacing: 0.04em;">Groups</h4>
+            <div name="userGroupsList">
+              <!-- read-only group table inserted here -->
             </div>
           </div>
         </div>
