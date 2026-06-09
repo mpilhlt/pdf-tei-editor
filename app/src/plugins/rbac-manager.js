@@ -684,6 +684,115 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
+   * Render the project members section as an interactive member picker widget.
+   * Selecting a group option expands it — all users in that group are added individually.
+   * @param {string} projectId
+   */
+  #renderProjectMembersSection(projectId) {
+    const section = this.#ui.querySelector('[name="projectMembersSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="projectMembersList"]')
+    listEl.innerHTML = ''
+
+    const project = this.#entityManagers.project.findById(projectId)
+    const currentMemberIds = project?.members || []
+
+    const memberObjects = currentMemberIds
+      .map(username => this.#entityManagers.user.findById(username))
+      .filter(Boolean)
+
+    const nonMembers = this.#entityManagers.user.getAll()
+      .filter(u => !currentMemberIds.includes(u.username))
+
+    const groups = this.#entityManagers.group.getAll()
+
+    const availableOptions = [
+      ...nonMembers.map(u => ({
+        value: u.username,
+        primaryLabel: u.username,
+        secondaryLabel: u.fullname || '',
+        optionGroup: 'Users'
+      })),
+      ...groups.map(g => ({
+        value: g.id,
+        primaryLabel: g.id,
+        secondaryLabel: g.name || '',
+        optionGroup: 'Groups'
+      }))
+    ]
+
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [
+        { key: 'username', label: 'Username', monospace: true },
+        { key: 'fullname', label: 'Full Name' }
+      ],
+      items: memberObjects,
+      availableOptions,
+      onAdd: async (value) => {
+        await this.#addProjectMember(projectId, value)
+      },
+      onRemove: async (item) => {
+        await this.#removeProjectMember(projectId, item.username)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Add a user (or all users in a group) to a project's members array.
+   * If value is a group id, all users in that group are added individually.
+   * @param {string} projectId
+   * @param {string} value - A username or group ID
+   */
+  async #addProjectMember(projectId, value) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+
+    const currentMembers = [...(project.members || [])]
+    let updatedMembers
+
+    if (this.#entityManagers.group.findById(value)) {
+      const usersInGroup = this.#entityManagers.user.getAll()
+        .filter(u => (u.groups || []).includes(value))
+      const newUsernames = usersInGroup
+        .map(u => u.username)
+        .filter(username => !currentMembers.includes(username))
+      updatedMembers = [...currentMembers, ...newUsernames]
+    } else {
+      updatedMembers = [...currentMembers, value]
+    }
+
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, members: updatedMembers })
+      this.#renderProjectMembersSection(projectId)
+    } catch (err) {
+      notify(`Failed to add project member: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Remove a user from a project's members array.
+   * @param {string} projectId
+   * @param {string} username
+   */
+  async #removeProjectMember(projectId, username) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+
+    const updatedMembers = (project.members || []).filter(m => m !== username)
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, members: updatedMembers })
+      this.#renderProjectMembersSection(projectId)
+    } catch (err) {
+      notify(`Failed to remove project member: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
    * Add a user to a group by appending groupId to the user's groups[] on the server.
    * @param {string} username
    * @param {string} groupId
