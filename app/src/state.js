@@ -18,6 +18,16 @@
  */
 
 /**
+ * Project information
+ * @typedef {object} ProjectInfo
+ * @property {string} id - Unique project identifier
+ * @property {string} name - Project display name
+ * @property {string} description - Project description
+ * @property {string[]} collections - Collection IDs in this project
+ * @property {string[]} members - Member usernames
+ */
+
+/**
  * The application state, which is often passed to the plugin endpoints
  *
  * @typedef {object} ApplicationState
@@ -35,6 +45,8 @@
  * @property {string|null} collectionFilter - The collection filter for the file selection (empty string = all)
  * @property {FileListItem[]|null} fileData - The file data loaded from the server
  * @property {CollectionInfo[]|null} collections - The list of accessible collections
+ * @property {string|null} project - ID of the project owning the current collection; null if none
+ * @property {ProjectInfo[]|null} projects - All projects accessible to the current user
  * @property {boolean} hasInternet - Whether the backend has internet access
  * @property {boolean} maintenanceMode - Whether the application is in maintenance mode (UI blocked by admin)
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
@@ -59,6 +71,8 @@ const initialState = {
   collectionFilter: null,
   fileData: null,
   collections: null,
+  project: null,
+  projects: null,
   offline: false,
   hasInternet: false,
   maintenanceMode: false,

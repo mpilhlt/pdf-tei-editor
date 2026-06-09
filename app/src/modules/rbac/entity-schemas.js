@@ -121,6 +121,55 @@ const entitySchemas = {
     ]
   },
 
+  project: {
+    label: 'Projects',
+    singularLabel: 'Project',
+    idField: 'id',
+    icon: 'folder2-open',
+    fields: [
+      {
+        name: 'id',
+        type: 'string',
+        label: 'ID',
+        required: true,
+        immutable: true,
+        placeholder: 'project-id',
+        helpText: 'Unique project identifier'
+      },
+      {
+        name: 'name',
+        type: 'string',
+        label: 'Name',
+        required: true,
+        placeholder: 'Project Name'
+      },
+      {
+        name: 'description',
+        type: 'textarea',
+        label: 'Description',
+        placeholder: 'Describe the project purpose'
+      },
+      {
+        name: 'members',
+        type: 'multiselect',
+        label: 'Members',
+        options: 'user',
+        helpText: 'Users with access to this project'
+      },
+      {
+        name: 'collections',
+        type: 'multiselect',
+        label: 'Collections',
+        options: 'collection',
+        helpText: 'Collections included in this project'
+      }
+    ],
+    relationships: [
+      { target: 'user', field: 'members', type: 'many-to-many' },
+      { target: 'collection', field: 'collections', type: 'many-to-many' }
+    ]
+  },
+
   group: {
     label: 'Groups',
     singularLabel: 'Group',
@@ -154,7 +203,7 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Collections',
         options: 'collection',
-        helpText: 'Collections accessible to this group (use "*" for all)'
+        helpText: 'Collections accessible to this group (collection access is now managed via Projects)'
       }
     ],
     relationships: [
