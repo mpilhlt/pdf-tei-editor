@@ -160,6 +160,7 @@ class RbacManagerPlugin extends Plugin {
     }
 
     this.#optionsData = {
+      project: this.#entityManagers.project.getAll(),
       user: this.#entityManagers.user.getAll(),
       group: this.#entityManagers.group.getAll(),
       role: this.#entityManagers.role.getAll(),

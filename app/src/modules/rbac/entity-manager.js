@@ -215,6 +215,7 @@ export class EntityManager {
  */
 export function createEntityManagers(apiClient) {
   return {
+    project: new EntityManager('project', apiClient),
     user: new EntityManager('user', apiClient),
     group: new EntityManager('group', apiClient),
     role: new EntityManager('role', apiClient),
