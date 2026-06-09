@@ -5,16 +5,24 @@
       "label": "LLamore"
     }
   ],
+  "model-configurations.description": "Available model configurations for extraction",
   "xml.encode-entities.server": true,
+  "xml.encode-entities.server.description": "Encode XML special characters on the server side before saving",
   "xml.encode-entities.client": false,
+  "xml.encode-entities.client.description": "Encode XML special characters on the client side before display",
   "xml.encode-quotes": false,
+  "xml.encode-quotes.description": "Encode typographic quotes in XML output",
   "heartbeat.interval": 30,
+  "heartbeat.interval.description": "Interval in seconds between client heartbeat requests to keep the session alive",
   "session.timeout": 86400,
+  "session.timeout.description": "Session timeout in seconds; users are logged out after this period of inactivity",
+  "session.timeout.type": "number",
   "state.showInUrl": [
     "pdf",
     "xml",
     "diff"
   ],
+  "state.showInUrl.description": "State keys reflected in the browser URL for sharing and bookmarking",
   "state.allowSetFromUrl": [
     "pdf",
     "xml",
@@ -23,24 +31,32 @@
     "xpath",
     "collection"
   ],
+  "state.allowSetFromUrl.description": "State keys that may be initialized from URL query parameters",
   "state.persistedVars": [
     "*"
   ],
+  "state.persistedVars.description": "State keys persisted in localStorage across page reloads (* = all)",
   "server.logging.level": {
     "sse": "info",
     "sync": "info"
   },
+  "server.logging.level.description": "Per-category server log levels (keys: sse, sync; values: debug, info, warning, error)",
   "application.mode": "development",
+  "application.mode.description": "Application runtime mode; affects debug output and performance optimizations",
   "application.mode.values": [
     "development",
     "production",
     "testing"
   ],
   "application.login-message": "",
+  "application.login-message.description": "Optional HTML message shown on the login screen",
   "application.login-message.type": "string",
   "docs.from-github": false,
+  "docs.from-github.description": "Load documentation from GitHub instead of the local server",
   "sse.enabled": true,
+  "sse.enabled.description": "Enable Server-Sent Events for real-time notifications",
   "schema.base-url": "https://mpilhlt.github.io/grobid-footnote-flavour/schema",
+  "schema.base-url.description": "Base URL for TEI schema files used for XML validation",
   "annotation.lifecycle.order": [
     "extraction",
     "unfinished",
@@ -51,6 +67,7 @@
     "candidate",
     "published"
   ],
+  "annotation.lifecycle.order.description": "Ordered list of annotation lifecycle states from earliest to latest",
   "annotation.lifecycle.order.type": "array",
   "annotation.lifecycle.change-descriptions": [
     "Extraction",
@@ -61,12 +78,14 @@
     "Pre-Candidate",
     "Pre-Publication"
   ],
+  "annotation.lifecycle.change-descriptions.description": "Human-readable labels for lifecycle transitions, one per gap between consecutive states",
   "annotation.lifecycle.change-descriptions.type": "array",
   "annotation.lifecycle.role.annotator": [
     "draft",
     "unfinished",
     "checked"
   ],
+  "annotation.lifecycle.role.annotator.description": "Lifecycle states that annotators are allowed to set",
   "annotation.lifecycle.role.annotator.type": "array",
   "annotation.lifecycle.role.reviewer": [
     "in-review",
@@ -74,14 +93,18 @@
     "candidate",
     "published"
   ],
+  "annotation.lifecycle.role.reviewer.description": "Lifecycle states that reviewers are allowed to set",
   "annotation.lifecycle.role.reviewer.type": "array",
   "access-control.mode": "role-based",
+  "access-control.mode.description": "Access control mode (role-based uses roles, owner-based restricts to file owner)",
   "access-control.mode.type": "string",
   "access-control.mode.values": ["role-based", "owner-based", "granular"],
   "access-control.default-visibility": "collection",
+  "access-control.default-visibility.description": "Default visibility for newly uploaded files (collection = visible to collection members, owner = private)",
   "access-control.default-visibility.type": "string",
   "access-control.default-visibility.values": ["collection", "owner"],
   "access-control.default-editability": "owner",
+  "access-control.default-editability.description": "Default edit permission for newly uploaded files (collection = editable by collection members, owner = only by owner)",
   "access-control.default-editability.type": "string",
   "access-control.default-editability.values": ["collection", "owner"]
 }
