@@ -104,12 +104,13 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
 
     dialog.querySelector('[name="addConfigKeyBtn"]').addEventListener('click', () => {
-      if (this.#currentEntityType === 'collection' && this.#selectedEntityId) {
+      if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && this.#selectedEntityId) {
         this.#addCollectionConfigRow()
       }
     })
 
     dialog.querySelector('[name="tabUser"]').addEventListener('click', () => this.#switchTab('user'))
+    dialog.querySelector('[name="tabProject"]').addEventListener('click', () => this.#switchTab('project'))
     dialog.querySelector('[name="tabGroup"]').addEventListener('click', () => this.#switchTab('group'))
     dialog.querySelector('[name="tabRole"]').addEventListener('click', () => this.#switchTab('role'))
     dialog.querySelector('[name="tabCollection"]').addEventListener('click', () => this.#switchTab('collection'))
@@ -188,7 +189,7 @@ class RbacManagerPlugin extends Plugin {
       }
     })
 
-    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+    const section = this.#ui.querySelector('[name="entityConfigSection"]')
     if (section) section.style.display = 'none'
 
     this.#renderEntityList()
@@ -335,10 +336,10 @@ class RbacManagerPlugin extends Plugin {
     const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
     formContainer.appendChild(form)
 
-    if (this.#currentEntityType === 'collection' && !this.#isNewEntity && this.#selectedEntityId) {
+    if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && !this.#isNewEntity && this.#selectedEntityId) {
       this.#loadAndRenderCollectionConfig(this.#selectedEntityId)
     } else {
-      const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+      const section = this.#ui.querySelector('[name="entityConfigSection"]')
       if (section) section.style.display = 'none'
     }
   }
@@ -375,7 +376,7 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="saveBtn"]').disabled = true
     dialog.querySelector('[name="deleteBtn"]').disabled = true
 
-    const section = dialog.querySelector('[name="collectionConfigSection"]')
+    const section = dialog.querySelector('[name="entityConfigSection"]')
     if (section) section.style.display = 'none'
   }
 
@@ -467,20 +468,23 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
-   * Load collection config overrides and render the section.
-   * @param {string} collectionId
+   * Load entity config overrides and render the section.
+   * @param {string} entityId
    */
-  async #loadAndRenderCollectionConfig(collectionId) {
-    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+  async #loadAndRenderCollectionConfig(entityId) {
+    const section = this.#ui.querySelector('[name="entityConfigSection"]')
     section.style.display = 'block'
     try {
-      const response = await this.getDependency('client').apiClient.collectionsGetConfig(collectionId)
+      const apiClient = this.getDependency('client').apiClient
+      const response = this.#currentEntityType === 'project'
+        ? await apiClient.projectsGetConfig(entityId)
+        : await apiClient.collectionsGetConfig(entityId)
       this.#collectionConfig = response?.config || {}
     } catch (err) {
       this.#collectionConfig = {}
-      this.getDependency('logger').warn(`Failed to load collection config: ${err}`)
+      this.getDependency('logger').warn(`Failed to load ${this.#currentEntityType} config: ${err}`)
     }
-    this.#renderCollectionConfigList(collectionId)
+    this.#renderCollectionConfigList(entityId)
   }
 
   /**
@@ -488,12 +492,12 @@ class RbacManagerPlugin extends Plugin {
    * @param {string} collectionId
    */
   #renderCollectionConfigList(collectionId) {
-    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+    const listEl = this.#ui.querySelector('[name="entityConfigList"]')
     listEl.innerHTML = ''
 
     const configKeys = Object.keys(this.#collectionConfig)
     if (configKeys.length === 0) {
-      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.5rem;">No collection-specific config overrides</div>'
+      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.5rem;">No config overrides</div>'
       return
     }
 
@@ -541,7 +545,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Show a row to add a new config key override. */
   #addCollectionConfigRow() {
-    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+    const listEl = this.#ui.querySelector('[name="entityConfigList"]')
 
     // Don't add a second "add" row if one already exists
     if (listEl.querySelector('.add-config-row')) return
@@ -605,31 +609,41 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
-   * Save a collection config key override to the server.
-   * @param {string} collectionId
+   * Save a config key override to the server.
+   * @param {string} entityId
    * @param {string} key
    * @param {any} value
    */
-  async #saveCollectionConfigKey(collectionId, key, value) {
+  async #saveCollectionConfigKey(entityId, key, value) {
     try {
-      await this.getDependency('client').apiClient.collectionsCreateConfig(collectionId, { key, value })
+      const apiClient = this.getDependency('client').apiClient
+      if (this.#currentEntityType === 'project') {
+        await apiClient.projectsCreateConfig(entityId, { key, value })
+      } else {
+        await apiClient.collectionsCreateConfig(entityId, { key, value })
+      }
       this.#collectionConfig[key] = value
-      this.#renderCollectionConfigList(collectionId)
+      this.#renderCollectionConfigList(entityId)
     } catch (err) {
       notify(`Failed to save config override: ${err}`, 'danger', 'exclamation-octagon')
     }
   }
 
   /**
-   * Delete a collection config key override from the server.
-   * @param {string} collectionId
+   * Delete a config key override from the server.
+   * @param {string} entityId
    * @param {string} key
    */
-  async #deleteCollectionConfigKey(collectionId, key) {
+  async #deleteCollectionConfigKey(entityId, key) {
     try {
-      await this.getDependency('client').apiClient.collectionsConfig(collectionId, key)
+      const apiClient = this.getDependency('client').apiClient
+      if (this.#currentEntityType === 'project') {
+        await apiClient.projectsConfig(entityId, key)
+      } else {
+        await apiClient.collectionsConfig(entityId, key)
+      }
       delete this.#collectionConfig[key]
-      this.#renderCollectionConfigList(collectionId)
+      this.#renderCollectionConfigList(entityId)
     } catch (err) {
       notify(`Failed to delete config override: ${err}`, 'danger', 'exclamation-octagon')
     }
