@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-09T12:15:40.996Z
+ * Generated from OpenAPI schema at 2026-06-09T12:23:26.136Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -746,11 +746,11 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all configuration values, optionally merged with collection-specific overrides.
-   * If collection is provided, collection-level config keys override global defaults.
+   * List all configuration values, optionally merged with project-specific overrides.
+   * If project is provided, project-level config keys override global defaults.
    *
    * @param {Object=} params - Query parameters
-   * @param {(string | null)=} params.collection
+   * @param {(string | null)=} params.project
    * @returns {Promise<Object<string, any>>}
    */
   async configList(params) {
@@ -1778,7 +1778,7 @@ export class ApiClientV1 {
    * Get current access control mode and defaults.
    *
    * @param {Object=} params - Query parameters
-   * @param {(string | null)=} params.collection
+   * @param {(string | null)=} params.project
    * @returns {Promise<AccessControlModeResponse>}
    */
   async filesAccessControlMode(params) {

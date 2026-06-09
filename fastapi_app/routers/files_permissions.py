@@ -30,7 +30,6 @@ from ..lib.core.dependencies import (
 )
 from ..lib.repository.file_repository import FileRepository
 from ..lib.utils.config_utils import get_config
-from ..lib.utils.collection_utils import collection_config_get
 from ..lib.utils.logging_utils import get_logger
 from ..lib.permissions.acl_utils import (
     user_has_reviewer_role,
@@ -80,18 +79,19 @@ class _PermissionsDBSingleton:
 
 @router.get("/access_control_mode", response_model=AccessControlModeResponse)
 def get_access_control_mode_endpoint(
-    collection: Optional[str] = Query(None)
+    project: Optional[str] = Query(None)
 ):
     """Get current access control mode and defaults."""
-    if collection:
+    if project:
         from ..config import get_settings
+        from ..lib.utils.project_utils import project_config_get
         settings = get_settings()
-        default_visibility = collection_config_get(
-            settings.db_dir, collection, 'access-control.default-visibility',
+        default_visibility = project_config_get(
+            settings.db_dir, project, 'access-control.default-visibility',
             use_default=True, default='collection'
         )
-        default_editability = collection_config_get(
-            settings.db_dir, collection, 'access-control.default-editability',
+        default_editability = project_config_get(
+            settings.db_dir, project, 'access-control.default-editability',
             use_default=True, default='owner'
         )
     else:
@@ -130,15 +130,23 @@ def get_permissions_endpoint(
     collection_id = file.doc_collections[0] if file.doc_collections else None
     if collection_id:
         from ..config import get_settings
+        from ..lib.utils.project_utils import get_project_for_collection, project_config_get
         settings = get_settings()
-        default_visibility = collection_config_get(
-            settings.db_dir, collection_id, 'access-control.default-visibility',
-            use_default=True, default='collection'
-        )
-        default_editability = collection_config_get(
-            settings.db_dir, collection_id, 'access-control.default-editability',
-            use_default=True, default='owner'
-        )
+        _project = get_project_for_collection(collection_id, settings.db_dir)
+        _project_id = _project['id'] if _project else None
+        if _project_id:
+            default_visibility = project_config_get(
+                settings.db_dir, _project_id, 'access-control.default-visibility',
+                use_default=True, default='collection'
+            )
+            default_editability = project_config_get(
+                settings.db_dir, _project_id, 'access-control.default-editability',
+                use_default=True, default='owner'
+            )
+        else:
+            config = get_config()
+            default_visibility = config.get('access-control.default-visibility', default='collection')
+            default_editability = config.get('access-control.default-editability', default='owner')
     else:
         config = get_config()
         default_visibility = config.get('access-control.default-visibility', default='collection')
