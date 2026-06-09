@@ -16,6 +16,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { createValueEditor, applyReadOnlyStyle } from '../modules/config-value-editor.js'
 
 // Register templates
 await registerTemplate('config-editor-dialog', 'config-editor-dialog.html')
@@ -231,129 +232,10 @@ class ConfigEditorPlugin extends Plugin {
    * @returns {{container: HTMLElement, setReadOnly?: (readonly: boolean) => void}}
    */
   #createValueEditor(key, value, allowedValues, isReadOnly = true) {
-    const container = document.createElement('div')
-    container.style.width = '100%'
-
-    if (allowedValues && Array.isArray(allowedValues)) {
-      const select = document.createElement('sl-select')
-      select.setAttribute('size', 'small')
-      select.value = value
-      select.disabled = isReadOnly
-
-      allowedValues.forEach(val => {
-        const option = document.createElement('sl-option')
-        option.value = val
-        option.textContent = val
-        select.appendChild(option)
-      })
-
-      if (!isReadOnly) {
-        select.addEventListener('sl-change', () => {
-          this.#handleValueChange(key, select.value)
-        })
-      }
-
-      container.appendChild(select)
-      return {
-        container,
-        setReadOnly: (readonly) => { select.disabled = readonly }
-      }
-    }
-
-    const actualType = typeof value
-
-    if (actualType === 'boolean') {
-      const checkbox = document.createElement('sl-checkbox')
-      checkbox.checked = Boolean(value)
-      checkbox.disabled = isReadOnly
-      if (!isReadOnly) {
-        checkbox.addEventListener('sl-change', () => {
-          this.#handleValueChange(key, checkbox.checked)
-        })
-      }
-      container.appendChild(checkbox)
-      return {
-        container,
-        setReadOnly: (readonly) => { checkbox.disabled = readonly }
-      }
-    } else if (actualType === 'number') {
-      const input = document.createElement('sl-input')
-      input.setAttribute('type', 'number')
-      input.setAttribute('size', 'small')
-      input.value = value != null ? String(value) : ''
-      if (!isReadOnly) {
-        input.addEventListener('sl-input', () => {
-          const numValue = parseFloat(input.value)
-          this.#handleValueChange(key, isNaN(numValue) ? null : numValue)
-        })
-      }
-      container.appendChild(input)
-      return {
-        container,
-        setReadOnly: (readonly) => {
-          input.readonly = readonly
-          this.#applyReadOnlyStyle(input, readonly)
-        }
-      }
-    } else if (this.#isStringArray(value)) {
-      const input = document.createElement('sl-input')
-      input.setAttribute('size', 'small')
-      input.value = this.#arrayToCommaSeparated(value)
-      input.style.fontFamily = 'monospace'
-      if (!isReadOnly) {
-        input.addEventListener('sl-input', () => {
-          try {
-            const parsed = this.#commaSeparatedToArray(input.value)
-            this.#handleValueChange(key, parsed)
-          } catch (e) {
-            this.#logger.error('Failed to parse array:', e)
-          }
-        })
-      }
-      container.appendChild(input)
-      return {
-        container,
-        setReadOnly: (readonly) => {
-          input.readonly = readonly
-          this.#applyReadOnlyStyle(input, readonly)
-        }
-      }
-    } else if (actualType === 'object') {
-      const input = document.createElement('sl-input')
-      input.setAttribute('size', 'small')
-      input.value = JSON.stringify(value)
-      input.style.fontFamily = 'monospace'
-      if (!isReadOnly) {
-        input.addEventListener('sl-input', () => {
-          this.#handleValueChange(key, input.value)
-        })
-      }
-      container.appendChild(input)
-      return {
-        container,
-        setReadOnly: (readonly) => {
-          input.readonly = readonly
-          this.#applyReadOnlyStyle(input, readonly)
-        }
-      }
-    } else {
-      const input = document.createElement('sl-input')
-      input.setAttribute('size', 'small')
-      input.value = value != null ? String(value) : ''
-      if (!isReadOnly) {
-        input.addEventListener('sl-input', () => {
-          this.#handleValueChange(key, input.value)
-        })
-      }
-      container.appendChild(input)
-      return {
-        container,
-        setReadOnly: (readonly) => {
-          input.readonly = readonly
-          this.#applyReadOnlyStyle(input, readonly)
-        }
-      }
-    }
+    return createValueEditor(
+      key, value, allowedValues, isReadOnly,
+      (k, v) => this.#handleValueChange(k, v)
+    )
   }
 
   /**
@@ -439,91 +321,12 @@ class ConfigEditorPlugin extends Plugin {
     this.#renderConfigList(filterText)
   }
 
-  // --- Utility helpers ---
-
-  /**
-   * @param {any[]} arr
-   * @returns {string}
-   */
-  #arrayToCommaSeparated(arr) {
-    return arr.map(item => {
-      const str = String(item)
-      if (str.includes(' ') || str.includes(',')) {
-        return `"${str.replace(/"/g, '\\"')}"`
-      }
-      return str
-    }).join(', ')
-  }
-
-  /**
-   * @param {string} str
-   * @returns {any[]}
-   */
-  #commaSeparatedToArray(str) {
-    const items = []
-    let current = ''
-    let inQuotes = false
-    let escaped = false
-
-    for (let i = 0; i < str.length; i++) {
-      const char = str[i]
-      if (escaped) { current += char; escaped = false; continue }
-      if (char === '\\') { escaped = true; continue }
-      if (char === '"') { inQuotes = !inQuotes; continue }
-      if (char === ',' && !inQuotes) {
-        if (current.trim()) items.push(current.trim())
-        current = ''
-        continue
-      }
-      current += char
-    }
-
-    if (current.trim()) items.push(current.trim())
-    return items
-  }
-
-  /**
-   * @param {any} value
-   * @returns {boolean}
-   */
-  #isStringArray(value) {
-    return Array.isArray(value) && value.length > 0 && value.every(item => typeof item === 'string')
-  }
-
   /**
    * @param {HTMLElement} element
    * @param {boolean} readonly
    */
   #applyReadOnlyStyle(element, readonly) {
-    if (readonly) {
-      element.style.setProperty('--sl-input-border-width', '0')
-      element.style.setProperty('--sl-input-border-color', 'transparent')
-      element.style.setProperty('--sl-input-border-color-hover', 'transparent')
-      element.style.setProperty('--sl-input-border-color-focus', 'transparent')
-      element.style.setProperty('--sl-input-background-color', 'transparent')
-      element.style.setProperty('--sl-input-background-color-hover', 'transparent')
-      element.style.setProperty('--sl-input-background-color-focus', 'transparent')
-      element.style.setProperty('--sl-focus-ring-width', '0')
-      element.style.setProperty('--sl-focus-ring-color', 'transparent')
-      element.style.setProperty('--sl-input-focus-ring-width', '0')
-      element.style.setProperty('--sl-input-focus-ring-color', 'transparent')
-      element.style.cursor = 'default'
-      element.style.pointerEvents = 'none'
-    } else {
-      element.style.removeProperty('--sl-input-border-width')
-      element.style.removeProperty('--sl-input-border-color')
-      element.style.removeProperty('--sl-input-border-color-hover')
-      element.style.removeProperty('--sl-input-border-color-focus')
-      element.style.removeProperty('--sl-input-background-color')
-      element.style.removeProperty('--sl-input-background-color-hover')
-      element.style.removeProperty('--sl-input-background-color-focus')
-      element.style.removeProperty('--sl-focus-ring-width')
-      element.style.removeProperty('--sl-focus-ring-color')
-      element.style.removeProperty('--sl-input-focus-ring-width')
-      element.style.removeProperty('--sl-input-focus-ring-color')
-      element.style.cursor = ''
-      element.style.pointerEvents = ''
-    }
+    applyReadOnlyStyle(element, readonly)
   }
 }
 
