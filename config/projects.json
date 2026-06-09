@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "default",
+    "name": "Default Project",
+    "description": "Default project for new users. Grants access to the inbox collection.",
+    "members": [],
+    "collections": ["_inbox"],
+    "config": {}
+  }
+]

@@ -105,5 +105,8 @@
   "access-control.default-editability": "owner",
   "access-control.default-editability.description": "Default edit permission for newly uploaded files (collection = editable by collection members, owner = only by owner)",
   "access-control.default-editability.type": "string",
-  "access-control.default-editability.values": ["collection", "owner"]
+  "access-control.default-editability.values": ["collection", "owner"],
+  "rbac.default-project": "default",
+  "rbac.default-project.description": "Project ID that new users are automatically added to on creation. Leave empty to disable auto-assignment.",
+  "rbac.default-project.type": "string"
 }
