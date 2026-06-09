@@ -124,6 +124,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing databases: {e}")
         raise
 
+    # Auto-migrate existing groups to projects on first run
+    from .lib.utils.project_utils import migrate_groups_to_projects
+    created = migrate_groups_to_projects(settings.db_dir)
+    if created:
+        logger.info(f"Auto-migrated {created} group(s) to projects")
+
     # Remove diagnostic users on startup in production mode
     if app_mode == "production":
         from .lib.core.dependencies import get_auth_manager
@@ -224,7 +230,8 @@ from .routers import (
     collections,
     users,
     groups,
-    roles
+    roles,
+    projects
 )
 
 # Versioned API router (v1)
@@ -234,6 +241,7 @@ api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
 api_v1.include_router(collections.router)
 api_v1.include_router(users.router)
+api_v1.include_router(projects.router)
 api_v1.include_router(groups.router)
 api_v1.include_router(roles.router)
 api_v1.include_router(validation.router)
