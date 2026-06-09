@@ -124,7 +124,7 @@ class ConfigEditorPlugin extends Plugin {
     tbody.innerHTML = ''
 
     const configKeys = Object.keys(this.#originalConfig)
-      .filter(key => !key.endsWith('.type') && !key.endsWith('.values'))
+      .filter(key => !key.endsWith('.type') && !key.endsWith('.values') && !key.endsWith('.description'))
       .filter(key => !filterText || (
         key.toLowerCase().includes(filterText.toLowerCase()) ||
         (this.#originalConfig[`${key}.description`] || '').toLowerCase().includes(filterText.toLowerCase())
