@@ -323,46 +323,34 @@ def list_users(db_dir: Path) -> List[Dict[str, Any]]:
 
 
 def get_user_collections(user: Optional[Dict[str, Any]], db_dir: Path) -> Optional[List[str]]:
-    """Gets all collections accessible to a user based on their group memberships.
+    """Gets all collections accessible to a user based on their project memberships.
 
     Args:
         user: User dictionary (from authentication), or None for anonymous
         db_dir: Path to the db directory
 
     Returns:
-        List of collection IDs accessible to the user, or None if user has access to all collections.
-        Returns empty list for anonymous users or users with no groups.
+        List of collection IDs accessible to the user, or None if user has access to all.
+        Returns empty list for anonymous users or users in no projects.
     """
     if not user:
-        # Anonymous users have no collection access
         return []
 
-    # Check for wildcard roles
     user_roles = user.get('roles', [])
     if '*' in user_roles:
-        return None  # None means access to all collections
+        return None  # admin wildcard
 
-    # Check for wildcard groups
-    user_groups = user.get('groups', [])
-    if '*' in user_groups:
-        return None  # Access to all collections
+    from fastapi_app.lib.utils.project_utils import get_user_projects
+    user_projects = get_user_projects(user, db_dir)
 
-    # Collect all collections from user's groups
-    from .group_utils import find_group, load_entity_data as load_groups_data
+    accessible: set[str] = set()
+    for project in user_projects:
+        project_collections = project.get('collections', [])
+        if '*' in project_collections:
+            return None  # wildcard project grants all access
+        accessible.update(project_collections)
 
-    groups_data = load_groups_data(db_dir, 'groups')
-    accessible_collections = set()
-
-    for group_id in user_groups:
-        group = find_group(group_id, groups_data)
-        if group:
-            group_collections = group.get('collections', [])
-            # Check for wildcard in group collections
-            if '*' in group_collections:
-                return None  # This group has access to all collections
-            accessible_collections.update(group_collections)
-
-    return list(accessible_collections)
+    return list(accessible)
 
 
 def user_has_collection_access(user: Optional[Dict[str, Any]], collection_id: str, db_dir: Path) -> bool:
