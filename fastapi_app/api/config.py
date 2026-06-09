@@ -15,7 +15,7 @@ from ..config import get_settings
 from ..lib.utils.auth import AuthManager
 from ..lib.core.sessions import SessionManager
 from ..lib.utils.server_utils import get_session_id_from_request
-from ..lib.utils.config_utils import get_config
+from ..lib.utils.config_utils import get_config, get_config_metadata
 from ..lib.utils.logging_utils import get_logger
 
 
@@ -107,11 +107,13 @@ async def list_config(collection: Optional[str] = None) -> dict:
     """
     config_data = config.load()
     if collection:
-        from ..lib.utils.collection_utils import collection_config_get_all
-        settings = get_settings()
-        overrides = collection_config_get_all(settings.db_dir, collection)
-        if overrides:
-            config_data = {**config_data, **overrides}
+        try:
+            from ..lib.utils.collection_utils import collection_config_get_all
+            overrides = collection_config_get_all(get_settings().db_dir, collection)
+            if overrides:
+                config_data = {**config_data, **overrides}
+        except ImportError:
+            logger.warning("collection_config_get_all not yet available; ignoring collection param")
     return config_data
 
 
@@ -137,14 +139,13 @@ class ConfigMetadataResponse(BaseModel):
     """Metadata for a config key."""
     key: str
     type: Optional[str] = None
-    values: Optional[list] = None
+    values: Optional[list[Any]] = None
     description: Optional[str] = None
 
 
 @router.get("/metadata/{key}", response_model=ConfigMetadataResponse)
 async def get_config_metadata_endpoint(key: str) -> ConfigMetadataResponse:
     """Get metadata (type, allowed values, description) for a config key."""
-    from ..lib.utils.config_utils import get_config_metadata
     settings = get_settings()
     meta = get_config_metadata(key, settings.db_dir)
     return ConfigMetadataResponse(key=key, **meta)
