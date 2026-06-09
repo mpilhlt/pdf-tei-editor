@@ -20,6 +20,8 @@ from ..lib.permissions.user_utils import (
     hash_password
 )
 from ..lib.utils.data_utils import load_entity_data, save_entity_data
+from ..lib.utils.config_utils import get_config
+from ..lib.utils.project_utils import add_member_to_project
 from ..lib.core.dependencies import get_current_user
 from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
@@ -206,6 +208,15 @@ def create_user_endpoint(
 
         # Save to file
         save_entity_data(settings.db_dir, 'users', users_data)
+
+        # Auto-assign to default project if configured
+        default_project_id = get_config().get('rbac.default-project', default=None)
+        if default_project_id:
+            ok, msg = add_member_to_project(settings.db_dir, default_project_id, body.username)
+            if ok:
+                logger.info(f"User '{body.username}' auto-added to default project '{default_project_id}'")
+            else:
+                logger.warning(f"rbac.default-project '{default_project_id}' configured but could not add user: {msg}")
 
         logger.info(f"User '{body.username}' created by admin '{current_user.get('username')}'")
 
