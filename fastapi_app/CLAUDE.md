@@ -96,7 +96,8 @@ if not user_has_access:
 - Users access documents through **collection membership**, not direct user-document links
 - Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
 - Use `get_user_collections(user, db_dir)` from `fastapi_app.lib.permissions.user_utils` to get all collections a user can access (returns `None` if user has wildcard access)
-- Admin users and users with wildcard (`*`) in their groups have access to all collections
+- Collection access is resolved via **project membership**: a user can access collections in any project where they appear in `members[]`
+- Users with `*` in their `roles` bypass project resolution and get access to all collections
 - Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
 - See [fastapi_app/routers/files_save.py](routers/files_save.py) for reference implementation
 

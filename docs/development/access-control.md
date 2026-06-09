@@ -1,30 +1,32 @@
 # Access Control System
 
-The PDF-TEI-Editor implements a multi-layered access control system that combines role-based access control (RBAC) with collection-based filtering.
+The PDF-TEI-Editor implements a multi-layered access control system that combines role-based access control (RBAC) with project-based collection filtering.
 
 ## Overview
 
 The access control system operates at three levels:
 
 1. **Role-Based Access Control (RBAC)** - Controls what operations users can perform
-2. **Collection-Based Access Control** - Controls which documents users can see and edit
+2. **Project-Based Access Control** - Controls which documents users can see and edit via project membership
 3. **Document-Level Access Control** - Controls visibility and editability of individual documents
 
 ## Architecture
 
-### User → Groups → Collections
+### User → Projects → Collections
 
-Users are assigned to groups, and groups have access to specific collections. Documents belong to collections, and users can only access documents in collections their groups have access to.
+Users are members of projects, and projects contain collections. Documents belong to collections, and users can only access documents in collections included in their projects.
 
-```
+```text
 User
-  ↓ belongs to
-Groups (one or more)
-  ↓ have access to
+  ↓ is member of
+Projects (one or more)
+  ↓ contain
 Collections (one or more)
   ↓ contain
 Documents
 ```
+
+**Groups** are purely organisational labels (used for tagging users). They have no role in collection access resolution.
 
 ## Configuration Files
 
@@ -46,6 +48,21 @@ Access control is configured through JSON files in the `data/db/` directory (or 
 ]
 ```
 
+### projects.json
+
+```json
+[
+  {
+    "id": "manuscripts-project",
+    "name": "Manuscripts Project",
+    "description": "Editors working on medieval manuscripts",
+    "members": ["editor1", "editor2"],
+    "collections": ["manuscripts", "letters"],
+    "config": {}
+  }
+]
+```
+
 ### groups.json
 
 ```json
@@ -53,11 +70,12 @@ Access control is configured through JSON files in the `data/db/` directory (or 
   {
     "id": "editors",
     "name": "Editors Group",
-    "description": "Editors with access to manuscripts",
-    "collections": ["manuscripts", "letters"]
+    "description": "Editors team (organisational label only)"
   }
 ]
 ```
+
+Groups no longer have a `collections` field. Collection access is controlled entirely by projects.
 
 ### collections.json
 
@@ -95,11 +113,9 @@ Access control is configured through JSON files in the `data/db/` directory (or 
 
 ## Wildcard Access (`*`)
 
-The wildcard `*` character grants unrestricted access at any level:
+### User-Level Wildcard Role
 
-### User-Level Wildcards
-
-**Wildcard Roles**: Users with `"roles": ["*"]` have all permissions
+**Wildcard Roles**: Users with `"roles": ["*"]` bypass all collection filtering and have access to all collections.
 
 ```json
 {
@@ -109,34 +125,15 @@ The wildcard `*` character grants unrestricted access at any level:
 }
 ```
 
-**Admin Role**: Users with `"roles": ["admin"]` have access to all collections
+### Project-Level Wildcard Collections
+
+**Wildcard Collections**: Projects with `"collections": ["*"]` grant all members access to all collections.
 
 ```json
 {
-  "username": "admin",
-  "roles": ["admin", "user"],
-  "groups": ["staff"]
-}
-```
-
-**Wildcard Groups**: Users with `"groups": ["*"]` have access to all collections
-
-```json
-{
-  "username": "manager",
-  "roles": ["user"],
-  "groups": ["*"]
-}
-```
-
-### Group-Level Wildcards
-
-**Wildcard Collections**: Groups with `"collections": ["*"]` grant access to all collections
-
-```json
-{
-  "id": "admin-group",
+  "id": "admin-project",
   "name": "Administrators",
+  "members": ["admin"],
   "collections": ["*"]
 }
 ```
@@ -145,13 +142,13 @@ The wildcard `*` character grants unrestricted access at any level:
 
 The system resolves collection access using this priority order:
 
-1. **Check for wildcard roles** - If user has `*` or `admin` in roles → access to all collections
-2. **Check for wildcard groups** - If user has `*` in groups → access to all collections
-3. **Check each group** - For each group the user belongs to:
-   - If group has `*` in collections → access to all collections
-   - Otherwise, collect all specific collection IDs from the group
+1. **Check for wildcard role** - If user has `*` in roles → access to all collections
+2. **Load user's projects** - Find all projects where the user appears in `members[]`
+3. **Check each project** - For each project the user belongs to:
+   - If project has `*` in collections → access to all collections
+   - Otherwise, add the specific collection IDs to the accessible set
 4. **Return result**:
-   - `null` (if any wildcard was found) = access to all collections
+   - `None` (if any wildcard was found) = access to all collections
    - `[]` (empty list) = no collection access
    - `["col1", "col2"]` = access to specific collections
 
@@ -163,7 +160,7 @@ The [user_utils.py](../../fastapi_app/lib/permissions/user_utils.py) module prov
 
 #### `get_user_collections(user, db_dir)`
 
-Returns the list of collections accessible to a user.
+Returns the list of collections accessible to a user based on their project memberships.
 
 ```python
 from fastapi_app.lib.permissions.user_utils import get_user_collections
@@ -185,8 +182,22 @@ else:
 **Returns:**
 
 - `None` - User has access to all collections (wildcard)
-- `[]` - User has no collection access (anonymous or no groups)
+- `[]` - User has no collection access (anonymous or no project memberships)
 - `["col1", "col2", ...]` - User has access to specific collections
+
+The [project_utils.py](../../fastapi_app/lib/utils/project_utils.py) module provides project helpers:
+
+#### `get_user_projects(user, db_dir)`
+
+Returns all projects where the user is listed in `members[]`.
+
+```python
+from fastapi_app.lib.utils.project_utils import get_user_projects
+
+projects = get_user_projects(current_user, settings.db_dir)
+for project in projects:
+    print(f"Project: {project['name']}, collections: {project['collections']}")
+```
 
 #### `user_has_collection_access(user, collection_id, db_dir)`
 
@@ -281,58 +292,13 @@ created_file = file_repo.insert_file(FileCreate(
 
 The frontend RBAC Manager plugin ([app/src/plugins/rbac-manager.js](../../app/src/plugins/rbac-manager.js)) provides a user interface for managing access control. It allows administrators to:
 
-- View and manage users, groups, and collections
-- Assign users to groups
-- Configure group collection access
+- View and manage users, groups, roles, collections, and projects
+- Assign users to groups (organisational labels only)
+- Configure project members and collections
 - Manage user roles
+- Set per-collection and per-project configuration overrides
 
 The RBAC Manager integrates with the backend API endpoints to provide real-time access control management.
-
-## Management CLI
-
-The `bin/manage.py` script provides commands to manage users, groups, and collections from the command line.
-
-### User Management
-
-```bash
-# Add user to group
-./bin/manage.py user add-group editor1 editors
-
-# Remove user from group
-./bin/manage.py user remove-group editor1 editors
-
-# List users with their groups
-./bin/manage.py user list
-```
-
-### Group Management
-
-```bash
-# Create group
-./bin/manage.py group add editors "Editors Group" --description "Manuscript editors"
-
-# Add collection to group
-./bin/manage.py group add-collection editors manuscripts
-
-# Add wildcard collection access
-./bin/manage.py group add-collection admin-group "*"
-
-# Remove collection from group
-./bin/manage.py group remove-collection editors manuscripts
-
-# List groups with their collections
-./bin/manage.py group list
-```
-
-### Collection Management
-
-```bash
-# Create collection
-./bin/manage.py collection add manuscripts "Manuscripts" --description "Medieval manuscripts"
-
-# List collections
-./bin/manage.py collection list
-```
 
 ## Access Control Flow
 
@@ -444,37 +410,41 @@ uv run python -m pytest tests/unit/fastapi/test_collection_access_control.py -v
 {
   "username": "editor1",
   "roles": ["user", "annotator"],
-  "groups": ["manuscript-editors"]
+  "groups": []
 }
 
-// groups.json
+// projects.json
 {
-  "id": "manuscript-editors",
+  "id": "manuscript-project",
   "name": "Manuscript Editors",
-  "collections": ["manuscripts"]
+  "members": ["editor1"],
+  "collections": ["manuscripts"],
+  "config": {}
 }
 ```
 
 **Result:** User can see and edit documents in the `manuscripts` collection.
 
-### Example 2: Multi-Collection Access
+### Example 2: Multi-Collection Access via Multiple Projects
 
 ```json
 // users.json
 {
   "username": "researcher1",
   "roles": ["user"],
-  "groups": ["manuscripts-group", "letters-group"]
+  "groups": []
 }
 
-// groups.json
+// projects.json
 [
   {
-    "id": "manuscripts-group",
+    "id": "manuscripts-project",
+    "members": ["researcher1"],
     "collections": ["manuscripts"]
   },
   {
-    "id": "letters-group",
+    "id": "letters-project",
+    "members": ["researcher1"],
     "collections": ["letters", "correspondence"]
   }
 ]
@@ -488,63 +458,37 @@ uv run python -m pytest tests/unit/fastapi/test_collection_access_control.py -v
 // users.json
 {
   "username": "admin",
-  "roles": ["admin", "reviewer"],
-  "groups": ["admin-group"]
+  "roles": ["*"],
+  "groups": []
 }
+```
 
-// groups.json
+**Result:** User has access to all collections (wildcard role bypasses project resolution).
+
+Alternatively, without a wildcard role:
+
+```json
+// projects.json
 {
-  "id": "admin-group",
-  "name": "Administrators",
+  "id": "admin-project",
+  "members": ["admin"],
   "collections": ["*"]
 }
 ```
 
-**Result:** User has access to all collections and all permissions.
-
-### Example 4: Project Manager
-
-```json
-// users.json
-{
-  "username": "pm1",
-  "roles": ["user"],
-  "groups": ["*"]
-}
-```
-
-**Result:** User has access to all collections but limited to user-level permissions (read-only).
+**Result:** User has access to all collections via wildcard project collections.
 
 ## Migration Notes
 
-If migrating from a system without collection-based access control:
+When migrating from the old group-based access control:
 
-1. **Create default collection**:
+The startup migration (`fastapi_app/lib/utils/project_utils.py`) automatically converts `groups[].collections` entries into projects. Each group that had collections becomes a project with those collections and the group's members as project members. After migration, `groups[].collections` is ignored by the access control layer.
 
-   ```bash
-   ./bin/manage.py collection add default "Default Collection"
-   ```
+To create a project granting all existing users access to a collection:
 
-2. **Create default group**:
-
-   ```bash
-   ./bin/manage.py group add default "Default Group"
-   ./bin/manage.py group add-collection default default
-   ```
-
-3. **Add all users to default group**:
-
-   ```bash
-   ./bin/manage.py user add-group user1 default
-   ./bin/manage.py user add-group user2 default
-   # ... for all users
-   ```
-
-4. **Assign collections to existing documents** (requires database update):
-
-   ```sql
-   UPDATE files SET doc_collections = '["default"]' WHERE doc_collections IS NULL;
-   ```
+```bash
+node bin/debug-api.js POST /api/v1/projects '{"id":"default","name":"Default","members":["user1","user2"],"collections":["default"]}'
+```
 
 ## Document-Level Access Control Modes
 
@@ -695,8 +639,8 @@ Reviewers have elevated privileges but with intentional limitations:
 
 **Check:**
 
-1. User has at least one group: `./bin/manage.py user list`
-2. Groups have collections: `./bin/manage.py group list`
+1. User is a member of at least one project: check `data/db/projects.json`
+2. That project includes the relevant collection in its `collections[]` array
 3. Documents have collections assigned (check `doc_collections` in database)
 
 ### User can see documents but cannot edit
