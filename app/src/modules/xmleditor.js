@@ -767,7 +767,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Toggles line wrapping on and off
-   * @param {boolean} value 
+   * @param {boolean} value
    */
   setLineWrapping(value) {
     this.#view.dispatch({
@@ -777,6 +777,9 @@ export class XMLEditor extends EventEmitter {
           value ? [] : EditorView.theme({ ".cm-scroller": { overflowX: "scroll" } })
         )
       ]
+    });
+    requestAnimationFrame(() => {
+      this.#view.scrollDOM.scrollLeft = 0;
     });
   }
 

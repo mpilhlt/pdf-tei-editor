@@ -518,6 +518,13 @@ class XmlEditorPlugin extends Plugin {
       this.#setLineWrappingPreference(enabled);
       this.#xmlEditor.setLineWrapping(enabled);
       this.#logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`);
+      if (this.state?.xpath) {
+        try {
+          this.#xmlEditor.selectByXpath(this.state.xpath);
+        } catch (err) {
+          this.#logger.debug(`Could not restore scroll position after wrap toggle: ${err.message}`);
+        }
+      }
     });
 
     // Capture Ctrl/Cmd+S to trigger XML download instead of browser save
