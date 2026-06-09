@@ -106,7 +106,7 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
 
     dialog.querySelector('[name="addConfigKeyBtn"]').addEventListener('click', () => {
-      if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && this.#selectedEntityId) {
+      if (this.#currentEntityType === 'project' && this.#selectedEntityId) {
         this.#addCollectionConfigRow()
       }
     })
@@ -154,7 +154,7 @@ class RbacManagerPlugin extends Plugin {
 
     await Promise.all(promises)
 
-    // Load global config for collection config key suggestions
+    // Load global config for project config key suggestions
     try {
       const configResponse = await this.getDependency('client').apiClient.configList()
       this.#globalConfigData = configResponse || {}
@@ -200,8 +200,14 @@ class RbacManagerPlugin extends Plugin {
     const projectMembersSection = this.#ui.querySelector('[name="projectMembersSection"]')
     if (projectMembersSection) projectMembersSection.style.display = 'none'
 
+    const projectCollectionsSection = this.#ui.querySelector('[name="projectCollectionsSection"]')
+    if (projectCollectionsSection) projectCollectionsSection.style.display = 'none'
+
     const userGroupsSection = this.#ui.querySelector('[name="userGroupsSection"]')
     if (userGroupsSection) userGroupsSection.style.display = 'none'
+
+    const userProjectsSection = this.#ui.querySelector('[name="userProjectsSection"]')
+    if (userProjectsSection) userProjectsSection.style.display = 'none'
 
     this.#renderEntityList()
     this.#showEmptyState()
@@ -348,7 +354,7 @@ class RbacManagerPlugin extends Plugin {
     const firstSection = formContainer.querySelector('[name="entityConfigSection"], [name="groupMembersSection"], [name="projectMembersSection"], [name="userGroupsSection"]')
     formContainer.insertBefore(form, firstSection)
 
-    if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && !this.#isNewEntity && this.#selectedEntityId) {
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
       this.#loadAndRenderCollectionConfig(this.#selectedEntityId)
     } else {
       const section = this.#ui.querySelector('[name="entityConfigSection"]')
@@ -369,10 +375,24 @@ class RbacManagerPlugin extends Plugin {
       if (section) section.style.display = 'none'
     }
 
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderProjectCollectionsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="projectCollectionsSection"]')
+      if (section) section.style.display = 'none'
+    }
+
     if (this.#currentEntityType === 'user' && !this.#isNewEntity && this.#selectedEntityId) {
       this.#renderUserGroupsSection(this.#selectedEntityId)
     } else {
       const section = this.#ui.querySelector('[name="userGroupsSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'user' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderUserProjectsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="userProjectsSection"]')
       if (section) section.style.display = 'none'
     }
   }
@@ -418,8 +438,14 @@ class RbacManagerPlugin extends Plugin {
     const projectMembersSection = dialog.querySelector('[name="projectMembersSection"]')
     if (projectMembersSection) projectMembersSection.style.display = 'none'
 
+    const projectCollectionsSection = dialog.querySelector('[name="projectCollectionsSection"]')
+    if (projectCollectionsSection) projectCollectionsSection.style.display = 'none'
+
     const userGroupsSection = dialog.querySelector('[name="userGroupsSection"]')
     if (userGroupsSection) userGroupsSection.style.display = 'none'
+
+    const userProjectsSection = dialog.querySelector('[name="userProjectsSection"]')
+    if (userProjectsSection) userProjectsSection.style.display = 'none'
   }
 
   /** Save entity (create or update) */
@@ -518,9 +544,7 @@ class RbacManagerPlugin extends Plugin {
     section.style.display = 'block'
     try {
       const apiClient = this.getDependency('client').apiClient
-      const response = this.#currentEntityType === 'project'
-        ? await apiClient.projectsGetConfig(entityId)
-        : await apiClient.collectionsGetConfig(entityId)
+      const response = await apiClient.projectsGetConfig(entityId)
       this.#collectionConfig = response?.config || {}
     } catch (err) {
       this.#collectionConfig = {}
@@ -601,21 +625,16 @@ class RbacManagerPlugin extends Plugin {
       .filter(k => !(k in this.#collectionConfig))
       .sort()
 
-    const keySelect = document.createElement('sl-select')
-    keySelect.setAttribute('size', 'small')
-    keySelect.setAttribute('placeholder', 'Select config key...')
-    keySelect.style.flex = '0 0 40%'
-    globalKeys.forEach(k => {
-      const opt = document.createElement('sl-option')
-      opt.value = k
-      opt.textContent = k
-      keySelect.appendChild(opt)
-    })
-    addRow.appendChild(keySelect)
+    const combobox = document.createElement('filtered-combobox')
+    combobox.setAttribute('size', 'small')
+    combobox.setAttribute('placeholder', 'Search config key...')
+    combobox.style.flex = '0 0 40%'
+    combobox.setOptions(globalKeys.map(k => ({ value: k, label: k })))
+    addRow.appendChild(combobox)
 
     const hintSpan = document.createElement('span')
     hintSpan.style.cssText = 'flex: 1; font-size: 0.8em; color: var(--sl-color-neutral-500);'
-    hintSpan.textContent = 'Select a key first'
+    hintSpan.textContent = 'Search and select a key'
     addRow.appendChild(hintSpan)
 
     const confirmBtn = document.createElement('sl-button')
@@ -631,20 +650,21 @@ class RbacManagerPlugin extends Plugin {
     cancelBtn.addEventListener('click', () => addRow.remove())
     addRow.appendChild(cancelBtn)
 
-    keySelect.addEventListener('sl-change', () => {
-      const selectedKey = String(keySelect.value)
+    combobox.addEventListener('sl-change', (e) => {
+      const selectedKey = e.detail?.value || ''
       confirmBtn.disabled = !selectedKey
       hintSpan.textContent = selectedKey
         ? `Global default: ${JSON.stringify(this.#globalConfigData[selectedKey])}`
-        : 'Select a key first'
+        : 'Search and select a key'
     })
 
     confirmBtn.addEventListener('click', async () => {
-      const selectedKey = String(keySelect.value)
+      const selectedKey = combobox.value
       if (!selectedKey) return
       const defaultValue = this.#globalConfigData[selectedKey]
-      await this.#saveCollectionConfigKey(this.#selectedEntityId, selectedKey, defaultValue)
+      combobox.clear()
       addRow.remove()
+      await this.#saveCollectionConfigKey(this.#selectedEntityId, selectedKey, defaultValue)
     })
 
     listEl.insertBefore(addRow, listEl.firstChild)
@@ -659,11 +679,7 @@ class RbacManagerPlugin extends Plugin {
   async #saveCollectionConfigKey(entityId, key, value) {
     try {
       const apiClient = this.getDependency('client').apiClient
-      if (this.#currentEntityType === 'project') {
-        await apiClient.projectsCreateConfig(entityId, { key, value })
-      } else {
-        await apiClient.collectionsCreateConfig(entityId, { key, value })
-      }
+      await apiClient.projectsCreateConfig(entityId, { key, value })
       this.#collectionConfig[key] = value
       this.#renderCollectionConfigList(entityId)
     } catch (err) {
@@ -820,6 +836,85 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
+   * Render the project collections section as an interactive member picker widget.
+   * @param {string} projectId
+   */
+  #renderProjectCollectionsSection(projectId) {
+    const section = this.#ui.querySelector('[name="projectCollectionsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="projectCollectionsList"]')
+    listEl.innerHTML = ''
+
+    const project = this.#entityManagers.project.findById(projectId)
+    const currentCollectionIds = project?.collections || []
+
+    const collectionObjects = currentCollectionIds
+      .map(id => this.#entityManagers.collection.findById(id))
+      .filter(Boolean)
+
+    const nonMemberCollections = this.#entityManagers.collection.getAll()
+      .filter(c => !currentCollectionIds.includes(c.id))
+
+    const picker = createMemberPicker({
+      label: 'Collections',
+      columns: [
+        { key: 'id', label: 'Collection ID', monospace: true },
+        { key: 'name', label: 'Name' }
+      ],
+      items: collectionObjects,
+      availableOptions: nonMemberCollections.map(c => ({
+        value: c.id,
+        primaryLabel: c.id,
+        secondaryLabel: c.name || ''
+      })),
+      onAdd: async (collectionId) => {
+        await this.#addProjectCollection(projectId, collectionId)
+      },
+      onRemove: async (item) => {
+        await this.#removeProjectCollection(projectId, item.id)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Add a collection to a project's collections array.
+   * @param {string} projectId
+   * @param {string} collectionId
+   */
+  async #addProjectCollection(projectId, collectionId) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+    const updatedCollections = [...(project.collections || []), collectionId]
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, collections: updatedCollections })
+      this.#renderProjectCollectionsSection(projectId)
+    } catch (err) {
+      notify(`Failed to add collection to project: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Remove a collection from a project's collections array.
+   * @param {string} projectId
+   * @param {string} collectionId
+   */
+  async #removeProjectCollection(projectId, collectionId) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+    const updatedCollections = (project.collections || []).filter(c => c !== collectionId)
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, collections: updatedCollections })
+      this.#renderProjectCollectionsSection(projectId)
+    } catch (err) {
+      notify(`Failed to remove collection from project: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
    * Render a read-only table of groups the selected user belongs to.
    * @param {string} username
    */
@@ -874,6 +969,58 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
+   * Render a read-only table of projects the selected user is a member of.
+   * @param {string} username
+   */
+  #renderUserProjectsSection(username) {
+    const section = this.#ui.querySelector('[name="userProjectsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="userProjectsList"]')
+    listEl.innerHTML = ''
+
+    const userProjects = this.#entityManagers.project.getAll()
+      .filter(p => (p.members || []).includes(username))
+
+    if (userProjects.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;'
+      empty.textContent = 'No projects assigned'
+      listEl.appendChild(empty)
+      return
+    }
+
+    const table = document.createElement('table')
+    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
+    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Project ID</th>
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Name</th>
+    </tr></thead>`
+    const tbody = document.createElement('tbody')
+
+    for (const project of userProjects) {
+      const tr = document.createElement('tr')
+      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
+
+      const tdId = document.createElement('td')
+      tdId.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
+      tdId.textContent = project.id
+
+      const tdName = document.createElement('td')
+      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
+      tdName.textContent = project.name || ''
+
+      tr.appendChild(tdId)
+      tr.appendChild(tdName)
+      tbody.appendChild(tr)
+    }
+
+    table.appendChild(tbody)
+    listEl.appendChild(table)
+  }
+
+  /**
    * Add a user to a group by appending groupId to the user's groups[] on the server.
    * @param {string} username
    * @param {string} groupId
@@ -915,11 +1062,7 @@ class RbacManagerPlugin extends Plugin {
   async #deleteCollectionConfigKey(entityId, key) {
     try {
       const apiClient = this.getDependency('client').apiClient
-      if (this.#currentEntityType === 'project') {
-        await apiClient.projectsConfig(entityId, key)
-      } else {
-        await apiClient.collectionsConfig(entityId, key)
-      }
+      await apiClient.projectsConfig(entityId, key)
       delete this.#collectionConfig[key]
       this.#renderCollectionConfigList(entityId)
     } catch (err) {

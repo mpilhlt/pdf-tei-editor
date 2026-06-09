@@ -55,7 +55,9 @@
  * @property {HTMLDivElement & entityConfigSectionPart} entityConfigSection
  * @property {HTMLDivElement & groupMembersSectionPart} groupMembersSection
  * @property {HTMLDivElement & projectMembersSectionPart} projectMembersSection
+ * @property {HTMLDivElement & projectCollectionsSectionPart} projectCollectionsSection
  * @property {HTMLDivElement & userGroupsSectionPart} userGroupsSection
+ * @property {HTMLDivElement & userProjectsSectionPart} userProjectsSection
  */
 
 /**
@@ -75,8 +77,18 @@
  */
 
 /**
+ * @typedef {object} projectCollectionsSectionPart
+ * @property {HTMLDivElement} projectCollectionsList
+ */
+
+/**
  * @typedef {object} userGroupsSectionPart
  * @property {HTMLDivElement} userGroupsList
+ */
+
+/**
+ * @typedef {object} userProjectsSectionPart
+ * @property {HTMLDivElement} userProjectsList
  */
 
 export {}

@@ -164,7 +164,8 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Collections',
         options: 'collection',
-        helpText: 'Collections included in this project'
+        helpText: 'Collections included in this project',
+        excludeFromForm: true
       }
     ],
     relationships: [
