@@ -178,6 +178,39 @@ class TestConfigUtils(unittest.TestCase):
         self.assertEqual(self.config.get('session.timeout'), 3600)
         self.assertEqual(self.config.get('session.cookie.name'), 'sessionId')
 
+    def test_set_with_description(self):
+        """Test that set() saves a description metadata key."""
+        success, msg = self.config.set('some.key', 'value', description='What this key controls')
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.description'], 'What this key controls')
+
+    def test_set_with_explicit_type(self):
+        """Test that set() uses explicit type over inferred type."""
+        success, msg = self.config.set('some.key', 42, value_type='string')
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'string')
+
+    def test_get_metadata_returns_all(self):
+        """Test get_metadata returns type, values, description."""
+        self.config.set('some.key', 'foo',
+                        value_type='string',
+                        allowed_values=['foo', 'bar'],
+                        description='A test key')
+        from fastapi_app.lib.utils.config_utils import get_config_metadata
+        meta = get_config_metadata('some.key', self.db_dir)
+        self.assertEqual(meta['type'], 'string')
+        self.assertEqual(meta['values'], ['foo', 'bar'])
+        self.assertEqual(meta['description'], 'A test key')
+
+    def test_set_values_via_parameter(self):
+        """Test that allowed_values parameter writes the .values key."""
+        success, _ = self.config.set('some.key', 'foo', allowed_values=['foo', 'bar'])
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.values'], ['foo', 'bar'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -103,18 +103,35 @@ class Config:
         """
         return get_config_value(key, self.db_dir, default)
 
-    def set(self, key: str, value: Any) -> tuple[bool, str]:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        value_type: str | None = None,
+        allowed_values: list | None = None,
+        description: str | None = None,
+    ) -> tuple[bool, str]:
         """
         Set a configuration value.
 
         Args:
             key: The configuration key
             value: The value to set
+            value_type: Optional explicit JSON type (overrides auto-inferred type)
+            allowed_values: Optional list of allowed values to store as key.values
+            description: Optional description stored as key.description
 
         Returns:
             Tuple of (success: bool, message: str)
         """
-        return set_config_value(key, value, self.db_dir)
+        return set_config_value(key, value, self.db_dir,
+                                value_type=value_type,
+                                allowed_values=allowed_values,
+                                description=description)
+
+    def get_metadata(self, key: str) -> dict[str, Any]:
+        """Return metadata dict with type, values, description for key."""
+        return get_config_metadata(key, self.db_dir)
 
     def delete(self, key: str) -> tuple[bool, str]:
         """
@@ -183,7 +200,32 @@ def get_config_value(key: str, db_dir: Path, default: Any = None) -> Any:
         return default
 
 
-def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
+def get_config_metadata(key: str, db_dir: Path) -> dict[str, Any]:
+    """Return type, values, and description metadata for a config key.
+
+    Args:
+        key: The configuration key
+        db_dir: Path to the database directory containing config.json
+
+    Returns:
+        Dict with 'type', 'values', and 'description' entries (values may be None)
+    """
+    config_data = load_full_config(db_dir)
+    return {
+        "type": config_data.get(f"{key}.type"),
+        "values": config_data.get(f"{key}.values"),
+        "description": config_data.get(f"{key}.description"),
+    }
+
+
+def set_config_value(
+    key: str,
+    value: Any,
+    db_dir: Path,
+    value_type: str | None = None,
+    allowed_values: list | None = None,
+    description: str | None = None,
+) -> tuple[bool, str]:
     """
     Set a configuration value with atomic write and file locking.
 
@@ -236,11 +278,18 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
                 # Set the value
                 config_data[key] = value
 
-                # Auto-set type for new keys (not ending in .values or .type)
-                if not key.endswith(".values") and not key.endswith(".type"):
+                # Auto-set type (explicit takes priority over inferred)
+                if not key.endswith(".values") and not key.endswith(".type") and not key.endswith(".description"):
                     type_key = f"{key}.type"
-                    if type_key not in config_data:
-                        config_data[type_key] = _get_json_type(value)
+                    resolved_type = value_type if value_type is not None else (_get_json_type(value) if type_key not in config_data else None)
+                    if resolved_type:
+                        config_data[type_key] = resolved_type
+
+                    if allowed_values is not None:
+                        config_data[f"{key}.values"] = allowed_values
+
+                    if description is not None:
+                        config_data[f"{key}.description"] = description
 
                 # Atomic write: write to temp file then rename
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')
