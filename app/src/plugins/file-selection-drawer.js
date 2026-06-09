@@ -385,6 +385,111 @@ class FileSelectionDrawerPlugin extends Plugin {
   }
 
   /**
+   * Build a complete sl-tree-item for a collection, including all file children.
+   * @param {string} collectionName
+   * @param {ApplicationState} state
+   * @param {Object} groupedFiles
+   * @param {function(string): boolean} shouldExpandCollection
+   * @param {function(Object): boolean} shouldExpandPdf
+   * @returns {HTMLElement}
+   */
+  #buildCollectionTreeItem(collectionName, state, groupedFiles, shouldExpandCollection, shouldExpandPdf) {
+    const collectionDisplayName = getCollectionName(collectionName, state.collections || []);
+    const collectionItem = document.createElement('sl-tree-item');
+    collectionItem.expanded = shouldExpandCollection(collectionName);
+    collectionItem.className = 'collection-item';
+    collectionItem.dataset.collection = collectionName;
+
+    const checkbox = document.createElement('sl-checkbox');
+    checkbox.size = 'small';
+    checkbox.checked = this.#selectedCollections.has(collectionName);
+    checkbox.addEventListener('click', (e) => e.stopPropagation());
+    checkbox.addEventListener('sl-change', (e) => {
+      e.stopPropagation();
+      this.#onCollectionCheckboxChange(collectionName, checkbox.checked);
+    });
+
+    const label = document.createElement('span');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '0.5rem';
+    label.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
+
+    collectionItem.innerHTML = '';
+    collectionItem.appendChild(checkbox);
+    collectionItem.appendChild(label);
+
+    const files = (groupedFiles[collectionName] || []).sort((a, b) => {
+      const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
+      const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
+      return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
+    });
+
+    for (const file of files) {
+      let artifactsToShow = file.artifacts || [];
+      if (state.variant === "none") {
+        artifactsToShow = artifactsToShow.filter(a => !a.variant);
+      } else if (state.variant && state.variant !== "") {
+        artifactsToShow = artifactsToShow.filter(a => a.variant === state.variant);
+      }
+      const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
+      const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+
+      const pdfItem = document.createElement('sl-tree-item');
+      pdfItem.expanded = shouldExpandPdf(file);
+      pdfItem.className = 'pdf-item';
+      pdfItem.dataset.type = file.source?.file_type === 'pdf' ? 'pdf' : 'xml-only';
+      pdfItem.dataset.hash = file.source?.id || '';
+      pdfItem.dataset.collection = file.collections[0];
+      const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
+      const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
+      pdfItem.innerHTML = `<sl-icon name="${icon}"></sl-icon><span>${displayLabel}</span>`;
+
+      if (goldToShow.length > 0) {
+        const goldSection = document.createElement('sl-tree-item');
+        goldSection.expanded = true;
+        goldSection.className = 'gold-section';
+        goldSection.dataset.type = 'section';
+        goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
+        goldToShow.forEach(gold => {
+          const variantSuffix = (!state.variant || state.variant === "") ? gold.variant ?? undefined : undefined;
+          const goldItem = document.createElement('sl-tree-item');
+          goldItem.className = 'gold-item';
+          goldItem.dataset.type = 'gold';
+          goldItem.dataset.hash = gold.id;
+          goldItem.dataset.pdfHash = file.source?.id || '';
+          goldItem.dataset.collection = file.collections[0];
+          goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
+          goldSection.appendChild(goldItem);
+        });
+        pdfItem.appendChild(goldSection);
+      }
+
+      if (versionsToShow.length > 0) {
+        const versionsSection = document.createElement('sl-tree-item');
+        versionsSection.expanded = false;
+        versionsSection.className = 'versions-section';
+        versionsSection.dataset.type = 'section';
+        versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
+        versionsToShow.forEach(version => {
+          const variantSuffix = (!state.variant || state.variant === "") ? version.variant ?? undefined : undefined;
+          const versionItem = document.createElement('sl-tree-item');
+          versionItem.className = 'version-item';
+          versionItem.dataset.type = 'version';
+          versionItem.dataset.hash = version.id;
+          versionItem.dataset.pdfHash = file.source?.id || '';
+          versionItem.dataset.collection = file.collections[0];
+          versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
+          versionsSection.appendChild(versionItem);
+        });
+        pdfItem.appendChild(versionsSection);
+      }
+      collectionItem.appendChild(pdfItem);
+    }
+    return collectionItem;
+  }
+
+  /**
    * Populates the file tree with hierarchical structure
    * @param {ApplicationState} state
    */
@@ -398,17 +503,6 @@ class FileSelectionDrawerPlugin extends Plugin {
     filteredData = filterFileDataByLabel(filteredData, this.#currentLabelFilter);
 
     const groupedFiles = groupFilesByCollection(filteredData);
-
-    const collectionsSet = new Set(Object.keys(groupedFiles));
-    if (state.collections) {
-      state.collections.forEach(col => collectionsSet.add(col.id));
-    }
-
-    const collections = Array.from(collectionsSet).sort((a, b) => {
-      if (a === "__unfiled") return -1;
-      if (b === "__unfiled") return 1;
-      return a.localeCompare(b);
-    });
 
     fileTree.innerHTML = '';
 
@@ -436,114 +530,41 @@ class FileSelectionDrawerPlugin extends Plugin {
       return false;
     };
 
+    const projects = state.projects || [];
+    const collectionsWithFiles = new Set(Object.keys(groupedFiles));
+    const allVisibleCollections = new Set([
+      ...collectionsWithFiles,
+      ...(state.collections || []).map(c => c.id)
+    ]);
+    const renderedCollections = new Set();
+
     const selectAllContainer = this.#drawerUi.selectAllContainer;
-    selectAllContainer.style.display = collections.length > 0 ? 'block' : 'none';
+    selectAllContainer.style.display = allVisibleCollections.size > 0 ? 'block' : 'none';
 
-    for (const collectionName of collections) {
-      const collectionDisplayName = getCollectionName(collectionName, state.collections || []);
+    for (const project of projects) {
+      const projectCollections = (project.collections || []).filter(colId => allVisibleCollections.has(colId));
+      if (projectCollections.length === 0) continue;
 
-      const collectionItem = document.createElement('sl-tree-item');
-      collectionItem.expanded = shouldExpandCollection(collectionName);
-      collectionItem.className = 'collection-item';
-      collectionItem.dataset.collection = collectionName;
+      const projectItem = document.createElement('sl-tree-item');
+      projectItem.expanded = true;
+      projectItem.className = 'project-item';
+      const projectLabel = document.createElement('span');
+      projectLabel.style.display = 'flex';
+      projectLabel.style.alignItems = 'center';
+      projectLabel.style.gap = '0.5rem';
+      projectLabel.innerHTML = `<sl-icon name="folder2-open"></sl-icon><strong>${project.name}</strong>`;
+      projectItem.appendChild(projectLabel);
 
-      const checkbox = document.createElement('sl-checkbox');
-      checkbox.size = 'small';
-      checkbox.checked = this.#selectedCollections.has(collectionName);
-
-      checkbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
-
-      checkbox.addEventListener('sl-change', (e) => {
-        e.stopPropagation();
-        this.#onCollectionCheckboxChange(collectionName, checkbox.checked);
-      });
-
-      const label = document.createElement('span');
-      label.style.display = 'flex';
-      label.style.alignItems = 'center';
-      label.style.gap = '0.5rem';
-      label.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
-
-      collectionItem.innerHTML = '';
-      collectionItem.appendChild(checkbox);
-      collectionItem.appendChild(label);
-
-      const files = (groupedFiles[collectionName] || [])
-        .sort((a, b) => {
-          const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
-          const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
-          return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
-        });
-
-      for (const file of files) {
-        let artifactsToShow = file.artifacts || [];
-        if (state.variant === "none") {
-          artifactsToShow = artifactsToShow.filter(a => !a.variant);
-        } else if (state.variant && state.variant !== "") {
-          artifactsToShow = artifactsToShow.filter(a => a.variant === state.variant);
-        }
-
-        const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
-        const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
-
-        const pdfItem = document.createElement('sl-tree-item');
-        pdfItem.expanded = shouldExpandPdf(file);
-        pdfItem.className = 'pdf-item';
-        pdfItem.dataset.type = file.source?.file_type === 'pdf' ? 'pdf' : 'xml-only';
-        pdfItem.dataset.hash = file.source?.id || '';
-        pdfItem.dataset.collection = file.collections[0];
-        const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
-        const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
-        pdfItem.innerHTML = `<sl-icon name="${icon}"></sl-icon><span>${displayLabel}</span>`;
-
-        if (goldToShow.length > 0) {
-          const goldSection = document.createElement('sl-tree-item');
-          goldSection.expanded = true;
-          goldSection.className = 'gold-section';
-          goldSection.dataset.type = 'section';
-          goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
-
-          goldToShow.forEach(gold => {
-            const variantSuffix = (!state.variant || state.variant === "") ? gold.variant ?? undefined : undefined;
-            const goldItem = document.createElement('sl-tree-item');
-            goldItem.className = 'gold-item';
-            goldItem.dataset.type = 'gold';
-            goldItem.dataset.hash = gold.id;
-            goldItem.dataset.pdfHash = file.source?.id || '';
-            goldItem.dataset.collection = file.collections[0];
-            goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
-            goldSection.appendChild(goldItem);
-          });
-          pdfItem.appendChild(goldSection);
-        }
-
-        if (versionsToShow.length > 0) {
-          const versionsSection = document.createElement('sl-tree-item');
-          versionsSection.expanded = false;
-          versionsSection.className = 'versions-section';
-          versionsSection.dataset.type = 'section';
-          versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
-
-          versionsToShow.forEach(version => {
-            const variantSuffix = (!state.variant || state.variant === "") ? version.variant ?? undefined : undefined;
-            const versionItem = document.createElement('sl-tree-item');
-            versionItem.className = 'version-item';
-            versionItem.dataset.type = 'version';
-            versionItem.dataset.hash = version.id;
-            versionItem.dataset.pdfHash = file.source?.id || '';
-            versionItem.dataset.collection = file.collections[0];
-            versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
-            versionsSection.appendChild(versionItem);
-          });
-          pdfItem.appendChild(versionsSection);
-        }
-
-        collectionItem.appendChild(pdfItem);
+      for (const colId of projectCollections) {
+        renderedCollections.add(colId);
+        projectItem.appendChild(this.#buildCollectionTreeItem(colId, state, groupedFiles, shouldExpandCollection, shouldExpandPdf));
       }
+      fileTree.appendChild(projectItem);
+    }
 
-      fileTree.appendChild(collectionItem);
+    for (const colId of allVisibleCollections) {
+      if (renderedCollections.has(colId)) continue;
+      fileTree.appendChild(this.#buildCollectionTreeItem(colId, state, groupedFiles, shouldExpandCollection, shouldExpandPdf));
     }
 
     this.#isUpdatingTree = true;
@@ -619,11 +640,16 @@ class FileSelectionDrawerPlugin extends Plugin {
 
     if (type === 'section') return;
 
+    const _owningProject = collection
+      ? (state.projects || []).find(p => p.collections && p.collections.includes(collection))
+      : null;
+
     const stateUpdates = {};
 
     if (type === 'pdf') {
       stateUpdates.pdf = hash;
       stateUpdates.collection = collection;
+      stateUpdates.project = _owningProject ? _owningProject.id : null;
 
       const selectedFile = findFileBySourceId(state.fileData, hash);
       if (selectedFile) {
@@ -638,9 +664,11 @@ class FileSelectionDrawerPlugin extends Plugin {
       stateUpdates.xml = hash;
       stateUpdates.pdf = null;
       stateUpdates.collection = collection;
+      stateUpdates.project = _owningProject ? _owningProject.id : null;
     } else if (type === 'gold' || type === 'version') {
       stateUpdates.xml = hash;
       stateUpdates.collection = collection;
+      stateUpdates.project = _owningProject ? _owningProject.id : null;
 
       if (pdfHash && pdfHash !== state.pdf) {
         stateUpdates.pdf = pdfHash;
