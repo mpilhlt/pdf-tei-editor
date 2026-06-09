@@ -127,7 +127,7 @@ def get_permissions_endpoint(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    collection_id = (file.doc_collections or [None])[0]
+    collection_id = file.doc_collections[0] if file.doc_collections else None
     if collection_id:
         from ..config import get_settings
         settings = get_settings()

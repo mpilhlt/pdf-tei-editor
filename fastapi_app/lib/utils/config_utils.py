@@ -290,6 +290,7 @@ def set_config_value(
                 # Auto-set type (explicit takes priority over inferred)
                 if not key.endswith(".values") and not key.endswith(".type") and not key.endswith(".description"):
                     type_key = f"{key}.type"
+                    resolved_type: str | None
                     if value_type is not None:
                         resolved_type = value_type
                     else:
