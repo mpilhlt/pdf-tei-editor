@@ -127,6 +127,88 @@ class TestProjectUtils(unittest.TestCase):
         result = get_user_projects(None, self.db_dir)
         self.assertEqual(result, [])
 
+    def test_project_config_set_and_get(self):
+        from fastapi_app.lib.utils.project_utils import (
+            create_project, project_config_set, project_config_get
+        )
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        ok, _ = project_config_set(self.db_dir, 'p1', 'some.key', 'value1')
+        self.assertTrue(ok)
+        result = project_config_get(self.db_dir, 'p1', 'some.key')
+        self.assertEqual(result, 'value1')
+
+    def test_project_config_get_fallback(self):
+        from fastapi_app.lib.utils.project_utils import create_project, project_config_get
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        result = project_config_get(self.db_dir, 'p1', 'missing.key', default='fallback')
+        self.assertEqual(result, 'fallback')
+
+    def test_project_config_get_all(self):
+        from fastapi_app.lib.utils.project_utils import (
+            create_project, project_config_set, project_config_get_all
+        )
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        project_config_set(self.db_dir, 'p1', 'k1', 'v1')
+        project_config_set(self.db_dir, 'p1', 'k2', 'v2')
+        result = project_config_get_all(self.db_dir, 'p1')
+        self.assertEqual(result, {'k1': 'v1', 'k2': 'v2'})
+
+    def test_project_config_delete(self):
+        from fastapi_app.lib.utils.project_utils import (
+            create_project, project_config_set, project_config_delete, project_config_get_all
+        )
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        project_config_set(self.db_dir, 'p1', 'k1', 'v1')
+        ok, _ = project_config_delete(self.db_dir, 'p1', 'k1')
+        self.assertTrue(ok)
+        self.assertEqual(project_config_get_all(self.db_dir, 'p1'), {})
+
+    def test_project_config_delete_missing_key(self):
+        from fastapi_app.lib.utils.project_utils import create_project, project_config_delete
+        save_entity_data(self.db_dir, 'projects', [create_project('p1', 'P1', '', [], [])])
+        ok, msg = project_config_delete(self.db_dir, 'p1', 'nope')
+        self.assertFalse(ok)
+
+    def test_migrate_groups_to_projects(self):
+        from fastapi_app.lib.utils.project_utils import migrate_groups_to_projects
+        save_entity_data(self.db_dir, 'groups', [
+            {'id': 'team-a', 'name': 'Team A', 'description': 'Desc', 'collections': ['col1', 'col2']},
+            {'id': 'admin', 'name': 'Admin', 'description': '', 'collections': ['*']},
+        ])
+        save_entity_data(self.db_dir, 'users', [
+            {'username': 'alice', 'groups': ['team-a']},
+            {'username': 'bob', 'groups': ['team-a', 'admin']},
+            {'username': 'carol', 'groups': ['admin']},
+        ])
+        save_entity_data(self.db_dir, 'projects', [])
+        migrate_groups_to_projects(self.db_dir)
+        from fastapi_app.lib.utils.project_utils import get_projects_with_details
+        projects = get_projects_with_details(self.db_dir)
+        self.assertEqual(len(projects), 2)
+        team_a = next(p for p in projects if p['id'] == 'team-a')
+        self.assertEqual(sorted(team_a['members']), ['alice', 'bob'])
+        self.assertEqual(sorted(team_a['collections']), ['col1', 'col2'])
+        admin_proj = next(p for p in projects if p['id'] == 'admin')
+        self.assertIn('carol', admin_proj['members'])
+        self.assertIn('*', admin_proj['collections'])
+
+    def test_migrate_groups_to_projects_idempotent(self):
+        from fastapi_app.lib.utils.project_utils import migrate_groups_to_projects
+        save_entity_data(self.db_dir, 'groups', [
+            {'id': 'team-a', 'name': 'Team A', 'description': '', 'collections': ['col1']},
+        ])
+        save_entity_data(self.db_dir, 'users', [
+            {'username': 'alice', 'groups': ['team-a']},
+        ])
+        save_entity_data(self.db_dir, 'projects', [
+            {'id': 'team-a', 'name': 'Already Migrated', 'description': '', 'members': ['bob'], 'collections': ['col1'], 'config': {}}
+        ])
+        migrate_groups_to_projects(self.db_dir)
+        from fastapi_app.lib.utils.project_utils import get_projects_with_details
+        projects = get_projects_with_details(self.db_dir)
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0]['name'], 'Already Migrated')
+
 
 if __name__ == '__main__':
     unittest.main()

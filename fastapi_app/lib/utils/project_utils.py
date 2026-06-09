@@ -98,3 +98,101 @@ def remove_member_from_project(
     project['members'] = members
     save_entity_data(db_dir, 'projects', projects)
     return True, f"Removed '{username}' from project '{project_id}'."
+
+
+def project_config_get_all(db_dir: Path, project_id: str) -> dict[str, Any]:
+    """Return all config overrides for a project."""
+    projects = load_entity_data(db_dir, 'projects')
+    project = find_project(project_id, projects)
+    if not project:
+        return {}
+    return dict(project.get('config') or {})
+
+
+def project_config_get(
+    db_dir: Path,
+    project_id: str,
+    key: str,
+    use_default: bool = True,
+    default: Any = None,
+) -> Any:
+    """Return project config override for key, falling back to global config."""
+    overrides = project_config_get_all(db_dir, project_id)
+    if key in overrides:
+        return overrides[key]
+    if use_default:
+        from fastapi_app.lib.utils.config_utils import get_config_value
+        return get_config_value(key, db_dir, default)
+    return default
+
+
+def project_config_set(
+    db_dir: Path,
+    project_id: str,
+    key: str,
+    value: Any,
+) -> tuple[bool, str]:
+    """Set a project-specific config override."""
+    projects = load_entity_data(db_dir, 'projects')
+    project = find_project(project_id, projects)
+    if not project:
+        return False, f"Project '{project_id}' not found."
+    project['config'] = project.get('config') or {}
+    project['config'][key] = value
+    save_entity_data(db_dir, 'projects', projects)
+    return True, f"Set project config '{key}' for '{project_id}'."
+
+
+def project_config_delete(
+    db_dir: Path,
+    project_id: str,
+    key: str,
+) -> tuple[bool, str]:
+    """Delete a project-specific config override."""
+    projects = load_entity_data(db_dir, 'projects')
+    project = find_project(project_id, projects)
+    if not project:
+        return False, f"Project '{project_id}' not found."
+    config_overrides = project.get('config') or {}
+    if key not in config_overrides:
+        return False, f"Key '{key}' not in project config overrides."
+    del config_overrides[key]
+    project['config'] = config_overrides
+    save_entity_data(db_dir, 'projects', projects)
+    return True, f"Deleted project config '{key}' for '{project_id}'."
+
+
+def migrate_groups_to_projects(db_dir: Path) -> int:
+    """Create a project for each group that does not already have a matching project.
+
+    Members are derived by scanning users.json for users whose groups[] contains the group ID.
+    Returns the number of projects created.
+    """
+    groups = load_entity_data(db_dir, 'groups')
+    users = load_entity_data(db_dir, 'users')
+    projects = load_entity_data(db_dir, 'projects')
+    existing_ids = {p['id'] for p in projects}
+
+    created = 0
+    for group in groups:
+        gid = group.get('id', '')
+        if gid in existing_ids:
+            continue
+        members = [
+            u['username']
+            for u in users
+            if gid in u.get('groups', [])
+        ]
+        new_project = create_project(
+            project_id=gid,
+            name=group.get('name', gid),
+            description=group.get('description', ''),
+            members=members,
+            collections=list(group.get('collections', [])),
+        )
+        projects.append(new_project)
+        created += 1
+
+    if created:
+        save_entity_data(db_dir, 'projects', projects)
+    return created
