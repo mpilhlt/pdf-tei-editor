@@ -196,6 +196,12 @@ class RbacManagerPlugin extends Plugin {
     const membersSection = this.#ui.querySelector('[name="groupMembersSection"]')
     if (membersSection) membersSection.style.display = 'none'
 
+    const projectMembersSection = this.#ui.querySelector('[name="projectMembersSection"]')
+    if (projectMembersSection) projectMembersSection.style.display = 'none'
+
+    const userGroupsSection = this.#ui.querySelector('[name="userGroupsSection"]')
+    if (userGroupsSection) userGroupsSection.style.display = 'none'
+
     this.#renderEntityList()
     this.#showEmptyState()
   }
@@ -338,7 +344,7 @@ class RbacManagerPlugin extends Plugin {
     }
 
     const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
-    const firstSection = formContainer.querySelector('[name="entityConfigSection"]') || formContainer.querySelector('[name="groupMembersSection"]')
+    const firstSection = formContainer.querySelector('[name="entityConfigSection"], [name="groupMembersSection"], [name="projectMembersSection"], [name="userGroupsSection"]')
     formContainer.insertBefore(form, firstSection)
 
     if ((this.#currentEntityType === 'collection' || this.#currentEntityType === 'project') && !this.#isNewEntity && this.#selectedEntityId) {
@@ -352,6 +358,20 @@ class RbacManagerPlugin extends Plugin {
       this.#renderGroupMembersWidget(this.#selectedEntityId)
     } else {
       const section = this.#ui.querySelector('[name="groupMembersSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderProjectMembersSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="projectMembersSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'user' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderUserGroupsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="userGroupsSection"]')
       if (section) section.style.display = 'none'
     }
   }
@@ -393,6 +413,12 @@ class RbacManagerPlugin extends Plugin {
 
     const membersSection = dialog.querySelector('[name="groupMembersSection"]')
     if (membersSection) membersSection.style.display = 'none'
+
+    const projectMembersSection = dialog.querySelector('[name="projectMembersSection"]')
+    if (projectMembersSection) projectMembersSection.style.display = 'none'
+
+    const userGroupsSection = dialog.querySelector('[name="userGroupsSection"]')
+    if (userGroupsSection) userGroupsSection.style.display = 'none'
   }
 
   /** Save entity (create or update) */
