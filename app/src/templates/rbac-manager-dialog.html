@@ -65,6 +65,19 @@
             <sl-icon name="inbox" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
             <p style="margin: 0;">Select an item from the list or create a new one</p>
           </div>
+          <!-- Collection config overrides section (shown only when a collection is selected) -->
+          <div name="collectionConfigSection" style="display:none; margin-top: 1rem; border-top: 1px solid var(--sl-color-neutral-200); padding-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h4 style="margin: 0; font-size: 0.9rem; font-weight: 600;">Config Overrides</h4>
+              <sl-button name="addConfigKeyBtn" size="small" variant="default">
+                <sl-icon slot="prefix" name="plus"></sl-icon>
+                Add
+              </sl-button>
+            </div>
+            <div name="collectionConfigList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- Config override rows inserted here -->
+            </div>
+          </div>
           <!-- Dynamic form will be inserted here -->
         </div>
       </div>

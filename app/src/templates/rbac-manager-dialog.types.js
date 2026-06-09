@@ -51,6 +51,13 @@
 /**
  * @typedef {object} formContainerPart
  * @property {HTMLDivElement} emptyState
+ * @property {HTMLDivElement & collectionConfigSectionPart} collectionConfigSection
+ */
+
+/**
+ * @typedef {object} collectionConfigSectionPart
+ * @property {import('../ui.js').SlButton} addConfigKeyBtn
+ * @property {HTMLDivElement} collectionConfigList
  */
 
 export {}
