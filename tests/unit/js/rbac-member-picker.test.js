@@ -13,6 +13,19 @@ global.document = dom.window.document
 global.window = dom.window
 global.customElements = { define: () => {} }
 
+// Register a minimal filtered-combobox stub in jsdom so document.createElement('filtered-combobox')
+// returns an element with the correct interface expected by member-picker.js.
+dom.window.customElements.define('filtered-combobox', class extends dom.window.HTMLElement {
+  constructor() {
+    super()
+    this._value = null
+    this._options = []
+  }
+  setOptions(opts) { this._options = [...opts] }
+  get value() { return this._value }
+  clear() { this._value = null }
+})
+
 import { createMemberPicker } from '../../../app/src/modules/rbac/member-picker.js'
 
 const COLUMNS = [
@@ -127,8 +140,22 @@ describe('createMemberPicker', () => {
   })
 })
 
-describe('createMemberPicker — optionGroup headers', () => {
-  it('renders group headers as disabled sl-option elements', () => {
+describe('createMemberPicker — filtered-combobox integration', () => {
+  it('add-row contains a filtered-combobox element', () => {
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [{ key: 'username', label: 'User' }],
+      items: [],
+      availableOptions: [{ value: 'alice', primaryLabel: 'alice' }],
+      onAdd: async () => {},
+      onRemove: async () => {}
+    })
+    picker.element.querySelector('[data-role="add-member-btn"]').click()
+    const combobox = picker.element.querySelector('filtered-combobox')
+    assert.ok(combobox, 'add-row should contain a filtered-combobox')
+  })
+
+  it('passes group options to filtered-combobox with correct group property', () => {
     const picker = createMemberPicker({
       label: 'Members',
       columns: [{ key: 'username', label: 'User' }],
@@ -140,15 +167,30 @@ describe('createMemberPicker — optionGroup headers', () => {
       onAdd: async () => {},
       onRemove: async () => {}
     })
-
-    // Open the add-row to render options
     picker.element.querySelector('[data-role="add-member-btn"]').click()
-    const selectEl = picker.element.querySelector('sl-select')
+    const combobox = picker.element.querySelector('filtered-combobox')
+    assert.ok(combobox._options.some(o => o.group === 'Users'), 'should have Users group')
+    assert.ok(combobox._options.some(o => o.group === 'Groups'), 'should have Groups group')
+  })
 
-    // First sl-option should be the group header (disabled)
-    const options = selectEl.querySelectorAll('sl-option')
-    const disabledOptions = Array.from(options).filter(o => o.disabled)
-    assert.ok(disabledOptions.length >= 1, 'should have at least one disabled group header option')
-    assert.strictEqual(disabledOptions[0].textContent.trim(), 'Users')
+  it('confirm button enables when combobox dispatches sl-change with a value', () => {
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [{ key: 'username', label: 'User' }],
+      items: [],
+      availableOptions: [{ value: 'bob', primaryLabel: 'bob' }],
+      onAdd: async () => {},
+      onRemove: async () => {}
+    })
+    picker.element.querySelector('[data-role="add-member-btn"]').click()
+    const addRow = picker.element.querySelector('.add-member-row')
+    const combobox = addRow.querySelector('filtered-combobox')
+    const confirmBtn = addRow.querySelector('sl-button[variant="primary"]')
+    assert.strictEqual(confirmBtn.disabled, true, 'confirm should start disabled')
+    combobox.dispatchEvent(new dom.window.CustomEvent('sl-change', {
+      detail: { value: 'bob', label: 'bob' },
+      bubbles: true
+    }))
+    assert.strictEqual(confirmBtn.disabled, false, 'confirm should enable after sl-change')
   })
 })

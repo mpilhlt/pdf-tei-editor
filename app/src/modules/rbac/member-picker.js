@@ -142,56 +142,17 @@ export function createMemberPicker({ label, columns, items: initialItems, availa
     addRow.className = 'add-member-row'
     addRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;'
 
-    const filterInput = document.createElement('sl-input')
-    filterInput.setAttribute('size', 'small')
-    filterInput.setAttribute('placeholder', 'Filter...')
-    filterInput.style.cssText = 'flex: 0 0 35%;'
-    addRow.appendChild(filterInput)
-
-    const selectEl = document.createElement('sl-select')
-    selectEl.setAttribute('size', 'small')
-    selectEl.setAttribute('placeholder', 'Select...')
-    selectEl.style.cssText = 'flex: 1;'
-
-    function renderOptions(filterText = '') {
-      selectEl.innerHTML = ''
-      let currentGroup = null
-
-      for (const opt of _available) {
-        const lc = filterText.toLowerCase()
-        const matchesPrimary = opt.primaryLabel.toLowerCase().includes(lc)
-        const matchesSecondary = (opt.secondaryLabel || '').toLowerCase().includes(lc)
-        if (filterText && !matchesPrimary && !matchesSecondary) continue
-
-        if (opt.optionGroup && opt.optionGroup !== currentGroup) {
-          currentGroup = opt.optionGroup
-          if (selectEl.children.length > 0) {
-            selectEl.appendChild(document.createElement('sl-divider'))
-          }
-          const groupHeader = document.createElement('sl-option')
-          groupHeader.value = ''
-          groupHeader.disabled = true
-          groupHeader.style.cssText = 'font-weight: 600; font-size: 0.8em; color: var(--sl-color-neutral-600);'
-          groupHeader.textContent = opt.optionGroup
-          selectEl.appendChild(groupHeader)
-        }
-
-        const slOpt = document.createElement('sl-option')
-        slOpt.value = opt.value
-        slOpt.textContent = opt.primaryLabel
-        if (opt.secondaryLabel) {
-          const sub = document.createElement('span')
-          sub.slot = 'suffix'
-          sub.style.cssText = 'font-size: 0.8em; color: var(--sl-color-neutral-500);'
-          sub.textContent = opt.secondaryLabel
-          slOpt.appendChild(sub)
-        }
-        selectEl.appendChild(slOpt)
-      }
-    }
-
-    renderOptions()
-    addRow.appendChild(selectEl)
+    const combobox = document.createElement('filtered-combobox')
+    combobox.setAttribute('size', 'small')
+    combobox.setAttribute('placeholder', 'Search and add...')
+    combobox.style.flex = '1'
+    combobox.setOptions(_available.map(opt => ({
+      value: opt.value,
+      label: opt.primaryLabel,
+      secondary: opt.secondaryLabel,
+      group: opt.optionGroup
+    })))
+    addRow.appendChild(combobox)
 
     const confirmBtn = document.createElement('sl-button')
     confirmBtn.setAttribute('size', 'small')
@@ -207,17 +168,14 @@ export function createMemberPicker({ label, columns, items: initialItems, availa
     cancelBtn.addEventListener('click', () => addRow.remove())
     addRow.appendChild(cancelBtn)
 
-    filterInput.addEventListener('input', () => {
-      renderOptions(filterInput.value || '')
-    })
-
-    selectEl.addEventListener('sl-change', () => {
-      confirmBtn.disabled = !selectEl.value
+    combobox.addEventListener('sl-change', (e) => {
+      confirmBtn.disabled = !e.detail?.value
     })
 
     confirmBtn.addEventListener('click', async () => {
-      const value = String(selectEl.value)
+      const value = combobox.value
       if (!value) return
+      combobox.clear()
       addRow.remove()
       await onAdd(value)
     })

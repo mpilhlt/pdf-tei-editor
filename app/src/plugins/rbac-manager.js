@@ -22,6 +22,7 @@ import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { createValueEditor } from '../modules/config-value-editor.js'
 import { createMemberPicker } from '../modules/rbac/member-picker.js'
+import '../modules/filtered-combobox.js'
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
