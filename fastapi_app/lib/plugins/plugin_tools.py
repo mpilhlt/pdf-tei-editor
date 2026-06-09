@@ -5,9 +5,19 @@ Utility functions for backend plugins
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from fastapi_app.config import get_settings
+
+
+class PluginConfigSpec(TypedDict):
+    """Shape of a single entry in a plugin's ``PLUGIN_CONFIG_SPECS`` list."""
+    config_key: str
+    env_var: str
+    default: NotRequired[Any]
+    value_type: NotRequired[str]
+    allowed_values: NotRequired[list[Any] | None]
+    description: NotRequired[str | None]
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +26,9 @@ def get_plugin_config(
     config_key: str,
     env_var: str,
     default: Any = None,
-    value_type: str = "string"
+    value_type: str = "string",
+    allowed_values: list[Any] | None = None,
+    description: str | None = None,
 ) -> Any:
     """
     Get plugin configuration value with env var fallback.
@@ -29,6 +41,8 @@ def get_plugin_config(
         env_var: Environment variable name
         default: Default value if neither source has value
         value_type: Type for validation ("string", "boolean", "number", "array")
+        allowed_values: Optional list of allowed values stored as key.values metadata
+        description: Optional human-readable description stored as key.description metadata
 
     Returns:
         Configuration value
@@ -38,23 +52,19 @@ def get_plugin_config(
         ...     "plugin.local-sync.enabled",
         ...     "PLUGIN_LOCAL_SYNC_ENABLED",
         ...     default=False,
-        ...     value_type="boolean"
+        ...     value_type="boolean",
+        ...     description="Enable the local sync plugin",
         ... )
     """
-    from fastapi_app.lib.utils.config_utils import get_config
     import os
+    from fastapi_app.lib.utils.config_utils import get_config
 
     config = get_config()
-
-    # Try to get from config
     value = config.get(config_key)
 
     if value is None:
-        # Check environment variable
         env_value = os.environ.get(env_var)
-
         if env_value is not None:
-            # Parse env value based on type
             if value_type == "boolean":
                 value = env_value.lower() in ("true", "1", "yes")
             elif value_type == "number":
@@ -64,14 +74,13 @@ def get_plugin_config(
                 value = json.loads(env_value)
             else:
                 value = env_value
-
-            # Create config key from env var
-            config.set(config_key, value)
         else:
-            # Use default
             value = default
-            if value is not None:
-                config.set(config_key, value)
+
+    # Always persist metadata (description, allowed_values) so re-registration on startup
+    # updates descriptions even when the config key already has a stored value.
+    if value is not None:
+        config.set(config_key, value, allowed_values=allowed_values, description=description)
 
     return value
 

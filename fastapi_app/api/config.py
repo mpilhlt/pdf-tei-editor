@@ -15,7 +15,7 @@ from ..config import get_settings
 from ..lib.utils.auth import AuthManager
 from ..lib.core.sessions import SessionManager
 from ..lib.utils.server_utils import get_session_id_from_request
-from ..lib.utils.config_utils import get_config
+from ..lib.utils.config_utils import get_config, get_config_metadata
 from ..lib.utils.logging_utils import get_logger
 
 
@@ -32,6 +32,9 @@ class ConfigSetRequest(BaseModel):
     """Request model for setting config values"""
     key: str
     value: Any
+    value_type: Optional[str] = None
+    allowed_values: Optional[list[Any]] = None
+    description: Optional[str] = None
 
 
 class InstructionItem(BaseModel):
@@ -96,13 +99,21 @@ def has_internet() -> bool:
 # API Endpoints
 
 @router.get("/list", response_model=dict)
-async def list_config() -> dict:
+async def list_config(collection: Optional[str] = None) -> dict:
     """
-    List all configuration values.
+    List all configuration values, optionally merged with collection-specific overrides.
 
-    Returns complete configuration object.
+    If collection is provided, collection-level config keys override global defaults.
     """
     config_data = config.load()
+    if collection:
+        try:
+            from ..lib.utils.collection_utils import collection_config_get_all
+            overrides = collection_config_get_all(get_settings().db_dir, collection)
+            if overrides:
+                config_data = {**config_data, **overrides}
+        except ImportError:
+            logger.warning("collection_config_get_all not yet available; ignoring collection param")
     return config_data
 
 
@@ -124,6 +135,22 @@ async def get_config(key: str) -> Any:
     return config_data[key]
 
 
+class ConfigMetadataResponse(BaseModel):
+    """Metadata for a config key."""
+    key: str
+    type: Optional[str] = None
+    values: Optional[list[Any]] = None
+    description: Optional[str] = None
+
+
+@router.get("/metadata/{key}", response_model=ConfigMetadataResponse)
+async def get_config_metadata_endpoint(key: str) -> ConfigMetadataResponse:
+    """Get metadata (type, allowed values, description) for a config key."""
+    settings = get_settings()
+    meta = get_config_metadata(key, settings.db_dir)
+    return ConfigMetadataResponse(key=key, **meta)
+
+
 @router.post("/set", response_model=ConfigSetResponse)
 async def set_config(
     request_data: ConfigSetRequest,
@@ -137,7 +164,13 @@ async def set_config(
     if not request_data.key:
         raise HTTPException(status_code=400, detail="Missing 'key' in request")
 
-    success, message = config.set(request_data.key, request_data.value)
+    success, message = config.set(
+        request_data.key,
+        request_data.value,
+        value_type=request_data.value_type,
+        allowed_values=request_data.allowed_values,
+        description=request_data.description
+    )
 
     if not success:
         raise HTTPException(status_code=400, detail=message)

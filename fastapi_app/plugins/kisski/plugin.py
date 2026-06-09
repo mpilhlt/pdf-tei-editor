@@ -23,8 +23,8 @@ class KisskiPlugin(Plugin):
     """Plugin that provides KISSKI API-based text and PDF processing."""
 
     def __init__(self) -> None:
-        get_plugin_config("plugin.kisski.api.key", "KISSKI_API_KEY", default=None)
-        get_plugin_config("plugin.kisski.api.url", "KISSKI_API_URL", default="https://chat-ai.academiccloud.de/v1")
+        get_plugin_config("plugin.kisski.api.key", "KISSKI_API_KEY", default=None, description="API key for the KISSKI Academic Cloud service")
+        get_plugin_config("plugin.kisski.api.url", "KISSKI_API_URL", default="https://chat-ai.academiccloud.de/v1", description="Base URL for the KISSKI Academic Cloud API")
 
     @property
     def metadata(self) -> dict[str, Any]:

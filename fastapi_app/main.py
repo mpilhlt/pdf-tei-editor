@@ -89,6 +89,21 @@ async def lifespan(app: FastAPI):
         docs_from_github = config_data.get("docs.from-github", False)
         logger.info(f"Documentation source from config: {'GitHub' if docs_from_github else 'local'}")
 
+    # Merge missing .description keys from default config into live config
+    try:
+        import json as _json
+        default_config_path = settings.project_root_dir / 'config' / 'config.json'
+        if default_config_path.exists():
+            with open(default_config_path, 'r', encoding='utf-8') as _f:
+                default_config_data = _json.load(_f)
+            live_config_data = config.load()
+            for _k, _v in default_config_data.items():
+                if _k.endswith('.description') and _k not in live_config_data:
+                    config.set(_k, _v)
+            logger.info("Merged missing config descriptions from defaults")
+    except Exception as _e:
+        logger.warning(f"Could not merge config descriptions: {_e}")
+
     # Ensure directories exist
     settings.data_root.mkdir(parents=True, exist_ok=True)
     settings.db_dir.mkdir(parents=True, exist_ok=True)

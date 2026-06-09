@@ -20,6 +20,7 @@ import { renderEntityForm, extractFormData, displayFormErrors, clearFormErrors }
 import { createEntityManagers } from '../modules/rbac/entity-manager.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { createValueEditor } from '../modules/config-value-editor.js'
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -61,6 +62,12 @@ class RbacManagerPlugin extends Plugin {
   /** @type {Record<string, any[]>} */
   #optionsData = {}
 
+  /** @type {Record<string, any>} */
+  #collectionConfig = {}
+
+  /** @type {Record<string, any>} */
+  #globalConfigData = {}
+
   /**
    * @param {ApplicationState} _state
    */
@@ -95,6 +102,12 @@ class RbacManagerPlugin extends Plugin {
     const dialog = this.#ui
 
     dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
+
+    dialog.querySelector('[name="addConfigKeyBtn"]').addEventListener('click', () => {
+      if (this.#currentEntityType === 'collection' && this.#selectedEntityId) {
+        this.#addCollectionConfigRow()
+      }
+    })
 
     dialog.querySelector('[name="tabUser"]').addEventListener('click', () => this.#switchTab('user'))
     dialog.querySelector('[name="tabGroup"]').addEventListener('click', () => this.#switchTab('group'))
@@ -138,6 +151,14 @@ class RbacManagerPlugin extends Plugin {
 
     await Promise.all(promises)
 
+    // Load global config for collection config key suggestions
+    try {
+      const configResponse = await this.getDependency('client').apiClient.configList()
+      this.#globalConfigData = configResponse || {}
+    } catch (err) {
+      this.getDependency('logger').warn(`Failed to load global config: ${err}`)
+    }
+
     this.#optionsData = {
       user: this.#entityManagers.user.getAll(),
       group: this.#entityManagers.group.getAll(),
@@ -165,6 +186,9 @@ class RbacManagerPlugin extends Plugin {
         tab.variant = 'default'
       }
     })
+
+    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+    if (section) section.style.display = 'none'
 
     this.#renderEntityList()
     this.#showEmptyState()
@@ -309,6 +333,13 @@ class RbacManagerPlugin extends Plugin {
 
     const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
     formContainer.appendChild(form)
+
+    if (this.#currentEntityType === 'collection' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#loadAndRenderCollectionConfig(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+      if (section) section.style.display = 'none'
+    }
   }
 
   /** Show empty state (no entity selected) */
@@ -342,6 +373,9 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="formTitle"]').textContent = 'Select an item'
     dialog.querySelector('[name="saveBtn"]').disabled = true
     dialog.querySelector('[name="deleteBtn"]').disabled = true
+
+    const section = dialog.querySelector('[name="collectionConfigSection"]')
+    if (section) section.style.display = 'none'
   }
 
   /** Save entity (create or update) */
@@ -429,6 +463,175 @@ class RbacManagerPlugin extends Plugin {
   #handleSearch(event) {
     const searchTerm = /** @type {HTMLInputElement} */(event.target).value
     this.#renderEntityList(searchTerm)
+  }
+
+  /**
+   * Load collection config overrides and render the section.
+   * @param {string} collectionId
+   */
+  async #loadAndRenderCollectionConfig(collectionId) {
+    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+    section.style.display = 'block'
+    try {
+      const response = await this.getDependency('client').apiClient.collectionsGetConfig(collectionId)
+      this.#collectionConfig = response?.config || {}
+    } catch (err) {
+      this.#collectionConfig = {}
+      this.getDependency('logger').warn(`Failed to load collection config: ${err}`)
+    }
+    this.#renderCollectionConfigList(collectionId)
+  }
+
+  /**
+   * Render the list of collection config override rows.
+   * @param {string} collectionId
+   */
+  #renderCollectionConfigList(collectionId) {
+    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+    listEl.innerHTML = ''
+
+    const configKeys = Object.keys(this.#collectionConfig)
+    if (configKeys.length === 0) {
+      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.5rem;">No collection-specific config overrides</div>'
+      return
+    }
+
+    for (const key of configKeys.sort()) {
+      const value = this.#collectionConfig[key]
+      const allowedValues = this.#globalConfigData[`${key}.values`]
+      listEl.appendChild(this.#createCollectionConfigRow(collectionId, key, value, allowedValues))
+    }
+  }
+
+  /**
+   * Create a single config override row element.
+   * @param {string} collectionId
+   * @param {string} key
+   * @param {any} value
+   * @param {any[]} [allowedValues]
+   * @returns {HTMLElement}
+   */
+  #createCollectionConfigRow(collectionId, key, value, allowedValues) {
+    const row = document.createElement('div')
+    row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;'
+    row.dataset.key = key
+
+    const keyLabel = document.createElement('span')
+    keyLabel.style.cssText = 'flex: 0 0 40%; font-family: monospace; font-size: 0.85em; word-break: break-all;'
+    keyLabel.textContent = key
+    row.appendChild(keyLabel)
+
+    const { container: editorContainer } = createValueEditor(key, value, allowedValues, false, async (k, newVal) => {
+      await this.#saveCollectionConfigKey(collectionId, k, newVal)
+    })
+    editorContainer.style.flex = '1'
+    row.appendChild(editorContainer)
+
+    const deleteBtn = document.createElement('sl-icon-button')
+    deleteBtn.setAttribute('name', 'trash')
+    deleteBtn.setAttribute('label', 'Remove override')
+    deleteBtn.addEventListener('click', async () => {
+      await this.#deleteCollectionConfigKey(collectionId, key)
+    })
+    row.appendChild(deleteBtn)
+
+    return row
+  }
+
+  /** Show a row to add a new config key override. */
+  #addCollectionConfigRow() {
+    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+
+    // Don't add a second "add" row if one already exists
+    if (listEl.querySelector('.add-config-row')) return
+
+    const addRow = document.createElement('div')
+    addRow.className = 'add-config-row'
+    addRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;'
+
+    const globalKeys = Object.keys(this.#globalConfigData)
+      .filter(k => !k.endsWith('.type') && !k.endsWith('.values') && !k.endsWith('.description'))
+      .filter(k => !(k in this.#collectionConfig))
+      .sort()
+
+    const keySelect = document.createElement('sl-select')
+    keySelect.setAttribute('size', 'small')
+    keySelect.setAttribute('placeholder', 'Select config key...')
+    keySelect.style.flex = '0 0 40%'
+    globalKeys.forEach(k => {
+      const opt = document.createElement('sl-option')
+      opt.value = k
+      opt.textContent = k
+      keySelect.appendChild(opt)
+    })
+    addRow.appendChild(keySelect)
+
+    const hintSpan = document.createElement('span')
+    hintSpan.style.cssText = 'flex: 1; font-size: 0.8em; color: var(--sl-color-neutral-500);'
+    hintSpan.textContent = 'Select a key first'
+    addRow.appendChild(hintSpan)
+
+    const confirmBtn = document.createElement('sl-button')
+    confirmBtn.setAttribute('size', 'small')
+    confirmBtn.setAttribute('variant', 'primary')
+    confirmBtn.textContent = 'Add'
+    confirmBtn.disabled = true
+    addRow.appendChild(confirmBtn)
+
+    const cancelBtn = document.createElement('sl-icon-button')
+    cancelBtn.setAttribute('name', 'x')
+    cancelBtn.setAttribute('label', 'Cancel')
+    cancelBtn.addEventListener('click', () => addRow.remove())
+    addRow.appendChild(cancelBtn)
+
+    keySelect.addEventListener('sl-change', () => {
+      const selectedKey = String(keySelect.value)
+      confirmBtn.disabled = !selectedKey
+      hintSpan.textContent = selectedKey
+        ? `Global default: ${JSON.stringify(this.#globalConfigData[selectedKey])}`
+        : 'Select a key first'
+    })
+
+    confirmBtn.addEventListener('click', async () => {
+      const selectedKey = String(keySelect.value)
+      if (!selectedKey) return
+      const defaultValue = this.#globalConfigData[selectedKey]
+      await this.#saveCollectionConfigKey(this.#selectedEntityId, selectedKey, defaultValue)
+      addRow.remove()
+    })
+
+    listEl.insertBefore(addRow, listEl.firstChild)
+  }
+
+  /**
+   * Save a collection config key override to the server.
+   * @param {string} collectionId
+   * @param {string} key
+   * @param {any} value
+   */
+  async #saveCollectionConfigKey(collectionId, key, value) {
+    try {
+      await this.getDependency('client').apiClient.collectionsCreateConfig(collectionId, { key, value })
+      this.#collectionConfig[key] = value
+      this.#renderCollectionConfigList(collectionId)
+    } catch (err) {
+      notify(`Failed to save config override: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Delete a collection config key override from the server.
+   * @param {string} collectionId
+   * @param {string} key
+   */
+  async #deleteCollectionConfigKey(collectionId, key) {
+    try {
+      await this.getDependency('client').apiClient.collectionsConfig(collectionId, key)
+      delete this.#collectionConfig[key]
+      this.#renderCollectionConfigList(collectionId)
+    } catch (err) {
+      notify(`Failed to delete config override: ${err}`, 'danger', 'exclamation-octagon')
+    }
   }
 }
 

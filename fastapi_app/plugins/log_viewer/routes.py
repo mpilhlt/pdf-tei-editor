@@ -119,6 +119,7 @@ async def get_recent_logs(
             "PLUGIN_LOG_VIEWER_INITIAL_LINES",
             default=DEFAULT_INITIAL_LINES,
             value_type="number",
+            description="Number of log lines returned by the log viewer on initial load",
         )
 
     settings = get_settings()

@@ -8,8 +8,8 @@ import logging
 from typing import Any, Callable
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.extraction import ExtractorRegistry
+from .config import init_plugin_config
 from .extractor import LLamoreExtractor
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,7 @@ class LLamorePlugin(Plugin):
     """Plugin that provides LLamore-based extraction."""
 
     def __init__(self) -> None:
-        get_plugin_config("plugin.llamore.api.key", "GEMINI_API_KEY", default=None)
-        get_plugin_config("plugin.llamore.model", "LLAMORE_MODEL", default="gemini-2.0-flash")
+        init_plugin_config()
 
     @property
     def metadata(self) -> dict[str, Any]:

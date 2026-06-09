@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
+from .config import init_plugin_config
 
 from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.sse.event_bus import get_event_bus
@@ -24,10 +24,7 @@ class GrobidPlugin(Plugin):
     """Plugin that provides GROBID-based extraction."""
 
     def __init__(self) -> None:
-        get_plugin_config("plugin.grobid.server.url", "GROBID_SERVER_URL", default="")
-        get_plugin_config("plugin.grobid.server.timeout", "GROBID_SERVER_TIMEOUT", default=10)
-        get_plugin_config("plugin.grobid.extraction.timeout", "GROBID_EXTRACTION_TIMEOUT", default=300)
-        get_plugin_config("plugin.grobid.cache.disabled", "GROBID_DISABLE_CACHE", default=False)
+        init_plugin_config()
 
     @property
     def metadata(self) -> dict[str, Any]:
