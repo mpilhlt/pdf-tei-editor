@@ -6,13 +6,13 @@ from fastapi_app.lib.utils.config_utils import get_config
 
 def init_plugin_config() -> None:
     """Initialize plugin configuration keys from environment variables."""
-    get_plugin_config("plugin.webdav-sync.enabled", "WEBDAV_ENABLED", default=False, value_type="boolean")
-    get_plugin_config("plugin.webdav-sync.base-url", "WEBDAV_BASE_URL", default="")
-    get_plugin_config("plugin.webdav-sync.username", "WEBDAV_USERNAME", default="")
-    get_plugin_config("plugin.webdav-sync.password", "WEBDAV_PASSWORD", default="")
-    get_plugin_config("plugin.webdav-sync.remote-root", "WEBDAV_REMOTE_ROOT", default="/pdf-tei-editor")
-    get_plugin_config("plugin.webdav-sync.transfer-workers", "WEBDAV_TRANSFER_WORKERS", default="4")
-    get_plugin_config("plugin.webdav-sync.sync-interval", "WEBDAV_SYNC_INTERVAL", default="300")
+    get_plugin_config("plugin.webdav-sync.enabled", "WEBDAV_ENABLED", default=False, value_type="boolean", description="Enable WebDAV synchronisation of files with a remote server")
+    get_plugin_config("plugin.webdav-sync.base-url", "WEBDAV_BASE_URL", default="", description="Base URL of the WebDAV server (e.g. https://cloud.example.org/remote.php/dav/files/user)")
+    get_plugin_config("plugin.webdav-sync.username", "WEBDAV_USERNAME", default="", description="Username for WebDAV authentication")
+    get_plugin_config("plugin.webdav-sync.password", "WEBDAV_PASSWORD", default="", description="Password for WebDAV authentication")
+    get_plugin_config("plugin.webdav-sync.remote-root", "WEBDAV_REMOTE_ROOT", default="/pdf-tei-editor", description="Remote WebDAV directory used as the sync root")
+    get_plugin_config("plugin.webdav-sync.transfer-workers", "WEBDAV_TRANSFER_WORKERS", default="4", description="Number of parallel workers for WebDAV file transfers")
+    get_plugin_config("plugin.webdav-sync.sync-interval", "WEBDAV_SYNC_INTERVAL", default="300", description="Interval in seconds between automatic WebDAV sync cycles (0 = disabled)")
 
 
 def get_webdav_config() -> dict[str, str]:

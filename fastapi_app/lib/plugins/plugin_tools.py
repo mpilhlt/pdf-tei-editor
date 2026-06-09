@@ -16,7 +16,9 @@ def get_plugin_config(
     config_key: str,
     env_var: str,
     default: Any = None,
-    value_type: str = "string"
+    value_type: str = "string",
+    allowed_values: list[Any] | None = None,
+    description: str | None = None,
 ) -> Any:
     """
     Get plugin configuration value with env var fallback.
@@ -29,6 +31,8 @@ def get_plugin_config(
         env_var: Environment variable name
         default: Default value if neither source has value
         value_type: Type for validation ("string", "boolean", "number", "array")
+        allowed_values: Optional list of allowed values stored as key.values metadata
+        description: Optional human-readable description stored as key.description metadata
 
     Returns:
         Configuration value
@@ -38,7 +42,8 @@ def get_plugin_config(
         ...     "plugin.local-sync.enabled",
         ...     "PLUGIN_LOCAL_SYNC_ENABLED",
         ...     default=False,
-        ...     value_type="boolean"
+        ...     value_type="boolean",
+        ...     description="Enable the local sync plugin",
         ... )
     """
     from fastapi_app.lib.utils.config_utils import get_config
@@ -65,13 +70,12 @@ def get_plugin_config(
             else:
                 value = env_value
 
-            # Create config key from env var
-            config.set(config_key, value)
+            config.set(config_key, value, allowed_values=allowed_values, description=description)
         else:
             # Use default
             value = default
             if value is not None:
-                config.set(config_key, value)
+                config.set(config_key, value, allowed_values=allowed_values, description=description)
 
     return value
 

@@ -24,10 +24,10 @@ class GrobidPlugin(Plugin):
     """Plugin that provides GROBID-based extraction."""
 
     def __init__(self) -> None:
-        get_plugin_config("plugin.grobid.server.url", "GROBID_SERVER_URL", default="")
-        get_plugin_config("plugin.grobid.server.timeout", "GROBID_SERVER_TIMEOUT", default=10)
-        get_plugin_config("plugin.grobid.extraction.timeout", "GROBID_EXTRACTION_TIMEOUT", default=300)
-        get_plugin_config("plugin.grobid.cache.disabled", "GROBID_DISABLE_CACHE", default=False)
+        get_plugin_config("plugin.grobid.server.url", "GROBID_SERVER_URL", default="", description="URL of the GROBID server (e.g. http://localhost:8070)")
+        get_plugin_config("plugin.grobid.server.timeout", "GROBID_SERVER_TIMEOUT", default=10, value_type="number", description="Timeout in seconds for GROBID server health-check requests")
+        get_plugin_config("plugin.grobid.extraction.timeout", "GROBID_EXTRACTION_TIMEOUT", default=300, value_type="number", description="Timeout in seconds for GROBID extraction requests")
+        get_plugin_config("plugin.grobid.cache.disabled", "GROBID_DISABLE_CACHE", default=False, value_type="boolean", description="Disable GROBID extraction cache; when true every upload triggers a fresh extraction")
 
     @property
     def metadata(self) -> dict[str, Any]:

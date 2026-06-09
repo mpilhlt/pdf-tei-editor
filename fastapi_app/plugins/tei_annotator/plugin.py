@@ -23,10 +23,10 @@ class TeiAnnotatorPlugin(Plugin):
 
     def __init__(self) -> None:
         # Config keys must be initialised in __init__ per project convention.
-        get_plugin_config("tei-annotator.server.url",     "TEI_ANNOTATOR_SERVER_URL", default=None)
-        get_plugin_config("tei-annotator.server.api-key", "TEI_ANNOTATOR_API_KEY",    default=None)
-        get_plugin_config("tei-annotator.provider",       "TEI_ANNOTATOR_PROVIDER",   default=None)
-        get_plugin_config("tei-annotator.model",          "TEI_ANNOTATOR_MODEL",      default=None)
+        get_plugin_config("tei-annotator.server.url",     "TEI_ANNOTATOR_SERVER_URL", default=None, description="URL of the TEI Annotator webservice")
+        get_plugin_config("tei-annotator.server.api-key", "TEI_ANNOTATOR_API_KEY",   default=None, description="API key for authenticating with the TEI Annotator webservice")
+        get_plugin_config("tei-annotator.provider",       "TEI_ANNOTATOR_PROVIDER",  default=None, description="LLM provider used by the TEI Annotator (e.g. openai, anthropic)")
+        get_plugin_config("tei-annotator.model",          "TEI_ANNOTATOR_MODEL",     default=None, description="LLM model identifier used by the TEI Annotator for annotation")
 
     @property
     def metadata(self) -> dict[str, Any]:

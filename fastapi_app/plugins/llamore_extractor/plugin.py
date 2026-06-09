@@ -19,8 +19,8 @@ class LLamorePlugin(Plugin):
     """Plugin that provides LLamore-based extraction."""
 
     def __init__(self) -> None:
-        get_plugin_config("plugin.llamore.api.key", "GEMINI_API_KEY", default=None)
-        get_plugin_config("plugin.llamore.model", "LLAMORE_MODEL", default="gemini-2.0-flash")
+        get_plugin_config("plugin.llamore.api.key", "GEMINI_API_KEY", default=None, description="Gemini API key for LLamore extraction")
+        get_plugin_config("plugin.llamore.model", "LLAMORE_MODEL", default="gemini-2.0-flash", description="Gemini model identifier used by LLamore for reference extraction")
 
     @property
     def metadata(self) -> dict[str, Any]:
