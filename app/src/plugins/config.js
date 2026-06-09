@@ -60,18 +60,18 @@ class ConfigPlugin extends Plugin {
   }
 
   /**
-   * Called when the active collection filter changes.
-   * Reloads configuration with collection-specific overrides applied.
-   * @param {string|null} newCollection
+   * Called when the active project changes.
+   * Reloads configuration with project-specific overrides applied.
+   * @param {string|null} newProject
    * @returns {Promise<void>}
    */
-  async onCollectionFilterChange(newCollection) {
-    this.getDependency('logger').debug(`Reloading config for collection: ${newCollection}`);
+  async onProjectChange(newProject) {
+    this.getDependency('logger').debug(`Reloading config for project: ${newProject}`);
     try {
-      const response = await this.getDependency('client').getConfigData(newCollection || null);
+      const response = await this.getDependency('client').getConfigData(newProject || null);
       this._configMap = response || {};
     } catch (error) {
-      this.getDependency('logger').error('Failed to reload config for collection:', String(error));
+      this.getDependency('logger').error('Failed to reload config for project:', String(error));
     }
   }
 

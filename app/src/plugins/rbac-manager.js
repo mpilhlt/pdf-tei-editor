@@ -21,6 +21,8 @@ import { createEntityManagers } from '../modules/rbac/entity-manager.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { createValueEditor } from '../modules/config-value-editor.js'
+import { createMemberPicker } from '../modules/rbac/member-picker.js'
+import '../modules/filtered-combobox.js'
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -104,12 +106,13 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="closeBtn"]').addEventListener('click', () => dialog.hide())
 
     dialog.querySelector('[name="addConfigKeyBtn"]').addEventListener('click', () => {
-      if (this.#currentEntityType === 'collection' && this.#selectedEntityId) {
+      if (this.#currentEntityType === 'project' && this.#selectedEntityId) {
         this.#addCollectionConfigRow()
       }
     })
 
     dialog.querySelector('[name="tabUser"]').addEventListener('click', () => this.#switchTab('user'))
+    dialog.querySelector('[name="tabProject"]').addEventListener('click', () => this.#switchTab('project'))
     dialog.querySelector('[name="tabGroup"]').addEventListener('click', () => this.#switchTab('group'))
     dialog.querySelector('[name="tabRole"]').addEventListener('click', () => this.#switchTab('role'))
     dialog.querySelector('[name="tabCollection"]').addEventListener('click', () => this.#switchTab('collection'))
@@ -151,7 +154,7 @@ class RbacManagerPlugin extends Plugin {
 
     await Promise.all(promises)
 
-    // Load global config for collection config key suggestions
+    // Load global config for project config key suggestions
     try {
       const configResponse = await this.getDependency('client').apiClient.configList()
       this.#globalConfigData = configResponse || {}
@@ -160,6 +163,7 @@ class RbacManagerPlugin extends Plugin {
     }
 
     this.#optionsData = {
+      project: this.#entityManagers.project.getAll(),
       user: this.#entityManagers.user.getAll(),
       group: this.#entityManagers.group.getAll(),
       role: this.#entityManagers.role.getAll(),
@@ -187,8 +191,23 @@ class RbacManagerPlugin extends Plugin {
       }
     })
 
-    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
-    if (section) section.style.display = 'none'
+    const configSection = this.#ui.querySelector('[name="entityConfigSection"]')
+    if (configSection) configSection.style.display = 'none'
+
+    const membersSection = this.#ui.querySelector('[name="groupMembersSection"]')
+    if (membersSection) membersSection.style.display = 'none'
+
+    const projectMembersSection = this.#ui.querySelector('[name="projectMembersSection"]')
+    if (projectMembersSection) projectMembersSection.style.display = 'none'
+
+    const projectCollectionsSection = this.#ui.querySelector('[name="projectCollectionsSection"]')
+    if (projectCollectionsSection) projectCollectionsSection.style.display = 'none'
+
+    const userGroupsSection = this.#ui.querySelector('[name="userGroupsSection"]')
+    if (userGroupsSection) userGroupsSection.style.display = 'none'
+
+    const userProjectsSection = this.#ui.querySelector('[name="userProjectsSection"]')
+    if (userProjectsSection) userProjectsSection.style.display = 'none'
 
     this.#renderEntityList()
     this.#showEmptyState()
@@ -332,12 +351,48 @@ class RbacManagerPlugin extends Plugin {
     }
 
     const form = renderEntityForm(this.#currentEntityType, entityData, this.#optionsData, this.#isNewEntity)
-    formContainer.appendChild(form)
+    const firstSection = formContainer.querySelector('[name="entityConfigSection"], [name="groupMembersSection"], [name="projectMembersSection"], [name="userGroupsSection"]')
+    formContainer.insertBefore(form, firstSection)
 
-    if (this.#currentEntityType === 'collection' && !this.#isNewEntity && this.#selectedEntityId) {
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
       this.#loadAndRenderCollectionConfig(this.#selectedEntityId)
     } else {
-      const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+      const section = this.#ui.querySelector('[name="entityConfigSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'group' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderGroupMembersWidget(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="groupMembersSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderProjectMembersSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="projectMembersSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'project' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderProjectCollectionsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="projectCollectionsSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'user' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderUserGroupsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="userGroupsSection"]')
+      if (section) section.style.display = 'none'
+    }
+
+    if (this.#currentEntityType === 'user' && !this.#isNewEntity && this.#selectedEntityId) {
+      this.#renderUserProjectsSection(this.#selectedEntityId)
+    } else {
+      const section = this.#ui.querySelector('[name="userProjectsSection"]')
       if (section) section.style.display = 'none'
     }
   }
@@ -374,8 +429,23 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="saveBtn"]').disabled = true
     dialog.querySelector('[name="deleteBtn"]').disabled = true
 
-    const section = dialog.querySelector('[name="collectionConfigSection"]')
-    if (section) section.style.display = 'none'
+    const configSection = dialog.querySelector('[name="entityConfigSection"]')
+    if (configSection) configSection.style.display = 'none'
+
+    const membersSection = dialog.querySelector('[name="groupMembersSection"]')
+    if (membersSection) membersSection.style.display = 'none'
+
+    const projectMembersSection = dialog.querySelector('[name="projectMembersSection"]')
+    if (projectMembersSection) projectMembersSection.style.display = 'none'
+
+    const projectCollectionsSection = dialog.querySelector('[name="projectCollectionsSection"]')
+    if (projectCollectionsSection) projectCollectionsSection.style.display = 'none'
+
+    const userGroupsSection = dialog.querySelector('[name="userGroupsSection"]')
+    if (userGroupsSection) userGroupsSection.style.display = 'none'
+
+    const userProjectsSection = dialog.querySelector('[name="userProjectsSection"]')
+    if (userProjectsSection) userProjectsSection.style.display = 'none'
   }
 
   /** Save entity (create or update) */
@@ -466,20 +536,21 @@ class RbacManagerPlugin extends Plugin {
   }
 
   /**
-   * Load collection config overrides and render the section.
-   * @param {string} collectionId
+   * Load entity config overrides and render the section.
+   * @param {string} entityId
    */
-  async #loadAndRenderCollectionConfig(collectionId) {
-    const section = this.#ui.querySelector('[name="collectionConfigSection"]')
+  async #loadAndRenderCollectionConfig(entityId) {
+    const section = this.#ui.querySelector('[name="entityConfigSection"]')
     section.style.display = 'block'
     try {
-      const response = await this.getDependency('client').apiClient.collectionsGetConfig(collectionId)
+      const apiClient = this.getDependency('client').apiClient
+      const response = await apiClient.projectsGetConfig(entityId)
       this.#collectionConfig = response?.config || {}
     } catch (err) {
       this.#collectionConfig = {}
-      this.getDependency('logger').warn(`Failed to load collection config: ${err}`)
+      this.getDependency('logger').warn(`Failed to load ${this.#currentEntityType} config: ${err}`)
     }
-    this.#renderCollectionConfigList(collectionId)
+    this.#renderCollectionConfigList(entityId)
   }
 
   /**
@@ -487,12 +558,12 @@ class RbacManagerPlugin extends Plugin {
    * @param {string} collectionId
    */
   #renderCollectionConfigList(collectionId) {
-    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+    const listEl = this.#ui.querySelector('[name="entityConfigList"]')
     listEl.innerHTML = ''
 
     const configKeys = Object.keys(this.#collectionConfig)
     if (configKeys.length === 0) {
-      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.5rem;">No collection-specific config overrides</div>'
+      listEl.innerHTML = '<div style="color: var(--sl-color-neutral-500); font-size: 0.85em; padding: 0.5rem;">No config overrides</div>'
       return
     }
 
@@ -540,7 +611,7 @@ class RbacManagerPlugin extends Plugin {
 
   /** Show a row to add a new config key override. */
   #addCollectionConfigRow() {
-    const listEl = this.#ui.querySelector('[name="collectionConfigList"]')
+    const listEl = this.#ui.querySelector('[name="entityConfigList"]')
 
     // Don't add a second "add" row if one already exists
     if (listEl.querySelector('.add-config-row')) return
@@ -554,21 +625,16 @@ class RbacManagerPlugin extends Plugin {
       .filter(k => !(k in this.#collectionConfig))
       .sort()
 
-    const keySelect = document.createElement('sl-select')
-    keySelect.setAttribute('size', 'small')
-    keySelect.setAttribute('placeholder', 'Select config key...')
-    keySelect.style.flex = '0 0 40%'
-    globalKeys.forEach(k => {
-      const opt = document.createElement('sl-option')
-      opt.value = k
-      opt.textContent = k
-      keySelect.appendChild(opt)
-    })
-    addRow.appendChild(keySelect)
+    const combobox = document.createElement('filtered-combobox')
+    combobox.setAttribute('size', 'small')
+    combobox.setAttribute('placeholder', 'Search config key...')
+    combobox.style.flex = '0 0 40%'
+    combobox.setOptions(globalKeys.map(k => ({ value: k, label: k })))
+    addRow.appendChild(combobox)
 
     const hintSpan = document.createElement('span')
     hintSpan.style.cssText = 'flex: 1; font-size: 0.8em; color: var(--sl-color-neutral-500);'
-    hintSpan.textContent = 'Select a key first'
+    hintSpan.textContent = 'Search and select a key'
     addRow.appendChild(hintSpan)
 
     const confirmBtn = document.createElement('sl-button')
@@ -584,51 +650,421 @@ class RbacManagerPlugin extends Plugin {
     cancelBtn.addEventListener('click', () => addRow.remove())
     addRow.appendChild(cancelBtn)
 
-    keySelect.addEventListener('sl-change', () => {
-      const selectedKey = String(keySelect.value)
+    combobox.addEventListener('sl-change', (e) => {
+      const selectedKey = e.detail?.value || ''
       confirmBtn.disabled = !selectedKey
       hintSpan.textContent = selectedKey
         ? `Global default: ${JSON.stringify(this.#globalConfigData[selectedKey])}`
-        : 'Select a key first'
+        : 'Search and select a key'
     })
 
     confirmBtn.addEventListener('click', async () => {
-      const selectedKey = String(keySelect.value)
+      const selectedKey = combobox.value
       if (!selectedKey) return
       const defaultValue = this.#globalConfigData[selectedKey]
-      await this.#saveCollectionConfigKey(this.#selectedEntityId, selectedKey, defaultValue)
+      combobox.clear()
       addRow.remove()
+      await this.#saveCollectionConfigKey(this.#selectedEntityId, selectedKey, defaultValue)
     })
 
     listEl.insertBefore(addRow, listEl.firstChild)
   }
 
   /**
-   * Save a collection config key override to the server.
-   * @param {string} collectionId
+   * Save a config key override to the server.
+   * @param {string} entityId
    * @param {string} key
    * @param {any} value
    */
-  async #saveCollectionConfigKey(collectionId, key, value) {
+  async #saveCollectionConfigKey(entityId, key, value) {
     try {
-      await this.getDependency('client').apiClient.collectionsCreateConfig(collectionId, { key, value })
+      const apiClient = this.getDependency('client').apiClient
+      await apiClient.projectsCreateConfig(entityId, { key, value })
       this.#collectionConfig[key] = value
-      this.#renderCollectionConfigList(collectionId)
+      this.#renderCollectionConfigList(entityId)
     } catch (err) {
       notify(`Failed to save config override: ${err}`, 'danger', 'exclamation-octagon')
     }
   }
 
   /**
-   * Delete a collection config key override from the server.
+   * Render the group members section as an interactive member picker widget.
+   * @param {string} groupId
+   */
+  #renderGroupMembersWidget(groupId) {
+    const section = this.#ui.querySelector('[name="groupMembersSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="groupMembersList"]')
+    listEl.innerHTML = ''
+
+    const allUsers = this.#entityManagers.user.getAll()
+    const members = allUsers.filter(u => (u.groups || []).includes(groupId))
+    const nonMembers = allUsers.filter(u => !(u.groups || []).includes(groupId))
+
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [
+        { key: 'username', label: 'Username', monospace: true },
+        { key: 'fullname', label: 'Full Name' }
+      ],
+      items: members,
+      availableOptions: nonMembers.map(u => ({
+        value: u.username,
+        primaryLabel: u.username,
+        secondaryLabel: u.fullname || ''
+      })),
+      onAdd: async (username) => {
+        await this.#addUserToGroup(username, groupId)
+      },
+      onRemove: async (item) => {
+        await this.#removeUserFromGroup(item.username, groupId)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Render the project members section as an interactive member picker widget.
+   * Selecting a group option expands it — all users in that group are added individually.
+   * @param {string} projectId
+   */
+  #renderProjectMembersSection(projectId) {
+    const section = this.#ui.querySelector('[name="projectMembersSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="projectMembersList"]')
+    listEl.innerHTML = ''
+
+    const project = this.#entityManagers.project.findById(projectId)
+    const currentMemberIds = project?.members || []
+
+    const memberObjects = currentMemberIds
+      .map(username => this.#entityManagers.user.findById(username))
+      .filter(Boolean)
+
+    const nonMembers = this.#entityManagers.user.getAll()
+      .filter(u => !currentMemberIds.includes(u.username))
+
+    const groups = this.#entityManagers.group.getAll()
+
+    const availableOptions = [
+      ...nonMembers.map(u => ({
+        value: u.username,
+        primaryLabel: u.username,
+        secondaryLabel: u.fullname || '',
+        optionGroup: 'Users'
+      })),
+      ...groups.map(g => ({
+        value: g.id,
+        primaryLabel: g.id,
+        secondaryLabel: g.name || '',
+        optionGroup: 'Groups'
+      }))
+    ]
+
+    const picker = createMemberPicker({
+      label: 'Members',
+      columns: [
+        { key: 'username', label: 'Username', monospace: true },
+        { key: 'fullname', label: 'Full Name' }
+      ],
+      items: memberObjects,
+      availableOptions,
+      onAdd: async (value) => {
+        await this.#addProjectMember(projectId, value)
+      },
+      onRemove: async (item) => {
+        await this.#removeProjectMember(projectId, item.username)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Add a user (or all users in a group) to a project's members array.
+   * If value is a group id, all users in that group are added individually.
+   * @param {string} projectId
+   * @param {string} value - A username or group ID
+   */
+  async #addProjectMember(projectId, value) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+
+    const currentMembers = [...(project.members || [])]
+    let updatedMembers
+
+    if (this.#entityManagers.group.findById(value)) {
+      const usersInGroup = this.#entityManagers.user.getAll()
+        .filter(u => (u.groups || []).includes(value))
+      const newUsernames = usersInGroup
+        .map(u => u.username)
+        .filter(username => !currentMembers.includes(username))
+      updatedMembers = [...currentMembers, ...newUsernames]
+    } else {
+      updatedMembers = [...currentMembers, value]
+    }
+
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, members: updatedMembers })
+      this.#renderProjectMembersSection(projectId)
+    } catch (err) {
+      notify(`Failed to add project member: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Remove a user from a project's members array.
+   * @param {string} projectId
+   * @param {string} username
+   */
+  async #removeProjectMember(projectId, username) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+
+    const updatedMembers = (project.members || []).filter(m => m !== username)
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, members: updatedMembers })
+      this.#renderProjectMembersSection(projectId)
+    } catch (err) {
+      notify(`Failed to remove project member: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Render the project collections section as an interactive member picker widget.
+   * @param {string} projectId
+   */
+  #renderProjectCollectionsSection(projectId) {
+    const section = this.#ui.querySelector('[name="projectCollectionsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="projectCollectionsList"]')
+    listEl.innerHTML = ''
+
+    const project = this.#entityManagers.project.findById(projectId)
+    const currentCollectionIds = project?.collections || []
+
+    const collectionObjects = currentCollectionIds
+      .map(id => this.#entityManagers.collection.findById(id))
+      .filter(Boolean)
+
+    const nonMemberCollections = this.#entityManagers.collection.getAll()
+      .filter(c => !currentCollectionIds.includes(c.id))
+
+    const picker = createMemberPicker({
+      label: 'Collections',
+      columns: [
+        { key: 'id', label: 'Collection ID', monospace: true },
+        { key: 'name', label: 'Name' }
+      ],
+      items: collectionObjects,
+      availableOptions: nonMemberCollections.map(c => ({
+        value: c.id,
+        primaryLabel: c.id,
+        secondaryLabel: c.name || ''
+      })),
+      onAdd: async (collectionId) => {
+        await this.#addProjectCollection(projectId, collectionId)
+      },
+      onRemove: async (item) => {
+        await this.#removeProjectCollection(projectId, item.id)
+      }
+    })
+
+    listEl.appendChild(picker.element)
+  }
+
+  /**
+   * Add a collection to a project's collections array.
+   * @param {string} projectId
    * @param {string} collectionId
+   */
+  async #addProjectCollection(projectId, collectionId) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+    const updatedCollections = [...(project.collections || []), collectionId]
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, collections: updatedCollections })
+      this.#renderProjectCollectionsSection(projectId)
+    } catch (err) {
+      notify(`Failed to add collection to project: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Remove a collection from a project's collections array.
+   * @param {string} projectId
+   * @param {string} collectionId
+   */
+  async #removeProjectCollection(projectId, collectionId) {
+    const project = this.#entityManagers.project.findById(projectId)
+    if (!project) return
+    const updatedCollections = (project.collections || []).filter(c => c !== collectionId)
+    try {
+      await this.#entityManagers.project.update(projectId, { ...project, collections: updatedCollections })
+      this.#renderProjectCollectionsSection(projectId)
+    } catch (err) {
+      notify(`Failed to remove collection from project: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Render a read-only table of groups the selected user belongs to.
+   * @param {string} username
+   */
+  #renderUserGroupsSection(username) {
+    const section = this.#ui.querySelector('[name="userGroupsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="userGroupsList"]')
+    listEl.innerHTML = ''
+
+    const user = this.#entityManagers.user.findById(username)
+    const userGroups = (user?.groups || [])
+      .map(groupId => this.#entityManagers.group.findById(groupId))
+      .filter(Boolean)
+
+    if (userGroups.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;'
+      empty.textContent = 'No groups assigned'
+      listEl.appendChild(empty)
+      return
+    }
+
+    const table = document.createElement('table')
+    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
+    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Group ID</th>
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Name</th>
+    </tr></thead>`
+    const tbody = document.createElement('tbody')
+
+    for (const group of userGroups) {
+      const tr = document.createElement('tr')
+      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
+
+      const tdId = document.createElement('td')
+      tdId.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
+      tdId.textContent = group.id
+
+      const tdName = document.createElement('td')
+      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
+      tdName.textContent = group.name || ''
+
+      tr.appendChild(tdId)
+      tr.appendChild(tdName)
+      tbody.appendChild(tr)
+    }
+
+    table.appendChild(tbody)
+    listEl.appendChild(table)
+  }
+
+  /**
+   * Render a read-only table of projects the selected user is a member of.
+   * @param {string} username
+   */
+  #renderUserProjectsSection(username) {
+    const section = this.#ui.querySelector('[name="userProjectsSection"]')
+    if (!section) return
+    section.style.display = 'block'
+
+    const listEl = this.#ui.querySelector('[name="userProjectsList"]')
+    listEl.innerHTML = ''
+
+    const userProjects = this.#entityManagers.project.getAll()
+      .filter(p => (p.members || []).includes(username))
+
+    if (userProjects.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color: var(--sl-color-neutral-500); font-size: 0.8em; padding: 0.2rem 0;'
+      empty.textContent = 'No projects assigned'
+      listEl.appendChild(empty)
+      return
+    }
+
+    const table = document.createElement('table')
+    table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82em;'
+    table.innerHTML = `<thead><tr style="border-bottom: 1px solid var(--sl-color-neutral-200);">
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Project ID</th>
+      <th style="text-align:left; padding: 0.2rem 0.4rem; color: var(--sl-color-neutral-600); font-weight: 600;">Name</th>
+    </tr></thead>`
+    const tbody = document.createElement('tbody')
+
+    for (const project of userProjects) {
+      const tr = document.createElement('tr')
+      tr.style.cssText = 'border-bottom: 1px solid var(--sl-color-neutral-100);'
+
+      const tdId = document.createElement('td')
+      tdId.style.cssText = 'padding: 0.2rem 0.4rem; font-family: monospace;'
+      tdId.textContent = project.id
+
+      const tdName = document.createElement('td')
+      tdName.style.cssText = 'padding: 0.2rem 0.4rem;'
+      tdName.textContent = project.name || ''
+
+      tr.appendChild(tdId)
+      tr.appendChild(tdName)
+      tbody.appendChild(tr)
+    }
+
+    table.appendChild(tbody)
+    listEl.appendChild(table)
+  }
+
+  /**
+   * Add a user to a group by appending groupId to the user's groups[] on the server.
+   * @param {string} username
+   * @param {string} groupId
+   */
+  async #addUserToGroup(username, groupId) {
+    const user = this.#entityManagers.user.findById(username)
+    if (!user) return
+    const updatedGroups = [...(user.groups || []), groupId]
+    try {
+      await this.#entityManagers.user.update(username, { ...user, groups: updatedGroups })
+      this.#renderGroupMembersWidget(groupId)
+    } catch (err) {
+      notify(`Failed to add user to group: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Remove a user from a group by updating the user's groups[] on the server.
+   * @param {string} username
+   * @param {string} groupId
+   */
+  async #removeUserFromGroup(username, groupId) {
+    const user = this.#entityManagers.user.findById(username)
+    if (!user) return
+    const updatedGroups = (user.groups || []).filter(g => g !== groupId)
+    try {
+      await this.#entityManagers.user.update(username, { ...user, groups: updatedGroups })
+      this.#renderGroupMembersWidget(groupId)
+    } catch (err) {
+      notify(`Failed to remove user from group: ${err}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Delete a config key override from the server.
+   * @param {string} entityId
    * @param {string} key
    */
-  async #deleteCollectionConfigKey(collectionId, key) {
+  async #deleteCollectionConfigKey(entityId, key) {
     try {
-      await this.getDependency('client').apiClient.collectionsConfig(collectionId, key)
+      const apiClient = this.getDependency('client').apiClient
+      await apiClient.projectsConfig(entityId, key)
       delete this.#collectionConfig[key]
-      this.#renderCollectionConfigList(collectionId)
+      this.#renderCollectionConfigList(entityId)
     } catch (err) {
       notify(`Failed to delete config override: ${err}`, 'danger', 'exclamation-octagon')
     }

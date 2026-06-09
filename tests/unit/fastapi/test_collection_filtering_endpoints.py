@@ -23,6 +23,8 @@ from fastapi_app.main import app
 from fastapi_app.lib.permissions.user_utils import add_user
 from fastapi_app.lib.permissions.group_utils import add_group, add_collection_to_group
 from fastapi_app.lib.utils.collection_utils import add_collection
+from fastapi_app.lib.utils.data_utils import save_entity_data
+from fastapi_app.lib.utils.project_utils import create_project
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.models.models import FileMetadata
@@ -54,13 +56,19 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         add_user(self.db_dir, 'user1', 'password123', 'User One', 'user1@example.com')
         add_user(self.db_dir, 'admin', 'admin123', 'Admin User', 'admin@example.com')
 
-        # Add user to group1
+        # Add user to group1 (kept for compatibility)
         from fastapi_app.lib.permissions.user_utils import add_group_to_user
         add_group_to_user(self.db_dir, 'user1', 'group1')
 
         # Make admin an admin
         from fastapi_app.lib.permissions.user_utils import add_role_to_user
         add_role_to_user(self.db_dir, 'admin', 'admin')
+
+        # Create projects mirroring the group structure for project-based access control
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('project1', 'Project 1', '', ['user1'], ['col1', 'col2']),
+            create_project('project2', 'Project 2', '', [], ['col3']),
+        ])
 
         # Setup database and repository
         self.db = DatabaseManager(self.test_dir / 'test.db')
@@ -174,9 +182,9 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         self.assertEqual(data['files'][0]['doc_id'], 'doc3')
 
     def test_files_list_admin_with_wildcard_group_sees_all_collections(self):
-        """Test that users with wildcard group access see all collections."""
+        """Test that users with wildcard role access see all collections."""
         self._add_test_file('doc1', ['col1', 'col2', 'col3'])
-        admin = self._create_mock_user('admin', ['admin', 'user'], ['*'])
+        admin = self._create_mock_user('admin', ['*'], [])
 
         response = self._call_with_user(admin, '/api/v1/files/list')
 
@@ -199,8 +207,8 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         self.assertNotIn('col3', collection_ids)
 
     def test_collections_list_wildcard_group_sees_all(self):
-        """Test that users with wildcard group access see all collections."""
-        admin = self._create_mock_user('admin', ['admin', 'user'], ['*'])
+        """Test that users with wildcard role access see all collections."""
+        admin = self._create_mock_user('admin', ['*'], [])
 
         response = self._call_with_user(admin, '/api/v1/collections')
 

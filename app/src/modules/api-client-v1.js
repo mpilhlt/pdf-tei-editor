@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-09T08:03:35.851Z
+ * Generated from OpenAPI schema at 2026-06-09T12:23:26.136Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -17,13 +17,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnnotateRequest
- * @property {string} stable_id
- * @property {string} xpath
- * @property {string} annotator_id
  */
 
 /**
@@ -202,6 +195,15 @@
  * @property {string} name - Group display name
  * @property {string=} description - Group description
  * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} CreateProjectRequest
+ * @property {string} id
+ * @property {string} name
+ * @property {string=} description
+ * @property {Array<string>=} members
+ * @property {Array<string>=} collections
  */
 
 /**
@@ -425,6 +427,33 @@
  */
 
 /**
+ * @typedef {Object} Project
+ * @property {string} id - Unique project identifier
+ * @property {string} name - Project display name
+ * @property {string=} description - Project description
+ * @property {Array<string>=} members - List of member usernames
+ * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} ProjectConfigItem
+ * @property {string} key
+ * @property {any} value
+ */
+
+/**
+ * @typedef {Object} ProjectConfigResponse
+ * @property {string} project_id
+ * @property {Object<string, any>} config
+ */
+
+/**
+ * @typedef {Object} ProjectConfigSetRequest
+ * @property {string} key
+ * @property {any} value
+ */
+
+/**
  * @typedef {Object} ReleaseLockRequest
  * @property {string} file_id
  */
@@ -560,6 +589,14 @@
  * @property {string=} fullname - User's full name
  * @property {string=} email - User's email address
  * @property {string=} password - New password (will be hashed server-side)
+ */
+
+/**
+ * @typedef {Object} UpdateProjectRequest
+ * @property {string=} name
+ * @property {string=} description
+ * @property {Array<string>=} members
+ * @property {Array<string>=} collections
  */
 
 /**
@@ -709,11 +746,11 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all configuration values, optionally merged with collection-specific overrides.
-   * If collection is provided, collection-level config keys override global defaults.
+   * List all configuration values, optionally merged with project-specific overrides.
+   * If project is provided, project-level config keys override global defaults.
    *
    * @param {Object=} params - Query parameters
-   * @param {(string | null)=} params.collection
+   * @param {(string | null)=} params.project
    * @returns {Promise<Object<string, any>>}
    */
   async configList(params) {
@@ -1023,6 +1060,96 @@ export class ApiClientV1 {
   async usersMeProfile(requestBody) {
     const endpoint = `/users/me/profile`
     return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * List projects. Admin sees all; regular users see only projects they are members of.
+   *
+   * @returns {Promise<Array<Project>>}
+   */
+  async listProjects() {
+    const endpoint = `/projects`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create Project Endpoint
+   *
+   * @param {CreateProjectRequest} requestBody
+   * @returns {Promise<void>}
+   */
+  async createProjects(requestBody) {
+    const endpoint = `/projects`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get project. Returns 404 if not found or if non-admin user is not a member.
+   *
+   * @param {string} project_id
+   * @returns {Promise<Project>}
+   */
+  async getProjects(project_id) {
+    const endpoint = `/projects/${project_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update Project Endpoint
+   *
+   * @param {string} project_id
+   * @param {UpdateProjectRequest} requestBody
+   * @returns {Promise<Project>}
+   */
+  async updateProjects(project_id, requestBody) {
+    const endpoint = `/projects/${project_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete Project Endpoint
+   *
+   * @param {string} project_id
+   * @returns {Promise<any>}
+   */
+  async deleteProjects(project_id) {
+    const endpoint = `/projects/${project_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Get Project Config
+   *
+   * @param {string} project_id
+   * @returns {Promise<ProjectConfigResponse>}
+   */
+  async projectsGetConfig(project_id) {
+    const endpoint = `/projects/${project_id}/config`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Set Project Config
+   *
+   * @param {string} project_id
+   * @param {ProjectConfigSetRequest} requestBody
+   * @returns {Promise<ProjectConfigItem>}
+   */
+  async projectsCreateConfig(project_id, requestBody) {
+    const endpoint = `/projects/${project_id}/config`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete Project Config
+   *
+   * @param {string} project_id
+   * @param {string} key
+   * @returns {Promise<any>}
+   */
+  async projectsConfig(project_id, key) {
+    const endpoint = `/projects/${project_id}/config/${key}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**
@@ -1651,7 +1778,7 @@ export class ApiClientV1 {
    * Get current access control mode and defaults.
    *
    * @param {Object=} params - Query parameters
-   * @param {(string | null)=} params.collection
+   * @param {(string | null)=} params.project
    * @returns {Promise<AccessControlModeResponse>}
    */
   async filesAccessControlMode(params) {

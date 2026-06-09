@@ -99,21 +99,21 @@ def has_internet() -> bool:
 # API Endpoints
 
 @router.get("/list", response_model=dict)
-async def list_config(collection: Optional[str] = None) -> dict:
+async def list_config(project: Optional[str] = None) -> dict:
     """
-    List all configuration values, optionally merged with collection-specific overrides.
+    List all configuration values, optionally merged with project-specific overrides.
 
-    If collection is provided, collection-level config keys override global defaults.
+    If project is provided, project-level config keys override global defaults.
     """
     config_data = config.load()
-    if collection:
+    if project:
         try:
-            from ..lib.utils.collection_utils import collection_config_get_all
-            overrides = collection_config_get_all(get_settings().db_dir, collection)
+            from ..lib.utils.project_utils import project_config_get_all
+            overrides = project_config_get_all(get_settings().db_dir, project)
             if overrides:
                 config_data = {**config_data, **overrides}
-        except ImportError:
-            logger.warning("collection_config_get_all not yet available; ignoring collection param")
+        except Exception:
+            logger.warning("project_config_get_all failed; ignoring project param")
     return config_data
 
 

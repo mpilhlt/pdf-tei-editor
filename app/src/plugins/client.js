@@ -491,6 +491,14 @@ async function getCollections() {
 }
 
 /**
+ * Returns all projects accessible to the current user.
+ * @returns {Promise<import('../state.js').ProjectInfo[]>}
+ */
+async function listProjects() {
+  return await apiClient.listProjects();
+}
+
+/**
  * Creates a new collection
  * @param {string} id - Collection ID (only letters, numbers, hyphens, underscores)
  * @param {string} [name] - Display name (defaults to id if not provided)
@@ -507,12 +515,12 @@ async function createCollection(id, name, description = "") {
 
 /**
  * Returns all server-side configuration values for this application,
- * optionally filtered by collection-specific overrides.
- * @param {string|null} [collection] - Collection name to apply overrides for
+ * optionally filtered by project-specific overrides.
+ * @param {string|null} [project] - Project ID to apply overrides for
  * @returns {Promise<Object>}
  */
-async function getConfigData(collection) {
-  return await apiClient.configList(collection ? { collection } : {});
+async function getConfigData(project) {
+  return await apiClient.configList(project ? { project } : {});
 }
 
 /**
@@ -768,6 +776,7 @@ const api = {
   moveFiles,
   copyFiles,
   getCollections,
+  listProjects,
   createCollection,
   state,
   sendHeartbeat,

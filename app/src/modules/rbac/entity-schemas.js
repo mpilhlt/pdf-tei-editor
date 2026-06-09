@@ -22,6 +22,7 @@
  * @property {string} [helpText] - Additional help text
  * @property {Function} [validator] - Custom validation function
  * @property {boolean} [hidden] - Whether field should be hidden
+ * @property {boolean} [excludeFromForm] - Whether field is managed by a widget outside the form (excluded from rendering and save data)
  */
 
 /**
@@ -98,7 +99,8 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Groups',
         options: 'group',
-        helpText: 'Groups determine collection access'
+        helpText: 'Groups this user belongs to (organisational label only)',
+        excludeFromForm: true
       },
       {
         name: 'session_id',
@@ -118,6 +120,57 @@ const entitySchemas = {
         field: 'roles',
         type: 'many-to-many'
       }
+    ]
+  },
+
+  project: {
+    label: 'Projects',
+    singularLabel: 'Project',
+    idField: 'id',
+    icon: 'folder2-open',
+    fields: [
+      {
+        name: 'id',
+        type: 'string',
+        label: 'ID',
+        required: true,
+        immutable: true,
+        placeholder: 'project-id',
+        helpText: 'Unique project identifier'
+      },
+      {
+        name: 'name',
+        type: 'string',
+        label: 'Name',
+        required: true,
+        placeholder: 'Project Name'
+      },
+      {
+        name: 'description',
+        type: 'textarea',
+        label: 'Description',
+        placeholder: 'Describe the project purpose'
+      },
+      {
+        name: 'members',
+        type: 'multiselect',
+        label: 'Members',
+        options: 'user',
+        helpText: 'Users with access to this project',
+        excludeFromForm: true
+      },
+      {
+        name: 'collections',
+        type: 'multiselect',
+        label: 'Collections',
+        options: 'collection',
+        helpText: 'Collections included in this project',
+        excludeFromForm: true
+      }
+    ],
+    relationships: [
+      { target: 'user', field: 'members', type: 'many-to-many' },
+      { target: 'collection', field: 'collections', type: 'many-to-many' }
     ]
   },
 
@@ -149,21 +202,8 @@ const entitySchemas = {
         label: 'Description',
         placeholder: 'Describe the group purpose'
       },
-      {
-        name: 'collections',
-        type: 'multiselect',
-        label: 'Collections',
-        options: 'collection',
-        helpText: 'Collections accessible to this group (use "*" for all)'
-      }
     ],
-    relationships: [
-      {
-        target: 'collection',
-        field: 'collections',
-        type: 'many-to-many'
-      }
-    ]
+    relationships: []
   },
 
   role: {

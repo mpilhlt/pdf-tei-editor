@@ -66,27 +66,19 @@ npm run test:all
 ## User Management
 
 ```bash
-# Manage users via CLI
-npm run manage user add <username> --password <password> --fullname "<Full Name>" --roles <role1,role2>
-npm run manage user list
-npm run manage user remove <username>
-npm run manage user help
+# Manage users via HTTP API (server must be running)
+npm run manage-remote -- user add <username> --password <password> --fullname "<Full Name>" --roles <role1,role2>
+npm run manage-remote -- user list
+npm run manage-remote -- user remove <username>
+npm run manage-remote -- user --help
 ```
 
 ## Configuration Management
 
 ```bash
-# Get/set configuration values
-npm run manage config get <key>                    # Read from db/config.json
-npm run manage config get <key> --default          # Read from config/config.json
-npm run manage config set <key> <json_value>       # Set in db/config.json
-npm run manage config set <key> <json_value> --default  # Set in both files
-npm run manage config delete <key>                 # Delete from db/config.json
-npm run manage config delete <key> --default       # Delete from both files
-
-# Value constraints and validation
-npm run manage config set <key> --values '["val1", "val2"]'  # Set allowed values
-npm run manage config set <key> --type "string"              # Set type constraint
+# Get/set configuration values via HTTP API (server must be running)
+npm run manage-remote -- config get <key>
+npm run manage-remote -- config set <key> <json_value>
 ```
 
 ## Development Workflow
@@ -111,7 +103,6 @@ npm run manage config set <key> --type "string"              # Set type constrai
 npm run start:dev              # Start FastAPI development server
 npm run start:prod             # Start production server
 npm run build                  # Build for production
-npm run manage                 # User/config management CLI
 npm run test:changed           # Test changed files (smart runner)
 npm run test:unit:js           # JavaScript unit tests
 npm run test:unit:fastapi      # Python unit tests
