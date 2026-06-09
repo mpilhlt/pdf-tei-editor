@@ -46,20 +46,15 @@ def get_plugin_config(
         ...     description="Enable the local sync plugin",
         ... )
     """
-    from fastapi_app.lib.utils.config_utils import get_config
     import os
+    from fastapi_app.lib.utils.config_utils import get_config
 
     config = get_config()
-
-    # Try to get from config
     value = config.get(config_key)
 
     if value is None:
-        # Check environment variable
         env_value = os.environ.get(env_var)
-
         if env_value is not None:
-            # Parse env value based on type
             if value_type == "boolean":
                 value = env_value.lower() in ("true", "1", "yes")
             elif value_type == "number":
@@ -69,13 +64,13 @@ def get_plugin_config(
                 value = json.loads(env_value)
             else:
                 value = env_value
-
-            config.set(config_key, value, allowed_values=allowed_values, description=description)
         else:
-            # Use default
             value = default
-            if value is not None:
-                config.set(config_key, value, allowed_values=allowed_values, description=description)
+
+    # Always persist metadata (description, allowed_values) so re-registration on startup
+    # updates descriptions even when the config key already has a stored value.
+    if value is not None:
+        config.set(config_key, value, allowed_values=allowed_values, description=description)
 
     return value
 

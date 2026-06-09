@@ -1,6 +1,45 @@
 """GROBID plugin configuration."""
 
+from typing import Any
+
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
+
+PLUGIN_CONFIG_SPECS: list[dict[str, Any]] = [
+    {
+        "config_key": "plugin.grobid.server.url",
+        "env_var":    "GROBID_SERVER_URL",
+        "default":     "",
+        "description": "URL of the GROBID server (e.g. http://localhost:8070)",
+    },
+    {
+        "config_key": "plugin.grobid.server.timeout",
+        "env_var":    "GROBID_SERVER_TIMEOUT",
+        "default":     10,
+        "value_type":  "number",
+        "description": "Timeout in seconds for GROBID server health-check requests",
+    },
+    {
+        "config_key": "plugin.grobid.extraction.timeout",
+        "env_var":    "GROBID_EXTRACTION_TIMEOUT",
+        "default":     300,
+        "value_type":  "number",
+        "description": "Timeout in seconds for GROBID extraction requests",
+    },
+    {
+        "config_key": "plugin.grobid.cache.disabled",
+        "env_var":    "GROBID_DISABLE_CACHE",
+        "default":     False,
+        "value_type":  "boolean",
+        "description": "Disable GROBID extraction cache; when true every upload triggers a fresh extraction",
+    },
+]
+
+
+def init_plugin_config() -> None:
+    """Register plugin config keys from environment variables."""
+    for spec in PLUGIN_CONFIG_SPECS:
+        get_plugin_config(**spec)
 
 
 SCHEMA_BASE_URL = "https://mpilhlt.github.io/grobid-footnote-flavour/schema"
