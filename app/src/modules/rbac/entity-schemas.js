@@ -22,6 +22,7 @@
  * @property {string} [helpText] - Additional help text
  * @property {Function} [validator] - Custom validation function
  * @property {boolean} [hidden] - Whether field should be hidden
+ * @property {boolean} [excludeFromForm] - Whether field is managed by a widget outside the form (excluded from rendering and save data)
  */
 
 /**
@@ -98,7 +99,8 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Groups',
         options: 'group',
-        helpText: 'Groups this user belongs to (organisational label only)'
+        helpText: 'Groups this user belongs to (organisational label only)',
+        excludeFromForm: true
       },
       {
         name: 'session_id',
@@ -154,7 +156,8 @@ const entitySchemas = {
         type: 'multiselect',
         label: 'Members',
         options: 'user',
-        helpText: 'Users with access to this project'
+        helpText: 'Users with access to this project',
+        excludeFromForm: true
       },
       {
         name: 'collections',
