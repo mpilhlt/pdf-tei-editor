@@ -5,9 +5,19 @@ Utility functions for backend plugins
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from fastapi_app.config import get_settings
+
+
+class PluginConfigSpec(TypedDict):
+    """Shape of a single entry in a plugin's ``PLUGIN_CONFIG_SPECS`` list."""
+    config_key: str
+    env_var: str
+    default: NotRequired[Any]
+    value_type: NotRequired[str]
+    allowed_values: NotRequired[list[Any] | None]
+    description: NotRequired[str | None]
 
 logger = logging.getLogger(__name__)
 

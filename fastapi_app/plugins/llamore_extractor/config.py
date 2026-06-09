@@ -1,10 +1,8 @@
 """LLamore plugin configuration."""
 
-from typing import Any
+from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 
-from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
-
-PLUGIN_CONFIG_SPECS: list[dict[str, Any]] = [
+PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
     {
         "config_key": "plugin.llamore.api.key",
         "env_var":    "GEMINI_API_KEY",

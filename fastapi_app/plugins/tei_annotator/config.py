@@ -4,11 +4,9 @@ Constants and annotation schema builders for the tei-annotator plugin.
 
 from __future__ import annotations
 
-from typing import Any
+from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 
-from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
-
-PLUGIN_CONFIG_SPECS: list[dict[str, Any]] = [
+PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
     {
         "config_key": "tei-annotator.server.url",
         "env_var":    "TEI_ANNOTATOR_SERVER_URL",
