@@ -125,11 +125,14 @@ class ConfigEditorPlugin extends Plugin {
 
     const configKeys = Object.keys(this.#originalConfig)
       .filter(key => !key.endsWith('.type') && !key.endsWith('.values'))
-      .filter(key => !filterText || key.toLowerCase().includes(filterText.toLowerCase()))
+      .filter(key => !filterText || (
+        key.toLowerCase().includes(filterText.toLowerCase()) ||
+        (this.#originalConfig[`${key}.description`] || '').toLowerCase().includes(filterText.toLowerCase())
+      ))
       .sort()
 
     if (configKeys.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3" style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-500);">No configuration entries found</td></tr>'
+      tbody.innerHTML = '<tr><td colspan="4" style="padding: 2rem; text-align: center; color: var(--sl-color-neutral-500);">No configuration entries found</td></tr>'
       return
     }
 
@@ -169,6 +172,11 @@ class ConfigEditorPlugin extends Plugin {
     nameCell.style.cssText = 'padding: 0.5rem; font-family: monospace; font-size: 0.85em; word-break: break-word;'
     nameCell.textContent = key
     row.appendChild(nameCell)
+
+    const descriptionCell = document.createElement('td')
+    descriptionCell.style.cssText = 'padding: 0.5rem; font-size: 0.8em; color: var(--sl-color-neutral-600); white-space: normal; word-wrap: break-word; vertical-align: top; max-width: 200px;'
+    descriptionCell.textContent = this.#originalConfig[`${key}.description`] || ''
+    row.appendChild(descriptionCell)
 
     const valueCell = document.createElement('td')
     valueCell.style.cssText = 'padding: 0.5rem;'
