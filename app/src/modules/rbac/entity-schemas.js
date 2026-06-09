@@ -198,21 +198,8 @@ const entitySchemas = {
         label: 'Description',
         placeholder: 'Describe the group purpose'
       },
-      {
-        name: 'collections',
-        type: 'multiselect',
-        label: 'Collections',
-        options: 'collection',
-        helpText: 'Collections accessible to this group (collection access is now managed via Projects)'
-      }
     ],
-    relationships: [
-      {
-        target: 'collection',
-        field: 'collections',
-        type: 'many-to-many'
-      }
-    ]
+    relationships: []
   },
 
   role: {
