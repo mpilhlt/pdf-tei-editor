@@ -76,7 +76,6 @@ import './modules/panels/index.js';
  * The top-level UI parts
  * @typedef {object} namedElementsTree
  * @property {UIPart<ToolBar, toolbarPart>} toolbar - The main toolbar
- * @property {SlSplitPanel} editors - Main split panel containing PDF viewer (start) and XML editor (end)
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes

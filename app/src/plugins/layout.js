@@ -9,7 +9,6 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
-import ui from '../ui.js';
 
 class LayoutPlugin extends Plugin {
   /** @param {PluginContext} context */
@@ -22,7 +21,12 @@ class LayoutPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
-    this.uiStorage.bind(ui.editors, 'position', {
+    // The split panel has no `name` attribute (adding one stops ui-system traversal
+    // into its children, breaking ui.xmlEditor/ui.pdfViewer). Access by stable id instead.
+    const editors = /** @type {import('@shoelace-style/shoelace').SlSplitPanel} */(
+      document.getElementById('editors')
+    );
+    this.uiStorage.bind(editors, 'position', {
       key: 'splitPosition',
       event: 'sl-reposition',
       default: 50,
