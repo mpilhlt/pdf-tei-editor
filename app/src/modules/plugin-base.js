@@ -2,10 +2,10 @@
  * Base Plugin class for class-based plugin architecture
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from './plugin-context.js'
+ * @import { UIStorage } from './ui-storage.js'
  */
 
 import { createNavigableElement } from './navigable-element.js';
-import { UIStorage } from './ui-storage.js';
 
 /**
  * Base class for plugins that provides state management and lifecycle methods
