@@ -36,3 +36,4 @@ Rules specific to frontend code in `app/`. The root [CLAUDE.md](../CLAUDE.md) ap
 
 - **User notifications** - Use `notify(message, variant, icon)` from `app/src/modules/sl-utils.js` for toast notifications. Variants: "primary", "success", "warning", "danger". Common icons: "check-circle", "exclamation-triangle", "exclamation-octagon", "info-circle"
 - **Reload file data** - Use `FiledataPlugin.getInstance().reload({ refresh: true })` to reload file data from the server. Import `FiledataPlugin` from `../plugins.js`
+- **UI preference persistence** - Use `this.uiStorage.get/set/remove/bind()` (available on every `Plugin` subclass) instead of writing `localStorage` directly. Keys are namespaced automatically as `ui.<plugin-name>.<key>`. See [docs/code-assistant/ui-storage.md](../docs/code-assistant/ui-storage.md) for the full API, DOM binding pattern, and testing guide.

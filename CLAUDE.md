@@ -17,6 +17,7 @@ Domain-specific rules are in subdirectory CLAUDE.md files: [app/CLAUDE.md](app/C
 For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
 - **[Frontend Architecture](docs/code-assistant/architecture-frontend.md)** - Frontend plugin system, UI components, templates
+- **[UI Storage](docs/code-assistant/ui-storage.md)** - Persisting UI preferences with UIStorage (localStorage wrapper, DOM binding, testing)
 - **[Backend Architecture](docs/code-assistant/architecture-backend.md)** - FastAPI structure, lib/ modules, import patterns
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
 - **[API Reference](docs/development/api-reference.md)** - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas

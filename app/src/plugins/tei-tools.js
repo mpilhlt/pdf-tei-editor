@@ -19,7 +19,6 @@ import { PanelUtils } from '../modules/panels/index.js'
 await registerTemplate('tei-tools-statusbar', 'tei-tools-statusbar.html')
 await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-drawer.html')
 
-
 /**
  * Builds a map of xml:id to full name from respStmt elements
  * @param {Document} xmlTree
