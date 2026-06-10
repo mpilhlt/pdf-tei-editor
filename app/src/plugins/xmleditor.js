@@ -989,15 +989,14 @@ class XmlEditorPlugin extends Plugin {
    * @returns {boolean}
    */
   #getLineWrappingPreference() {
-    const stored = localStorage.getItem('xmleditor.lineWrapping');
-    return stored === null ? true : stored === 'true';
+    return this.uiStorage.get('lineWrapping', true);
   }
 
   /**
    * @param {boolean} enabled
    */
   #setLineWrappingPreference(enabled) {
-    localStorage.setItem('xmleditor.lineWrapping', String(enabled));
+    this.uiStorage.set('lineWrapping', enabled);
   }
 
   /**
@@ -1005,7 +1004,7 @@ class XmlEditorPlugin extends Plugin {
    * @returns {string|null}
    */
   #getXpathPreference(variantId) {
-    return localStorage.getItem(`xmleditor.xpath.${variantId}`);
+    return this.uiStorage.get(`xpath.${variantId}`, null);
   }
 
   /**
@@ -1014,9 +1013,9 @@ class XmlEditorPlugin extends Plugin {
    */
   #setXpathPreference(variantId, xpath) {
     if (xpath) {
-      localStorage.setItem(`xmleditor.xpath.${variantId}`, xpath);
+      this.uiStorage.set(`xpath.${variantId}`, xpath);
     } else {
-      localStorage.removeItem(`xmleditor.xpath.${variantId}`);
+      this.uiStorage.remove(`xpath.${variantId}`);
     }
   }
 
