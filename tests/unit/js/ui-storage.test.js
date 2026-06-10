@@ -112,5 +112,28 @@ describe('UIStorage', () => {
       el._emit('sl-reposition');
       assert.strictEqual(ui.get('pos', 50), 50); // unchanged
     });
+
+    it('throws when key is missing', () => {
+      const el = makeElement({ position: 50 });
+      assert.throws(
+        () => ui.bind(el, 'position', { event: 'sl-reposition' }),
+        /options\.key is required/
+      );
+    });
+
+    it('throws when event is missing', () => {
+      const el = makeElement({ position: 50 });
+      assert.throws(
+        () => ui.bind(el, 'position', { key: 'pos' }),
+        /options\.event is required/
+      );
+    });
+
+    it('throws when element is null', () => {
+      assert.throws(
+        () => ui.bind(null, 'position', { key: 'pos', event: 'sl-reposition' }),
+        /element is null or undefined/
+      );
+    });
   });
 });

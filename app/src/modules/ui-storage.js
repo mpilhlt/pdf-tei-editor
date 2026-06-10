@@ -70,6 +70,9 @@ export class UIStorage {
    * @returns {() => void} Unbind function — call to remove the event listener
    */
   bind(element, property, { key, event, default: defaultValue } = {}) {
+    if (!element) throw new Error('UIStorage.bind(): element is null or undefined');
+    if (!key) throw new Error('UIStorage.bind(): options.key is required');
+    if (!event) throw new Error('UIStorage.bind(): options.event is required');
     const stored = this.get(key, defaultValue);
     if (stored !== undefined) element[property] = stored;
     const handler = () => this.set(key, element[property]);
