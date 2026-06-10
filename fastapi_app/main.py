@@ -204,6 +204,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# DEBUG middleware - log all requests/responses to trace DELETE failures
+import traceback as _traceback
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as _Request
+
+class _DebugRequestMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: _Request, call_next):
+        logger.info(f"DEBUG REQUEST: {request.method} {request.url.path}")
+        try:
+            response = await call_next(request)
+            logger.info(f"DEBUG RESPONSE: {request.method} {request.url.path} → {response.status_code}")
+            return response
+        except Exception as _e:
+            logger.error(f"DEBUG UNHANDLED EXCEPTION in {request.method} {request.url.path}: {_e}\n{_traceback.format_exc()}")
+            raise
+
+app.add_middleware(_DebugRequestMiddleware)
+
 # Import API routers
 from .api import auth, config
 from .routers import (
