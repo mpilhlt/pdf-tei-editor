@@ -9,6 +9,7 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
+import ui from '../ui.js';
 
 class LayoutPlugin extends Plugin {
   /** @param {PluginContext} context */
@@ -21,14 +22,11 @@ class LayoutPlugin extends Plugin {
    */
   async install(initialState) {
     await super.install(initialState);
-    const panel = document.querySelector('#editors');
-    if (panel) {
-      this.uiStorage.bind(panel, 'position', {
-        key: 'splitPosition',
-        event: 'sl-reposition',
-        default: 50,
-      });
-    }
+    this.uiStorage.bind(ui.editors, 'position', {
+      key: 'splitPosition',
+      event: 'sl-reposition',
+      default: 50,
+    });
   }
 }
 
