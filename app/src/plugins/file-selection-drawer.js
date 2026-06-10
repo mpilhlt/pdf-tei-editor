@@ -123,6 +123,10 @@ class FileSelectionDrawerPlugin extends Plugin {
       this.#onSelectAllChange();
     });
 
+    this.#drawerUi.selectAllContainer.expandProjectsCheckbox.addEventListener('sl-change', () => {
+      this.#onExpandProjectsChange();
+    });
+
     this.#drawerUi.exportDropdown.exportMenu.addEventListener('sl-select', async (event) => {
       if (!this.state) return;
       // @ts-ignore - detail.item exists on SlMenu sl-select events
@@ -539,15 +543,24 @@ class FileSelectionDrawerPlugin extends Plugin {
     const renderedCollections = new Set();
 
     const selectAllContainer = this.#drawerUi.selectAllContainer;
-    selectAllContainer.style.display = allVisibleCollections.size > 0 ? 'block' : 'none';
+    selectAllContainer.style.display = allVisibleCollections.size > 0 ? 'flex' : 'none';
 
     for (const project of projects) {
       const projectCollections = (project.collections || []).filter(colId => allVisibleCollections.has(colId));
       if (projectCollections.length === 0) continue;
 
       const projectItem = document.createElement('sl-tree-item');
-      projectItem.expanded = true;
+      projectItem.expanded = this.#getProjectExpanded(`project:${project.id}`);
       projectItem.className = 'project-item';
+      projectItem.dataset.projectKey = `project:${project.id}`;
+      projectItem.addEventListener('sl-expand', () => {
+        this.#setProjectExpanded(`project:${project.id}`, true);
+        this.#syncExpandProjectsCheckbox();
+      });
+      projectItem.addEventListener('sl-collapse', () => {
+        this.#setProjectExpanded(`project:${project.id}`, false);
+        this.#syncExpandProjectsCheckbox();
+      });
       const projectLabel = document.createElement('span');
       projectLabel.style.display = 'flex';
       projectLabel.style.alignItems = 'center';
@@ -562,9 +575,31 @@ class FileSelectionDrawerPlugin extends Plugin {
       fileTree.appendChild(projectItem);
     }
 
-    for (const colId of allVisibleCollections) {
-      if (renderedCollections.has(colId)) continue;
-      fileTree.appendChild(this.#buildCollectionTreeItem(colId, state, groupedFiles, shouldExpandCollection, shouldExpandPdf));
+    const orphanColIds = [...allVisibleCollections].filter(colId => !renderedCollections.has(colId));
+    if (orphanColIds.length > 0) {
+      const noProjectItem = document.createElement('sl-tree-item');
+      noProjectItem.expanded = this.#getProjectExpanded('no-project');
+      noProjectItem.className = 'project-item';
+      noProjectItem.dataset.projectKey = 'no-project';
+      noProjectItem.addEventListener('sl-expand', () => {
+        this.#setProjectExpanded('no-project', true);
+        this.#syncExpandProjectsCheckbox();
+      });
+      noProjectItem.addEventListener('sl-collapse', () => {
+        this.#setProjectExpanded('no-project', false);
+        this.#syncExpandProjectsCheckbox();
+      });
+      const noProjectLabel = document.createElement('span');
+      noProjectLabel.style.display = 'flex';
+      noProjectLabel.style.alignItems = 'center';
+      noProjectLabel.style.gap = '0.5rem';
+      noProjectLabel.innerHTML = `<sl-icon name="folder2-open"></sl-icon><strong>No project</strong>`;
+      noProjectItem.appendChild(noProjectLabel);
+
+      for (const colId of orphanColIds) {
+        noProjectItem.appendChild(this.#buildCollectionTreeItem(colId, state, groupedFiles, shouldExpandCollection, shouldExpandPdf));
+      }
+      fileTree.appendChild(noProjectItem);
     }
 
     this.#isUpdatingTree = true;
@@ -575,6 +610,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     }
 
     this.#updateExportButtonState();
+    this.#syncExpandProjectsCheckbox();
   }
 
   /**
@@ -731,6 +767,60 @@ class FileSelectionDrawerPlugin extends Plugin {
     });
 
     this.#updateExportButtonState();
+  }
+
+  // TODO #368: Replace sessionStorage with a generic UI state persistence mechanism
+  static #STORAGE_KEY_PREFIX = 'file-drawer-expanded:';
+
+  /**
+   * @param {string} key
+   * @param {boolean} [defaultValue]
+   */
+  #getProjectExpanded(key, defaultValue = true) {
+    const stored = sessionStorage.getItem(FileSelectionDrawerPlugin.#STORAGE_KEY_PREFIX + key);
+    return stored !== null ? stored === 'true' : defaultValue;
+  }
+
+  /**
+   * @param {string} key
+   * @param {boolean} expanded
+   */
+  #setProjectExpanded(key, expanded) {
+    sessionStorage.setItem(FileSelectionDrawerPlugin.#STORAGE_KEY_PREFIX + key, String(expanded));
+  }
+
+  #onExpandProjectsChange() {
+    const checkbox = this.#drawerUi.selectAllContainer.expandProjectsCheckbox;
+    const expand = checkbox.checked;
+    const projectItems = this.#drawerUi.fileTree.querySelectorAll('.project-item');
+    projectItems.forEach(item => {
+      const el = /** @type {HTMLElement & {expanded: boolean}} */ (item);
+      el.expanded = expand;
+      const key = /** @type {HTMLElement} */ (item).dataset.projectKey;
+      if (key) this.#setProjectExpanded(key, expand);
+    });
+    this.#syncExpandProjectsCheckbox();
+  }
+
+  #syncExpandProjectsCheckbox() {
+    const checkbox = this.#drawerUi?.selectAllContainer?.expandProjectsCheckbox;
+    if (!checkbox) return;
+    const projectItems = [...this.#drawerUi.fileTree.querySelectorAll('.project-item')];
+    if (projectItems.length === 0) {
+      checkbox.indeterminate = false;
+      checkbox.checked = true;
+      return;
+    }
+    const expandedCount = projectItems.filter(item => /** @type {any} */ (item).expanded).length;
+    if (expandedCount === projectItems.length) {
+      checkbox.indeterminate = false;
+      checkbox.checked = true;
+    } else if (expandedCount === 0) {
+      checkbox.indeterminate = false;
+      checkbox.checked = false;
+    } else {
+      checkbox.indeterminate = true;
+    }
   }
 
   #updateExportButtonState() {

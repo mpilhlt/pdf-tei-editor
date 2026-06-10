@@ -18,6 +18,7 @@
 /**
  * @typedef {object} selectAllContainerPart
  * @property {import('../ui.js').SlCheckbox} selectAllCheckbox
+ * @property {import('../ui.js').SlCheckbox} expandProjectsCheckbox
  */
 
 /**

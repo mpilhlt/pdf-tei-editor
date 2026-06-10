@@ -26,8 +26,9 @@
     <!-- Tree area - fills remaining space -->
     <div style="flex: 1; padding: 1rem; overflow-y: auto; min-height: 0; display: block; width: 100%;">
       <!-- Select all/none checkbox (hidden by default, shown when collections exist) -->
-      <div name="selectAllContainer" style="display: none; margin-bottom: 0.5rem;">
+      <div name="selectAllContainer" style="display: none; margin-bottom: 0.5rem; gap: 1rem; align-items: center;">
         <sl-checkbox name="selectAllCheckbox" size="small">Select all/none</sl-checkbox>
+        <sl-checkbox name="expandProjectsCheckbox" size="small" checked>Expand projects</sl-checkbox>
       </div>
 
       <sl-tree name="fileTree" selection="leaf" style="width: 100%; min-height: 200px; display: block;">
