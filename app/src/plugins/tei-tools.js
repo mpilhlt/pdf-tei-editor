@@ -20,23 +20,6 @@ await registerTemplate('tei-tools-statusbar', 'tei-tools-statusbar.html')
 await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-drawer.html')
 
 /**
- * Get teiHeader visibility preference from localStorage
- * @returns {boolean}
- */
-function getTeiHeaderVisibilityPreference() {
-  const stored = localStorage.getItem('tei-tools.teiHeaderVisible')
-  return stored === 'true'
-}
-
-/**
- * Set teiHeader visibility preference in localStorage
- * @param {boolean} visible
- */
-function setTeiHeaderVisibilityPreference(visible) {
-  localStorage.setItem('tei-tools.teiHeaderVisible', String(visible))
-}
-
-/**
  * Builds a map of xml:id to full name from respStmt elements
  * @param {Document} xmlTree
  * @returns {Object.<string, string>}
@@ -141,7 +124,7 @@ class TeiToolsPlugin extends Plugin {
     teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
 
     if (hasTeiHeader) {
-      const preferredVisible = getTeiHeaderVisibilityPreference()
+      const preferredVisible = this.uiStorage.get('teiHeaderVisible', false)
       try {
         if (preferredVisible) {
           this.#xmlEditorApi.unfoldByXpath('//tei:teiHeader')
@@ -174,7 +157,7 @@ class TeiToolsPlugin extends Plugin {
         this.#xmlEditorApi.foldByXpath('//tei:teiHeader')
         this.getDependency('logger').debug('Folded teiHeader')
       }
-      setTeiHeaderVisibilityPreference(show)
+      this.uiStorage.set('teiHeaderVisible', show)
     } catch (error) {
       this.getDependency('logger').warn(`Error toggling teiHeader visibility: ${String(error)}`)
     }

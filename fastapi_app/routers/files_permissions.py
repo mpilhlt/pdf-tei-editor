@@ -12,7 +12,7 @@ Implements permission management endpoints:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..lib.repository.permissions_db import (
     PermissionsDB,
@@ -78,14 +78,31 @@ class _PermissionsDBSingleton:
 
 
 @router.get("/access_control_mode", response_model=AccessControlModeResponse)
-def get_access_control_mode_endpoint():
+def get_access_control_mode_endpoint(
+    project: Optional[str] = Query(None)
+):
     """Get current access control mode and defaults."""
-    config = get_config()
+    if project:
+        from ..config import get_settings
+        from ..lib.utils.project_utils import project_config_get
+        settings = get_settings()
+        default_visibility = project_config_get(
+            settings.db_dir, project, 'access-control.default-visibility',
+            use_default=True, default='collection'
+        )
+        default_editability = project_config_get(
+            settings.db_dir, project, 'access-control.default-editability',
+            use_default=True, default='owner'
+        )
+    else:
+        config = get_config()
+        default_visibility = config.get('access-control.default-visibility', default='collection')
+        default_editability = config.get('access-control.default-editability', default='owner')
 
     return AccessControlModeResponse(
         mode=get_mode(),
-        default_visibility=config.get('access-control.default-visibility', default='collection'),
-        default_editability=config.get('access-control.default-editability', default='owner')
+        default_visibility=default_visibility,
+        default_editability=default_editability
     )
 
 
@@ -110,9 +127,30 @@ def get_permissions_endpoint(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    config = get_config()
-    default_visibility = config.get('access-control.default-visibility', default='collection')
-    default_editability = config.get('access-control.default-editability', default='owner')
+    collection_id = file.doc_collections[0] if file.doc_collections else None
+    if collection_id:
+        from ..config import get_settings
+        from ..lib.utils.project_utils import get_project_for_collection, project_config_get
+        settings = get_settings()
+        _project = get_project_for_collection(collection_id, settings.db_dir)
+        _project_id = _project['id'] if _project else None
+        if _project_id:
+            default_visibility = project_config_get(
+                settings.db_dir, _project_id, 'access-control.default-visibility',
+                use_default=True, default='collection'
+            )
+            default_editability = project_config_get(
+                settings.db_dir, _project_id, 'access-control.default-editability',
+                use_default=True, default='owner'
+            )
+        else:
+            config = get_config()
+            default_visibility = config.get('access-control.default-visibility', default='collection')
+            default_editability = config.get('access-control.default-editability', default='owner')
+    else:
+        config = get_config()
+        default_visibility = config.get('access-control.default-visibility', default='collection')
+        default_editability = config.get('access-control.default-editability', default='owner')
 
     perms = get_document_permissions(
         stable_id,

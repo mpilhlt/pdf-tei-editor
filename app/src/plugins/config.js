@@ -60,6 +60,22 @@ class ConfigPlugin extends Plugin {
   }
 
   /**
+   * Called when the active project changes.
+   * Reloads configuration with project-specific overrides applied.
+   * @param {string|null} newProject
+   * @returns {Promise<void>}
+   */
+  async onProjectChange(newProject) {
+    this.getDependency('logger').debug(`Reloading config for project: ${newProject}`);
+    try {
+      const response = await this.getDependency('client').getConfigData(newProject || null);
+      this._configMap = response || {};
+    } catch (error) {
+      this.getDependency('logger').error('Failed to reload config for project:', String(error));
+    }
+  }
+
+  /**
    * Sets a configuration value for a given key on the server.
    * @param {string} key
    * @param {any} value

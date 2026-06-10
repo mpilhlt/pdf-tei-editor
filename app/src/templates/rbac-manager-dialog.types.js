@@ -11,6 +11,7 @@
 /**
  * @typedef {object} tabContainerPart
  * @property {import('../ui.js').SlButton} tabUser
+ * @property {import('../ui.js').SlButton} tabProject
  * @property {import('../ui.js').SlButton} tabGroup
  * @property {import('../ui.js').SlButton} tabRole
  * @property {import('../ui.js').SlButton} tabCollection
@@ -51,6 +52,43 @@
 /**
  * @typedef {object} formContainerPart
  * @property {HTMLDivElement} emptyState
+ * @property {HTMLDivElement & entityConfigSectionPart} entityConfigSection
+ * @property {HTMLDivElement & groupMembersSectionPart} groupMembersSection
+ * @property {HTMLDivElement & projectMembersSectionPart} projectMembersSection
+ * @property {HTMLDivElement & projectCollectionsSectionPart} projectCollectionsSection
+ * @property {HTMLDivElement & userGroupsSectionPart} userGroupsSection
+ * @property {HTMLDivElement & userProjectsSectionPart} userProjectsSection
+ */
+
+/**
+ * @typedef {object} entityConfigSectionPart
+ * @property {import('../ui.js').SlButton} addConfigKeyBtn
+ * @property {HTMLDivElement} entityConfigList
+ */
+
+/**
+ * @typedef {object} groupMembersSectionPart
+ * @property {HTMLDivElement} groupMembersList
+ */
+
+/**
+ * @typedef {object} projectMembersSectionPart
+ * @property {HTMLDivElement} projectMembersList
+ */
+
+/**
+ * @typedef {object} projectCollectionsSectionPart
+ * @property {HTMLDivElement} projectCollectionsList
+ */
+
+/**
+ * @typedef {object} userGroupsSectionPart
+ * @property {HTMLDivElement} userGroupsList
+ */
+
+/**
+ * @typedef {object} userProjectsSectionPart
+ * @property {HTMLDivElement} userProjectsList
  */
 
 export {}

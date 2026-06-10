@@ -31,8 +31,8 @@ export function renderEntityForm(entityType, data, optionsData = {}, isNew = fal
 
   // Render each field
   for (const field of schema.fields) {
-    // Skip hidden fields
-    if (field.hidden) continue
+    // Skip hidden fields and fields managed by external widgets
+    if (field.hidden || field.excludeFromForm) continue
 
     const fieldContainer = document.createElement('div')
     fieldContainer.className = 'field-container'
@@ -297,6 +297,8 @@ export function extractFormData(form) {
   const data = {}
 
   for (const field of schema.fields) {
+    // Skip hidden fields and fields managed by external widgets to avoid overwriting their data
+    if (field.hidden || field.excludeFromForm) continue
     if (field.type === 'multiselect') {
       // Extract from checkbox group
       const checkboxGroup = form.querySelector(`.checkbox-group[data-name="${field.name}"]`)

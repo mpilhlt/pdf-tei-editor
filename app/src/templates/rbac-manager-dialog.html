@@ -5,6 +5,10 @@
       <sl-icon slot="prefix" name="person"></sl-icon>
       Users
     </sl-button>
+    <sl-button name="tabProject" variant="default" data-entity-type="project">
+      <sl-icon slot="prefix" name="folder2-open"></sl-icon>
+      Projects
+    </sl-button>
     <sl-button name="tabGroup" variant="default" data-entity-type="group">
       <sl-icon slot="prefix" name="people"></sl-icon>
       Groups
@@ -66,6 +70,51 @@
             <p style="margin: 0;">Select an item from the list or create a new one</p>
           </div>
           <!-- Dynamic form will be inserted here -->
+          <!-- Entity config overrides section (shown for collection/project when an entity is selected) -->
+          <div name="entityConfigSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h4 style="margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--sl-color-neutral-700); text-transform: uppercase; letter-spacing: 0.04em;">Config Overrides</h4>
+              <sl-button name="addConfigKeyBtn" size="small" variant="default">
+                <sl-icon slot="prefix" name="plus"></sl-icon>
+                Add
+              </sl-button>
+            </div>
+            <div name="entityConfigList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- Config override rows inserted here -->
+            </div>
+          </div>
+          <!-- Group members section (shown when a group is selected) -->
+          <div name="groupMembersSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <div name="groupMembersList">
+              <!-- createMemberPicker element inserted here -->
+            </div>
+          </div>
+          <!-- Project members section (shown when a project is selected) -->
+          <div name="projectMembersSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <div name="projectMembersList">
+              <!-- createMemberPicker element inserted here -->
+            </div>
+          </div>
+          <!-- Project collections section (shown when a project is selected) -->
+          <div name="projectCollectionsSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <div name="projectCollectionsList">
+              <!-- createMemberPicker element inserted here -->
+            </div>
+          </div>
+          <!-- User groups section (shown when a user is selected — read-only) -->
+          <div name="userGroupsSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--sl-color-neutral-700); text-transform: uppercase; letter-spacing: 0.04em;">Groups</h4>
+            <div name="userGroupsList">
+              <!-- read-only group table inserted here -->
+            </div>
+          </div>
+          <!-- User projects section (shown when a user is selected — read-only) -->
+          <div name="userProjectsSection" style="display:none; margin-top: 1.25rem; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.75rem; background: var(--sl-color-neutral-50);">
+            <h4 style="margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--sl-color-neutral-700); text-transform: uppercase; letter-spacing: 0.04em;">Projects</h4>
+            <div name="userProjectsList">
+              <!-- read-only project table inserted here -->
+            </div>
+          </div>
         </div>
       </div>
 

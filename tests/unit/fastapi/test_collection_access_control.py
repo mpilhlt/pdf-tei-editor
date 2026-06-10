@@ -20,9 +20,9 @@ from fastapi_app.lib.permissions.user_utils import (
     user_has_collection_access,
     add_user
 )
-from fastapi_app.lib.permissions.group_utils import add_group, add_collection_to_group
 from fastapi_app.lib.utils.collection_utils import add_collection
 from fastapi_app.lib.utils.data_utils import save_entity_data
+from fastapi_app.lib.utils.project_utils import create_project
 
 
 class TestCollectionAccessControl(unittest.TestCase):
@@ -81,11 +81,14 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertFalse(has_access)
 
     def test_user_with_wildcard_groups_has_all_collections(self):
-        """Test that users with wildcard groups have access to all collections."""
+        """Test that users in a project with wildcard collections have access to all collections."""
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('wildcard-project', 'Wildcard Project', '', ['superuser'], ['*'])
+        ])
         user = {
             'username': 'superuser',
             'roles': ['user'],
-            'groups': ['*']
+            'groups': []
         }
 
         collections = get_user_collections(user, self.db_dir)
@@ -95,16 +98,15 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertTrue(has_access)
 
     def test_user_with_specific_group_collections(self):
-        """Test that users get collections from their groups."""
-        # Create group with specific collections
-        add_group(self.db_dir, 'group1', 'Group 1', 'Test group')
-        add_collection_to_group(self.db_dir, 'group1', 'col1')
-        add_collection_to_group(self.db_dir, 'group1', 'col2')
+        """Test that users get collections from their projects."""
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('project1', 'Project 1', '', ['testuser'], ['col1', 'col2'])
+        ])
 
         user = {
             'username': 'testuser',
             'roles': ['user'],
-            'groups': ['group1']
+            'groups': []
         }
 
         collections = get_user_collections(user, self.db_dir)
@@ -119,18 +121,16 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertFalse(has_access)
 
     def test_user_with_multiple_groups(self):
-        """Test that users get collections from all their groups."""
-        # Create two groups with different collections
-        add_group(self.db_dir, 'group1', 'Group 1', 'First group')
-        add_collection_to_group(self.db_dir, 'group1', 'col1')
-
-        add_group(self.db_dir, 'group2', 'Group 2', 'Second group')
-        add_collection_to_group(self.db_dir, 'group2', 'col2')
+        """Test that users get collections from all their projects."""
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('project1', 'Project 1', '', ['testuser'], ['col1']),
+            create_project('project2', 'Project 2', '', ['testuser'], ['col2']),
+        ])
 
         user = {
             'username': 'testuser',
             'roles': ['user'],
-            'groups': ['group1', 'group2']
+            'groups': []
         }
 
         collections = get_user_collections(user, self.db_dir)
@@ -140,15 +140,15 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertNotIn('col3', collections)
 
     def test_group_with_wildcard_collections(self):
-        """Test that groups with wildcard collections grant access to all collections."""
-        # Create group with wildcard collections
-        add_group(self.db_dir, 'admin-group', 'Admin Group', 'Admin access')
-        add_collection_to_group(self.db_dir, 'admin-group', '*')
+        """Test that projects with wildcard collections grant access to all collections."""
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('admin-project', 'Admin Project', '', ['testuser'], ['*'])
+        ])
 
         user = {
             'username': 'testuser',
             'roles': ['user'],
-            'groups': ['admin-group']
+            'groups': []
         }
 
         collections = get_user_collections(user, self.db_dir)
@@ -174,11 +174,11 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertFalse(has_access)
 
     def test_user_with_nonexistent_group(self):
-        """Test that nonexistent groups don't grant collection access."""
+        """Test that users with no matching projects have no collection access."""
         user = {
             'username': 'testuser',
             'roles': ['user'],
-            'groups': ['nonexistent-group']
+            'groups': []
         }
 
         collections = get_user_collections(user, self.db_dir)
@@ -188,21 +188,19 @@ class TestCollectionAccessControl(unittest.TestCase):
         self.assertFalse(has_access)
 
     def test_mixed_wildcard_and_specific_groups(self):
-        """Test that having one group with wildcard grants access to all."""
-        # Create groups
-        add_group(self.db_dir, 'group1', 'Group 1', 'Limited group')
-        add_collection_to_group(self.db_dir, 'group1', 'col1')
-
-        add_group(self.db_dir, 'admin-group', 'Admin Group', 'Full access')
-        add_collection_to_group(self.db_dir, 'admin-group', '*')
+        """Test that having one project with wildcard collections grants access to all."""
+        save_entity_data(self.db_dir, 'projects', [
+            create_project('project1', 'Project 1', '', ['testuser'], ['col1']),
+            create_project('admin-project', 'Admin Project', '', ['testuser'], ['*']),
+        ])
 
         user = {
             'username': 'testuser',
             'roles': ['user'],
-            'groups': ['group1', 'admin-group']
+            'groups': []
         }
 
-        # Should have access to all collections due to admin-group
+        # Should have access to all collections due to admin-project
         collections = get_user_collections(user, self.db_dir)
         self.assertIsNone(collections)  # None means all collections
 

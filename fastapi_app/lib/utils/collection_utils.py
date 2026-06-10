@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data, get_data_file_path, load_json_file
+from fastapi_app.lib.utils.config_utils import get_config_value
 
 
 def find_collection(collection_id: str, collections_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -332,6 +333,109 @@ def set_collection_property(db_dir: Path, collection_id: str, property_name: str
         return True, f"Collection '{collection_id}' is now '{value}'."
     else:
         return True, f"Property '{property_name}' for collection '{collection_id}' set to '{value}'."
+
+
+def collection_config_get_all(db_dir: Path, collection_id: str) -> dict[str, Any]:
+    """Return all collection-specific config overrides.
+
+    Args:
+        db_dir: Path to the db directory
+        collection_id: The collection ID
+
+    Returns:
+        Dict of config key-value overrides, empty dict if none.
+    """
+    collections_data = load_entity_data(db_dir, 'collections')
+    collection = find_collection(collection_id, collections_data)
+    if not collection:
+        return {}
+    return dict(collection.get('config') or {})
+
+
+def collection_config_get(
+    db_dir: Path,
+    collection_id: str,
+    key: str,
+    use_default: bool = True,
+    default: Any = None
+) -> Any:
+    """Get a config value, falling back to global config if use_default is True.
+
+    Args:
+        db_dir: Path to the db directory
+        collection_id: The collection ID
+        key: Config key
+        use_default: If True and key not in collection config, return global value
+        default: Default value if key not found anywhere
+
+    Returns:
+        Collection-specific value, global value, or default.
+    """
+    overrides = collection_config_get_all(db_dir, collection_id)
+    if key in overrides:
+        return overrides[key]
+    if use_default:
+        return get_config_value(key, db_dir, default)
+    return default
+
+
+def collection_config_set(
+    db_dir: Path,
+    collection_id: str,
+    key: str,
+    value: Any
+) -> tuple[bool, str]:
+    """Set a collection-specific config override.
+
+    Args:
+        db_dir: Path to the db directory
+        collection_id: The collection ID
+        key: Config key
+        value: The value to store
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    collections_data = load_entity_data(db_dir, 'collections')
+    collection = find_collection(collection_id, collections_data)
+    if not collection:
+        return False, f"Collection '{collection_id}' not found"
+
+    collection['config'] = collection.get('config') or {}
+    collection['config'][key] = value
+
+    save_entity_data(db_dir, 'collections', collections_data)
+    return True, f"Set collection config '{key}' for '{collection_id}'"
+
+
+def collection_config_delete(
+    db_dir: Path,
+    collection_id: str,
+    key: str
+) -> tuple[bool, str]:
+    """Delete a collection-specific config override.
+
+    Args:
+        db_dir: Path to the db directory
+        collection_id: The collection ID
+        key: Config key to remove from collection overrides
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    collections_data = load_entity_data(db_dir, 'collections')
+    collection = find_collection(collection_id, collections_data)
+    if not collection:
+        return False, f"Collection '{collection_id}' not found"
+
+    config_overrides = collection.get('config') or {}
+    if key not in config_overrides:
+        return False, f"Key '{key}' not in collection config overrides"
+
+    del config_overrides[key]
+    collection['config'] = config_overrides
+    save_entity_data(db_dir, 'collections', collections_data)
+    return True, f"Deleted collection config '{key}' for '{collection_id}'"
 
 
 def list_collections(db_dir: Path) -> List[Dict[str, Any]]:

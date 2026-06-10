@@ -2,9 +2,10 @@
  * Base Plugin class for class-based plugin architecture
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from './plugin-context.js'
+ * @import { UIStorage } from './ui-storage.js'
  */
 
-import { createNavigableElement } from './navigable-element.js'
+import { createNavigableElement } from './navigable-element.js';
 
 /**
  * Base class for plugins that provides state management and lifecycle methods
@@ -60,6 +61,9 @@ export class Plugin {
 
   /** @type {ApplicationState|null} */
   #state = null;
+
+  /** @type {UIStorage|undefined} */
+  #uiStorage;
 
   //
   // Plugin lifecycle methods (override in subclasses)
@@ -169,6 +173,16 @@ export class Plugin {
    */
   get state() {
     return this.#state;
+  }
+
+  /**
+   * UIStorage instance scoped to this plugin's name.
+   * Use for persisting UI preferences to localStorage across page loads.
+   * @returns {UIStorage}
+   */
+  get uiStorage() {
+    if (!this.#uiStorage) this.#uiStorage = this.context.getUIStorage(this.name);
+    return this.#uiStorage;
   }
 
   /**

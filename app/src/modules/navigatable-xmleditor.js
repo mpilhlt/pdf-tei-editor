@@ -103,14 +103,10 @@ export class NavXmlEditor extends XMLEditor {
       if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
       selectedNode = selectedNode.parentNode
     }
-    console.log(`DEBUG handeSelectionChange: clicked tag="${originalNode?.tagName}", bubbled to="${selectedNode?.tagName}", parentTagName="${parentTagName}"`);
-
     if (!selectedNode) {
-      console.log(`DEBUG handeSelectionChange: no matching ancestor found, ignoring`);
       return;
     }
     if (this.selectedNode === selectedNode) {
-      console.log(`DEBUG handeSelectionChange: same node as before (this.selectedNode === selectedNode), ignoring. currentIndex=${this.currentIndex}`);
       return;
     }
 
@@ -121,7 +117,6 @@ export class NavXmlEditor extends XMLEditor {
       this.parentPath, xmlTree, this.namespaceResolver,
       XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
     );
-    console.log(`DEBUG handeSelectionChange: snapshot has ${snapshot.snapshotLength} nodes for parentPath="${this.parentPath}"`);
     let nodeIndex = -1;
     for (let i = 0; i < snapshot.snapshotLength; i++) {
       if (snapshot.snapshotItem(i) === selectedNode) {
@@ -131,11 +126,8 @@ export class NavXmlEditor extends XMLEditor {
     }
 
     if (nodeIndex < 0) {
-      console.log(`DEBUG handeSelectionChange: bubbled node not found in snapshot, ignoring`);
       return;
     }
-
-    console.log(`DEBUG handeSelectionChange: setting currentIndex=${nodeIndex}, selectedXpath="${this.parentPath}[${nodeIndex}]"`);
     this.currentIndex = nodeIndex;
     this.selectedNode = selectedNode;
     this.selectedXpath = `${this.parentPath}[${nodeIndex}]`;
@@ -153,9 +145,7 @@ export class NavXmlEditor extends XMLEditor {
 
     // Wait for editor to be ready
     if (!this.isReady()) {
-      console.log("Editor not ready, deferring selection")
       this.once(XMLEditor.EVENT_EDITOR_READY, () => {
-        console.log("Editor is now ready")
         this.selectByIndex(index)
       })
       return;
@@ -167,7 +157,6 @@ export class NavXmlEditor extends XMLEditor {
       throw new Error(`Index out of bounds: ${index} of ${size} items`);
     }
     this.currentIndex = index;
-    console.log(`DEBUG selectByIndex: index=${index}, selectedNode reset to null`);
     this.selectedNode = null; // reset so the next handeSelectionChange doesn't skip as "same node"
 
     const newXpath = `${this.parentPath}[${this.currentIndex}]`

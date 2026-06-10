@@ -89,6 +89,21 @@ async def lifespan(app: FastAPI):
         docs_from_github = config_data.get("docs.from-github", False)
         logger.info(f"Documentation source from config: {'GitHub' if docs_from_github else 'local'}")
 
+    # Merge missing .description keys from default config into live config
+    try:
+        import json as _json
+        default_config_path = settings.project_root_dir / 'config' / 'config.json'
+        if default_config_path.exists():
+            with open(default_config_path, 'r', encoding='utf-8') as _f:
+                default_config_data = _json.load(_f)
+            live_config_data = config.load()
+            for _k, _v in default_config_data.items():
+                if _k.endswith('.description') and _k not in live_config_data:
+                    config.set(_k, _v)
+            logger.info("Merged missing config descriptions from defaults")
+    except Exception as _e:
+        logger.warning(f"Could not merge config descriptions: {_e}")
+
     # Ensure directories exist
     settings.data_root.mkdir(parents=True, exist_ok=True)
     settings.db_dir.mkdir(parents=True, exist_ok=True)
@@ -108,6 +123,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error initializing databases: {e}")
         raise
+
+    # Auto-migrate existing groups to projects on first run
+    from .lib.utils.project_utils import migrate_groups_to_projects
+    created = migrate_groups_to_projects(settings.db_dir)
+    if created:
+        logger.info(f"Auto-migrated {created} group(s) to projects")
 
     # Remove diagnostic users on startup in production mode
     if app_mode == "production":
@@ -209,7 +230,8 @@ from .routers import (
     collections,
     users,
     groups,
-    roles
+    roles,
+    projects
 )
 
 # Versioned API router (v1)
@@ -219,6 +241,7 @@ api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
 api_v1.include_router(collections.router)
 api_v1.include_router(users.router)
+api_v1.include_router(projects.router)
 api_v1.include_router(groups.router)
 api_v1.include_router(roles.router)
 api_v1.include_router(validation.router)

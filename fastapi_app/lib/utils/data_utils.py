@@ -12,6 +12,7 @@ DATA_FILES = {
     'roles': 'roles.json',
     'groups': 'groups.json',
     'collections': 'collections.json',
+    'projects': 'projects.json',
     'config': 'config.json'
 }
 

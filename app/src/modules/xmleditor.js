@@ -41,14 +41,15 @@
  * @property {(message: any) => void} error
  */
 
-import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment, Transaction } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
-import { EditorView, keymap } from "@codemirror/view"
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
-import { indentWithTab } from "@codemirror/commands"
-import { linter, lintGutter, forceLinting } from "@codemirror/lint"
+import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language"
+import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
+import { linter, lintGutter, forceLinting, lintKeymap } from "@codemirror/lint"
 
 // custom modules
 
@@ -153,6 +154,7 @@ export class XMLEditor extends EventEmitter {
   #mergeViewExt = null;
 
   // compartments
+  #historyCompartment = new Compartment()
   #mergeViewCompartment = new Compartment()
   #autocompleteCompartment = new Compartment()
   #linterCompartment = new Compartment()
@@ -185,8 +187,34 @@ export class XMLEditor extends EventEmitter {
     }
 
     // list of extensions to be used in the editor
+    // history() is placed in a compartment so it can be cleared when a new document is loaded (fixes #387)
     const extensions = [
-      basicSetup,
+      lineNumbers(),
+      highlightActiveLineGutter(),
+      highlightSpecialChars(),
+      this.#historyCompartment.of(history()),
+      foldGutter(),
+      drawSelection(),
+      dropCursor(),
+      EditorState.allowMultipleSelections.of(true),
+      indentOnInput(),
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      bracketMatching(),
+      closeBrackets(),
+      autocompletion(),
+      rectangularSelection(),
+      crosshairCursor(),
+      highlightActiveLine(),
+      highlightSelectionMatches(),
+      keymap.of([
+        ...closeBracketsKeymap,
+        ...defaultKeymap,
+        ...searchKeymap,
+        ...historyKeymap,
+        ...foldKeymap,
+        ...completionKeymap,
+        ...lintKeymap
+      ]),
       xml(),
       this.#xmlTagSyncCompartment.of(xmlTagSync),
       this.#linterCompartment.of([]),
@@ -426,7 +454,10 @@ export class XMLEditor extends EventEmitter {
     
     // inform listeners about the xml
     await this.emit("editorBeforeLoad", xml)
-    
+
+    // Clear undo/redo history so the previous document's edits cannot be undone into new doc (fixes #387)
+    this.clearHistory();
+
     // display xml in editor, this triggers the update handlers
     // use addToHistory: false to prevent undo from going back before document load (fixes #221)
     this.#view.dispatch({
@@ -446,10 +477,19 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Marks the editor as clean, i.e. no changes are pending. 
+   * Marks the editor as clean, i.e. no changes are pending.
    */
   markAsClean() {
     this.#editorIsDirty = false;
+  }
+
+  /**
+   * Clears the undo/redo history so previous document content cannot be restored.
+   * Called before loading a new document to prevent cross-document undo (fixes #387).
+   */
+  clearHistory() {
+    this.#view.dispatch({ effects: this.#historyCompartment.reconfigure([]) });
+    this.#view.dispatch({ effects: this.#historyCompartment.reconfigure(history()) });
   }
   
   /**
@@ -727,7 +767,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Toggles line wrapping on and off
-   * @param {boolean} value 
+   * @param {boolean} value
    */
   setLineWrapping(value) {
     this.#view.dispatch({
@@ -737,6 +777,9 @@ export class XMLEditor extends EventEmitter {
           value ? [] : EditorView.theme({ ".cm-scroller": { overflowX: "scroll" } })
         )
       ]
+    });
+    requestAnimationFrame(() => {
+      this.#view.scrollDOM.scrollLeft = 0;
     });
   }
 

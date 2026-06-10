@@ -23,6 +23,7 @@ export { default as FiledataPlugin } from './plugins/filedata.js';
 export { default as HeartbeatPlugin } from './plugins/heartbeat.js';
 export { default as HelpPlugin } from './plugins/help.js';
 export { default as InfoPlugin } from './plugins/info.js';
+export { default as LayoutPlugin } from './plugins/layout.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
 export { default as MoveFilesPlugin } from './plugins/move-files.js';
 export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
@@ -60,6 +61,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   heartbeat: import('./plugins/heartbeat.js').default,
  *   help: import('./plugins/help.js').default,
  *   info: import('./plugins/info.js').default,
+ *   layout: import('./plugins/layout.js').default,
  *   logger: import('./plugins/logger.js').default,
  *   "move-files": import('./plugins/move-files.js').default,
  *   pdfviewer: import('./plugins/pdfviewer.js').default,

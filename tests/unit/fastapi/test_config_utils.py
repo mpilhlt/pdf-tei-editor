@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.utils.config_utils import Config
+from fastapi_app.lib.utils.config_utils import Config, get_config_metadata
 
 
 class TestConfigUtils(unittest.TestCase):
@@ -177,6 +177,55 @@ class TestConfigUtils(unittest.TestCase):
 
         self.assertEqual(self.config.get('session.timeout'), 3600)
         self.assertEqual(self.config.get('session.cookie.name'), 'sessionId')
+
+    def test_set_with_description(self):
+        """Test that set() saves a description metadata key."""
+        success, msg = self.config.set('some.key', 'value', description='What this key controls')
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.description'], 'What this key controls')
+
+    def test_set_with_explicit_type(self):
+        """Test that set() uses explicit type over inferred type."""
+        success, msg = self.config.set('some.key', 42, value_type='string')
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'string')
+
+    def test_get_metadata_returns_all(self):
+        """Test get_metadata returns type, values, description."""
+        self.config.set('some.key', 'foo',
+                        value_type='string',
+                        allowed_values=['foo', 'bar'],
+                        description='A test key')
+        meta = get_config_metadata('some.key', self.db_dir)
+        self.assertEqual(meta['type'], 'string')
+        self.assertEqual(meta['values'], ['foo', 'bar'])
+        self.assertEqual(meta['description'], 'A test key')
+        # Also verify the Config class method delegates correctly
+        self.assertEqual(self.config.get_metadata('some.key'), meta)
+
+    def test_set_values_via_parameter(self):
+        """Test that allowed_values parameter writes the .values key."""
+        success, _ = self.config.set('some.key', 'foo', allowed_values=['foo', 'bar'])
+        self.assertTrue(success)
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.values'], ['foo', 'bar'])
+
+    def test_set_with_allowed_values_validates_value(self):
+        """Test that set() rejects values not in allowed_values even on first set."""
+        success, msg = self.config.set('some.key', 'bad_value', allowed_values=['foo', 'bar'])
+        self.assertFalse(success)
+        self.assertIn('not in allowed values', msg)
+
+    def test_set_with_explicit_type_overwrites_existing(self):
+        """Test that explicit value_type overwrites an already-stored type."""
+        self.config.set('some.key', 42)  # infers 'number'
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'number')
+        self.config.set('some.key', 42, value_type='string')
+        config_data = self.config.load()
+        self.assertEqual(config_data['some.key.type'], 'string')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,29 @@
 """LLamore plugin configuration."""
 
+from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
+
+PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
+    {
+        "config_key": "plugin.llamore.api.key",
+        "env_var":    "GEMINI_API_KEY",
+        "default":     None,
+        "description": "Gemini API key for LLamore extraction",
+    },
+    {
+        "config_key": "plugin.llamore.model",
+        "env_var":    "LLAMORE_MODEL",
+        "default":     "gemini-2.0-flash",
+        "description": "Gemini model identifier used by LLamore for reference extraction",
+    },
+]
+
+
+def init_plugin_config() -> None:
+    """Register plugin config keys from environment variables."""
+    for spec in PLUGIN_CONFIG_SPECS:
+        get_plugin_config(**spec)
+
+
 SCHEMA_BASE_URL = "https://mpilhlt.github.io/llamore/schema"
 
 

@@ -6,23 +6,25 @@ The PDF-TEI Editor uses a layered access control system to manage who can view a
 
 The system implements a three-level access control model:
 
-```
-User → Group → Collection
+```text
+User → Project → Collection
 ```
 
-- **Users** belong to one or more **Groups**
-- **Groups** have access to one or more **Collections**
+- **Users** are members of one or more **Projects**
+- **Projects** contain one or more **Collections**
 - **Collections** contain documents
 
-This model allows fine-grained access control where users can only access documents in collections that their groups have access to.
+This model allows fine-grained access control where users can only access documents in collections included in their projects.
+
+**Groups** are purely organisational labels (e.g., for team structure). They do not control collection access.
 
 ## Access Control Layers
 
-### 1. Collection-Based Access
+### 1. Project-Based Collection Access
 
-Documents belong to collections, and users access documents through their group memberships. You can only see and edit documents in collections your groups have access to.
+Documents belong to collections, and users access documents through their project memberships. You can only see and edit documents in collections that are part of your projects.
 
-**Example:** If you belong to the "Editors" group which has access to the "Manuscripts" collection, you can see all documents in that collection.
+**Example:** If you are a member of the "Manuscripts Project" which includes the "Manuscripts" collection, you can see all documents in that collection.
 
 ### 2. Role-Based Restrictions
 

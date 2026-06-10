@@ -23,6 +23,7 @@ Low-level API (for advanced use):
 
     get_config_value(key, db_dir, default)
     set_config_value(key, value, db_dir)
+    get_config_metadata(key, db_dir)
 """
 
 import json
@@ -103,18 +104,35 @@ class Config:
         """
         return get_config_value(key, self.db_dir, default)
 
-    def set(self, key: str, value: Any) -> tuple[bool, str]:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        value_type: str | None = None,
+        allowed_values: list[Any] | None = None,
+        description: str | None = None,
+    ) -> tuple[bool, str]:
         """
         Set a configuration value.
 
         Args:
             key: The configuration key
             value: The value to set
+            value_type: Optional explicit JSON type (overrides auto-inferred type)
+            allowed_values: Optional list of allowed values to store as key.values
+            description: Optional description stored as key.description
 
         Returns:
             Tuple of (success: bool, message: str)
         """
-        return set_config_value(key, value, self.db_dir)
+        return set_config_value(key, value, self.db_dir,
+                                value_type=value_type,
+                                allowed_values=allowed_values,
+                                description=description)
+
+    def get_metadata(self, key: str) -> dict[str, Any]:
+        """Return metadata dict with type, values, description for key."""
+        return get_config_metadata(key, self.db_dir)
 
     def delete(self, key: str) -> tuple[bool, str]:
         """
@@ -183,7 +201,32 @@ def get_config_value(key: str, db_dir: Path, default: Any = None) -> Any:
         return default
 
 
-def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
+def get_config_metadata(key: str, db_dir: Path) -> dict[str, Any]:
+    """Return type, values, and description metadata for a config key.
+
+    Args:
+        key: The configuration key
+        db_dir: Path to the database directory containing config.json
+
+    Returns:
+        Dict with 'type', 'values', and 'description' entries (values may be None)
+    """
+    config_data = load_full_config(db_dir)
+    return {
+        "type": config_data.get(f"{key}.type"),
+        "values": config_data.get(f"{key}.values"),
+        "description": config_data.get(f"{key}.description"),
+    }
+
+
+def set_config_value(
+    key: str,
+    value: Any,
+    db_dir: Path,
+    value_type: str | None = None,
+    allowed_values: list[Any] | None = None,
+    description: str | None = None,
+) -> tuple[bool, str]:
     """
     Set a configuration value with atomic write and file locking.
 
@@ -194,6 +237,10 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
         key: The configuration key
         value: The value to set
         db_dir: Path to the database directory containing config.json
+        value_type: Optional explicit type name ("string", "number", "boolean", "array", "object", "null").
+            Overrides inferred type. Ignored for metadata sub-keys.
+        allowed_values: Optional list of permitted values. Written as key.values. Ignored for metadata sub-keys.
+        description: Optional human-readable description. Written as key.description. Ignored for metadata sub-keys.
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -229,6 +276,10 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
                     if value not in valid_types:
                         return False, f"Type must be one of {valid_types}"
 
+                # Validate against incoming allowed_values (before they are persisted)
+                if allowed_values is not None and value not in allowed_values:
+                    return False, f"Value {json.dumps(value)} is not in allowed values {json.dumps(allowed_values)}"
+
                 # Validate against existing constraints
                 if not _validate_config_value(config_data, key, value):
                     return False, "Value does not meet validation constraints"
@@ -236,11 +287,22 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
                 # Set the value
                 config_data[key] = value
 
-                # Auto-set type for new keys (not ending in .values or .type)
-                if not key.endswith(".values") and not key.endswith(".type"):
+                # Auto-set type (explicit takes priority over inferred)
+                if not key.endswith(".values") and not key.endswith(".type") and not key.endswith(".description"):
                     type_key = f"{key}.type"
-                    if type_key not in config_data:
-                        config_data[type_key] = _get_json_type(value)
+                    resolved_type: str | None
+                    if value_type is not None:
+                        resolved_type = value_type
+                    else:
+                        resolved_type = _get_json_type(value) if type_key not in config_data else None
+                    if resolved_type:
+                        config_data[type_key] = resolved_type
+
+                    if allowed_values is not None:
+                        config_data[f"{key}.values"] = allowed_values
+
+                    if description is not None:
+                        config_data[f"{key}.description"] = description
 
                 # Atomic write: write to temp file then rename
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')

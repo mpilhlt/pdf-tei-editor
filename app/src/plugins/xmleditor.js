@@ -505,7 +505,7 @@ class XmlEditorPlugin extends Plugin {
             const items = this.#xpathDropdown.items || [];
             const savedXpathInItems = savedXpath && items.some(item => item.value === savedXpath);
             if (savedXpathInItems) {
-              await this.dispatchStateChange({ xpath: `${savedXpath}[1]` });
+              await this.scheduleStateChange({ xpath: `${savedXpath}[1]` });
             }
           }
         }, 0);
@@ -518,6 +518,13 @@ class XmlEditorPlugin extends Plugin {
       this.#setLineWrappingPreference(enabled);
       this.#xmlEditor.setLineWrapping(enabled);
       this.#logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`);
+      if (this.state?.xpath) {
+        try {
+          this.#xmlEditor.selectByXpath(this.state.xpath);
+        } catch (err) {
+          this.#logger.debug(`Could not restore scroll position after wrap toggle: ${err.message}`);
+        }
+      }
     });
 
     // Capture Ctrl/Cmd+S to trigger XML download instead of browser save
@@ -982,15 +989,14 @@ class XmlEditorPlugin extends Plugin {
    * @returns {boolean}
    */
   #getLineWrappingPreference() {
-    const stored = localStorage.getItem('xmleditor.lineWrapping');
-    return stored === null ? true : stored === 'true';
+    return this.uiStorage.get('lineWrapping', true);
   }
 
   /**
    * @param {boolean} enabled
    */
   #setLineWrappingPreference(enabled) {
-    localStorage.setItem('xmleditor.lineWrapping', String(enabled));
+    this.uiStorage.set('lineWrapping', enabled);
   }
 
   /**
@@ -998,7 +1004,7 @@ class XmlEditorPlugin extends Plugin {
    * @returns {string|null}
    */
   #getXpathPreference(variantId) {
-    return localStorage.getItem(`xmleditor.xpath.${variantId}`);
+    return this.uiStorage.get(`xpath.${variantId}`, null);
   }
 
   /**
@@ -1007,9 +1013,9 @@ class XmlEditorPlugin extends Plugin {
    */
   #setXpathPreference(variantId, xpath) {
     if (xpath) {
-      localStorage.setItem(`xmleditor.xpath.${variantId}`, xpath);
+      this.uiStorage.set(`xpath.${variantId}`, xpath);
     } else {
-      localStorage.removeItem(`xmleditor.xpath.${variantId}`);
+      this.uiStorage.remove(`xpath.${variantId}`);
     }
   }
 

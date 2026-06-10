@@ -11,7 +11,7 @@ Implements standard REST endpoints:
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from ..lib.utils.collection_utils import (
     get_collections_with_details,
@@ -20,7 +20,10 @@ from ..lib.utils.collection_utils import (
     remove_collection,
     set_collection_property,
     grant_user_collection_access,
-    can_delete_collection
+    can_delete_collection,
+    collection_config_get_all,
+    collection_config_set,
+    collection_config_delete
 )
 from ..lib.core.dependencies import get_current_user, get_file_repository
 from ..lib.repository.file_repository import FileRepository
@@ -323,6 +326,24 @@ class CollectionDeleteResponse(BaseModel):
     files_deleted: int = Field(..., description="Number of files marked as deleted")
 
 
+class CollectionConfigSetRequest(BaseModel):
+    """Request model for setting a collection config override."""
+    key: str = Field(..., description="Config key (must exist in global config or any key is accepted)")
+    value: Any = Field(..., description="Config value")
+
+
+class CollectionConfigItem(BaseModel):
+    """A single collection config override entry."""
+    key: str = Field(..., description="Config key")
+    value: Any = Field(..., description="Config value")
+
+
+class CollectionConfigResponse(BaseModel):
+    """Response model for collection config list."""
+    collection_id: str = Field(..., description="Collection ID")
+    config: dict[str, Any] = Field(..., description="Collection-specific config overrides")
+
+
 @router.get("/{collection_id}/files", response_model=CollectionFilesResponse)
 def list_collection_files(
     collection_id: str,
@@ -446,3 +467,71 @@ def delete_collection(
     except Exception as e:
         logger.error(f"Error deleting collection: {e}")
         raise HTTPException(status_code=500, detail=f"Error deleting collection: {str(e)}")
+
+
+@router.get("/{collection_id}/config", response_model=CollectionConfigResponse)
+def get_collection_config(
+    collection_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """List all collection-specific config overrides for a collection."""
+    settings = get_settings()
+    try:
+        all_collections = get_collections_with_details(settings.db_dir)
+        if not find_collection(collection_id, all_collections or []):
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+        overrides = collection_config_get_all(settings.db_dir, collection_id)
+        return CollectionConfigResponse(collection_id=collection_id, config=overrides)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting collection config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{collection_id}/config", response_model=CollectionConfigItem)
+def set_collection_config_key(
+    collection_id: str,
+    request_data: CollectionConfigSetRequest,
+    current_user: dict = Depends(require_admin)
+):
+    """Set a collection-specific config override."""
+    settings = get_settings()
+    try:
+        all_collections = get_collections_with_details(settings.db_dir)
+        if not find_collection(collection_id, all_collections or []):
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+        success, message = collection_config_set(settings.db_dir, collection_id, request_data.key, request_data.value)
+        if not success:
+            raise HTTPException(status_code=400, detail=message)
+        logger.info(f"User {current_user.get('username')} set collection '{collection_id}' config '{request_data.key}'")
+        return CollectionConfigItem(key=request_data.key, value=request_data.value)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting collection config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{collection_id}/config/{key}")
+def delete_collection_config_key(
+    collection_id: str,
+    key: str,
+    current_user: dict = Depends(require_admin)
+):
+    """Delete a collection-specific config override."""
+    settings = get_settings()
+    try:
+        all_collections = get_collections_with_details(settings.db_dir)
+        if not find_collection(collection_id, all_collections or []):
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+        success, message = collection_config_delete(settings.db_dir, collection_id, key)
+        if not success:
+            raise HTTPException(status_code=404, detail=message)
+        logger.info(f"User {current_user.get('username')} deleted collection '{collection_id}' config '{key}'")
+        return {"success": True, "collection_id": collection_id, "key": key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting collection config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -279,6 +279,58 @@ class TestCollectionUtils(unittest.TestCase):
         self.assertFalse(file3.deleted)
 
 
+    def test_collection_config_set_and_get(self):
+        """Test setting and getting collection-specific config."""
+        from fastapi_app.lib.utils.collection_utils import (
+            collection_config_set, collection_config_get
+        )
+        add_collection(self.db_dir, 'test-col', 'Test')
+        success, msg = collection_config_set(self.db_dir, 'test-col', 'schema.base-url', 'https://example.com/schema')
+        self.assertTrue(success)
+        value = collection_config_get(self.db_dir, 'test-col', 'schema.base-url')
+        self.assertEqual(value, 'https://example.com/schema')
+
+    def test_collection_config_get_falls_back_to_global(self):
+        """Test that collection_config_get falls back to global config when use_default=True."""
+        from fastapi_app.lib.utils.collection_utils import collection_config_get
+        from fastapi_app.lib.utils.config_utils import set_config_value
+        add_collection(self.db_dir, 'test-col', 'Test')
+        set_config_value('schema.base-url', 'https://global.example.com', self.db_dir)
+        value = collection_config_get(self.db_dir, 'test-col', 'schema.base-url', use_default=True)
+        self.assertEqual(value, 'https://global.example.com')
+
+    def test_collection_config_get_no_fallback(self):
+        """Test that collection_config_get returns None when use_default=False and key not in collection."""
+        from fastapi_app.lib.utils.collection_utils import collection_config_get
+        add_collection(self.db_dir, 'test-col', 'Test')
+        value = collection_config_get(self.db_dir, 'test-col', 'schema.base-url', use_default=False)
+        self.assertIsNone(value)
+
+    def test_collection_config_delete(self):
+        """Test deleting a collection-specific config key."""
+        from fastapi_app.lib.utils.collection_utils import (
+            collection_config_set, collection_config_get, collection_config_delete
+        )
+        add_collection(self.db_dir, 'test-col', 'Test')
+        collection_config_set(self.db_dir, 'test-col', 'schema.base-url', 'https://example.com')
+        success, msg = collection_config_delete(self.db_dir, 'test-col', 'schema.base-url')
+        self.assertTrue(success)
+        value = collection_config_get(self.db_dir, 'test-col', 'schema.base-url', use_default=False)
+        self.assertIsNone(value)
+
+    def test_collection_config_get_all(self):
+        """Test retrieving all collection-specific config overrides."""
+        from fastapi_app.lib.utils.collection_utils import (
+            collection_config_set, collection_config_get_all
+        )
+        add_collection(self.db_dir, 'test-col', 'Test')
+        collection_config_set(self.db_dir, 'test-col', 'schema.base-url', 'https://example.com')
+        collection_config_set(self.db_dir, 'test-col', 'annotation.lifecycle.order', ['draft', 'published'])
+        overrides = collection_config_get_all(self.db_dir, 'test-col')
+        self.assertEqual(overrides['schema.base-url'], 'https://example.com')
+        self.assertEqual(overrides['annotation.lifecycle.order'], ['draft', 'published'])
+
+
 class TestCollectionOwnership(unittest.TestCase):
     """Test collection ownership utility functions."""
 

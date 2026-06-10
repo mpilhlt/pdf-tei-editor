@@ -17,6 +17,7 @@ Domain-specific rules are in subdirectory CLAUDE.md files: [app/CLAUDE.md](app/C
 For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
 - **[Frontend Architecture](docs/code-assistant/architecture-frontend.md)** - Frontend plugin system, UI components, templates
+- **[UI Storage](docs/code-assistant/ui-storage.md)** - Persisting UI preferences with UIStorage (localStorage wrapper, DOM binding, testing)
 - **[Backend Architecture](docs/code-assistant/architecture-backend.md)** - FastAPI structure, lib/ modules, import patterns
 - **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
 - **[API Reference](docs/development/api-reference.md)** - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
@@ -118,43 +119,6 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 - **Markdown formatting** — follow these rules in all `.md` files: (1) Table cells must have spaces around the content: `| value |`, not `|value|`; separator rows must be `| --- |`, not `|---|`. (2) Fenced code blocks must always specify a language identifier (bash, python, text, etc.) — never use a bare triple-backtick fence. (3) Anchor links must exactly match a heading in the file after lowercasing and replacing spaces/punctuation with hyphens; verify the target heading exists before writing the link.
 - **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
 
-## Planning documents, todo documents, github issues, documentation
-
-### Standard Feature Implementation Workflow
-
-When implementing a new feature, follow this workflow:
-
-1. **Create implementation plan** in `dev/todo/<feature-name>-implementation.md`
-   - Document technical requirements and API endpoints
-   - List UI components to add
-   - Outline implementation steps
-   - Include code examples for key patterns
-2. **Work on the implementation** following the plan
-3. **Document results** in the same plan document under "Implementation Progress"
-   - List completed changes with file references and line numbers
-   - Document key implementation details and patterns used
-   - Include lessons learned for future reference
-
-### Planning Document Content
-
-- If you are asked to create planning documents for complex, multi-phase tasks, only include technically relevant information needed for the implementation or for later reference, e.g. for writing documentation on the new code
-- Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.
-- When migrating code to a new state, do not mention the legacy state unless absolutely necessary (for example, when code is concerns with migration of data) and there is no need to discuss the improvements provided by the new solution. This also applies to writing in-code documentation and comments.
-
-### Commit messages and contributing best practices
-
-- When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
-- This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
-- Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
-
-### Completion documents and summaries
-
-- When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.
-- Omit statistical information on the number of changed lines, methods etc. or lists of code changes. Just summarize what the new code does and provide examples if the usage is different from before, so that you can update existing documentation.
-- The summary should be concise and only include information relevant to understanding the implementation. Omit discussion of advantages, alternatives, or motivational language.
-- If there were any significant challenges or deviations from the original plan, briefly mention them in a factual manner.
-- The goal is to provide a clear understanding of what was implemented without unnecessary detail.
-
-### Missing or incorrect documentation
+## Missing or incorrect documentation
 
 **IMPORTANT** If during a session you notice that information that the user gives you is missing or outdated in the documentation, suggest to update it.

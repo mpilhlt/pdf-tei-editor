@@ -265,7 +265,7 @@ class PdfViewerPlugin extends Plugin {
 
     // Add autosearch switch to statusbar
     const statusBar = ui.pdfViewer.statusbar;
-    const savedAutoSearch = this.#storage.getGlobal('autosearch', false);
+    const savedAutoSearch = this.uiStorage.get('autosearch', false);
     const autoSearchSwitchWidget = PanelUtils.createSwitch({
       text: 'Autosearch',
       helpText: savedAutoSearch ? 'on' : 'off',
@@ -334,7 +334,7 @@ class PdfViewerPlugin extends Plugin {
     });
 
     // Restore cursor tool mode
-    if (this.#storage.getGlobal('handTool', false)) {
+    if (this.uiStorage.get('handTool', false)) {
       this.#pdfViewer.setHandToolMode();
       this.#textSelectBtn.setAttribute('variant', 'default');
       this.#handToolBtn.setAttribute('variant', 'primary');
@@ -492,7 +492,7 @@ class PdfViewerPlugin extends Plugin {
   #onSelectTextTool() {
     if (!this.#pdfViewer.isHandTool()) return;
     this.#pdfViewer.setTextSelectMode();
-    this.#storage.setGlobal('handTool', false);
+    this.uiStorage.set('handTool', false);
     this.#textSelectBtn.setAttribute('variant', 'primary');
     this.#handToolBtn.setAttribute('variant', 'default');
   }
@@ -500,7 +500,7 @@ class PdfViewerPlugin extends Plugin {
   #onSelectHandTool() {
     if (this.#pdfViewer.isHandTool()) return;
     this.#pdfViewer.setHandToolMode();
-    this.#storage.setGlobal('handTool', true);
+    this.uiStorage.set('handTool', true);
     this.#textSelectBtn.setAttribute('variant', 'default');
     this.#handToolBtn.setAttribute('variant', 'primary');
   }
@@ -556,7 +556,7 @@ class PdfViewerPlugin extends Plugin {
     if (autoSearchSwitch) {
       autoSearchSwitch.setAttribute('help-text', checked ? 'on' : 'off');
     }
-    this.#storage.setGlobal('autosearch', checked);
+    this.uiStorage.set('autosearch', checked);
 
     this.#logger.info(`Auto search is: ${checked}`);
     const xmlEditor = this.getDependency('xmleditor');
