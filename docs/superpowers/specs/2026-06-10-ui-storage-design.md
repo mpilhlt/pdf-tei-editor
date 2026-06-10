@@ -136,7 +136,25 @@ All existing direct `localStorage`/`sessionStorage` uses for UI preferences are 
 
 ---
 
-## 5. Out of scope / future
+## 5. Documentation
+
+After implementation, write `docs/code-assistant/ui-storage.md` covering:
+
+- Purpose and when to use `UIStorage` vs `SessionStorage` vs application state
+- `UIStorage` API reference (`get`, `set`, `remove`, `bind`)
+- Key naming convention (`ui.<plugin-name>.<key>`)
+- How to access `this.uiStorage` from a plugin
+- The `bind()` DOM binding pattern with a worked example (split panel)
+- How to inject a custom storage backend (testing, server-backed)
+
+Then add references in the agent files:
+
+- **`CLAUDE.md`** (root) — add `ui-storage.md` to the Detailed Documentation table, under or near the Frontend Architecture entry
+- **`app/CLAUDE.md`** — add a note in the Utilities section pointing to `ui-storage.md` for UI preference persistence, and reminding that direct `localStorage` use should use `UIStorage` instead
+
+---
+
+## 6. Out of scope / future
 
 - **Approach C (HTML attribute binding):** Declare bindings in markup via `ui-persist` attributes, processed at boot. Track in a separate GitHub issue; can be layered on top of the `UIStorage.bind()` primitive without changes to this design.
 - **Server-backed storage:** Swap the `localStorage` backend in `PluginContext.getUIStorage()` to sync across devices. No API changes needed in plugins.
