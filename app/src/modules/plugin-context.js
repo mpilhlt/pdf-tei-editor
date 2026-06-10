@@ -3,7 +3,9 @@
  * @import { ApplicationState } from '../state.js'
  * @import { Application } from '../modules/application.js'
  * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
- */ 
+ */
+
+import { UIStorage } from './ui-storage.js';
 
 /**
  * PluginContext provides a controlled interface for plugins to interact with application services
@@ -127,6 +129,16 @@ export class PluginContext {
    */
   getDependency(name) {
     return this.#application.getDependency(name);
+  }
+
+  /**
+   * Create a UIStorage instance scoped to the given namespace.
+   * Override this method to swap the storage backend (e.g. for testing or server-backed storage).
+   * @param {string} namespace - Storage namespace, typically the plugin name
+   * @returns {UIStorage}
+   */
+  getUIStorage(namespace) {
+    return new UIStorage(namespace);
   }
 
   //
