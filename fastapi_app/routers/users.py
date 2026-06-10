@@ -80,7 +80,6 @@ def require_authenticated(current_user: Optional[dict] = Depends(get_current_use
 
 def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     """Verify user is authenticated and has admin role."""
-    logger.info(f"DEBUG require_admin called, user={current_user and current_user.get('username')}")
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
 
@@ -363,7 +362,6 @@ def delete_user_endpoint(
     Returns:
         Success message
     """
-    logger.info(f"DEBUG delete_user_endpoint called: username={username}, user={current_user.get('username')}")
     settings = get_settings()
 
     # Prevent self-deletion
