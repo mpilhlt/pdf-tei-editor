@@ -168,8 +168,6 @@ class XmlAnnotationPlugin extends Plugin {
     }
   }
 
-  // ── Stubs (implemented in Tasks 6 and 7) ───────────────────────────
-
   async #enableAnnotationMode() {
     if (!this.#xmlEditor.getXmlTree || !this.#xmlEditor.getXmlTree()) {
       notify('Cannot enable annotation mode: XML is not well-formed', 'warning', 'exclamation-triangle')
@@ -228,8 +226,49 @@ class XmlAnnotationPlugin extends Plugin {
     }
   }
 
-  async #wrapSelectionWith(_def) { /* Task 7 */ }
-  async #removeAnnotationAtClick() { /* Task 7 */ }
+  /**
+   * Wraps the current CM selection in the given annotation tag and re-syncs.
+   * @param {AnnotationTagDef} def
+   */
+  async #wrapSelectionWith(def) {
+    const view = this.#xmlEditor.getView?.()
+    if (!view) return
+    const { from, to } = view.state.selection.main
+    if (from === to) return
+    const selectedText = view.state.doc.sliceString(from, to)
+    const wrapped = `<${def.tag}>${selectedText}</${def.tag}>`
+    view.dispatch({ changes: { from, to, insert: wrapped }, userEvent: 'input.annotate' })
+    try {
+      const ancestor = this.#xmlEditor.getDomNodeAt?.(from)
+      if (ancestor) await this.#xmlEditor.updateEditorFromNode?.(ancestor.parentNode ?? ancestor)
+    } catch (e) {
+      // DOM may not be synced yet if the editor is still processing the change
+      this.#logger.debug('[xml-annotation] wrap sync failed: ' + String(e))
+    }
+  }
+
+  /**
+   * Removes the annotation element at the cursor position by unwrapping its children to the parent.
+   */
+  async #removeAnnotationAtClick() {
+    const view = this.#xmlEditor.getView?.()
+    if (!view) return
+    const pos = view.state.selection.main.head
+    try {
+      const node = this.#xmlEditor.getDomNodeAt?.(pos)
+      if (!(node instanceof Element)) return
+      if (!this.#tagDefs.some(d => d.tag === node.localName)) return
+      const parent = node.parentNode
+      if (!parent) return
+      while (node.firstChild) parent.insertBefore(node.firstChild, node)
+      parent.removeChild(node)
+      await this.#xmlEditor.updateEditorFromNode?.(parent)
+    } catch (err) {
+      // Annotation removal can fail if the XML DOM is out of sync; log as warning since this
+      // represents an unexpected state (unlike wrap-sync failures which are timing-related)
+      this.#logger.warn('[xml-annotation] remove annotation failed: ' + String(err))
+    }
+  }
 
   /**
    * @param {string[]} changedKeys
