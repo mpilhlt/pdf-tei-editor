@@ -714,7 +714,7 @@ class XmlEditorPlugin extends Plugin {
     for (const results of (contributions || [])) {
       for (const item of (results || [])) {
         if (item?.element instanceof HTMLElement) {
-          this.#contextMenu.addItem(item.element);
+          this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
         }
       }
     }
