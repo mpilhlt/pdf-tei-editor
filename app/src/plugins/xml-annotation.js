@@ -13,6 +13,9 @@ import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { XmlAnnotationPopup } from '../modules/codemirror/xml-annotation-popup.js'
+import ui from '../ui.js'
+import { notify } from '../modules/sl-utils.js'
+import { createAnnotationField, annotationTheme } from '../modules/codemirror/xml-annotation-decorations.js'
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null,
@@ -167,8 +170,64 @@ class XmlAnnotationPlugin extends Plugin {
 
   // ── Stubs (implemented in Tasks 6 and 7) ───────────────────────────
 
-  async #enableAnnotationMode() { /* Task 6 */ }
-  async #disableAnnotationMode() { /* Task 6 */ }
+  async #enableAnnotationMode() {
+    if (!this.#xmlEditor.getXmlTree || !this.#xmlEditor.getXmlTree()) {
+      notify('Cannot enable annotation mode: XML is not well-formed', 'warning', 'exclamation-triangle')
+      if (this.#switch) this.#switch.checked = false
+      return
+    }
+    const xmlTree = this.#xmlEditor.getXmlTree()
+    const textEl = xmlTree?.querySelector('text')
+    if (!textEl) {
+      notify('Cannot enable annotation mode: no <text> element found', 'warning', 'exclamation-triangle')
+      if (this.#switch) this.#switch.checked = false
+      return
+    }
+    this.#annotationMode = true
+    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+    this.#wasReadOnlyBeforeAnnotation = this.#xmlEditor.isReadOnly?.() ?? false
+    if (!this.#wasReadOnlyBeforeAnnotation) {
+      await this.#xmlEditor.setReadOnly?.(true)
+    }
+    ui.xmlEditor.headerbar.hidden = true
+    this.#setContextMenuItemsVisible(true)
+    this.#scrollToTextElement()
+  }
+
+  async #disableAnnotationMode() {
+    this.#annotationMode = false
+    this.#slot?.reconfigure([])
+    if (!this.#wasReadOnlyBeforeAnnotation) {
+      await this.#xmlEditor.setReadOnly?.(false)
+    }
+    ui.xmlEditor.headerbar.hidden = false
+    this.#setContextMenuItemsVisible(false)
+    if (this.#switch && this.#switch.checked) this.#switch.checked = false
+  }
+
+  /** @param {boolean} visible */
+  #setContextMenuItemsVisible(visible) {
+    if (this.#menuDivider) this.#menuDivider.hidden = !visible
+    if (this.#menuRemoveItem) this.#menuRemoveItem.hidden = !visible
+    for (const item of this.#menuTagItems) item.hidden = !visible
+  }
+
+  #scrollToTextElement() {
+    const xmlTree = this.#xmlEditor.getXmlTree?.()
+    if (!xmlTree) return
+    const textEl = xmlTree.querySelector('text')
+    if (!textEl) return
+    try {
+      const pos = this.#xmlEditor.getDomNodePosition?.(textEl)
+      if (pos != null) {
+        this.#xmlEditor.getView?.()?.dispatch({ selection: { anchor: pos }, scrollIntoView: true })
+      }
+    } catch (e) {
+      // CM view may not be ready if the editor has not rendered yet; scroll is optional UI polish
+      this.#logger.debug('[xml-annotation] scroll to text element failed: ' + String(e))
+    }
+  }
+
   async #wrapSelectionWith(_def) { /* Task 7 */ }
   async #removeAnnotationAtClick() { /* Task 7 */ }
 
