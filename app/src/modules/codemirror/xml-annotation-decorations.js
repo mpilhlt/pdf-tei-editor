@@ -77,7 +77,7 @@ class BadgeWidget extends WidgetType {
       e.stopPropagation();
       span.dispatchEvent(new CustomEvent('ann-badge-click', {
         bubbles: true,
-        detail: { tag: this.tag, from: this.from }
+        detail: { tag: this.tag, from: this.from, clientX: e.clientX, clientY: e.clientY }
       }));
     });
     return span;
