@@ -97,6 +97,11 @@ class XmlAnnotationPlugin extends Plugin {
 
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
     this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_AFTER_LOAD, () => this.#onDocumentLoaded())
+
+    // Populate tag defs from initialState so the popup tagMap is ready before any variant change fires
+    if (initialState.variant) {
+      await this.#updateTagDefs(initialState)
+    }
   }
 
   // ── Context menu contribution ───────────────────────────────────────
