@@ -13,6 +13,7 @@ import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { XmlAnnotationPopup } from '../modules/codemirror/xml-annotation-popup.js'
+import { XMLEditor } from '../modules/xmleditor.js'
 import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { createAnnotationField, annotationTheme } from '../modules/codemirror/xml-annotation-decorations.js'
@@ -93,6 +94,9 @@ class XmlAnnotationPlugin extends Plugin {
       this.#popup = new XmlAnnotationPopup(this.#xmlEditor)
       this.#popup.mount(editorContainer, this.#tagDefs)
     }
+
+    // Rebuild decorations and scroll when a new document is loaded in annotation mode
+    this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_AFTER_LOAD, () => this.#onDocumentLoaded())
   }
 
   // ── Context menu contribution ───────────────────────────────────────
@@ -210,6 +214,17 @@ class XmlAnnotationPlugin extends Plugin {
     for (const item of this.#menuTagItems) item.hidden = !visible
   }
 
+  async #onDocumentLoaded() {
+    if (!this.#annotationMode) return
+    if (this.#tagDefs.length === 0) {
+      await this.#disableAnnotationMode()
+      return
+    }
+    // Rebuild decorations for the newly loaded document
+    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+    this.#scrollToTextElement()
+  }
+
   #scrollToTextElement() {
     const xmlTree = this.#xmlEditor.getXmlTree?.()
     if (!xmlTree) return
@@ -274,7 +289,49 @@ class XmlAnnotationPlugin extends Plugin {
    * @param {string[]} changedKeys
    * @param {ApplicationState} state
    */
-  async onStateUpdate(changedKeys, state) { /* Task 8 */ }
+  async onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('variant')) {
+      await this.#updateTagDefs(state)
+    }
+    if (changedKeys.includes('xml') && !state.xml && this.#annotationMode) {
+      await this.#disableAnnotationMode()
+    }
+  }
+
+  /** @param {ApplicationState} state */
+  async #updateTagDefs(state) {
+    const variant = state.variant
+    const extractors = this.#extraction.extractorInfo()
+    /** @type {AnnotationTagDef[]} */
+    const newDefs = []
+
+    if (extractors && variant) {
+      for (const ext of extractors) {
+        if (!ext.variants || ext.variants.includes(variant)) {
+          const tags = /** @type {any} */ (ext).annotation_tags
+          if (Array.isArray(tags)) newDefs.push(...tags)
+        }
+      }
+    }
+
+    this.#tagDefs = newDefs
+    const hasTagDefs = newDefs.length > 0
+
+    if (this.#switch) {
+      this.#switch.disabled = !hasTagDefs
+      this.#switch.helpText = hasTagDefs ? '' : 'No annotation tags defined for this variant'
+    }
+
+    this.#popup?.updateTagDefs(newDefs)
+
+    if (this.#annotationMode) {
+      if (!hasTagDefs) {
+        await this.#disableAnnotationMode()
+      } else {
+        this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+      }
+    }
+  }
 }
 
 export default XmlAnnotationPlugin
