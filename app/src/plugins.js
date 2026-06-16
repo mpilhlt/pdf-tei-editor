@@ -46,6 +46,7 @@ import {
   UrlHashStatePlugin,
   UserAccountPlugin,
   XmlEditorPlugin,
+  XmlAnnotationPlugin,
   XslViewerPlugin,
 } from './plugin-registry.js'
 
@@ -80,6 +81,7 @@ const plugins = [
   LayoutPlugin,
   PdfViewerPlugin,
   XmlEditorPlugin,
+  XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
   XslViewerPlugin,
   TeiToolsPlugin,
   FileSelectionPlugin,
