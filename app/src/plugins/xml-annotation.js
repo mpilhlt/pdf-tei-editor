@@ -20,7 +20,9 @@ import { createAnnotationField, annotationTheme } from '../modules/codemirror/xm
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null,
- *   color: string, attributes: Array<{name:string, values?: string[]|null}> }} AnnotationTagDef
+ *   color: string, attributes: Array<{name:string, values?: string[]|null}>,
+ *   description?: string|null, priority?: number,
+ *   defaultAttributes?: Record<string,string>|null }} AnnotationTagDef
  */
 
 class XmlAnnotationPlugin extends Plugin {
@@ -65,6 +67,12 @@ class XmlAnnotationPlugin extends Plugin {
 
   /** @type {HTMLElement|null} */
   #menuRemoveItem = null;
+
+  /** @type {HTMLElement|null} */
+  #menuSentinel = null;
+
+  /** @type {number|null} */
+  #topLevelCount = null;
 
   /** @type {XmlAnnotationPopup|null} */
   #popup = null;
@@ -309,12 +317,15 @@ class XmlAnnotationPlugin extends Plugin {
     const extractors = this.#extraction.extractorInfo()
     /** @type {AnnotationTagDef[]} */
     const newDefs = []
+    this.#topLevelCount = null
 
     if (extractors && variant) {
       for (const ext of extractors) {
         if (!ext.variants || ext.variants.includes(variant)) {
-          const tags = /** @type {any} */ (ext).annotation_tags
-          if (Array.isArray(tags)) newDefs.push(...tags)
+          const variantTags = /** @type {any} */ (ext).annotationTags?.[variant]
+          if (Array.isArray(variantTags)) newDefs.push(...variantTags)
+          const cutoff = /** @type {any} */ (ext).annotationTagsCutoff?.[variant]
+          if (cutoff != null) this.#topLevelCount = cutoff
         }
       }
     }
@@ -323,7 +334,7 @@ class XmlAnnotationPlugin extends Plugin {
     const hasTagDefs = newDefs.length > 0
 
     if (this.#switch) {
-      this.#switch.disabled = !hasTagDefs
+      this.#switch.hidden = !hasTagDefs
       this.#switch.helpText = hasTagDefs ? '' : 'No annotation tags defined for this variant'
     }
 
