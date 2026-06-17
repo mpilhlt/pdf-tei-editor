@@ -56,6 +56,41 @@ class TestAnnotationTagDef(unittest.TestCase):
         self.assertEqual(data["tag"], "author")
         self.assertIsNone(data["labelMap"])
 
+    def test_new_fields_defaults(self):
+        tag = AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
+        self.assertIsNone(tag.description)
+        self.assertEqual(tag.priority, 100)
+        self.assertIsNone(tag.defaultAttributes)
+
+    def test_description_field(self):
+        tag = AnnotationTagDef(
+            tag="bibl", label="BIBL", color="#89dceb",
+            description="An individual bibliographic reference"
+        )
+        self.assertEqual(tag.description, "An individual bibliographic reference")
+
+    def test_priority_field(self):
+        tag = AnnotationTagDef(tag="body", label="body", color="#89dceb", priority=1)
+        self.assertEqual(tag.priority, 1)
+
+    def test_default_attributes_field(self):
+        tag = AnnotationTagDef(
+            tag="note", label="note[footnote]", color="#94e2d5",
+            defaultAttributes={"place": "footnote"}
+        )
+        self.assertEqual(tag.defaultAttributes, {"place": "footnote"})
+
+    def test_serialization_with_new_fields(self):
+        tag = AnnotationTagDef(
+            tag="note", label="note[footnote]", color="#94e2d5",
+            priority=5, defaultAttributes={"place": "footnote"},
+            description="A footnote"
+        )
+        data = tag.model_dump()
+        self.assertEqual(data["priority"], 5)
+        self.assertEqual(data["defaultAttributes"], {"place": "footnote"})
+        self.assertEqual(data["description"], "A footnote")
+
 
 class TestExtractorInfoAnnotationTags(unittest.TestCase):
 

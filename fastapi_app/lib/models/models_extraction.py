@@ -49,6 +49,18 @@ class AnnotationTagDef(BaseModel):
         default_factory=list,
         description="Attributes shown in the properties popup"
     )
+    description: Optional[str] = Field(
+        None,
+        description="Tooltip text for the context menu item"
+    )
+    priority: int = Field(
+        100,
+        description="Sort order; lower = shown first in the menu"
+    )
+    defaultAttributes: Optional[Dict[str, str]] = Field(
+        None,
+        description="Attribute key/value pairs baked into the opening tag when wrapping a selection"
+    )
 
 
 class ExtractorInfo(BaseModel):
