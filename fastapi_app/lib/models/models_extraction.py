@@ -105,9 +105,13 @@ class ExtractorInfo(BaseModel):
         None,
         description="Annotation guide URLs for each variant"
     )
-    annotationTags: List[AnnotationTagDef] = Field(
-        default_factory=list,
-        description="Annotation tag definitions for this extractor's variants"
+    annotationTags: Dict[str, List[AnnotationTagDef]] = Field(
+        default_factory=dict,
+        description="Annotation tag definitions keyed by variant_id"
+    )
+    annotationTagsCutoff: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu"
     )
 
 

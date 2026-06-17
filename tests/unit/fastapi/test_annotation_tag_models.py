@@ -94,31 +94,41 @@ class TestAnnotationTagDef(unittest.TestCase):
 
 class TestExtractorInfoAnnotationTags(unittest.TestCase):
 
-    def test_default_empty(self):
+    def test_default_empty_dict(self):
         info = ExtractorInfo(
-            id="grobid",
-            name="Grobid",
-            description="Grobid extractor",
-            input=["pdf"],
-            output=["xml"],
-            available=True,
+            id="grobid", name="Grobid", description="Grobid extractor",
+            input=["pdf"], output=["xml"], available=True,
         )
-        self.assertEqual(info.annotationTags, [])
+        self.assertEqual(info.annotationTags, {})
 
-    def test_with_annotation_tags(self):
+    def test_with_annotation_tags_dict(self):
         info = ExtractorInfo(
-            id="grobid",
-            name="Grobid",
-            description="Grobid extractor",
-            input=["pdf"],
-            output=["xml"],
-            available=True,
-            annotationTags=[
-                AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
-            ],
+            id="grobid", name="Grobid", description="Grobid extractor",
+            input=["pdf"], output=["xml"], available=True,
+            annotationTags={
+                "grobid.training.references": [
+                    AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
+                ]
+            },
         )
-        self.assertEqual(len(info.annotationTags), 1)
-        self.assertEqual(info.annotationTags[0].tag, "bibl")
+        tags = info.annotationTags.get("grobid.training.references", [])
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].tag, "bibl")
+
+    def test_annotation_tags_cutoff_default(self):
+        info = ExtractorInfo(
+            id="grobid", name="Grobid", description="Grobid extractor",
+            input=["pdf"], output=["xml"], available=True,
+        )
+        self.assertEqual(info.annotationTagsCutoff, {})
+
+    def test_annotation_tags_cutoff_values(self):
+        info = ExtractorInfo(
+            id="grobid", name="Grobid", description="Grobid extractor",
+            input=["pdf"], output=["xml"], available=True,
+            annotationTagsCutoff={"grobid.training.segmentation": 6}
+        )
+        self.assertEqual(info.annotationTagsCutoff["grobid.training.segmentation"], 6)
 
 
 if __name__ == "__main__":
