@@ -264,13 +264,15 @@ class XmlAnnotationPlugin extends Plugin {
     const { from, to } = view.state.selection.main
     if (from === to) return
     const selectedText = view.state.doc.sliceString(from, to)
-    const wrapped = `<${def.tag}>${selectedText}</${def.tag}>`
+    const attrStr = def.defaultAttributes
+      ? ' ' + Object.entries(def.defaultAttributes).map(([k, v]) => `${k}="${v}"`).join(' ')
+      : ''
+    const wrapped = `<${def.tag}${attrStr}>${selectedText}</${def.tag}>`
     view.dispatch({ changes: { from, to, insert: wrapped }, userEvent: 'input.annotate' })
     try {
       const ancestor = this.#xmlEditor.getDomNodeAt?.(from)
       if (ancestor) await this.#xmlEditor.updateEditorFromNode?.(ancestor.parentNode ?? ancestor)
     } catch (e) {
-      // DOM may not be synced yet if the editor is still processing the change
       this.#logger.debug('[xml-annotation] wrap sync failed: ' + String(e))
     }
   }
