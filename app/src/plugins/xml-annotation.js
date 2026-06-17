@@ -364,7 +364,10 @@ class XmlAnnotationPlugin extends Plugin {
   /** @param {ApplicationState} state */
   async #updateTagDefs(state) {
     const variant = state.variant
-    const extractors = this.#extraction.extractorInfo()
+    let extractors = this.#extraction.extractorInfo()
+    if (!extractors) {
+      extractors = await this.getDependency('client').getExtractorList()
+    }
     /** @type {AnnotationTagDef[]} */
     const newDefs = []
     this.#topLevelCount = null
