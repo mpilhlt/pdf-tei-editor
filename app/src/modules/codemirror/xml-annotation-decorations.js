@@ -122,6 +122,31 @@ function simplifiedLabel(tagDef) {
 }
 
 /**
+ * Reads attribute name→value pairs from an OpenTag Lezer node.
+ * Strips surrounding quotes from attribute values.
+ * @param {import('@lezer/common').SyntaxNode} openTagNode
+ * @param {import('@codemirror/state').EditorState} state
+ * @returns {Record<string, string>}
+ */
+function readAttributes(openTagNode, state) {
+  const attrs = {};
+  let child = openTagNode.firstChild;
+  while (child) {
+    if (child.name === 'Attribute') {
+      const nameNode = child.firstChild;
+      const valueNode = child.lastChild;
+      if (nameNode && valueNode && nameNode !== valueNode && nameNode.name === 'AttributeName') {
+        const name = state.doc.sliceString(nameNode.from, nameNode.to);
+        const raw = state.doc.sliceString(valueNode.from, valueNode.to);
+        attrs[name] = raw.length >= 2 ? raw.slice(1, -1) : raw;
+      }
+    }
+    child = child.nextSibling;
+  }
+  return attrs;
+}
+
+/**
  * Walks the Lezer syntax tree and builds a DecorationSet for all annotation elements.
  *
  * For each annotation element (tag name matches a tagDef):
@@ -136,13 +161,23 @@ function simplifiedLabel(tagDef) {
  * RangeSetBuilder, which requires strictly ascending order.
  *
  * @param {import('@codemirror/state').EditorState} state
- * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[]}>} tagDefs
+ * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>} tagDefs
  * @returns {import('@codemirror/state').DecorationSet}
  */
 function buildDecorations(state, tagDefs) {
   // TODO: optimize by using RangeSet.map(tr.changes) for position-only changes,
   // with targeted rebuild only when tag structure changes (annotation mode edits).
-  const tagMap = new Map(tagDefs.map(d => [d.tag, d]));
+
+  // Build a multi-def map: tag name → [defs]. Multiple defs per tag are supported
+  // and disambiguated by defaultAttributes at match time.
+  /** @type {Map<string, typeof tagDefs>} */
+  const tagMap = new Map();
+  for (const d of tagDefs) {
+    const bucket = tagMap.get(d.tag);
+    if (bucket) bucket.push(d);
+    else tagMap.set(d.tag, [d]);
+  }
+
   const tree = syntaxTree(state);
 
   /** @type {Array<{from:number, to:number, def: typeof tagDefs[0], depth:number}>} */
@@ -160,7 +195,26 @@ function buildDecorations(state, tagDefs) {
         const tagNameNode = openTag.firstChild?.nextSibling;
         if (!tagNameNode || tagNameNode.name !== 'TagName') return;
         const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
-        const def = tagMap.get(tagName);
+        const defs = tagMap.get(tagName);
+        if (!defs) return;
+
+        // Pick the best matching def: prefer one whose defaultAttributes all match,
+        // fall back to the generic def (defaultAttributes null/undefined).
+        let def = null;
+        let fallbackDef = null;
+        let elemAttrs = /** @type {Record<string,string>|null} */ (null);
+        for (const candidate of defs) {
+          if (!candidate.defaultAttributes) {
+            fallbackDef = candidate;
+          } else {
+            if (!elemAttrs) elemAttrs = readAttributes(openTag, state);
+            if (Object.entries(candidate.defaultAttributes).every(([k, v]) => elemAttrs[k] === v)) {
+              def = candidate;
+              break;
+            }
+          }
+        }
+        def = def ?? fallbackDef;
         if (!def) return;
 
         // Determine content region: between OpenTag.to and CloseTag.from

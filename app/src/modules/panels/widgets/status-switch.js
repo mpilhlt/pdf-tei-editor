@@ -5,7 +5,7 @@
 
 class StatusSwitch extends HTMLElement {
   static get observedAttributes() {
-    return ['checked', 'disabled', 'text', 'help-text', 'size'];
+    return ['checked', 'disabled', 'text', 'text-after', 'help-text', 'size'];
   }
 
   constructor() {
@@ -48,6 +48,7 @@ class StatusSwitch extends HTMLElement {
     const checked = this.hasAttribute('checked');
     const disabled = this.hasAttribute('disabled');
     const text = this.getAttribute('text') || '';
+    const textAfter = this.getAttribute('text-after') || '';
     const helpText = this.getAttribute('help-text') || '';
     const size = this.getAttribute('size') || 'small';
 
@@ -92,6 +93,10 @@ class StatusSwitch extends HTMLElement {
           white-space: nowrap;
         }
 
+        .text-after {
+          margin-left: -4px;
+        }
+
         .help-text {
           font-size: var(--sl-font-size-2x-small);
           color: var(--sl-color-neutral-500);
@@ -107,11 +112,12 @@ class StatusSwitch extends HTMLElement {
       
       <div class="switch-container">
         ${text ? `<span class="text">${text}</span>` : ''}
-        <sl-switch 
-          size="${size}" 
-          ${checked ? 'checked' : ''} 
+        <sl-switch
+          size="${size}"
+          ${checked ? 'checked' : ''}
           ${disabled ? 'disabled' : ''}
         ></sl-switch>
+        ${textAfter ? `<span class="text text-after">${textAfter}</span>` : ''}
         ${helpText ? `<span class="help-text">${helpText}</span>` : ''}
       </div>
     `;
@@ -157,6 +163,18 @@ class StatusSwitch extends HTMLElement {
       this.setAttribute('text', value);
     } else {
       this.removeAttribute('text');
+    }
+  }
+
+  get textAfter() {
+    return this.getAttribute('text-after') || '';
+  }
+
+  set textAfter(value) {
+    if (value) {
+      this.setAttribute('text-after', value);
+    } else {
+      this.removeAttribute('text-after');
     }
   }
 

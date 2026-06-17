@@ -56,6 +56,9 @@ class XmlAnnotationPlugin extends Plugin {
   /** @type {boolean} */
   #wasReadOnlyBeforeAnnotation = false;
 
+  /** @type {boolean} */
+  #wasHeaderVisible = false;
+
   /** @type {any} */
   #switch = null;
 
@@ -82,12 +85,14 @@ class XmlAnnotationPlugin extends Plugin {
     // Build the statusbar switch
     this.#switch = PanelUtils.createSwitch({
       name: 'annotationModeSwitch',
-      text: 'Annotate',
+      text: 'XML',
       helpText: 'No annotation tags defined for this variant'
     })
+    this.#switch.setAttribute('text-after', 'Visual')
     this.#switch.hidden = true
-    this.#switch.addEventListener('widget-change', () => this.#onSwitchChange())
-    this.uiStorage.bind(this.#switch, 'checked', { key: 'annotationMode', event: 'widget-change', default: false })
+    this.#switch.addEventListener('widget-change', () => {
+      this.dispatchStateChange({ view: this.#switch.checked ? 'annotation' : null })
+    })
     this.#xmlEditor.addStatusbarWidget(this.#switch, 'left', 3)
 
     // Mount the properties popup
@@ -100,8 +105,9 @@ class XmlAnnotationPlugin extends Plugin {
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
     this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_AFTER_LOAD, () => this.#onDocumentLoaded())
 
-    // Populate tag defs from initialState so the popup tagMap is ready before any variant change fires
-    if (initialState.variant) {
+    // Populate tag defs from initialState so the popup tagMap is ready before any variant change fires.
+    // Skip if not authenticated yet — onStateUpdate will populate after login.
+    if (initialState.variant && initialState.user) {
       await this.#updateTagDefs(initialState)
     }
   }
@@ -202,33 +208,30 @@ class XmlAnnotationPlugin extends Plugin {
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
-  async #onSwitchChange() {
-    if (this.#switch?.checked) {
-      await this.#enableAnnotationMode()
-    } else {
-      await this.#disableAnnotationMode()
-    }
-  }
-
   async #enableAnnotationMode() {
-    if (!this.#xmlEditor.getXmlTree || !this.#xmlEditor.getXmlTree()) {
-      notify('Cannot enable annotation mode: XML is not well-formed', 'warning', 'exclamation-triangle')
-      if (this.#switch) this.#switch.checked = false
+    const xmlTree = this.#xmlEditor.getXmlTree?.()
+    if (!xmlTree) {
+      // No document loaded yet; #onDocumentLoaded will retry once the editor is ready
       return
     }
-    const xmlTree = this.#xmlEditor.getXmlTree()
-    const textEl = xmlTree?.querySelector('text')
+    const textEl = xmlTree.querySelector('text')
     if (!textEl) {
       notify('Cannot enable annotation mode: no <text> element found', 'warning', 'exclamation-triangle')
-      if (this.#switch) this.#switch.checked = false
+      await this.scheduleStateChange({ view: null })
       return
     }
     this.#annotationMode = true
+    if (this.#switch) this.#switch.checked = true
     this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
     this.#wasReadOnlyBeforeAnnotation = this.#xmlEditor.isReadOnly?.() ?? false
     if (!this.#wasReadOnlyBeforeAnnotation) {
       await this.#xmlEditor.setReadOnly?.(true)
     }
+    // Always collapse the TEI header in annotation mode; restore on exit
+    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+    this.#wasHeaderVisible = headerToggle.checked ?? false
+    await this.#xmlEditor.foldByXpath?.('//tei:teiHeader')
+    headerToggle.checked = false
     ui.xmlEditor.headerbar.hidden = true
     ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = true
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
@@ -238,6 +241,7 @@ class XmlAnnotationPlugin extends Plugin {
 
   async #disableAnnotationMode() {
     this.#annotationMode = false
+    if (this.#switch) this.#switch.checked = false
     this.#slot?.reconfigure([])
     if (!this.#wasReadOnlyBeforeAnnotation) {
       await this.#xmlEditor.setReadOnly?.(false)
@@ -245,8 +249,17 @@ class XmlAnnotationPlugin extends Plugin {
     ui.xmlEditor.headerbar.hidden = false
     ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = false
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = false
+    // Restore TEI header to its pre-annotation visibility
+    if (this.#wasHeaderVisible) {
+      await this.#xmlEditor.unfoldByXpath?.('//tei:teiHeader')
+      const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+      headerToggle.checked = true
+    }
     this.#setContextMenuItemsVisible(false)
-    if (this.#switch && this.#switch.checked) this.#switch.checked = false
+    // Revert state if this was triggered internally (e.g. document removed, variant lost tagDefs)
+    if (this.state.view === 'annotation') {
+      await this.scheduleStateChange({ view: null })
+    }
   }
 
   /** @param {boolean} visible */
@@ -257,6 +270,12 @@ class XmlAnnotationPlugin extends Plugin {
   }
 
   async #onDocumentLoaded() {
+    // state.view may have been restored from URL/localStorage before the document was ready;
+    // activate annotation mode now that the editor has content.
+    if (!this.#annotationMode && this.state.view === 'annotation' && this.#tagDefs.length > 0) {
+      await this.#enableAnnotationMode()
+      return
+    }
     if (!this.#annotationMode) return
     if (this.#tagDefs.length === 0) {
       await this.#disableAnnotationMode()
@@ -340,6 +359,21 @@ class XmlAnnotationPlugin extends Plugin {
     if (changedKeys.includes('xml') && !state.xml && this.#annotationMode) {
       await this.#disableAnnotationMode()
     }
+    if (changedKeys.includes('view')) {
+      const wantAnnotation = state.view === 'annotation'
+      if (this.#switch) this.#switch.checked = wantAnnotation
+      if (wantAnnotation && !this.#annotationMode) {
+        await this.#enableAnnotationMode()
+      } else if (!wantAnnotation && this.#annotationMode) {
+        await this.#disableAnnotationMode()
+      }
+    }
+    // Re-assert disabled state each time state updates while annotation mode is active,
+    // because other plugins' onStateUpdate handlers may re-enable these controls.
+    if (this.#annotationMode) {
+      ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = true
+      ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
+    }
   }
 
   /** @param {ApplicationState} state */
@@ -377,6 +411,9 @@ class XmlAnnotationPlugin extends Plugin {
       } else {
         this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
       }
+    } else if (hasTagDefs && this.state.view === 'annotation' && this.#xmlEditor.getXmlTree?.()) {
+      // tagDefs just became available and the document is already loaded; activate now
+      await this.#enableAnnotationMode()
     }
   }
 }

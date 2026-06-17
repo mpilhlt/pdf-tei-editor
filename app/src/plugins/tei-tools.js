@@ -101,7 +101,8 @@ class TeiToolsPlugin extends Plugin {
 
   async onStateUpdate(_changedKeys) {
     const hasDocument = !!this.state.xml
-    this.#teiHeaderToggleWidget.disabled = !hasDocument
+    const inAnnotationMode = this.state.view === 'annotation'
+    this.#teiHeaderToggleWidget.disabled = !hasDocument || inAnnotationMode
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
@@ -114,7 +115,7 @@ class TeiToolsPlugin extends Plugin {
 
     teiHeaderToggleWidget.disabled = !hasTeiHeader
 
-    if (hasTeiHeader) {
+    if (hasTeiHeader && this.state.view !== 'annotation') {
       const preferredVisible = this.uiStorage.get('teiHeaderVisible', false)
       try {
         if (preferredVisible) {
