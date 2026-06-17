@@ -50,7 +50,7 @@ class TestGetAnnotationTags(unittest.TestCase):
     def test_default_attributes_note_footnote(self):
         tags = self.get_annotation_tags()
         seg = tags["grobid.training.segmentation"]
-        footnote = next(t for t in seg if t["label"] == "note[footnote]")
+        footnote = next(t for t in seg if t["label"] == "note[foot]")
         self.assertEqual(footnote["defaultAttributes"], {"place": "footnote"})
 
     def test_default_attributes_div_acknowledgement(self):

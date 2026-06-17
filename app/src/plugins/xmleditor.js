@@ -713,10 +713,13 @@ class XmlEditorPlugin extends Plugin {
       ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'values' }
     );
     for (const results of (contributions || [])) {
-      for (const item of (results || [])) {
-        if (item?.element instanceof HTMLElement) {
-          this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
-        }
+      const items = (results || []).filter(item => item?.element instanceof HTMLElement);
+      // Prepend items in reverse so they appear in declaration order at the top of the menu
+      for (const item of [...items].filter(i => i.prepend).reverse()) {
+        this.#contextMenu.prependItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
+      }
+      for (const item of items.filter(i => !i.prepend)) {
+        this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
     }
   }

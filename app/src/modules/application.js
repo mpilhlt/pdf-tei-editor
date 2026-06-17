@@ -250,6 +250,10 @@ export class Application {
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>}
    */
+  isStateUpdating() {
+    return this.#isUpdatingState;
+  }
+
   scheduleStateChange(changes) {
     if (!this.#isUpdatingState) {
       return this.updateState(changes);

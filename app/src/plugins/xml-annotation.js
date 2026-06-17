@@ -143,10 +143,12 @@ class XmlAnnotationPlugin extends Plugin {
     return [
       {
         element: divider,
+        prepend: true,
         onBeforeShow: () => { divider.hidden = !this.#annotationMode }
       },
       {
         element: removeItem,
+        prepend: true,
         onBeforeShow: () => {
           removeItem.hidden = !this.#annotationMode
           if (!this.#annotationMode) return
@@ -161,6 +163,7 @@ class XmlAnnotationPlugin extends Plugin {
       },
       {
         element: palette,
+        prepend: true,
         onBeforeShow: () => this.#rebuildPalette()
       }
     ]

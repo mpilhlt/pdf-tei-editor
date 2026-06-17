@@ -42,12 +42,9 @@ class TeiAnnotatorPlugin(Plugin):
     @classmethod
     def is_available(cls) -> bool:
         """Available when TEI_ANNOTATOR_SERVER_URL (or the config key) is set."""
-        url = get_plugin_config(
-            "tei-annotator.server.url",
-            "TEI_ANNOTATOR_SERVER_URL",
-            default=None,
-        )
-        return bool(url)
+        from fastapi_app.lib.utils.config_utils import get_config
+        init_plugin_config()
+        return bool(get_config().get("tei-annotator.server.url", default=None))
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the frontend extension."""

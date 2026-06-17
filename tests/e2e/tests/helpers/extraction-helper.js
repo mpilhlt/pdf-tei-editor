@@ -96,6 +96,9 @@ export async function selectFirstDocuments(page) {
       const firstPdfValue = pdfOptions[0].value;
       console.log('Attempting to select PDF:', firstPdfValue);
 
+      // Simulate user opening the dropdown (required by #userOpenedDropdown guard)
+      ui.toolbar.pdf.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
+
       // Try direct value assignment
       ui.toolbar.pdf.value = firstPdfValue;
 
@@ -132,6 +135,9 @@ export async function selectFirstDocuments(page) {
     if (xmlOptions.length > 0) {
       const firstXmlValue = xmlOptions[0].value;
       console.log('Attempting to select XML:', firstXmlValue);
+
+      // Simulate user opening the dropdown (required by #userOpenedDropdown guard)
+      ui.toolbar.xml.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
 
       // Try direct value assignment
       ui.toolbar.xml.value = firstXmlValue;

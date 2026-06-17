@@ -202,6 +202,16 @@ export class XmlEditorContextMenu {
     if (options?.onBeforeShow) this.#beforeShowCallbacks.push(options.onBeforeShow);
   }
 
+  /**
+   * Prepend a contributed item before all other menu items.
+   * @param {HTMLElement} element
+   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean}) => void }} [options]
+   */
+  prependItem(element, options) {
+    if (this.#menu) this.#menu.insertBefore(element, this.#menu.firstChild);
+    if (options?.onBeforeShow) this.#beforeShowCallbacks.push(options.onBeforeShow);
+  }
+
   // ── Private ────────────────────────────────────────────────────────────────
 
   /** @param {number} x @param {number} y */
