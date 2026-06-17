@@ -89,12 +89,12 @@ class XmlAnnotationPlugin extends Plugin {
     this.#switch = PanelUtils.createSwitch({
       name: 'annotationModeSwitch',
       text: 'Annotate',
+      disabled: true,
       helpText: 'No annotation tags defined for this variant'
     })
-    this.#switch.hidden = true
     this.#switch.addEventListener('widget-change', () => this.#onSwitchChange())
     this.uiStorage.bind(this.#switch, 'checked', { key: 'annotationMode', event: 'widget-change', default: false })
-    this.#xmlEditor.addStatusbarWidget(this.#switch, 'left', 3)
+    this.#xmlEditor.addStatusbarWidget(this.#switch, 'left', 90)
 
     // Mount the properties popup
     const editorContainer = document.getElementById('codemirror-container')
