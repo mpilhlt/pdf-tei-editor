@@ -552,7 +552,9 @@ class FileSelectionPlugin extends Plugin {
         } else {
           stateUpdate.pdf = null;
         }
-        await this.dispatchStateChange(stateUpdate);
+        // scheduleStateChange defers if another propagation is still running (e.g. a slow
+        // plugin held #isUpdatingState=true when the user clicked), otherwise dispatches immediately.
+        await this.scheduleStateChange(stateUpdate);
         await this.getDependency('services').load(filesToLoad);
       } catch (error) {
         this.#logger.error(String(error));
@@ -574,7 +576,7 @@ class FileSelectionPlugin extends Plugin {
           const _selProject = (state.projects || []).find(
             p => p.collections && p.collections.includes(_selCollection)
           );
-          await this.dispatchStateChange({
+          await this.scheduleStateChange({
             collection: _selCollection,
             project: _selProject ? _selProject.id : null
           });
@@ -583,7 +585,7 @@ class FileSelectionPlugin extends Plugin {
       }
       await this.getDependency('services').removeMergeView();
       await this.getDependency('services').load({ xml });
-      await this.dispatchStateChange({ xml });
+      await this.scheduleStateChange({ xml });
     } catch (error) {
       this.#logger.error(String(error));
       await this.reload({ refresh: true });
@@ -603,12 +605,12 @@ class FileSelectionPlugin extends Plugin {
     } else {
       await this.getDependency('services').removeMergeView();
     }
-    await this.dispatchStateChange({ diff });
+    await this.scheduleStateChange({ diff });
   }
 
   /** @param {string} variant */
   async #onChangeVariantSelection(variant) {
-    await this.dispatchStateChange({ variant, xml: null });
+    await this.scheduleStateChange({ variant, xml: null });
   }
 
   /** @param {string} collectionFilter */
@@ -632,9 +634,9 @@ class FileSelectionPlugin extends Plugin {
 
     if (shouldClearSelection) {
       await this.getDependency('services').removeMergeView();
-      await this.dispatchStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
+      await this.scheduleStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
     } else {
-      await this.dispatchStateChange({ collectionFilter, collection, project });
+      await this.scheduleStateChange({ collectionFilter, collection, project });
     }
   }
 }

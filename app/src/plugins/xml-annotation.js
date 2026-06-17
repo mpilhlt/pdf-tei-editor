@@ -220,7 +220,7 @@ class XmlAnnotationPlugin extends Plugin {
     const textEl = xmlTree.querySelector('text')
     if (!textEl) {
       notify('Cannot enable annotation mode: no <text> element found', 'warning', 'exclamation-triangle')
-      await this.scheduleStateChange({ view: null })
+      this.scheduleStateChange({ view: null })
       return
     }
     this.#annotationMode = true
@@ -259,9 +259,11 @@ class XmlAnnotationPlugin extends Plugin {
       headerToggle.checked = true
     }
     this.#setContextMenuItemsVisible(false)
-    // Revert state if this was triggered internally (e.g. document removed, variant lost tagDefs)
+    // Revert state if this was triggered internally (e.g. document removed, variant lost tagDefs).
+    // Must not be awaited: called from onStateUpdate while propagation is active, so the deferred
+    // Promise would deadlock (scheduleStateChange flushes only after propagation ends).
     if (this.state.view === 'annotation') {
-      await this.scheduleStateChange({ view: null })
+      this.scheduleStateChange({ view: null })
     }
   }
 
