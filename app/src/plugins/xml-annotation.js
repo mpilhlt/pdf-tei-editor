@@ -115,9 +115,9 @@ class XmlAnnotationPlugin extends Plugin {
   // ── Context menu contribution ───────────────────────────────────────
 
   /**
-   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
-   * Called by XmlEditorPlugin.start() to collect context menu contributions.
-   * Delegates to {@link XmlAnnotationPlugin#contextMenuItems}.
+   * Builds the static context menu elements contributed by this plugin:
+   * a section divider, a "Remove annotation" item, and a hidden sentinel
+   * whose onBeforeShow callback drives {@link XmlAnnotationPlugin##rebuildTagMenuItems}.
    * @returns {Array<{element: HTMLElement, onBeforeShow?: () => void}>}
    */
   #contextMenuItems() {
@@ -216,6 +216,7 @@ class XmlAnnotationPlugin extends Plugin {
   #createTagSubmenu(defs, hasSelection) {
     const wrapper = document.createElement('sl-menu-item')
     wrapper.textContent = 'More…'
+    wrapper.disabled = !hasSelection
     const inner = document.createElement('sl-menu')
     inner.slot = 'submenu'
     for (const def of defs) inner.appendChild(this.#createTagItem(def, hasSelection))
