@@ -89,7 +89,6 @@ class XmlAnnotationPlugin extends Plugin {
     this.#switch = PanelUtils.createSwitch({
       name: 'annotationModeSwitch',
       text: 'Annotate',
-      disabled: true,
       helpText: 'No annotation tags defined for this variant'
     })
     this.#switch.addEventListener('widget-change', () => this.#onSwitchChange())
