@@ -115,8 +115,9 @@ class XmlAnnotationPlugin extends Plugin {
   // ── Context menu contribution ───────────────────────────────────────
 
   /**
-   * Returns annotation context menu items: divider + remove item + one item per tag.
-   * Items are hidden when annotation mode is OFF (managed in onBeforeShow callbacks).
+   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
+   * Called by XmlEditorPlugin.start() to collect context menu contributions.
+   * Delegates to {@link XmlAnnotationPlugin#contextMenuItems}.
    * @returns {Array<{element: HTMLElement, onBeforeShow?: () => void}>}
    */
   #contextMenuItems() {
@@ -131,7 +132,11 @@ class XmlAnnotationPlugin extends Plugin {
     this.#menuRemoveItem = removeItem
     removeItem.addEventListener('click', () => this.#removeAnnotationAtClick())
 
-    const items = [
+    const sentinel = document.createElement('sl-divider')
+    sentinel.hidden = true
+    this.#menuSentinel = sentinel
+
+    return [
       {
         element: divider,
         onBeforeShow: () => { divider.hidden = !this.#annotationMode }
@@ -149,30 +154,73 @@ class XmlAnnotationPlugin extends Plugin {
             removeItem.disabled = !el || !this.#tagDefs.some(d => d.tag === el.localName)
           } catch { removeItem.disabled = true }
         }
+      },
+      {
+        element: sentinel,
+        onBeforeShow: () => this.#rebuildTagMenuItems()
       }
     ]
+  }
 
-    for (const def of this.#tagDefs) {
-      const item = document.createElement('sl-menu-item')
-      item.textContent = def.label.replace(/\{@[^}]+\}/g, '…')
-      item.dataset.tag = def.tag
-      item.hidden = true
-      item.disabled = true
-      item.addEventListener('click', () => this.#wrapSelectionWith(def))
-      items.push({
-        element: item,
-        onBeforeShow: () => {
-          item.hidden = !this.#annotationMode
-          if (!this.#annotationMode) return
-          const view = this.#xmlEditor.getView?.()
-          const { from, to } = view?.state.selection.main ?? { from: 0, to: 0 }
-          item.disabled = !view || !this.#xmlEditor.isSynced?.() || from === to
-        }
-      })
+  /**
+   * Rebuilds tag menu items in the context menu each time it opens.
+   * Called via the sentinel element's onBeforeShow callback.
+   */
+  #rebuildTagMenuItems() {
+    const menu = this.#menuSentinel?.parentElement
+    if (!menu) return
+    for (const item of this.#menuTagItems) item.remove()
+    this.#menuTagItems = []
+    if (!this.#annotationMode || this.#tagDefs.length === 0) return
+    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+    const cutoff = this.#topLevelCount
+    const topDefs = cutoff != null ? sorted.slice(0, cutoff) : sorted
+    const moreDefs = cutoff != null ? sorted.slice(cutoff) : []
+    const view = this.#xmlEditor.getView?.()
+    const { from, to } = view?.state.selection.main ?? { from: 0, to: 0 }
+    const hasSelection = from !== to && !!this.#xmlEditor.isSynced?.()
+    for (const def of topDefs) {
+      const item = this.#createTagItem(def, hasSelection)
+      menu.insertBefore(item, this.#menuSentinel)
       this.#menuTagItems.push(item)
     }
+    if (moreDefs.length > 0) {
+      const submenu = this.#createTagSubmenu(moreDefs, hasSelection)
+      menu.insertBefore(submenu, this.#menuSentinel)
+      this.#menuTagItems.push(submenu)
+    }
+  }
 
-    return items
+  /**
+   * Creates a single tag menu item for the context menu.
+   * @param {AnnotationTagDef} def
+   * @param {boolean} hasSelection
+   * @returns {HTMLElement}
+   */
+  #createTagItem(def, hasSelection) {
+    const item = document.createElement('sl-menu-item')
+    item.textContent = def.label.replace(/\{@[^}]+\}/g, '…')
+    item.dataset.tag = def.tag
+    item.disabled = !hasSelection
+    if (def.description) item.title = def.description
+    item.addEventListener('click', () => this.#wrapSelectionWith(def))
+    return item
+  }
+
+  /**
+   * Creates a "More…" submenu containing the lower-priority tag items.
+   * @param {AnnotationTagDef[]} defs
+   * @param {boolean} hasSelection
+   * @returns {HTMLElement}
+   */
+  #createTagSubmenu(defs, hasSelection) {
+    const wrapper = document.createElement('sl-menu-item')
+    wrapper.textContent = 'More…'
+    const inner = document.createElement('sl-menu')
+    inner.slot = 'submenu'
+    for (const def of defs) inner.appendChild(this.#createTagItem(def, hasSelection))
+    wrapper.appendChild(inner)
+    return wrapper
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────
@@ -224,7 +272,6 @@ class XmlAnnotationPlugin extends Plugin {
   #setContextMenuItemsVisible(visible) {
     if (this.#menuDivider) this.#menuDivider.hidden = !visible
     if (this.#menuRemoveItem) this.#menuRemoveItem.hidden = !visible
-    for (const item of this.#menuTagItems) item.hidden = !visible
   }
 
   async #onDocumentLoaded() {
