@@ -62,6 +62,10 @@ class StatusSwitch extends HTMLElement {
           user-select: none;
         }
 
+        :host([hidden]) {
+          display: none !important;
+        }
+
         .switch-container {
           display: inline-flex;
           align-items: center;
