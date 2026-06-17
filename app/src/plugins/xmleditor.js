@@ -709,7 +709,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Collect context menu contributions from all plugins that declare ep.xmlEditor.contextMenuItems
     const contributions = await this.context.invokePluginEndpoint(
-      ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'full' }
+      ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'values' }
     );
     for (const results of (contributions || [])) {
       for (const item of (results || [])) {
