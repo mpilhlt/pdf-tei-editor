@@ -59,9 +59,6 @@ class XmlAnnotationPlugin extends Plugin {
   /** @type {any} */
   #switch = null;
 
-  /** @type {HTMLElement[]} */
-  #menuTagItems = [];
-
   /** @type {HTMLElement|null} */
   #menuDivider = null;
 
@@ -69,10 +66,7 @@ class XmlAnnotationPlugin extends Plugin {
   #menuRemoveItem = null;
 
   /** @type {HTMLElement|null} */
-  #menuSentinel = null;
-
-  /** @type {number|null} */
-  #topLevelCount = null;
+  #paletteDiv = null;
 
   /** @type {XmlAnnotationPopup|null} */
   #popup = null;
@@ -91,9 +85,10 @@ class XmlAnnotationPlugin extends Plugin {
       text: 'Annotate',
       helpText: 'No annotation tags defined for this variant'
     })
+    this.#switch.hidden = true
     this.#switch.addEventListener('widget-change', () => this.#onSwitchChange())
     this.uiStorage.bind(this.#switch, 'checked', { key: 'annotationMode', event: 'widget-change', default: false })
-    this.#xmlEditor.addStatusbarWidget(this.#switch, 'left', 90)
+    this.#xmlEditor.addStatusbarWidget(this.#switch, 'left', 3)
 
     // Mount the properties popup
     const editorContainer = document.getElementById('codemirror-container')
@@ -114,9 +109,9 @@ class XmlAnnotationPlugin extends Plugin {
   // ── Context menu contribution ───────────────────────────────────────
 
   /**
-   * Builds the static context menu elements contributed by this plugin:
-   * a section divider, a "Remove annotation" item, and a hidden sentinel
-   * whose onBeforeShow callback drives {@link XmlAnnotationPlugin##rebuildTagMenuItems}.
+   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
+   * Returns a section divider, a "Remove annotation" item, and a tag palette
+   * div whose chips are rebuilt each time the menu opens via onBeforeShow.
    * @returns {Array<{element: HTMLElement, onBeforeShow?: () => void}>}
    */
   #contextMenuItems() {
@@ -131,9 +126,13 @@ class XmlAnnotationPlugin extends Plugin {
     this.#menuRemoveItem = removeItem
     removeItem.addEventListener('click', () => this.#removeAnnotationAtClick())
 
-    const sentinel = document.createElement('sl-divider')
-    sentinel.hidden = true
-    this.#menuSentinel = sentinel
+    const palette = document.createElement('div')
+    palette.hidden = true
+    Object.assign(palette.style, {
+      display: 'flex', flexWrap: 'wrap', gap: '4px',
+      padding: '4px 12px 8px', boxSizing: 'border-box', maxWidth: '260px'
+    })
+    this.#paletteDiv = palette
 
     return [
       {
@@ -155,72 +154,50 @@ class XmlAnnotationPlugin extends Plugin {
         }
       },
       {
-        element: sentinel,
-        onBeforeShow: () => this.#rebuildTagMenuItems()
+        element: palette,
+        onBeforeShow: () => this.#rebuildPalette()
       }
     ]
   }
 
-  /**
-   * Rebuilds tag menu items in the context menu each time it opens.
-   * Called via the sentinel element's onBeforeShow callback.
-   */
-  #rebuildTagMenuItems() {
-    const menu = this.#menuSentinel?.parentElement
-    if (!menu) return
-    for (const item of this.#menuTagItems) item.remove()
-    this.#menuTagItems = []
+  /** Rebuilds the tag chip palette each time the context menu opens. */
+  #rebuildPalette() {
+    const palette = this.#paletteDiv
+    if (!palette) return
+    palette.hidden = !this.#annotationMode
+    palette.replaceChildren()
     if (!this.#annotationMode || this.#tagDefs.length === 0) return
-    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
-    const cutoff = this.#topLevelCount
-    const topDefs = cutoff != null ? sorted.slice(0, cutoff) : sorted
-    const moreDefs = cutoff != null ? sorted.slice(cutoff) : []
+
     const view = this.#xmlEditor.getView?.()
     const { from, to } = view?.state.selection.main ?? { from: 0, to: 0 }
     const hasSelection = from !== to && !!this.#xmlEditor.isSynced?.()
-    for (const def of topDefs) {
-      const item = this.#createTagItem(def, hasSelection)
-      menu.insertBefore(item, this.#menuSentinel)
-      this.#menuTagItems.push(item)
-    }
-    if (moreDefs.length > 0) {
-      const submenu = this.#createTagSubmenu(moreDefs, hasSelection)
-      menu.insertBefore(submenu, this.#menuSentinel)
-      this.#menuTagItems.push(submenu)
-    }
-  }
 
-  /**
-   * Creates a single tag menu item for the context menu.
-   * @param {AnnotationTagDef} def
-   * @param {boolean} hasSelection
-   * @returns {HTMLElement}
-   */
-  #createTagItem(def, hasSelection) {
-    const item = document.createElement('sl-menu-item')
-    item.textContent = def.label.replace(/\{@[^}]+\}/g, '…')
-    item.dataset.tag = def.tag
-    item.disabled = !hasSelection
-    if (def.description) item.title = def.description
-    item.addEventListener('click', () => this.#wrapSelectionWith(def))
-    return item
-  }
-
-  /**
-   * Creates a "More…" submenu containing the lower-priority tag items.
-   * @param {AnnotationTagDef[]} defs
-   * @param {boolean} hasSelection
-   * @returns {HTMLElement}
-   */
-  #createTagSubmenu(defs, hasSelection) {
-    const wrapper = document.createElement('sl-menu-item')
-    wrapper.textContent = 'More…'
-    wrapper.disabled = !hasSelection
-    const inner = document.createElement('sl-menu')
-    inner.slot = 'submenu'
-    for (const def of defs) inner.appendChild(this.#createTagItem(def, hasSelection))
-    wrapper.appendChild(inner)
-    return wrapper
+    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+    for (const def of sorted) {
+      const chip = document.createElement('span')
+      chip.textContent = def.label.replace(/\{@[^}]+\}/g, '…')
+      chip.title = def.description || def.label
+      chip.dataset.tag = def.tag
+      Object.assign(chip.style, {
+        display: 'inline-block',
+        background: def.color,
+        color: '#1e1e2e',
+        fontFamily: 'monospace',
+        fontSize: '9px',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        borderRadius: '3px',
+        padding: '2px 6px 3px',
+        cursor: hasSelection ? 'pointer' : 'not-allowed',
+        opacity: hasSelection ? '1' : '0.35',
+        userSelect: 'none',
+      })
+      if (hasSelection) {
+        chip.addEventListener('click', () => this.#wrapSelectionWith(def))
+      }
+      palette.appendChild(chip)
+    }
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────
@@ -253,6 +230,8 @@ class XmlAnnotationPlugin extends Plugin {
       await this.#xmlEditor.setReadOnly?.(true)
     }
     ui.xmlEditor.headerbar.hidden = true
+    ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = true
+    ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
     this.#setContextMenuItemsVisible(true)
     this.#scrollToTextElement()
   }
@@ -264,6 +243,8 @@ class XmlAnnotationPlugin extends Plugin {
       await this.#xmlEditor.setReadOnly?.(false)
     }
     ui.xmlEditor.headerbar.hidden = false
+    ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = false
+    ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = false
     this.#setContextMenuItemsVisible(false)
     if (this.#switch && this.#switch.checked) this.#switch.checked = false
   }
@@ -272,6 +253,7 @@ class XmlAnnotationPlugin extends Plugin {
   #setContextMenuItemsVisible(visible) {
     if (this.#menuDivider) this.#menuDivider.hidden = !visible
     if (this.#menuRemoveItem) this.#menuRemoveItem.hidden = !visible
+    if (this.#paletteDiv) this.#paletteDiv.hidden = !visible
   }
 
   async #onDocumentLoaded() {
@@ -369,15 +351,12 @@ class XmlAnnotationPlugin extends Plugin {
     }
     /** @type {AnnotationTagDef[]} */
     const newDefs = []
-    this.#topLevelCount = null
 
     if (extractors && variant) {
       for (const ext of extractors) {
         if (!ext.variants || ext.variants.includes(variant)) {
           const variantTags = /** @type {any} */ (ext).annotationTags?.[variant]
           if (Array.isArray(variantTags)) newDefs.push(...variantTags)
-          const cutoff = /** @type {any} */ (ext).annotationTagsCutoff?.[variant]
-          if (cutoff != null) this.#topLevelCount = cutoff
         }
       }
     }
