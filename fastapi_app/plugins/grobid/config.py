@@ -277,7 +277,7 @@ ANNOTATION_GUIDES = [
     },
     {
         "variant_id": "grobid.training.segmentation",
-        "type": "html",
+        "type": "markdown",
         "url": "https://pad.gwdg.de/s/1Oti-hJDb#segmentation"
     },
     {
@@ -288,7 +288,7 @@ ANNOTATION_GUIDES = [
     {
         "variant_id": "grobid.training.references",
         "type": "html",
-        "url": "https://pad.gwdg.de/s/1Oti-hJDb#reference-segmenter"
+        "url": "https://grobid.readthedocs.io/en/latest/training/Bibliographical-references"
     }
 ]
 
