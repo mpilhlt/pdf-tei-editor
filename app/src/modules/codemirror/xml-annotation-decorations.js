@@ -5,11 +5,12 @@
  *
  * Exports:
  *   resolveLabel(tagDef, element) — resolves badge label from tagDef + element attributes
- *   createAnnotationField(tagDefs) — returns a StateField that decorates annotation elements
+ *   createAnnotationField(tagDefs) — returns extensions that decorate annotation elements
+ *                                    and make all non-annotated XML tags atomic
  *   annotationTheme — EditorView.baseTheme with ann-badge, ann-outer, ann-inner styles
  */
 
-import { StateField, RangeSetBuilder } from '@codemirror/state';
+import { StateField, RangeSetBuilder, RangeValue } from '@codemirror/state';
 import { Decoration, WidgetType, EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 
@@ -83,6 +84,7 @@ class BadgeWidget extends WidgetType {
     return span;
   }
 
+  /** @param {import('@codemirror/view').WidgetType} other */
   eq(other) {
     return other instanceof BadgeWidget &&
       other.label === this.label &&
@@ -107,6 +109,13 @@ class HiddenWidget extends WidgetType {
 
 const hiddenWidget = Decoration.replace({ widget: new HiddenWidget() });
 
+/** Marker placed on non-annotated XML tag ranges to make them atomic. */
+class TagMarker extends RangeValue {
+  /** @param {RangeValue} other */
+  eq(other) { return other instanceof TagMarker; }
+}
+const tagMarker = new TagMarker();
+
 /**
  * Computes a simplified badge label from tagDef.label at decoration-build time.
  * The XML DOM is not available here, so we strip {@attr} tokens and clean up brackets.
@@ -129,7 +138,7 @@ function simplifiedLabel(tagDef) {
  * @returns {Record<string, string>}
  */
 function readAttributes(openTagNode, state) {
-  const attrs = {};
+  const attrs = /** @type {Record<string, string>} */ ({});
   let child = openTagNode.firstChild;
   while (child) {
     if (child.name === 'Attribute') {
@@ -147,112 +156,128 @@ function readAttributes(openTagNode, state) {
 }
 
 /**
- * Walks the Lezer syntax tree and builds a DecorationSet for all annotation elements.
+ * Walks the Lezer syntax tree once and builds:
+ *   - a DecorationSet for annotation elements (badges, content marks, hidden close tags)
+ *   - a RangeSet of TagMarker values for all non-annotated XML tags (atomic cursor motion)
  *
  * For each annotation element (tag name matches a tagDef):
  *   - OpenTag  → Decoration.replace → BadgeWidget (simplified label)
  *   - Content  → Decoration.mark class ann-outer (depth=1) or ann-inner (depth≥2)
  *   - CloseTag → Decoration.replace → zero-width hidden widget
  *
- * Structural tags (lb, p, etc.) are left as-is.
- * TODO: replace structural tags with icons in a future iteration.
+ * For each non-annotation element (tag name not in tagMap):
+ *   - OpenTag and CloseTag → TagMarker atomic range (cursor skips over them)
+ *   - Self-closing elements → SelfClosingTag → TagMarker atomic range
  *
  * All decorations are collected and sorted by `from` position before being added to the
  * RangeSetBuilder, which requires strictly ascending order.
  *
  * @param {import('@codemirror/state').EditorState} state
- * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>} tagDefs
- * @returns {import('@codemirror/state').DecorationSet}
+ * @param {Map<string, Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>>} tagMap
+ * @returns {{ decos: import('@codemirror/view').DecorationSet, atomic: import('@codemirror/state').RangeSet<TagMarker> }}
  */
-function buildDecorations(state, tagDefs) {
+function buildAll(state, tagMap) {
   // TODO: optimize by using RangeSet.map(tr.changes) for position-only changes,
   // with targeted rebuild only when tag structure changes (annotation mode edits).
 
-  // Build a multi-def map: tag name → [defs]. Multiple defs per tag are supported
-  // and disambiguated by defaultAttributes at match time.
-  /** @type {Map<string, typeof tagDefs>} */
-  const tagMap = new Map();
-  for (const d of tagDefs) {
-    const bucket = tagMap.get(d.tag);
-    if (bucket) bucket.push(d);
-    else tagMap.set(d.tag, [d]);
-  }
-
   const tree = syntaxTree(state);
 
-  /** @type {Array<{from:number, to:number, def: typeof tagDefs[0], depth:number}>} */
+  /** @type {Array<{from:number, to:number, def: {tag:string,label:string,labelMap?:Record<string,string>|null,color:string,attributes:any[],defaultAttributes?:Record<string,string>|null}, depth:number}>} */
   const stack = [];
 
-  /** @type {Array<{from:number, to:number, dec: import('@codemirror/state').Decoration}>} */
-  const pending = [];
+  /** @type {Array<{from:number, to:number, dec: import('@codemirror/view').Decoration}>} */
+  const pendingDecos = [];
+
+  /** @type {Array<{from:number, to:number}>} */
+  const pendingAtomic = [];
 
   tree.iterate({
     enter(node) {
       if (node.name === 'Element') {
-        const openTag = node.node.firstChild;
-        if (!openTag || openTag.name !== 'OpenTag') return;
-        // TagName is the second child of OpenTag (first is the `<` token)
-        const tagNameNode = openTag.firstChild?.nextSibling;
-        if (!tagNameNode || tagNameNode.name !== 'TagName') return;
-        const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
-        const defs = tagMap.get(tagName);
-        if (!defs) return;
+        const firstChild = node.node.firstChild;
+        if (!firstChild) return;
 
-        // Pick the best matching def: prefer one whose defaultAttributes all match,
-        // fall back to the generic def (defaultAttributes null/undefined).
-        let def = null;
-        let fallbackDef = null;
-        let elemAttrs = /** @type {Record<string,string>|null} */ (null);
-        for (const candidate of defs) {
-          if (!candidate.defaultAttributes) {
-            fallbackDef = candidate;
-          } else {
-            if (!elemAttrs) elemAttrs = readAttributes(openTag, state);
-            if (Object.entries(candidate.defaultAttributes).every(([k, v]) => elemAttrs[k] === v)) {
-              def = candidate;
-              break;
+        if (firstChild.name === 'OpenTag') {
+          // TagName is the second child of OpenTag (first is the `<` token)
+          const tagNameNode = firstChild.firstChild?.nextSibling;
+          if (!tagNameNode || tagNameNode.name !== 'TagName') return;
+          const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
+          const defs = tagMap.get(tagName);
+
+          if (!defs) {
+            // Non-annotation element: make its open/close tags atomic
+            pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
+            const lastChild = node.node.lastChild;
+            if (lastChild && (lastChild.name === 'CloseTag' || lastChild.name === 'MismatchedCloseTag')) {
+              pendingAtomic.push({ from: lastChild.from, to: lastChild.to });
+            }
+            return;
+          }
+
+          // Pick the best matching def: prefer one whose defaultAttributes all match,
+          // fall back to the generic def (defaultAttributes null/undefined).
+          let def = null;
+          let fallbackDef = null;
+          let elemAttrs = /** @type {Record<string,string>|null} */ (null);
+          for (const candidate of defs) {
+            if (!candidate.defaultAttributes) {
+              fallbackDef = candidate;
+            } else {
+              if (!elemAttrs) elemAttrs = readAttributes(firstChild, state);
+              if (elemAttrs && Object.entries(candidate.defaultAttributes).every(([k, v]) => elemAttrs[k] === v)) {
+                def = candidate;
+                break;
+              }
             }
           }
-        }
-        def = def ?? fallbackDef;
-        if (!def) return;
+          def = def ?? fallbackDef;
+          if (!def) return;
 
-        // Determine content region: between OpenTag.to and CloseTag.from
-        const closeTag = node.node.lastChild;
-        const hasCloseTag = closeTag && (closeTag.name === 'CloseTag' || closeTag.name === 'MismatchedCloseTag');
+          // Determine content region: between OpenTag.to and CloseTag.from
+          const closeTag = node.node.lastChild;
+          const hasCloseTag = closeTag && (closeTag.name === 'CloseTag' || closeTag.name === 'MismatchedCloseTag');
 
-        const depth = stack.length + 1;
-        stack.push({ from: node.from, to: node.to, def, depth });
+          const depth = stack.length + 1;
+          stack.push({ from: node.from, to: node.to, def, depth });
 
-        // Badge for the OpenTag
-        const label = simplifiedLabel(def);
-        pending.push({
-          from: openTag.from,
-          to: openTag.to,
-          dec: Decoration.replace({ widget: new BadgeWidget(label, def.color, tagName, openTag.from) })
-        });
+          // Badge for the OpenTag
+          const label = simplifiedLabel(def);
+          pendingDecos.push({
+            from: firstChild.from,
+            to: firstChild.to,
+            dec: Decoration.replace({ widget: new BadgeWidget(label, def.color, tagName, firstChild.from) })
+          });
 
-        // Content mark (between OpenTag.to and CloseTag.from)
-        if (hasCloseTag) {
-          const contentFrom = openTag.to;
-          const contentTo   = closeTag.from;
-          if (contentFrom < contentTo) {
-            const cls = depth === 1 ? 'ann-outer' : 'ann-inner';
-            pending.push({
-              from: contentFrom,
-              to: contentTo,
-              dec: Decoration.mark({
-                class: cls,
-                attributes: { style: `--ann-color: ${def.color}` }
-              })
+          // Content mark (between OpenTag.to and CloseTag.from)
+          if (hasCloseTag) {
+            const contentFrom = firstChild.to;
+            const contentTo   = closeTag.from;
+            if (contentFrom < contentTo) {
+              const cls = depth === 1 ? 'ann-outer' : 'ann-inner';
+              pendingDecos.push({
+                from: contentFrom,
+                to: contentTo,
+                dec: Decoration.mark({
+                  class: cls,
+                  attributes: { style: `--ann-color: ${def.color}` }
+                })
+              });
+            }
+            // Hidden widget for the CloseTag
+            pendingDecos.push({
+              from: closeTag.from,
+              to: closeTag.to,
+              dec: hiddenWidget
             });
           }
-          // Hidden widget for the CloseTag
-          pending.push({
-            from: closeTag.from,
-            to: closeTag.to,
-            dec: hiddenWidget
-          });
+        } else if (firstChild.name === 'SelfClosingTag') {
+          // Self-closing element: make the tag atomic if not an annotation tag
+          const tagNameNode = firstChild.firstChild?.nextSibling;
+          if (!tagNameNode || tagNameNode.name !== 'TagName') return;
+          const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
+          if (!tagMap.has(tagName)) {
+            pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
+          }
         }
       }
     },
@@ -265,28 +290,51 @@ function buildDecorations(state, tagDefs) {
   });
 
   // Sort by from position (RangeSetBuilder requires strictly ascending order)
-  pending.sort((a, b) => a.from - b.from || a.to - b.to);
+  pendingDecos.sort((a, b) => a.from - b.from || a.to - b.to);
+  pendingAtomic.sort((a, b) => a.from - b.from || a.to - b.to);
 
-  const builder = new RangeSetBuilder();
-  for (const { from, to, dec } of pending) {
-    builder.add(from, to, dec);
+  const decoBuilder = new RangeSetBuilder();
+  for (const { from, to, dec } of pendingDecos) {
+    decoBuilder.add(from, to, dec);
   }
-  return builder.finish();
+
+  const atomicBuilder = new RangeSetBuilder();
+  for (const { from, to } of pendingAtomic) {
+    atomicBuilder.add(from, to, tagMarker);
+  }
+
+  return { decos: decoBuilder.finish(), atomic: atomicBuilder.finish() };
 }
 
 /**
- * Factory: creates a CodeMirror StateField parameterised by annotation tag definitions.
+ * Factory: creates CodeMirror extensions parameterised by annotation tag definitions.
  * Pass the result to `createExtensionSlot().reconfigure(...)` to activate annotation mode.
  *
- * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[]}>} tagDefs
- * @returns {import('@codemirror/state').StateField<import('@codemirror/state').DecorationSet>}
+ * Returns a StateField (decorations + atomic ranges built in one tree walk) and the
+ * EditorView.atomicRanges facet that makes non-annotated XML tags uncrossable by cursor motion.
+ *
+ * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>} tagDefs
+ * @returns {import('@codemirror/state').Extension[]}
  */
 export function createAnnotationField(tagDefs) {
-  return StateField.define({
-    create: (state) => buildDecorations(state, tagDefs),
-    update: (decs, tr) => tr.docChanged ? buildDecorations(tr.state, tagDefs) : decs,
-    provide: f => EditorView.decorations.from(f)
+  /** @type {Map<string, typeof tagDefs>} */
+  const tagMap = new Map();
+  for (const d of tagDefs) {
+    const bucket = tagMap.get(d.tag);
+    if (bucket) bucket.push(d);
+    else tagMap.set(d.tag, [d]);
+  }
+
+  const field = StateField.define({
+    create: (state) => buildAll(state, tagMap),
+    update: (both, tr) => tr.docChanged ? buildAll(tr.state, tagMap) : both,
+    provide: f => EditorView.decorations.from(f, b => b.decos)
   });
+
+  return [
+    field,
+    EditorView.atomicRanges.of(view => view.state.field(field).atomic)
+  ];
 }
 
 /** CSS theme for annotation decorations — applied via EditorView.baseTheme. */

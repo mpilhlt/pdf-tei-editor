@@ -236,7 +236,6 @@ class XmlAnnotationPlugin extends Plugin {
     await this.#xmlEditor.foldByXpath?.('//tei:teiHeader')
     headerToggle.checked = false
     ui.xmlEditor.headerbar.hidden = true
-    ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = true
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
     this.#setContextMenuItemsVisible(true)
     this.#scrollToTextElement()
@@ -373,10 +372,9 @@ class XmlAnnotationPlugin extends Plugin {
         await this.#disableAnnotationMode()
       }
     }
-    // Re-assert disabled state each time state updates while annotation mode is active,
+    // Re-assert teiHeaderToggle disabled state each time state updates while annotation mode is active,
     // because other plugins' onStateUpdate handlers may re-enable these controls.
     if (this.#annotationMode) {
-      ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = true
       ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
     }
   }
