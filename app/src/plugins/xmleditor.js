@@ -229,7 +229,7 @@ class XmlEditorPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#xmlEditor;
-    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress', 'addContextMenuItem', 'createExtensionSlot']);
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress', 'addContextMenuItem']);
     return /** @type {NavXmlEditor} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
