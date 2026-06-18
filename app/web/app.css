@@ -526,3 +526,33 @@ sl-menu[name="pluginsMenu"] small {
   font-size: var(--sl-font-size-x-small);
   color: var(--sl-color-neutral-500);
 }
+/* XML Annotation Mode */
+.ann-badge {
+  display: inline-block;
+  background: var(--ann-color);
+  color: #1e1e2e;
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  padding: 1px 5px 2px;
+  margin-right: 3px;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+}
+.ann-badge:hover { opacity: 0.8; }
+
+.ann-outer {
+  background: color-mix(in srgb, var(--ann-color) 18%, transparent);
+  border-radius: 3px;
+}
+
+.ann-inner {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--ann-color);
+}

@@ -49,6 +49,10 @@ export class PluginContext {
     return this.#application.scheduleStateChange(changes);
   }
 
+  isStateUpdating() {
+    return this.#application.isStateUpdating();
+  }
+
   /**
    * Update extension properties in state
    * @param {Object} extChanges - Extension properties to update

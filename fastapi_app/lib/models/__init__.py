@@ -44,6 +44,8 @@ from fastapi_app.lib.models.models_files import (
 )
 from fastapi_app.lib.models.models_extraction import (
     AnnotationGuideInfo,
+    AnnotationTagAttribute,
+    AnnotationTagDef,
     ExtractorInfo,
     ListExtractorsResponse,
     ExtractRequest,
@@ -109,6 +111,8 @@ __all__ = [
     "GarbageCollectResponse",
     # Extraction models
     "AnnotationGuideInfo",
+    "AnnotationTagAttribute",
+    "AnnotationTagDef",
     "ExtractorInfo",
     "ListExtractorsResponse",
     "ExtractRequest",

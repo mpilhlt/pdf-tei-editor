@@ -41,7 +41,7 @@
  * @property {(message: any) => void} error
  */
 
-import { EditorState, EditorSelection, Compartment, Transaction } from "@codemirror/state";
+import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
@@ -311,6 +311,27 @@ export class XMLEditor extends EventEmitter {
     }
     return namespaces[prefix] || null;
   };
+
+  /**
+   * Claim a reconfigurable CodeMirror extension slot.
+   * Appends a new Compartment to the live EditorState via StateEffect.appendConfig.
+   * Call this during install() of a dependent plugin.
+   * @param {Extension} [initial] Initial extension value (default: empty)
+   * @returns {{ reconfigure: (ext: Extension) => void }}
+   */
+  createExtensionSlot(initial = []) {
+    if (!this.#view) throw new Error('XMLEditor not initialized');
+    const compartment = new Compartment();
+    this.#view.dispatch({
+      effects: StateEffect.appendConfig.of(compartment.of(initial))
+    });
+    return {
+      reconfigure: (ext) => {
+        if (!isExtension(ext)) throw new TypeError('Argument must have the Extension interface');
+        this.#view.dispatch({ effects: compartment.reconfigure(ext) });
+      }
+    };
+  }
 
   /**
    * Add one or more linter extensions to the editor

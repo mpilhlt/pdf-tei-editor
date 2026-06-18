@@ -49,6 +49,7 @@
  * @property {ProjectInfo[]|null} projects - All projects accessible to the current user
  * @property {boolean} hasInternet - Whether the backend has internet access
  * @property {boolean} maintenanceMode - Whether the application is in maintenance mode (UI blocked by admin)
+ * @property {string|null} view - Active editor view mode; 'annotation' for annotation view, null for raw XML
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  * @property {ApplicationState|null} previousState - Links to the previous state object
  */
@@ -76,6 +77,7 @@ const initialState = {
   offline: false,
   hasInternet: false,
   maintenanceMode: false,
+  view: null,
   ext: {},
   previousState: null
 }

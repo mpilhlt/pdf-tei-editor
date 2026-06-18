@@ -175,7 +175,7 @@ function release(releaseType) {
   if (apiClientStatus.length > 0) {
     console.log('⚠️  API client was regenerated. Committing changes...');
     exec('git add app/src/modules/api-client-v1.js', false, true);
-    exec('git commit -m "Update API client before release"', false, true);
+    exec('git commit -m "chore: Update API client before release"', false, true);
   }
 
   // Bump version using npm version command

@@ -1,0 +1,408 @@
+// @ts-check
+
+/**
+ * CodeMirror decoration layer for XML annotation mode.
+ *
+ * Exports:
+ *   resolveLabel(tagDef, element) — resolves badge label from tagDef + element attributes
+ *   createAnnotationField(tagDefs) — returns extensions that decorate annotation elements
+ *                                    and make all non-annotated XML tags atomic
+ *   navigateEffect — StateEffect dispatched to highlight the currently navigated element
+ *   createNavigationField() — StateField that shows ann-navigated border on the navigated element
+ *   annotationTheme — EditorView.baseTheme with ann-badge, ann-outer, ann-inner, ann-navigated styles
+ */
+
+import { StateField, StateEffect, RangeSetBuilder, RangeValue } from '@codemirror/state';
+import { Decoration, WidgetType, EditorView } from '@codemirror/view';
+import { syntaxTree } from '@codemirror/language';
+
+/**
+ * Resolves the display label for a badge given a tag definition and the live XML DOM element.
+ *
+ * Resolution order:
+ *   1. labelMap: first entry whose "attr=value" matches an element attribute wins
+ *   2. label template: replace `{@attrName}` tokens; remove surrounding brackets if attr absent
+ *   3. plain label: returned as-is
+ *
+ * @param {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[] }} tagDef
+ * @param {Element} element
+ * @returns {string}
+ */
+export function resolveLabel(tagDef, element) {
+  if (tagDef.labelMap) {
+    for (const [key, mapped] of Object.entries(tagDef.labelMap)) {
+      const eqIdx = key.indexOf('=');
+      if (eqIdx === -1) continue;
+      const attrName = key.slice(0, eqIdx);
+      const attrVal  = key.slice(eqIdx + 1);
+      if (element.getAttribute(attrName) === attrVal) return mapped;
+    }
+  }
+
+  // Template interpolation: replace [{@attrName}] or {@attrName}
+  // If the attribute is absent, drop the whole token including any surrounding [...]
+  return tagDef.label.replace(/\[?\{@([^}]+)\}\]?/g, (match, attrName) => {
+    const val = element.getAttribute(attrName);
+    if (val === null) return '';
+    const hasBrackets = match.startsWith('[');
+    return hasBrackets ? `[${val}]` : val;
+  });
+}
+
+/**
+ * A badge widget rendered in place of an OpenTag for a known annotation element.
+ * Dispatches `ann-badge-click` custom event with { tag, from } when clicked.
+ * The popup handler resolves the XML DOM element from `from` at click-time.
+ */
+class BadgeWidget extends WidgetType {
+  /**
+   * @param {string} label
+   * @param {string} color
+   * @param {string} tag
+   * @param {number} from Document position of the open tag start
+   */
+  constructor(label, color, tag, from) {
+    super();
+    this.label = label;
+    this.color = color;
+    this.tag = tag;
+    this.from = from;
+  }
+
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'ann-badge';
+    span.style.setProperty('--ann-color', this.color);
+    span.dataset.tag = this.tag;
+    span.dataset.from = String(this.from);
+    span.textContent = this.label;
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      span.dispatchEvent(new CustomEvent('ann-badge-click', {
+        bubbles: true,
+        detail: { tag: this.tag, from: this.from, clientX: e.clientX, clientY: e.clientY }
+      }));
+    });
+    return span;
+  }
+
+  /** @param {import('@codemirror/view').WidgetType} other */
+  eq(other) {
+    return other instanceof BadgeWidget &&
+      other.label === this.label &&
+      other.color === this.color &&
+      other.tag === this.tag &&
+      other.from === this.from;
+  }
+
+  ignoreEvent() { return false; }
+}
+
+/** Zero-width widget that hides a CloseTag. Shared across all instances. */
+class HiddenWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement('span');
+    span.style.display = 'none';
+    return span;
+  }
+  eq() { return true; }
+  ignoreEvent() { return true; }
+}
+
+const hiddenWidget = Decoration.replace({ widget: new HiddenWidget() });
+
+/** Marker placed on non-annotated XML tag ranges to make them atomic. */
+class TagMarker extends RangeValue {
+  /** @param {RangeValue} other */
+  eq(other) { return other instanceof TagMarker; }
+}
+const tagMarker = new TagMarker();
+
+/**
+ * Computes a simplified badge label from tagDef.label at decoration-build time.
+ * The XML DOM is not available here, so we strip {@attr} tokens and clean up brackets.
+ * Full label resolution (via resolveLabel) happens at popup click time.
+ * @param {{ label: string, tag: string }} tagDef
+ * @returns {string}
+ */
+function simplifiedLabel(tagDef) {
+  return tagDef.label
+    .replace(/\[?\{@[^}]+\}\]?/g, '')
+    .replace(/\[+\]+/g, '')
+    .trim() || tagDef.tag.toUpperCase();
+}
+
+/**
+ * Reads attribute name→value pairs from an OpenTag Lezer node.
+ * Strips surrounding quotes from attribute values.
+ * @param {import('@lezer/common').SyntaxNode} openTagNode
+ * @param {import('@codemirror/state').EditorState} state
+ * @returns {Record<string, string>}
+ */
+function readAttributes(openTagNode, state) {
+  const attrs = /** @type {Record<string, string>} */ ({});
+  let child = openTagNode.firstChild;
+  while (child) {
+    if (child.name === 'Attribute') {
+      const nameNode = child.firstChild;
+      const valueNode = child.lastChild;
+      if (nameNode && valueNode && nameNode !== valueNode && nameNode.name === 'AttributeName') {
+        const name = state.doc.sliceString(nameNode.from, nameNode.to);
+        const raw = state.doc.sliceString(valueNode.from, valueNode.to);
+        attrs[name] = raw.length >= 2 ? raw.slice(1, -1) : raw;
+      }
+    }
+    child = child.nextSibling;
+  }
+  return attrs;
+}
+
+/**
+ * Walks the Lezer syntax tree once and builds:
+ *   - a DecorationSet for annotation elements (badges, content marks, hidden close tags)
+ *   - a RangeSet of TagMarker values for all non-annotated XML tags (atomic cursor motion)
+ *
+ * For each annotation element (tag name matches a tagDef):
+ *   - OpenTag  → Decoration.replace → BadgeWidget (simplified label)
+ *   - Content  → Decoration.mark class ann-outer (depth=1) or ann-inner (depth≥2)
+ *   - CloseTag → Decoration.replace → zero-width hidden widget
+ *
+ * For each non-annotation element (tag name not in tagMap):
+ *   - OpenTag and CloseTag → TagMarker atomic range (cursor skips over them)
+ *   - Self-closing elements → SelfClosingTag → TagMarker atomic range
+ *
+ * All decorations are collected and sorted by `from` position before being added to the
+ * RangeSetBuilder, which requires strictly ascending order.
+ *
+ * @param {import('@codemirror/state').EditorState} state
+ * @param {Map<string, Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>>} tagMap
+ * @returns {{ decos: import('@codemirror/view').DecorationSet, atomic: import('@codemirror/state').RangeSet<TagMarker> }}
+ */
+function buildAll(state, tagMap) {
+  // TODO: optimize by using RangeSet.map(tr.changes) for position-only changes,
+  // with targeted rebuild only when tag structure changes (annotation mode edits).
+
+  const tree = syntaxTree(state);
+
+  /** @type {Array<{from:number, to:number, def: {tag:string,label:string,labelMap?:Record<string,string>|null,color:string,attributes:any[],defaultAttributes?:Record<string,string>|null}, depth:number}>} */
+  const stack = [];
+
+  /** @type {Array<{from:number, to:number, dec: import('@codemirror/view').Decoration}>} */
+  const pendingDecos = [];
+
+  /** @type {Array<{from:number, to:number}>} */
+  const pendingAtomic = [];
+
+  tree.iterate({
+    enter(node) {
+      if (node.name === 'Element') {
+        const firstChild = node.node.firstChild;
+        if (!firstChild) return;
+
+        if (firstChild.name === 'OpenTag') {
+          // TagName is the second child of OpenTag (first is the `<` token)
+          const tagNameNode = firstChild.firstChild?.nextSibling;
+          if (!tagNameNode || tagNameNode.name !== 'TagName') return;
+          const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
+          const defs = tagMap.get(tagName);
+
+          if (!defs) {
+            // Non-annotation element: make its open/close tags atomic
+            pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
+            const lastChild = node.node.lastChild;
+            if (lastChild && (lastChild.name === 'CloseTag' || lastChild.name === 'MismatchedCloseTag')) {
+              pendingAtomic.push({ from: lastChild.from, to: lastChild.to });
+            }
+            return;
+          }
+
+          // Pick the best matching def: prefer one whose defaultAttributes all match,
+          // fall back to the generic def (defaultAttributes null/undefined).
+          let def = null;
+          let fallbackDef = null;
+          let elemAttrs = /** @type {Record<string,string>|null} */ (null);
+          for (const candidate of defs) {
+            if (!candidate.defaultAttributes) {
+              fallbackDef = candidate;
+            } else {
+              if (!elemAttrs) elemAttrs = readAttributes(firstChild, state);
+              if (elemAttrs && Object.entries(candidate.defaultAttributes).every(([k, v]) => elemAttrs[k] === v)) {
+                def = candidate;
+                break;
+              }
+            }
+          }
+          def = def ?? fallbackDef;
+          if (!def) return;
+
+          // Determine content region: between OpenTag.to and CloseTag.from
+          const closeTag = node.node.lastChild;
+          const hasCloseTag = closeTag && (closeTag.name === 'CloseTag' || closeTag.name === 'MismatchedCloseTag');
+
+          const depth = stack.length + 1;
+          stack.push({ from: node.from, to: node.to, def, depth });
+
+          // Badge for the OpenTag
+          const label = simplifiedLabel(def);
+          pendingDecos.push({
+            from: firstChild.from,
+            to: firstChild.to,
+            dec: Decoration.replace({ widget: new BadgeWidget(label, def.color, tagName, firstChild.from) })
+          });
+
+          // Content mark (between OpenTag.to and CloseTag.from)
+          if (hasCloseTag) {
+            const contentFrom = firstChild.to;
+            const contentTo   = closeTag.from;
+            if (contentFrom < contentTo) {
+              const cls = depth === 1 ? 'ann-outer' : 'ann-inner';
+              pendingDecos.push({
+                from: contentFrom,
+                to: contentTo,
+                dec: Decoration.mark({
+                  class: cls,
+                  attributes: { style: `--ann-color: ${def.color}` }
+                })
+              });
+            }
+            // Hidden widget for the CloseTag
+            pendingDecos.push({
+              from: closeTag.from,
+              to: closeTag.to,
+              dec: hiddenWidget
+            });
+          }
+        } else if (firstChild.name === 'SelfClosingTag') {
+          // Self-closing element: make the tag atomic if not an annotation tag
+          const tagNameNode = firstChild.firstChild?.nextSibling;
+          if (!tagNameNode || tagNameNode.name !== 'TagName') return;
+          const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
+          if (!tagMap.has(tagName)) {
+            pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
+          }
+        }
+      }
+    },
+    leave(node) {
+      if (node.name === 'Element') {
+        const top = stack[stack.length - 1];
+        if (top && top.from === node.from) stack.pop();
+      }
+    }
+  });
+
+  // Sort by from position (RangeSetBuilder requires strictly ascending order)
+  pendingDecos.sort((a, b) => a.from - b.from || a.to - b.to);
+  pendingAtomic.sort((a, b) => a.from - b.from || a.to - b.to);
+
+  const decoBuilder = new RangeSetBuilder();
+  for (const { from, to, dec } of pendingDecos) {
+    decoBuilder.add(from, to, dec);
+  }
+
+  const atomicBuilder = new RangeSetBuilder();
+  for (const { from, to } of pendingAtomic) {
+    atomicBuilder.add(from, to, tagMarker);
+  }
+
+  return { decos: decoBuilder.finish(), atomic: atomicBuilder.finish() };
+}
+
+/**
+ * Dispatched to highlight the element currently reached by node navigation.
+ * Value: `{ from: number, to: number }` — the content range of the element (between its open/close
+ * tags), or `null` to clear the highlight.
+ */
+export const navigateEffect = StateEffect.define();
+
+/**
+ * Creates a StateField that renders an `ann-navigated` border mark on the element that was most
+ * recently navigated to via the footer prev/next buttons.
+ * The field is updated by dispatching `navigateEffect`; the decoration is preserved across
+ * compartment reconfigurations as long as the same field instance is used.
+ * @returns {import('@codemirror/state').StateField<import('@codemirror/view').DecorationSet>}
+ */
+export function createNavigationField() {
+  return StateField.define({
+    create: () => Decoration.none,
+    update(deco, tr) {
+      deco = deco.map(tr.changes);
+      for (const e of tr.effects) {
+        if (e.is(navigateEffect)) {
+          const range = /** @type {{ from: number, to: number }|null} */ (e.value);
+          if (!range || range.from >= range.to) return Decoration.none;
+          const builder = new RangeSetBuilder();
+          builder.add(range.from, range.to, Decoration.mark({ class: 'ann-navigated' }));
+          return builder.finish();
+        }
+      }
+      return deco;
+    },
+    provide: f => EditorView.decorations.from(f)
+  });
+}
+
+/**
+ * Factory: creates CodeMirror extensions parameterised by annotation tag definitions.
+ * Pass the result to `createExtensionSlot().reconfigure(...)` to activate annotation mode.
+ *
+ * Returns a StateField (decorations + atomic ranges built in one tree walk) and the
+ * EditorView.atomicRanges facet that makes non-annotated XML tags uncrossable by cursor motion.
+ *
+ * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>} tagDefs
+ * @returns {import('@codemirror/state').Extension[]}
+ */
+export function createAnnotationField(tagDefs) {
+  /** @type {Map<string, typeof tagDefs>} */
+  const tagMap = new Map();
+  for (const d of tagDefs) {
+    const bucket = tagMap.get(d.tag);
+    if (bucket) bucket.push(d);
+    else tagMap.set(d.tag, [d]);
+  }
+
+  const field = StateField.define({
+    create: (state) => buildAll(state, tagMap),
+    update: (both, tr) => tr.docChanged ? buildAll(tr.state, tagMap) : both,
+    provide: f => EditorView.decorations.from(f, b => b.decos)
+  });
+
+  return [
+    field,
+    EditorView.atomicRanges.of(view => view.state.field(field).atomic)
+  ];
+}
+
+/** CSS theme for annotation decorations — applied via EditorView.baseTheme. */
+export const annotationTheme = EditorView.baseTheme({
+  '.ann-badge': {
+    display: 'inline-block',
+    background: 'var(--ann-color)',
+    color: '#1e1e2e',
+    fontFamily: 'monospace',
+    fontSize: '9px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    borderRadius: '3px',
+    padding: '1px 5px 2px',
+    marginRight: '3px',
+    verticalAlign: 'middle',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  '.ann-outer': {
+    background: 'color-mix(in srgb, var(--ann-color) 18%, transparent)',
+    borderRadius: '3px',
+  },
+  '.ann-inner': {
+    textDecoration: 'underline',
+    textUnderlineOffset: '3px',
+    textDecorationThickness: '2px',
+    textDecorationColor: 'var(--ann-color)',
+  },
+  '.ann-navigated': {
+    boxShadow: '0 0 0 1px color-mix(in srgb, var(--sl-color-primary-600, #005cb8) 55%, transparent)',
+    borderRadius: '2px',
+  },
+});

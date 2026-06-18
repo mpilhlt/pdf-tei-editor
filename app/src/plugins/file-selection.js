@@ -66,11 +66,10 @@ class FileSelectionPlugin extends Plugin {
   /** @type {Set<string>} */
   #variants;
   #collections;
-  #isUpdatingProgrammatically = false;
-  #isInStateUpdateCycle = false;
   #isPopulatingSelectboxes = false;
   #isFileLoading = false;
-  #openDropdownCount = 0;
+  /** @type {Set<EventTarget>} Selects that were opened by the user; gates sl-change handling */
+  #userOpenedDropdown = new Set();
 
   /** @param {ApplicationState} initialState */
   async install(initialState) {
@@ -88,33 +87,37 @@ class FileSelectionPlugin extends Plugin {
       }
     }
 
-    /** @type {[SlSelect, function][]} */
+  }
+
+  async start() {
+    /** @type {[SlSelect, string, function(string): Promise<void>][]} */
     const handlers = [
-      [this.#collection, () => this.#onChangeCollectionSelection()],
-      [this.#variant,    () => this.#onChangeVariantSelection()],
-      [this.#pdf,        () => this.#onChangePdfSelection()],
-      [this.#xml,        () => this.#onChangeXmlSelection()],
-      [this.#diff,       () => this.#onChangeDiffSelection()]
+      [this.#collection, 'collection', (v) => this.#onChangeCollectionSelection(v)],
+      [this.#variant,    'variant',    (v) => this.#onChangeVariantSelection(v)],
+      [this.#pdf,        'pdf',        (v) => this.#onChangePdfSelection(v)],
+      [this.#xml,        'xml',        (v) => this.#onChangeXmlSelection(v)],
+      [this.#diff,       'diff',       (v) => this.#onChangeDiffSelection(v)]
     ];
 
-    for (const [select, handler] of handlers) {
-      select.addEventListener('sl-change', async () => {
-        if (this.#isUpdatingProgrammatically) return;
-        if (this.#isInStateUpdateCycle) return;
-        await handler();
-      });
-
+    for (const [select, , handler] of handlers) {
       select.addEventListener('sl-show', () => {
-        this.#openDropdownCount++;
+        this.#userOpenedDropdown.add(select);
         select.closest('tool-bar')?.classList.add('dropdown-open');
       });
 
+      select.addEventListener('sl-change', async () => {
+        if (!this.#userOpenedDropdown.has(select)) return;
+        this.#userOpenedDropdown.delete(select);
+        await handler(select.value);
+      });
+
       select.addEventListener('sl-hide', () => {
-        this.#openDropdownCount--;
-        if (this.#openDropdownCount <= 0) {
-          this.#openDropdownCount = 0;
-          select.closest('tool-bar')?.classList.remove('dropdown-open');
-        }
+        setTimeout(() => {
+          this.#userOpenedDropdown.delete(select);
+          if (this.#userOpenedDropdown.size === 0) {
+            select.closest('tool-bar')?.classList.remove('dropdown-open');
+          }
+        }, 0);
       });
     }
   }
@@ -124,25 +127,19 @@ class FileSelectionPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async onStateUpdate(changedKeys, state) {
-    this.#isInStateUpdateCycle = true;
-    try {
-      if ((changedKeys.includes('collections') || changedKeys.includes('projects')) && state.collections) {
-        await this.#populateCollectionSelectbox(state);
-      }
+    if ((changedKeys.includes('collections') || changedKeys.includes('projects')) && state.collections) {
+      await this.#populateCollectionSelectbox(state);
+    }
 
-      if (changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter'].includes(k)) && state.fileData) {
-        const fileDataChanged = changedKeys.includes('fileData');
-        const selectionsChanged = changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'collectionFilter'].includes(k));
-        if (selectionsChanged || fileDataChanged) {
-          await this.#populateSelectboxes(state);
-        } else {
-          this.#logger.debug("Not repopulating selectboxes.");
-        }
-      }
-
+    if (changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter'].includes(k)) && state.fileData) {
+      // Schedule outside the state propagation window: #populateSelectboxes has many async
+      // steps that can take seconds for large file lists, and holding #isUpdatingState=true
+      // that long blocks user interactions from dispatching their own state changes.
+      setTimeout(() => {
+        this.#populateSelectboxes(this.state).catch(e => this.#logger.error(String(e)));
+      }, 0);
+    } else {
       this.#updateSelectboxValues(state);
-    } finally {
-      this.#isInStateUpdateCycle = false;
     }
   }
 
@@ -155,7 +152,6 @@ class FileSelectionPlugin extends Plugin {
     this.#setSelectboxLoadingState(isLoading);
     if (!isLoading && this.state?.fileData) {
       await this.#populateSelectboxes(this.state);
-      this.#updateSelectboxValues(this.state);
     }
   }
 
@@ -201,24 +197,19 @@ class FileSelectionPlugin extends Plugin {
 
   /** @param {ApplicationState} state */
   #updateSelectboxValues(state) {
-    this.#isUpdatingProgrammatically = true;
-    try {
-      let sourceValue = state.pdf || "";
-      if (!state.pdf && state.xml && state.fileData) {
-        const xmlFile = state.fileData.find(file =>
-          file.artifacts && file.artifacts.some(a => a.id === state.xml)
-        );
-        if (xmlFile && !xmlFile.source) {
-          sourceValue = state.xml;
-        }
+    let sourceValue = state.pdf || "";
+    if (!state.pdf && state.xml && state.fileData) {
+      const xmlFile = state.fileData.find(file =>
+        file.artifacts && file.artifacts.some(a => a.id === state.xml)
+      );
+      if (xmlFile && !xmlFile.source) {
+        sourceValue = state.xml;
       }
-      this.#pdf.value = sourceValue;
-      this.#xml.value = state.xml || "";
-      this.#diff.value = state.diff || "";
-      this.#collection.value = state.collectionFilter || "";
-    } finally {
-      this.#isUpdatingProgrammatically = false;
     }
+    this.#pdf.value = sourceValue;
+    this.#xml.value = state.xml || "";
+    this.#diff.value = state.diff || "";
+    this.#collection.value = state.collectionFilter || "";
   }
 
   /** @param {boolean} isLoading */
@@ -296,12 +287,7 @@ class FileSelectionPlugin extends Plugin {
       this.#collection.appendChild(option);
     }
 
-    this.#isUpdatingProgrammatically = true;
-    try {
-      this.#collection.value = state.collectionFilter || "";
-    } finally {
-      this.#isUpdatingProgrammatically = false;
-    }
+    this.#collection.value = state.collectionFilter || "";
   }
 
   /** @param {ApplicationState} state */
@@ -341,12 +327,7 @@ class FileSelectionPlugin extends Plugin {
       this.#variant.appendChild(option);
     });
 
-    this.#isUpdatingProgrammatically = true;
-    try {
-      this.#variant.value = state.variant || "";
-    } finally {
-      this.#isUpdatingProgrammatically = false;
-    }
+    this.#variant.value = state.variant || "";
   }
 
   /** @param {ApplicationState} state */
@@ -512,17 +493,18 @@ class FileSelectionPlugin extends Plugin {
         }
         this.#pdf.appendChild(new SlDivider());
       }
+      // Update selected values after options are in the DOM
+      this.#updateSelectboxValues(state);
     } finally {
       this.#isPopulatingSelectboxes = false;
       this.#setSelectboxLoadingState(false);
     }
   }
 
-  async #onChangePdfSelection() {
+  /** @param {string} selectedIdentifier */
+  async #onChangePdfSelection(selectedIdentifier) {
     const state = this.state;
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
-
-    const selectedIdentifier = this.#pdf.value;
     const selectedFile = state.fileData.find(file => {
       if (file.source && file.source.id === selectedIdentifier) return true;
       if (file.artifacts && file.artifacts.some(a => a.id === selectedIdentifier)) return true;
@@ -570,70 +552,70 @@ class FileSelectionPlugin extends Plugin {
         } else {
           stateUpdate.pdf = null;
         }
-        await this.dispatchStateChange(stateUpdate);
+        // scheduleStateChange defers if another propagation is still running (e.g. a slow
+        // plugin held #isUpdatingState=true when the user clicked), otherwise dispatches immediately.
+        await this.scheduleStateChange(stateUpdate);
         await this.getDependency('services').load(filesToLoad);
       } catch (error) {
         this.#logger.error(String(error));
-        await this.dispatchStateChange({ collection: null, pdf: null, xml: null });
+        await this.scheduleStateChange({ collection: null, pdf: null, xml: null });
         await this.reload({ refresh: true });
       }
     }
   }
 
-  async #onChangeXmlSelection() {
+  /** @param {string} xml */
+  async #onChangeXmlSelection(xml) {
     const state = this.state;
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
-    const xml = this.#xml.value;
-    if (xml && typeof xml === "string" && xml !== state.xml) {
-      try {
-        for (const file of state.fileData) {
-          if (file.artifacts && file.artifacts.some(a => a.id === xml)) {
-            const _selCollection = file.collections[0];
-            const _selProject = (state.projects || []).find(
-              p => p.collections && p.collections.includes(_selCollection)
-            );
-            await this.dispatchStateChange({
-              collection: _selCollection,
-              project: _selProject ? _selProject.id : null
-            });
-            break;
-          }
+    if (!xml || xml === state.xml) return;
+    try {
+      for (const file of state.fileData) {
+        if (file.artifacts && file.artifacts.some(a => a.id === xml)) {
+          const _selCollection = file.collections[0];
+          const _selProject = (state.projects || []).find(
+            p => p.collections && p.collections.includes(_selCollection)
+          );
+          await this.scheduleStateChange({
+            collection: _selCollection,
+            project: _selProject ? _selProject.id : null
+          });
+          break;
         }
-        await this.getDependency('services').removeMergeView();
-        await this.getDependency('services').load({ xml });
-        await this.dispatchStateChange({ xml });
-      } catch (error) {
-        console.error(String(error));
-        await this.reload({ refresh: true });
-        await this.dispatchStateChange({ xml: null });
-        this.#dialog.error(String(error));
       }
+      await this.getDependency('services').removeMergeView();
+      await this.getDependency('services').load({ xml });
+      await this.scheduleStateChange({ xml });
+    } catch (error) {
+      this.#logger.error(String(error));
+      await this.reload({ refresh: true });
+      await this.scheduleStateChange({ xml: null });
+      this.#dialog.error(String(error));
     }
   }
 
-  async #onChangeDiffSelection() {
-    const state = this.state;
-    const diff = String(this.#diff.value);
-    if (diff && typeof diff === "string" && diff !== this.#xml.value) {
+  /** @param {string} diff */
+  async #onChangeDiffSelection(diff) {
+    if (diff && diff !== this.state.xml) {
       try {
         await this.getDependency('services').showMergeView(diff);
       } catch (error) {
-        console.error(error);
+        this.#logger.error(String(error));
       }
     } else {
       await this.getDependency('services').removeMergeView();
     }
-    await this.dispatchStateChange({ diff });
+    await this.scheduleStateChange({ diff });
   }
 
-  async #onChangeVariantSelection() {
-    const variant = String(this.#variant.value);
-    await this.dispatchStateChange({ variant, xml: null });
+  /** @param {string} variant */
+  async #onChangeVariantSelection(variant) {
+    await this.scheduleStateChange({ variant, xml: null });
   }
 
-  async #onChangeCollectionSelection() {
+  /** @param {string} collectionFilter */
+  async #onChangeCollectionSelection(collectionFilter) {
     const state = this.state;
-    const collectionFilter = String(this.#collection.value);
     const collection = collectionFilter || null;
     const matchedProject = (state.projects || []).find(
       p => p.collections && p.collections.includes(collectionFilter)
@@ -652,9 +634,9 @@ class FileSelectionPlugin extends Plugin {
 
     if (shouldClearSelection) {
       await this.getDependency('services').removeMergeView();
-      await this.dispatchStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
+      await this.scheduleStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
     } else {
-      await this.dispatchStateChange({ collectionFilter, collection, project });
+      await this.scheduleStateChange({ collectionFilter, collection, project });
     }
   }
 }

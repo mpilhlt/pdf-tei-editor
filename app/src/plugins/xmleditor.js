@@ -72,6 +72,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} nextDiffBtn - Next diff button
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
+ * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
+ * @property {StatusSwitch} teiHeaderToggleWidget - TEI header visibility toggle (managed by tei-tools plugin)
  * @property {StatusButton} validateBtn - Validate XML button
  * @property {StatusButton} undoBtn - Undo button
  * @property {StatusButton} redoBtn - Redo button
@@ -87,7 +89,6 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
  * @property {StatusButton} prevNodeBtn - Previous node navigation button
  * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
  * @property {StatusButton} nextNodeBtn - Next node navigation button
@@ -284,7 +285,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Create toolbar widgets from templates and add to toolbar
     const toolbarWidgets = createFromTemplate('xmleditor-toolbar');
-    const toolbarPriorities = [104, 103, 102, 101, 100, 99]; // separator, prevDiff, nextDiff, separator, reject, accept
+    const toolbarPriorities = [104, 103, 102, 101, 100, 99, 98, 97, 96]; // style, prevDiff, nextDiff, sep, reject, accept, sep, wrap, header
     toolbarWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
         this.#toolbar.add(widget, toolbarPriorities[index] || 1);
@@ -368,7 +369,7 @@ class XmlEditorPlugin extends Plugin {
     }
     this.#indentationStatusWidget = this.#statusbar.indentationStatusWidget;
     this.#cursorPositionWidget = this.#statusbar.cursorPositionWidget;
-    this.#lineWrappingSwitch = this.#statusbar.lineWrappingSwitch;
+    this.#lineWrappingSwitch = this.#toolbar.lineWrappingSwitch;
 
     // Store toolbar widget references
     this.#prevDiffBtn = this.#toolbar.prevDiffBtn;
@@ -709,13 +710,16 @@ class XmlEditorPlugin extends Plugin {
 
     // Collect context menu contributions from all plugins that declare ep.xmlEditor.contextMenuItems
     const contributions = await this.context.invokePluginEndpoint(
-      ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'full' }
+      ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'values' }
     );
     for (const results of (contributions || [])) {
-      for (const item of (results || [])) {
-        if (item?.element instanceof HTMLElement) {
-          this.#contextMenu.addItem(item.element);
-        }
+      const items = (results || []).filter(item => item?.element instanceof HTMLElement);
+      // Prepend items in reverse so they appear in declaration order at the top of the menu
+      for (const item of [...items].filter(i => i.prepend).reverse()) {
+        this.#contextMenu.prependItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
+      }
+      for (const item of items.filter(i => !i.prepend)) {
+        this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
     }
   }

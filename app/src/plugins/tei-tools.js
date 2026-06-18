@@ -6,17 +6,17 @@
  * @import { ApplicationState } from '../state.js'
  * @import { SlDrawer } from '../ui.js'
  * @import { teiRevisionHistoryDrawerPart } from '../templates/tei-revision-history-drawer.types.js'
- * @import { teiToolsStatusbarPart } from '../templates/tei-tools-statusbar.types.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
+ * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
+import ui from '../ui.js'
 
 // Register templates
-await registerTemplate('tei-tools-statusbar', 'tei-tools-statusbar.html')
 await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-drawer.html')
 
 /**
@@ -50,8 +50,9 @@ class TeiToolsPlugin extends Plugin {
 
   /** @type {StatusButton} */
   #revisionHistoryBtn;
+
+  /** @type {StatusSwitch} */
   #teiHeaderToggleWidget;
-  #teiHeaderLabel;
 
   /** @param {ApplicationState} _state */
   async install(_state) {
@@ -60,14 +61,7 @@ class TeiToolsPlugin extends Plugin {
 
     const xmlEditorApi = this.getDependency('xmleditor')
 
-    const statusbarWidgets = createFromTemplate('tei-tools-statusbar')
-    const tooltipEl = /** @type {HTMLElement} */ ([...statusbarWidgets].find(w => w instanceof HTMLElement))
-    if (tooltipEl) {
-      const tooltipUi = /** @type {teiToolsStatusbarPart} */ (this.createUi(tooltipEl))
-      this.#teiHeaderToggleWidget = tooltipUi.teiHeaderToggleWidget
-      this.#teiHeaderLabel = tooltipUi.teiHeaderLabel
-      xmlEditorApi.addStatusbarWidget(tooltipEl, 'left', 2)
-    }
+    this.#teiHeaderToggleWidget = /** @type {StatusSwitch} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
 
     this.#revisionHistoryBtn = PanelUtils.createButton({
       icon: 'clock-history',
@@ -107,8 +101,8 @@ class TeiToolsPlugin extends Plugin {
 
   async onStateUpdate(_changedKeys) {
     const hasDocument = !!this.state.xml
-    this.#teiHeaderToggleWidget.disabled = !hasDocument
-    this.#teiHeaderLabel.style.opacity = hasDocument ? '1' : '0.5'
+    const inAnnotationMode = this.state.view === 'annotation'
+    this.#teiHeaderToggleWidget.disabled = !hasDocument || inAnnotationMode
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
@@ -117,13 +111,11 @@ class TeiToolsPlugin extends Plugin {
 
   #updateTeiHeaderToggle() {
     const teiHeaderToggleWidget = this.#teiHeaderToggleWidget
-    const teiHeaderLabel = this.#teiHeaderLabel
     const hasTeiHeader = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
 
     teiHeaderToggleWidget.disabled = !hasTeiHeader
-    teiHeaderLabel.style.opacity = hasTeiHeader ? '1' : '0.5'
 
-    if (hasTeiHeader) {
+    if (hasTeiHeader && this.state.view !== 'annotation') {
       const preferredVisible = this.uiStorage.get('teiHeaderVisible', false)
       try {
         if (preferredVisible) {
