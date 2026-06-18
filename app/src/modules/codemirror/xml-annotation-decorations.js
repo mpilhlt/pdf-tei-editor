@@ -7,10 +7,12 @@
  *   resolveLabel(tagDef, element) — resolves badge label from tagDef + element attributes
  *   createAnnotationField(tagDefs) — returns extensions that decorate annotation elements
  *                                    and make all non-annotated XML tags atomic
- *   annotationTheme — EditorView.baseTheme with ann-badge, ann-outer, ann-inner styles
+ *   navigateEffect — StateEffect dispatched to highlight the currently navigated element
+ *   createNavigationField() — StateField that shows ann-navigated border on the navigated element
+ *   annotationTheme — EditorView.baseTheme with ann-badge, ann-outer, ann-inner, ann-navigated styles
  */
 
-import { StateField, RangeSetBuilder, RangeValue } from '@codemirror/state';
+import { StateField, StateEffect, RangeSetBuilder, RangeValue } from '@codemirror/state';
 import { Decoration, WidgetType, EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 
@@ -307,6 +309,40 @@ function buildAll(state, tagMap) {
 }
 
 /**
+ * Dispatched to highlight the element currently reached by node navigation.
+ * Value: `{ from: number, to: number }` — the content range of the element (between its open/close
+ * tags), or `null` to clear the highlight.
+ */
+export const navigateEffect = StateEffect.define();
+
+/**
+ * Creates a StateField that renders an `ann-navigated` border mark on the element that was most
+ * recently navigated to via the footer prev/next buttons.
+ * The field is updated by dispatching `navigateEffect`; the decoration is preserved across
+ * compartment reconfigurations as long as the same field instance is used.
+ * @returns {import('@codemirror/state').StateField<import('@codemirror/view').DecorationSet>}
+ */
+export function createNavigationField() {
+  return StateField.define({
+    create: () => Decoration.none,
+    update(deco, tr) {
+      deco = deco.map(tr.changes);
+      for (const e of tr.effects) {
+        if (e.is(navigateEffect)) {
+          const range = /** @type {{ from: number, to: number }|null} */ (e.value);
+          if (!range || range.from >= range.to) return Decoration.none;
+          const builder = new RangeSetBuilder();
+          builder.add(range.from, range.to, Decoration.mark({ class: 'ann-navigated' }));
+          return builder.finish();
+        }
+      }
+      return deco;
+    },
+    provide: f => EditorView.decorations.from(f)
+  });
+}
+
+/**
  * Factory: creates CodeMirror extensions parameterised by annotation tag definitions.
  * Pass the result to `createExtensionSlot().reconfigure(...)` to activate annotation mode.
  *
@@ -364,5 +400,9 @@ export const annotationTheme = EditorView.baseTheme({
     textUnderlineOffset: '3px',
     textDecorationThickness: '2px',
     textDecorationColor: 'var(--ann-color)',
+  },
+  '.ann-navigated': {
+    boxShadow: '0 0 0 1px color-mix(in srgb, var(--sl-color-primary-600, #005cb8) 55%, transparent)',
+    borderRadius: '2px',
   },
 });

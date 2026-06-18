@@ -16,7 +16,7 @@ import { XmlAnnotationPopup } from '../modules/codemirror/xml-annotation-popup.j
 import { XMLEditor } from '../modules/xmleditor.js'
 import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
-import { createAnnotationField, annotationTheme } from '../modules/codemirror/xml-annotation-decorations.js'
+import { createAnnotationField, annotationTheme, navigateEffect, createNavigationField } from '../modules/codemirror/xml-annotation-decorations.js'
 import { syntaxTree } from '@codemirror/language'
 
 /**
@@ -48,6 +48,10 @@ class XmlAnnotationPlugin extends Plugin {
 
   /** @type {{ reconfigure: (ext: any) => void }|null} */
   #slot = null;
+
+  /** Navigation highlight field — created once and reused across all reconfigure() calls so CM
+   *  preserves its decoration state when compartment contents change (e.g. tag def updates). */
+  #navField = createNavigationField();
 
   /** @type {AnnotationTagDef[]} */
   #tagDefs = [];
@@ -227,7 +231,7 @@ class XmlAnnotationPlugin extends Plugin {
     }
     this.#annotationMode = true
     if (this.#switch) this.#switch.checked = true
-    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
     this.#wasReadOnlyBeforeAnnotation = this.#xmlEditor.isReadOnly?.() ?? false
     if (!this.#wasReadOnlyBeforeAnnotation) {
       await this.#xmlEditor.setReadOnly?.(true)
@@ -288,7 +292,7 @@ class XmlAnnotationPlugin extends Plugin {
       return
     }
     // Rebuild decorations for the newly loaded document
-    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
     this.#scrollToTextElement()
   }
 
@@ -466,10 +470,42 @@ class XmlAnnotationPlugin extends Plugin {
         await this.#disableAnnotationMode()
       }
     }
+    // In annotation mode, override the range selection that XmlEditorPlugin dispatches for xpath
+    // navigation with a cursor at the element start, so the scroll target is reliable and the
+    // selection doesn't visually conflict with ann-outer/ann-inner decorations.
+    if (changedKeys.includes('xpath') && this.#annotationMode && state.xpath) {
+      this.#scrollToXpath(state.xpath)
+    }
     // Re-assert teiHeaderToggle disabled state each time state updates while annotation mode is active,
     // because other plugins' onStateUpdate handlers may re-enable these controls.
     if (this.#annotationMode) {
       ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
+    }
+  }
+
+  /**
+   * Navigates the editor to the element matched by xpath: places the cursor right after the open
+   * tag (= after the badge widget), scrolls it into view, and adds an `ann-navigated` border
+   * decoration around the element content so the current element is visually distinct.
+   * @param {string} xpath
+   */
+  #scrollToXpath(xpath) {
+    try {
+      const syntaxNode = this.#xmlEditor.getSyntaxNodeByXpath?.(xpath)
+      if (!syntaxNode) return
+      const openTag  = syntaxNode.firstChild
+      const closeTag = syntaxNode.lastChild
+      // contentFrom: right after the open tag's '>' (= after the badge widget in annotation mode)
+      // contentTo:   right before the close tag's '<' (= end of visible content)
+      const contentFrom = openTag  ? openTag.to            : syntaxNode.from
+      const contentTo   = (closeTag && closeTag !== openTag) ? closeTag.from : syntaxNode.to
+      this.#xmlEditor.getView?.()?.dispatch({
+        effects: navigateEffect.of({ from: contentFrom, to: contentTo }),
+        selection: { anchor: contentFrom },
+        scrollIntoView: true
+      })
+    } catch (e) {
+      this.#logger.debug('[xml-annotation] xpath scroll failed: ' + String(e))
     }
   }
 
@@ -506,7 +542,7 @@ class XmlAnnotationPlugin extends Plugin {
       if (!hasTagDefs) {
         await this.#disableAnnotationMode()
       } else {
-        this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme])
+        this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
       }
     } else if (hasTagDefs && this.state.view === 'annotation' && this.#xmlEditor.getXmlTree?.()) {
       // tagDefs just became available and the document is already loaded; activate now
