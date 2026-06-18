@@ -16,7 +16,6 @@ from fastapi_app.lib.services.metadata_extraction import get_metadata_for_docume
 from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_annotation_tags,
-    get_annotation_tags_cutoff,
     get_form_options,
     get_grobid_server_timeout,
     get_grobid_server_url,
@@ -83,7 +82,6 @@ class GrobidTrainingExtractor(BaseExtractor):
             "navigation_xpath": get_navigation_xpath(),
             "annotationGuides": get_annotation_guides(),
             "annotationTags": get_annotation_tags(),
-            "annotationTagsCutoff": get_annotation_tags_cutoff(),
         }
 
     @classmethod

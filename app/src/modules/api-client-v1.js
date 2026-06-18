@@ -302,7 +302,6 @@
  * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
- * @property {Object<string, any>=} annotationTagsCutoff - Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu
  */
 
 /**

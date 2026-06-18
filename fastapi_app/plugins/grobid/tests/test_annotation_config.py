@@ -4,7 +4,7 @@ Unit tests for annotation tag config in the grobid plugin.
 Run manually:
     uv run python tests/unit-test-runner.py fastapi_app/plugins/grobid/tests/test_annotation_config.py -v
 
-@testCovers fastapi_app/plugins/grobid/config.py
+@testCovers fastapi_app/plugins/grobid/config/annotation_tags.py
 """
 
 import unittest
@@ -69,34 +69,6 @@ class TestGetAnnotationTags(unittest.TestCase):
             "get_annotation_tags() must return a deep copy"
         )
 
-
-class TestGetAnnotationTagsCutoff(unittest.TestCase):
-
-    def setUp(self):
-        from fastapi_app.plugins.grobid.config import get_annotation_tags_cutoff
-        self.get_annotation_tags_cutoff = get_annotation_tags_cutoff
-
-    def test_returns_dict(self):
-        cutoff = self.get_annotation_tags_cutoff()
-        self.assertIsInstance(cutoff, dict)
-
-    def test_segmentation_cutoff(self):
-        cutoff = self.get_annotation_tags_cutoff()
-        self.assertEqual(cutoff["grobid.training.segmentation"], 6)
-
-    def test_reference_segmenter_cutoff(self):
-        cutoff = self.get_annotation_tags_cutoff()
-        self.assertEqual(cutoff["grobid.training.references.referenceSegmenter"], 3)
-
-    def test_references_cutoff(self):
-        cutoff = self.get_annotation_tags_cutoff()
-        self.assertEqual(cutoff["grobid.training.references"], 6)
-
-    def test_returns_copy(self):
-        c1 = self.get_annotation_tags_cutoff()
-        c1["grobid.training.segmentation"] = 999
-        c2 = self.get_annotation_tags_cutoff()
-        self.assertEqual(c2["grobid.training.segmentation"], 6)
 
 
 if __name__ == "__main__":
