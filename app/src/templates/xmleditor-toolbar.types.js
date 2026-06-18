@@ -7,6 +7,8 @@
  * @property {HTMLElement} nextDiffBtn
  * @property {HTMLElement} rejectAllBtn
  * @property {HTMLElement} acceptAllBtn
+ * @property {HTMLElement} lineWrappingSwitch
+ * @property {HTMLElement} teiHeaderToggleWidget
  */
 
 export {}

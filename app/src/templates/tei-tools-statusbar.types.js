@@ -3,8 +3,6 @@
 
 /**
  * @typedef {object} teiToolsStatusbarPart
- * @property {HTMLElement} teiHeaderLabel
- * @property {HTMLElement} teiHeaderToggleWidget
  */
 
 export {}

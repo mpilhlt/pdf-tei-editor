@@ -1,7 +1,16 @@
 """GROBID plugin configuration."""
 
+import copy
+
 from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
+
+from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES, AnnotationGuide
+from fastapi_app.plugins.grobid.config.annotation_tags import ANNOTATION_TAGS, AnnotationTagsMap
+from fastapi_app.plugins.grobid.config.content_locations import VARIANT_CONTENT_LOCATIONS, VariantContentLocations
+from fastapi_app.plugins.grobid.config.form_options import FORM_OPTIONS, FormOptions
+from fastapi_app.plugins.grobid.config.navigation import NAVIGATION_XPATH, NavigationXPath
+from fastapi_app.plugins.grobid.config.variants import PROCESSING_FLAVORS, SUPPORTED_VARIANTS
 
 PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
     {
@@ -143,155 +152,6 @@ VARIANT_MODEL_PATHS: dict[str, str] = {
     "grobid.training.figure": "figure",
 }
 
-# Supported variants - training data and service endpoints
-SUPPORTED_VARIANTS = [
-    # Training variants (use /api/createTraining endpoint)
-    "grobid.training.header.affiliation",
-    "grobid.training.header.authors",
-    "grobid.training.header.date",
-    "grobid.training.header",
-    "grobid.training.segmentation",
-    "grobid.training.references",
-    "grobid.training.references.authors",
-    "grobid.training.references.referenceSegmenter",
-    "grobid.training.table",
-    "grobid.training.figure",
-    
-    # Service variants (use direct API endpoints)
-    "grobid.service.fulltext",
-    "grobid.service.references",
-]
-
-# Processing flavors
-PROCESSING_FLAVORS = [
-    "default",
-    "article/dh-law-footnotes"
-]
-
-# Form options for the extraction dialog
-FORM_OPTIONS = {
-    "doi": {
-        "type": "string",
-        "label": "DOI",
-        "description": "DOI of the document for metadata enrichment",
-        "required": False
-    },
-    "variant_id": {
-        "type": "string",
-        "label": "Variant identifier",
-        "description": "Variant identifier for the training data type",
-        "required": False,
-        "options": SUPPORTED_VARIANTS
-    },
-    "flavor": {
-        "type": "string",
-        "label": "GROBID processing flavor",
-        "description": "Processing flavor that determines how GROBID analyzes the document structure",
-        "required": False,
-        "options": PROCESSING_FLAVORS
-    }
-}
-
-# Maps variant_id to the XPath locations of training content.
-# "grobid_path": element path in raw GROBID output (relative to root TEI element)
-# "annotation_path": element path in stored document (relative to root TEI element)
-# Variants not listed here use the default: content is in <text> in both contexts.
-VARIANT_CONTENT_LOCATIONS: dict[str, dict[str, str]] = {
-    "grobid.training.header.affiliation": {
-        "grobid_path": "teiHeader",
-        "annotation_path": "text/front",
-    },
-    "grobid.training.header.authors": {
-        "grobid_path": "teiHeader",
-        "annotation_path": "text/front",
-    },
-    "grobid.training.header.date": {
-        "grobid_path": "teiHeader",
-        "annotation_path": "text/front",
-    },
-}
-
-# Navigation XPath expressions for each variant
-NAVIGATION_XPATH = {
-    "grobid.training.segmentation": [
-        {
-            "value": "//tei:listBibl",
-            "label": "&lt;listBibl&gt;"
-        }
-    ],
-    "grobid.training.references.referenceSegmenter": [
-        {
-            "value": "//tei:listBibl/tei:bibl",
-            "label": "&lt;bibl&gt;"
-        }
-    ],
-    "grobid.training.references": [
-        {
-            "value": "//tei:bibl",
-            "label": "&lt;bibl&gt;"
-        }
-    ],
-    "grobid.service.fulltext": [
-        {
-            "value": "//tei:div",
-            "label": "&lt;div&gt;"
-        },
-        {
-            "value": "//tei:bibl",
-            "label": "&lt;bibl&gt;"
-        }
-    ],
-    "grobid.service.references": [
-        {
-            "value": "//tei:bibl",
-            "label": "&lt;bibl&gt;"
-        }
-    ],
-    "grobid.training.header.affiliation": [
-        {
-            "value": "//tei:affiliation",
-            "label": "&lt;affiliation&gt;"
-        }
-    ],
-    "grobid.training.header.authors": [
-        {
-            "value": "//tei:author",
-            "label": "&lt;author&gt;"
-        }
-    ],
-    "grobid.training.header.date": [
-        {
-            "value": "//tei:date",
-            "label": "&lt;date&gt;"
-        }
-    ],
-}
-
-# Annotation guide URLs for each variant
-# Each entry contains variant_id, type (markdown/html), and URL
-ANNOTATION_GUIDES = [
-    {
-        "variant_id": "grobid.training.segmentation",
-        "type": "markdown",
-        "url": "https://pad.gwdg.de/s/1Oti-hJDb/download#segmentation"
-    },
-    {
-        "variant_id": "grobid.training.segmentation",
-        "type": "html",
-        "url": "https://pad.gwdg.de/s/1Oti-hJDb#segmentation"
-    },
-    {
-        "variant_id": "grobid.training.references.referenceSegmenter",
-        "type": "markdown",
-        "url": "https://pad.gwdg.de/s/1Oti-hJDb/download#reference-segmenter"
-    },
-    {
-        "variant_id": "grobid.training.references",
-        "type": "html",
-        "url": "https://pad.gwdg.de/s/1Oti-hJDb#reference-segmenter"
-    }
-]
-
 
 def get_supported_variants() -> list[str]:
     """Return list of supported GROBID training variants."""
@@ -303,15 +163,13 @@ def get_processing_flavors() -> list[str]:
     return PROCESSING_FLAVORS.copy()
 
 
-def get_form_options() -> dict:
+def get_form_options() -> FormOptions:
     """Return form options for the extraction dialog."""
-    import copy
     return copy.deepcopy(FORM_OPTIONS)
 
 
-def get_navigation_xpath() -> dict:
+def get_navigation_xpath() -> NavigationXPath:
     """Return navigation XPath expressions for each variant."""
-    import copy
     return copy.deepcopy(NAVIGATION_XPATH)
 
 
@@ -323,12 +181,16 @@ def get_model_path(variant_id: str) -> str:
     return variant_id.removeprefix("grobid.training.").replace(".", "/")
 
 
-def get_variant_content_locations() -> dict[str, dict[str, str]]:
+def get_variant_content_locations() -> VariantContentLocations:
     """Return the content location mapping for all variants with non-default content placement."""
-    import copy
     return copy.deepcopy(VARIANT_CONTENT_LOCATIONS)
 
 
-def get_annotation_guides() -> list[dict]:
+def get_annotation_guides() -> list[AnnotationGuide]:
     """Return list of annotation guide configurations."""
     return ANNOTATION_GUIDES.copy()
+
+
+def get_annotation_tags() -> AnnotationTagsMap:
+    """Return annotation tag definitions keyed by variant_id."""
+    return copy.deepcopy(ANNOTATION_TAGS)

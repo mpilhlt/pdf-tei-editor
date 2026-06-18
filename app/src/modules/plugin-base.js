@@ -186,6 +186,15 @@ export class Plugin {
   }
 
   /**
+   * Returns true while the application is propagating a state change to plugins.
+   * Use this in event listeners to skip handling spurious events fired during propagation.
+   * @returns {boolean}
+   */
+  get isStateUpdating() {
+    return this.context.isStateUpdating();
+  }
+
+  /**
    * Dispatch state changes through the plugin context.
    * Must NOT be called from within an onStateUpdate handler. Use scheduleStateChange()
    * when dispatching is needed after async work triggered by onStateUpdate.

@@ -40,6 +40,7 @@ export { default as ToolbarPlugin } from './plugins/toolbar.js';
 export { default as ToolsPlugin } from './plugins/tools.js';
 export { default as UrlHashStatePlugin } from './plugins/url-hash-state.js';
 export { default as UserAccountPlugin } from './plugins/user-account.js';
+export { default as XmlAnnotationPlugin } from './plugins/xml-annotation.js';
 export { default as XmlEditorPlugin } from './plugins/xmleditor.js';
 export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
 
@@ -78,6 +79,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   tools: import('./plugins/tools.js').default,
  *   "url-hash-state": import('./plugins/url-hash-state.js').default,
  *   "user-account": import('./plugins/user-account.js').default,
+ *   "xml-annotation": import('./plugins/xml-annotation.js').default,
  *   xmleditor: import('./plugins/xmleditor.js').default,
  *   "xsl-viewer": import('./plugins/xsl-viewer.js').default,
  * }} PluginRegistryTypes

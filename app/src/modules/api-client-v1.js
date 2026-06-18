@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-09T12:23:26.136Z
+ * Generated from OpenAPI schema at 2026-06-17T18:26:15.225Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -20,10 +20,35 @@
  */
 
 /**
+ * @typedef {Object} AnnotateRequest
+ * @property {string} stable_id
+ * @property {string} xpath
+ * @property {string} annotator_id
+ */
+
+/**
  * @typedef {Object} AnnotationGuideInfo
  * @property {string} variant_id - The variant identifier this guide applies to
  * @property {string} type - The content type: 'html' or 'markdown'
  * @property {string} url - The URL to fetch the guide from
+ */
+
+/**
+ * @typedef {Object} AnnotationTagAttribute
+ * @property {string} name - XML attribute name
+ * @property {Array<string>=} values - Allowed values; if None, a free-text input is shown
+ */
+
+/**
+ * @typedef {Object} AnnotationTagDef
+ * @property {string} tag - XML element name (e.g. 'bibl')
+ * @property {string} label - Badge label; may contain {@attrName} template tokens
+ * @property {Object<string, any>=} labelMap - Attribute-value → label overrides, e.g. {'level=m': 'TITLE[M]'}
+ * @property {string} color - CSS colour for this tag's badge and underline
+ * @property {Array<AnnotationTagAttribute>=} attributes - Attributes shown in the properties popup
+ * @property {string=} description - Tooltip text for the context menu item
+ * @property {number=} priority - Sort order; lower = shown first in the menu
+ * @property {Object<string, any>=} defaultAttributes - Attribute key/value pairs baked into the opening tag when wrapping a selection
  */
 
 /**
@@ -276,6 +301,7 @@
  * @property {Array<string>=} variants - List of supported variant identifiers
  * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
+ * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
  */
 
 /**

@@ -213,7 +213,7 @@ class AuthenticationPlugin extends Plugin {
     try {
       await this.#client.logout();
       this.#logger.info('User logged out successfully');
-      await this.dispatchStateChange({
+      await this.scheduleStateChange({
         user: null,
         sessionId: null,
         xml: null,
