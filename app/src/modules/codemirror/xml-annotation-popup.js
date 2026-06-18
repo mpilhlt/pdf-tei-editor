@@ -12,6 +12,62 @@
  *   attributes?: Array<{ name: string, values?: string[]|null }>|null }} AnnotationTagDef
  */
 
+/**
+ * Merges `element` into its nearest preceding element sibling: element's children and all
+ * nodes that sit between the sibling and element (text nodes, etc.) are appended in order to
+ * the end of the sibling.  If no preceding element sibling exists, element is unwrapped
+ * in-place (its children replace it in the parent).
+ * @param {Element} element
+ * @returns {Node} the parent node that must be re-synced to the editor
+ */
+export function mergeWithPrev(element) {
+  const parent = /** @type {Node} */ (element.parentNode);
+  const prev = element.previousElementSibling;
+  if (prev) {
+    const frag = document.createDocumentFragment();
+    let n = prev.nextSibling;
+    while (n && n !== element) {
+      const next = n.nextSibling;
+      frag.appendChild(n);
+      n = next;
+    }
+    while (element.firstChild) frag.appendChild(element.firstChild);
+    prev.appendChild(frag);
+  } else {
+    while (element.firstChild) parent.insertBefore(element.firstChild, element);
+  }
+  parent.removeChild(element);
+  return parent;
+}
+
+/**
+ * Merges `element` into its nearest following element sibling: element's children and all
+ * nodes that sit between element and the sibling (text nodes, etc.) are prepended in order to
+ * the beginning of the sibling.  If no following element sibling exists, element is unwrapped
+ * in-place.
+ * @param {Element} element
+ * @returns {Node} the parent node that must be re-synced to the editor
+ */
+export function mergeWithNext(element) {
+  const parent = /** @type {Node} */ (element.parentNode);
+  const next = element.nextElementSibling;
+  if (next) {
+    const frag = document.createDocumentFragment();
+    while (element.firstChild) frag.appendChild(element.firstChild);
+    let n = element.nextSibling;
+    while (n && n !== next) {
+      const after = n.nextSibling;
+      frag.appendChild(n);
+      n = after;
+    }
+    next.insertBefore(frag, next.firstChild);
+  } else {
+    while (element.firstChild) parent.insertBefore(element.firstChild, element);
+  }
+  parent.removeChild(element);
+  return parent;
+}
+
 export class XmlAnnotationPopup {
   /** @param {XMLEditor} editor */
   constructor(editor) {
@@ -133,6 +189,28 @@ export class XmlAnnotationPopup {
 
       this.#overlay.appendChild(row);
     }
+
+    const mergePrevLink = document.createElement('div');
+    mergePrevLink.style.cssText = 'margin-top:8px; color:#89dceb; cursor:pointer; font-size:11px;';
+    mergePrevLink.textContent = '« Merge with previous';
+    mergePrevLink.addEventListener('click', async () => {
+      if (!element.parentNode) return;
+      const parent = mergeWithPrev(element);
+      await this.#editor.updateEditorFromNode(parent);
+      this.#hide();
+    });
+    this.#overlay.appendChild(mergePrevLink);
+
+    const mergeNextLink = document.createElement('div');
+    mergeNextLink.style.cssText = 'margin-top:4px; color:#89dceb; cursor:pointer; font-size:11px;';
+    mergeNextLink.textContent = '» Merge with next';
+    mergeNextLink.addEventListener('click', async () => {
+      if (!element.parentNode) return;
+      const parent = mergeWithNext(element);
+      await this.#editor.updateEditorFromNode(parent);
+      this.#hide();
+    });
+    this.#overlay.appendChild(mergeNextLink);
 
     const removeLink = document.createElement('div');
     removeLink.style.cssText = 'margin-top:8px; color:#f38ba8; cursor:pointer; font-size:11px;';
