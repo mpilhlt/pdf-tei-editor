@@ -76,13 +76,15 @@ describe('createAnnotationField', () => {
   const tagDefs = [
     { tag: 'bibl', label: 'BIBL', color: '#89dceb', attributes: [] }
   ];
-  const field = createAnnotationField(tagDefs);
+  // createAnnotationField returns [StateField, atomicRanges facet]; extract the field for state queries
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
 
   function makeView(doc) {
     const parent = document.getElementById('editor');
     parent.innerHTML = '';
     return new EditorView({
-      state: EditorState.create({ doc, extensions: [xml(), field] }),
+      state: EditorState.create({ doc, extensions: [xml(), extensions] }),
       parent
     });
   }
@@ -93,7 +95,7 @@ describe('createAnnotationField', () => {
 
   it('produces decorations for a known annotation tag', () => {
     const view = makeView('<root><bibl>Smith 1987</bibl></root>');
-    const decos = view.state.field(field);
+    const { decos } = view.state.field(annotationField);
     assert.ok(decos.size > 0, 'should produce at least one decoration for <bibl>');
   });
 });
