@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-17T18:26:15.225Z
+ * Generated from OpenAPI schema at 2026-06-18T19:03:31.056Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -49,6 +49,7 @@
  * @property {string=} description - Tooltip text for the context menu item
  * @property {number=} priority - Sort order; lower = shown first in the menu
  * @property {Object<string, any>=} defaultAttributes - Attribute key/value pairs baked into the opening tag when wrapping a selection
+ * @property {Array<string>=} childTags - Tag names that may be nested inside this element rather than splitting it
  */
 
 /**
@@ -302,6 +303,7 @@
  * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
+ * @property {Object<string, any>=} annotationTagsCutoff - Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu
  */
 
 /**
