@@ -203,7 +203,7 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 4,
             "defaultAttributes": None,
             "description": "Publication date sequence",
-        },
+        },    
         {
             "tag": "biblScope",
             "label": "pages",
@@ -245,6 +245,14 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "defaultAttributes": {"unit": "issue"},
             "description": "Issue / number",
         },
+        {
+            "tag": "edition",
+            "label": "edition",
+            "color": "#d18455",
+            "priority": 10,
+            "defaultAttributes": None,
+            "description": "Edition of a publication",
+        },            
         {
             "tag": "orgName",
             "label": "orgName",
