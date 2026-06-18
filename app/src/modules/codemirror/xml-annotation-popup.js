@@ -9,7 +9,7 @@
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string,
- *   attributes: Array<{ name: string, values?: string[]|null }> }} AnnotationTagDef
+ *   attributes?: Array<{ name: string, values?: string[]|null }>|null }} AnnotationTagDef
  */
 
 export class XmlAnnotationPopup {
@@ -85,14 +85,14 @@ export class XmlAnnotationPopup {
     title.textContent = `✏ ${def.label.replace(/\{@[^}]+\}/g, '…')}`;
     this.#overlay.appendChild(title);
 
-    if (def.attributes.length > 0) {
+    if ((def.attributes?.length ?? 0) > 0) {
       const attrLabel = document.createElement('div');
       attrLabel.style.cssText = 'font-size:10px; color:#6c7086; margin-bottom:6px; text-transform:uppercase;';
       attrLabel.textContent = 'Attributes';
       this.#overlay.appendChild(attrLabel);
     }
 
-    for (const attr of def.attributes) {
+    for (const attr of def.attributes ?? []) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:4px;';
 

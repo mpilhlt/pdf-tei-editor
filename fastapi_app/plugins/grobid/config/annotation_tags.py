@@ -10,7 +10,7 @@ class AttributeSpec(TypedDict):
     values: list[str]
 
 
-class AnnotationTag(TypedDict):
+class AnnotationTag(TypedDict, total=False):
     """A single annotation tag entry in the annotation toolbar."""
 
     tag: str
@@ -20,6 +20,7 @@ class AnnotationTag(TypedDict):
     defaultAttributes: dict[str, str] | None
     description: str
     attributes: list[AttributeSpec]
+    childTags: list[str]
 
 
 AnnotationTagsMap = dict[str, list[AnnotationTag]]
@@ -34,7 +35,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 1,
             "defaultAttributes": None,
             "description": "The main body of the document",
-            "attributes": [],
         },
         {
             "tag": "listBibl",
@@ -43,7 +43,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 2,
             "defaultAttributes": None,
             "description": "Bibliographical section",
-            "attributes": [],
         },
         {
             "tag": "front",
@@ -52,7 +51,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 3,
             "defaultAttributes": None,
             "description": "Document header / front matter",
-            "attributes": [],
         },
         {
             "tag": "titlePage",
@@ -61,7 +59,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 4,
             "defaultAttributes": None,
             "description": "Cover page",
-            "attributes": [],
         },
         {
             "tag": "note",
@@ -70,7 +67,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 5,
             "defaultAttributes": {"place": "footnote"},
             "description": "Page footer or numbered footnote",
-            "attributes": [],
         },
         {
             "tag": "page",
@@ -79,7 +75,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 6,
             "defaultAttributes": None,
             "description": "Page number indicator",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -88,7 +83,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 7,
             "defaultAttributes": {"type": "acknowledgement"},
             "description": "Acknowledgement statement in the annex",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -97,7 +91,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 8,
             "defaultAttributes": {"type": "toc"},
             "description": "Table of contents",
-            "attributes": [],
         },
         {
             "tag": "note",
@@ -106,7 +99,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 9,
             "defaultAttributes": {"place": "headnote"},
             "description": "Page header / running head",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -115,7 +107,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 10,
             "defaultAttributes": {"type": "annex"},
             "description": "Any other annex section",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -124,7 +115,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 11,
             "defaultAttributes": {"type": "funding"},
             "description": "Funding information annex",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -133,7 +123,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 12,
             "defaultAttributes": {"type": "conflict"},
             "description": "Conflict of interest statement",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -142,7 +131,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 13,
             "defaultAttributes": {"type": "contribution"},
             "description": "Author contribution statement",
-            "attributes": [],
         },
         {
             "tag": "div",
@@ -151,7 +139,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 14,
             "defaultAttributes": {"type": "availability"},
             "description": "Data/code availability statement",
-            "attributes": [],
         },
     ],
     "grobid.training.references.referenceSegmenter": [
@@ -162,7 +149,7 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 1,
             "defaultAttributes": None,
             "description": "An individual bibliographic reference",
-            "attributes": [],
+            "childTags": ["label"],
         },
         {
             "tag": "bibl",
@@ -171,7 +158,7 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 2,
             "defaultAttributes": {"type": "footnote"},
             "description": "A note or comment that is not a bibliographic reference",
-            "attributes": [],
+            "childTags": ["label"],
         },
         {
             "tag": "label",
@@ -180,7 +167,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 3,
             "defaultAttributes": None,
             "description": "Reference number or footnote marker (e.g. [1], ¹)",
-            "attributes": [],
         },
     ],
     "grobid.training.references": [
@@ -191,7 +177,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 1,
             "defaultAttributes": None,
             "description": "Complete sequence of author names",
-            "attributes": [],
         },
         {
             "tag": "title",
@@ -218,7 +203,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 4,
             "defaultAttributes": None,
             "description": "Publication date sequence",
-            "attributes": [],
         },
         {
             "tag": "biblScope",
@@ -227,7 +211,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 5,
             "defaultAttributes": {"unit": "page"},
             "description": "Full page range of the article",
-            "attributes": [],
         },
         {
             "tag": "title",
@@ -245,7 +228,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 7,
             "defaultAttributes": None,
             "description": "Publisher name; also used for corporate authors such as web pages",
-            "attributes": [],
         },
         {
             "tag": "biblScope",
@@ -254,7 +236,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 8,
             "defaultAttributes": {"unit": "volume"},
             "description": "Volume number",
-            "attributes": [],
         },
         {
             "tag": "biblScope",
@@ -263,7 +244,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 9,
             "defaultAttributes": {"unit": "issue"},
             "description": "Issue / number",
-            "attributes": [],
         },
         {
             "tag": "orgName",
@@ -272,7 +252,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 10,
             "defaultAttributes": None,
             "description": "Institution for theses or technical reports",
-            "attributes": [],
         },
         {
             "tag": "pubPlace",
@@ -281,7 +260,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 11,
             "defaultAttributes": None,
             "description": "Publication place or location of publishing institution",
-            "attributes": [],
         },
         {
             "tag": "editor",
@@ -290,7 +268,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 12,
             "defaultAttributes": None,
             "description": "Sequence of editor names",
-            "attributes": [],
         },
         {
             "tag": "ptr",
@@ -299,7 +276,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 13,
             "defaultAttributes": {"type": "web"},
             "description": "Web URL (exclude prefixes like 'URL:' and trailing periods)",
-            "attributes": [],
         },
         {
             "tag": "idno",
@@ -317,7 +293,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 15,
             "defaultAttributes": None,
             "description": "Any note not covered by another tag",
-            "attributes": [],
         },
         {
             "tag": "title",
@@ -335,7 +310,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 17,
             "defaultAttributes": {"type": "collaboration"},
             "description": "Project-based collaboration acting as an author group",
-            "attributes": [],
         },
         {
             "tag": "note",
@@ -344,7 +318,6 @@ ANNOTATION_TAGS: AnnotationTagsMap = {
             "priority": 18,
             "defaultAttributes": {"type": "report"},
             "description": "Type of report or thesis (e.g. 'Ph.D. thesis', 'Technical Report')",
-            "attributes": [],
         },
     ],
 }

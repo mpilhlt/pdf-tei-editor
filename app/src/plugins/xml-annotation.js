@@ -17,12 +17,14 @@ import { XMLEditor } from '../modules/xmleditor.js'
 import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { createAnnotationField, annotationTheme } from '../modules/codemirror/xml-annotation-decorations.js'
+import { syntaxTree } from '@codemirror/language'
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null,
- *   color: string, attributes: Array<{name:string, values?: string[]|null}>,
+ *   color: string, attributes?: Array<{name:string, values?: string[]|null}>|null,
  *   description?: string|null, priority?: number,
- *   defaultAttributes?: Record<string,string>|null }} AnnotationTagDef
+ *   defaultAttributes?: Record<string,string>|null,
+ *   childTags?: string[]|null }} AnnotationTagDef
  */
 
 class XmlAnnotationPlugin extends Plugin {
@@ -308,6 +310,9 @@ class XmlAnnotationPlugin extends Plugin {
 
   /**
    * Wraps the current CM selection in the given annotation tag and re-syncs.
+   * If the selection falls inside an existing annotation element whose tag does not
+   * list `def.tag` in `childTags`, the parent element is split around the selection
+   * instead of nesting the new tag inside it.
    * @param {AnnotationTagDef} def
    */
   async #wrapSelectionWith(def) {
@@ -315,6 +320,17 @@ class XmlAnnotationPlugin extends Plugin {
     if (!view) return
     const { from, to } = view.state.selection.main
     if (from === to) return
+
+    const enclosing = this.#findEnclosingAnnotation(view.state, from, to)
+    if (enclosing) {
+      const parentDefs = this.#tagDefs.filter(d => d.tag === enclosing.tagName)
+      const isChildTag = parentDefs.some(d => d.childTags?.includes(def.tag))
+      if (!isChildTag) {
+        await this.#splitAnnotation(view, from, to, def, enclosing)
+        return
+      }
+    }
+
     const selectedText = view.state.doc.sliceString(from, to)
     const attrStr = def.defaultAttributes
       ? ' ' + Object.entries(def.defaultAttributes).map(([k, v]) => `${k}="${v}"`).join(' ')
@@ -326,6 +342,84 @@ class XmlAnnotationPlugin extends Plugin {
       if (ancestor) await this.#xmlEditor.updateEditorFromNode?.(ancestor.parentNode ?? ancestor)
     } catch (e) {
       this.#logger.debug('[xml-annotation] wrap sync failed: ' + String(e))
+    }
+  }
+
+  /**
+   * Walks the Lezer syntax tree upward from `from` to find the innermost annotation
+   * element (tag in `#tagDefs`) that fully contains the range [from, to].
+   * @param {import('@codemirror/state').EditorState} state
+   * @param {number} from
+   * @param {number} to
+   * @returns {{ tagName: string, openTagText: string, contentFrom: number, contentTo: number, elementFrom: number, elementTo: number }|null}
+   */
+  #findEnclosingAnnotation(state, from, to) {
+    const tagSet = new Set(this.#tagDefs.map(d => d.tag))
+    let node = syntaxTree(state).resolveInner(from, 1)
+    while (node) {
+      if (node.name === 'Element') {
+        const openTag = node.firstChild
+        if (openTag?.name === 'OpenTag') {
+          const tagNameNode = openTag.firstChild?.nextSibling
+          if (tagNameNode?.name === 'TagName') {
+            const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to)
+            if (tagSet.has(tagName)) {
+              const closeTag = node.lastChild
+              if (closeTag && (closeTag.name === 'CloseTag' || closeTag.name === 'MismatchedCloseTag')) {
+                const contentFrom = openTag.to
+                const contentTo = closeTag.from
+                if (from >= contentFrom && to <= contentTo) {
+                  return {
+                    tagName,
+                    openTagText: state.doc.sliceString(openTag.from, openTag.to),
+                    contentFrom,
+                    contentTo,
+                    elementFrom: node.from,
+                    elementTo: node.to,
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      node = node.parent
+    }
+    return null
+  }
+
+  /**
+   * Splits the enclosing annotation element around the selection [from, to] and
+   * applies `def` to the selected text. The text before and after the selection
+   * each become separate elements of the original parent type (preserving its
+   * open-tag markup including attributes). Empty before/after parts are omitted.
+   * @param {import('@codemirror/view').EditorView} view
+   * @param {number} from
+   * @param {number} to
+   * @param {AnnotationTagDef} def
+   * @param {{ tagName: string, openTagText: string, contentFrom: number, contentTo: number, elementFrom: number, elementTo: number }} enclosing
+   */
+  async #splitAnnotation(view, from, to, def, enclosing) {
+    const { tagName, openTagText, contentFrom, contentTo, elementFrom, elementTo } = enclosing
+    const state = view.state
+    const beforeText = state.doc.sliceString(contentFrom, from)
+    const selectedText = state.doc.sliceString(from, to)
+    const afterText = state.doc.sliceString(to, contentTo)
+    const attrStr = def.defaultAttributes
+      ? ' ' + Object.entries(def.defaultAttributes).map(([k, v]) => `${k}="${v}"`).join(' ')
+      : ''
+    let replacement = ''
+    if (beforeText.length > 0) replacement += `${openTagText}${beforeText}</${tagName}>`
+    replacement += `<${def.tag}${attrStr}>${selectedText}</${def.tag}>`
+    if (afterText.length > 0) replacement += `${openTagText}${afterText}</${tagName}>`
+    view.dispatch({ changes: { from: elementFrom, to: elementTo, insert: replacement }, userEvent: 'input.annotate' })
+    // sync() rebuilds the DOM from the current CM state (CM→DOM).
+    // updateEditorFromNode is intentionally NOT used here: it goes DOM→CM with the stale
+    // pre-split DOM, which would revert the split.
+    try {
+      await this.#xmlEditor.sync?.()
+    } catch (e) {
+      this.#logger.debug('[xml-annotation] split sync failed: ' + String(e))
     }
   }
 

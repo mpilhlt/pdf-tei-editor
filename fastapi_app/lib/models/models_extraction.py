@@ -61,6 +61,10 @@ class AnnotationTagDef(BaseModel):
         None,
         description="Attribute key/value pairs baked into the opening tag when wrapping a selection"
     )
+    childTags: List[str] = Field(
+        default_factory=list,
+        description="Tag names that may be nested inside this element rather than splitting it"
+    )
 
 
 class ExtractorInfo(BaseModel):
