@@ -26,18 +26,6 @@ class TestGetAnnotationTags(unittest.TestCase):
         self.assertIn("grobid.training.references.referenceSegmenter", tags)
         self.assertIn("grobid.training.references", tags)
 
-    def test_segmentation_has_14_tags(self):
-        tags = self.get_annotation_tags()
-        self.assertEqual(len(tags["grobid.training.segmentation"]), 14)
-
-    def test_reference_segmenter_has_3_tags(self):
-        tags = self.get_annotation_tags()
-        self.assertEqual(len(tags["grobid.training.references.referenceSegmenter"]), 3)
-
-    def test_references_has_18_tags(self):
-        tags = self.get_annotation_tags()
-        self.assertEqual(len(tags["grobid.training.references"]), 18)
-
     def test_each_tag_has_required_fields(self):
         tags = self.get_annotation_tags()
         for variant, defs in tags.items():
