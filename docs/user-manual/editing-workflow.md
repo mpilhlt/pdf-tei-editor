@@ -159,6 +159,17 @@ Click any colored badge in the annotation view to open an attribute popup:
 
 Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it.
 
+### Merging annotations
+
+The attribute popup includes two merge operations for consolidating adjacent annotated spans of the same type:
+
+- **« Merge with previous** — absorbs the current element's content into the nearest preceding sibling element, including any intermediate text, preserving reading order.
+- **» Merge with next** — same, targeting the nearest following sibling element.
+
+If no element sibling exists in the given direction, the element is unwrapped in place (equivalent to **Remove annotation**).
+
+Use these commands when a single logical annotation has been split across two spans, for example after correcting a word boundary or combining two separately tagged author names into one.
+
 ### Removing an annotation
 
 - **Via context menu:** Right-click anywhere inside the annotated span, then choose **Remove annotation**.

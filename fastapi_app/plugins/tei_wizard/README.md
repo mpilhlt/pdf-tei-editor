@@ -100,6 +100,37 @@ Register an enhancement JavaScript file.
 
 Returns a list of `(Path, plugin_id)` tuples for all registered enhancements.
 
+## Built-in Enhancements
+
+The `tei-wizard` plugin registers these enhancements from its own `enhancements/` directory:
+
+### Pretty Print XML (`pretty-print-xml.js`)
+
+Indents the XML DOM by inserting whitespace text nodes. The algorithm is content-aware:
+
+- A node's children are indented only when the node has block-level element children (elements not in the inline list).
+- Nodes that contain only text and inline elements (e.g. a `<listBibl>` holding unsegmented raw text, a `<note>` with only `<lb/>`-separated lines) are left untouched so text flow is preserved.
+- Stray text nodes that appear between block children (messy extraction output) are preserved in place.
+
+Two lists are configurable in `config.json`:
+
+| Config key | Default | Purpose |
+| --- | --- | --- |
+| `tei.pretty-print.no-indent-inside` | `["bibl", "p", "ab"]` | Explicit override: children of these elements are never indented even though the dynamic check would indent them (e.g. `bibl` contains `author`/`title` which are not inline but should not be indented). |
+| `tei.pretty-print.inline-elements` | `["lb", "pb", "hi", "ref", ...]` | Elements treated as always-inline: no leading indent is inserted before them, and their own children are not indented. |
+
+### Add RNG Schema Definition (`add-rng-schema-definition.js`)
+
+Replaces any existing schema declarations with an `<?xml-model ?>` processing instruction pointing to the appropriate RNG schema. Reads the schema URL from the document's `teiHeader` (`ref` element with a `.rng` target), falling back to the `schema.base-url` config value combined with the active variant.
+
+### Fix Common Extraction Issues (`fix-common-extraction-issues.js`)
+
+Corrects structural problems that commonly appear in PDF-to-TEI extraction output:
+
+- Reorders `application` children so `label` elements precede `ref` elements (required by TEI spec).
+- Adds a missing `title` element as the first child of `monogr` and `analytic` elements that lack one.
+- Adds a schema `ref` (`.rng` target) to extractor `application` elements that don't already have one, deriving the URL from the `variant-id` label.
+
 ## Example Plugin Structure
 
 ```
