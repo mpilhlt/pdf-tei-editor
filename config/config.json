@@ -108,5 +108,11 @@
   "access-control.default-editability.values": ["collection", "owner"],
   "rbac.default-project": "default",
   "rbac.default-project.description": "Project ID that new users are automatically added to on creation. Leave empty to disable auto-assignment.",
-  "rbac.default-project.type": "string"
+  "rbac.default-project.type": "string",
+  "tei.pretty-print.no-indent-inside": ["bibl", "p", "ab"],
+  "tei.pretty-print.no-indent-inside.description": "Explicit override: TEI element local names whose children are never indented, even when the dynamic heuristic would otherwise indent them (e.g. bibl, whose author/title children are not inline elements but whose content is still inline flow).",
+  "tei.pretty-print.no-indent-inside.type": "array",
+  "tei.pretty-print.inline-elements": ["lb", "pb", "cb", "milestone", "hi", "ref", "ptr", "seg", "choice", "corr", "sic", "abbr", "expan", "add", "del", "gap", "supplied", "unclear"],
+  "tei.pretty-print.inline-elements.description": "TEI element local names that are always inline: no leading indentation is inserted before them and their children are not indented.",
+  "tei.pretty-print.inline-elements.type": "array"
 }
