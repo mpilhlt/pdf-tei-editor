@@ -7,6 +7,8 @@
  * @import { XMLEditor } from '../xmleditor.js'
  */
 
+import { resolveLabel } from './xml-annotation-decorations.js';
+
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string,
  *   attributes?: Array<{ name: string, values?: string[]|null }>|null }} AnnotationTagDef
@@ -80,7 +82,7 @@ export class XmlAnnotationPopup {
   /** @type {HTMLElement|null} */
   #overlay = null;
 
-  /** @type {Map<string, AnnotationTagDef>} */
+  /** @type {Map<string, AnnotationTagDef[]>} */
   #tagMap = new Map();
 
   /**
@@ -90,7 +92,7 @@ export class XmlAnnotationPopup {
    * @param {AnnotationTagDef[]} tagDefs
    */
   mount(parent, tagDefs) {
-    this.#tagMap = new Map(tagDefs.map(d => [d.tag, d]));
+    this.#buildTagMap(tagDefs);
 
     const overlay = document.createElement('div');
     overlay.className = 'ann-popup';
@@ -100,11 +102,13 @@ export class XmlAnnotationPopup {
 
     parent.addEventListener('ann-badge-click', (e) => {
       const { tag, from, clientX = 0, clientY = 0 } = /** @type {CustomEvent} */ (e).detail;
-      const def = this.#tagMap.get(tag);
-      if (!def) return;
+      const defs = this.#tagMap.get(tag);
+      if (!defs) return;
       let element;
       try { element = /** @type {Element} */ (this.#editor.getDomNodeAt(from)); } catch { return; }
       if (!element) return;
+      const def = this.#selectDef(defs, element);
+      if (!def) return;
       this.#show({ clientX, clientY }, def, element);
     });
 
@@ -121,11 +125,41 @@ export class XmlAnnotationPopup {
    * @param {AnnotationTagDef[]} tagDefs
    */
   updateTagDefs(tagDefs) {
-    this.#tagMap = new Map(tagDefs.map(d => [d.tag, d]));
+    this.#buildTagMap(tagDefs);
     this.#hide();
   }
 
   // ── Private ────────────────────────────────────────────────────────
+
+  /** @param {AnnotationTagDef[]} tagDefs */
+  #buildTagMap(tagDefs) {
+    this.#tagMap = new Map();
+    for (const d of tagDefs) {
+      const bucket = this.#tagMap.get(d.tag);
+      if (bucket) bucket.push(d);
+      else this.#tagMap.set(d.tag, [d]);
+    }
+  }
+
+  /**
+   * Picks the best-matching def for `element` from a bucket of defs for the same tag name.
+   * Prefers a def whose `defaultAttributes` all match the element's attributes; falls back to
+   * the first def with no `defaultAttributes`.  Mirrors the selection logic in buildAll().
+   * @param {AnnotationTagDef[]} defs
+   * @param {Element} element
+   * @returns {AnnotationTagDef|null}
+   */
+  #selectDef(defs, element) {
+    let fallback = /** @type {AnnotationTagDef|null} */ (null);
+    for (const d of defs) {
+      if (!d.defaultAttributes) {
+        if (!fallback) fallback = d;
+      } else if (Object.entries(d.defaultAttributes).every(([k, v]) => element.getAttribute(k) === v)) {
+        return d;
+      }
+    }
+    return fallback;
+  }
 
   /**
    * @param {{ clientX: number, clientY: number }} coords
@@ -138,7 +172,7 @@ export class XmlAnnotationPopup {
 
     const title = document.createElement('div');
     title.style.cssText = 'font-weight:bold; margin-bottom:10px; font-size:11px; letter-spacing:.05em;';
-    title.textContent = `✏ ${def.label.replace(/\{@[^}]+\}/g, '…')}`;
+    title.textContent = `✏ ${resolveLabel(def, element)}`;
     this.#overlay.appendChild(title);
 
     if ((def.attributes?.length ?? 0) > 0) {

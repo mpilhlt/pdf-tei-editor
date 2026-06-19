@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Tests for mergeWithPrev / mergeWithNext exported from xml-annotation-popup.js.
+ * Tests for mergeWithPrev / mergeWithNext and XmlAnnotationPopup exported from xml-annotation-popup.js.
  *
  * @testCovers app/src/modules/codemirror/xml-annotation-popup.js
  */
@@ -12,8 +12,9 @@ import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.document = dom.window.document;
+global.window = dom.window;
 
-const { mergeWithPrev, mergeWithNext } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
+const { mergeWithPrev, mergeWithNext, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
 
 /**
  * Build a parent <p> element whose innerHTML is set to `html`, then return
@@ -155,5 +156,67 @@ describe('mergeWithNext', () => {
     mergeWithNext(child);
     assert.strictEqual(parent.textContent, before);
     assert.strictEqual(parent.children.length, 1);
+  });
+});
+
+// ── XmlAnnotationPopup title resolution ───────────────────────────────────
+
+/**
+ * Dispatch ann-badge-click on `container` and return the popup overlay element.
+ * @param {HTMLElement} container
+ * @param {string} tag
+ * @param {Element} domElement - returned by the mock editor's getDomNodeAt
+ * @returns {HTMLElement|null}
+ */
+function triggerPopup(container, tag, domElement) {
+  const mockEditor = {
+    getDomNodeAt: () => domElement,
+    updateEditorFromNode: async () => {}
+  };
+  const popup = new XmlAnnotationPopup(mockEditor);
+  popup.mount(container, tagDefsWithDuplicates);
+  container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+    bubbles: true,
+    detail: { tag, from: 0, clientX: 10, clientY: 10 }
+  }));
+  return container.querySelector('.ann-popup');
+}
+
+const tagDefsWithDuplicates = [
+  // generic bibl — no defaultAttributes, serves as fallback
+  { tag: 'bibl', label: 'bibl',          color: '#aaa', attributes: [], defaultAttributes: null },
+  // specific bibl for footnote entries — defaultAttributes distinguishes it
+  { tag: 'bibl', label: 'bibl[footnote]', color: '#bbb', attributes: [], defaultAttributes: { type: 'footnote' } },
+];
+
+describe('XmlAnnotationPopup - popup title for duplicate tag defs', () => {
+  it('shows generic label for <bibl> with no attributes', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const bibl = document.createElement('bibl'); // no attributes
+      const overlay = triggerPopup(container, 'bibl', bibl);
+      const titleText = overlay?.querySelector('div')?.textContent ?? '';
+      assert.ok(titleText.includes('bibl'), 'title should include tag name');
+      assert.ok(!titleText.includes('footnote'),
+        `title should NOT include "footnote" for <bibl> with no attributes, got: "${titleText}"`);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('shows specific label for <bibl type="footnote">', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote');
+      const overlay = triggerPopup(container, 'bibl', bibl);
+      const titleText = overlay?.querySelector('div')?.textContent ?? '';
+      assert.ok(titleText.includes('footnote'),
+        `title should include "footnote" for <bibl type="footnote">, got: "${titleText}"`);
+    } finally {
+      document.body.removeChild(container);
+    }
   });
 });
