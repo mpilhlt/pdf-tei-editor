@@ -80,7 +80,7 @@ Visit: **<http://localhost:8000>**
 
 ### For End Users
 
-- [User Manual](docs/user-manual/index.md) - How to use the application
+- [User Manual](docs/user-manual/getting-started.md) - How to use the application
 - [Getting Started](docs/user-manual/getting-started.md) - First-time user guide
 - [Interface Overview](docs/user-manual/interface-overview.md) - Understanding the interface
 - [Workflows](docs/user-manual/extraction-workflow.md) - Extraction, editing, and sync workflows
