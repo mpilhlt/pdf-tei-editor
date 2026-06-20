@@ -60,8 +60,6 @@ You can type directly in the editor at any time the document is not read-only. T
 | Remove tag | Unwrap the tag at the cursor, preserving its text content |
 | Insert `</tag><tag>` | Insert a tag boundary at the cursor position using the tag from the current XPath navigation selection |
 
-In annotation mode the context menu additionally shows the annotation chip palette and a "Remove annotation" item — see [Visual Annotation Mode](#visual-annotation-mode).
-
 ---
 
 ## XPath Navigation
@@ -144,7 +142,7 @@ Click the toggle again (back to **XML**) to return to the standard XML view.
 ### Wrapping a text span
 
 1. Select the text you want to annotate by clicking and dragging.
-2. Right-click to open the context menu. A chip palette appears at the top, showing one colored chip per available annotation tag.
+2. Release the mouse. A popup appears near the cursor showing one colored chip per available annotation tag.
 3. Hover over a chip to see its description in a tooltip.
 4. Click the chip to wrap the selection. The tag is inserted with any mandatory default attributes (e.g. `<note place="footnote">`) automatically.
 
@@ -159,6 +157,10 @@ Click any colored badge in the annotation view to open an attribute popup:
 
 Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it.
 
+### Changing a tag
+
+The attribute popup includes a **Change to** chip palette at the bottom. Click any chip to retag the annotated element to a different annotation type. The element's content is preserved; mandatory default attributes for the new tag type are applied automatically.
+
 ### Merging annotations
 
 The attribute popup includes two merge operations for consolidating adjacent annotated spans of the same type:
@@ -172,10 +174,7 @@ Use these commands when a single logical annotation has been split across two sp
 
 ### Removing an annotation
 
-- **Via context menu:** Right-click anywhere inside the annotated span, then choose **Remove annotation**.
-- **Via popup:** Click the badge to open the attribute popup, then click the **Remove annotation** link at the bottom.
-
-Both methods unwrap the element and restore its text content.
+Click the badge to open the attribute popup, then click the **Remove annotation** link at the bottom. The element is unwrapped and its text content is restored.
 
 ### Saving
 
