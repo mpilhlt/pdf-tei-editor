@@ -11,7 +11,9 @@ import { resolveLabel } from './xml-annotation-decorations.js';
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string,
- *   attributes?: Array<{ name: string, values?: string[]|null }>|null }} AnnotationTagDef
+ *   attributes?: Array<{ name: string, values?: string[]|null }>|null,
+ *   description?: string|null, priority?: number,
+ *   defaultAttributes?: Record<string,string>|null }} AnnotationTagDef
  */
 
 /**
@@ -82,8 +84,14 @@ export class XmlAnnotationPopup {
   /** @type {HTMLElement|null} */
   #overlay = null;
 
+  /** @type {AnnotationTagDef[]} */
+  #tagDefs = [];
+
   /** @type {Map<string, AnnotationTagDef[]>} */
   #tagMap = new Map();
+
+  /** @type {((def: AnnotationTagDef) => void)|null} */
+  #wrapCallback = null;
 
   /**
    * Mount the popup overlay into the editor container.
@@ -129,10 +137,49 @@ export class XmlAnnotationPopup {
     this.#hide();
   }
 
+  /**
+   * Register the callback invoked when the user picks a chip in the selection popup.
+   * Must be called once from the annotation plugin after `mount()`.
+   * @param {(def: AnnotationTagDef) => void} fn
+   */
+  setWrapCallback(fn) {
+    this.#wrapCallback = fn;
+  }
+
+  /**
+   * Show the "Annotate as…" palette popup at the given screen coordinates.
+   * Called by the annotation plugin's mouseup handler when annotation mode is active
+   * and the user has a non-empty CM selection.
+   * @param {{ clientX: number, clientY: number }} coords
+   * @param {number} _from  CM document position of selection start (reserved for future use)
+   * @param {number} _to    CM document position of selection end
+   */
+  showForSelection(coords, _from, _to) {
+    if (!this.#overlay) return;
+    this.#overlay.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight:bold; margin-bottom:10px; font-size:11px; letter-spacing:.05em;';
+    title.textContent = 'Annotate as…';
+    this.#overlay.appendChild(title);
+
+    this.#renderPalette(this.#overlay, null, (def) => {
+      this.#hide();
+      this.#wrapCallback?.(def);
+    });
+
+    const x = coords.clientX;
+    const y = coords.clientY;
+    this.#overlay.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+    this.#overlay.style.top  = `${Math.min(y + 12, window.innerHeight - 200)}px`;
+    this.#overlay.style.display = '';
+  }
+
   // ── Private ────────────────────────────────────────────────────────
 
   /** @param {AnnotationTagDef[]} tagDefs */
   #buildTagMap(tagDefs) {
+    this.#tagDefs = tagDefs;
     this.#tagMap = new Map();
     for (const d of tagDefs) {
       const bucket = this.#tagMap.get(d.tag);
@@ -259,12 +306,87 @@ export class XmlAnnotationPopup {
     });
     this.#overlay.appendChild(removeLink);
 
-    // Position near the badge
+    const changeDivider = document.createElement('sl-divider');
+    changeDivider.style.cssText = 'margin: 8px 0;';
+    this.#overlay.appendChild(changeDivider);
+
+    const changeLabel = document.createElement('div');
+    changeLabel.style.cssText = 'font-size:10px; color:#6c7086; margin-bottom:6px; text-transform:uppercase;';
+    changeLabel.textContent = 'Change to';
+    this.#overlay.appendChild(changeLabel);
+
+    this.#renderPalette(this.#overlay, def.tag, async (newDef) => {
+      this.#hide();
+      await this.#retag(element, newDef);
+    });
+
+    // Position near the badge — extra bottom margin for the "Change to" palette section
     const x = coords.clientX;
     const y = coords.clientY;
     this.#overlay.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
-    this.#overlay.style.top  = `${Math.min(y + 12, window.innerHeight - 200)}px`;
+    this.#overlay.style.top  = `${Math.min(y + 12, window.innerHeight - 280)}px`;
     this.#overlay.style.display = '';
+  }
+
+  /**
+   * Renders one chip per tag definition into `container`.
+   * The chip whose `tag === currentTag` is muted and non-interactive.
+   * @param {HTMLElement} container
+   * @param {string|null} currentTag
+   * @param {(def: AnnotationTagDef) => void} onChipClick
+   */
+  #renderPalette(container, currentTag, onChipClick) {
+    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' });
+    for (const def of sorted) {
+      const chip = document.createElement('span');
+      chip.textContent = def.label.replace(/\{@[^}]+\}/g, '…');
+      chip.title = def.description || def.label;
+      const isCurrent = def.tag === currentTag;
+      Object.assign(chip.style, {
+        display: 'inline-block',
+        background: def.color,
+        color: '#1e1e2e',
+        fontFamily: 'monospace',
+        fontSize: '9px',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        borderRadius: '3px',
+        padding: '2px 6px 3px',
+        cursor: isCurrent ? 'default' : 'pointer',
+        opacity: isCurrent ? '0.4' : '1',
+        userSelect: 'none',
+      });
+      if (!isCurrent) chip.addEventListener('click', () => onChipClick(def));
+      row.appendChild(chip);
+    }
+    container.appendChild(row);
+  }
+
+  /**
+   * Replaces `element` with a new element of `newDef.tag`, copying all existing
+   * attributes then applying `newDef.defaultAttributes` on top.
+   * @param {Element} element
+   * @param {AnnotationTagDef} newDef
+   */
+  async #retag(element, newDef) {
+    if (element.localName === newDef.tag) return;
+    const parent = element.parentNode;
+    if (!parent) return;
+    const newEl = document.createElementNS(element.namespaceURI, newDef.tag);
+    for (const attr of element.attributes) {
+      newEl.setAttribute(attr.name, attr.value);
+    }
+    if (newDef.defaultAttributes) {
+      for (const [k, v] of Object.entries(newDef.defaultAttributes)) {
+        newEl.setAttribute(k, v);
+      }
+    }
+    while (element.firstChild) newEl.appendChild(element.firstChild);
+    parent.replaceChild(newEl, element);
+    await this.#editor.updateEditorFromNode(parent);
   }
 
   #hide() {

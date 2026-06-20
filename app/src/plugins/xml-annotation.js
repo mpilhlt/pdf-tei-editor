@@ -10,7 +10,6 @@
  */
 
 import Plugin from '../modules/plugin-base.js'
-import ep from '../extension-points.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { XmlAnnotationPopup } from '../modules/codemirror/xml-annotation-popup.js'
 import { XMLEditor } from '../modules/xmleditor.js'
@@ -18,6 +17,7 @@ import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { createAnnotationField, annotationTheme, navigateEffect, createNavigationField } from '../modules/codemirror/xml-annotation-decorations.js'
 import { syntaxTree } from '@codemirror/language'
+import { EditorView } from '@codemirror/view'
 
 /**
  * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null,
@@ -28,16 +28,6 @@ import { syntaxTree } from '@codemirror/language'
  */
 
 class XmlAnnotationPlugin extends Plugin {
-  static extensionPoints = [ep.xmlEditor.contextMenuItems];
-
-  /**
-   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
-   * Called by XmlEditorPlugin.start() to collect context menu contributions.
-   * Delegates to {@link XmlAnnotationPlugin#contextMenuItems}.
-   * @returns {Array<{element: HTMLElement, onBeforeShow?: () => void}>}
-   */
-  [ep.xmlEditor.contextMenuItems]() { return this.#contextMenuItems() }
-
   constructor(context) {
     super(context, { name: 'xml-annotation', deps: ['xmleditor', 'extraction', 'logger'] })
   }
@@ -68,15 +58,6 @@ class XmlAnnotationPlugin extends Plugin {
   /** @type {any} */
   #switch = null;
 
-  /** @type {HTMLElement|null} */
-  #menuDivider = null;
-
-  /** @type {HTMLElement|null} */
-  #menuRemoveItem = null;
-
-  /** @type {HTMLElement|null} */
-  #paletteDiv = null;
-
   /** @type {XmlAnnotationPopup|null} */
   #popup = null;
 
@@ -106,6 +87,7 @@ class XmlAnnotationPlugin extends Plugin {
     if (editorContainer) {
       this.#popup = new XmlAnnotationPopup(this.#xmlEditor)
       this.#popup.mount(editorContainer, this.#tagDefs)
+      this.#popup.setWrapCallback(def => this.#wrapSelectionWith(def))
     }
 
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
@@ -115,103 +97,6 @@ class XmlAnnotationPlugin extends Plugin {
     // Skip if not authenticated yet — onStateUpdate will populate after login.
     if (initialState.variant && initialState.user) {
       await this.#updateTagDefs(initialState)
-    }
-  }
-
-  // ── Context menu contribution ───────────────────────────────────────
-
-  /**
-   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
-   * Returns a section divider, a "Remove annotation" item, and a tag palette
-   * div whose chips are rebuilt each time the menu opens via onBeforeShow.
-   * @returns {Array<{element: HTMLElement, onBeforeShow?: () => void}>}
-   */
-  #contextMenuItems() {
-    const divider = document.createElement('sl-divider')
-    divider.hidden = true
-    this.#menuDivider = divider
-
-    const removeItem = document.createElement('sl-menu-item')
-    removeItem.textContent = 'Remove annotation'
-    removeItem.hidden = true
-    removeItem.disabled = true
-    this.#menuRemoveItem = removeItem
-    removeItem.addEventListener('click', () => this.#removeAnnotationAtClick())
-
-    const palette = document.createElement('div')
-    palette.hidden = true
-    Object.assign(palette.style, {
-      display: 'flex', flexWrap: 'wrap', gap: '4px',
-      padding: '4px 12px 8px', boxSizing: 'border-box', maxWidth: '260px'
-    })
-    this.#paletteDiv = palette
-
-    return [
-      {
-        element: divider,
-        prepend: true,
-        onBeforeShow: () => { divider.hidden = !this.#annotationMode }
-      },
-      {
-        element: removeItem,
-        prepend: true,
-        onBeforeShow: () => {
-          removeItem.hidden = !this.#annotationMode
-          if (!this.#annotationMode) return
-          const view = this.#xmlEditor.getView?.()
-          const synced = this.#xmlEditor.isSynced?.()
-          if (!view || !synced) { removeItem.disabled = true; return }
-          try {
-            const el = /** @type {Element|null} */ (this.#xmlEditor.getDomNodeAt?.(view.state.selection.main.head))
-            removeItem.disabled = !el || !this.#tagDefs.some(d => d.tag === el.localName)
-          } catch { removeItem.disabled = true }
-        }
-      },
-      {
-        element: palette,
-        prepend: true,
-        onBeforeShow: () => this.#rebuildPalette()
-      }
-    ]
-  }
-
-  /** Rebuilds the tag chip palette each time the context menu opens. */
-  #rebuildPalette() {
-    const palette = this.#paletteDiv
-    if (!palette) return
-    palette.hidden = !this.#annotationMode
-    palette.replaceChildren()
-    if (!this.#annotationMode || this.#tagDefs.length === 0) return
-
-    const view = this.#xmlEditor.getView?.()
-    const { from, to } = view?.state.selection.main ?? { from: 0, to: 0 }
-    const hasSelection = from !== to && !!this.#xmlEditor.isSynced?.()
-
-    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
-    for (const def of sorted) {
-      const chip = document.createElement('span')
-      chip.textContent = def.label.replace(/\{@[^}]+\}/g, '…')
-      chip.title = def.description || def.label
-      chip.dataset.tag = def.tag
-      Object.assign(chip.style, {
-        display: 'inline-block',
-        background: def.color,
-        color: '#1e1e2e',
-        fontFamily: 'monospace',
-        fontSize: '9px',
-        fontWeight: '700',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        borderRadius: '3px',
-        padding: '2px 6px 3px',
-        cursor: hasSelection ? 'pointer' : 'not-allowed',
-        opacity: hasSelection ? '1' : '0.35',
-        userSelect: 'none',
-      })
-      if (hasSelection) {
-        chip.addEventListener('click', () => this.#wrapSelectionWith(def))
-      }
-      palette.appendChild(chip)
     }
   }
 
@@ -231,7 +116,12 @@ class XmlAnnotationPlugin extends Plugin {
     }
     this.#annotationMode = true
     if (this.#switch) this.#switch.checked = true
-    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
+    this.#slot?.reconfigure([
+      createAnnotationField(this.#tagDefs),
+      annotationTheme,
+      this.#navField,
+      EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
+    ])
     this.#wasReadOnlyBeforeAnnotation = this.#xmlEditor.isReadOnly?.() ?? false
     if (!this.#wasReadOnlyBeforeAnnotation) {
       await this.#xmlEditor.setReadOnly?.(true)
@@ -243,7 +133,6 @@ class XmlAnnotationPlugin extends Plugin {
     headerToggle.checked = false
     ui.xmlEditor.headerbar.hidden = true
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
-    this.#setContextMenuItemsVisible(true)
     this.#scrollToTextElement()
   }
 
@@ -263,20 +152,12 @@ class XmlAnnotationPlugin extends Plugin {
       const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
       headerToggle.checked = true
     }
-    this.#setContextMenuItemsVisible(false)
     // Revert state if this was triggered internally (e.g. document removed, variant lost tagDefs).
     // Must not be awaited: called from onStateUpdate while propagation is active, so the deferred
     // Promise would deadlock (scheduleStateChange flushes only after propagation ends).
     if (this.state.view === 'annotation') {
       this.scheduleStateChange({ view: null })
     }
-  }
-
-  /** @param {boolean} visible */
-  #setContextMenuItemsVisible(visible) {
-    if (this.#menuDivider) this.#menuDivider.hidden = !visible
-    if (this.#menuRemoveItem) this.#menuRemoveItem.hidden = !visible
-    if (this.#paletteDiv) this.#paletteDiv.hidden = !visible
   }
 
   async #onDocumentLoaded() {
@@ -292,7 +173,12 @@ class XmlAnnotationPlugin extends Plugin {
       return
     }
     // Rebuild decorations for the newly loaded document
-    this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
+    this.#slot?.reconfigure([
+      createAnnotationField(this.#tagDefs),
+      annotationTheme,
+      this.#navField,
+      EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
+    ])
     this.#scrollToTextElement()
   }
 
@@ -428,26 +314,27 @@ class XmlAnnotationPlugin extends Plugin {
   }
 
   /**
-   * Removes the annotation element at the cursor position by unwrapping its children to the parent.
+   * Handles mouseup events on the CM editor content in annotation mode.
+   * Shows the "Annotate as…" popup when a non-empty selection is present.
+   * Skips if the event target is (or is inside) an annotation badge — badge clicks
+   * are handled by the ann-badge-click path.
+   * @param {MouseEvent} e
+   * @param {import('@codemirror/view').EditorView} view
+   * @returns {boolean}
    */
-  async #removeAnnotationAtClick() {
-    const view = this.#xmlEditor.getView?.()
-    if (!view) return
-    const pos = view.state.selection.main.head
-    try {
-      const node = this.#xmlEditor.getDomNodeAt?.(pos)
-      if (!(node instanceof Element)) return
-      if (!this.#tagDefs.some(d => d.tag === node.localName)) return
-      const parent = node.parentNode
-      if (!parent) return
-      while (node.firstChild) parent.insertBefore(node.firstChild, node)
-      parent.removeChild(node)
-      await this.#xmlEditor.updateEditorFromNode?.(parent)
-    } catch (err) {
-      // Annotation removal can fail if the XML DOM is out of sync; log as warning since this
-      // represents an unexpected state (unlike wrap-sync failures which are timing-related)
-      this.#logger.warn('[xml-annotation] remove annotation failed: ' + String(err))
-    }
+  #onEditorMouseUp(e, view) {
+    if (!this.#annotationMode) return false
+    if (e.target instanceof Element && e.target.closest('.ann-badge')) return false
+    // Defer one macrotask: CM commits selection on document mouseup (after this contentDOM
+    // mouseup), and the browser fires a click after mouseup which would immediately dismiss
+    // the popup via the document click listener. Deferring past both events solves both.
+    const coords = { clientX: e.clientX, clientY: e.clientY }
+    setTimeout(() => {
+      const { from, to } = view.state.selection.main
+      if (from === to) return
+      this.#popup?.showForSelection(coords, from, to)
+    }, 0)
+    return false
   }
 
   /**
@@ -542,7 +429,12 @@ class XmlAnnotationPlugin extends Plugin {
       if (!hasTagDefs) {
         await this.#disableAnnotationMode()
       } else {
-        this.#slot?.reconfigure([createAnnotationField(this.#tagDefs), annotationTheme, this.#navField])
+        this.#slot?.reconfigure([
+          createAnnotationField(this.#tagDefs),
+          annotationTheme,
+          this.#navField,
+          EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
+        ])
       }
     } else if (hasTagDefs && this.state.view === 'annotation' && this.#xmlEditor.getXmlTree?.()) {
       // tagDefs just became available and the document is already loaded; activate now
