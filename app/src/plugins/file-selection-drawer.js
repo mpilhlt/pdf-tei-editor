@@ -235,6 +235,8 @@ class FileSelectionDrawerPlugin extends Plugin {
     this.#logger.debug("Closing file selection drawer");
     this.#selectedCollections.clear();
     this.#updateExportButtonState();
+    this.#selectedDocuments.clear();
+    this.#updateMoveCopyButtonState();
     this.#drawerUi.hide();
   }
 
@@ -856,9 +858,24 @@ class FileSelectionDrawerPlugin extends Plugin {
           this.#selectedCollections.delete(collectionName);
         }
       }
+      // Sync document checkboxes — programmatic, does NOT fire sl-change
+      const pdfItems = item.querySelectorAll('.pdf-item');
+      pdfItems.forEach(pdfItem => {
+        const pdfCheckbox = /** @type {SlCheckbox} */ (pdfItem.querySelector('sl-checkbox'));
+        const pdfId = /** @type {HTMLElement} */ (pdfItem).dataset.hash;
+        if (pdfCheckbox && pdfId) {
+          pdfCheckbox.checked = checked;
+          if (checked) {
+            this.#selectedDocuments.add(pdfId);
+          } else {
+            this.#selectedDocuments.delete(pdfId);
+          }
+        }
+      });
     });
 
     this.#updateExportButtonState();
+    this.#updateMoveCopyButtonState();
   }
 
   // TODO #368: Replace sessionStorage with a generic UI state persistence mechanism
@@ -1213,35 +1230,38 @@ class FileSelectionDrawerPlugin extends Plugin {
     let successCount = 0;
     const errors = [];
 
-    for (const pdfId of pdfIds) {
-      for (const collectionId of targetCollections) {
-        try {
-          if (action === 'move') {
-            await this.#client.moveFiles(pdfId, collectionId);
-          } else {
-            await this.#client.copyFiles(pdfId, collectionId);
+    try {
+      for (const pdfId of pdfIds) {
+        for (const collectionId of targetCollections) {
+          try {
+            if (action === 'move') {
+              await this.#client.moveFiles(pdfId, collectionId);
+            } else {
+              await this.#client.copyFiles(pdfId, collectionId);
+            }
+            successCount++;
+          } catch (error) {
+            errors.push({ pdfId, collectionId, error: String(error) });
+            this.#logger.error(`Failed to ${action} ${pdfId} to ${collectionId}: ${error}`);
           }
-          successCount++;
-        } catch (error) {
-          errors.push({ pdfId, collectionId, error: String(error) });
-          this.#logger.error(`Failed to ${action} ${pdfId} to ${collectionId}: ${error}`);
         }
       }
+
+      const verb = action === 'move' ? 'moved' : 'copied';
+      if (errors.length === 0) {
+        notify(`${successCount} document(s) ${verb} to "${collectionNames}"`, 'success', 'check-circle');
+      } else if (successCount > 0) {
+        notify(`${successCount} succeeded, ${errors.length} failed`, 'warning', 'exclamation-triangle');
+      } else {
+        notify(`Failed to ${action} all documents`, 'danger', 'exclamation-octagon');
+      }
+
+      this.#selectedDocuments.clear();
+      await this.getDependency('filedata').reload({ refresh: true });
+    } finally {
+      moveCopyButton.loading = false;
+      this.#updateMoveCopyButtonState();
     }
-
-    moveCopyButton.loading = false;
-
-    const verb = action === 'move' ? 'moved' : 'copied';
-    if (errors.length === 0) {
-      notify(`${successCount} document(s) ${verb} to "${collectionNames}"`, 'success', 'check-circle');
-    } else if (successCount > 0) {
-      notify(`${successCount} succeeded, ${errors.length} failed`, 'warning', 'exclamation-triangle');
-    } else {
-      notify(`Failed to ${action} all documents`, 'danger', 'exclamation-octagon');
-    }
-
-    this.#selectedDocuments.clear();
-    await this.getDependency('filedata').reload({ refresh: true });
   }
 
   /**
