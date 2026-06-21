@@ -10,6 +10,7 @@ class StatusSwitch extends HTMLElement {
 
   constructor() {
     super();
+    this._programmaticChecked = false;
     this.attachShadow({ mode: 'open' });
     this.render();
   }
@@ -20,7 +21,9 @@ class StatusSwitch extends HTMLElement {
     this.setupEventListeners();
   }
 
-  attributeChangedCallback() {
+  attributeChangedCallback(name) {
+    // Skip re-render for programmatic checked changes; the setter updates sl-switch directly.
+    if (name === 'checked' && this._programmaticChecked) return;
     this.render();
     if (this.isConnected) {
       this.updateHostProperties();
@@ -135,11 +138,17 @@ class StatusSwitch extends HTMLElement {
   }
 
   set checked(value) {
+    // Use flag so attributeChangedCallback skips render; update the inner sl-switch directly
+    // to avoid destroying/recreating it, which causes spurious sl-change events from Shoelace.
+    this._programmaticChecked = true;
     if (value) {
       this.setAttribute('checked', '');
     } else {
       this.removeAttribute('checked');
     }
+    this._programmaticChecked = false;
+    const slSwitch = this.shadowRoot?.querySelector('sl-switch');
+    if (slSwitch) slSwitch.checked = Boolean(value);
   }
 
   get disabled() {

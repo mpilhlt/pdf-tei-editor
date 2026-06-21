@@ -962,7 +962,6 @@ export class XMLEditor extends EventEmitter {
       throw new Error("XPath is not provided.");
     }
     xpath = `count(${xpath})`
-
     return xmlTree.evaluate(xpath, xmlTree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
   }
 

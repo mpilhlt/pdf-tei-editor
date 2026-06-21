@@ -761,7 +761,11 @@ class XmlEditorPlugin extends Plugin {
     this.#setNavigationWidgetsVisible(hasNavigationPaths && Boolean(state.xml));
 
     // Update xpath selection and counter
-    if (state.xpath) {
+    if (state.xpath && !state.xpath.startsWith('/')) {
+      this.#logger.warn(`Discarding invalid xpath state: "${state.xpath}"`);
+      this.scheduleStateChange({ xpath: '' });
+    }
+    if (state.xpath?.startsWith('/')) {
       let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
       const nonIndexedPath = pathBeforePredicates + nonIndexPredicates;
 
@@ -850,7 +854,7 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // xpath state => selection
-    if (this.#xmlEditor.isReady() && state.xpath && state.xml) {
+    if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
       const { index, pathBeforePredicates } = parseXPath(state.xpath);
       try {
         const size = this.#xmlEditor.countDomNodesByXpath(pathBeforePredicates);
