@@ -8,6 +8,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { CollectionInfo, ProjectInfo } from '../state.js'
  * @import { moveFilesDialogPart } from '../templates/move-files-dialog.types.js'
+ * @import { SlDialog, SlCheckbox } from '../ui.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -26,7 +27,7 @@ class MoveFilesPlugin extends Plugin {
   get #logger() { return this.getDependency('logger') }
   get #dialog() { return this.getDependency('dialog') }
 
-  /** @type {import('../ui.js').SlDialog & moveFilesDialogPart} */
+  /** @type {SlDialog & moveFilesDialogPart} */
   #dialogUi = null
 
   /** @param {ApplicationState} _state */
@@ -64,7 +65,7 @@ class MoveFilesPlugin extends Plugin {
   #appendCollectionCheckbox(id, name, checked = false) {
     const div = document.createElement('div')
     div.style.cssText = 'display: flex; align-items: center; padding: 0.25rem 0;'
-    const checkbox = /** @type {import('../ui.js').SlCheckbox} */ (document.createElement('sl-checkbox'))
+    const checkbox = /** @type {SlCheckbox} */ (document.createElement('sl-checkbox'))
     checkbox.size = 'small'
     checkbox.textContent = name
     checkbox.checked = checked
@@ -76,7 +77,7 @@ class MoveFilesPlugin extends Plugin {
   }
 
   #updateButtonStates() {
-    const checkboxes = /** @type {import('../ui.js').SlCheckbox[]} */ ([
+    const checkboxes = /** @type {SlCheckbox[]} */ ([
       ...this.#dialogUi.collectionsList.querySelectorAll('sl-checkbox')
     ])
     const checkedCount = checkboxes.filter(cb => cb.checked).length
@@ -105,6 +106,7 @@ class MoveFilesPlugin extends Plugin {
       }
     }
 
+    const headingStyle = 'font-weight: bold; padding: 0.5rem 0 0.15rem; font-size: 0.85em; text-transform: uppercase; color: var(--sl-color-neutral-500);'
     const renderedIds = new Set()
     for (const project of (projects || [])) {
       const projectCols = /** @type {CollectionInfo[]} */ (
@@ -112,7 +114,7 @@ class MoveFilesPlugin extends Plugin {
       )
       if (projectCols.length === 0) continue
       const heading = document.createElement('div')
-      heading.style.cssText = 'font-weight: bold; padding: 0.5rem 0 0.15rem; font-size: 0.85em; text-transform: uppercase; color: var(--sl-color-neutral-500);'
+      heading.style.cssText = headingStyle
       heading.textContent = project.name
       dlg.collectionsList.appendChild(heading)
       appendGroup(projectCols)
@@ -123,7 +125,7 @@ class MoveFilesPlugin extends Plugin {
     if (orphans.length > 0) {
       if (renderedIds.size > 0) {
         const heading = document.createElement('div')
-        heading.style.cssText = 'font-weight: bold; padding: 0.5rem 0 0.15rem; font-size: 0.85em; text-transform: uppercase; color: var(--sl-color-neutral-500);'
+        heading.style.cssText = headingStyle
         heading.textContent = 'No project'
         dlg.collectionsList.appendChild(heading)
       }
@@ -139,6 +141,9 @@ class MoveFilesPlugin extends Plugin {
 
     this.#updateButtonStates()
 
+    const preventClose = (e) => e.preventDefault()
+    dlg.addEventListener('sl-request-close', preventClose)
+
     /** @type {'move'|'copy'|null} */
     let action = null
     try {
@@ -147,22 +152,22 @@ class MoveFilesPlugin extends Plugin {
         dlg.moveBtn.addEventListener('click', () => resolve('move'), { once: true })
         dlg.copyBtn.addEventListener('click', () => resolve('copy'), { once: true })
         dlg.cancel.addEventListener('click', reject, { once: true })
-        dlg.addEventListener('sl-hide', e => e.preventDefault(), { once: true })
       })
     } catch {
       this.#logger.info("User cancelled batch move/copy dialog")
       return null
     } finally {
+      dlg.removeEventListener('sl-request-close', preventClose)
       dlg.hide()
     }
 
-    const checkboxes = /** @type {import('../ui.js').SlCheckbox[]} */ ([
+    const checkboxes = /** @type {SlCheckbox[]} */ ([
       ...dlg.collectionsList.querySelectorAll('sl-checkbox')
     ])
     const targetCollections = checkboxes
       .filter(cb => cb.checked)
       .map(cb => cb.dataset.collectionId)
-      .filter(/** @param {any} id */ id => Boolean(id))
+      .filter(id => Boolean(id))
 
     return { action, targetCollections }
   }
