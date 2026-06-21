@@ -151,15 +151,14 @@ class MoveFilesPlugin extends Plugin {
 
     ui.spinner.show(`${operationName} files, please wait...`)
     try {
-      let result
       if (isCopyMode) {
-        result = await this.#client.copyFiles(pdf, xml, destinationCollection)
+        await this.#client.copyFiles(pdf, destinationCollection)
       } else {
-        result = await this.#client.moveFiles(pdf, xml, destinationCollection)
+        await this.#client.moveFiles(pdf, destinationCollection)
       }
 
       await this.#fileSelection.reload()
-      await this.#services.load({ pdf: result.new_pdf_id, xml: result.new_xml_id })
+      await this.#services.load({ pdf })
 
       const destCollection = collections.find(c => c.id === destinationCollection)
       const collectionName = destCollection ? destCollection.name : destinationCollection

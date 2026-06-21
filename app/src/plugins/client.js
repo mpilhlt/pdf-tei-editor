@@ -453,31 +453,27 @@ async function state() {
 
 
 /**
- * Moves the given files to a new collection
- * @param {string} pdf - PDF file ID
- * @param {string} xml - XML file ID
+ * Moves the given PDF (and all its associated TEI files) to a new collection
+ * @param {string} pdf - PDF file stable_id
  * @param {string} destinationCollection - Destination collection ID
- * @returns {Promise<{new_pdf_id: string, new_xml_id: string}>}
+ * @returns {Promise<{new_pdf_id: string}>}
  */
-async function moveFiles(pdf, xml, destinationCollection) {
+async function moveFiles(pdf, destinationCollection) {
   return await apiClient.filesMove({
     pdf_id: pdf,
-    xml_id: xml,
     destination_collection: destinationCollection
   });
 }
 
 /**
- * Copies the given files to an additional collection
- * @param {string} pdf - PDF file ID
- * @param {string} xml - XML file ID
+ * Copies the given PDF (and all its associated TEI files) to an additional collection
+ * @param {string} pdf - PDF file stable_id
  * @param {string} destinationCollection - Destination collection ID
- * @returns {Promise<{new_pdf_id: string, new_xml_id: string}>}
+ * @returns {Promise<{new_pdf_id: string}>}
  */
-async function copyFiles(pdf, xml, destinationCollection) {
+async function copyFiles(pdf, destinationCollection) {
   return await apiClient.filesCopy({
     pdf_id: pdf,
-    xml_id: xml,
     destination_collection: destinationCollection
   });
 }

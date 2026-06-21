@@ -130,9 +130,8 @@ Covers:
   checkbox interactions.
 - `MoveFilesPlugin` no longer has `onStateUpdate` — the drawer's `#updateMoveCopyButtonState`
   controls the button instead.
-- `filesMove` / `filesCopy` API calls use `pdf_id` (stable_id) and `xml_id` (first gold
-  or first artifact, or the same stable_id if no artifact available). The backend ignores
-  `xml_id` for the actual move but the field is required.
+- `filesMove` / `filesCopy` API calls only require `pdf_id` and `destination_collection`.
+  `xml_id` has been removed — operations always act on the PDF and all associated TEI files atomically.
 - The `move-files` dependency is added to `FileSelectionDrawerPlugin`'s `deps` array
   only after verifying no circular dependency exists (move-files → services, file-selection,
   logger, dialog; none of these lead back to file-selection-drawer).
