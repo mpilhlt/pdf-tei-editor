@@ -3,16 +3,12 @@
 
 /**
  * @typedef {object} moveFilesDialogPart
- * @property {import('../ui.js').SlSelect} collectionName
+ * @property {HTMLSpanElement} docCount
+ * @property {HTMLDivElement} collectionsList
  * @property {import('../ui.js').SlButton} newCollectionBtn
- * @property {import('../ui.js').SlCheckbox} copyMode
  * @property {import('../ui.js').SlButton} cancel
- * @property {import('../ui.js').SlButton & submitPart} submit
- */
-
-/**
- * @typedef {object} submitPart
- * @property {HTMLSpanElement} submitLabel
+ * @property {import('../ui.js').SlButton} moveBtn
+ * @property {import('../ui.js').SlButton} copyBtn
  */
 
 export {}
