@@ -169,8 +169,12 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+
   #xmlTagSyncCompartment = new Compartment()
   #themeCompartment = new Compartment()
+  /** @type {import('./codemirror/editor-themes.js').EditorTheme} */
+  #currentTheme = getTheme('default')
+  #readOnlyBackgroundShown = false
 
 
   /**
@@ -418,12 +422,12 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
-   * @param {Boolean} value 
+   * @param {Boolean} value
    */
-  async setReadOnly(value) { 
+  async setReadOnly(value) {
     this.#editorIsReadOnly = Boolean(value)
     this.#view.dispatch({
-      effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
+      effects: [this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))]
     });
     await this.emit("editorReadOnly", this.#editorIsReadOnly)
   }
@@ -814,9 +818,26 @@ export class XMLEditor extends EventEmitter {
    * @param {EditorTheme} theme
    */
   setTheme(theme) {
-    this.#view.dispatch({
-      effects: this.#themeCompartment.reconfigure(theme.extensions)
-    });
+    this.#currentTheme = theme
+    const effects = [this.#themeCompartment.reconfigure(theme.extensions)]
+    this.#view.dispatch({ effects })
+    if (this.#readOnlyBackgroundShown) {
+      this.#view.dom.style.backgroundColor = theme.readOnlyBackground
+    }
+  }
+
+  /**
+   * Shows or hides the read-only background color on the editor. Call with `true` only for
+   * access-control read-only state, not for annotation mode or other temporary restrictions.
+   * @param {boolean} show
+   */
+  setReadOnlyBackground(show) {
+    this.#readOnlyBackgroundShown = Boolean(show)
+    if (show) {
+      this.#view.dom.style.backgroundColor = this.#currentTheme.readOnlyBackground
+    } else {
+      this.#view.dom.style.removeProperty('background-color')
+    }
   }
 
   /**

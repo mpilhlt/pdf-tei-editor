@@ -877,6 +877,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Update visual indicators based on state
     if (state.editorReadOnly) {
+      this.#xmlEditor.setReadOnlyBackground(true);
       if (!this.#xmlEditorEl.classList.contains('editor-readonly')) {
         this.#xmlEditorEl.classList.add('editor-readonly');
       }
@@ -888,6 +889,7 @@ class XmlEditorPlugin extends Plugin {
         }
       }
     } else {
+      this.#xmlEditor.setReadOnlyBackground(false);
       if (this.#xmlEditorEl.classList.contains('editor-readonly')) {
         this.#xmlEditorEl.classList.remove('editor-readonly');
       }

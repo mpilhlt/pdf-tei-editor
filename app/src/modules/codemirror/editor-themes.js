@@ -10,6 +10,7 @@ import { tags } from "@lezer/highlight";
  * @typedef {object} EditorTheme
  * @property {string} id - Unique identifier used for persistence
  * @property {string} label - Display label shown in the theme menu
+ * @property {string} readOnlyBackground - Background color applied when editor is read-only
  * @property {Extension[]} extensions - CodeMirror extensions to load into the theme Compartment
  */
 
@@ -75,21 +76,25 @@ export const THEMES = [
   {
     id: "default",
     label: "Default (light)",
+    readOnlyBackground: "#f8e8b7",
     extensions: [lightViewTheme, syntaxHighlighting(defaultHighlight)],
   },
   {
     id: "dark",
     label: "Dark",
+    readOnlyBackground: "#2e2a00",
     extensions: [darkViewTheme, syntaxHighlighting(darkHighlight)],
   },
   {
     id: "colorBlind",
     label: "Color-blind friendly",
+    readOnlyBackground: "#f8e8b7",
     extensions: [lightViewTheme, syntaxHighlighting(colorBlindHighlight)],
   },
   {
     id: "highContrast",
     label: "High contrast",
+    readOnlyBackground: "#ffe566",
     extensions: [lightViewTheme, syntaxHighlighting(highContrastHighlight)],
   },
 ];

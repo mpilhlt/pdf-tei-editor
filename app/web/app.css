@@ -315,9 +315,6 @@ sl-button-group[label] {
   background-color: #ff000030;
 }
 
-.editor-readonly {
-  background-color: #f8e8b7ba;
-}
 
 sl-icon.rotating {
   animation: spin 1s linear infinite;
