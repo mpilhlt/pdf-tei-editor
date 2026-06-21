@@ -1,50 +1,35 @@
 /**
- * This plugin allows moving files to a different collection.
+ * Service plugin for moving/copying files between collections.
+ * Exposes showBatchDialog() for use by FileSelectionDrawerPlugin.
  */
 
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import { SlButton } from '../ui.js'
+ * @import { CollectionInfo, ProjectInfo } from '../state.js'
  * @import { moveFilesDialogPart } from '../templates/move-files-dialog.types.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import { notify } from '../modules/sl-utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import ui from '../ui.js'
-import { userHasRole } from '../modules/acl-utils.js'
 
-// Register template
 await registerTemplate('move-files-dialog', 'move-files-dialog.html')
 
 class MoveFilesPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'move-files', deps: ['services', 'file-selection', 'logger', 'dialog', 'document-actions'] })
+    super(context, { name: 'move-files', deps: ['logger', 'dialog', 'client'] })
   }
 
-  get #client()          { return this.getDependency('client') }
-  get #services()        { return this.getDependency('services') }
-  get #logger()          { return this.getDependency('logger') }
-  get #dialog()          { return this.getDependency('dialog') }
-  get #fileSelection()   { return this.getDependency('file-selection') }
-  get #documentActions() { return this.getDependency('document-actions') }
-
-  /** @type {SlButton} */
-  #moveBtn = Object.assign(document.createElement('sl-button'), {
-    innerHTML: `<sl-icon name="folder-symlink"></sl-icon>`,
-    variant: 'default',
-    size: 'small',
-    name: 'moveFiles'
-  })
+  get #client() { return this.getDependency('client') }
+  get #logger() { return this.getDependency('logger') }
+  get #dialog() { return this.getDependency('dialog') }
 
   /** @type {import('../ui.js').SlDialog & moveFilesDialogPart} */
   #dialogUi = null
 
-  /**
-   * @param {ApplicationState} _state
-   */
+  /** @param {ApplicationState} _state */
   async install(_state) {
     await super.install(_state)
     this.#logger.debug(`Installing plugin "move-files"`)
@@ -52,125 +37,136 @@ class MoveFilesPlugin extends Plugin {
     const dialog = createSingleFromTemplate('move-files-dialog', document.body)
     this.#dialogUi = this.createUi(dialog)
 
-    this.#documentActions.addButton(this.#moveBtn)
-    this.#moveBtn.addEventListener('click', () => this.#showMoveFilesDialog())
-
     this.#dialogUi.newCollectionBtn.addEventListener('click', async () => {
       const newCollectionId = prompt("Enter new collection ID (Only letters, numbers, '-' and '_'):")
-      if (newCollectionId) {
-        if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionId)) {
-          this.#dialog.error("Invalid collection ID. Only letters, numbers, hyphens, and underscores are allowed.")
-          return
-        }
-        const newCollectionName = prompt("Enter collection display name (optional, leave blank to use ID):")
-        try {
-          const result = await this.#client.createCollection(newCollectionId, newCollectionName || newCollectionId)
-          if (result.success) {
-            const placeholderOption = this.#dialogUi.collectionName.querySelector('sl-option[disabled]')
-            if (placeholderOption) placeholderOption.remove()
-            const option = Object.assign(document.createElement('sl-option'), {
-              value: newCollectionId,
-              textContent: newCollectionName || newCollectionId
-            })
-            this.#dialogUi.collectionName.append(option)
-            this.#dialogUi.collectionName.value = newCollectionId
-            notify(result.message)
-            await this.#fileSelection.reload()
-          }
-        } catch (error) {
-          this.#dialog.error(`Error creating collection: ${String(error)}`)
-        }
+      if (!newCollectionId) return
+      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionId)) {
+        this.#dialog.error("Invalid collection ID. Only letters, numbers, hyphens, and underscores are allowed.")
+        return
       }
-    })
-
-    this.#dialogUi.copyMode.addEventListener('sl-change', () => {
-      const isCopyMode = this.#dialogUi.copyMode.checked
-      this.#dialogUi.submit.submitLabel.textContent = isCopyMode ? 'Copy' : 'Move'
+      const newCollectionName = prompt("Enter collection display name (optional, leave blank to use ID):")
+      if (newCollectionName === null) return
+      try {
+        await this.#client.createCollection(newCollectionId, newCollectionName || newCollectionId)
+        this.#appendCollectionCheckbox(newCollectionId, newCollectionName || newCollectionId, true)
+        notify(`Collection '${newCollectionName || newCollectionId}' created`, 'success', 'check-circle')
+      } catch (error) {
+        this.#dialog.error(`Error creating collection: ${String(error)}`)
+      }
     })
   }
 
-  async onStateUpdate(_changedKeys) {
-    const isReviewer = userHasRole(this.state.user, ["admin", "reviewer"])
-    this.#moveBtn.disabled = !this.state.xml || !isReviewer
+  /**
+   * @param {string} id
+   * @param {string} name
+   * @param {boolean} [checked]
+   */
+  #appendCollectionCheckbox(id, name, checked = false) {
+    const div = document.createElement('div')
+    div.style.cssText = 'display: flex; align-items: center; padding: 0.25rem 0;'
+    const checkbox = /** @type {import('../ui.js').SlCheckbox} */ (document.createElement('sl-checkbox'))
+    checkbox.size = 'small'
+    checkbox.textContent = name
+    checkbox.checked = checked
+    checkbox.dataset.collectionId = id
+    checkbox.addEventListener('sl-change', () => this.#updateButtonStates())
+    div.appendChild(checkbox)
+    this.#dialogUi.collectionsList.appendChild(div)
+    this.#updateButtonStates()
   }
 
-  async #showMoveFilesDialog() {
-    const state = this.state
-    const { xml, pdf, collections } = state
-    if (!xml || !pdf) {
-      this.#dialog.error("Cannot move/copy files, PDF or XML path is missing.")
-      return
-    }
+  #updateButtonStates() {
+    const checkboxes = /** @type {import('../ui.js').SlCheckbox[]} */ ([
+      ...this.#dialogUi.collectionsList.querySelectorAll('sl-checkbox')
+    ])
+    const checkedCount = checkboxes.filter(cb => cb.checked).length
+    this.#dialogUi.moveBtn.disabled = checkedCount !== 1
+    this.#dialogUi.copyBtn.disabled = checkedCount === 0
+  }
 
-    this.#dialogUi.copyMode.checked = false
-    this.#dialogUi.submit.submitLabel.textContent = 'Move'
+  /**
+   * Opens a dialog to select target collection(s) for batch move/copy.
+   * @param {{
+   *   pdfIds: string[],
+   *   collections: CollectionInfo[],
+   *   projects: ProjectInfo[]
+   * }} params
+   * @returns {Promise<{action: 'move'|'copy', targetCollections: string[]}|null>}
+   */
+  async showBatchDialog({ pdfIds, collections, projects }) {
+    const dlg = this.#dialogUi
+    dlg.docCount.textContent = String(pdfIds.length)
+    dlg.collectionsList.innerHTML = ''
 
-    const collectionSelectBox = this.#dialogUi.collectionName
-    collectionSelectBox.innerHTML = ""
-
-    if (!collections || collections.length === 0) {
-      const placeholderOption = Object.assign(document.createElement('sl-option'), {
-        value: '',
-        textContent: '(No collections available - click "New" to create one)',
-        disabled: true
-      })
-      collectionSelectBox.append(placeholderOption)
-      collectionSelectBox.value = ''
-    } else {
-      for (const collection of collections) {
-        const option = Object.assign(document.createElement('sl-option'), {
-          value: collection.id,
-          textContent: collection.name
-        })
-        collectionSelectBox.append(option)
+    /** @param {CollectionInfo[]} cols */
+    const appendGroup = (cols) => {
+      for (const col of cols) {
+        this.#appendCollectionCheckbox(col.id, col.name)
       }
     }
 
-    try {
-      this.#dialogUi.show()
-      await new Promise((resolve, reject) => {
-        this.#dialogUi.submit.addEventListener('click', resolve, { once: true })
-        this.#dialogUi.cancel.addEventListener('click', reject, { once: true })
-        this.#dialogUi.addEventListener('sl-hide', e => e.preventDefault(), { once: true })
-      })
-    } catch (e) {
-      this.#logger.info("User cancelled move/copy files dialog")
-      return
-    } finally {
-      this.#dialogUi.hide()
+    const renderedIds = new Set()
+    for (const project of (projects || [])) {
+      const projectCols = /** @type {CollectionInfo[]} */ (
+        (project.collections || []).map(id => collections.find(c => c.id === id)).filter(Boolean)
+      )
+      if (projectCols.length === 0) continue
+      const heading = document.createElement('div')
+      heading.style.cssText = 'font-weight: bold; padding: 0.5rem 0 0.15rem; font-size: 0.85em; text-transform: uppercase; color: var(--sl-color-neutral-500);'
+      heading.textContent = project.name
+      dlg.collectionsList.appendChild(heading)
+      appendGroup(projectCols)
+      projectCols.forEach(c => renderedIds.add(c.id))
     }
 
-    const destinationCollection = String(collectionSelectBox.value)
-    if (!destinationCollection) {
-      this.#dialog.error("No collection selected. Please select a collection or create a new one.")
-      return
-    }
-
-    const isCopyMode = this.#dialogUi.copyMode.checked
-    const operationName = isCopyMode ? 'Copying' : 'Moving'
-
-    ui.spinner.show(`${operationName} files, please wait...`)
-    try {
-      if (isCopyMode) {
-        await this.#client.copyFiles(pdf, destinationCollection)
-      } else {
-        await this.#client.moveFiles(pdf, destinationCollection)
+    const orphans = collections.filter(c => !renderedIds.has(c.id))
+    if (orphans.length > 0) {
+      if (renderedIds.size > 0) {
+        const heading = document.createElement('div')
+        heading.style.cssText = 'font-weight: bold; padding: 0.5rem 0 0.15rem; font-size: 0.85em; text-transform: uppercase; color: var(--sl-color-neutral-500);'
+        heading.textContent = 'No project'
+        dlg.collectionsList.appendChild(heading)
       }
-
-      await this.#fileSelection.reload()
-      await this.#services.load({ pdf })
-
-      const destCollection = collections.find(c => c.id === destinationCollection)
-      const collectionName = destCollection ? destCollection.name : destinationCollection
-      notify(`Files ${isCopyMode ? 'copied' : 'moved'} to "${collectionName}"`)
-    } catch (error) {
-      this.#dialog.error(`Error ${isCopyMode ? 'copying' : 'moving'} files: ${String(error)}`)
-    } finally {
-      ui.spinner.hide()
+      appendGroup(orphans)
     }
+
+    if (collections.length === 0) {
+      const msg = document.createElement('p')
+      msg.style.color = 'var(--sl-color-neutral-500)'
+      msg.textContent = 'No collections available. Click "New" to create one.'
+      dlg.collectionsList.appendChild(msg)
+    }
+
+    this.#updateButtonStates()
+
+    /** @type {'move'|'copy'|null} */
+    let action = null
+    try {
+      dlg.show()
+      action = await new Promise((resolve, reject) => {
+        dlg.moveBtn.addEventListener('click', () => resolve('move'), { once: true })
+        dlg.copyBtn.addEventListener('click', () => resolve('copy'), { once: true })
+        dlg.cancel.addEventListener('click', reject, { once: true })
+        dlg.addEventListener('sl-hide', e => e.preventDefault(), { once: true })
+      })
+    } catch {
+      this.#logger.info("User cancelled batch move/copy dialog")
+      return null
+    } finally {
+      dlg.hide()
+    }
+
+    const checkboxes = /** @type {import('../ui.js').SlCheckbox[]} */ ([
+      ...dlg.collectionsList.querySelectorAll('sl-checkbox')
+    ])
+    const targetCollections = checkboxes
+      .filter(cb => cb.checked)
+      .map(cb => cb.dataset.collectionId)
+      .filter(/** @param {any} id */ id => Boolean(id))
+
+    return { action, targetCollections }
   }
 }
 
 export default MoveFilesPlugin
-
 export const plugin = MoveFilesPlugin
