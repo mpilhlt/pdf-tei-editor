@@ -44,7 +44,7 @@ class FileSelectionDrawerPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'file-selection-drawer',
-      deps: ['logger', 'dialog', 'client', 'filedata']
+      deps: ['logger', 'dialog', 'client', 'filedata', 'move-files']
     });
   }
 
@@ -62,6 +62,7 @@ class FileSelectionDrawerPlugin extends Plugin {
   get #logger() { return this.getDependency('logger') }
   get #dialog() { return this.getDependency('dialog') }
   get #client() { return this.getDependency('client') }
+  get #moveFiles() { return this.getDependency('move-files') }
 
   /** @type {HTMLElement & fileDrawerButtonPart} */
   #triggerUi = /** @type {any} */ (null)
@@ -76,6 +77,8 @@ class FileSelectionDrawerPlugin extends Plugin {
   #isUpdatingSelect = false;  // blocks sl-change on variantSelect during programmatic value sets
   /** @type {Set<string>} */
   #selectedCollections = new Set();
+  /** @type {Set<string>} PDF stable_ids checked for batch move/copy */
+  #selectedDocuments = new Set();
   /** @type {ExportFormatInfo[]} */
   #availableExportFormats = [];
 
@@ -168,6 +171,12 @@ class FileSelectionDrawerPlugin extends Plugin {
       }
     });
 
+    this.#drawerUi.moveCopyButton.addEventListener('click', async () => {
+      if (this.state) {
+        await this.#handleMoveCopy(this.state);
+      }
+    });
+
     // Clear initializing flag after microtasks from component initialization have flushed
     setTimeout(() => { this.#isInitializing = false; }, 0);
   }
@@ -226,6 +235,8 @@ class FileSelectionDrawerPlugin extends Plugin {
     this.#logger.debug("Closing file selection drawer");
     this.#selectedCollections.clear();
     this.#updateExportButtonState();
+    this.#selectedDocuments.clear();
+    this.#updateMoveCopyButtonState();
     this.#drawerUi.hide();
   }
 
@@ -330,14 +341,17 @@ class FileSelectionDrawerPlugin extends Plugin {
     const deleteButton = this.#drawerUi.deleteButton;
     const newCollectionButton = this.#drawerUi.newCollectionButton;
 
+    const moveCopyButton = this.#drawerUi.moveCopyButton;
     if (hasReviewerRole) {
       importButton.style.display = '';
       exportDropdown.style.display = '';
       newCollectionButton.style.display = '';
+      moveCopyButton.style.display = '';
     } else {
       importButton.style.display = 'none';
       exportDropdown.style.display = 'none';
       newCollectionButton.style.display = 'none';
+      moveCopyButton.style.display = 'none';
     }
     const isAdmin = user && user.roles && (user.roles.includes('*') || user.roles.includes('admin'));
     deleteButton.style.display = isAdmin || ownsAnyCollection ? '' : 'none';
@@ -447,7 +461,23 @@ class FileSelectionDrawerPlugin extends Plugin {
       pdfItem.dataset.collection = file.collections[0];
       const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
       const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
-      pdfItem.innerHTML = `<sl-icon name="${icon}"></sl-icon><span>${displayLabel}</span>`;
+      const pdfId = file.source?.id || '';
+
+      const docCheckbox = /** @type {SlCheckbox} */ (document.createElement('sl-checkbox'));
+      docCheckbox.size = 'small';
+      docCheckbox.checked = this.#selectedDocuments.has(pdfId);
+      docCheckbox.addEventListener('click', e => e.stopPropagation());
+      docCheckbox.addEventListener('sl-change', e => {
+        e.stopPropagation();
+        this.#onDocumentCheckboxChange(pdfId, docCheckbox.checked, collectionName);
+      });
+      const iconEl = document.createElement('sl-icon');
+      iconEl.name = icon;
+      const labelEl = document.createElement('span');
+      labelEl.textContent = displayLabel;
+      pdfItem.appendChild(docCheckbox);
+      pdfItem.appendChild(iconEl);
+      pdfItem.appendChild(labelEl);
 
       if (goldToShow.length > 0) {
         const goldSection = document.createElement('sl-tree-item');
@@ -499,6 +529,8 @@ class FileSelectionDrawerPlugin extends Plugin {
    */
   async #populateFileTree(state) {
     if (!state.fileData) return;
+    this.#selectedDocuments.clear();
+    this.#updateMoveCopyButtonState();
 
     const fileTree = this.#drawerUi?.fileTree;
     if (!fileTree) return;
@@ -743,7 +775,69 @@ class FileSelectionDrawerPlugin extends Plugin {
     } else {
       this.#selectedCollections.delete(collectionName);
     }
+
+    // Sync document checkboxes — programmatic, does NOT fire sl-change
+    const collectionTreeItem = /** @type {HTMLElement|null} */ (
+      this.#drawerUi.fileTree.querySelector(`.collection-item[data-collection="${collectionName}"]`)
+    );
+    if (collectionTreeItem) {
+      const pdfItems = collectionTreeItem.querySelectorAll('.pdf-item');
+      pdfItems.forEach(item => {
+        const pdfCheckbox = /** @type {SlCheckbox} */ (item.querySelector('sl-checkbox'));
+        const pdfId = /** @type {HTMLElement} */ (item).dataset.hash;
+        if (pdfCheckbox && pdfId) {
+          pdfCheckbox.checked = checked;
+          if (checked) {
+            this.#selectedDocuments.add(pdfId);
+          } else {
+            this.#selectedDocuments.delete(pdfId);
+          }
+        }
+      });
+    }
+
     this.#updateExportButtonState();
+    this.#updateMoveCopyButtonState();
+  }
+
+  /**
+   * @param {string} pdfId
+   * @param {boolean} checked
+   * @param {string} collectionName
+   */
+  #onDocumentCheckboxChange(pdfId, checked, collectionName) {
+    if (checked) {
+      this.#selectedDocuments.add(pdfId);
+    } else {
+      this.#selectedDocuments.delete(pdfId);
+    }
+
+    // Update collection checkbox state (checked / indeterminate / unchecked)
+    const collectionTreeItem = /** @type {HTMLElement|null} */ (
+      this.#drawerUi.fileTree.querySelector(`.collection-item[data-collection="${collectionName}"]`)
+    );
+    if (collectionTreeItem) {
+      const pdfCheckboxes = /** @type {SlCheckbox[]} */ (
+        [...collectionTreeItem.querySelectorAll('.pdf-item sl-checkbox')]
+      );
+      const checkedCount = pdfCheckboxes.filter(cb => cb.checked).length;
+      const collectionCheckbox = /** @type {SlCheckbox} */ (
+        collectionTreeItem.querySelector('sl-checkbox')
+      );
+      if (collectionCheckbox) {
+        if (checkedCount === 0) {
+          collectionCheckbox.indeterminate = false;
+          collectionCheckbox.checked = false;
+        } else if (checkedCount === pdfCheckboxes.length) {
+          collectionCheckbox.indeterminate = false;
+          collectionCheckbox.checked = true;
+        } else {
+          collectionCheckbox.indeterminate = true;
+        }
+      }
+    }
+
+    this.#updateMoveCopyButtonState();
   }
 
   #onSelectAllChange() {
@@ -764,9 +858,24 @@ class FileSelectionDrawerPlugin extends Plugin {
           this.#selectedCollections.delete(collectionName);
         }
       }
+      // Sync document checkboxes — programmatic, does NOT fire sl-change
+      const pdfItems = item.querySelectorAll('.pdf-item');
+      pdfItems.forEach(pdfItem => {
+        const pdfCheckbox = /** @type {SlCheckbox} */ (pdfItem.querySelector('sl-checkbox'));
+        const pdfId = /** @type {HTMLElement} */ (pdfItem).dataset.hash;
+        if (pdfCheckbox && pdfId) {
+          pdfCheckbox.checked = checked;
+          if (checked) {
+            this.#selectedDocuments.add(pdfId);
+          } else {
+            this.#selectedDocuments.delete(pdfId);
+          }
+        }
+      });
     });
 
     this.#updateExportButtonState();
+    this.#updateMoveCopyButtonState();
   }
 
   // TODO #368: Replace sessionStorage with a generic UI state persistence mechanism
@@ -821,6 +930,11 @@ class FileSelectionDrawerPlugin extends Plugin {
     } else {
       checkbox.indeterminate = true;
     }
+  }
+
+  #updateMoveCopyButtonState() {
+    const moveCopyButton = this.#drawerUi.moveCopyButton;
+    moveCopyButton.disabled = this.#selectedDocuments.size === 0;
   }
 
   #updateExportButtonState() {
@@ -1074,6 +1188,79 @@ class FileSelectionDrawerPlugin extends Plugin {
     } finally {
       newCollectionButton.disabled = false;
       newCollectionButton.loading = false;
+    }
+  }
+
+  /**
+   * @param {ApplicationState} state
+   */
+  async #handleMoveCopy(state) {
+    const pdfIds = Array.from(this.#selectedDocuments);
+    if (pdfIds.length === 0) return;
+
+    const result = await this.#moveFiles.showBatchDialog({
+      pdfIds,
+      collections: state.collections || [],
+      projects: state.projects || []
+    });
+
+    if (!result) return;
+
+    const { action, targetCollections } = result;
+
+    if (targetCollections.length === 0) {
+      this.#dialog.error('No collection selected.');
+      return;
+    }
+
+    const collectionNames = targetCollections
+      .map(id => (state.collections || []).find(c => c.id === id)?.name || id)
+      .join(', ');
+
+    const confirmMsg = action === 'move'
+      ? `Move ${pdfIds.length} document(s) to "${collectionNames}"?\n\nThis will remove them from their current collection(s).`
+      : `Copy ${pdfIds.length} document(s) to "${collectionNames}"?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const moveCopyButton = this.#drawerUi.moveCopyButton;
+    moveCopyButton.loading = true;
+    moveCopyButton.disabled = true;
+
+    let successCount = 0;
+    const errors = [];
+
+    try {
+      for (const pdfId of pdfIds) {
+        for (const collectionId of targetCollections) {
+          try {
+            if (action === 'move') {
+              await this.#client.moveFiles(pdfId, collectionId);
+            } else {
+              await this.#client.copyFiles(pdfId, collectionId);
+            }
+            successCount++;
+          } catch (error) {
+            errors.push({ pdfId, collectionId, error: String(error) });
+            this.#logger.error(`Failed to ${action} ${pdfId} to ${collectionId}: ${error}`);
+          }
+        }
+      }
+
+      const verb = action === 'move' ? 'moved' : 'copied';
+      if (errors.length === 0) {
+        notify(`${successCount} document(s) ${verb} to "${collectionNames}"`, 'success', 'check-circle');
+      } else if (successCount > 0) {
+        notify(`${successCount} succeeded, ${errors.length} failed`, 'warning', 'exclamation-triangle');
+      } else {
+        notify(`Failed to ${action} all documents`, 'danger', 'exclamation-octagon');
+      }
+
+      this.#selectedDocuments.clear();
+      await this.getDependency('filedata').reload({ refresh: true });
+    } finally {
+      moveCopyButton.loading = false;
+      this.#updateMoveCopyButtonState();
     }
   }
 

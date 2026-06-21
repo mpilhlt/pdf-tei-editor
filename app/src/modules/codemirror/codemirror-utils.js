@@ -612,3 +612,59 @@ export function resolveDeduplicated(data) {
 
   return finalResolved;
 }
+
+/**
+ * Finds the element that actually vertically scrolls the CodeMirror editor content.
+ * When the layout does not constrain CM's height, cm-scroller expands to its content
+ * and never scrolls; a parent element with overflow:auto/scroll does the scrolling instead.
+ * @param {EditorView} view
+ * @returns {Element|null}
+ */
+export function findCmScrollContainer(view) {
+  const cmScrollEl = view.scrollDOM
+  if (cmScrollEl.scrollHeight > cmScrollEl.clientHeight + 1) return cmScrollEl
+  let el = /** @type {Element|null} */ (cmScrollEl.parentElement)
+  while (el && el !== document.documentElement) {
+    const overflowY = getComputedStyle(el).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') return el
+    el = el.parentElement
+  }
+  return null
+}
+
+/**
+ * Returns the document character position of the first visible line in the editor.
+ * Uses getBoundingClientRect to compute how many pixels of CM content are hidden above
+ * the visible area, then maps that pixel height to a character position via lineBlockAtHeight.
+ * Works correctly when the actual scroll container is an ancestor of cm-scroller
+ * (i.e. cm-scroller is unconstrained and does not itself scroll).
+ * @param {EditorView} view
+ * @param {Element} scrollContainer The element returned by {@link findCmScrollContainer}
+ * @returns {number}
+ */
+export function getFirstVisibleCharacter(view, scrollContainer) {
+  const cmRect = view.scrollDOM.getBoundingClientRect()
+  const containerRect = scrollContainer.getBoundingClientRect()
+  const hiddenAbove = Math.max(0, containerRect.top - cmRect.top)
+  return view.lineBlockAtHeight(hiddenAbove).from
+}
+
+/**
+ * Scrolls the given document character position to the top of the visible editor area
+ * by directly adjusting the scroll container's scrollTop.
+ * Computes the CM editor's absolute offset within the scrollable content at call time,
+ * so it works even when the layout has changed since the position was captured (e.g. after
+ * header fold/unfold or extension reconfigure).
+ * Must be called after CM has re-rendered so that lineBlockAt reflects the current layout.
+ * @param {EditorView} view
+ * @param {Element} scrollContainer The element returned by {@link findCmScrollContainer}
+ * @param {number} pos The document character position to scroll to the top
+ */
+export function scrollCharacterToTop(view, scrollContainer, pos) {
+  const block = view.lineBlockAt(pos)
+  const cmRect = view.scrollDOM.getBoundingClientRect()
+  const containerRect = scrollContainer.getBoundingClientRect()
+  // Absolute offset of the CM editor's top within the scrollable content
+  const cmAbsoluteTop = scrollContainer.scrollTop + (cmRect.top - containerRect.top)
+  scrollContainer.scrollTop = cmAbsoluteTop + block.top
+}

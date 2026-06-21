@@ -11,6 +11,7 @@
  * @property {import('../ui.js').SlDropdown & exportDropdownPart} exportDropdown
  * @property {import('../ui.js').SlButton} deleteButton
  * @property {import('../ui.js').SlButton} newCollectionButton
+ * @property {import('../ui.js').SlButton} moveCopyButton
  * @property {import('../ui.js').SlButton} closeDrawer
  * @property {HTMLInputElement} importFileInput
  */

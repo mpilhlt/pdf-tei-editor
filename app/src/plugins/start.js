@@ -140,7 +140,9 @@ class StartPlugin extends Plugin {
         })
 
         // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
-        const xpath = UrlHash.get("xpath") || ''
+        // Discard non-absolute values (e.g. bare numbers stored by a stale/buggy session)
+        const rawXpath = UrlHash.get("xpath") || ''
+        const xpath = rawXpath.startsWith('/') ? rawXpath : ''
 
         // update the UI
         await this.dispatchStateChange({ xpath })
