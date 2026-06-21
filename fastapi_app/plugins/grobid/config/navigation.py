@@ -21,14 +21,14 @@ NAVIGATION_XPATH: NavigationXPath = {
         {"value": "//tei:listBibl/tei:bibl", "label": "&lt;bibl&gt;"},
     ],
     "grobid.training.references": [
-        {"value": "//tei:bibl", "label": "&lt;bibl&gt;"},
+        {"value": "//tei:listBibl/tei:bibl", "label": "&lt;bibl&gt;"},
     ],
     "grobid.service.fulltext": [
         {"value": "//tei:div",  "label": "&lt;div&gt;"},
-        {"value": "//tei:bibl", "label": "&lt;bibl&gt;"},
+        {"value": "//tei:listBibl/tei:bibl", "label": "&lt;bibl&gt;"},
     ],
     "grobid.service.references": [
-        {"value": "//tei:bibl", "label": "&lt;bibl&gt;"},
+        {"value": "//tei:listBibl/tei:bibl", "label": "&lt;bibl&gt;"},
     ],
     "grobid.training.header.affiliation": [
         {"value": "//tei:affiliation", "label": "&lt;affiliation&gt;"},
