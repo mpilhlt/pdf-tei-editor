@@ -11,6 +11,7 @@
     "@codemirror/state": "../../node_modules/@codemirror/state/dist/index.js",
     "@codemirror/lint": "../../node_modules/@codemirror/lint/dist/index.js",
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
+    "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
     "markdown-it": "../../node_modules/markdown-it/index.mjs"
   },
   "scopes": {
@@ -40,7 +41,6 @@
       "@lezer/xml": "../../node_modules/@lezer/xml/dist/index.js"
     },
     "../../node_modules/@codemirror/language/": {
-      "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
       "@lezer/common": "../../node_modules/@lezer/common/dist/index.js",
       "style-mod": "../../node_modules/style-mod/src/style-mod.js"
     },
@@ -48,7 +48,6 @@
       "crelt": "../../node_modules/crelt/index.js"
     },
     "../../node_modules/@codemirror/merge/": {
-      "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
       "style-mod": "../../node_modules/style-mod/src/style-mod.js"
     },
     "../../node_modules/@codemirror/state/": {
@@ -84,7 +83,6 @@
       "mdurl": "../../node_modules/mdurl/index.mjs"
     },
     "../../node_modules/@lezer/xml/": {
-      "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
       "@lezer/lr": "../../node_modules/@lezer/lr/dist/index.js"
     },
     "../../node_modules/linkify-it/": {

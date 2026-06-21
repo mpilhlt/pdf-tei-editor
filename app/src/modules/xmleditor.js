@@ -45,7 +45,7 @@ import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } f
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language"
+import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
 import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
@@ -58,6 +58,10 @@ import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
+import { getTheme } from './codemirror/editor-themes.js';
+/**
+ * @import {EditorTheme} from './codemirror/editor-themes.js'
+ */
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -166,6 +170,7 @@ export class XMLEditor extends EventEmitter {
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
   #xmlTagSyncCompartment = new Compartment()
+  #themeCompartment = new Compartment()
 
 
   /**
@@ -198,7 +203,7 @@ export class XMLEditor extends EventEmitter {
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      this.#themeCompartment.of(getTheme('default').extensions),
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
@@ -801,6 +806,16 @@ export class XMLEditor extends EventEmitter {
     });
     requestAnimationFrame(() => {
       this.#view.scrollDOM.scrollLeft = 0;
+    });
+  }
+
+  /**
+   * Replaces the active editor theme bundle.
+   * @param {EditorTheme} theme
+   */
+  setTheme(theme) {
+    this.#view.dispatch({
+      effects: this.#themeCompartment.reconfigure(theme.extensions)
     });
   }
 
