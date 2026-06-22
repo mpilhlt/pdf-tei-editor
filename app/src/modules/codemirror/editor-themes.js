@@ -76,7 +76,7 @@ export const THEMES = [
   {
     id: "default",
     label: "Default (light)",
-    readOnlyBackground: "#f8e8b7",
+    readOnlyBackground: "#f8efd5",
     extensions: [lightViewTheme, syntaxHighlighting(defaultHighlight)],
   },
   {
@@ -88,13 +88,13 @@ export const THEMES = [
   {
     id: "colorBlind",
     label: "Color-blind friendly",
-    readOnlyBackground: "#f8e8b7",
+    readOnlyBackground: "#f8efd5",
     extensions: [lightViewTheme, syntaxHighlighting(colorBlindHighlight)],
   },
   {
     id: "highContrast",
     label: "High contrast",
-    readOnlyBackground: "#ffe566",
+    readOnlyBackground: "#f8efd5",
     extensions: [lightViewTheme, syntaxHighlighting(highContrastHighlight)],
   },
 ];
