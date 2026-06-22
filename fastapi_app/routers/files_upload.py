@@ -11,7 +11,7 @@ Key features:
 - Return full hash
 """
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 import mimetypes
 from pathlib import Path
 from typing import Optional
@@ -35,7 +35,8 @@ from ..lib.core.dependencies import (
     get_current_user
 )
 from ..lib.utils.logging_utils import get_logger
-from ..lib.utils.doi_utils import validate_doi, extract_doi_from_pdf
+from ..lib.utils.doc_id_utils import resolve_doc_id
+from ..lib.utils.config_utils import get_config
 
 
 logger = get_logger(__name__)
@@ -55,6 +56,7 @@ if not MAGIC_AVAILABLE:
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(
     request: Request,
+    collection_id: Optional[str] = Form(None),
     file: UploadFile = File(...),
     storage: FileStorage = Depends(get_file_storage),
     repo: FileRepository = Depends(get_file_repository),
@@ -123,29 +125,10 @@ async def upload_file(
 
     logger.debug(f"Detected file type: {file_type}")
 
-    # Compute doc_id and label from filename before duplicate check so they can
-    # be applied to existing files when the same content is re-uploaded with a
-    # different (e.g. DOI-based) name.
-    import os
-    import re
-    original_name = os.path.splitext(file.filename)[0]
-    # Decode filesystem-safe DOI encoding back to display form:
-    # "10.1111__eulj.12049" -> "10.1111/eulj.12049" (double underscore)
-    label = original_name.replace("__", "/")
-    # Also accept a single underscore as the DOI prefix/suffix separator:
-    # "10.1111_eulj.12049" -> "10.1111/eulj.12049"
-    label = re.sub(r'^(10\.\d{4,9})_(?!_)', r'\1/', label)
-    # Derive doc_id from the decoded label (replace remaining whitespace with _)
-    doc_id = re.sub(r'\s+', '_', label)
-
-    # For PDFs whose filename is not already a valid DOI, try to extract one
-    # from the text layer (first two pages only, to avoid bibliography DOIs).
-    if file_type == 'pdf' and not validate_doi(doc_id):
-        extracted_doi = extract_doi_from_pdf(content)
-        if extracted_doi:
-            logger.info(f"Extracted DOI from PDF content: {extracted_doi}")
-            doc_id = extracted_doi
-            label = extracted_doi
+    # Resolve doc_id according to the configured strategy.
+    mode = get_config().get('document.id.mode', default='doi')
+    doc_id = resolve_doc_id(mode, file.filename, content, file_type, collection_id, repo)
+    label = doc_id
 
     # Save to hash-sharded storage
     file_hash, storage_path = storage.save_file(content, file_type)
