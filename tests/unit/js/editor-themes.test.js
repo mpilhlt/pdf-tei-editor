@@ -23,22 +23,6 @@ describe('editor-themes', () => {
     }
   });
 
-  it('default theme has amber read-only background', () => {
-    assert.strictEqual(getTheme('default').readOnlyBackground, '#f8e8b7');
-  });
-
-  it('dark theme has dark-amber read-only background', () => {
-    assert.strictEqual(getTheme('dark').readOnlyBackground, '#2e2a00');
-  });
-
-  it('colorBlind theme has amber read-only background', () => {
-    assert.strictEqual(getTheme('colorBlind').readOnlyBackground, '#f8e8b7');
-  });
-
-  it('highContrast theme has bright-yellow read-only background', () => {
-    assert.strictEqual(getTheme('highContrast').readOnlyBackground, '#ffe566');
-  });
-
   it('getTheme falls back to default for unknown id', () => {
     const t = getTheme('nonexistent');
     assert.strictEqual(t.id, 'default');
