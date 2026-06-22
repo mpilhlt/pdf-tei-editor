@@ -76,8 +76,6 @@ Collections are named buckets of documents.
 | Name | Yes | Display label shown in dropdowns throughout the UI |
 | Description | No | Optional free-text note |
 
-When an existing collection is selected, a **Config Overrides** section appears. Collection-level overrides take precedence over project-level overrides.
-
 A newly created collection is not accessible to anyone until it is added to at least one project's Collections list. The `_inbox` collection is the system default for newly extracted documents and should always be included in at least one project.
 
 ---
@@ -111,7 +109,7 @@ The built-in roles (`admin`, `reviewer`, `annotator`) cannot be deleted. Roles a
 
 ## Config Overrides
 
-Both Projects and Collections support per-entity configuration overrides layered on top of the global `config.json`. Collection overrides take precedence over project overrides, which take precedence over global config.
+Projects support per-entity configuration overrides layered on top of the global `config.json`.
 
 To add an override:
 
