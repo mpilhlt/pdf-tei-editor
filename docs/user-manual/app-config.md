@@ -48,3 +48,26 @@ A success or error notification appears after each save attempt.
 - Changes take effect immediately after saving
 - If a setting expects a JSON value and you enter invalid JSON, an error notification is shown and the value is not saved.
 - The configuration editor is not visible to non-administrator users.
+
+## Configuration reference
+
+The following settings can be changed via the Configuration Editor (admin role required).
+
+### `document.id.mode`
+
+Controls how the **document ID** (`doc_id`) is derived when a new PDF is uploaded. The document ID connects the PDF to its extracted TEI annotations and is used as the base name of exported files.
+
+| Value | Behaviour |
+| --- | --- |
+| `doi` (default) | Uses the filename as the ID. If the filename is not already a valid DOI, the first two pages of the PDF are scanned and the extracted DOI is used instead. |
+| `filename` | Always uses the filename as the ID (no DOI extraction). |
+| `collection` | Generates `{collection_id}-{NNNN}` (e.g. `my-corpus-0003`). Requires the upload request to include a `collection_id` form field; without one, falls back to `doi` mode. The counter is per collection and zero-padded to four digits. |
+| `uuid` | Generates a random UUID v4 as the ID. |
+
+**Example** — set in `data/db/config.json` or via the Configuration Editor:
+
+```json
+"document.id.mode": "collection"
+```
+
+**Frontend note:** To use `collection` mode, the upload call must pass the target `collection_id` as a form field alongside the file. Without it, the mode silently falls back to `doi`.
