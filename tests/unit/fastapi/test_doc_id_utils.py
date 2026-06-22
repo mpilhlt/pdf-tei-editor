@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.models.models import FileCreate
+from unittest.mock import MagicMock, patch
 
 
 class TestGetMaxCollectionCounter(unittest.TestCase):
@@ -57,3 +58,106 @@ class TestGetMaxCollectionCounter(unittest.TestCase):
         self._insert("f1", "mycol-0001")
         self._insert("f2", "mycol-extra")
         self.assertEqual(self.repo.get_max_collection_counter("mycol"), 1)
+
+
+class TestResolveDocId(unittest.TestCase):
+    """Test resolve_doc_id() for all four modes."""
+
+    def test_filename_mode_strips_extension(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        self.assertEqual(resolve_doc_id('filename', 'my-doc.pdf', b'', 'pdf'), 'my-doc')
+
+    def test_filename_mode_replaces_whitespace(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        self.assertEqual(resolve_doc_id('filename', 'My Document.pdf', b'', 'pdf'), 'My_Document')
+
+    def test_filename_mode_decodes_double_underscore(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        self.assertEqual(resolve_doc_id('filename', '10.1111__eulj.12049.pdf', b'', 'pdf'), '10.1111/eulj.12049')
+
+    def test_filename_mode_decodes_single_underscore_doi(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        self.assertEqual(resolve_doc_id('filename', '10.1111_eulj.12049.pdf', b'', 'pdf'), '10.1111/eulj.12049')
+
+    def test_filename_mode_does_not_extract_doi(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf') as mock_ex:
+            resolve_doc_id('filename', 'my-doc.pdf', b'fake-bytes', 'pdf')
+            mock_ex.assert_not_called()
+
+    def test_doi_mode_extracts_doi_from_pdf_content(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value='10.5678/found'):
+            result = resolve_doc_id('doi', 'my-doc.pdf', b'fake-pdf', 'pdf')
+        self.assertEqual(result, '10.5678/found')
+
+    def test_doi_mode_falls_back_to_filename_when_no_doi(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value=None):
+            result = resolve_doc_id('doi', 'my-doc.pdf', b'', 'pdf')
+        self.assertEqual(result, 'my-doc')
+
+    def test_doi_mode_skips_extraction_for_xml(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf') as mock_ex:
+            result = resolve_doc_id('doi', 'my-doc.xml', b'', 'xml')
+            mock_ex.assert_not_called()
+        self.assertEqual(result, 'my-doc')
+
+    def test_doi_mode_skips_extraction_when_filename_is_already_doi(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf') as mock_ex:
+            result = resolve_doc_id('doi', '10.1111__eulj.12049.pdf', b'', 'pdf')
+            mock_ex.assert_not_called()
+        self.assertEqual(result, '10.1111/eulj.12049')
+
+    def test_collection_mode_first_doc_is_0001(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        mock_repo = MagicMock()
+        mock_repo.get_max_collection_counter.return_value = 0
+        result = resolve_doc_id('collection', 'irrelevant.pdf', b'', 'pdf', 'mycol', mock_repo)
+        self.assertEqual(result, 'mycol-0001')
+        mock_repo.get_max_collection_counter.assert_called_once_with('mycol')
+
+    def test_collection_mode_increments_counter(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        mock_repo = MagicMock()
+        mock_repo.get_max_collection_counter.return_value = 5
+        result = resolve_doc_id('collection', 'irrelevant.pdf', b'', 'pdf', 'mycol', mock_repo)
+        self.assertEqual(result, 'mycol-0006')
+
+    def test_collection_mode_pads_to_four_digits(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        mock_repo = MagicMock()
+        mock_repo.get_max_collection_counter.return_value = 99
+        result = resolve_doc_id('collection', 'irrelevant.pdf', b'', 'pdf', 'mycol', mock_repo)
+        self.assertEqual(result, 'mycol-0100')
+
+    def test_collection_mode_falls_back_to_doi_without_collection_id(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value=None):
+            result = resolve_doc_id('collection', 'my-doc.pdf', b'', 'pdf', None, None)
+        self.assertEqual(result, 'my-doc')
+
+    def test_collection_mode_falls_back_to_doi_on_counter_failure(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        mock_repo = MagicMock()
+        mock_repo.get_max_collection_counter.side_effect = Exception("DB error")
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value=None):
+            result = resolve_doc_id('collection', 'my-doc.pdf', b'', 'pdf', 'mycol', mock_repo)
+        self.assertEqual(result, 'mycol-0001')
+
+    def test_uuid_mode_returns_valid_uuid4(self):
+        import uuid as _uuid
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        result = resolve_doc_id('uuid', 'irrelevant.pdf', b'', 'pdf')
+        parsed = _uuid.UUID(result)
+        self.assertEqual(parsed.version, 4)
+
+    def test_unknown_mode_falls_back_to_doi_with_warning(self):
+        from fastapi_app.lib.utils.doc_id_utils import resolve_doc_id
+        with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value=None):
+            with self.assertLogs('fastapi_app.lib.utils.doc_id_utils', level='WARNING') as log:
+                result = resolve_doc_id('bogus', 'my-doc.pdf', b'', 'pdf')
+        self.assertEqual(result, 'my-doc')
+        self.assertTrue(any('bogus' in line for line in log.output))
