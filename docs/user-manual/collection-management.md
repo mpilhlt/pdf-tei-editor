@@ -7,7 +7,7 @@ The PDF-TEI Editor organizes documents in a two-level hierarchy: **projects** co
 - A **collection** is a named set of documents (e.g. a processing batch, a thematic group, or a user's personal workspace).
 - A **project** bundles one or more collections together and lists the users who have access to them. You can only see collections that belong to at least one project you are a member of.
 
-Admins configure projects, collections, and memberships. For that setup workflow, see the [RBAC Manager administrator guide](../../dev/done/rbac-manager.md#administrator-guide).
+Admins configure projects, collections, and memberships. For that setup workflow, see the [RBAC Manager administrator guide](rbac-manager.md).
 
 ## What You Can See
 
