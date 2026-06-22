@@ -107,8 +107,4 @@ def move_files(
             f"Document {pdf_file.doc_id} already in collection {body.destination_collection}"
         )
 
-    # Return IDs (stable_id, unchanged)
-    return MoveFilesResponse(
-        new_pdf_id=pdf_file.stable_id,
-        new_xml_id=body.xml_id  # XML ID unchanged
-    )
+    return MoveFilesResponse(new_pdf_id=pdf_file.stable_id)

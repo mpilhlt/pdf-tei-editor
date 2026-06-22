@@ -149,28 +149,24 @@ class DeleteFilesResponse(BaseModel):
 
 class MoveFilesRequest(BaseModel):
     """Request for POST /api/files/move"""
-    pdf_id: str         # Hash or stable_id
-    xml_id: str         # Hash or stable_id
+    pdf_id: str                  # Hash or stable_id
     destination_collection: str
 
 
 class MoveFilesResponse(BaseModel):
     """Response for POST /api/files/move"""
     new_pdf_id: str
-    new_xml_id: str
 
 
 class CopyFilesRequest(BaseModel):
     """Request for POST /api/files/copy"""
-    pdf_id: str         # Hash or stable_id
-    xml_id: str         # Hash or stable_id
+    pdf_id: str                  # Hash or stable_id
     destination_collection: str
 
 
 class CopyFilesResponse(BaseModel):
     """Response for POST /api/files/copy"""
     new_pdf_id: str
-    new_xml_id: str
 
 
 class GetLocksResponse(BaseModel):

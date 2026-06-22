@@ -16,6 +16,7 @@ import { XMLEditor } from '../modules/xmleditor.js'
 import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { createAnnotationField, annotationTheme, navigateEffect, createNavigationField } from '../modules/codemirror/xml-annotation-decorations.js'
+import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop } from '../modules/codemirror/codemirror-utils.js'
 import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
 
@@ -114,6 +115,11 @@ class XmlAnnotationPlugin extends Plugin {
       this.scheduleStateChange({ view: null })
       return
     }
+    // Capture character position of first visible line before any layout changes.
+    const cmView = this.#xmlEditor.getView?.()
+    const scrollContainer = cmView ? findCmScrollContainer(cmView) : null
+    const savedPos = cmView && scrollContainer ? getFirstVisibleCharacter(cmView, scrollContainer) : 0
+
     this.#annotationMode = true
     if (this.#switch) this.#switch.checked = true
     this.#slot?.reconfigure([
@@ -133,10 +139,23 @@ class XmlAnnotationPlugin extends Plugin {
     headerToggle.checked = false
     ui.xmlEditor.headerbar.hidden = true
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
-    this.#scrollToTextElement()
+    // Restore the first visible line after CM has re-rendered in the new mode.
+    // Two rAFs ensure CM's own layout update fires before we read lineBlockAt.
+    if (cmView && scrollContainer != null) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollCharacterToTop(cmView, scrollContainer, savedPos)
+        })
+      })
+    }
   }
 
   async #disableAnnotationMode() {
+    // Capture character position of first visible line before any layout changes.
+    const cmView = this.#xmlEditor.getView?.()
+    const scrollContainer = cmView ? findCmScrollContainer(cmView) : null
+    const savedPos = cmView && scrollContainer ? getFirstVisibleCharacter(cmView, scrollContainer) : 0
+
     this.#annotationMode = false
     if (this.#switch) this.#switch.checked = false
     this.#slot?.reconfigure([])
@@ -146,17 +165,29 @@ class XmlAnnotationPlugin extends Plugin {
     ui.xmlEditor.headerbar.hidden = false
     ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = false
     ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = false
-    // Restore TEI header to its pre-annotation visibility
+    // Restore TEI header to its pre-annotation state (explicit in both branches so toggle
+    // always reflects the previously user-selected state, not annotation-mode defaults).
+    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
     if (this.#wasHeaderVisible) {
       await this.#xmlEditor.unfoldByXpath?.('//tei:teiHeader')
-      const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
       headerToggle.checked = true
+    } else {
+      headerToggle.checked = false
     }
     // Revert state if this was triggered internally (e.g. document removed, variant lost tagDefs).
     // Must not be awaited: called from onStateUpdate while propagation is active, so the deferred
     // Promise would deadlock (scheduleStateChange flushes only after propagation ends).
     if (this.state.view === 'annotation') {
       this.scheduleStateChange({ view: null })
+    }
+    // Restore the first visible line after CM has re-rendered in the new mode.
+    // Two rAFs ensure CM's own layout update fires before we read lineBlockAt.
+    if (cmView && scrollContainer != null) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollCharacterToTop(cmView, scrollContainer, savedPos)
+        })
+      })
     }
   }
 
@@ -179,7 +210,11 @@ class XmlAnnotationPlugin extends Plugin {
       this.#navField,
       EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
     ])
-    this.#scrollToTextElement()
+    if (this.state?.xpath) {
+      this.#scrollToXpath(this.state.xpath)
+    } else {
+      this.#scrollToTextElement()
+    }
   }
 
   #scrollToTextElement() {
@@ -374,11 +409,20 @@ class XmlAnnotationPlugin extends Plugin {
    * Navigates the editor to the element matched by xpath: places the cursor right after the open
    * tag (= after the badge widget), scrolls it into view, and adds an `ann-navigated` border
    * decoration around the element content so the current element is visually distinct.
+   *
+   * Uses getDomNodesByXpath (ORDERED_NODE_ITERATOR_TYPE) rather than getSyntaxNodeByXpath
+   * (which internally uses FIRST_ORDERED_NODE_TYPE) to avoid a Firefox XPath evaluation error
+   * where type 9 throws "Result type mismatch" in certain timing contexts.
    * @param {string} xpath
    */
   #scrollToXpath(xpath) {
     try {
-      const syntaxNode = this.#xmlEditor.getSyntaxNodeByXpath?.(xpath)
+      const nodes = this.#xmlEditor.getDomNodesByXpath?.(xpath)
+      const domNode = nodes?.[0]
+      if (!domNode) return
+      const pos = this.#xmlEditor.getDomNodePosition?.(domNode)
+      if (pos == null) return
+      const syntaxNode = this.#xmlEditor.getSyntaxNodeAt?.(pos)
       if (!syntaxNode) return
       const openTag  = syntaxNode.firstChild
       const closeTag = syntaxNode.lastChild

@@ -45,7 +45,7 @@ import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } f
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language"
+import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
 import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
@@ -58,6 +58,10 @@ import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
+import { getTheme } from './codemirror/editor-themes.js';
+/**
+ * @import {EditorTheme} from './codemirror/editor-themes.js'
+ */
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -165,7 +169,12 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+
   #xmlTagSyncCompartment = new Compartment()
+  #themeCompartment = new Compartment()
+  /** @type {import('./codemirror/editor-themes.js').EditorTheme} */
+  #currentTheme = getTheme('default')
+  #readOnlyBackgroundShown = false
 
 
   /**
@@ -198,7 +207,7 @@ export class XMLEditor extends EventEmitter {
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      this.#themeCompartment.of(getTheme('default').extensions),
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
@@ -413,12 +422,12 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
-   * @param {Boolean} value 
+   * @param {Boolean} value
    */
-  async setReadOnly(value) { 
+  async setReadOnly(value) {
     this.#editorIsReadOnly = Boolean(value)
     this.#view.dispatch({
-      effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
+      effects: [this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))]
     });
     await this.emit("editorReadOnly", this.#editorIsReadOnly)
   }
@@ -479,22 +488,29 @@ export class XMLEditor extends EventEmitter {
     // Clear undo/redo history so the previous document's edits cannot be undone into new doc (fixes #387)
     this.clearHistory();
 
-    // display xml in editor, this triggers the update handlers
-    // use addToHistory: false to prevent undo from going back before document load (fixes #221)
-    this.#view.dispatch({
-      changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
-      selection: EditorSelection.cursor(0),
-      annotations: Transaction.addToHistory.of(false)
-    });
-    this.#documentVersion = 0;
-    await this.isReadyPromise();
-    
-    // Mark as clean AFTER the editor is ready and all update handlers have run
-    // This prevents auto-save from being triggered during initial load
-    this.#editorIsDirty = false;
-    
-    // Emit after load event
-    await this.emit("editorAfterLoad", null);
+    // Hide the editor to prevent flash of unprocessed content while post-load
+    // handlers (e.g. header folding) run. Revealed after all handlers complete.
+    this.#view.dom.style.visibility = 'hidden';
+    try {
+      // display xml in editor, this triggers the update handlers
+      // use addToHistory: false to prevent undo from going back before document load (fixes #221)
+      this.#view.dispatch({
+        changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
+        selection: EditorSelection.cursor(0),
+        annotations: Transaction.addToHistory.of(false)
+      });
+      this.#documentVersion = 0;
+      await this.isReadyPromise();
+
+      // Mark as clean AFTER the editor is ready and all update handlers have run
+      // This prevents auto-save from being triggered during initial load
+      this.#editorIsDirty = false;
+
+      // Emit after load event
+      await this.emit("editorAfterLoad", null);
+    } finally {
+      this.#view.dom.style.visibility = '';
+    }
   }
 
   /**
@@ -805,6 +821,33 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
+   * Replaces the active editor theme bundle.
+   * @param {EditorTheme} theme
+   */
+  setTheme(theme) {
+    this.#currentTheme = theme
+    const effects = [this.#themeCompartment.reconfigure(theme.extensions)]
+    this.#view.dispatch({ effects })
+    if (this.#readOnlyBackgroundShown) {
+      this.#view.dom.style.backgroundColor = theme.readOnlyBackground
+    }
+  }
+
+  /**
+   * Shows or hides the read-only background color on the editor. Call with `true` only for
+   * access-control read-only state, not for annotation mode or other temporary restrictions.
+   * @param {boolean} show
+   */
+  setReadOnlyBackground(show) {
+    this.#readOnlyBackgroundShown = Boolean(show)
+    if (show) {
+      this.#view.dom.style.backgroundColor = this.#currentTheme.readOnlyBackground
+    } else {
+      this.#view.dom.style.removeProperty('background-color')
+    }
+  }
+
+  /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
    * the editor is updated
    * @param {Node} node A XML DOM node
@@ -962,7 +1005,6 @@ export class XMLEditor extends EventEmitter {
       throw new Error("XPath is not provided.");
     }
     xpath = `count(${xpath})`
-
     return xmlTree.evaluate(xpath, xmlTree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
   }
 

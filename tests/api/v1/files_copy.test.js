@@ -69,12 +69,10 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     // Copy files to new collection using hashes from setup
     const result = await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
       pdf_id: testState.pdfHash,
-      xml_id: testState.teiHash,
       destination_collection: testState.destinationCollection
     }, BASE_URL);
 
     assert(result.new_pdf_id, 'Should return new PDF ID');
-    assert(result.new_xml_id, 'Should return new XML ID');
 
     // Verify file is now in both collections
     const updatedFileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
@@ -88,7 +86,7 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     }
     assert(copiedDoc.collections.includes(testState.destinationCollection), 'Should be in destination collection');
 
-    logger.success(`Files copied successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
+    logger.success(`Files copied successfully: PDF=${result.new_pdf_id}`);
   });
 
   test('POST /api/v1/files/copy should support abbreviated hashes', async () => {
@@ -102,12 +100,10 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     // Copy using abbreviated hashes
     const result = await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
       pdf_id: testState.pdfHash,
-      xml_id: testState.teiHash,
       destination_collection: 'another-collection'
     }, BASE_URL);
 
     assert(result.new_pdf_id, 'Should return new PDF ID');
-    assert(result.new_xml_id, 'Should return new XML ID');
 
     logger.success('Copy with abbreviated hashes successful');
   });
@@ -123,12 +119,10 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     // Try to copy to same collection again (should be idempotent)
     const result = await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
       pdf_id: testState.pdfHash,
-      xml_id: testState.teiHash,
       destination_collection: 'another-collection'
     }, BASE_URL);
 
     assert(result.new_pdf_id, 'Should return new PDF ID even if already in collection');
-    assert(result.new_xml_id, 'Should return new XML ID even if already in collection');
 
     logger.success('Duplicate collection copy handled gracefully');
   });
@@ -139,7 +133,6 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     try {
       await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
         pdf_id: 'nonexistenthash123',
-        xml_id: testState.teiHash || 'somehash',
         destination_collection: 'test-dest'
       }, BASE_URL);
 
@@ -156,7 +149,7 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
     try {
       await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
         pdf_id: 'somehash'
-        // Missing xml_id and destination_collection
+        // Missing destination_collection
       }, BASE_URL);
 
       assert.fail('Should have thrown validation error');

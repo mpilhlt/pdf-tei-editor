@@ -8,12 +8,13 @@
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
  * @import { StatusDropdown } from '../modules/panels/widgets/status-dropdown.js'
- * @import { UIPart, SlDropdown, SlMenu } from '../ui.js'
+ * @import { UIPart, SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
  * @import { xslViewerOverlayPart } from './xsl-viewer.js'
  * @import { UserData } from './authentication.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { EditorTheme } from '../modules/codemirror/editor-themes.js'
  */
 
 import ui, { updateUi } from '../ui.js'
@@ -27,7 +28,8 @@ import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
 import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
-import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { THEMES, getTheme } from '../modules/codemirror/editor-themes.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
@@ -51,6 +53,7 @@ await registerTemplate('xmleditor-tei-buttons', 'xmleditor-tei-buttons.html')
 await registerTemplate('xmleditor-import-export-buttons', 'xmleditor-import-export-buttons.html')
 await registerTemplate('xmleditor-statusbar', 'xmleditor-statusbar.html')
 await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.html')
+await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
 
 //
 // UI
@@ -84,6 +87,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
  * @property {StatusButton} revisionHistoryBtn - Revision history button (added by tei-tools plugin)
+ * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
+ * @property {SlMenu} themeMenu - Editor theme picker menu
  */
 
 /**
@@ -165,6 +170,10 @@ class XmlEditorPlugin extends Plugin {
   #uploadBtn;
   /** @type {StatusButton} */
   #downloadBtn;
+  /** @type {SlDropdown|null} */
+  #themeDropdown = null;
+  /** @type {SlMenu|null} */
+  #themeMenu = null;
 
   // Statusbar widget references
   /** @type {StatusSwitch} */
@@ -309,6 +318,50 @@ class XmlEditorPlugin extends Plugin {
         this.#toolbar.add(widget, importExportPriorities[index] || 1);
       }
     });
+
+    // Create theme selector button and add to toolbar (priority 1 - far right)
+    const themeButtonEl = createSingleFromTemplate('xmleditor-theme-button');
+    this.#toolbar.add(themeButtonEl, 1);
+
+    const themeDropdown = /** @type {SlDropdown} */ (themeButtonEl.querySelector('[name="themeDropdown"]'));
+    this.#themeDropdown = themeDropdown;
+    this.#themeMenu = /** @type {SlMenu} */ (themeButtonEl.querySelector('[name="themeMenu"]'));
+
+    // Build theme menu items from saved preference
+    const savedThemeId = this.uiStorage.get('editorTheme', 'default');
+    for (const theme of THEMES) {
+      const item = /** @type {SlMenuItem} */ (document.createElement('sl-menu-item'));
+      item.textContent = theme.label;
+      item.dataset.themeId = theme.id;
+      item.type = 'checkbox';
+      item.checked = theme.id === savedThemeId;
+      this.#themeMenu.appendChild(item);
+    }
+
+    // Apply saved theme to the editor
+    this.#xmlEditor.setTheme(getTheme(savedThemeId));
+
+    // Theme selection handler
+    this.#themeMenu.addEventListener('sl-select', (event) => {
+      const item = /** @type {SlMenuItem} */ (event.detail.item);
+      const themeId = item.dataset.themeId;
+      if (!themeId) return;
+      this.#xmlEditor.setTheme(getTheme(themeId));
+      this.uiStorage.set('editorTheme', themeId);
+      this.#themeMenu.querySelectorAll('sl-menu-item').forEach(el => {
+        /** @type {SlMenuItem} */ (el).checked = el.dataset.themeId === themeId;
+      });
+    });
+
+    // Fix z-index stacking context so the dropdown appears above the editor
+    if (themeDropdown) {
+      themeDropdown.addEventListener('sl-show', () => {
+        themeDropdown.closest('tool-bar')?.classList.add('dropdown-open');
+      });
+      themeDropdown.addEventListener('sl-hide', () => {
+        themeDropdown.closest('tool-bar')?.classList.remove('dropdown-open');
+      });
+    }
 
     // Read-only status widget (added dynamically when needed)
     this.#readOnlyStatusWidget = PanelUtils.createText({
@@ -761,7 +814,11 @@ class XmlEditorPlugin extends Plugin {
     this.#setNavigationWidgetsVisible(hasNavigationPaths && Boolean(state.xml));
 
     // Update xpath selection and counter
-    if (state.xpath) {
+    if (state.xpath && !state.xpath.startsWith('/')) {
+      this.#logger.warn(`Discarding invalid xpath state: "${state.xpath}"`);
+      this.scheduleStateChange({ xpath: '' });
+    }
+    if (state.xpath?.startsWith('/')) {
       let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
       const nonIndexedPath = pathBeforePredicates + nonIndexPredicates;
 
@@ -820,6 +877,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Update visual indicators based on state
     if (state.editorReadOnly) {
+      this.#xmlEditor.setReadOnlyBackground(true);
       if (!this.#xmlEditorEl.classList.contains('editor-readonly')) {
         this.#xmlEditorEl.classList.add('editor-readonly');
       }
@@ -831,6 +889,7 @@ class XmlEditorPlugin extends Plugin {
         }
       }
     } else {
+      this.#xmlEditor.setReadOnlyBackground(false);
       if (this.#xmlEditorEl.classList.contains('editor-readonly')) {
         this.#xmlEditorEl.classList.remove('editor-readonly');
       }
@@ -850,7 +909,7 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // xpath state => selection
-    if (this.#xmlEditor.isReady() && state.xpath && state.xml) {
+    if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
       const { index, pathBeforePredicates } = parseXPath(state.xpath);
       try {
         const size = this.#xmlEditor.countDomNodesByXpath(pathBeforePredicates);

@@ -205,14 +205,12 @@
 /**
  * @typedef {Object} CopyFilesRequest
  * @property {string} pdf_id
- * @property {string} xml_id
  * @property {string} destination_collection
  */
 
 /**
  * @typedef {Object} CopyFilesResponse
  * @property {string} new_pdf_id
- * @property {string} new_xml_id
  */
 
 /**
@@ -439,14 +437,12 @@
 /**
  * @typedef {Object} MoveFilesRequest
  * @property {string} pdf_id
- * @property {string} xml_id
  * @property {string} destination_collection
  */
 
 /**
  * @typedef {Object} MoveFilesResponse
  * @property {string} new_pdf_id
- * @property {string} new_xml_id
  */
 
 /**
