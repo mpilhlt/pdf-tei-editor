@@ -1,10 +1,77 @@
-# RBAC Manager Plugin Implementation Plan
+# RBAC Manager Plugin
 
-## Overview
+## Administrator Guide
 
-Generic RBAC management plugin for visual administration of users, groups, roles, and collections with extensible entity-driven architecture.
+The RBAC Manager is available to admin users only. Open it via the **shield icon** in the application toolbar. The dialog has five tabs: **Users**, **Projects**, **Groups**, **Roles**, and **Collections**.
+
+### Access Control Model
+
+Access to documents flows through this hierarchy:
+
+```text
+User → Project membership → Collections listed in the project → Documents in those collections
+```
+
+A user can see and open documents only in collections that belong to at least one project the user is listed in. Users whose roles include `*` (wildcard) bypass project resolution and have access to all collections.
+
+### Setting Up a New Project
+
+1. Open the RBAC Manager and click the **Projects** tab.
+2. Click **Add** to create a new project. Fill in:
+   - **ID** — a short, URL-safe identifier (letters, numbers, hyphens, underscores).
+   - **Name** — the human-readable display name.
+   - **Description** — optional.
+3. Save. The project appears in the list.
+4. Select the project to open its detail form. Below the basic fields you will see two additional sections:
+   - **Members** — add or remove usernames. Each listed user gains access to all collections in this project.
+   - **Collections** — add or remove collection IDs. Use `*` as the sole entry to grant access to every collection (wildcard project).
+
+### Setting Up a New Collection
+
+1. Click the **Collections** tab.
+2. Click **Add**. Fill in:
+   - **ID** — URL-safe identifier, used as the directory name on disk.
+   - **Name** — display label shown in dropdowns.
+   - **Description** — optional.
+3. Save. The collection exists but is not yet accessible to anyone.
+4. Go back to **Projects** and add the new collection ID to the appropriate project's Collections list.
+
+The `_inbox` collection is the system default for newly extracted documents. It should be included in at least one project so that users can see arriving documents.
+
+### Managing Users
+
+1. Click the **Users** tab.
+2. Click **Add** to create a user. Required fields: **username** and **password**. Optional: **email**, **display name**.
+3. Select an existing user to edit their details or reset their password.
+4. The user detail form shows read-only **Groups** and **Projects** sections so you can quickly audit a user's access without switching tabs.
+5. You cannot delete your own account.
+
+### Managing Groups
+
+Groups are named sets of users. They can be referenced in role assignments or used to bulk-manage access.
+
+1. Click the **Groups** tab, then **Add**.
+2. Fill in the group **ID** and **Name**.
+3. After saving, select the group and use the **Members** section to add usernames.
+
+### Managing Roles
+
+Roles carry permission strings consumed by the application. Built-in roles (`admin`, `reviewer`, `annotator`) cannot be deleted.
+
+1. Click the **Roles** tab to view or create roles.
+2. A role with `*` in its permissions list grants unrestricted access.
+
+### Per-Collection and Per-Project Config Overrides
+
+Selecting a project or collection shows a **Config Overrides** section at the bottom of the form. These key/value pairs override the global application config for documents in that scope. Use them to, for example, enable a specific extraction variant or restrict the annotation lifecycle statuses for a particular collection.
+
+Click **Add** in the Config Overrides section, enter the config key (auto-suggested from the global config) and its value, then **Save** the entity.
+
+---
 
 ## Implementation Plan
+
+Generic RBAC management plugin for visual administration of users, groups, roles, and collections with extensible entity-driven architecture.
 
 ### Phase 1: Core Infrastructure (MVP)
 

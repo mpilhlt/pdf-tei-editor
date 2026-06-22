@@ -13,6 +13,7 @@ All queries filter deleted = 0 by default unless explicitly requesting deleted f
 """
 
 import json
+import re
 import sqlite3
 from typing import Optional, List
 from datetime import datetime
@@ -657,6 +658,25 @@ class FileRepository:
             rows = cursor.fetchall()
 
             return [self._row_to_model(row) for row in rows]
+
+    def get_max_collection_counter(self, prefix: str) -> int:
+        """Return the max numeric suffix N in non-deleted doc_ids '{prefix}-NNNN', or 0."""
+        suffix_re = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT doc_id FROM files WHERE doc_id LIKE ? AND deleted = 0",
+                (f"{prefix}-%",)
+            )
+            rows = cursor.fetchall()
+        max_n = 0
+        for row in rows:
+            m = suffix_re.match(row['doc_id'])
+            if m:
+                n = int(m.group(1))
+                if n > max_n:
+                    max_n = n
+        return max_n
 
     def get_pdf_for_document(self, doc_id: str) -> Optional[FileMetadata]:
         """

@@ -33,6 +33,7 @@ Left side: the XML / Visual annotation mode toggle (only visible for variants th
 | Save revision (floppy disk) | Document loaded, annotator role | Record the current state in the document's revision history |
 | Delete (trash) | Document loaded, permitted | Delete the current version, all versions, or the PDF and all XML |
 | Upload / Download | Annotator role | Replace the current XML from a local file, or download a copy |
+| Theme (palette icon) | Always | Open the theme picker dropdown. Available themes: **Default (light)**, **Dark**, **Color-blind friendly**, **High contrast**. The selection is saved per user and restored on the next visit. |
 
 Buttons that are greyed out are disabled for the current document state or your role.
 

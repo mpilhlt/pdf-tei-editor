@@ -114,5 +114,9 @@
   "tei.pretty-print.no-indent-inside.type": "array",
   "tei.pretty-print.inline-elements": ["lb", "pb", "cb", "milestone", "hi", "ref", "ptr", "seg", "choice", "corr", "sic", "abbr", "expan", "add", "del", "gap", "supplied", "unclear"],
   "tei.pretty-print.inline-elements.description": "TEI element local names that are always inline: no leading indentation is inserted before them and their children are not indented.",
-  "tei.pretty-print.inline-elements.type": "array"
+  "tei.pretty-print.inline-elements.type": "array",
+  "document.id.mode": "doi",
+  "document.id.mode.description": "Strategy for generating doc_id on new PDF upload: filename (as-is), doi (filename with DOI override from PDF content, default), collection ({collection_id}-{NNNN}), uuid (UUID4)",
+  "document.id.mode.type": "string",
+  "document.id.mode.values": ["filename", "doi", "collection", "uuid"]
 }
