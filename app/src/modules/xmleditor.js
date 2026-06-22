@@ -488,22 +488,29 @@ export class XMLEditor extends EventEmitter {
     // Clear undo/redo history so the previous document's edits cannot be undone into new doc (fixes #387)
     this.clearHistory();
 
-    // display xml in editor, this triggers the update handlers
-    // use addToHistory: false to prevent undo from going back before document load (fixes #221)
-    this.#view.dispatch({
-      changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
-      selection: EditorSelection.cursor(0),
-      annotations: Transaction.addToHistory.of(false)
-    });
-    this.#documentVersion = 0;
-    await this.isReadyPromise();
-    
-    // Mark as clean AFTER the editor is ready and all update handlers have run
-    // This prevents auto-save from being triggered during initial load
-    this.#editorIsDirty = false;
-    
-    // Emit after load event
-    await this.emit("editorAfterLoad", null);
+    // Hide the editor to prevent flash of unprocessed content while post-load
+    // handlers (e.g. header folding) run. Revealed after all handlers complete.
+    this.#view.dom.style.visibility = 'hidden';
+    try {
+      // display xml in editor, this triggers the update handlers
+      // use addToHistory: false to prevent undo from going back before document load (fixes #221)
+      this.#view.dispatch({
+        changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
+        selection: EditorSelection.cursor(0),
+        annotations: Transaction.addToHistory.of(false)
+      });
+      this.#documentVersion = 0;
+      await this.isReadyPromise();
+
+      // Mark as clean AFTER the editor is ready and all update handlers have run
+      // This prevents auto-save from being triggered during initial load
+      this.#editorIsDirty = false;
+
+      // Emit after load event
+      await this.emit("editorAfterLoad", null);
+    } finally {
+      this.#view.dom.style.visibility = '';
+    }
   }
 
   /**

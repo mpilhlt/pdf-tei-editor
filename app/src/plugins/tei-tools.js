@@ -73,11 +73,10 @@ class TeiToolsPlugin extends Plugin {
 
     this.#ui = this.createUi(createSingleFromTemplate('tei-revision-history-drawer', document.body))
 
-    this.#xmlEditorApi.on('editorAfterLoad', () => {
-      this.#xmlEditorApi.whenReady().then(() => {
-        this.#updateTeiHeaderToggle()
-        this.#updateRevisionHistoryButton()
-      })
+    this.#xmlEditorApi.on('editorAfterLoad', async () => {
+      await this.#xmlEditorApi.whenReady()
+      this.#updateTeiHeaderToggle()
+      this.#updateRevisionHistoryButton()
     })
   }
 
