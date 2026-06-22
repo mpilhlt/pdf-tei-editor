@@ -1,60 +1,27 @@
-# Collection Management
+# Projects and Collections
 
-(ai-generated, not very useful yet)
+## Overview
 
-Collections in the PDF-TEI Editor help organize documents into logical groups for better project management, access control, and workflow organization.
+The PDF-TEI Editor organizes documents in a two-level hierarchy: **projects** contain **collections**, and your membership in a project determines which collections you can see and work with.
 
-## Understanding Collections
+- A **collection** is a named set of documents (e.g. a processing batch, a thematic group, or a user's personal workspace).
+- A **project** bundles one or more collections together and lists the users who have access to them. You can only see collections that belong to at least one project you are a member of.
 
-### What Are Collections?
+Admins configure projects, collections, and memberships. For that setup workflow, see the [RBAC Manager administrator guide](../../dev/done/rbac-manager.md#administrator-guide).
 
-Collections are organizational containers that group related documents together:
+## What You Can See
 
-- **Project-Based**: Documents for specific research projects
-- **Thematic Groups**: Documents by subject, period, or type
-- **Processing Stages**: Documents at different stages of processing
-- **Institutional**: Documents by source institution or department
-- **User Collections**: Personal document collections
+When you open the document selector, the collection dropdown shows only the collections accessible to you. If a collection does not appear in the list, you are not a member of any project that includes it — contact an administrator.
 
-### Collection Hierarchy
-
-- **Root Collections**: Top-level organizational units
-- **Nested Organization**: Collections can contain sub-collections
-- **Cross-Collection Access**: Documents can be referenced across collections
-- **Default Collection**: New documents go to `_inbox` by default
-
-## Viewing Collections
-
-### Collection Display
-
-Collections are visible in several places:
-
-- **PDF Dropdown**: Shows collection structure in document selection
-- **Document Information**: Current document's collection is displayed
-- **Extraction Dialog**: Collection selection during extraction process
-- **Move Files Dialog**: Available destination collections
-
-### Collection Information
-
-Each collection displays:
-
-- **Collection Name**: Human-readable collection identifier
-- **Document Count**: Number of documents in the collection
-- **Access Level**: Your permission level for the collection
-- **Description**: Purpose and scope of the collection (if available)
+Every new document extracted from a PDF lands in the **Inbox** (`_inbox`) collection by default. From there it can be moved to a more specific collection once processing is under way.
 
 ## Moving Documents Between Collections
 
-### Move Files Tool (<sl-icon name="folder-symlink"></sl-icon>)
+Use the **Move files** button (<sl-icon name="folder-symlink"></sl-icon>) in the Document toolbar to relocate the current document.
 
-1. **Access Move Dialog**: Click the <sl-icon name="folder-symlink"></sl-icon> button in the Document toolbar section
-2. **Select Target Collection**: Choose destination collection from dropdown
-3. **Create New Collection**: Option to create a new collection if needed
-4. **Confirm Move**: Documents and related files are moved to the new collection
+1. Click the <sl-icon name="folder-symlink"></sl-icon> button to open the Move Files dialog.
+2. Choose a destination collection from the dropdown. Only collections you have write access to are shown.
+3. Optionally, type a new collection name to create it on the fly.
+4. Confirm — the document and its related files are moved immediately.
 
-### Move Dialog Features
-
-- **Collection Selection**: Dropdown showing all accessible collections
-- **New Collection Creation**: Create collections on-the-fly during move operations
-- **Permission Validation**: Only shows collections you have write access to
-- **Batch Operations**: Move multiple related files together
+The move is visible to all users who have access to the destination collection.
