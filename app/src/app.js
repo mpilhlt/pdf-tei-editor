@@ -64,6 +64,13 @@ logger.setLogLevel(logLevel.DEBUG)
 
 // Compose initial application state from various sources
 let serverState = await client.state()
+
+// Pre-seed config from the public (pre-auth) config returned by /config/state.
+// This allows config.get() to work before authentication for all non-sensitive keys.
+if (serverState.publicConfig) {
+  config.preload(serverState.publicConfig)
+}
+
 let sessionState = stateManager.getStateFromSessionStorage();
 if (sessionState) {
   logger.info("Loaded state from sessionStorage")
@@ -78,12 +85,12 @@ sessionState.hasInternet = serverState.hasInternet
 // Apply session state to current state
 Object.assign(state, sessionState)
 
-// Configure test logger based on application mode
-const applicationMode = await config.get("application.mode")
+// Configure test logger based on application mode (read from publicConfig)
+const applicationMode = serverState.publicConfig?.['application.mode']
 configureTestLog(applicationMode)
 
-// URL hash params override properties 
-const allowSetFromUrl = (await config.get("state.allowSetFromUrl") || [])
+// URL hash params override properties (read from publicConfig)
+const allowSetFromUrl = serverState.publicConfig?.['state.allowSetFromUrl'] || []
 const urlHashState = {}
 const urlParams = new URLSearchParams(window.location.hash.slice(1));
 for (const [key, value] of urlParams.entries()) {
@@ -98,8 +105,8 @@ if (Object.keys(urlHashState).length > 0) {
   Object.assign(state, urlHashState)
 }
 
-// Initialize application with final composed state
-const persistedStateVars = (await config.get("state.persistedVars") || [])
+// Initialize application with final composed state (read from publicConfig)
+const persistedStateVars = serverState.publicConfig?.['state.persistedVars'] || []
 app.initializeState(state, {
   persistedStateVars,
   enableStatePreservation: true

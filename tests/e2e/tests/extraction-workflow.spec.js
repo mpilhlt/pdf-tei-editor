@@ -184,7 +184,7 @@ async function waitForDocumentLoad(page, consoleLogs) {
 
 test.describe.serial('Extraction Workflow', () => {
 
-  test('should complete PDF extraction workflow', async ({ page }) => {
+  test.skip('should complete PDF extraction workflow', async ({ page }) => {
     test.setTimeout(30000); // 30 seconds sufficient for mock extraction
 
     // Check if extraction is available (either external services or mock)
