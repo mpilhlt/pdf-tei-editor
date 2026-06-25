@@ -14,6 +14,7 @@ import json
 import logging
 
 from ..config import get_settings
+from ..lib.core.dependencies import require_authenticated_user
 from ..lib.models.models_validation import (
     ValidateRequest,
     ValidateResponse,
@@ -34,7 +35,8 @@ router = APIRouter(prefix="/validate", tags=["validation"])
 @router.post("", response_model=ValidateResponse)
 def validate_xml(
     request: ValidateRequest,
-    settings=Depends(get_settings)
+    settings=Depends(get_settings),
+    user: dict = Depends(require_authenticated_user)
 ) -> ValidateResponse:
     """
     Validate XML document against embedded schema references.
@@ -75,7 +77,8 @@ def validate_xml(
 @router.post("/autocomplete-data", response_model=AutocompleteDataResponse)
 def generate_autocomplete_data(
     request: AutocompleteDataRequest,
-    settings=Depends(get_settings)
+    settings=Depends(get_settings),
+    user: dict = Depends(require_authenticated_user)
 ) -> AutocompleteDataResponse:
     """
     Generate CodeMirror autocomplete data from the schema associated with an XML document.

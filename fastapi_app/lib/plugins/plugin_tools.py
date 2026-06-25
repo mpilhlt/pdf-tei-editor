@@ -18,6 +18,7 @@ class PluginConfigSpec(TypedDict):
     value_type: NotRequired[str]
     allowed_values: NotRequired[list[Any] | None]
     description: NotRequired[str | None]
+    masked: NotRequired[bool]
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def get_plugin_config(
     value_type: str = "string",
     allowed_values: list[Any] | None = None,
     description: str | None = None,
+    masked: bool = False,
 ) -> Any:
     """
     Get plugin configuration value with env var fallback.
@@ -43,6 +45,9 @@ def get_plugin_config(
         value_type: Type for validation ("string", "boolean", "number", "array")
         allowed_values: Optional list of allowed values stored as key.values metadata
         description: Optional human-readable description stored as key.description metadata
+        masked: When True, stores {config_key}.masked = True so the value is hidden in
+            the config editor and excluded from the public (pre-auth) config. Any plugin
+            that reads credentials from environment variables MUST pass masked=True.
 
     Returns:
         Configuration value
@@ -77,10 +82,12 @@ def get_plugin_config(
         else:
             value = default
 
-    # Always persist metadata (description, allowed_values) so re-registration on startup
-    # updates descriptions even when the config key already has a stored value.
+    # Always persist metadata (description, allowed_values, masked) so re-registration on startup
+    # updates metadata even when the config key already has a stored value.
+    # Only pass masked=True (never False) to avoid overwriting an existing masked=True.
     if value is not None:
-        config.set(config_key, value, allowed_values=allowed_values, description=description)
+        config.set(config_key, value, allowed_values=allowed_values, description=description,
+                   masked=True if masked else None)
 
     return value
 

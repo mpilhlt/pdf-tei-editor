@@ -8,6 +8,7 @@ PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
         "env_var":    "GEMINI_API_KEY",
         "default":     None,
         "description": "Gemini API key for LLamore extraction",
+        "masked":      True,
     },
     {
         "config_key": "plugin.llamore.model",

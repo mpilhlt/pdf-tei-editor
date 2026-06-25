@@ -16,7 +16,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { createValueEditor, applyReadOnlyStyle } from '../modules/config-value-editor.js'
+import { createValueEditor, createMaskedValueEditor, applyReadOnlyStyle } from '../modules/config-value-editor.js'
 
 // Register templates
 await registerTemplate('config-editor-dialog', 'config-editor-dialog.html')
@@ -125,7 +125,7 @@ class ConfigEditorPlugin extends Plugin {
     tbody.innerHTML = ''
 
     const configKeys = Object.keys(this.#originalConfig)
-      .filter(key => !key.endsWith('.type') && !key.endsWith('.values') && !key.endsWith('.description'))
+      .filter(key => !key.endsWith('.type') && !key.endsWith('.values') && !key.endsWith('.description') && !key.endsWith('.masked'))
       .filter(key => !filterText || (
         key.toLowerCase().includes(filterText.toLowerCase()) ||
         (this.#originalConfig[`${key}.description`] || '').toLowerCase().includes(filterText.toLowerCase())
@@ -224,7 +224,8 @@ class ConfigEditorPlugin extends Plugin {
   }
 
   /**
-   * Create value editor based on type and constraints
+   * Create value editor based on type and constraints.
+   * Uses a password-style input for masked keys.
    * @param {string} key
    * @param {any} value
    * @param {any[] | undefined} allowedValues
@@ -232,6 +233,10 @@ class ConfigEditorPlugin extends Plugin {
    * @returns {{container: HTMLElement, setReadOnly?: (readonly: boolean) => void}}
    */
   #createValueEditor(key, value, allowedValues, isReadOnly = true) {
+    const isMasked = this.#originalConfig[`${key}.masked`] === true
+    if (isMasked) {
+      return createMaskedValueEditor(key, value, isReadOnly, (k, v) => this.#handleValueChange(k, v))
+    }
     return createValueEditor(
       key, value, allowedValues, isReadOnly,
       (k, v) => this.#handleValueChange(k, v)
@@ -272,6 +277,11 @@ class ConfigEditorPlugin extends Plugin {
   async #saveValue(key) {
     try {
       let valueToSave = this.#modifiedConfig[key]
+
+      if (valueToSave === '****') {
+        notify(`Cannot save placeholder value for ${key}`, 'warning', 'exclamation-triangle')
+        return
+      }
 
       const originalType = typeof this.#originalConfig[key]
       if (originalType === 'object' && typeof valueToSave === 'string') {
