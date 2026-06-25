@@ -28,6 +28,7 @@ PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
         "env_var":    "WEBDAV_PASSWORD",
         "default":     "",
         "description": "Password for WebDAV authentication",
+        "masked":      True,
     },
     {
         "config_key": "plugin.webdav-sync.remote-root",

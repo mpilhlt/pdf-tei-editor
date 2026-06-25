@@ -129,6 +129,39 @@ export function createValueEditor(key, value, allowedValues, isReadOnly = true, 
   }
 }
 
+/**
+ * Create a password-style editor for masked config values.
+ * Shows "****" or "(set but hidden)" as placeholder; never sends the sentinel back on save.
+ * @param {string} key - Config key
+ * @param {any} currentValue - Current masked value (typically "****" or empty)
+ * @param {boolean} [isReadOnly] - Start in read-only mode
+ * @param {(key: string, newValue: string) => void} [onChange] - Called on every value change
+ * @returns {ValueEditorResult}
+ */
+export function createMaskedValueEditor(key, currentValue, isReadOnly = true, onChange = null) {
+  const container = document.createElement('div')
+  container.style.width = '100%'
+
+  const input = document.createElement('sl-input')
+  input.setAttribute('type', 'password')
+  input.setAttribute('size', 'small')
+  input.setAttribute('password-toggle', '')
+  const isSentinel = currentValue === '****'
+  input.setAttribute('placeholder', isSentinel ? '(set but hidden)' : '(not set)')
+  input.value = ''
+
+  if (!isReadOnly && onChange) {
+    input.addEventListener('sl-input', () => onChange(key, input.value))
+  }
+
+  container.appendChild(input)
+  return {
+    container,
+    setReadOnly: (readonly) => { input.readonly = readonly; applyReadOnlyStyle(input, readonly) },
+    getValue: () => input.value
+  }
+}
+
 /** @param {any} value @returns {boolean} */
 function isStringArray(value) {
   return Array.isArray(value) && value.length > 0 && value.every(item => typeof item === 'string')

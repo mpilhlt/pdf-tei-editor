@@ -33,6 +33,10 @@ from pathlib import Path
 from typing import Any, Optional
 from fastapi_app.lib.utils.data_utils import get_data_file_path
 
+MASKED_SENTINEL = "****"
+
+_METADATA_SUFFIXES = ('.type', '.values', '.description', '.masked')
+
 
 # Platform-specific imports for file locking
 if sys.platform == 'win32':
@@ -111,6 +115,7 @@ class Config:
         value_type: str | None = None,
         allowed_values: list[Any] | None = None,
         description: str | None = None,
+        masked: bool | None = None,
     ) -> tuple[bool, str]:
         """
         Set a configuration value.
@@ -121,6 +126,7 @@ class Config:
             value_type: Optional explicit JSON type (overrides auto-inferred type)
             allowed_values: Optional list of allowed values to store as key.values
             description: Optional description stored as key.description
+            masked: When True, writes {key}.masked = True alongside the value
 
         Returns:
             Tuple of (success: bool, message: str)
@@ -128,7 +134,8 @@ class Config:
         return set_config_value(key, value, self.db_dir,
                                 value_type=value_type,
                                 allowed_values=allowed_values,
-                                description=description)
+                                description=description,
+                                masked=masked)
 
     def get_metadata(self, key: str) -> dict[str, Any]:
         """Return metadata dict with type, values, description for key."""
@@ -146,22 +153,26 @@ class Config:
         """
         return delete_config_value(key, self.db_dir)
 
-    def load(self) -> dict:
+    def load(self, apply_masks: bool = False) -> dict:
         """
         Load the complete configuration.
+
+        Args:
+            apply_masks: When True, replace masked values with MASKED_SENTINEL
 
         Returns:
             Configuration dictionary
         """
-        return load_full_config(self.db_dir)
+        return load_full_config(self.db_dir, apply_masks=apply_masks)
 
 
-def load_full_config(db_dir: Path) -> dict:
+def load_full_config(db_dir: Path, apply_masks: bool = False) -> dict:
     """
     Load complete configuration from config.json.
 
     Args:
         db_dir: Path to the database directory containing config.json
+        apply_masks: When True, replace values of masked keys with MASKED_SENTINEL
 
     Returns:
         Configuration dictionary
@@ -177,12 +188,20 @@ def load_full_config(db_dir: Path) -> dict:
 
     try:
         with open(config_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
     except (IOError, json.JSONDecodeError):
         return {}
 
+    if apply_masks:
+        for key in list(data.keys()):
+            if not key.endswith(_METADATA_SUFFIXES):
+                if data.get(f"{key}.masked") is True:
+                    data[key] = MASKED_SENTINEL
 
-def get_config_value(key: str, db_dir: Path, default: Any = None) -> Any:
+    return data
+
+
+def get_config_value(key: str, db_dir: Path, default: Any = None, apply_masks: bool = False) -> Any:
     """
     Get a configuration value with dot notation support.
 
@@ -190,32 +209,36 @@ def get_config_value(key: str, db_dir: Path, default: Any = None) -> Any:
         key: The configuration key (supports dot notation like "session.timeout")
         db_dir: Path to the database directory containing config.json
         default: Default value if key not found
+        apply_masks: When True, return MASKED_SENTINEL for masked keys
 
     Returns:
         The configuration value or default
     """
     try:
         config_data = load_full_config(db_dir)
+        if apply_masks and config_data.get(f"{key}.masked") is True:
+            return MASKED_SENTINEL
         return config_data.get(key, default)
     except (FileNotFoundError, ValueError):
         return default
 
 
 def get_config_metadata(key: str, db_dir: Path) -> dict[str, Any]:
-    """Return type, values, and description metadata for a config key.
+    """Return type, values, description, and masked metadata for a config key.
 
     Args:
         key: The configuration key
         db_dir: Path to the database directory containing config.json
 
     Returns:
-        Dict with 'type', 'values', and 'description' entries (values may be None)
+        Dict with 'type', 'values', 'description', and 'masked' entries (values may be None)
     """
     config_data = load_full_config(db_dir)
     return {
         "type": config_data.get(f"{key}.type"),
         "values": config_data.get(f"{key}.values"),
         "description": config_data.get(f"{key}.description"),
+        "masked": config_data.get(f"{key}.masked", False),
     }
 
 
@@ -226,6 +249,7 @@ def set_config_value(
     value_type: str | None = None,
     allowed_values: list[Any] | None = None,
     description: str | None = None,
+    masked: bool | None = None,
 ) -> tuple[bool, str]:
     """
     Set a configuration value with atomic write and file locking.
@@ -241,6 +265,8 @@ def set_config_value(
             Overrides inferred type. Ignored for metadata sub-keys.
         allowed_values: Optional list of permitted values. Written as key.values. Ignored for metadata sub-keys.
         description: Optional human-readable description. Written as key.description. Ignored for metadata sub-keys.
+        masked: When True, writes {key}.masked = True alongside the value. Never pass False to avoid
+            overwriting an existing masked=True with False on re-registration.
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -303,6 +329,9 @@ def set_config_value(
 
                     if description is not None:
                         config_data[f"{key}.description"] = description
+
+                    if masked is True:
+                        config_data[f"{key}.masked"] = True
 
                 # Atomic write: write to temp file then rename
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')

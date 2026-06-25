@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 import json
 
 from ..lib.core.dependencies import require_authenticated_user
-from ..lib.utils.config_utils import get_config, get_config_metadata
+from ..lib.utils.config_utils import get_config, get_config_metadata, MASKED_SENTINEL
 from ..lib.utils.logging_utils import get_logger
 
 
@@ -29,6 +29,7 @@ class ConfigSetRequest(BaseModel):
     value_type: Optional[str] = None
     allowed_values: Optional[list[Any]] = None
     description: Optional[str] = None
+    masked: Optional[bool] = None
 
 
 class InstructionItem(BaseModel):
@@ -42,8 +43,12 @@ _SENSITIVE_KEY_PATTERNS = ('api.key', 'api-key', 'password')
 
 
 def _get_public_config(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Return config dict with sensitive keys removed."""
-    return {k: v for k, v in cfg.items() if not any(p in k for p in _SENSITIVE_KEY_PATTERNS)}
+    """Return config dict with masked/sensitive keys removed."""
+    return {
+        k: v for k, v in cfg.items()
+        if not cfg.get(f"{k}.masked")                           # metadata-driven
+        and not any(p in k for p in _SENSITIVE_KEY_PATTERNS)   # pattern-based safety net
+    }
 
 
 class StateResponse(BaseModel):
@@ -83,13 +88,16 @@ async def list_config(
     If project is provided, project-level config keys override global defaults.
     Requires authentication.
     """
-    config_data = config.load()
+    config_data = config.load(apply_masks=True)
     if project:
         try:
             from ..lib.utils.project_utils import project_config_get_all
             from ..config import get_settings
             overrides = project_config_get_all(get_settings().db_dir, project)
             if overrides:
+                for k, v in overrides.items():
+                    if config_data.get(f"{k}.masked") is True:
+                        overrides[k] = MASKED_SENTINEL
                 config_data = {**config_data, **overrides}
         except Exception:
             logger.warning("project_config_get_all failed; ignoring project param")
@@ -115,6 +123,9 @@ async def get_config_value_endpoint(
     if key not in config_data:
         raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
 
+    if config_data.get(f"{key}.masked") is True:
+        return MASKED_SENTINEL
+
     return config_data[key]
 
 
@@ -124,6 +135,7 @@ class ConfigMetadataResponse(BaseModel):
     type: Optional[str] = None
     values: Optional[list[Any]] = None
     description: Optional[str] = None
+    masked: bool = False
 
 
 @router.get("/metadata/{key}", response_model=ConfigMetadataResponse)
@@ -151,12 +163,16 @@ async def set_config(
     if not request_data.key:
         raise HTTPException(status_code=400, detail="Missing 'key' in request")
 
+    if request_data.value == MASKED_SENTINEL:
+        raise HTTPException(status_code=400, detail="Cannot save masked sentinel value")
+
     success, message = config.set(
         request_data.key,
         request_data.value,
         value_type=request_data.value_type,
         allowed_values=request_data.allowed_values,
-        description=request_data.description
+        description=request_data.description,
+        masked=request_data.masked,
     )
 
     if not success:
