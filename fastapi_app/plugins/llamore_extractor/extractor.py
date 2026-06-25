@@ -70,7 +70,7 @@ class LLamoreExtractor(BaseExtractor):
                 cls._models_cache_time = now
                 return models
         except Exception as exc:
-            logger.warning("Could not fetch Gemini model list: %s", exc)
+            logger.debug("Could not fetch Gemini model list: %s", exc)
 
         return [configured_model]
 
@@ -214,7 +214,7 @@ class LLamoreExtractor(BaseExtractor):
 
     def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any]) -> etree._Element:  # type: ignore[name-defined]
         """Extract references from PDF using LLamore."""
-        print(f"Extracting references from {pdf_path} via LLamore/Gemini")
+        logger.info("Extracting references from %s via LLamore/Gemini", pdf_path)
 
         gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
         model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
