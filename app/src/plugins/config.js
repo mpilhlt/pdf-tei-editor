@@ -20,6 +20,15 @@ class ConfigPlugin extends Plugin {
   }
 
   /**
+   * Pre-seeds the configuration cache from an already-fetched data object.
+   * Call this before installPlugins() to make config.get() work before authentication.
+   * @param {Object<string, any>} data
+   */
+  preload(data) {
+    this._configMap = data;
+  }
+
+  /**
    * Fetches the configuration data from the server and updates the local map.
    * @returns {Promise<void>}
    */

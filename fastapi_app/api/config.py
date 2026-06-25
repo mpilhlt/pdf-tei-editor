@@ -6,15 +6,10 @@ Provides configuration management, instructions, and state information.
 
 from typing import Any, Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, Request, HTTPException, Depends
-from pathlib import Path
+from fastapi import APIRouter, HTTPException, Depends
 import json
-import os
 
-from ..config import get_settings
-from ..lib.utils.auth import AuthManager
-from ..lib.core.sessions import SessionManager
-from ..lib.utils.server_utils import get_session_id_from_request
+from ..lib.core.dependencies import require_authenticated_user
 from ..lib.utils.config_utils import get_config, get_config_metadata
 from ..lib.utils.logging_utils import get_logger
 
@@ -22,7 +17,6 @@ from ..lib.utils.logging_utils import get_logger
 logger = get_logger(__name__)
 router = APIRouter(prefix="/config", tags=["configuration"])
 
-# Get config instance
 config = get_config()
 
 
@@ -44,43 +38,23 @@ class InstructionItem(BaseModel):
     text: List[str]
 
 
+_SENSITIVE_KEY_PATTERNS = ('api.key', 'api-key', 'password')
+
+
+def _get_public_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Return config dict with sensitive keys removed."""
+    return {k: v for k, v in cfg.items() if not any(p in k for p in _SENSITIVE_KEY_PATTERNS)}
+
+
 class StateResponse(BaseModel):
     """Response model for application state"""
     hasInternet: Optional[bool] = None
+    publicConfig: Optional[dict[str, Any]] = None
 
 
 class ConfigSetResponse(BaseModel):
     """Response for config set operation"""
     result: str
-
-
-# Authentication dependency
-
-async def require_auth(request: Request) -> dict:
-    """
-    Dependency that requires valid authentication.
-
-    Returns authenticated user data.
-    """
-    settings = get_settings()
-    session_id = get_session_id_from_request(request)
-
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    auth_manager = AuthManager(settings.db_dir, logger=logger)
-    session_manager = SessionManager(settings.db_dir, logger=logger)
-
-    # Validate session
-    if not session_manager.is_session_valid(session_id, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Session expired")
-
-    # Get user
-    user = auth_manager.get_user_by_session_id(session_id, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid session")
-
-    return user
 
 
 # Helper functions
@@ -99,16 +73,21 @@ def has_internet() -> bool:
 # API Endpoints
 
 @router.get("/list", response_model=dict)
-async def list_config(project: Optional[str] = None) -> dict:
+async def list_config(
+    project: Optional[str] = None,
+    user: dict = Depends(require_authenticated_user)
+) -> dict:
     """
     List all configuration values, optionally merged with project-specific overrides.
 
     If project is provided, project-level config keys override global defaults.
+    Requires authentication.
     """
     config_data = config.load()
     if project:
         try:
             from ..lib.utils.project_utils import project_config_get_all
+            from ..config import get_settings
             overrides = project_config_get_all(get_settings().db_dir, project)
             if overrides:
                 config_data = {**config_data, **overrides}
@@ -118,11 +97,15 @@ async def list_config(project: Optional[str] = None) -> dict:
 
 
 @router.get("/get/{key}")
-async def get_config(key: str) -> Any:
+async def get_config_value_endpoint(
+    key: str,
+    user: dict = Depends(require_authenticated_user)
+) -> Any:
     """
     Get a specific configuration value by key.
 
     Returns the value associated with the key.
+    Requires authentication.
     """
     if not key:
         raise HTTPException(status_code=400, detail="Invalid or empty key")
@@ -144,8 +127,12 @@ class ConfigMetadataResponse(BaseModel):
 
 
 @router.get("/metadata/{key}", response_model=ConfigMetadataResponse)
-async def get_config_metadata_endpoint(key: str) -> ConfigMetadataResponse:
-    """Get metadata (type, allowed values, description) for a config key."""
+async def get_config_metadata_endpoint(
+    key: str,
+    user: dict = Depends(require_authenticated_user)
+) -> ConfigMetadataResponse:
+    """Get metadata (type, allowed values, description) for a config key. Requires authentication."""
+    from ..config import get_settings
     settings = get_settings()
     meta = get_config_metadata(key, settings.db_dir)
     return ConfigMetadataResponse(key=key, **meta)
@@ -154,7 +141,7 @@ async def get_config_metadata_endpoint(key: str) -> ConfigMetadataResponse:
 @router.post("/set", response_model=ConfigSetResponse)
 async def set_config(
     request_data: ConfigSetRequest,
-    user: dict = Depends(require_auth)
+    user: dict = Depends(require_authenticated_user)
 ):
     """
     Set a configuration value.
@@ -181,13 +168,14 @@ async def set_config(
 
 
 @router.get("/instructions", response_model=List[InstructionItem])
-async def get_instructions(user: dict = Depends(require_auth)) -> List[InstructionItem]:
+async def get_instructions(user: dict = Depends(require_authenticated_user)) -> List[InstructionItem]:
     """
     Get extraction instructions.
 
     Requires authentication.
     Returns list of instruction items.
     """
+    from ..config import get_settings
     settings = get_settings()
     instruction_file = settings.db_dir / "prompt.json"
 
@@ -212,13 +200,14 @@ class SaveInstructionsResponse(BaseModel):
 @router.post("/instructions", response_model=SaveInstructionsResponse)
 async def save_instructions(
     instructions: List[InstructionItem],
-    user: dict = Depends(require_auth)
+    user: dict = Depends(require_authenticated_user)
 ) -> SaveInstructionsResponse:
     """
     Save extraction instructions.
 
     Requires authentication.
     """
+    from ..config import get_settings
     settings = get_settings()
     instruction_file = settings.db_dir / "prompt.json"
 
@@ -241,6 +230,11 @@ async def get_state():
     """
     Get application state information.
 
-    Returns state including internet connectivity.
+    Returns internet connectivity and all non-sensitive config values (publicConfig).
+    This is the only config endpoint that does not require authentication.
+    Sensitive config keys (API keys, passwords) are excluded from publicConfig.
     """
-    return StateResponse(hasInternet=has_internet())
+    return StateResponse(
+        hasInternet=has_internet(),
+        publicConfig=_get_public_config(config.load()),
+    )
