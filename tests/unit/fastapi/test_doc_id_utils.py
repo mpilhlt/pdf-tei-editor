@@ -132,7 +132,8 @@ class TestResolveDocId(unittest.TestCase):
         mock_repo = MagicMock()
         mock_repo.get_max_collection_counter.side_effect = Exception("DB error")
         with patch('fastapi_app.lib.utils.doc_id_utils.extract_doi_from_pdf', return_value=None):
-            result = resolve_doc_id('collection', 'my-doc.pdf', b'', 'pdf', 'mycol', mock_repo)
+            with self.assertLogs('fastapi_app.lib.utils.doc_id_utils', level='WARNING'):
+                result = resolve_doc_id('collection', 'my-doc.pdf', b'', 'pdf', 'mycol', mock_repo)
         self.assertEqual(result, 'mycol-0001')
 
     def test_uuid_mode_returns_valid_uuid4(self):
