@@ -270,6 +270,20 @@ async def custom_action():
 - Config values are automatically created from environment variables on first initialization
 - Routes and plugin methods use the same `get_config()` pattern
 
+**MANDATORY: Mask credentials** — Any plugin that reads an API key, password, token, or other credential from an environment variable and stores it via `get_plugin_config()` **must** pass `masked=True`. This ensures the value is excluded from the public (pre-auth) config endpoint and displayed as `****` in the config editor:
+
+```python
+get_plugin_config(
+    "plugin.my-plugin.api-key",
+    "MY_PLUGIN_API_KEY",
+    default=None,
+    description="API key for My Plugin",
+    masked=True,   # REQUIRED for any secret / credential
+)
+```
+
+Failure to pass `masked=True` for credentials is a security defect.
+
 **Example - Plugin availability based on config**:
 
 ```python
