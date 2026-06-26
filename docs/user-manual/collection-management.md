@@ -15,13 +15,26 @@ When you open the document selector, the collection dropdown shows only the coll
 
 Every new document extracted from a PDF lands in the **Inbox** (`_inbox`) collection by default. From there it can be moved to a more specific collection once processing is under way.
 
-## Moving Documents Between Collections
+## Moving and Copying Documents Between Collections
 
-Use the **Move files** button (<sl-icon name="folder-symlink"></sl-icon>) in the Document toolbar to relocate the current document.
+Documents are moved or copied in batch from the **Collection & Files** drawer. Open it with the drawer button in the toolbar.
 
-1. Click the <sl-icon name="folder-symlink"></sl-icon> button to open the Move Files dialog.
-2. Choose a destination collection from the dropdown. Only collections you have write access to are shown.
-3. Optionally, type a new collection name to create it on the fly.
-4. Confirm — the document and its related files are moved immediately.
+### Selecting documents
 
-The move is visible to all users who have access to the destination collection.
+The drawer shows all collections and their documents in a tree. Each document and each collection has a checkbox:
+
+- Check individual document rows to add them to the selection.
+- Check a collection's checkbox to select all documents in that collection at once. The collection checkbox reflects partial selections with an indeterminate state.
+- Use **Select all/none** at the top of the tree to select or deselect every document in one click.
+
+### Running the move or copy
+
+Once at least one document is checked, the **Move or copy** button (<sl-icon name="folder-symlink"></sl-icon>) in the drawer footer becomes active.
+
+1. Click the <sl-icon name="folder-symlink"></sl-icon> button to open the batch Move/Copy dialog.
+2. Choose **Move** or **Copy** and select one or more destination collections. Only collections you have write access to are shown.
+3. Confirm — the operation runs immediately for all selected documents.
+
+A **move** removes each document from its current collection. A **copy** leaves the original in place and adds it to the target collection as well.
+
+The result is visible to all users who have access to the destination collection.
