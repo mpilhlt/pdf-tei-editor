@@ -1,0 +1,16 @@
+{
+  "id": "napoli-010",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[9]",
+  "queryText": "-si pensi appunto a Murphy e alla sua sedia a dondolo, che lo mostra simbolicamente come un «antieroe dell'inattività» (ivi, p. 36).",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 109.28,
+      "x1": 555.65,
+      "y1": 130.76999999999998
+    }
+  }
+}

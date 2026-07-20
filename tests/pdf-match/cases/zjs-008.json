@@ -1,0 +1,16 @@
+{
+  "id": "zjs-008",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[7]",
+  "queryText": "11 Upon Japan's surrender, the Allied Powers authorised the ROC Government to accept the surrender of Taiwan a~nd the Pescadores. See Chert a~nd Reisman,op cit n 5,611.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 146,
+      "y0": 201,
+      "x1": 454.13112,
+      "y1": 219
+    }
+  }
+}

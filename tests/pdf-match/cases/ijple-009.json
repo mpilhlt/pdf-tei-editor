@@ -1,0 +1,16 @@
+{
+  "id": "ijple-009",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[8]",
+  "queryText": "9 Joint Committee on Human Rights, The Implications for Access to Justice of the Government's Proposals to Reform Legal Aid, 13 December 2013, HL Paper 100 of session 2013-14, p 7.",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 72,
+      "y0": 118.20491999999999,
+      "x1": 494.4882719999996,
+      "y1": 141.84
+    }
+  }
+}

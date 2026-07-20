@@ -1,0 +1,16 @@
+{
+  "id": "gruber-018",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[17]",
+  "queryText": "7 Vgl. Rudolf Wiethölter, Rechtswissenschaft, 1968/1986, 38, mit direk-tem Bezug auf Bernhard Windscheid; ferner ders., Anforderungen an den Juristen heute, in: Recht in Recht-Fertigungen, hg. von P. Zumban-sen/M. Amstutz, 1992/2014, 525-541, 527 und 534: \"Ein ‚nützlicher Ju-rist' -das wäre dann doch wohl ein Mann, der gar nichts weiß und alles kann: der Mann, der eben buchstäblich ‚zu allem fähig ist'.\"",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 56.6929,
+      "y0": 59.0239,
+      "x1": 283.4729000000001,
+      "y1": 106.0239
+    }
+  }
+}

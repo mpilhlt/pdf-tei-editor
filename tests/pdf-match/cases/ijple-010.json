@@ -1,0 +1,16 @@
+{
+  "id": "ijple-010",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[9]",
+  "queryText": "10 Catherine Jennings, \"Accessing Justice: Civil Legal Aid, the Public Interest and Judicial Action\" (January 30, 2018). https://ssrn.com/abstract=3396591 accessed 25 th July 2022",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 71.99604,
+      "y0": 89.88,
+      "x1": 501.39753599999955,
+      "y1": 113.52000000000001
+    }
+  }
+}

@@ -73,6 +73,7 @@ New to the project? Start here:
 | Document | What You'll Learn |
 |----------|-------------------|
 | [Testing](testing.md) | How to write and run tests |
+| [Testing PDF Viewer Code](testing-pdf-viewer.md) | How to test PDF Viewer / text-matching code with Node, no browser |
 | [Validation](validation.md) | How XML validation and autocomplete work |
 | [Deployment](deployment.md) | How to deploy to production |
 

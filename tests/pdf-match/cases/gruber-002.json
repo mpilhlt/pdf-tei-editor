@@ -1,0 +1,16 @@
+{
+  "id": "gruber-002",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "1 For R.W. from M.G. in memory of the \"3rd Floor\"! For valuable comments and suggestions I would like to thank Alina De Col, Andreas Fischer-Les-cano, Fabienne Graf, Dario Haux, Steve Howe, Vaios Karavas, Michele Luminati, Suad Salihu and Gunther Teubner. The German version of this article was written as part of the Lucerne SNSF project \"Future Gener-ations in Swiss and European Private Law\", first published in: Archiv für Rechts-und Sozialphilosophie 107 (2021), 367-391.",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 61.197,
+      "x1": 538.5847,
+      "y1": 108.197
+    }
+  }
+}

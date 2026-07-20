@@ -1,0 +1,16 @@
+{
+  "id": "napoli-009",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[8]",
+  "queryText": "In un modo inatteso, è Beckett stesso ad attingere a un filosofo come Geulincx (1624-1669) che sembra rappresentare ciò che c'è di più distante dal XX secolo, in cui Beckett risulta ben radicato. Questa inconsueta vicinanza viene indagata da Rosario Diana alla luce del tema comune del tracollo dell'Io: nel caso del filosofo fiammingo, tale tracollo si declina come dis-appartenenza dell'Io a se stesso, poiché interamente radicato in Dio; nel caso del drammaturgo irlandese, essendo assente ogni divinità, la disillusione di un Io agente si rivela invece «una sorta di saggia acquiescenza alla catastrofe dell'inattività», la quale si traduce spesso in una «degenerazione delle capacità motorie dei protagonisti» (ivi, pp. 33-34)",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 132.3,
+      "x1": 555.66,
+      "y1": 199.8
+    }
+  }
+}

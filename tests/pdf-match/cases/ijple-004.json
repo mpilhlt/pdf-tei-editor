@@ -1,0 +1,16 @@
+{
+  "id": "ijple-004",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[3]",
+  "queryText": "4 United Nations General Assembly, \"Legal Empowerment of the poor and eradication of poverty Report of the Secretary-General\" (July 2009) https://www.un.org/esa/socdev/documents/reports/Legal%20empowerment%20of%20the%20poor.pdf accessed 25 th July 2022",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 72,
+      "y0": 75,
+      "x1": 536.1191159999994,
+      "y1": 125.52000000000001
+    }
+  }
+}

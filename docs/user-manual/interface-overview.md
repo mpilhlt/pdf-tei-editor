@@ -22,7 +22,7 @@ The header bar of the PDF viewer provides the following information:
 
 Both values can be copied by single-click, in addition, administrators can change title and id by double-clicking.
 
-In the status bar of the PDF viewer, you can toggle the "Autosearch" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. This lookup is computationally non-trivial and will often fail - use it as far as it works for you. 
+In the status bar of the PDF viewer, you can toggle the "Autosearch" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
 
 ### Right Panel: XML Editor  
 

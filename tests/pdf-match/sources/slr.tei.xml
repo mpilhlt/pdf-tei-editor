@@ -1,0 +1,117 @@
+<?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.referenceSegmenter.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc xml:id="_10.30722__slr.19653">
+      <titleStmt>
+        <title level="a">Act of Grace Payments and the Constitution</title>
+        <author>
+          <persName>
+            <forename>Oscar</forename>
+            <surname>Roos</surname>
+          </persName>
+        </author>
+        <author>
+          <persName>
+            <forename>Yee-Fui</forename>
+            <surname>Ng</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>The University of Sydney Library</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2024</date>
+        <idno type="DOI">10.30722/slr.19653</idno>
+        <ptr target="https://doi.org/10.30722/slr.19653"/>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Oscar Roos, Yee-Fui Ng. (2024). Act of Grace Payments and the Constitution. Sydney Law Review, 46(1), 55-86. DOI: 10.30722/slr.19653</bibl>
+        <biblStruct>
+          <analytic>
+            <title level="a">Act of Grace Payments and the Constitution</title>
+            <author>
+              <persName>
+                <forename>Oscar</forename>
+                <surname>Roos</surname>
+              </persName>
+            </author>
+            <author>
+              <persName>
+                <forename>Yee-Fui</forename>
+                <surname>Ng</surname>
+              </persName>
+            </author>
+          </analytic>
+          <monogr>
+            <title level="j">Sydney Law Review</title>
+            <imprint>
+              <biblScope unit="volume">46</biblScope>
+              <biblScope unit="issue">1</biblScope>
+              <biblScope unit="page" from="55" to="86">55-86</biblScope>
+              <date when="2024">2024</date>
+              <publisher>The University of Sydney Library</publisher>
+            </imprint>
+          </monogr>
+          <idno type="DOI">10.30722/slr.19653</idno>
+          <ptr target="https://doi.org/10.30722/slr.19653"/>
+        </biblStruct>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="pdf-tei-editor" type="editor">
+          <label>PDF-TEI Editor</label>
+          <ref target="https://github.com/mpilhlt/pdf-tei-editor"/>
+        </application>
+        <application version="0.8.3-SNAPSHOT" ident="GROBID" when="2026-03-31T14:22:28.367588Z" type="extractor">
+          <label>GROBID</label>
+          <label type="model">reference-segmenter</label>
+          <label type="flavor">article/dh-law-footnotes</label>
+          <label type="variant-id">grobid.training.references.referenceSegmenter</label>
+          <label type="revision">0.8.2-75-g8f37e39ec</label>
+          <ref target="https://github.com/grobidOrg/grobid"/>
+          <ref target="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.referenceSegmenter.rng"/>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2026-03-31T14:22:28.367588Z" status="extraction">
+        <note type="label">Extraction</note>
+        <desc>Extraction</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <text xmlns="http://www.tei-c.org/ns/1.0" xml:lang="en">
+        <listBibl>
+        <bibl>73<lb/> Williams No 2 (n 7) 467-8 </bibl>
+        <bibl><label>[78] (</label>French CJ, Hayne, Kiefel, Bell and Keane JJ), quoting from the<lb/> defendants' submissions.<lb/> 106 AAP Case (n 1) 397 (Mason J); Williams No 1 (n 5) 249-52 [194]-[198], 267 [240] (</bibl>
+<bibl>Hayne J), 362<lb/> [559], 370-3 [582]-[594] (</bibl>
+<bibl>Kiefel J), 346-9 [497]-[507], 357 [542] (</bibl>
+<bibl>Crennan J). See also at 180 [4],<lb/> 184-5 [22], 188-91 [29]-[34], 216-17 [</bibl>
+        <bibl><label>83]</label> (French CJ), 230-1 [131], 234-5 [144]-[146] (</bibl>
+<bibl>Gummow<lb/> and Bell JJ), 272 [256] (</bibl>
+<bibl>Hayne J), 342 [485], 355 [535] (</bibl>
+<bibl>Crennan J), 361 [558] (</bibl>
+<bibl>Kiefel J).<lb/> 107 For a discussion of the use of the concepts of breadth and depth to analyse Commonwealth executive<lb/> power, see Stephenson (n 4) 36-8. For a discussion of the limitations on the nationhood power framed<lb/> by those concepts, see at 59-70.<lb/> 108 </bibl>
+<bibl>See above Part II(C)(1)(iii) for our discussion of the possible engagement of the nationhood power,<lb/> in combination with s 51(xxxix) of the Constitution, to provide constitutional support to s 65 of the<lb/> PGPA Act (n 13).<lb/> 109 AAP Case (n 1) 397 (Mason J) (emphasis added).<lb/> 110 Ibid 397 (Mason J) (emphasis added).<lb/> 111 Hanks, Gordon and Hill (n 83) 214.<lb/> 112 Williams No 1 (n 5) 233-4 [139]-[141</bibl>
+        <bibl><label>]</label> (</bibl>
+<bibl>Gummow and Bell JJ), 255-6 [208]-[209] (</bibl>
+<bibl>Hayne J), 342<lb/> [484], 343 [487], 345 [493], 353-5 [525]-[534] (</bibl>
+<bibl>Crennan J). See at 370 [582] (</bibl>
+<bibl>Kiefel J). In Williams<lb/> No 1, the existence of the ordinary functions exception was not in dispute between the parties:<lb/> Williams No 1 (n 5) 233 [139] (</bibl>
+<bibl>Gummow and Bell JJ), 342 [482]-[484], 345 [493] (</bibl>
+<bibl>Crennan J), 370<lb/> [582] (</bibl>
+<bibl>Kiefel J).<lb/> 113 RMG 409 (n 35) </bibl>
+        <bibl><label>[1]</label>.<lb/> Australia, Parliamentary Debates, Legislative Assembly, 18 January 1892, 285; Western Australia,<lb/> Parliamentary Debates, Legislative Assembly, 19 December 1892, 447-8; Parliament of New South<lb/> Wales, Sessional Papers, 1899(3) 462-3, 870, 867.<lb/> 131 Finn (n 130) </bibl>
+        <bibl><label>75</label>. See also Parramatta River Steamers &amp; Tramway Co v Hixson (1895) 16 NSWLR<lb/> 105, 109 (Martin CJ), 109-10 (Windeyer J), 110 (Innes J) ('Parramatta River Steamers'); Twaddell<lb/> v Driver [1877] Knox Reports 459 ('Twaddell').<lb/> 132 Finn (n 130) 75.<lb/> 133 Parramatta River Steamers (n 131) 109 (Martin CJ), 109-10 (</bibl>
+<bibl>Windeyer J), 110 (Innes J). See<lb/> Twaddell (n 131).<lb/> 134 See above n 112 and accompanying text.<lb/> 151 Ibid, quoting Women's Legal Service NSW, Submission No 108 to Senate Legal and Constitutional<lb/> Affairs References Committee, Parliament of Australia, Review of Government Compensation<lb/> Payments (2010) 3.<lb/> 152 Hartigan (n 144) 335-8 [76]-[</bibl>
+        <bibl><label>93</label>].<lb/> 153 </bibl>
+<bibl>Hartigan v Commissioner for Social Housing (ACT) (2017) 319 FLR 158.<lb/> 154 Boughey, Rock and Weeks (n 28) 319-20.<lb/> 155 Hartigan (n 144) 326 [4].<lb/> 156 Ibid 331 </bibl>
+        <bibl><label>[47]</label> (McWilliam AsJ).<lb/> (3) Of the existing state soft law instruments regulating non-statutory act of grace<lb/> payments (that is, in South Australia, Victoria and New South Wales), only<lb/> the Victorian instrument refers to morality; 184 the New South Wales and<lb/> 181 Ibid 27.<lb/> 182 Those instruments are Treasury (SA), Ex Gratia Payments (Treasurer's Instruction 14, July 2020)<lb/> ('SA Treasurer's Instruction'); Treasury (Vic), Disclosure of Ex Gratia Expenses (Financial<lb/> Reporting Direction 11, April 2022) [6.</bibl>
+        <bibl><label>1]</label> (emphasis added) ('Victorian Treasurer's Direction') and<lb/> NSW Treasury Circular (n 11).<lb/> 183 WA Treasurer's Instruction (n 157).<lb/> 184 Victorian Treasurer's Direction (n 182) 6.1 (emphasis added).</bibl>
+        </listBibl>
+    </text>
+
+</TEI>

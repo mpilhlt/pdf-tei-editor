@@ -1,0 +1,16 @@
+{
+  "id": "limbach-002",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "2 Aharon Barak, Introduction: The Supreme Court and the Problem of Terrorism, in: Israel Supreme Court (ed.), Judgments of the Israel Supreme Court: Fighting Terrorism within the Law, 2005, 5.",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 144.140312,
+      "x1": 481.9311239999999,
+      "y1": 178.16029999999998
+    }
+  }
+}

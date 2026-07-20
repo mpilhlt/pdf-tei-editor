@@ -1,0 +1,16 @@
+{
+  "id": "gruber-013",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[12]",
+  "queryText": "2 Rudolf v. Jhering, Unsere Aufgabe, in: Jahrbücher für die Dogmatik des heutigen römischen und deutschen Privatrechts, Band I, hg. von C. F. v. Gerber/R. v. Jhering, 1857, 1-52, 2.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 56.6929,
+      "y0": 187.0244,
+      "x1": 283.4638,
+      "y1": 210.0244
+    }
+  }
+}

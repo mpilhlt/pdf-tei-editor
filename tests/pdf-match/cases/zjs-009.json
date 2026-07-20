@@ -1,0 +1,16 @@
+{
+  "id": "zjs-009",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[8]",
+  "queryText": "12 This is the view that has previously been adopted by both the PRC and the ROC govermnents. See Crawford J The Creation of States at International Law (1979) 14~5o 13 See Chiu op cit n 8 164.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 146,
+      "y0": 172,
+      "x1": 455.79328000000004,
+      "y1": 200
+    }
+  }
+}

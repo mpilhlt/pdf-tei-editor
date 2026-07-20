@@ -1,0 +1,16 @@
+{
+  "id": "napoli-005",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "3 Cfr. ivi, p. 190.",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 293.35,
+      "x1": 123.3,
+      "y1": 303.35
+    }
+  }
+}

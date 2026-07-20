@@ -1,0 +1,16 @@
+{
+  "id": "ijple-007",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[6]",
+  "queryText": "7 Ibid, Pp 85",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 72,
+      "y0": 75.24,
+      "x1": 125.21429999999998,
+      "y1": 85.19999999999999
+    }
+  }
+}

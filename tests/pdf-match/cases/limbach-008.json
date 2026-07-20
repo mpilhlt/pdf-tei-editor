@@ -1,0 +1,16 @@
+{
+  "id": "limbach-008",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[7]",
+  "queryText": "8 Bundesverfassungsgericht (German Federal Constitutional Court), BVerfGE 57, 250, 276.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 144.140306,
+      "x1": 481.954169999999,
+      "y1": 166.6403
+    }
+  }
+}

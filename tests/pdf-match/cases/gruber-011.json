@@ -1,0 +1,16 @@
+{
+  "id": "gruber-011",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[10]",
+  "queryText": "8 Cf. for example, Richard Susskind, Tomorrow's Lawyers (2017);",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 51.0238,
+      "x1": 514.1144,
+      "y1": 58.0238
+    }
+  }
+}

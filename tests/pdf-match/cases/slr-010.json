@@ -1,0 +1,16 @@
+{
+  "id": "slr-010",
+  "pdf": "slr",
+  "tei": "tests/pdf-match/sources/slr.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[9]",
+  "queryText": "Crennan J), 361 [558] (",
+  "expected": {
+    "page": 19,
+    "bbox": {
+      "x0": 80.86320000000006,
+      "y0": 197.58516000000003,
+      "x1": 367.19358000000005,
+      "y1": 205.56516000000002
+    }
+  }
+}

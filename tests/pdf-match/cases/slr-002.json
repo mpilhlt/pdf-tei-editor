@@ -1,0 +1,16 @@
+{
+  "id": "slr-002",
+  "pdf": "slr",
+  "tei": "tests/pdf-match/sources/slr.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "73 Williams No 2 (n 7) 467-8",
+  "expected": {
+    "page": 12,
+    "bbox": {
+      "x0": 66.6,
+      "y0": 68.82,
+      "x1": 401.1836760000002,
+      "y1": 76.8
+    }
+  }
+}

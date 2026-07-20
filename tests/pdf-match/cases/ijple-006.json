@@ -1,0 +1,16 @@
+{
+  "id": "ijple-006",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[5]",
+  "queryText": "6 Tom Bingham, \"The Rule of Law\" (Penguin 2010)Pp 37",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 72,
+      "y0": 90.12,
+      "x1": 321.7798799999997,
+      "y1": 100.08000000000001
+    }
+  }
+}

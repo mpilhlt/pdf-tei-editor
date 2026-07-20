@@ -1,0 +1,16 @@
+{
+  "id": "limbach-005",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "5 Gesetz zur Neuregelung der Telekommunikationsüberwachung und anderer verdeckter Ermittlungsmaßnahmen sowie zur Umsetzung der Richtlinie 2006/24/EG, 21 December 2007, BGBl. I, 3198.",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 167.180432,
+      "x1": 482.05136400000094,
+      "y1": 201.1403
+    }
+  }
+}

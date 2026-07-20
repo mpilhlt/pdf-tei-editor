@@ -1,0 +1,16 @@
+{
+  "id": "ijple-008",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[7]",
+  "queryText": "8 R (on the application of UNISON) (Appellant) v Lord Chancellor (Respondent) [2017] UKSC 51",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 72,
+      "y0": 146.76,
+      "x1": 498.6186839999998,
+      "y1": 156.72
+    }
+  }
+}

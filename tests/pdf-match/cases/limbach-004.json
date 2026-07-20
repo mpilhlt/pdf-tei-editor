@@ -1,0 +1,16 @@
+{
+  "id": "limbach-004",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[3]",
+  "queryText": "4 Gesetz zur Bekämpfung des internationalen Terrorismus, 9 January 2002, (Terrorismusbekämpfungsgesetz), Bundesgesetzblatt (BGBl.) I 361, 3142.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 144.140306,
+      "x1": 481.866995999999,
+      "y1": 166.6403
+    }
+  }
+}

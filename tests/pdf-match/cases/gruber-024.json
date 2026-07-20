@@ -1,0 +1,16 @@
+{
+  "id": "gruber-024",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[23]",
+  "queryText": "12 Cf. Andreas Fischer-Lescano, Als Ob! Der Philosoph als wahrer Revolu-tionär des Rechts, in: Khurana et al. (eds.), Negativität. Kunst -Recht -Politik (2018), 207-219, 212 et seq.",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 59.0238,
+      "x1": 538.5819000000001,
+      "y1": 82.0238
+    }
+  }
+}

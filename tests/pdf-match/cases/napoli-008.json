@@ -1,0 +1,16 @@
+{
+  "id": "napoli-008",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[7]",
+  "queryText": "6 Il riferimento è al saggio Conceit and Collapse of the I. Beckett and Geulincx (ivi, pp. 21-38).",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 189.8,
+      "x1": 555.66,
+      "y1": 199.8
+    }
+  }
+}
