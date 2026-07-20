@@ -9,6 +9,7 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 - **Dual-pane interface** with synchronized PDF viewer and XML editor
 - **AI-powered extraction** supporting multiple extraction engines (GROBID, etc.) via frontier and open LLMs
 - **Visual annotation mode** — hide raw XML and annotate text with colored badges using a point-and-click interface
+- **Search-in-PDF navigation** — automatically locates and highlights the PDF region corresponding to the cursor position in the XML editor
 - **Version management** with branching, merging, and comparison tools
 - **Schema validation** with automatic TEI compliance checking
 - **Access control** with role-based permissions and collection management
