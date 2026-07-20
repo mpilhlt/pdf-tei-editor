@@ -1,0 +1,10 @@
+{
+  "id": "gruber-012",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[11]",
+  "queryText": "Markus Hartung et al. (eds.), Legal Tech. The Digitalisation des Rechtsmarkts (2018).",
+  "expected": null,
+  "rejected": true,
+  "rejectNote": "incorrectly includes \"and\""
+}

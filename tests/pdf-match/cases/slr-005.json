@@ -1,0 +1,16 @@
+{
+  "id": "slr-005",
+  "pdf": "slr",
+  "tei": "tests/pdf-match/sources/slr.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "Kiefel J), 346-9 [497]-[507], 357 [542] (",
+  "expected": {
+    "page": 19,
+    "bbox": {
+      "x0": 80.81531999999999,
+      "y0": 216.00300000000001,
+      "x1": 401.1309239999999,
+      "y1": 223.983
+    }
+  }
+}

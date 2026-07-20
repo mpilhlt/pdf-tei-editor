@@ -1,0 +1,16 @@
+{
+  "id": "gruber-021",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[20]",
+  "queryText": "9 On this point, see Gustav Radbruch, Rechtsphilosophie (1932), § 14, 106 et seq.: \"A good lawyer would cease to be a good lawyer if, at every mo-ment of his professional life, he were not fully aware at once of both the necessity and the profound questionableness of his profession. [...] Only the philistine feels himself at every moment to be an unquestionably use-ful member of human society.\"",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 203.0241,
+      "x1": 538.5895999999998,
+      "y1": 250.0241
+    }
+  }
+}

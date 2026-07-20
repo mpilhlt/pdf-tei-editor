@@ -1,0 +1,16 @@
+{
+  "id": "zjs-006",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[5]",
+  "queryText": "9 See Kirkham D B 'The International Legal Status of Formosa' (t968) 6 Canadian Yearbook of lnterna¢ional Law 144, 147.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 146,
+      "y0": 239,
+      "x1": 446.80903,
+      "y1": 258
+    }
+  }
+}

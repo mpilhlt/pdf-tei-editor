@@ -1,0 +1,16 @@
+{
+  "id": "zjs-010",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[9]",
+  "queryText": "14 See Crawford, op cit 147 and O'Covme~l D P \"r~be Status of Formosa and the Chinese Recognition Problem' (1956) 50 American Jov,-nal of International Law 405, 407.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 146,
+      "y0": 153,
+      "x1": 457.98528,
+      "y1": 171
+    }
+  }
+}

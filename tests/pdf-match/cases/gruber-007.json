@@ -1,0 +1,16 @@
+{
+  "id": "gruber-007",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[6]",
+  "queryText": "5 Cf. Bernhard Windscheid, Recht und Rechtswissenschaft (Leipziger Rektoratsrede, 31 October 1884), in: Häuser (ed.), Die Leipziger Rek-toratsreden 1871-1933 (2009), 375-386, 383.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 131.0241,
+      "x1": 538.5778,
+      "y1": 154.0241
+    }
+  }
+}

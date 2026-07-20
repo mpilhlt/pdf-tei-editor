@@ -1,0 +1,16 @@
+{
+  "id": "ijple-005",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "5 Magna Carta Article 40",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 72,
+      "y0": 104.88,
+      "x1": 180.54210000000003,
+      "y1": 114.84
+    }
+  }
+}

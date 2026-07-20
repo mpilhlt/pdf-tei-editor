@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pdf-match review</title>
+<style>
+  :root {
+    --border: #ccc;
+    --accepted: #2a2;
+    --rejected: #c22;
+    --unreviewed: #f90;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    margin: 0;
+    display: flex;
+    height: 100vh;
+    color: #222;
+  }
+  #sidebar {
+    width: 320px;
+    flex: 0 0 320px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #sidebar-header {
+    padding: 0.75em;
+    border-bottom: 1px solid var(--border);
+  }
+  #progress {
+    font-size: 0.85em;
+    margin-bottom: 0.5em;
+    color: #444;
+  }
+  #filter { width: 100%; padding: 0.3em; }
+  #case-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+  }
+  #case-list li {
+    padding: 0.5em 0.75em;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    border-left: 5px solid transparent;
+    font-size: 0.9em;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5em;
+  }
+  #case-list li:hover { background: #f5f5f5; }
+  #case-list li.selected { background: #e8f0fe; }
+  #case-list li.state-accepted { border-left-color: var(--accepted); }
+  #case-list li.state-rejected { border-left-color: var(--rejected); }
+  #case-list li.state-unreviewed { border-left-color: var(--unreviewed); }
+  .case-id { font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .case-score { color: #666; flex: 0 0 auto; }
+  #main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5em;
+    min-width: 0;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 1em;
+    font-size: 0.8em;
+    color: #fff;
+    font-weight: bold;
+  }
+  .badge.accepted { background: var(--accepted); }
+  .badge.rejected { background: var(--rejected); }
+  .badge.unreviewed { background: var(--unreviewed); }
+  .field { margin: 0.6em 0; }
+  .field label { display: block; font-weight: bold; font-size: 0.8em; text-transform: uppercase; color: #666; margin-bottom: 0.2em; }
+  .field .value { white-space: pre-wrap; word-break: break-word; }
+  #image-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    margin: 1em 0;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: #f7f7f7;
+  }
+  #image-wrap.full-page { max-width: 100%; }
+  #page-image {
+    display: block;
+    max-width: none;
+  }
+  #image-wrap.full-page #page-image { max-width: 100%; width: 100%; height: auto; position: static; }
+  #image-wrap:not(.full-page) #page-image { position: absolute; }
+  #bbox {
+    position: absolute;
+    border: 3px solid red;
+    background: rgba(255, 0, 0, 0.15);
+    pointer-events: none;
+  }
+  #image-toggle {
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0.3em 0 0;
+  }
+  #image-missing {
+    padding: 1em;
+    border: 1px dashed var(--border);
+    background: #fffbe6;
+    max-width: 600px;
+  }
+  #actions { margin: 1em 0; display: flex; gap: 0.5em; align-items: center; }
+  button {
+    padding: 0.5em 1.2em;
+    font-size: 1em;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: #fff;
+  }
+  #accept-btn { border-color: var(--accepted); color: var(--accepted); }
+  #accept-btn:hover { background: var(--accepted); color: #fff; }
+  #reject-btn { border-color: var(--rejected); color: var(--rejected); }
+  #reject-btn:hover { background: var(--rejected); color: #fff; }
+  #reject-note {
+    flex: 1;
+    max-width: 300px;
+    padding: 0.4em;
+  }
+  #shortcut-hint { font-size: 0.8em; color: #888; margin-left: 0.5em; }
+  table { border-collapse: collapse; margin-top: 0.5em; }
+  td, th { border: 1px solid var(--border); padding: 2px 8px; text-align: left; font-size: 0.85em; }
+  #empty-state { padding: 2em; color: #666; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div id="progress">Loading…</div>
+    <select id="filter">
+      <option value="all">All</option>
+      <option value="unreviewed">Unreviewed</option>
+      <option value="accepted">Accepted</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </div>
+  <ul id="case-list"></ul>
+</div>
+
+<div id="main">
+  <div id="empty-state">Loading cases…</div>
+  <div id="detail" style="display:none;"></div>
+</div>
+
+<script>
+'use strict';
+
+/** @type {Array<Object>} */
+let cases = [];
+/** @type {string|null} */
+let selectedId = null;
+let filterState = 'all';
+/** Whether to show the full page instead of a crop centered on the bbox (persists across case navigation). */
+let showFullPage = false;
+
+// Crop view tuning: the crop window always spans the full page width (so
+// multi-column layouts stay legible) and is cropped vertically to the bbox
+// padded by a margin (a fraction of the bbox's own height, with a floor so
+// short bboxes still get enough context), then bounded to a max on-screen
+// size.
+const CROP_MAX_W = 460;
+const CROP_MAX_H = 380;
+const CROP_MARGIN_Y_OF_BBOX = 1.0;
+const CROP_MARGIN_Y_MIN_OF_PAGE = 0.05;
+// The highlight border is drawn flush against the matched-text bbox by
+// default, which can cover adjacent glyphs (e.g. a footnote number, or the
+// last line's descenders). Pad the drawn box outward so the border clears
+// the text instead of overlapping it. PDF space has origin bottom-left, so
+// the bottom pad (larger, to reliably clear a full line of descenders/the
+// next line) is subtracted from y0.
+const BBOX_DISPLAY_PAD_X = 5;
+const BBOX_DISPLAY_PAD_TOP = 5;
+const BBOX_DISPLAY_PAD_BOTTOM = 14;
+
+/**
+ * Pads a bbox outward (asymmetrically top vs. bottom) so the highlight
+ * border doesn't overlap the matched text, clamped to the page bounds.
+ * @param {{x0: number, y0: number, x1: number, y1: number}} bbox
+ * @param {{width: number, height: number}} viewport
+ * @returns {{x0: number, y0: number, x1: number, y1: number}}
+ */
+function padBboxForDisplay(bbox, viewport) {
+  return {
+    x0: Math.max(0, bbox.x0 - BBOX_DISPLAY_PAD_X),
+    y0: Math.max(0, bbox.y0 - BBOX_DISPLAY_PAD_BOTTOM),
+    x1: Math.min(viewport.width, bbox.x1 + BBOX_DISPLAY_PAD_X),
+    y1: Math.min(viewport.height, bbox.y1 + BBOX_DISPLAY_PAD_TOP)
+  };
+}
+
+/**
+ * Computes the CSS geometry (container size, image offset/scale, bbox
+ * overlay position) needed to render `bbox` cropped from the full page
+ * image (full width, cropped to a vertical band around the bbox with some
+ * context) into a container no larger than CROP_MAX_W x CROP_MAX_H.
+ * @param {{width: number, height: number}} viewport - Full page size (PDF points)
+ * @param {{x0: number, y0: number, x1: number, y1: number}} bbox - PDF-space bbox (origin bottom-left)
+ * @returns {Object} Geometry percentages/pixels for the crop container, image, and bbox overlay
+ */
+function computeCrop(viewport, bbox) {
+  const pw = viewport.width, ph = viewport.height;
+  const bh = bbox.y1 - bbox.y0;
+  const marginY = Math.max(bh * CROP_MARGIN_Y_OF_BBOX, ph * CROP_MARGIN_Y_MIN_OF_PAGE);
+
+  // Image-space (top-down) top/bottom of the bbox; PDF space has origin bottom-left.
+  const imgTop = ph - bbox.y1;
+  const imgBottom = ph - bbox.y0;
+
+  const cy0 = Math.max(0, imgTop - marginY);
+  const cy1 = Math.min(ph, imgBottom + marginY);
+  const cropHFrac = (cy1 - cy0) / ph;
+  const ch0Frac = cy0 / ph;
+
+  const aspect = pw / (cropHFrac * ph);
+  let containerW, containerH;
+  if (aspect >= CROP_MAX_W / CROP_MAX_H) {
+    containerW = CROP_MAX_W;
+    containerH = CROP_MAX_W / aspect;
+  } else {
+    containerH = CROP_MAX_H;
+    containerW = CROP_MAX_H * aspect;
+  }
+
+  const bboxTopFrac = imgTop / ph, bboxBottomFrac = imgBottom / ph;
+
+  return {
+    containerW, containerH,
+    imgWidthPct: 100,
+    imgHeightPct: 100 / cropHFrac,
+    imgLeftPct: 0,
+    imgTopPct: -100 * ch0Frac / cropHFrac,
+    boxLeftPct: 100 * bbox.x0 / pw,
+    boxTopPct: 100 * (bboxTopFrac - ch0Frac) / cropHFrac,
+    boxWidthPct: 100 * (bbox.x1 - bbox.x0) / pw,
+    boxHeightPct: 100 * (bboxBottomFrac - bboxTopFrac) / cropHFrac
+  };
+}
+
+const listEl = document.getElementById('case-list');
+const progressEl = document.getElementById('progress');
+const filterEl = document.getElementById('filter');
+const mainEl = document.getElementById('main');
+const emptyStateEl = document.getElementById('empty-state');
+const detailEl = document.getElementById('detail');
+
+/** @param {unknown} s */
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+async function loadCases() {
+  const res = await fetch('/api/cases');
+  cases = await res.json();
+  if (!selectedId && cases.length) {
+    const firstUnreviewed = cases.find(c => c.reviewState === 'unreviewed');
+    selectedId = (firstUnreviewed || cases[0]).id;
+  }
+  renderSidebar();
+  renderDetail();
+}
+
+function filteredCases() {
+  if (filterState === 'all') return cases;
+  return cases.filter(c => c.reviewState === filterState);
+}
+
+function renderSidebar() {
+  const counts = { accepted: 0, rejected: 0, unreviewed: 0 };
+  for (const c of cases) counts[c.reviewState]++;
+  progressEl.textContent = `${counts.accepted} accepted, ${counts.rejected} rejected, ${counts.unreviewed} unreviewed of ${cases.length}`;
+
+  const list = filteredCases();
+  listEl.innerHTML = '';
+  for (const c of list) {
+    const li = document.createElement('li');
+    li.className = `state-${c.reviewState}${c.id === selectedId ? ' selected' : ''}`;
+    li.dataset.id = c.id;
+    const scoreText = c.match ? c.match.score.toFixed(3) : '—';
+    li.innerHTML = `<span class="case-id">${esc(c.id)}</span><span class="case-score">${scoreText}</span>`;
+    li.addEventListener('click', () => selectCase(c.id));
+    listEl.appendChild(li);
+  }
+}
+
+function selectCase(id) {
+  selectedId = id;
+  renderSidebar();
+  renderDetail();
+  const li = listEl.querySelector(`li[data-id="${CSS.escape(id)}"]`);
+  if (li) li.scrollIntoView({ block: 'nearest' });
+}
+
+function currentCase() {
+  return cases.find(c => c.id === selectedId) || null;
+}
+
+function renderDetail() {
+  const c = currentCase();
+  if (!c) {
+    emptyStateEl.style.display = '';
+    emptyStateEl.textContent = 'No case selected.';
+    detailEl.style.display = 'none';
+    return;
+  }
+  emptyStateEl.style.display = 'none';
+  detailEl.style.display = '';
+
+  let imageBlock;
+  if (c.match && c.viewport) {
+    const pw = c.viewport.width;
+    const ph = c.viewport.height;
+    const bbox = padBboxForDisplay(c.match.bbox, c.viewport);
+    const errorHandler = `this.parentElement.outerHTML='<div id=&quot;image-missing&quot;>Page image missing for <code>${esc(c.pdf)}</code> page ${c.match.page}. Re-run <code>node tests/pdf-match/extract-fixtures.js --id ${esc(c.pdf)} --render</code> (using the original PDF path) to regenerate page PNGs.</div>'`;
+
+    let wrapStyle, imgStyle, boxStyle;
+    if (showFullPage) {
+      wrapStyle = '';
+      imgStyle = '';
+      const leftPct = (100 * bbox.x0 / pw).toFixed(2);
+      const topPct = (100 * (ph - bbox.y1) / ph).toFixed(2);
+      const widthPct = (100 * (bbox.x1 - bbox.x0) / pw).toFixed(2);
+      const heightPct = (100 * (bbox.y1 - bbox.y0) / ph).toFixed(2);
+      boxStyle = `left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%;`;
+    } else {
+      const g = computeCrop(c.viewport, bbox);
+      wrapStyle = `width:${g.containerW.toFixed(1)}px; max-width:100%; aspect-ratio:${g.containerW.toFixed(2)}/${g.containerH.toFixed(2)};`;
+      imgStyle = `width:${g.imgWidthPct.toFixed(2)}%; height:${g.imgHeightPct.toFixed(2)}%; left:${g.imgLeftPct.toFixed(2)}%; top:${g.imgTopPct.toFixed(2)}%;`;
+      boxStyle = `left:${g.boxLeftPct.toFixed(2)}%; top:${g.boxTopPct.toFixed(2)}%; width:${g.boxWidthPct.toFixed(2)}%; height:${g.boxHeightPct.toFixed(2)}%;`;
+    }
+
+    imageBlock = `
+      <label id="image-toggle"><input type="checkbox" id="full-page-toggle" ${showFullPage ? 'checked' : ''}> Show full page</label>
+      <div id="image-wrap" class="${showFullPage ? 'full-page' : ''}" style="${wrapStyle}">
+        <img id="page-image" src="/pages/${esc(c.pdf)}/page-${c.match.page}.png"
+             alt="page ${c.match.page}" style="${imgStyle}"
+             onerror="${errorHandler}">
+        <div id="bbox" style="${boxStyle}"></div>
+      </div>`;
+  } else if (c.match) {
+    imageBlock = '<div id="image-missing">No page viewport available for the matched page.</div>';
+  } else {
+    imageBlock = '<div id="image-missing">No match proposed by the matcher for this case.</div>';
+  }
+
+  const candidateRows = (c.candidates || []).map(cand =>
+    `<tr><td>${cand.page}</td><td>${cand.score}</td><td>${esc(cand.text)}</td></tr>`).join('');
+
+  detailEl.innerHTML = `
+    <h2 style="font-family:monospace;">${esc(c.id)} <span class="badge ${c.reviewState}">${c.reviewState}</span></h2>
+    <div class="field"><label>PDF / Page</label><div class="value">${esc(c.pdf)} / ${c.match ? c.match.page : '—'}</div></div>
+    <div class="field"><label>Score</label><div class="value">${c.match ? c.match.score.toFixed(3) : '—'}</div></div>
+    <div class="field"><label>XPath</label><div class="value">${esc(c.xpath || '')}</div></div>
+    <div class="field"><label>Query text</label><div class="value">${esc(c.queryText)}</div></div>
+    <div class="field"><label>Matched text</label><div class="value">${c.match ? esc(c.match.matchedText) : '—'}</div></div>
+    ${imageBlock}
+    <details>
+      <summary>Top candidates (${(c.candidates || []).length})</summary>
+      <table><tr><th>Page</th><th>Score</th><th>Text</th></tr>${candidateRows}</table>
+    </details>
+    <div id="actions">
+      <button id="accept-btn" title="Shortcut: a">Accept</button>
+      <button id="reject-btn" title="Shortcut: r">Reject</button>
+      <input id="reject-note" type="text" placeholder="optional rejection note" value="${esc(c.rejectNote || '')}">
+      <span id="shortcut-hint">a = accept · r = reject · j/k or ↑/↓ = move</span>
+    </div>
+  `;
+
+  document.getElementById('accept-btn').addEventListener('click', () => submitVerdict('accept'));
+  document.getElementById('reject-btn').addEventListener('click', () => submitVerdict('reject'));
+  document.getElementById('accept-btn').disabled = !c.match;
+
+  const toggle = document.getElementById('full-page-toggle');
+  if (toggle) {
+    toggle.addEventListener('change', () => {
+      showFullPage = toggle.checked;
+      renderDetail();
+    });
+  }
+}
+
+/** @param {'accept'|'reject'} verdict */
+async function submitVerdict(verdict) {
+  const c = currentCase();
+  if (!c) return;
+  if (verdict === 'accept' && !c.match) {
+    alert('No proposed match - cannot accept.');
+    return;
+  }
+  const noteInput = document.getElementById('reject-note');
+  const note = noteInput ? noteInput.value.trim() : '';
+
+  const res = await fetch('/api/verdict', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: c.id, verdict, note: note || undefined })
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(`Failed: ${body.error || res.statusText}`);
+    return;
+  }
+  const { reviewState } = await res.json();
+  c.reviewState = reviewState;
+  c.rejectNote = verdict === 'reject' ? (note || null) : null;
+  renderSidebar();
+  advanceToNextUnreviewed();
+}
+
+function advanceToNextUnreviewed() {
+  const list = filteredCases();
+  const idx = list.findIndex(c => c.id === selectedId);
+  let next = list.slice(idx + 1).find(c => c.reviewState === 'unreviewed');
+  if (!next) next = cases.find(c => c.reviewState === 'unreviewed');
+  if (next) {
+    selectCase(next.id);
+  } else {
+    renderDetail();
+  }
+}
+
+function moveSelection(delta) {
+  const list = filteredCases();
+  const idx = list.findIndex(c => c.id === selectedId);
+  const next = list[idx + delta];
+  if (next) selectCase(next.id);
+}
+
+filterEl.addEventListener('change', () => {
+  filterState = filterEl.value;
+  renderSidebar();
+});
+
+document.addEventListener('keydown', ev => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (ev.key === 'a') { submitVerdict('accept'); ev.preventDefault(); }
+  else if (ev.key === 'r') { submitVerdict('reject'); ev.preventDefault(); }
+  else if (ev.key === 'ArrowDown' || ev.key === 'j') { moveSelection(1); ev.preventDefault(); }
+  else if (ev.key === 'ArrowUp' || ev.key === 'k') { moveSelection(-1); ev.preventDefault(); }
+});
+
+loadCases();
+</script>
+</body>
+</html>

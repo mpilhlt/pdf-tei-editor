@@ -1,0 +1,16 @@
+{
+  "id": "zjs-003",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "Poid.",
+  "expected": {
+    "page": 5,
+    "bbox": {
+      "x0": 189,
+      "y0": 112,
+      "x1": 203.81724,
+      "y1": 121
+    }
+  }
+}

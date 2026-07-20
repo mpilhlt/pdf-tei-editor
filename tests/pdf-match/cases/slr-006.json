@@ -1,0 +1,16 @@
+{
+  "id": "slr-006",
+  "pdf": "slr",
+  "tei": "tests/pdf-match/sources/slr.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[5]",
+  "queryText": "Crennan J). See also at 180 [4], 184-5 [22], 188-91 [29]-[34], 216-17 [",
+  "expected": {
+    "page": 19,
+    "bbox": {
+      "x0": 80.81531999999999,
+      "y0": 206.82600000000002,
+      "x1": 401.14927799999975,
+      "y1": 223.983
+    }
+  }
+}

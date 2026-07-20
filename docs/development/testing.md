@@ -492,6 +492,14 @@ Supported patterns:
 4. **Sequential vs Parallel** - Use `describe.serial()` for dependent tests
 5. **Meaningful assertions** - Test behavior, not implementation details
 
+### Testing PDF Viewer Code
+
+For code that touches the PDF Viewer or PDF text extraction/matching, see
+[Testing PDF Viewer Code with Node](testing-pdf-viewer.md) — how to keep
+algorithmic logic DOM-free so it runs identically in Node and the browser,
+Node-side PDF.js/`@napi-rs/canvas` gotchas, and the fixture-based offline
+pipeline pattern used by `tests/pdf-match/`.
+
 ### Test Organization
 
 - **Unit tests**: Test single functions/classes in isolation

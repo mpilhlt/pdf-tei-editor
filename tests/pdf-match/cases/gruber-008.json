@@ -1,0 +1,16 @@
+{
+  "id": "gruber-008",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[7]",
+  "queryText": "6 See the interesting switch between civil and constitutional judicial observation perspectives in this regard: BVerfG, Order of 12.12.2012 -2 BvR 1750/12, MDR 2013, 294.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 107.024,
+      "x1": 538.5882999999999,
+      "y1": 130.024
+    }
+  }
+}

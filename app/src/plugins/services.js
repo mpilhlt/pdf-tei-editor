@@ -426,38 +426,27 @@ class ServicesPlugin extends Plugin {
   }
 
   /**
-   * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+   * Given a node in the XML, locate and highlight the region of the PDF
+   * it was extracted from, using fuzzy sequence matching on the node's
+   * ordered text content.
    * @param {Element} node
    */
   async searchNodeContentsInPdf(node) {
-
-    let searchTerms = getNodeText(node)
-      // Split on whitespace only; keep hyphenated compounds intact since the
-      // span-level scorer handles prefix/suffix matching for line-break hyphens
-      .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/\s+/u)), [])
-      .filter(term => term.length > 0)
-
-    // make the list of search terms unique
-    searchTerms = Array.from(new Set(searchTerms))
-
-    // add footnote number as required anchor term
-    // Check the node and its ancestors for a source attribute (handles clicks on child elements)
-    let anchorTerm = null
-    let sourceNode = node
-    while (sourceNode && sourceNode.nodeType === Node.ELEMENT_NODE) {
-      if (sourceNode.hasAttribute("source")) {
-        const source = sourceNode.getAttribute("source")
-        if (source?.slice(0, 2) === "fn") {
-          anchorTerm = source.slice(2)
-          searchTerms.unshift(anchorTerm)
-          break
-        }
-      }
-      sourceNode = sourceNode.parentElement
+    const queryText = getNodeText(node).join(' ')
+    if (!queryText.trim()) {
+      return
     }
-
-    // start search - if anchorTerm is set, clusters must contain it
-    await this.#pdfViewer.search(searchTerms, { anchorTerm })
+    // If the node originates from a footnote, prepend the printed footnote
+    // number: the footnote text in the PDF physically starts with it
+    const footnoteId = getSourceFootnoteId(node)
+    const query = footnoteId ? `${footnoteId} ${queryText}` : queryText
+    const match = await this.#pdfViewer.search(query)
+    if (match) {
+      this.#logger.debug(`PDF match: page ${match.page}, score ${match.score.toFixed(3)}`)
+    } else {
+      this.#logger.debug(`No PDF match for query: ${query.slice(0, 80)}...`)
+      notify('No sufficiently similar text found in the PDF', 'warning', 'search')
+    }
   }
 }
 
@@ -490,4 +479,25 @@ function getTextNodes(node) {
     }
   }
   return textNodes
+}
+
+/**
+ * Returns the printed footnote identifier for a node, if the project's
+ * ad-hoc convention applies: a `source="fnNN"` attribute on the node or an
+ * ancestor marks the footnote the node was extracted from. This convention
+ * is non-standard and may change - keep ALL knowledge of it inside this
+ * function; callers only see "text to prepend to the PDF search query".
+ * @param {Element} node
+ * @returns {string|null} The printed footnote number, or null
+ */
+export function getSourceFootnoteId(node) {
+  let current = node
+  while (current && current.nodeType === 1 /* ELEMENT_NODE */) {
+    const source = current.getAttribute('source')
+    if (source && /^fn\d+$/.test(source)) {
+      return source.slice(2)
+    }
+    current = current.parentElement
+  }
+  return null
 }

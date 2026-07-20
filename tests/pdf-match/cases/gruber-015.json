@@ -1,0 +1,16 @@
+{
+  "id": "gruber-015",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[14]",
+  "queryText": "4 Vgl. Rudolf Wiethölter, Zur Regelbildung in der Dogmatik des Zivilrechts, in: Recht in Recht-Fertigungen, hg. von P. Zumbansen/M. Amstutz, 1992/2014, 143-160, 146.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 56.6929,
+      "y0": 155.0242,
+      "x1": 283.46539999999993,
+      "y1": 178.0242
+    }
+  }
+}

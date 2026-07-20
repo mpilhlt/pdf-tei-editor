@@ -1,0 +1,16 @@
+{
+  "id": "gruber-003",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "1 Für R.W. von M.G. in Erinnerung an den \"3. Stock\"! Für wertvolle Kom-mentare und Anregungen danke ich Alina De Col, Andreas Fischer-Les-cano, Fabienne Graf, Dario Haux, Steve Howe, Vaios Karavas, Michele Luminati, Suad Salihu und Gunther Teubner. Der Beitrag ist im Rahmen des vom Schweizerischen Nationalfonds (SNF) geförderten Projekts \"Future Generations in Swiss and European Private Law\" entstanden.",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.6929,
+      "y0": 61.1969,
+      "x1": 283.4645000000001,
+      "y1": 108.1969
+    }
+  }
+}

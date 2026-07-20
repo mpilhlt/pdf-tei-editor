@@ -1314,3 +1314,30 @@ def endpoint(current_user: dict = Depends(require_admin)):
 - Use `Depends(get_current_user)` to inject authentication
 - FastAPI automatically handles session extraction from `X-Session-Id` header
 - Session header is case-sensitive: `X-Session-Id`
+
+## PDF Text Lookup Pipeline (pdf-match)
+
+The PDF text matcher (`app/src/modules/pdf-text-matcher.js`) — behind the PDF
+Viewer's Autosearch switch — has a dedicated offline pipeline in
+`tests/pdf-match/` that runs it against real-PDF fixtures with
+human-confirmed gold locations. **Read
+[tests/pdf-match/README.md](../../tests/pdf-match/README.md) before touching
+this feature** for the fetch → prepare → run → review → confirm workflow and
+the npm scripts (`pdf-match:fetch`, `pdf-match:prepare`, `pdf-match:run`,
+`pdf-match:review`). For the general pattern this pipeline follows (DOM-free
+algorithm design, Node-side PDF.js gotchas, fixture-based testing), see
+[Testing PDF Viewer Code with Node](../development/testing-pdf-viewer.md).
+
+The gold cases run as part of `npm run test:unit:js` via
+`tests/unit/js/pdf-match-regression.test.js`; algorithm changes must keep the
+printed page-accuracy and region-hit metrics from regressing. Gold cases run
+at the matcher's most permissive threshold (0) — the suite asserts region
+*correctness*, not whether a case's score clears the production runtime
+threshold (a case can be confirmed-correct with a score below the runtime
+cutoff; that is tracked separately in the printed metrics, not a test
+failure).
+
+Reliability: on the current gold set (68 real bibliography entries from 6
+documents), page accuracy and region hit rate are both 100%. In practice,
+match quality tracks the PDF's text-extraction quality — scanned pages, OCR
+artifacts, and unusual layouts are where it degrades.

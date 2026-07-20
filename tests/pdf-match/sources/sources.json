@@ -1,0 +1,45 @@
+{
+  "_comment": "Curated provenance metadata for the pdf-match test PDFs (hand-maintained, not generated). Per-docid keys: `description` (required); `sourcePath` (optional) — path to a local PDF to copy in, absolute or relative to the repo root, for documents that aren't downloadable or that a user has on disk; `downloadUrl` (optional) — direct PDF download URL; `doi` (optional) — used by fetch-sources.js to re-resolve a download URL via Unpaywall/Crossref if `downloadUrl` is absent or fails; `sha256` (optional) — integrity check that guards against the publisher silently replacing the file, which would invalidate the committed gold cases in fixtures/ and cases/; if omitted, fetch-sources.js prints the computed hash so it can be pinned later. Resolution precedence in fetch-sources.js: existing file on disk -> sourcePath -> downloadUrl -> doi. `resolvedVia` (optional, informational) notes how the downloadUrl was originally discovered by hand (landing-page or unpaywall).",
+  "gruber": {
+    "doi": "10.26031/2023.001",
+    "downloadUrl": "https://www.anci.ch/articles/Ancilla2023_1_Gruber.pdf",
+    "sha256": "2097ee19b99b00e500921e4b09d44abc0eecc6be8e843ab5638cbad7421e5a05",
+    "description": "Gruber, \"Futurities of Law. Toward the Legal Design of the Next Society\" (Ancilla Iuris) — two-column parallel German/English text, footnotes split across columns, heavy hyphenation; the deliberate hard case",
+    "resolvedVia": "landing-page"
+  },
+  "ijple": {
+    "doi": "10.19164/ijple.v6i1.1294",
+    "downloadUrl": "https://www.northumbriajournals.co.uk/index.php/ijple/article/download/1294/1664",
+    "sha256": "84e93732f7da9bd8b449493f73b96e70997d5bf4390cefdfe7ed95bb5f8891a1",
+    "description": "\"The Journey To Legal Capability: Challenges for Public Law from Public Legal Education\"",
+    "resolvedVia": "unpaywall"
+  },
+  "napoli": {
+    "doi": "10.6093/2284-0184/11598",
+    "downloadUrl": "https://serena.sharepress.it/rth/article/download/11598/11729",
+    "sha256": "0acc1103713a4e72232cca265fc2fe0b6760a5ddb085547d5e0e33a3ea85f133",
+    "description": "Priscilla Bavieri, \"Tra filosofia e teatro. A proposito di un libro di Rosario Diana\"",
+    "resolvedVia": "landing-page"
+  },
+  "slr": {
+    "doi": "10.30722/slr.19653",
+    "downloadUrl": "https://openjournals.library.sydney.edu.au/SLR/article/download/19653/16600",
+    "sha256": "501ca404ba05fbc031b55f16a1dec1a901d3aaedec710b5ace41d2073280edfe",
+    "description": "\"Act of Grace Payments and the Constitution\" (Sydney Law Review)",
+    "resolvedVia": "unpaywall"
+  },
+  "zjs": {
+    "doi": "10.53300/001c.5220",
+    "downloadUrl": "https://blr.scholasticahq.com/article/5220.pdf",
+    "sha256": "a4a67d027ee9ca723b86e25f4014a85b86bbf3d0364e7cd671adaeaecc10e334",
+    "description": "\"Legal Aspects of Australia's Commercial Relationship With Taiwan\"",
+    "resolvedVia": "unpaywall"
+  },
+  "limbach": {
+    "doi": "10.3249/1868-1581-1-1-limbach",
+    "downloadUrl": "https://journals.uni-goettingen.de/gojil/article/download/1895/1607",
+    "sha256": "92a8abe00461c8bcd2a2941c931dee6c84907ade3aa54d5418b4def89d21b9a2",
+    "description": "Jutta Limbach, \"Human Rights in Times of Terror: Is Collective Security the Enemy of Individual Freedom?\" (GoJIL)",
+    "resolvedVia": "landing-page"
+  }
+}

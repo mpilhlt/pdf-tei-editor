@@ -1,0 +1,16 @@
+{
+  "id": "ijple-002",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "2 Sarah Nason, \"Justice Outside London? An Update on 'Regional' Judicial Review\" (UK Constitutional Law Association, November 16 2016) https://ukconstitutionallaw.org/2016/11/16/sarah-nason-justice-outside-london-an-update-on-regional-judicial-review/ accessed 25 th July 2022",
+  "expected": {
+    "page": 1,
+    "bbox": {
+      "x0": 72,
+      "y0": 75,
+      "x1": 528.5942999999993,
+      "y1": 112.19999999999999
+    }
+  }
+}

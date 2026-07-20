@@ -1,0 +1,16 @@
+{
+  "id": "napoli-006",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[5]",
+  "queryText": "4 Tale trasposizione è qualcosa di diverso dal riadattamento -pensiamo ad esempio all'adattamento teatrale o cinematografico di un romanzo. Questi tipi di traduzione conservano una qualche comunanza strutturale di fondo, ossia la matrice narrativa (cfr. ibid.).",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 258.83,
+      "x1": 555.4100000000002,
+      "y1": 291.85
+    }
+  }
+}

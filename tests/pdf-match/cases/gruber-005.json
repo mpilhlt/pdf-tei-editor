@@ -1,0 +1,16 @@
+{
+  "id": "gruber-005",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "3 Cf. ibid, 16.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 179.0243,
+      "x1": 358.3036,
+      "y1": 186.0243
+    }
+  }
+}

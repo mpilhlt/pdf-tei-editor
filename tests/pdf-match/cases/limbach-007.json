@@ -1,0 +1,16 @@
+{
+  "id": "limbach-007",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[6]",
+  "queryText": "7 Grundgesetz, 23 May 1949, BGBl. I 1, latest amendment, 28 August 2006, BGBl. I 2034.",
+  "expected": {
+    "page": 5,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 144.140306,
+      "x1": 481.89905999999905,
+      "y1": 166.6403
+    }
+  }
+}

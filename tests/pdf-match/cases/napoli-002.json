@@ -1,0 +1,16 @@
+{
+  "id": "napoli-002",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "* R. Diana, Migrations of Concepts. From Philosophical Text to Scene, Brepols, Turnhout, 2023.",
+  "expected": {
+    "page": 1,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 86.275,
+      "x1": 444.64000000000004,
+      "y1": 96.275
+    }
+  }
+}

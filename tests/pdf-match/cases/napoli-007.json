@@ -1,0 +1,16 @@
+{
+  "id": "napoli-007",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[6]",
+  "queryText": "5 Rosalba Quindici ha realizzato, a partire dal 2013, una serie di melologhi su temi filosofici -su libretto di Rosario Diana -in collaborazione con l'Istituto per la storia del pensiero filosofico e scientifico moderno (Consiglio nazionale delle ricerche) e altri importanti enti artistico-culturali. Nel processo di composizione musicale attuato ad hoc per i testi di Diana, la musica non è mai qualcosa che possa essere derubricato a elemento di secondo piano rispetto alla parola, ma diviene «un vero e proprio personaggio» che interagisce con la parola attraverso un suo linguaggio specifico (cfr. ivi, p. 125).",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 201.3,
+      "x1": 555.8100000000001,
+      "y1": 257.33000000000004
+    }
+  }
+}

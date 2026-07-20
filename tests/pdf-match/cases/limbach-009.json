@@ -1,0 +1,16 @@
+{
+  "id": "limbach-009",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[8]",
+  "queryText": "9 The Israeli High Court of Justice, HCJ 5100/94 The Public Committee Against Torture in Israel v. The State of Israel; reprinted in: Judgments of the Israel Supreme Court: Fighting Terrorism within the Law, 43.",
+  "expected": {
+    "page": 8,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 167.180432,
+      "x1": 481.9621860000001,
+      "y1": 201.1403
+    }
+  }
+}

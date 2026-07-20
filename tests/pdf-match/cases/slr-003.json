@@ -1,0 +1,16 @@
+{
+  "id": "slr-003",
+  "pdf": "slr",
+  "tei": "tests/pdf-match/sources/slr.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "[78] (French CJ, Hayne, Kiefel, Bell and Keane JJ), quoting from the defendants' submissions. 106 AAP Case (n 1) 397 (Mason J); Williams No 1 (n 5) 249-52 [194]-[198], 267 [240] (",
+  "expected": {
+    "page": 19,
+    "bbox": {
+      "x0": 66.6,
+      "y0": 225.18,
+      "x1": 401.2018739999997,
+      "y1": 301.96824
+    }
+  }
+}

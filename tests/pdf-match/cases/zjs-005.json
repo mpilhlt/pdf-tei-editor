@@ -1,0 +1,16 @@
+{
+  "id": "zjs-005",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[4]",
+  "queryText": "8 See Jain JP\"Tbe Legal Status of Formosa' (1963) 57 American Journal of International Law 16,44. See also CbJu H (ed)China and the Taiwan Issue (t979) 165.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 146,
+      "y0": 258,
+      "x1": 464.47496,
+      "y1": 277
+    }
+  }
+}

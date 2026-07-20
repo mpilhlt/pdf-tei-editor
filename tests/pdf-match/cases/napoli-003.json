@@ -1,0 +1,16 @@
+{
+  "id": "napoli-003",
+  "pdf": "napoli",
+  "tei": "tests/pdf-match/sources/napoli.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "1 Ivi, p. 9 (l'autore mi ha gentilmente fornito il testo del libro italiano sul quale è stata condotta la traduzione in inglese e da cui sono tratte le citazioni in questo lavoro).",
+  "expected": {
+    "page": 1,
+    "bbox": {
+      "x0": 56.775,
+      "y0": 63.275,
+      "x1": 555.2900000000002,
+      "y1": 84.775
+    }
+  }
+}

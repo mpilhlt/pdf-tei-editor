@@ -1,0 +1,16 @@
+{
+  "id": "zjs-002",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[1]",
+  "queryText": "The rut1 area of q'aiwan' includes the island of Taiwan, the Pescad~res and the offshore islands of Quemoy and Matsuo The Treaty of Shimonoseki, by which Taiwan ~nd the Pescadores were ceded to Japan, was signed by the government of the Ching Dynasty after the Sino-Japanese War of 1894. See C~en LC m'~d Reisman W H Who Owns Taiw~: A Search for International Title' (1972) 81 gale Law Journal 599, 608.",
+  "expected": {
+    "page": 5,
+    "bbox": {
+      "x0": 189,
+      "y0": 122,
+      "x1": 483.27263999999997,
+      "y1": 189
+    }
+  }
+}

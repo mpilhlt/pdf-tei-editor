@@ -1,0 +1,16 @@
+{
+  "id": "gruber-023",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[22]",
+  "queryText": "11 Cf. on this Wiethölter, (fn. 7), Anforderungen, 533 et seq.",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 83.0239,
+      "x1": 491.0567,
+      "y1": 90.0239
+    }
+  }
+}

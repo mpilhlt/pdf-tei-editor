@@ -1,0 +1,16 @@
+{
+  "id": "gruber-010",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[9]",
+  "queryText": "also Wiethölter, Anforderungen an den Juristen heute, in: Zumbansen/Amstutz (eds.), Recht in Recht-Fer-tigungen (1992/2014), 525-541, 527 and 534: \"A 'useful lawyer' -that would be, after all, a man who knows nothing at all and can do everything: the man who is literally 'capable of anything.'\"",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 325.9843,
+      "y0": 59.0239,
+      "x1": 538.5813000000002,
+      "y1": 98.0239
+    }
+  }
+}

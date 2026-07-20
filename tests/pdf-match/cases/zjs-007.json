@@ -1,0 +1,16 @@
+{
+  "id": "zjs-007",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[6]",
+  "queryText": "10 See Oppertheim L International Law (7th ed Lauterpacht H.) (1952) 304 as quoted in Chiu op cit n 8 t66.",
+  "expected": {
+    "page": 6,
+    "bbox": {
+      "x0": 145,
+      "y0": 220,
+      "x1": 461.15070000000003,
+      "y1": 238
+    }
+  }
+}

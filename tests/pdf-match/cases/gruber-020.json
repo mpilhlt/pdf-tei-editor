@@ -1,0 +1,16 @@
+{
+  "id": "gruber-020",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[19]",
+  "queryText": "Markus Hartung/Micha-Manuel Bues/Gernot Halbleib (Hg.), Legal Tech. Die Digitalisierung des Rechtsmarkts, 2018.",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 70.8661,
+      "y0": 251.0241,
+      "x1": 283.47219999999993,
+      "y1": 266.0241
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "limbach-006",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[5]",
+  "queryText": "6 Directive 2006/24/EC of the European Parliament and of the Council, O.J. L105/54 (2006).",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 144.140306,
+      "x1": 481.9812239999992,
+      "y1": 166.6403
+    }
+  }
+}

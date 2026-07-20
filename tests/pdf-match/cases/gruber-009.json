@@ -1,0 +1,16 @@
+{
+  "id": "gruber-009",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[8]",
+  "queryText": "7 Cf. Rudolf Wiethölter, Rechtswissenschaft (1968/1986), 38, with direct reference to Bernhard Windscheid;",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 91.0239,
+      "x1": 538.5806000000001,
+      "y1": 106.0239
+    }
+  }
+}

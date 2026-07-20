@@ -1,0 +1,16 @@
+{
+  "id": "ijple-003",
+  "pdf": "ijple",
+  "tei": "tests/pdf-match/sources/ijple.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "3 Genn et al, \"Developing capable citizens: the role of public legal education The report of the PLEAS Task Force\" https://lawforlife.org.uk/wp-content/uploads/2013/05/pleas-task-force-report-14.pdf accessed 25th July 2022",
+  "expected": {
+    "page": 2,
+    "bbox": {
+      "x0": 72,
+      "y0": 129,
+      "x1": 537.6867839999999,
+      "y1": 166.20000000000002
+    }
+  }
+}

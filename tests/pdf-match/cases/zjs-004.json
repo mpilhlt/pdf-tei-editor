@@ -1,0 +1,16 @@
+{
+  "id": "zjs-004",
+  "pdf": "zjs",
+  "tei": "tests/pdf-match/sources/zjs.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[3]",
+  "queryText": "See Leng S Taiwan. China's Last Frontier (1991) as quoted in Far Eastern Economic Review (Heng Kong) 9 May 1991, 34.",
+  "expected": {
+    "page": 5,
+    "bbox": {
+      "x0": 189,
+      "y0": 93,
+      "x1": 488.22759,
+      "y1": 111
+    }
+  }
+}

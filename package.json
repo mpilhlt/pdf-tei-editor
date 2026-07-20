@@ -19,6 +19,12 @@
         "export": "uv run python bin/export_files.py",
         "batch-extract": "node bin/batch-extract.js",
         "manage-remote": "node bin/manage-remote.js",
+        "pdf-match:review": "node tests/pdf-match/review-server.js",
+        "pdf-match:fetch": "node tests/pdf-match/fetch-sources.js",
+        "pdf-match:extract": "node tests/pdf-match/extract-fixtures.js",
+        "pdf-match:generate": "node tests/pdf-match/generate-cases.js",
+        "pdf-match:prepare": "node tests/pdf-match/prepare.js",
+        "pdf-match:run": "node tests/pdf-match/run-cases.js",
         "start": "uv run python bin/start-prod",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
@@ -82,6 +88,7 @@
     },
     "devDependencies": {
         "@jsenv/importmap-node-module": "^7.1.1",
+        "@napi-rs/canvas": "^1.0.2",
         "@playwright/test": "^1.56.1",
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
@@ -98,5 +105,8 @@
         "jsdom": "^26.1.0",
         "madge": "^8.0.0",
         "rollup": "^4.40.2"
+    },
+    "overrides": {
+        "@napi-rs/canvas": "$@napi-rs/canvas"
     }
 }

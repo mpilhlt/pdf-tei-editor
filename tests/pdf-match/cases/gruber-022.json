@@ -1,0 +1,16 @@
+{
+  "id": "gruber-022",
+  "pdf": "gruber",
+  "tei": "tests/pdf-match/sources/gruber.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[21]",
+  "queryText": "10 See on this Christoph Menke, \"Unsere Zerrissenheit ist doch das Beste an der Moderne, was wir haben,\" DIE ZEIT 20(2017): \"[Law] is not re-flexively political, it does not recognize what responsibility it itself bears. It must forever follow up and correct social developments -as in a nev-er-ending cycle. That is why we constantly experience that all attempts to control legal regulation through new legal regulation lead to the same problems. This corrective logic must not be imagined too innocuously; this is not a free experiment of society with itself. It destroys living con-ditions when it produces exploitation and deprivation of freedom. I, for one, cannot see in this a successful self-correction of the law. The cycle of law bears traits of fatality and destiny -I would even say stupidity.\"",
+  "expected": {
+    "page": 4,
+    "bbox": {
+      "x0": 311.811,
+      "y0": 131.024,
+      "x1": 538.5907,
+      "y1": 202.024
+    }
+  }
+}

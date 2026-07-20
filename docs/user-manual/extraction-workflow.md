@@ -45,7 +45,7 @@ Edits are always be done in copies, which merged by the reviewers into the "gold
 
 ![](../images/6abdcf0a-a077-4f6c-9bb3-a4d92f541bb7.png)
 
-- By toggling "Autosearch" (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) in the footer of the PDF Viewer, you can search the contents of a `<biblStruct>` in the PDF automatically. This works only for the "Llamore" extraction, and isn't always reliable, so you might want to turn it on and off based on how it performs. 
+- By toggling "Autosearch" (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) in the footer of the PDF Viewer, you can search the contents of a `<biblStruct>` in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page.
 
 - You can leave comments anywhere by enclosing them in the xml comment markup: `<!-- this is a comment -->`
 - When you are done, click on the "Save document revision" button (![](../images/e0f8ad27-fb47-47fa-bde3-023f2353e0b8.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.

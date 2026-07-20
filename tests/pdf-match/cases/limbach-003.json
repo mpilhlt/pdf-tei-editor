@@ -1,0 +1,16 @@
+{
+  "id": "limbach-003",
+  "pdf": "limbach",
+  "tei": "tests/pdf-match/sources/limbach.tei.xml",
+  "xpath": "/TEI[1]/text[1]/listBibl[1]/bibl[2]",
+  "queryText": "3 European Convention for the Protection of Human Rights and Fundamental Freedoms and its protocols, 4 November 1950, 213 U.N.T.S. 222.",
+  "expected": {
+    "page": 3,
+    "bbox": {
+      "x0": 113.4,
+      "y0": 167.180426,
+      "x1": 481.935132,
+      "y1": 189.6203
+    }
+  }
+}
