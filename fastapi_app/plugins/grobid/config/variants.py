@@ -20,5 +20,5 @@ SUPPORTED_VARIANTS: list[str] = [
 
 PROCESSING_FLAVORS: list[str] = [
     "default",
-    "article/dh-law-footnotes",
+    "article/footnotes-refs",
 ]

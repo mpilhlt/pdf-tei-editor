@@ -278,7 +278,7 @@ def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, 
     revision_label.text = grobid_revision
 
     flavor_label = etree.SubElement(grobid_app, "label", type="flavor")
-    flavor_label.text = "article/dh-law-footnotes"
+    flavor_label.text = "article/footnotes-refs"
 
     variant_label = etree.SubElement(grobid_app, "label", type="variant-id")
     variant_label.text = variant_id

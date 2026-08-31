@@ -94,7 +94,7 @@ For example, create this script `batch-extract.sh`
 npm run batch-extract -- \
      --extractor grobid \
      --option variant_id=grobid.service.references \
-     --option flavor=article/dh-law-footnotes \
+     --option flavor=article/footnotes-refs \
      --collection mycollection \
      '/path/to/pdfs'
 

@@ -35,7 +35,7 @@ The plugin also registers a `split-bibl` enhancement with the TEI Wizard plugin,
 
 ### Processing flavors
 
-Flavors map to custom GROBID model variants. Supported values: `default`, `article/dh-law-footnotes`.
+Flavors map to custom GROBID model variants. Supported values: `default`, `article/footnotes-refs`.
 
 ---
 
