@@ -97,7 +97,7 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 ### Development Workflow
 
 1. Backend changes: Server auto-reloads automatically (FastAPI dev server detects changes)
-2. Schema updates: Delete `schema/cache/` to refresh XSD cache
+2. Schema updates: cached schema files (`data/schema/cache/`) auto-refresh after 1 hour (see `SCHEMA_CACHE_TTL_SECONDS` in `fastapi_app/lib/core/schema_validator.py`). For an immediate refresh, delete `data/schema/cache/`, or pass `invalidate_cache: true` to `/api/v1/validate/autocomplete-data`
 3. Building is only needed for production and is handled by pre-push git hooks
 
 ### Critical Rules
