@@ -105,19 +105,19 @@ class TestGetAnnotationTags(unittest.TestCase):
         )
         self.assertEqual(title_casename["tag"], "title")
 
-    def test_default_attributes_date_decision(self):
+    def test_date_type_options_collapsed_into_single_chip(self):
+        """date[decision]/date[enacted] are not separate chips; the single
+        'date' entry exposes them as an in-popup 'type' dropdown, like idno."""
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
-        date_decision = next(t for t in refs if t["label"] == "date[decision]")
-        self.assertEqual(date_decision["defaultAttributes"], {"type": "decision"})
-        self.assertEqual(date_decision["tag"], "date")
-
-    def test_default_attributes_date_enacted(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        date_enacted = next(t for t in refs if t["label"] == "date[enacted]")
-        self.assertEqual(date_enacted["defaultAttributes"], {"type": "enacted"})
-        self.assertEqual(date_enacted["tag"], "date")
+        date_entries = [t for t in refs if t["tag"] == "date"]
+        self.assertEqual(len(date_entries), 1, "date must be a single collapsed chip")
+        date = date_entries[0]
+        self.assertEqual(date["label"], "date")
+        self.assertIsNone(date["defaultAttributes"])
+        self.assertEqual(date["attributes"][0]["name"], "type")
+        for expected in ["decision", "enacted"]:
+            self.assertIn(expected, date["attributes"][0]["values"])
 
     def test_default_attributes_orgname_court(self):
         tags = self.get_annotation_tags()
@@ -126,19 +126,30 @@ class TestGetAnnotationTags(unittest.TestCase):
         self.assertEqual(orgname_court["defaultAttributes"], {"type": "court"})
         self.assertEqual(orgname_court["tag"], "orgName")
 
-    def test_default_attributes_cited_range_units(self):
+    def test_cited_range_units_collapsed_into_single_chip(self):
+        """citedRange's 8 @unit values are not separate chips; a single
+        'citedRange' entry exposes them as an in-popup 'unit' dropdown,
+        like idno."""
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
         units = [
             "section", "sub-section", "sentence", "number",
             "letter", "margin", "recital", "page",
         ]
-        for unit in units:
-            entry = next(t for t in refs if t["label"] == f"citedRange[{unit}]")
-            self.assertEqual(entry["defaultAttributes"], {"unit": unit})
-            self.assertEqual(entry["tag"], "citedRange")
-            self.assertEqual(entry["attributes"][0]["name"], "unit")
-            self.assertEqual(entry["attributes"][0]["values"], units)
+        cited_range_entries = [t for t in refs if t["tag"] == "citedRange"]
+        self.assertEqual(len(cited_range_entries), 1, "citedRange must be a single collapsed chip")
+        cited_range = cited_range_entries[0]
+        self.assertEqual(cited_range["label"], "citedRange")
+        self.assertIsNone(cited_range["defaultAttributes"])
+        self.assertEqual(cited_range["attributes"][0]["name"], "unit")
+        self.assertEqual(cited_range["attributes"][0]["values"], units)
+
+    def test_seg_signal_in_references(self):
+        tags = self.get_annotation_tags()
+        refs = tags["grobid.training.references"]
+        seg_signal = next(t for t in refs if t["label"] == "seg[signal]")
+        self.assertEqual(seg_signal["tag"], "seg")
+        self.assertEqual(seg_signal["defaultAttributes"], {"type": "signal"})
 
     def test_idno_attributes_include_legal_values(self):
         tags = self.get_annotation_tags()
