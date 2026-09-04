@@ -315,9 +315,9 @@ export class XmlAnnotationPopup {
     changeLabel.textContent = 'Change to';
     this.#overlay.appendChild(changeLabel);
 
-    this.#renderPalette(this.#overlay, def.tag, async (newDef) => {
+    this.#renderPalette(this.#overlay, def, async (newDef) => {
       this.#hide();
-      await this.#retag(element, newDef);
+      await this.#retag(element, def, newDef);
     });
 
     // Position near the badge — extra bottom margin for the "Change to" palette section
@@ -330,12 +330,12 @@ export class XmlAnnotationPopup {
 
   /**
    * Renders one chip per tag definition into `container`.
-   * The chip whose `tag === currentTag` is muted and non-interactive.
+   * The chip whose def is `currentDef` (by object identity) is muted and non-interactive.
    * @param {HTMLElement} container
-   * @param {string|null} currentTag
+   * @param {AnnotationTagDef|null} currentDef
    * @param {(def: AnnotationTagDef) => void} onChipClick
    */
-  #renderPalette(container, currentTag, onChipClick) {
+  #renderPalette(container, currentDef, onChipClick) {
     const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
     const row = document.createElement('div');
     Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' });
@@ -343,7 +343,7 @@ export class XmlAnnotationPopup {
       const chip = document.createElement('span');
       chip.textContent = def.label.replace(/\{@[^}]+\}/g, '…');
       chip.title = def.description || def.label;
-      const isCurrent = def.tag === currentTag;
+      const isCurrent = def === currentDef;
       Object.assign(chip.style, {
         display: 'inline-block',
         background: def.color,
@@ -366,27 +366,58 @@ export class XmlAnnotationPopup {
   }
 
   /**
-   * Replaces `element` with a new element of `newDef.tag`, copying all existing
-   * attributes then applying `newDef.defaultAttributes` on top.
+   * Retags `element` from `currentDef` to `newDef`. If the tag name changes, a new
+   * element is created (copying existing attributes) and swapped into the parent, as
+   * before; if the tag name is unchanged, `element` is mutated in place. Either way,
+   * any attribute key present in `currentDef.defaultAttributes` but absent from
+   * `newDef.defaultAttributes` is removed, then `newDef.defaultAttributes` is applied
+   * on top. Truly identical tag+defaultAttributes (a genuine no-op) does nothing.
    * @param {Element} element
+   * @param {AnnotationTagDef} currentDef
    * @param {AnnotationTagDef} newDef
    */
-  async #retag(element, newDef) {
-    if (element.localName === newDef.tag) return;
+  async #retag(element, currentDef, newDef) {
+    const currentAttrs = currentDef.defaultAttributes ?? {};
+    const newAttrs = newDef.defaultAttributes ?? {};
+    const tagChanged = element.localName !== newDef.tag;
+    const attrsChanged = !this.#attrsEqual(currentAttrs, newAttrs);
+    if (!tagChanged && !attrsChanged) return;
+
     const parent = element.parentNode;
     if (!parent) return;
-    const newEl = document.createElementNS(element.namespaceURI, newDef.tag);
-    for (const attr of element.attributes) {
-      newEl.setAttribute(attr.name, attr.value);
-    }
-    if (newDef.defaultAttributes) {
-      for (const [k, v] of Object.entries(newDef.defaultAttributes)) {
-        newEl.setAttribute(k, v);
+
+    let target = element;
+    if (tagChanged) {
+      const newEl = document.createElementNS(element.namespaceURI, newDef.tag);
+      for (const attr of element.attributes) {
+        newEl.setAttribute(attr.name, attr.value);
       }
+      while (element.firstChild) newEl.appendChild(element.firstChild);
+      parent.replaceChild(newEl, element);
+      target = newEl;
     }
-    while (element.firstChild) newEl.appendChild(element.firstChild);
-    parent.replaceChild(newEl, element);
+
+    for (const key of Object.keys(currentAttrs)) {
+      if (!(key in newAttrs)) target.removeAttribute(key);
+    }
+    for (const [k, v] of Object.entries(newAttrs)) {
+      target.setAttribute(k, v);
+    }
+
     await this.#editor.updateEditorFromNode(parent);
+  }
+
+  /**
+   * Shallow key/value equality check for two `defaultAttributes`-shaped objects.
+   * @param {Record<string,string>} a
+   * @param {Record<string,string>} b
+   * @returns {boolean}
+   */
+  #attrsEqual(a, b) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every((k) => a[k] === b[k]);
   }
 
   #hide() {

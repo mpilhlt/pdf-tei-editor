@@ -220,3 +220,113 @@ describe('XmlAnnotationPopup - popup title for duplicate tag defs', () => {
     }
   });
 });
+
+// ── XmlAnnotationPopup retag via "Change to" palette ───────────────────────
+
+/**
+ * Like triggerPopup, but returns a call trace of the mock editor's
+ * updateEditorFromNode invocations alongside the popup overlay, so tests can
+ * assert whether a retag actually happened (and whether it triggered an
+ * editor sync).
+ * @param {HTMLElement} container
+ * @param {string} tag
+ * @param {Element} domElement - returned by the mock editor's getDomNodeAt
+ * @returns {{ overlay: HTMLElement|null, calls: Node[] }}
+ */
+function triggerPopupTracked(container, tag, domElement) {
+  const calls = /** @type {Node[]} */ ([]);
+  const mockEditor = {
+    getDomNodeAt: () => domElement,
+    updateEditorFromNode: async (/** @type {Node} */ node) => { calls.push(node); }
+  };
+  const popup = new XmlAnnotationPopup(mockEditor);
+  popup.mount(container, tagDefsWithDuplicates);
+  container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+    bubbles: true,
+    detail: { tag, from: 0, clientX: 10, clientY: 10 }
+  }));
+  return { overlay: container.querySelector('.ann-popup'), calls };
+}
+
+/**
+ * Finds the "Change to" palette chip whose text content exactly matches `label`.
+ * Chips are rendered as bare <span> elements; since the fixture defs here all have
+ * `attributes: []`, no other <span> elements appear in the popup, so an exact
+ * textContent match reliably identifies the chip.
+ * @param {HTMLElement} overlay
+ * @param {string} label
+ */
+function findChip(overlay, label) {
+  const spans = [...overlay.querySelectorAll('span')];
+  const chip = spans.find((s) => s.textContent === label);
+  if (!chip) {
+    throw new Error(`chip "${label}" not found among: ${spans.map((s) => s.textContent).join(', ')}`);
+  }
+  return chip;
+}
+
+describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
+  it('clicking the other same-tag preset actually retags the element (previously a no-op)', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl'); // no attributes -> matches generic 'bibl' def
+      parent.appendChild(bibl);
+      const { overlay } = triggerPopupTracked(container, 'bibl', bibl);
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(parent.children.length, 1, 'exactly one element remains in parent');
+      const result = parent.firstElementChild;
+      assert.strictEqual(result?.localName, 'bibl');
+      assert.strictEqual(result?.getAttribute('type'), 'footnote',
+        'retagging to bibl[footnote] must set type="footnote"');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('removes an attribute present on the old preset but absent from the new preset\'s defaultAttributes', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote'); // matches bibl[footnote] def
+      parent.appendChild(bibl);
+      const { overlay } = triggerPopupTracked(container, 'bibl', bibl);
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl'); // plain bibl, no defaultAttributes
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      const result = parent.firstElementChild;
+      assert.strictEqual(result?.localName, 'bibl');
+      assert.strictEqual(result?.hasAttribute('type'), false,
+        'type attribute must be fully removed when switching to a preset that does not declare it');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('clicking the currently-active preset\'s own chip is a genuine no-op (same tag and defaultAttributes)', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote'); // matches bibl[footnote] def -> this is "current"
+      parent.appendChild(bibl);
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(parent.children.length, 1);
+      const result = parent.firstElementChild;
+      assert.strictEqual(result?.localName, 'bibl');
+      assert.strictEqual(result?.getAttribute('type'), 'footnote', 'attribute must remain unchanged');
+      assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called for a genuine no-op');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
