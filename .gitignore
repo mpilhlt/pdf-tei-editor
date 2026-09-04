@@ -1,18 +1,15 @@
-# Secrets and caches
-.env*
+# Local files, secrets and caches
+.*
 !.env.development
 !.env.production
 !.env.test
 !.env.deploy.demo.localhost
 !.env.deploy.example.org
+*.pyc
 
 # Caches and temp files
-.venv
-__pycache__
-.python-version
-.DS_Store
-._*
-*.backup
+
+/deploy*.backup
 nohup.out
 off/
 *.stackdump
@@ -50,11 +47,6 @@ nul
 /docs/api/backend/
 /docs/api/backend-api.json
 
-# IDE
-.idea
-
-/deploy
-/.local
 
 # pdf-match test pipeline: generated review artifacts (fixtures and cases ARE committed)
 tests/pdf-match/pages/
