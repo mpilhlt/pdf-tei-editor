@@ -8,9 +8,9 @@
 *.pyc
 
 # Caches and temp files
-
-/deploy*.backup
-nohup.out
+*.backup
+*.backup.*
+*.out
 off/
 *.stackdump
 
