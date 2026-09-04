@@ -11,6 +11,7 @@ For FastAPI migration - Phase 5.
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pathlib import Path
 import logging
+from datetime import datetime
 from typing import Optional, List
 
 from ..config import get_settings
@@ -294,6 +295,11 @@ def _save_pdf_extraction_result(
     except Exception as e:
         logger.warning(f"Failed to parse TEI metadata for label: {e}")
 
+    # Fall back to the extractor name, then append the extraction timestamp so
+    # that repeated extractions of the same document are distinguishable (#418)
+    label = label or options.get('extractor', 'unknown')
+    label = f"{label} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+
     # Check if file with this hash already exists (e.g., re-running same extraction)
     existing_file = repo.get_file_by_id(tei_hash)
     if existing_file:
@@ -368,7 +374,6 @@ def _save_xml_extraction_result(
         Dict with 'xml': stable_id and optionally 'pdf': stable_id of the associated PDF
     """
     import hashlib
-    from datetime import datetime
     from lxml import etree
     from ..lib.utils.tei_utils import extract_tei_metadata
 
@@ -409,6 +414,10 @@ def _save_xml_extraction_result(
         label = tei_meta.get('edition_title') or extractor_id
     except Exception:
         pass
+
+    # Append the extraction timestamp so that repeated extractions of the same
+    # document are distinguishable (#418)
+    label = f"{label} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
 
     file_create = FileCreate(
         id=file_hash,
