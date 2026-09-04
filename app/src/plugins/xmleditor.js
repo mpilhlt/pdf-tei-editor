@@ -225,6 +225,8 @@ class XmlEditorPlugin extends Plugin {
   #saveStatusWidget = null;
   /** @type {boolean} */
   #saveBlockedShownToUser = false;
+  /** @type {boolean} */
+  #syncErrorShownToUser = false;
   /** @type {string|null} */
   #lastLoadedStableId = null;
   /** @type {string} */
@@ -529,6 +531,28 @@ class XmlEditorPlugin extends Plugin {
       this.#logger.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
       this.#xmlEditor.configureIntenation(indentUnit, 4);
       this.#updateIndentationStatus(indentUnit);
+      // Give a newly loaded document a fresh chance to warn about sync errors.
+      this.#syncErrorShownToUser = false;
+    });
+
+    // The editor's internal DOM/syntax-tree link step failed even though the XML
+    // itself is well-formed (see XmlEditorDomSync). This is a bug in the editor,
+    // not a problem with the user's document, so it must not block saving or show
+    // "invalid XML" UI (handled by treating it as well-formed in XMLEditor#sync).
+    // Warn the user once per document load so they can report it, without spamming
+    // a toast on every debounced sync while the underlying issue persists.
+    this.#xmlEditor.on('editorXmlSyncError', (error) => {
+      this.#logger.error('XML editor DOM/syntax sync error: ' + String(error));
+      if (!this.#syncErrorShownToUser) {
+        this.#syncErrorShownToUser = true;
+        notify(
+          'An internal error occurred while synchronizing the editor view. Your document is still ' +
+          'valid and is being saved normally, but some editor features (e.g. tag renaming, the ' +
+          'context menu) may not work correctly. Please notify the administrator.',
+          'danger',
+          'bug'
+        );
+      }
     });
 
     // Reset undo/redo buttons on document load (history is cleared)

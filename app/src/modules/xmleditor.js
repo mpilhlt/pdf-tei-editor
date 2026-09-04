@@ -19,6 +19,8 @@
  * @property {ViewUpdate} editorUpdateDelayed - Emitted 1 second after last change
  * @property {Diagnostic[]} editorXmlNotWellFormed - Emitted when XML is invalid
  * @property {null} editorXmlWellFormed - Emitted when XML becomes valid
+ * @property {Error} editorXmlSyncError - Emitted when the XML is well-formed but the
+ *   internal DOM/syntax-tree link step failed (a sync bug, not an XML validity problem)
  * @property {boolean} editorReadOnly - Emitted when read-only state changes
  * @property {string} editorBeforeLoad - Emitted before loading new document
  * @property {null} editorAfterLoad - Emitted after loading and syncing new document
@@ -73,6 +75,8 @@ import { getTheme } from './codemirror/editor-themes.js';
  * @fires XMLEditor#editorUpdateDelayed - Fired 1 second after last content change
  * @fires XMLEditor#editorXmlNotWellFormed - Fired when XML becomes invalid
  * @fires XMLEditor#editorXmlWellFormed - Fired when XML becomes valid
+ * @fires XMLEditor#editorXmlSyncError - Fired when XML is well-formed but the internal
+ *   DOM/syntax-tree link step failed
  * @fires XMLEditor#editorReadOnly - Fired when read-only state changes
  * @fires XMLEditor#editorBeforeLoad - Fired before loading new document
  * @fires XMLEditor#editorShowMergeView - Fired when the merge view is shown
@@ -87,6 +91,7 @@ export class XMLEditor extends EventEmitter {
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
+  static EVENT_EDITOR_XML_SYNC_ERROR = "editorXmlSyncError"
   static EVENT_EDITOR_READONLY = "editorReadOnly"
   static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
   static EVENT_EDITOR_AFTER_LOAD = "editorAfterLoad"
@@ -1238,21 +1243,20 @@ export class XMLEditor extends EventEmitter {
         });
         await this.emit("editorXmlNotWellFormed", [result.diagnostic]);
       } else if (result.status === 'linkFailed') {
-        // Previous last-good tree is preserved inside #domSync; we emit a
-        // malformed-like event so that UI reflects the broken sync state.
-        this.#logger.warn(
+        // The DOM parser succeeded — the document IS well-formed XML — so this is
+        // an internal bug in the DOM/syntax-tree linking algorithm, not an XML
+        // validity problem. Treat it as well-formed for the UI (no "invalid XML"
+        // markers, xmlTagSync stays enabled) and surface a distinct event instead
+        // of the malformed-XML one, so the app can warn about the internal error
+        // separately without blocking the user's valid document.
+        this.#logger.error(
           `Linking DOM and syntax tree failed: ${result.linkError?.message ?? 'unknown error'}`
         );
-        await this.emit("editorXmlNotWellFormed", [
-          {
-            from: 0,
-            to: 0,
-            severity: 'error',
-            message: `DOM/syntax link failed: ${result.linkError?.message ?? 'unknown error'}`,
-            line: 1,
-            column: 1
-          }
-        ]);
+        this.#view.dispatch({
+          effects: this.#xmlTagSyncCompartment.reconfigure(xmlTagSync)
+        });
+        await this.emit("editorXmlWellFormed", null);
+        await this.emit("editorXmlSyncError", result.linkError ?? new Error('unknown link error'));
       }
       // status === 'empty' falls through silently.
     } catch (error) {

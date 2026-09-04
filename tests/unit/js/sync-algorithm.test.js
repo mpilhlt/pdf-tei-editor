@@ -277,6 +277,71 @@ describe('XmlEditorDomSync', () => {
     });
   });
 
+  describe('DOM/syntax-tree link failure on well-formed XML', () => {
+
+    /**
+     * Builds a fake EditorView that reports `domText` from `view.state.doc.toString()`
+     * (what `sync()` parses into a DOM document) while every other read of
+     * `view.state` — crucially `ensureSyntaxTree`'s parsing — still sees the real,
+     * fully-parsed state for `syntaxText`. This deterministically reproduces a
+     * genuine DOM/syntax-tree structural mismatch (the case `linkSyntaxTreeWithDOM`
+     * is meant to catch) without depending on parser-timing races or an actual
+     * second parser bug: it models the real scenario of the editor content moving
+     * on between the two reads.
+     * @param {string} syntaxText
+     * @param {string} domText
+     */
+    function createMismatchedView(syntaxText, domText) {
+      const view = createView(syntaxText);
+      forceParse(view);
+      const fakeDoc = new Proxy(view.state.doc, {
+        get(target, prop, receiver) {
+          if (prop === 'toString') return () => domText;
+          if (prop === 'length') return domText.length;
+          return Reflect.get(target, prop, receiver);
+        }
+      });
+      const fakeState = new Proxy(view.state, {
+        get(target, prop, receiver) {
+          if (prop === 'doc') return fakeDoc;
+          return Reflect.get(target, prop, receiver);
+        }
+      });
+      return new Proxy(view, {
+        get(target, prop, receiver) {
+          if (prop === 'state') return fakeState;
+          return Reflect.get(target, prop, receiver);
+        }
+      });
+    }
+
+    it('reports linkFailed while keeping the DOM tree current, not stale', async () => {
+      const view = createMismatchedView('<root><a/><b/><c/></root>', '<root><a/><b/></root>');
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+
+      const result = await sync.sync(view);
+
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.status, 'linkFailed');
+      assert.ok(result.linkError instanceof Error);
+      assert.strictEqual(sync.isSynced(), false);
+      assert.strictEqual(sync.getLastSyncError()?.stage, 'link');
+
+      // The DOM tree reflects the CURRENT editor content ("<root><a/><b/></root>",
+      // 2 children) rather than being left stale — the DOM parser itself always
+      // succeeds independently of the link step.
+      const tree = sync.getXmlTree();
+      assert.ok(tree, 'xml tree should still be available after a link failure');
+      assert.strictEqual(tree.documentElement.tagName, 'root');
+      assert.strictEqual(tree.documentElement.children.length, 2);
+      assert.strictEqual(sync.getEditorContent(), '<root><a/><b/></root>');
+
+      // Position maps are unreliable after a link failure and must not be exposed.
+      assert.strictEqual(sync.getSyntaxToDom(), null);
+      assert.strictEqual(sync.getDomToSyntax(), null);
+    });
+  });
+
   describe('empty document', () => {
 
     it('returns status: empty and clears state', async () => {
