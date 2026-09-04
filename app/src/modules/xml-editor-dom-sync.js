@@ -28,7 +28,7 @@
  * @import {Diagnostic} from '@codemirror/lint'
  */
 
-import { syntaxTree, syntaxParserRunning } from '@codemirror/language';
+import { syntaxTree, ensureSyntaxTree } from '@codemirror/language';
 import { linkSyntaxTreeWithDOM, parseXmlError } from './codemirror/codemirror-utils.js';
 
 /**
@@ -148,13 +148,18 @@ export class XmlEditorDomSync {
       return { ok: false, status: 'malformed', diagnostic };
     }
 
-    // Stage 2: wait for the syntax parser if it is still processing the latest text.
-    if (syntaxParserRunning(view)) {
-      while (syntaxParserRunning(view)) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+    // Stage 2: force the syntax parser to fully parse the document.
+    // `syntaxParserRunning()`/`isWorking()` reports "not running" once CodeMirror's
+    // background ParseWorker has caught up to its bounded lookahead (viewport +
+    // 100k chars), NOT once the whole document is parsed. For documents whose tail
+    // lies beyond that bound, that made this stage return immediately with a stale,
+    // truncated syntax tree, causing spurious link failures against a well-formed
+    // DOM. `ensureSyntaxTree` forces parsing up to an explicit document position instead.
+    let newSyntaxTree = ensureSyntaxTree(view.state, content.length, 50);
+    while (!newSyntaxTree) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      newSyntaxTree = ensureSyntaxTree(view.state, content.length, 50);
     }
-    const newSyntaxTree = syntaxTree(view.state);
 
     // Stage 3: link syntax tree to DOM.
     try {

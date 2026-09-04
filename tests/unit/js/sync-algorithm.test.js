@@ -25,6 +25,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 
 // Set up jsdom globals BEFORE importing CodeMirror (it probes for `document`).
@@ -385,6 +386,36 @@ describe('XmlEditorDomSync', () => {
       assert.strictEqual(result.status, 'wellFormed');
       assert.strictEqual(sync.getProcessingInstructions().length, 1);
       assert.strictEqual(sync.getXmlTree().documentElement.tagName, 'root');
+    });
+  });
+
+  describe('large documents with a truncated syntax tree', () => {
+
+    // Regression test for a bug where `sync()` relied on `syntaxParserRunning()`
+    // to decide whether the Lezer syntax tree was fully parsed. That signal only
+    // reflects whether CodeMirror's background ParseWorker is still scheduled to
+    // run — it goes false once the worker reaches its bounded lookahead (viewport
+    // + 100k chars) or runs out of its time budget, NOT necessarily once the whole
+    // document has been parsed. For large, well-formed documents this made `sync()`
+    // link a stale/truncated syntax tree against the full DOM tree, producing a
+    // spurious "DOM tree has more child elements than the syntax tree" error.
+    it('fully parses the document even when the syntax tree was previously truncated', async () => {
+      const fixturePath = new URL('./fixtures/xml-sync-large-document.xml', import.meta.url);
+      const content = fs.readFileSync(fixturePath, 'utf8');
+      const view = createView(content);
+
+      // Simulate the background parser having stopped partway through the
+      // document (as it does in real usage for large documents), well before
+      // the `<back>` section containing the bibliography.
+      ensureSyntaxTree(view.state, 3000, 50);
+
+      const sync = new XmlEditorDomSync({ logger: silentLogger });
+      const result = await sync.sync(view);
+
+      assert.strictEqual(result.status, 'wellFormed');
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(sync.getLastSyncError(), null);
+      assert.strictEqual(sync.getXmlTree().documentElement.tagName, 'TEI');
     });
   });
 });
