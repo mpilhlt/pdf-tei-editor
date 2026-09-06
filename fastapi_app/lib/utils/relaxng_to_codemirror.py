@@ -24,6 +24,8 @@ from typing import Dict, List, Set, Optional, Union
 from collections import defaultdict
 import json
 
+RNG_NS = '{http://relaxng.org/ns/structure/1.0}'
+
 
 class RelaxNGParser:
     """
@@ -120,6 +122,7 @@ class RelaxNGParser:
         self.deduplicate = deduplicate
         self.debug_dedup = debug_dedup
         self.namespace_map = {}
+        self.root: Optional[ET.Element] = None
         self.defined_patterns = {}
         self.element_definitions = {}
         self.attribute_definitions = defaultdict(dict)
@@ -155,7 +158,8 @@ class RelaxNGParser:
         try:
             tree = ET.parse(file_path)
             root = tree.getroot()
-            
+            self.root = root  # Retained for extract_tag_definitions()
+
             # Extract namespace prefixes
             self._extract_namespaces(root)
             
@@ -368,7 +372,178 @@ class RelaxNGParser:
         
         # Return None for open attributes, sorted list for constrained ones
         return sorted(list(values)) if values else None
-    
+
+    def _find_element_definition(self, tag_name: str) -> Optional[ET.Element]:
+        """
+        Find the `<element name=tag_name>` definition to use for tag
+        generation. When a tag name is defined more than once in a
+        flattened schema (e.g. a training-content `bibl` vs. an unrelated
+        header `sourceDescBibl`'s trivial `<element name="bibl">`), the
+        LAST occurrence in document order wins — matching
+        `_process_elements()`'s own overwrite-on-reprocess behavior, which
+        is why the existing autocomplete map already resolves to the
+        richer definition for such names today.
+        """
+        if self.root is None:
+            return None
+        match = None
+        for element in self.root.findall(f'.//{RNG_NS}element'):
+            if element.get('name') == tag_name:
+                match = element
+        return match
+
+    def _is_attribute_required(self, container: ET.Element, attr_name: str) -> bool:
+        """
+        True if `<attribute name=attr_name>` is a mandatory direct
+        descendant of `container` — i.e. reachable without passing through
+        an `<optional>` or `<choice>`, either of which would make its
+        presence conditional. Does not resolve `<ref>`s: only used on
+        already-resolved `<element>` nodes whose attributes are declared
+        inline, which is the case for every schema this parser targets.
+        """
+        for attr in container.findall(f'./{RNG_NS}attribute'):
+            if attr.get('name') == attr_name:
+                return True
+        for group in container.findall(f'./{RNG_NS}group'):
+            if self._is_attribute_required(group, attr_name):
+                return True
+        for interleave in container.findall(f'./{RNG_NS}interleave'):
+            if self._is_attribute_required(interleave, attr_name):
+                return True
+        return False
+
+    def _extract_value_documentation(self, attr_element: ET.Element) -> Dict[str, str]:
+        """Map enumerated `<value>` text to its own `<a:documentation>`,
+        for values that declare one. Values without documentation are
+        omitted from the result."""
+        docs = {}
+        for value in attr_element.findall(f'.//{RNG_NS}value'):
+            if not value.text:
+                continue
+            doc = self._extract_documentation(value)
+            if doc:
+                docs[value.text.strip()] = doc
+        return docs
+
+    def _extract_grouped_presets(self, choice: ET.Element) -> Optional[List[Dict]]:
+        """
+        If `choice` (a `<choice>` element) is a set of `<group>`
+        alternatives that each assign one or more attributes to a single
+        literal `<value>`, return one preset per group:
+        `[{'attrs': {attr_name: value}, 'description': str|None}, ...]`.
+        Returns None if `choice` isn't shaped this way (e.g. it has no
+        `<group>` children, or a group has no attribute assignments) —
+        the independent-enumerated-attribute path in `extract_tag_definitions`
+        applies instead.
+        """
+        groups = choice.findall(f'./{RNG_NS}group')
+        if not groups:
+            return None
+        presets = []
+        for group in groups:
+            attrs = {}
+            for attr in group.findall(f'./{RNG_NS}attribute'):
+                attr_name = attr.get('name')
+                value = attr.find(f'./{RNG_NS}value')
+                if attr_name and value is not None and value.text:
+                    attrs[attr_name] = value.text.strip()
+            if not attrs:
+                return None
+            presets.append({'attrs': attrs, 'description': self._extract_documentation(group)})
+        return presets
+
+    def _extract_variants(self, element: ET.Element) -> "tuple[List[Dict], bool]":
+        """
+        Returns `(variants, bare_allowed)` for `element`, covering two
+        shapes:
+
+        1. A `<choice>` of `<group>`s (correlated multi-attribute presets,
+           e.g. `references_title`'s level+type combinations) — found
+           either as a direct, mandatory child of `element` (bare_allowed
+           = False) or wrapped in `<optional>` (bare_allowed = True).
+        2. One or more independently enumerated attributes (the common
+           case, e.g. `citedRange@unit`, `orgName@type`) — each
+           attribute's values become independent variants; bare_allowed
+           is False only if the schema does not wrap that attribute in
+           `<optional>`.
+
+        Freeform attributes (no enumerated `<value>`s at all) never
+        produce variants — they stay editable as free text via the
+        existing per-element `attributes` list instead.
+        """
+        direct_choice = element.find(f'./{RNG_NS}choice')
+        optional = element.find(f'./{RNG_NS}optional')
+        optional_choice = optional.find(f'./{RNG_NS}choice') if optional is not None else None
+
+        for choice, bare_allowed in ((direct_choice, False), (optional_choice, True)):
+            if choice is None:
+                continue
+            presets = self._extract_grouped_presets(choice)
+            if presets is not None:
+                return presets, bare_allowed
+
+        variants = []
+        required_attr_found = False
+        for attr_name, attr_data in self._extract_attributes(element).items():
+            values = attr_data['values'] if isinstance(attr_data, dict) else attr_data
+            if not values:
+                continue
+            value_docs = {}
+            for attr_el in element.iter(f'{RNG_NS}attribute'):
+                if attr_el.get('name') == attr_name:
+                    value_docs.update(self._extract_value_documentation(attr_el))
+            for v in values:
+                variants.append({'attrs': {attr_name: v}, 'description': value_docs.get(v)})
+            if self._is_attribute_required(element, attr_name):
+                required_attr_found = True
+        return variants, not required_attr_found
+
+    def extract_tag_definitions(self, root_tag: str, exclude: "Set[str]" = frozenset()) -> Dict[str, Dict]:
+        """
+        Extract per-tag data for annotation-chip generation: `root_tag`
+        plus every element name allowed as its child in the content model
+        (per `_extract_child_elements`), minus `exclude`. Must be called
+        after `parse_file()`.
+
+        Distinct from `_extract_attributes()`/`_extract_attribute_values()`
+        (used for the CodeMirror autocomplete map, which only needs
+        attribute *names* and value lists) — this is purely additive and
+        does not change their behavior or the autocomplete map's shape.
+
+        Returns `{tag_name: {
+            'description': str | None,
+            'children': list[str],
+            'attributes': [{'name': str, 'values': list[str] | None}],
+            'variants': [{'attrs': dict[str, str], 'description': str | None}],
+            'bareAllowed': bool,
+        }}`. A `root_tag` not found as an `<element>` anywhere in the
+        schema yields an empty dict.
+        """
+        root_element = self._find_element_definition(root_tag)
+        if root_element is None:
+            return {}
+
+        tag_names = ({root_tag} | set(self._extract_child_elements(root_element))) - set(exclude)
+
+        result = {}
+        for tag_name in tag_names:
+            element = self._find_element_definition(tag_name)
+            if element is None:
+                continue
+            attributes = []
+            for attr_name, attr_data in self._extract_attributes(element).items():
+                values = attr_data['values'] if isinstance(attr_data, dict) else attr_data
+                attributes.append({'name': attr_name, 'values': values})
+            variants, bare_allowed = self._extract_variants(element)
+            result[tag_name] = {
+                'description': self._extract_documentation(element),
+                'children': self._extract_child_elements(element),
+                'attributes': attributes,
+                'variants': variants,
+                'bareAllowed': bare_allowed,
+            }
+        return result
+
     def _build_autocomplete_map(self) -> Dict[str, Dict]:
         """Build the final autocomplete map."""
         result = {}
