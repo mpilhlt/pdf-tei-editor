@@ -24,6 +24,10 @@ from typing import Dict, List, Set, Optional, Union
 from collections import defaultdict
 import json
 
+# Used by the extract_tag_definitions() tag-extraction code added below.
+# Pre-existing methods in this file still inline the namespace literal
+# directly; that is unchanged/out of scope here, so the two conventions
+# intentionally coexist.
 RNG_NS = '{http://relaxng.org/ns/structure/1.0}'
 
 
@@ -392,24 +396,37 @@ class RelaxNGParser:
                 match = element
         return match
 
-    def _is_attribute_required(self, container: ET.Element, attr_name: str) -> bool:
+    def _is_attribute_required(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> bool:
         """
-        True if `<attribute name=attr_name>` is a mandatory direct
-        descendant of `container` — i.e. reachable without passing through
-        an `<optional>` or `<choice>`, either of which would make its
-        presence conditional. Does not resolve `<ref>`s: only used on
-        already-resolved `<element>` nodes whose attributes are declared
-        inline, which is the case for every schema this parser targets.
+        True if `<attribute name=attr_name>` is a mandatory descendant of
+        `container` — i.e. reachable without passing through an
+        `<optional>` or `<choice>`, either of which would make its
+        presence conditional. Resolves `<ref>` (with cycle detection,
+        mirroring `_extract_attributes`) so a required attribute declared
+        in a referenced `<define>` is detected too; refs found inside
+        `<optional>`/`<choice>` are correctly not visited here since this
+        method is never called on those containers.
         """
+        if visited is None:
+            visited = set()
         for attr in container.findall(f'./{RNG_NS}attribute'):
             if attr.get('name') == attr_name:
                 return True
         for group in container.findall(f'./{RNG_NS}group'):
-            if self._is_attribute_required(group, attr_name):
+            if self._is_attribute_required(group, attr_name, visited):
                 return True
         for interleave in container.findall(f'./{RNG_NS}interleave'):
-            if self._is_attribute_required(interleave, attr_name):
+            if self._is_attribute_required(interleave, attr_name, visited):
                 return True
+        for ref in container.findall(f'./{RNG_NS}ref'):
+            ref_name = ref.get('name')
+            if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                visited.add(ref_name)
+                try:
+                    if self._is_attribute_required(self.defined_patterns[ref_name], attr_name, visited):
+                        return True
+                finally:
+                    visited.discard(ref_name)
         return False
 
     def _extract_value_documentation(self, attr_element: ET.Element) -> Dict[str, str]:
@@ -452,6 +469,31 @@ class RelaxNGParser:
             presets.append({'attrs': attrs, 'description': self._extract_documentation(group)})
         return presets
 
+    def _find_attribute_elements(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> List[ET.Element]:
+        """Find all `<attribute name=attr_name>` nodes reachable from
+        `container`, resolving `<ref>` (with cycle detection) the same way
+        `_extract_attributes` does, so per-value documentation lookup sees
+        attributes declared in a referenced `<define>` too."""
+        if visited is None:
+            visited = set()
+        found = []
+        for attr in container.findall(f'./{RNG_NS}attribute'):
+            if attr.get('name') == attr_name:
+                found.append(attr)
+        for c in (container.findall(f'./{RNG_NS}choice') + container.findall(f'./{RNG_NS}group') +
+                  container.findall(f'./{RNG_NS}optional') + container.findall(f'./{RNG_NS}zeroOrMore') +
+                  container.findall(f'./{RNG_NS}oneOrMore') + container.findall(f'./{RNG_NS}interleave')):
+            found.extend(self._find_attribute_elements(c, attr_name, visited))
+        for ref in container.findall(f'./{RNG_NS}ref'):
+            ref_name = ref.get('name')
+            if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                visited.add(ref_name)
+                try:
+                    found.extend(self._find_attribute_elements(self.defined_patterns[ref_name], attr_name, visited))
+                finally:
+                    visited.discard(ref_name)
+        return found
+
     def _extract_variants(self, element: ET.Element) -> "tuple[List[Dict], bool]":
         """
         Returns `(variants, bare_allowed)` for `element`, covering two
@@ -485,13 +527,12 @@ class RelaxNGParser:
         variants = []
         required_attr_found = False
         for attr_name, attr_data in self._extract_attributes(element).items():
-            values = attr_data['values'] if isinstance(attr_data, dict) else attr_data
+            values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
             if not values:
                 continue
             value_docs = {}
-            for attr_el in element.iter(f'{RNG_NS}attribute'):
-                if attr_el.get('name') == attr_name:
-                    value_docs.update(self._extract_value_documentation(attr_el))
+            for attr_el in self._find_attribute_elements(element, attr_name):
+                value_docs.update(self._extract_value_documentation(attr_el))
             for v in values:
                 variants.append({'attrs': {attr_name: v}, 'description': value_docs.get(v)})
             if self._is_attribute_required(element, attr_name):
@@ -532,7 +573,7 @@ class RelaxNGParser:
                 continue
             attributes = []
             for attr_name, attr_data in self._extract_attributes(element).items():
-                values = attr_data['values'] if isinstance(attr_data, dict) else attr_data
+                values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
                 attributes.append({'name': attr_name, 'values': values})
             variants, bare_allowed = self._extract_variants(element)
             result[tag_name] = {
