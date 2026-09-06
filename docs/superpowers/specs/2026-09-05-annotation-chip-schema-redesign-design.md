@@ -267,21 +267,33 @@ The mechanism is the standard RelaxNG Compatibility Annotations namespace,
 `_extract_attribute_values()` currently collects `<value>` text but not any
 annotation on it. To get per-variant tooltips (e.g. distinguishing
 `citedRange[unit=page]` from `citedRange[unit=section]`), extend it to also
-read `<a:documentation>` as a child of `<value>`:
+read a value's documentation — but **not** as a direct child of `<value>`:
+`<value>` has a text-only content model in RelaxNG and rejects
+foreign-namespace children (confirmed with both `jing -s` and
+`lxml.etree.RelaxNG` — an earlier draft of this section incorrectly showed
+`<value>page<a:documentation>...</a:documentation></value>`, which does not
+validate). Instead, wrap the `<value>` in a `<group>` and put the
+`<a:documentation>` as the group's first child — a `<group>` containing
+exactly one pattern is semantically identical to that pattern alone, so
+this doesn't change what validates:
 
 ```xml
 <attribute name="unit">
   <choice>
-    <value datatypeLibrary="">page</value>
-    <!-- becomes -->
-    <value datatypeLibrary="">page<a:documentation>Pinpoint by printed page number</a:documentation></value>
+    <group>
+      <a:documentation>Pinpoint by printed page number</a:documentation>
+      <value datatypeLibrary="">page</value>
+    </group>
+    <value datatypeLibrary="">section</value>
   </choice>
 </attribute>
 ```
 
-RelaxNG permits annotation elements as children of any pattern, so this is
-valid without a schema-language change — just an additional small XPath in
-the existing extraction function, returned as
+The extraction function looks for this `<group>`-wrapper shape instead of
+a `<value>` child: for each `<group>` reachable under the attribute, if it
+directly contains exactly one `<value>` plus an `<a:documentation>`, that
+value's text maps to that documentation; bare (unwrapped) `<value>`s are
+still supported, just without documentation. Returned as
 `{value, description}` instead of a bare string.
 
 ### Known complexity: correlated attribute presets
