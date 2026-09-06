@@ -31,6 +31,7 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
           <ref name="title"/>
           <ref name="idno"/>
           <ref name="note"/>
+          <ref name="ptr"/>
         </choice>
       </zeroOrMore>
     </element>
@@ -98,6 +99,13 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
         <value>char</value>
       </choice>
     </attribute>
+  </define>
+
+  <define name="ptr">
+    <element name="ptr">
+      <attribute name="target"/>
+      <empty/>
+    </element>
   </define>
 
   <define name="title">
@@ -240,6 +248,17 @@ class TestExtractTagDefinitions(unittest.TestCase):
         result = self.parser.extract_tag_definitions("root", set())
         bibl = result["bibl"]
         self.assertEqual(len(bibl["variants"]), 2)
+
+    def test_required_freeform_attribute_forces_bare_not_allowed(self):
+        # Regression: `target` on `ptr` is required (no <optional>
+        # wrapper) and freeform (no enumerated <value>s at all). The old
+        # code did `if not values: continue` before checking
+        # _is_attribute_required, so required-freeform attributes never
+        # reached the required check and bareAllowed wrongly stayed True.
+        result = self.parser.extract_tag_definitions("root", set())
+        ptr = result["ptr"]
+        self.assertEqual(ptr["variants"], [], "a freeform attribute must never produce dropdown variants")
+        self.assertFalse(ptr["bareAllowed"], "target is required on ptr, so the bare tag must not be allowed")
 
     def test_ref_nested_attribute_variant_documentation(self):
         # Regression: per-value documentation lookup must resolve <ref>

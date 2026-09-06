@@ -516,7 +516,11 @@ class RelaxNGParser:
 
         Freeform attributes (no enumerated `<value>`s at all) never
         produce variants — they stay editable as free text via the
-        existing per-element `attributes` list instead.
+        existing per-element `attributes` list instead. Required-ness is
+        still checked for every attribute regardless of shape, enumerated
+        or freeform: a required freeform attribute (e.g. `ptr@target`)
+        must still force `bare_allowed = False` even though it
+        contributes no variants of its own.
         """
         direct_choice = element.find(f'./{RNG_NS}choice')
         optional = element.find(f'./{RNG_NS}optional')
@@ -533,6 +537,8 @@ class RelaxNGParser:
         required_attr_found = False
         for attr_name, attr_data in self._extract_attributes(element).items():
             values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
+            if self._is_attribute_required(element, attr_name):
+                required_attr_found = True
             if not values:
                 continue
             value_docs = {}
@@ -540,8 +546,6 @@ class RelaxNGParser:
                 value_docs.update(self._extract_value_documentation(attr_el))
             for v in values:
                 variants.append({'attrs': {attr_name: v}, 'description': value_docs.get(v)})
-            if self._is_attribute_required(element, attr_name):
-                required_attr_found = True
         return variants, not required_attr_found
 
     def extract_tag_definitions(self, root_tag: str, exclude: "Set[str]" = frozenset()) -> Dict[str, Dict]:
