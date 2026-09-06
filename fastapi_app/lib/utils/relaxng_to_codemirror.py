@@ -430,14 +430,19 @@ class RelaxNGParser:
         return False
 
     def _extract_value_documentation(self, attr_element: ET.Element) -> Dict[str, str]:
-        """Map enumerated `<value>` text to its own `<a:documentation>`,
-        for values that declare one. Values without documentation are
-        omitted from the result."""
+        """Map enumerated `<value>` text to its own documentation. RelaxNG's
+        `<value>` has a text-only content model and cannot carry an
+        `<a:documentation>` child directly, so a documented value is instead
+        wrapped as `<group><a:documentation>...</a:documentation><value>...</value></group>` —
+        this looks for that shape (via any `<group>` descendant containing a
+        `<value>`) in addition to plain undocumented `<value>`s. Values
+        without documentation are omitted from the result."""
         docs = {}
-        for value in attr_element.findall(f'.//{RNG_NS}value'):
-            if not value.text:
+        for group in attr_element.findall(f'.//{RNG_NS}group'):
+            value = group.find(f'./{RNG_NS}value')
+            if value is None or not value.text:
                 continue
-            doc = self._extract_documentation(value)
+            doc = self._extract_documentation(group)
             if doc:
                 docs[value.text.strip()] = doc
         return docs

@@ -7,6 +7,7 @@ extraction added on top of the existing CodeMirror-autocomplete parser.
 
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 import sys
 
@@ -41,7 +42,10 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
       <optional>
         <attribute name="type">
           <choice>
-            <value>footnote<a:documentation>A footnote reference</a:documentation></value>
+            <group>
+              <a:documentation>A footnote reference</a:documentation>
+              <value>footnote</value>
+            </group>
             <value>decision</value>
           </choice>
         </attribute>
@@ -87,7 +91,10 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
   <define name="unitAttr">
     <attribute name="unit">
       <choice>
-        <value>word<a:documentation>Word-level unit</a:documentation></value>
+        <group>
+          <a:documentation>Word-level unit</a:documentation>
+          <value>word</value>
+        </group>
         <value>char</value>
       </choice>
     </attribute>
@@ -207,6 +214,32 @@ class TestExtractTagDefinitions(unittest.TestCase):
         result = self.parser.extract_tag_definitions("root", set())
         note = result["note"]
         self.assertFalse(note["bareAllowed"], "unit is required on note (declared via nested <ref>), so the bare tag must not be allowed")
+
+    def test_value_doc_wrapper_group_not_mistaken_for_attribute_preset_group(self):
+        # A <choice> whose <group>s wrap a single <value> (the required
+        # documentation-wrapper shape, since <value> cannot carry an
+        # <a:documentation> child directly) but contain no <attribute> at
+        # all must not be treated as a set of correlated attribute-value
+        # presets by _extract_grouped_presets - it must return None so the
+        # independent-enumerated-attribute path in _extract_variants
+        # handles it instead, still producing per-value variants.
+        choice_xml = (
+            '<choice xmlns="http://relaxng.org/ns/structure/1.0" '
+            'xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0">'
+            '<group><a:documentation>doc</a:documentation><value>a</value></group>'
+            '<value>b</value>'
+            '</choice>'
+        )
+        choice = ET.fromstring(choice_xml)
+        self.assertIsNone(self.parser._extract_grouped_presets(choice))
+
+    def test_bibl_type_choice_of_value_only_groups_yields_nonzero_variants(self):
+        # bibl@type uses exactly this shape (one group-wrapped documented
+        # value, one bare value) - end-to-end, it must still produce two
+        # independent variants, not zero.
+        result = self.parser.extract_tag_definitions("root", set())
+        bibl = result["bibl"]
+        self.assertEqual(len(bibl["variants"]), 2)
 
     def test_ref_nested_attribute_variant_documentation(self):
         # Regression: per-value documentation lookup must resolve <ref>
