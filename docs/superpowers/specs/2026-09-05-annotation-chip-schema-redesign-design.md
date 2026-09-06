@@ -294,9 +294,26 @@ dropdown item per enumerated value." Two current presets don't:
 paired combinations, not independent axes — the schema doesn't mean
 "any level with type=legislation."
 
-Recommended fix: restructure `title`'s attributes in the upstream schema
-from two independent optional attributes into an optional `<choice>` of
-`<group>`s, one per named preset:
+`title` is a **shared** RelaxNG define (`schema/shared/bibl-struct.rng`)
+reused by `teiHeader/titleStmt`, `editionStmt/edition`, and
+`biblStruct`'s `analytic`/`monogr`/`series` in all three variants — not
+local to the flat `references`-training `<bibl>` content model. The
+upstream repo already has a convention for exactly this situation:
+`references_date`, `references_citedRange`, `references_edition`,
+`references_ptr`, `references_note`, `references_seg`, and
+`references_ref` are all local overrides in `schema/grobid.training.references.rng`
+that shadow a shared define (or add a references-only element) so that
+a constraint needed only for the flat training-bibl view doesn't leak
+into `teiHeader` or `biblStruct` elsewhere. `title` needs the same
+treatment: add a new local `references_title` define in
+`grobid.training.references.rng`, and change `bibl`'s content model to
+reference `references_title` instead of the shared `title` — leaving
+`teiHeader/titleStmt`'s and `biblStruct`'s own `<title>` (still governed
+by the shared, unconstrained define) completely unaffected.
+
+Recommended fix: give `references_title` an optional `<choice>` of
+`<group>`s, one per named preset, instead of two independent optional
+attributes:
 
 ```xml
 <optional>
@@ -345,18 +362,36 @@ added (or a required-ness change) to avoid losing current behavior when
 the manual config is deleted. None of these are drift — the current manual
 curation *for these specific attributes* has no schema backing at all
 today (`values: []` / freeform `<attribute>`), so schema generation
-produces nothing for them until fixed:
+produces nothing for them until fixed. Where the underlying define is
+**shared** across contexts (`idno`, `biblScope`, `title` — all three
+live in `schema/shared/bibl-struct.rng` and are also used by `teiHeader`
+and `biblStruct`), the fix is a references-local override
+(`references_idno`, `references_biblScope`, `references_title`) added to
+`grobid.training.references.rng`, exactly like the existing
+`references_date`/`references_citedRange` pattern — not an edit to the
+shared define, which would narrow validity for unrelated documents (e.g.
+a real bibliography's `idno@type="ISBN"`, or a plain `<title>` in
+`titleStmt`). Where the define is already local to one file (`div` in
+segmentation, `bibl` in referenceSegmenter, and the already-local
+`references_ptr`/`references_note`), it's a direct edit.
 
-| Variant | Element@Attribute | Values to add | Currently |
-| --- | --- | --- | --- |
-| references | `idno@type` | DOI, arXiv, report, docket, ECLI, CELEX | freeform |
-| references | `biblScope@unit` | page, volume, issue | freeform |
-| references | `ptr@type` | web | freeform |
-| references | `note@type` | report | freeform |
-| references | `title@type` | legislation, caseName | freeform (see correlated-preset fix above) |
-| references | `title@level` | (no new values) make **required** | optional |
-| segmentation | `div@type` | contribution (add to existing 6) | partially enumerated |
-| referenceSegmenter | `bibl@type` | decision, legislation (add to existing `footnote`) | partially enumerated |
+| Variant | Element@Attribute | Values to add | Currently | Define is |
+| --- | --- | --- | --- | --- |
+| references | `idno@type` | DOI, arXiv, report, docket, ECLI, CELEX | freeform | shared → needs `references_idno` override |
+| references | `biblScope@unit` | page, volume, issue | freeform | shared → needs `references_biblScope` override |
+| references | `ptr@type` | web | freeform | local (`references_ptr`) → direct edit |
+| references | `note@type` | report | freeform | local (`references_note`) → direct edit |
+| references | `title@type` | legislation, caseName | freeform | shared → needs `references_title` override (see correlated-preset fix above) |
+| references | `title@level` | (no new values) make **required** | optional | shared → needs `references_title` override |
+| segmentation | `div@type` | contribution (add to existing 6) | partially enumerated | local → direct edit |
+| referenceSegmenter | `bibl@type` | decision, legislation (add to existing `footnote`) | partially enumerated | local → direct edit |
+
+`references_idno` and `references_biblScope` are otherwise identical
+copies of the shared `idno`/`biblScope` content model, just with an
+enumerated `<choice>` instead of a freeform `<attribute name="...">`.
+`bibl`'s content model in `grobid.training.references.rng` changes its
+three `<ref name="idno"/>`, `<ref name="biblScope"/>`,
+`<ref name="title"/>` entries to point at the new local names.
 
 These already fully enumerated and need **no schema change** — generation
 will surface them as new chips/variants that don't exist in today's manual
@@ -482,9 +517,11 @@ rather than take them as final wording.
 ## Migration / rollout order
 
 1. Upstream repo: add `<a:documentation>` (tag + attribute + value level)
-   per the migration table above; add the missing enums and the
-   `title@level` required-ness / `title` attribute-group restructuring
-   from "Required schema fixes."
+   per the migration table above; add `references_title`,
+   `references_idno`, `references_biblScope` local overrides and the
+   other enum/required-ness fixes from "Required schema fixes." Tracked
+   as its own implementation plan: `docs/2026-09-05-annotation-chip-schema-changes-plan.md`
+   in the `grobid-footnote-flavour` repo.
 2. This repo: extend `RelaxNGParser` (per-value docs, attribute-group
    presets), add `annotation_tags_generator.py` and
    `annotation_tags_scope.py`, wire `get_annotation_tags()` to the
