@@ -411,4 +411,65 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       document.body.removeChild(container);
     }
   });
+
+  // Regression test: mirrors the real `title` def generated for
+  // grobid.training.references, whose variants have DIFFERENT attribute-key
+  // sets: {level: 'a'} vs {level: 'm', type: 'legislation'}. Muting must
+  // compare against the FULL set of variant-controlled attribute names
+  // (variantAttrNames), not just the candidate variant's own keys — otherwise
+  // {level: 'a'} would be wrongly treated as "active" for an element that
+  // also has type="legislation", since checking only `level` never notices
+  // the extra `type` attribute.
+  it('mixed-key-set variants: only the variant matching ALL variant-controlled attributes is muted', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const mixedKeyDefs = [
+        {
+          tag: 'title',
+          label: 'title',
+          color: '#ddd',
+          attributes: [],
+          variants: [
+            { attrs: { level: 'a' } },
+            { attrs: { level: 'm', type: 'legislation' } },
+          ],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const parent = document.createElement('p');
+      const title = document.createElement('title');
+      title.setAttribute('level', 'm');
+      title.setAttribute('type', 'legislation'); // matches the SECOND variant exactly
+      parent.appendChild(title);
+      const { overlay, calls } = triggerPopupTracked(container, 'title', title, mixedKeyDefs);
+
+      // First variant {level: 'a'} must NOT be muted: the element has an
+      // extra `type` attribute this variant doesn't mention, so picking it
+      // is a real change (strip type, set level='a').
+      const firstItem = findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[a]');
+      assert.ok(!firstItem.disabled, 'first variant must not be disabled');
+      firstItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      assert.strictEqual(parent.firstElementChild?.getAttribute('level'), 'a');
+      assert.strictEqual(parent.firstElementChild?.hasAttribute('type'), false,
+        'type must be stripped when switching to the level-only variant');
+      assert.strictEqual(calls.length, 1, 'clicking the non-active variant must trigger a real retag');
+
+      // Reset and verify the second variant's own item IS muted (genuine no-op).
+      const parent2 = document.createElement('p');
+      const title2 = document.createElement('title');
+      title2.setAttribute('level', 'm');
+      title2.setAttribute('type', 'legislation');
+      parent2.appendChild(title2);
+      const { overlay: overlay2, calls: calls2 } = triggerPopupTracked(container, 'title', title2, mixedKeyDefs);
+      const secondItem = findMenuItem(/** @type {HTMLElement} */ (overlay2), 'title[m,legislation]');
+      secondItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      assert.strictEqual(parent2.firstElementChild?.getAttribute('level'), 'm');
+      assert.strictEqual(parent2.firstElementChild?.getAttribute('type'), 'legislation');
+      assert.strictEqual(calls2.length, 0, 'clicking the already-active variant must be a genuine no-op');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
 });

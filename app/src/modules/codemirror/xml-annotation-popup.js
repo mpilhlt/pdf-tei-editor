@@ -375,7 +375,7 @@ export class XmlAnnotationPopup {
         const menu = document.createElement('sl-menu');
         for (const variant of def.variants ?? []) {
           const isActiveVariant = isCurrentTag && currentElement != null &&
-            Object.entries(variant.attrs).every(([k, v]) => currentElement.getAttribute(k) === v);
+            variantAttrNames.every(name => currentElement.getAttribute(name) === (variant.attrs[name] ?? null));
           const item = document.createElement('sl-menu-item');
           const suffix = Object.values(variant.attrs).join(',');
           item.textContent = `${def.tag}[${suffix}]`;
