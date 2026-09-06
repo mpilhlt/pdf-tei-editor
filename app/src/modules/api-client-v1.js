@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-06-25T10:30:30.924Z
+ * Generated from OpenAPI schema at 2026-09-06T03:03:40.439Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -42,14 +42,19 @@
 /**
  * @typedef {Object} AnnotationTagDef
  * @property {string} tag - XML element name (e.g. 'bibl')
- * @property {string} label - Badge label; may contain {@attrName} template tokens
- * @property {Object<string, any>=} labelMap - Attribute-value → label overrides, e.g. {'level=m': 'TITLE[M]'}
+ * @property {string} label - Chip label; always the bare tag name
  * @property {string} color - CSS colour for this tag's badge and underline
- * @property {Array<AnnotationTagAttribute>=} attributes - Attributes shown in the properties popup
- * @property {string=} description - Tooltip text for the context menu item
- * @property {number=} priority - Sort order; lower = shown first in the menu
- * @property {Object<string, any>=} defaultAttributes - Attribute key/value pairs baked into the opening tag when wrapping a selection
+ * @property {Array<AnnotationTagAttribute>=} attributes - Attributes shown in the properties popup for an already-tagged element
+ * @property {Array<AnnotationTagVariant>=} variants - Attribute-value dropdown options for the split-button chip; empty if the tag has no enumerated attributes
+ * @property {boolean=} bareAllowed - Whether clicking the chip body (as opposed to only the dropdown) inserts the bare tag with no attributes
+ * @property {string=} description - Tooltip text for the chip itself
  * @property {Array<string>=} childTags - Tag names that may be nested inside this element rather than splitting it
+ */
+
+/**
+ * @typedef {Object} AnnotationTagVariant
+ * @property {Object<string, any>} attrs - Attribute name/value pairs applied when this variant is chosen
+ * @property {string=} description - Tooltip text for this specific variant
  */
 
 /**
