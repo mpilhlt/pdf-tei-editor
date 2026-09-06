@@ -42,33 +42,57 @@ function mockElement(el, attrs) {
 }
 
 describe('resolveLabel', () => {
-  const tagDef = {
-    tag: 'title',
-    label: 'TITLE[{@level}]',
-    labelMap: { 'level=m': 'TITLE[M]', 'level=a': 'TITLE[A]' },
-    color: '#a6e3a1',
-    attributes: []
-  };
-
-  it('uses labelMap when attribute matches', () => {
+  it('returns tag[value] when a variant attribute is set', () => {
+    const tagDef = {
+      tag: 'title',
+      label: 'title',
+      color: '#a6e3a1',
+      attributes: [],
+      variants: [
+        { attrs: { level: 'a' } },
+        { attrs: { level: 'm' } },
+      ],
+    };
     const el = mockElement(document.createElement('title'), { level: 'm' });
-    assert.strictEqual(resolveLabel(tagDef, el), 'TITLE[M]');
+    assert.strictEqual(resolveLabel(tagDef, el), 'title[m]');
   });
 
-  it('falls back to template interpolation when no labelMap match', () => {
-    const el = mockElement(document.createElement('title'), { level: 's' });
-    assert.strictEqual(resolveLabel(tagDef, el), 'TITLE[s]');
+  it('joins multiple variant-controlled attribute values', () => {
+    const tagDef = {
+      tag: 'title',
+      label: 'title',
+      color: '#a6e3a1',
+      attributes: [],
+      variants: [
+        { attrs: { level: 'm', type: 'legislation' } },
+      ],
+    };
+    const el = mockElement(document.createElement('title'), { level: 'm', type: 'legislation' });
+    assert.strictEqual(resolveLabel(tagDef, el), 'title[m,legislation]');
   });
 
-  it('removes brackets around absent attribute', () => {
+  it('returns the bare tag when the variant attribute is absent on the element', () => {
+    const tagDef = {
+      tag: 'title',
+      label: 'title',
+      color: '#a6e3a1',
+      attributes: [],
+      variants: [{ attrs: { level: 'a' } }],
+    };
     const el = document.createElement('title'); // no level attr
-    assert.strictEqual(resolveLabel(tagDef, el), 'TITLE');
+    assert.strictEqual(resolveLabel(tagDef, el), 'title');
   });
 
-  it('returns plain label when no template tokens', () => {
-    const plain = { tag: 'bibl', label: 'BIBL', color: '#89dceb', attributes: [] };
+  it('returns plain label when the def has no variants', () => {
+    const plain = { tag: 'bibl', label: 'bibl', color: '#89dceb', attributes: [], variants: [] };
     const el = document.createElement('bibl');
-    assert.strictEqual(resolveLabel(plain, el), 'BIBL');
+    assert.strictEqual(resolveLabel(plain, el), 'bibl');
+  });
+
+  it('returns plain label when variants is undefined (optional field)', () => {
+    const plain = { tag: 'bibl', label: 'bibl', color: '#89dceb', attributes: [] };
+    const el = document.createElement('bibl');
+    assert.strictEqual(resolveLabel(plain, el), 'bibl');
   });
 });
 
