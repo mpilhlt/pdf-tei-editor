@@ -25,7 +25,8 @@ class AnnotationGuideInfo(BaseModel):
 
 
 class AnnotationTagAttribute(BaseModel):
-    """A single XML attribute that can be edited in the annotation properties popup."""
+    """An attribute editable in the post-hoc properties popup for an
+    already-tagged element (enumerated or freeform)."""
     name: str = Field(..., description="XML attribute name")
     values: Optional[List[str]] = Field(
         None,
@@ -33,33 +34,38 @@ class AnnotationTagAttribute(BaseModel):
     )
 
 
+class AnnotationTagVariant(BaseModel):
+    """One split-button dropdown entry: an attribute-value combination
+    (one or more attributes assigned together) applied when wrapping a
+    selection or retagging an element."""
+    attrs: Dict[str, str] = Field(
+        ..., description="Attribute name/value pairs applied when this variant is chosen"
+    )
+    description: Optional[str] = Field(
+        None, description="Tooltip text for this specific variant"
+    )
+
+
 class AnnotationTagDef(BaseModel):
     """Definition of an annotation tag contributed by a variant plugin."""
     tag: str = Field(..., description="XML element name (e.g. 'bibl')")
-    label: str = Field(
-        ...,
-        description="Badge label; may contain {@attrName} template tokens"
-    )
-    labelMap: Optional[Dict[str, str]] = Field(
-        None,
-        description="Attribute-value → label overrides, e.g. {'level=m': 'TITLE[M]'}"
-    )
+    label: str = Field(..., description="Chip label; always the bare tag name")
     color: str = Field(..., description="CSS colour for this tag's badge and underline")
     attributes: List[AnnotationTagAttribute] = Field(
         default_factory=list,
-        description="Attributes shown in the properties popup"
+        description="Attributes shown in the properties popup for an already-tagged element"
+    )
+    variants: List[AnnotationTagVariant] = Field(
+        default_factory=list,
+        description="Attribute-value dropdown options for the split-button chip; empty if the tag has no enumerated attributes"
+    )
+    bareAllowed: bool = Field(
+        True,
+        description="Whether clicking the chip body (as opposed to only the dropdown) inserts the bare tag with no attributes"
     )
     description: Optional[str] = Field(
         None,
-        description="Tooltip text for the context menu item"
-    )
-    priority: int = Field(
-        100,
-        description="Sort order; lower = shown first in the menu"
-    )
-    defaultAttributes: Optional[Dict[str, str]] = Field(
-        None,
-        description="Attribute key/value pairs baked into the opening tag when wrapping a selection"
+        description="Tooltip text for the chip itself"
     )
     childTags: List[str] = Field(
         default_factory=list,
