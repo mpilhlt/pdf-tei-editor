@@ -10,10 +10,11 @@
 import { resolveLabel } from './xml-annotation-decorations.js';
 
 /**
- * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string,
+ * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
+ * @typedef {{ tag: string, label: string, color: string,
  *   attributes?: Array<{ name: string, values?: string[]|null }>|null,
- *   description?: string|null, priority?: number,
- *   defaultAttributes?: Record<string,string>|null }} AnnotationTagDef
+ *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
+ *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
  */
 
 /**
@@ -87,10 +88,10 @@ export class XmlAnnotationPopup {
   /** @type {AnnotationTagDef[]} */
   #tagDefs = [];
 
-  /** @type {Map<string, AnnotationTagDef[]>} */
+  /** @type {Map<string, AnnotationTagDef>} */
   #tagMap = new Map();
 
-  /** @type {((def: AnnotationTagDef) => void)|null} */
+  /** @type {((def: AnnotationTagDef, attrs: Record<string,string>) => void)|null} */
   #wrapCallback = null;
 
   /**
@@ -110,13 +111,11 @@ export class XmlAnnotationPopup {
 
     parent.addEventListener('ann-badge-click', (e) => {
       const { tag, from, clientX = 0, clientY = 0 } = /** @type {CustomEvent} */ (e).detail;
-      const defs = this.#tagMap.get(tag);
-      if (!defs) return;
+      const def = this.#tagMap.get(tag);
+      if (!def) return;
       let element;
       try { element = /** @type {Element} */ (this.#editor.getDomNodeAt(from)); } catch { return; }
       if (!element) return;
-      const def = this.#selectDef(defs, element);
-      if (!def) return;
       this.#show({ clientX, clientY }, def, element);
     });
 
@@ -138,9 +137,10 @@ export class XmlAnnotationPopup {
   }
 
   /**
-   * Register the callback invoked when the user picks a chip in the selection popup.
+   * Register the callback invoked when the user picks a chip (or one of its
+   * dropdown variants) in the selection popup.
    * Must be called once from the annotation plugin after `mount()`.
-   * @param {(def: AnnotationTagDef) => void} fn
+   * @param {(def: AnnotationTagDef, attrs: Record<string,string>) => void} fn
    */
   setWrapCallback(fn) {
     this.#wrapCallback = fn;
@@ -163,9 +163,9 @@ export class XmlAnnotationPopup {
     title.textContent = 'Annotate as…';
     this.#overlay.appendChild(title);
 
-    this.#renderPalette(this.#overlay, null, (def) => {
+    this.#renderPalette(this.#overlay, null, null, (def, attrs) => {
       this.#hide();
-      this.#wrapCallback?.(def);
+      this.#wrapCallback?.(def, attrs);
     });
 
     const x = coords.clientX;
@@ -182,30 +182,8 @@ export class XmlAnnotationPopup {
     this.#tagDefs = tagDefs;
     this.#tagMap = new Map();
     for (const d of tagDefs) {
-      const bucket = this.#tagMap.get(d.tag);
-      if (bucket) bucket.push(d);
-      else this.#tagMap.set(d.tag, [d]);
+      this.#tagMap.set(d.tag, d);
     }
-  }
-
-  /**
-   * Picks the best-matching def for `element` from a bucket of defs for the same tag name.
-   * Prefers a def whose `defaultAttributes` all match the element's attributes; falls back to
-   * the first def with no `defaultAttributes`.  Mirrors the selection logic in buildAll().
-   * @param {AnnotationTagDef[]} defs
-   * @param {Element} element
-   * @returns {AnnotationTagDef|null}
-   */
-  #selectDef(defs, element) {
-    let fallback = /** @type {AnnotationTagDef|null} */ (null);
-    for (const d of defs) {
-      if (!d.defaultAttributes) {
-        if (!fallback) fallback = d;
-      } else if (Object.entries(d.defaultAttributes).every(([k, v]) => element.getAttribute(k) === v)) {
-        return d;
-      }
-    }
-    return fallback;
   }
 
   /**
@@ -315,9 +293,9 @@ export class XmlAnnotationPopup {
     changeLabel.textContent = 'Change to';
     this.#overlay.appendChild(changeLabel);
 
-    this.#renderPalette(this.#overlay, def, async (newDef) => {
+    this.#renderPalette(this.#overlay, def, element, async (newDef, attrs) => {
       this.#hide();
-      await this.#retag(element, def, newDef);
+      await this.#retag(element, def, newDef, attrs);
     });
 
     // Position near the badge — extra bottom margin for the "Change to" palette section
@@ -329,22 +307,39 @@ export class XmlAnnotationPopup {
   }
 
   /**
-   * Renders one chip per tag definition into `container`.
-   * The chip whose def is `currentDef` (by object identity) is muted and non-interactive.
+   * Renders one split-button chip per tag definition into `container`,
+   * sorted alphabetically by tag name. `currentElement` is the DOM element
+   * the "Change to" popup was opened on, or `null` for a fresh-selection
+   * "Annotate as…" popup (where nothing is "current" and every action is
+   * enabled). Muting is computed per-action, not per-chip: since one
+   * AnnotationTagDef now covers every attribute-value combination for a
+   * tag, "this def is the element's current tag" no longer means every
+   * action on it is a no-op — only the SPECIFIC action that reproduces
+   * what the element already has is. A tag with `variants` gets a caret
+   * trigger opening a dropdown of attribute-value combinations; if
+   * `bareAllowed` is false, the chip body itself is inert for direct
+   * insertion and only opens the dropdown when clicked.
    * @param {HTMLElement} container
    * @param {AnnotationTagDef|null} currentDef
-   * @param {(def: AnnotationTagDef) => void} onChipClick
+   * @param {Element|null} currentElement
+   * @param {(def: AnnotationTagDef, attrs: Record<string,string>) => void} onPick
    */
-  #renderPalette(container, currentDef, onChipClick) {
-    const sorted = [...this.#tagDefs].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+  #renderPalette(container, currentDef, currentElement, onPick) {
+    const sorted = [...this.#tagDefs].sort((a, b) => a.tag.localeCompare(b.tag));
     const row = document.createElement('div');
     Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' });
     for (const def of sorted) {
-      const chip = document.createElement('span');
-      chip.textContent = def.label.replace(/\{@[^}]+\}/g, '…');
-      chip.title = def.description || def.label;
-      const isCurrent = def === currentDef;
-      Object.assign(chip.style, {
+      const isCurrentTag = def === currentDef;
+      const variantAttrNames = (def.variants ?? []).flatMap(v => Object.keys(v.attrs));
+      const isElementBare = isCurrentTag && currentElement != null &&
+        variantAttrNames.every(name => !currentElement.getAttribute(name));
+      const hasVariants = (def.variants?.length ?? 0) > 0;
+      const bareAllowed = def.bareAllowed !== false;
+
+      const wrapper = document.createElement('span');
+      Object.assign(wrapper.style, { display: 'inline-flex', borderRadius: '3px', overflow: 'hidden' });
+
+      const chipStyle = {
         display: 'inline-block',
         background: def.color,
         color: '#1e1e2e',
@@ -353,34 +348,79 @@ export class XmlAnnotationPopup {
         fontWeight: '700',
         textTransform: 'uppercase',
         letterSpacing: '0.04em',
-        borderRadius: '3px',
         padding: '2px 6px 3px',
-        cursor: isCurrent ? 'default' : 'pointer',
-        opacity: isCurrent ? '0.4' : '1',
+        cursor: isElementBare ? 'default' : 'pointer',
+        opacity: isElementBare ? '0.4' : '1',
         userSelect: 'none',
-      });
-      if (!isCurrent) chip.addEventListener('click', () => onChipClick(def));
-      row.appendChild(chip);
+      };
+
+      const chip = document.createElement('span');
+      chip.textContent = def.label;
+      chip.title = def.description || def.label;
+      Object.assign(chip.style, chipStyle);
+      wrapper.appendChild(chip);
+
+      if (!isElementBare && bareAllowed) {
+        chip.addEventListener('click', () => onPick(def, {}));
+      }
+
+      if (hasVariants) {
+        const dropdown = document.createElement('sl-dropdown');
+        const caret = document.createElement('span');
+        caret.textContent = '▾';
+        caret.slot = 'trigger';
+        Object.assign(caret.style, { ...chipStyle, borderLeft: '1px solid rgba(0,0,0,.25)', padding: '2px 4px 3px', cursor: 'pointer', opacity: '1' });
+        dropdown.appendChild(caret);
+
+        const menu = document.createElement('sl-menu');
+        for (const variant of def.variants ?? []) {
+          const isActiveVariant = isCurrentTag && currentElement != null &&
+            Object.entries(variant.attrs).every(([k, v]) => currentElement.getAttribute(k) === v);
+          const item = document.createElement('sl-menu-item');
+          const suffix = Object.values(variant.attrs).join(',');
+          item.textContent = `${def.tag}[${suffix}]`;
+          item.title = variant.description || def.description || def.label;
+          if (!isActiveVariant) {
+            item.addEventListener('click', () => onPick(def, variant.attrs));
+          } else {
+            item.disabled = true;
+          }
+          menu.appendChild(item);
+        }
+        dropdown.appendChild(menu);
+
+        if (!bareAllowed) {
+          // No bare-tag action: clicking the chip body also opens the dropdown.
+          chip.addEventListener('click', () => { dropdown.open = true; });
+        }
+
+        wrapper.appendChild(dropdown);
+      }
+
+      row.appendChild(wrapper);
     }
     container.appendChild(row);
   }
 
   /**
-   * Retags `element` from `currentDef` to `newDef`. If the tag name changes, a new
-   * element is created (copying existing attributes) and swapped into the parent, as
-   * before; if the tag name is unchanged, `element` is mutated in place. Either way,
-   * any attribute key present in `currentDef.defaultAttributes` but absent from
-   * `newDef.defaultAttributes` is removed, then `newDef.defaultAttributes` is applied
-   * on top. Truly identical tag+defaultAttributes (a genuine no-op) does nothing.
+   * Retags `element` from `currentDef` to `newDef`, applying `attrs` (the
+   * chosen variant's attribute-value pairs, or `{}` for a bare-tag pick).
+   * If the tag name changes, a new element is created (copying existing
+   * attributes) and swapped into the parent; if unchanged, `element` is
+   * mutated in place. Either way, any attribute name controlled by
+   * `currentDef`'s own variants but absent from `attrs` is removed first
+   * (so switching from `bibl[type=decision]` to plain `bibl` doesn't leave
+   * a stale `type` attribute behind), then `attrs` is applied on top.
    * @param {Element} element
    * @param {AnnotationTagDef} currentDef
    * @param {AnnotationTagDef} newDef
+   * @param {Record<string,string>} attrs
    */
-  async #retag(element, currentDef, newDef) {
-    const currentAttrs = currentDef.defaultAttributes ?? {};
-    const newAttrs = newDef.defaultAttributes ?? {};
+  async #retag(element, currentDef, newDef, attrs) {
     const tagChanged = element.localName !== newDef.tag;
-    const attrsChanged = !this.#attrsEqual(currentAttrs, newAttrs);
+    const currentVariantAttrNames = new Set((currentDef.variants ?? []).flatMap(v => Object.keys(v.attrs)));
+    const attrsChanged = [...currentVariantAttrNames].some(name => element.getAttribute(name) !== (attrs[name] ?? null))
+      || Object.entries(attrs).some(([k, v]) => element.getAttribute(k) !== v);
     if (!tagChanged && !attrsChanged) return;
 
     const parent = element.parentNode;
@@ -397,27 +437,14 @@ export class XmlAnnotationPopup {
       target = newEl;
     }
 
-    for (const key of Object.keys(currentAttrs)) {
-      if (!(key in newAttrs)) target.removeAttribute(key);
+    for (const name of currentVariantAttrNames) {
+      if (!(name in attrs)) target.removeAttribute(name);
     }
-    for (const [k, v] of Object.entries(newAttrs)) {
+    for (const [k, v] of Object.entries(attrs)) {
       target.setAttribute(k, v);
     }
 
     await this.#editor.updateEditorFromNode(parent);
-  }
-
-  /**
-   * Shallow key/value equality check for two `defaultAttributes`-shaped objects.
-   * @param {Record<string,string>} a
-   * @param {Record<string,string>} b
-   * @returns {boolean}
-   */
-  #attrsEqual(a, b) {
-    const aKeys = Object.keys(a);
-    const bKeys = Object.keys(b);
-    if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((k) => a[k] === b[k]);
   }
 
   #hide() {

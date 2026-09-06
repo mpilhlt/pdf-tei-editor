@@ -166,15 +166,16 @@ describe('mergeWithNext', () => {
  * @param {HTMLElement} container
  * @param {string} tag
  * @param {Element} domElement - returned by the mock editor's getDomNodeAt
+ * @param {AnnotationTagDef[]} [tagDefs]
  * @returns {HTMLElement|null}
  */
-function triggerPopup(container, tag, domElement) {
+function triggerPopup(container, tag, domElement, tagDefs = tagDefsWithVariants) {
   const mockEditor = {
     getDomNodeAt: () => domElement,
     updateEditorFromNode: async () => {}
   };
   const popup = new XmlAnnotationPopup(mockEditor);
-  popup.mount(container, tagDefsWithDuplicates);
+  popup.mount(container, tagDefs);
   container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
     bubbles: true,
     detail: { tag, from: 0, clientX: 10, clientY: 10 }
@@ -182,14 +183,24 @@ function triggerPopup(container, tag, domElement) {
   return container.querySelector('.ann-popup');
 }
 
-const tagDefsWithDuplicates = [
-  // generic bibl — no defaultAttributes, serves as fallback
-  { tag: 'bibl', label: 'bibl',          color: '#aaa', attributes: [], defaultAttributes: null },
-  // specific bibl for footnote entries — defaultAttributes distinguishes it
-  { tag: 'bibl', label: 'bibl[footnote]', color: '#bbb', attributes: [], defaultAttributes: { type: 'footnote' } },
+// One AnnotationTagDef per tag now (not one per attribute-value combination);
+// attribute-value combinations live in `variants` instead.
+const tagDefsWithVariants = [
+  {
+    tag: 'bibl',
+    label: 'bibl',
+    color: '#aaa',
+    attributes: [],
+    variants: [
+      { attrs: { type: 'footnote' }, description: 'A footnote reference' },
+      { attrs: { type: 'decision' } },
+    ],
+    bareAllowed: true,
+    childTags: [],
+  },
 ];
 
-describe('XmlAnnotationPopup - popup title for duplicate tag defs', () => {
+describe('XmlAnnotationPopup - popup title for a tag with variants', () => {
   it('shows generic label for <bibl> with no attributes', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -231,16 +242,17 @@ describe('XmlAnnotationPopup - popup title for duplicate tag defs', () => {
  * @param {HTMLElement} container
  * @param {string} tag
  * @param {Element} domElement - returned by the mock editor's getDomNodeAt
+ * @param {AnnotationTagDef[]} [tagDefs]
  * @returns {{ overlay: HTMLElement|null, calls: Node[] }}
  */
-function triggerPopupTracked(container, tag, domElement) {
+function triggerPopupTracked(container, tag, domElement, tagDefs = tagDefsWithVariants) {
   const calls = /** @type {Node[]} */ ([]);
   const mockEditor = {
     getDomNodeAt: () => domElement,
     updateEditorFromNode: async (/** @type {Node} */ node) => { calls.push(node); }
   };
   const popup = new XmlAnnotationPopup(mockEditor);
-  popup.mount(container, tagDefsWithDuplicates);
+  popup.mount(container, tagDefs);
   container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
     bubbles: true,
     detail: { tag, from: 0, clientX: 10, clientY: 10 }
@@ -249,10 +261,11 @@ function triggerPopupTracked(container, tag, domElement) {
 }
 
 /**
- * Finds the "Change to" palette chip whose text content exactly matches `label`.
- * Chips are rendered as bare <span> elements; since the fixture defs here all have
- * `attributes: []`, no other <span> elements appear in the popup, so an exact
- * textContent match reliably identifies the chip.
+ * Finds the top-level chip <span> (not a dropdown menu item, not the
+ * wrapper span, not the caret) whose textContent exactly matches `label`.
+ * Chip spans have no children (their textContent is just the label), while
+ * the wrapper span's textContent also includes the caret glyph — so an
+ * exact match against the bare tag name distinguishes them.
  * @param {HTMLElement} overlay
  * @param {string} label
  */
@@ -265,66 +278,135 @@ function findChip(overlay, label) {
   return chip;
 }
 
+/**
+ * Finds an `sl-menu-item` dropdown entry by its exact `tag[value,...]` text.
+ * @param {HTMLElement} overlay
+ * @param {string} text
+ */
+function findMenuItem(overlay, text) {
+  const items = [...overlay.querySelectorAll('sl-menu-item')];
+  const item = items.find((i) => i.textContent === text);
+  if (!item) {
+    throw new Error(`menu item "${text}" not found among: ${items.map((i) => i.textContent).join(', ')}`);
+  }
+  return item;
+}
+
 describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
-  it('clicking the other same-tag preset actually retags the element (previously a no-op)', () => {
+  it('clicking a dropdown variant sets the attribute on the same tag', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     try {
       const parent = document.createElement('p');
-      const bibl = document.createElement('bibl'); // no attributes -> matches generic 'bibl' def
+      const bibl = document.createElement('bibl'); // bare, no attributes
       parent.appendChild(bibl);
       const { overlay } = triggerPopupTracked(container, 'bibl', bibl);
-      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
-      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       assert.strictEqual(parent.children.length, 1, 'exactly one element remains in parent');
       const result = parent.firstElementChild;
       assert.strictEqual(result?.localName, 'bibl');
-      assert.strictEqual(result?.getAttribute('type'), 'footnote',
-        'retagging to bibl[footnote] must set type="footnote"');
+      assert.strictEqual(result?.getAttribute('type'), 'footnote');
     } finally {
       document.body.removeChild(container);
     }
   });
 
-  it('removes an attribute present on the old preset but absent from the new preset\'s defaultAttributes', () => {
+  it('clicking the bare chip body removes an attribute set by a previous variant', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     try {
       const parent = document.createElement('p');
       const bibl = document.createElement('bibl');
-      bibl.setAttribute('type', 'footnote'); // matches bibl[footnote] def
+      bibl.setAttribute('type', 'footnote');
       parent.appendChild(bibl);
       const { overlay } = triggerPopupTracked(container, 'bibl', bibl);
-      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl'); // plain bibl, no defaultAttributes
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl');
       chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       const result = parent.firstElementChild;
       assert.strictEqual(result?.localName, 'bibl');
       assert.strictEqual(result?.hasAttribute('type'), false,
-        'type attribute must be fully removed when switching to a preset that does not declare it');
+        'type attribute must be fully removed when clicking the bare chip');
     } finally {
       document.body.removeChild(container);
     }
   });
 
-  it('clicking the currently-active preset\'s own chip is a genuine no-op (same tag and defaultAttributes)', () => {
+  it('clicking the currently-active variant\'s own item is a genuine no-op', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     try {
       const parent = document.createElement('p');
       const bibl = document.createElement('bibl');
-      bibl.setAttribute('type', 'footnote'); // matches bibl[footnote] def -> this is "current"
+      bibl.setAttribute('type', 'footnote'); // this variant is "active"
       parent.appendChild(bibl);
       const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
-      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
-      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       assert.strictEqual(parent.children.length, 1);
       const result = parent.firstElementChild;
-      assert.strictEqual(result?.localName, 'bibl');
       assert.strictEqual(result?.getAttribute('type'), 'footnote', 'attribute must remain unchanged');
       assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called for a genuine no-op');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('clicking the bare chip body when already bare is a genuine no-op', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl'); // already bare
+      parent.appendChild(bibl);
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'bibl');
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(parent.firstElementChild?.hasAttribute('type'), false);
+      assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called for a genuine no-op');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('switching to a different variant (not bare, not the active one) updates the attribute', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote');
+      parent.appendChild(bibl);
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[decision]');
+      item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(parent.firstElementChild?.getAttribute('type'), 'decision');
+      assert.strictEqual(calls.length, 1, 'updateEditorFromNode must be called for a real change');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('a tag with no variants renders a plain chip with no dropdown', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const plainDefs = [
+        { tag: 'author', label: 'author', color: '#ccc', attributes: [], variants: [], bareAllowed: true, childTags: [] },
+      ];
+      const parent = document.createElement('p');
+      const author = document.createElement('author');
+      parent.appendChild(author);
+      const { overlay } = triggerPopupTracked(container, 'author', author, plainDefs);
+      assert.strictEqual(overlay?.querySelectorAll('sl-dropdown').length, 0,
+        'a tag with no variants must not render a dropdown');
+      // chip body click is still a no-op here since the element is already bare and 'author' is bareAllowed
+      findChip(/** @type {HTMLElement} */ (overlay), 'author');
     } finally {
       document.body.removeChild(container);
     }
