@@ -21,11 +21,11 @@ import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
 
 /**
- * @typedef {{ tag: string, label: string, labelMap?: Record<string,string>|null,
- *   color: string, attributes?: Array<{name:string, values?: string[]|null}>|null,
- *   description?: string|null, priority?: number,
- *   defaultAttributes?: Record<string,string>|null,
- *   childTags?: string[]|null }} AnnotationTagDef
+ * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
+ * @typedef {{ tag: string, label: string, color: string,
+ *   attributes?: Array<{name:string, values?: string[]|null}>|null,
+ *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
+ *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
  */
 
 class XmlAnnotationPlugin extends Plugin {
@@ -88,7 +88,7 @@ class XmlAnnotationPlugin extends Plugin {
     if (editorContainer) {
       this.#popup = new XmlAnnotationPopup(this.#xmlEditor)
       this.#popup.mount(editorContainer, this.#tagDefs)
-      this.#popup.setWrapCallback(def => this.#wrapSelectionWith(def))
+      this.#popup.setWrapCallback((def, attrs) => this.#wrapSelectionWith(def, attrs))
     }
 
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
@@ -234,13 +234,15 @@ class XmlAnnotationPlugin extends Plugin {
   }
 
   /**
-   * Wraps the current CM selection in the given annotation tag and re-syncs.
+   * Wraps the current CM selection in the given annotation tag (with the
+   * given attribute-value pairs — `{}` for a bare-tag pick) and re-syncs.
    * If the selection falls inside an existing annotation element whose tag does not
    * list `def.tag` in `childTags`, the parent element is split around the selection
    * instead of nesting the new tag inside it.
    * @param {AnnotationTagDef} def
+   * @param {Record<string,string>} attrs
    */
-  async #wrapSelectionWith(def) {
+  async #wrapSelectionWith(def, attrs) {
     const view = this.#xmlEditor.getView?.()
     if (!view) return
     const { from, to } = view.state.selection.main
@@ -251,14 +253,14 @@ class XmlAnnotationPlugin extends Plugin {
       const parentDefs = this.#tagDefs.filter(d => d.tag === enclosing.tagName)
       const isChildTag = parentDefs.some(d => d.childTags?.includes(def.tag))
       if (!isChildTag) {
-        await this.#splitAnnotation(view, from, to, def, enclosing)
+        await this.#splitAnnotation(view, from, to, def, attrs, enclosing)
         return
       }
     }
 
     const selectedText = view.state.doc.sliceString(from, to)
-    const attrStr = def.defaultAttributes
-      ? ' ' + Object.entries(def.defaultAttributes).map(([k, v]) => `${k}="${v}"`).join(' ')
+    const attrStr = Object.keys(attrs).length
+      ? ' ' + Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')
       : ''
     const wrapped = `<${def.tag}${attrStr}>${selectedText}</${def.tag}>`
     view.dispatch({ changes: { from, to, insert: wrapped }, userEvent: 'input.annotate' })
@@ -315,23 +317,24 @@ class XmlAnnotationPlugin extends Plugin {
 
   /**
    * Splits the enclosing annotation element around the selection [from, to] and
-   * applies `def` to the selected text. The text before and after the selection
+   * applies `def`/`attrs` to the selected text. The text before and after the selection
    * each become separate elements of the original parent type (preserving its
    * open-tag markup including attributes). Empty before/after parts are omitted.
    * @param {import('@codemirror/view').EditorView} view
    * @param {number} from
    * @param {number} to
    * @param {AnnotationTagDef} def
+   * @param {Record<string,string>} attrs
    * @param {{ tagName: string, openTagText: string, contentFrom: number, contentTo: number, elementFrom: number, elementTo: number }} enclosing
    */
-  async #splitAnnotation(view, from, to, def, enclosing) {
+  async #splitAnnotation(view, from, to, def, attrs, enclosing) {
     const { tagName, openTagText, contentFrom, contentTo, elementFrom, elementTo } = enclosing
     const state = view.state
     const beforeText = state.doc.sliceString(contentFrom, from)
     const selectedText = state.doc.sliceString(from, to)
     const afterText = state.doc.sliceString(to, contentTo)
-    const attrStr = def.defaultAttributes
-      ? ' ' + Object.entries(def.defaultAttributes).map(([k, v]) => `${k}="${v}"`).join(' ')
+    const attrStr = Object.keys(attrs).length
+      ? ' ' + Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')
       : ''
     let replacement = ''
     if (beforeText.length > 0) replacement += `${openTagText}${beforeText}</${tagName}>`
