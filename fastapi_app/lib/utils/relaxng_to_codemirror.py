@@ -507,20 +507,19 @@ class RelaxNGParser:
         1. A `<choice>` of `<group>`s (correlated multi-attribute presets,
            e.g. `references_title`'s level+type combinations) — found
            either as a direct, mandatory child of `element` (bare_allowed
-           = False) or wrapped in `<optional>` (bare_allowed = True).
+           = False) or wrapped in `<optional>` (bare_allowed = True). Also
+           forced to False if any OTHER attribute on `element` (not one of
+           the preset attributes) is independently required.
         2. One or more independently enumerated attributes (the common
            case, e.g. `citedRange@unit`, `orgName@type`) — each
            attribute's values become independent variants; bare_allowed
-           is False only if the schema does not wrap that attribute in
-           `<optional>`.
+           is False if ANY attribute on the element — enumerated or
+           freeform — is required per `_is_attribute_required`.
 
         Freeform attributes (no enumerated `<value>`s at all) never
         produce variants — they stay editable as free text via the
-        existing per-element `attributes` list instead. Required-ness is
-        still checked for every attribute regardless of shape, enumerated
-        or freeform: a required freeform attribute (e.g. `ptr@target`)
-        must still force `bare_allowed = False` even though it
-        contributes no variants of its own.
+        existing per-element `attributes` list instead — but they still
+        count toward `bare_allowed` if required.
         """
         direct_choice = element.find(f'./{RNG_NS}choice')
         optional = element.find(f'./{RNG_NS}optional')
@@ -531,7 +530,13 @@ class RelaxNGParser:
                 continue
             presets = self._extract_grouped_presets(choice)
             if presets is not None:
-                return presets, bare_allowed
+                preset_attr_names = {name for preset in presets for name in preset['attrs']}
+                other_required = any(
+                    self._is_attribute_required(element, name)
+                    for name in self._extract_attributes(element)
+                    if name not in preset_attr_names
+                )
+                return presets, bare_allowed and not other_required
 
         variants = []
         required_attr_found = False

@@ -32,6 +32,7 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
           <ref name="idno"/>
           <ref name="note"/>
           <ref name="ptr"/>
+          <ref name="quote"/>
         </choice>
       </zeroOrMore>
     </element>
@@ -105,6 +106,26 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
     <element name="ptr">
       <attribute name="target"/>
       <empty/>
+    </element>
+  </define>
+
+  <define name="quote">
+    <element name="quote">
+      <attribute name="source"/>
+      <optional>
+        <choice>
+          <group>
+            <a:documentation>direct quotation</a:documentation>
+            <attribute name="type"><value>direct</value></attribute>
+          </group>
+          <group>
+            <a:documentation>paraphrase</a:documentation>
+            <attribute name="type"><value>paraphrase</value></attribute>
+            <attribute name="cert"><value>medium</value></attribute>
+          </group>
+        </choice>
+      </optional>
+      <text/>
     </element>
   </define>
 
@@ -259,6 +280,24 @@ class TestExtractTagDefinitions(unittest.TestCase):
         ptr = result["ptr"]
         self.assertEqual(ptr["variants"], [], "a freeform attribute must never produce dropdown variants")
         self.assertFalse(ptr["bareAllowed"], "target is required on ptr, so the bare tag must not be allowed")
+
+    def test_grouped_preset_with_separate_required_attribute_forces_not_bare_allowed(self):
+        # Regression: `quote`'s type/cert choice is wrapped in <optional>,
+        # so the choice alone would allow bareAllowed=True - but `source`
+        # is a separate, independently required attribute outside the
+        # choice entirely. The grouped-preset branch used to return
+        # immediately without checking for such "other" required
+        # attributes, so bareAllowed wrongly came out True.
+        result = self.parser.extract_tag_definitions("root", set())
+        quote = result["quote"]
+        variant_attrs = [v["attrs"] for v in quote["variants"]]
+        self.assertIn({"type": "direct"}, variant_attrs)
+        self.assertIn({"type": "paraphrase", "cert": "medium"}, variant_attrs)
+        self.assertFalse(
+            quote["bareAllowed"],
+            "source is a separate required attribute outside the optional choice, "
+            "so bareAllowed must be False even though the choice itself is optional",
+        )
 
     def test_ref_nested_attribute_variant_documentation(self):
         # Regression: per-value documentation lookup must resolve <ref>
