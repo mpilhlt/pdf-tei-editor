@@ -1,10 +1,11 @@
 """
-Unit tests for annotation tag config in the grobid plugin.
+Unit tests for schema-driven annotation tag generation in the grobid plugin.
 
 Run manually:
     uv run python tests/unit-test-runner.py fastapi_app/plugins/grobid/tests/test_annotation_config.py -v
 
-@testCovers fastapi_app/plugins/grobid/config/annotation_tags.py
+@testCovers fastapi_app/plugins/grobid/config/__init__.py
+@testCovers fastapi_app/plugins/grobid/config/annotation_tags_generator.py
 """
 
 import unittest
@@ -33,20 +34,24 @@ class TestGetAnnotationTags(unittest.TestCase):
                 self.assertIn("tag", d, f"Missing 'tag' in {variant}")
                 self.assertIn("label", d, f"Missing 'label' in {variant}")
                 self.assertIn("color", d, f"Missing 'color' in {variant}")
-                self.assertIn("priority", d, f"Missing 'priority' in {variant}")
+                self.assertIn("bareAllowed", d, f"Missing 'bareAllowed' in {variant}")
+                self.assertIn("variants", d, f"Missing 'variants' in {variant}")
 
-    def test_default_attributes_note_footnote(self):
+    def test_one_entry_per_tag_name(self):
+        """The old design had one flat entry per attribute-value combination
+        (title[a], title[j], ...); the new design collapses these into a
+        single entry per distinct tag name, with combinations moved into
+        that entry's 'variants' list."""
         tags = self.get_annotation_tags()
-        seg = tags["grobid.training.segmentation"]
-        footnote = next(t for t in seg if t["label"] == "note[foot]")
-        self.assertEqual(footnote["defaultAttributes"], {"place": "footnote"})
+        refs = tags["grobid.training.references"]
+        tag_names = [t["tag"] for t in refs]
+        self.assertEqual(len(tag_names), len(set(tag_names)), f"Duplicate tag entries: {tag_names}")
 
-    def test_default_attributes_div_acknowledgement(self):
+    def test_alphabetical_order(self):
         tags = self.get_annotation_tags()
-        seg = tags["grobid.training.segmentation"]
-        ack = next(t for t in seg if t["label"] == "acknowledgement")
-        self.assertEqual(ack["defaultAttributes"], {"type": "acknowledgement"})
-        self.assertEqual(ack["tag"], "div")
+        for variant, defs in tags.items():
+            names = [d["tag"] for d in defs]
+            self.assertEqual(names, sorted(names), f"{variant} chip list is not alphabetical")
 
     def test_returns_deep_copy(self):
         tags1 = self.get_annotation_tags()
@@ -57,123 +62,95 @@ class TestGetAnnotationTags(unittest.TestCase):
             "get_annotation_tags() must return a deep copy"
         )
 
-    # --- Legal citation annotation tags (grobid.training.references) ---
+    # --- grobid.training.segmentation ---
 
-    def test_default_attributes_bibl_plain_in_references(self):
+    def test_segmentation_note_has_place_variants(self):
+        tags = self.get_annotation_tags()
+        seg = tags["grobid.training.segmentation"]
+        note = next(t for t in seg if t["tag"] == "note")
+        variant_attrs = [v["attrs"] for v in note["variants"]]
+        self.assertIn({"place": "footnote"}, variant_attrs)
+        self.assertIn({"place": "headnote"}, variant_attrs)
+
+    def test_segmentation_div_has_type_variants(self):
+        tags = self.get_annotation_tags()
+        seg = tags["grobid.training.segmentation"]
+        div = next(t for t in seg if t["tag"] == "div")
+        variant_values = {v["attrs"].get("type") for v in div["variants"]}
+        for expected in ["acknowledgement", "toc", "annex", "funding", "conflict"]:
+            self.assertIn(expected, variant_values)
+
+    def test_segmentation_excludes_lb(self):
+        tags = self.get_annotation_tags()
+        seg = tags["grobid.training.segmentation"]
+        self.assertNotIn("lb", {t["tag"] for t in seg})
+
+    # --- grobid.training.references.referenceSegmenter ---
+
+    def test_reference_segmenter_bibl_has_type_variants(self):
+        tags = self.get_annotation_tags()
+        seg = tags["grobid.training.references.referenceSegmenter"]
+        bibl = next(t for t in seg if t["tag"] == "bibl")
+        self.assertTrue(bibl["bareAllowed"])
+        variant_values = {v["attrs"].get("type") for v in bibl["variants"]}
+        self.assertIn("footnote", variant_values)
+
+    def test_reference_segmenter_bibl_childtags_include_label(self):
+        tags = self.get_annotation_tags()
+        seg = tags["grobid.training.references.referenceSegmenter"]
+        bibl = next(t for t in seg if t["tag"] == "bibl")
+        self.assertIn("label", bibl["childTags"])
+
+    # --- grobid.training.references ---
+
+    def test_references_bibl_has_type_variants(self):
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
-        bibl = next(t for t in refs if t["label"] == "bibl")
-        self.assertIsNone(bibl["defaultAttributes"])
-        self.assertEqual(bibl["tag"], "bibl")
+        bibl = next(t for t in refs if t["tag"] == "bibl")
+        self.assertTrue(bibl["bareAllowed"])
+        variant_values = {v["attrs"].get("type") for v in bibl["variants"]}
+        for expected in ["footnote", "decision", "legislation"]:
+            self.assertIn(expected, variant_values)
 
-    def test_default_attributes_bibl_footnote_in_references(self):
+    def test_references_citedrange_units_collapsed_into_variants(self):
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
-        bibl_footnote = next(t for t in refs if t["label"] == "bibl[footnote]")
-        self.assertEqual(bibl_footnote["defaultAttributes"], {"type": "footnote"})
-        self.assertEqual(bibl_footnote["tag"], "bibl")
-
-    def test_default_attributes_bibl_decision_in_references(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        bibl_decision = next(t for t in refs if t["label"] == "bibl[decision]")
-        self.assertEqual(bibl_decision["defaultAttributes"], {"type": "decision"})
-        self.assertEqual(bibl_decision["tag"], "bibl")
-
-    def test_default_attributes_bibl_legislation_in_references(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        bibl_legislation = next(t for t in refs if t["label"] == "bibl[legislation]")
-        self.assertEqual(bibl_legislation["defaultAttributes"], {"type": "legislation"})
-        self.assertEqual(bibl_legislation["tag"], "bibl")
-
-    def test_default_attributes_title_legislation(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        title_legislation = next(t for t in refs if t["label"] == "title[legislation]")
-        self.assertEqual(
-            title_legislation["defaultAttributes"], {"level": "m", "type": "legislation"}
-        )
-        self.assertEqual(title_legislation["tag"], "title")
-
-    def test_default_attributes_title_casename(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        title_casename = next(t for t in refs if t["label"] == "title[caseName]")
-        self.assertEqual(
-            title_casename["defaultAttributes"], {"level": "a", "type": "caseName"}
-        )
-        self.assertEqual(title_casename["tag"], "title")
-
-    def test_date_type_options_collapsed_into_single_chip(self):
-        """date[decision]/date[enacted] are not separate chips; the single
-        'date' entry exposes them as an in-popup 'type' dropdown, like idno."""
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        date_entries = [t for t in refs if t["tag"] == "date"]
-        self.assertEqual(len(date_entries), 1, "date must be a single collapsed chip")
-        date = date_entries[0]
-        self.assertEqual(date["label"], "date")
-        self.assertIsNone(date["defaultAttributes"])
-        self.assertEqual(date["attributes"][0]["name"], "type")
-        for expected in ["decision", "enacted"]:
-            self.assertIn(expected, date["attributes"][0]["values"])
-
-    def test_default_attributes_orgname_court(self):
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        orgname_court = next(t for t in refs if t["label"] == "orgName[court]")
-        self.assertEqual(orgname_court["defaultAttributes"], {"type": "court"})
-        self.assertEqual(orgname_court["tag"], "orgName")
-
-    def test_cited_range_units_collapsed_into_single_chip(self):
-        """citedRange's 8 @unit values are not separate chips; a single
-        'citedRange' entry exposes them as an in-popup 'unit' dropdown,
-        like idno."""
-        tags = self.get_annotation_tags()
-        refs = tags["grobid.training.references"]
-        units = [
-            "section", "sub-section", "sentence", "number",
-            "letter", "margin", "recital", "page",
-        ]
         cited_range_entries = [t for t in refs if t["tag"] == "citedRange"]
-        self.assertEqual(len(cited_range_entries), 1, "citedRange must be a single collapsed chip")
+        self.assertEqual(len(cited_range_entries), 1, "citedRange must be a single collapsed entry")
         cited_range = cited_range_entries[0]
-        self.assertEqual(cited_range["label"], "citedRange")
-        self.assertIsNone(cited_range["defaultAttributes"])
-        self.assertEqual(cited_range["attributes"][0]["name"], "unit")
-        self.assertEqual(cited_range["attributes"][0]["values"], units)
+        self.assertFalse(cited_range["bareAllowed"], "citedRange@unit is required in the schema")
+        units = {v["attrs"].get("unit") for v in cited_range["variants"]}
+        for expected in ["section", "sub-section", "sentence", "number", "letter", "margin", "recital", "page"]:
+            self.assertIn(expected, units)
 
-    def test_seg_signal_in_references(self):
+    def test_references_orgname_has_type_variants(self):
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
-        seg_signal = next(t for t in refs if t["label"] == "seg[signal]")
-        self.assertEqual(seg_signal["tag"], "seg")
-        self.assertEqual(seg_signal["defaultAttributes"], {"type": "signal"})
+        org_name = next(t for t in refs if t["tag"] == "orgName")
+        self.assertTrue(org_name["bareAllowed"])
+        variant_values = {v["attrs"].get("type") for v in org_name["variants"]}
+        self.assertIn("court", variant_values)
+        self.assertIn("collaboration", variant_values)
 
-    def test_idno_attributes_include_legal_values(self):
+    def test_references_seg_signal_variant(self):
         tags = self.get_annotation_tags()
         refs = tags["grobid.training.references"]
-        idno = next(t for t in refs if t["label"] == "idno")
-        values = idno["attributes"][0]["values"]
-        for expected in ["DOI", "arXiv", "report", "docket", "ECLI", "CELEX"]:
-            self.assertIn(expected, values)
+        seg = next(t for t in refs if t["tag"] == "seg")
+        variant_values = {v["attrs"].get("type") for v in seg["variants"]}
+        self.assertIn("signal", variant_values)
 
-    def test_default_attributes_bibl_decision_in_reference_segmenter(self):
+    def test_references_ref_anaphoric_cataphoric_variants(self):
+        """references_ref (anaphoric/cataphoric) is fully enumerated in the
+        schema but had no chip at all in the old manual config — schema
+        generation surfaces it as a new chip, which is intended."""
         tags = self.get_annotation_tags()
-        seg = tags["grobid.training.references.referenceSegmenter"]
-        bibl_decision = next(t for t in seg if t["label"] == "bibl[decision]")
-        self.assertEqual(bibl_decision["defaultAttributes"], {"type": "decision"})
-        self.assertEqual(bibl_decision["tag"], "bibl")
-        self.assertEqual(bibl_decision["childTags"], ["label"])
-
-    def test_default_attributes_bibl_legislation_in_reference_segmenter(self):
-        tags = self.get_annotation_tags()
-        seg = tags["grobid.training.references.referenceSegmenter"]
-        bibl_legislation = next(t for t in seg if t["label"] == "bibl[legislation]")
-        self.assertEqual(bibl_legislation["defaultAttributes"], {"type": "legislation"})
-        self.assertEqual(bibl_legislation["tag"], "bibl")
-        self.assertEqual(bibl_legislation["childTags"], ["label"])
+        refs = tags["grobid.training.references"]
+        ref_entries = [t for t in refs if t["tag"] == "ref"]
+        self.assertTrue(ref_entries, "ref tag should now be generated from the schema")
+        ref = ref_entries[0]
+        variant_values = {v["attrs"].get("type") for v in ref["variants"]}
+        self.assertIn("anaphoric", variant_values)
+        self.assertIn("cataphoric", variant_values)
 
     def test_bibl_childtags_cover_all_references_variant_tags(self):
         """Every bibl-tagged entry in grobid.training.references must list
@@ -186,15 +163,13 @@ class TestGetAnnotationTags(unittest.TestCase):
         refs = tags["grobid.training.references"]
         other_tags = {t["tag"] for t in refs if t["tag"] != "bibl"}
         bibl_entries = [t for t in refs if t["tag"] == "bibl"]
-        self.assertTrue(
-            bibl_entries, "No bibl-tagged entries found in grobid.training.references"
-        )
+        self.assertTrue(bibl_entries, "No bibl-tagged entry found in grobid.training.references")
         for entry in bibl_entries:
             child_tags = set(entry.get("childTags", []))
             missing = other_tags - child_tags
             self.assertEqual(
                 missing, set(),
-                f"childTags of '{entry['label']}' is missing tags: {missing}"
+                f"childTags of '{entry['tag']}' is missing tags: {missing}"
             )
 
 
