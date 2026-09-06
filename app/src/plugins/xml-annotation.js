@@ -250,8 +250,8 @@ class XmlAnnotationPlugin extends Plugin {
 
     const enclosing = this.#findEnclosingAnnotation(view.state, from, to)
     if (enclosing) {
-      const parentDefs = this.#tagDefs.filter(d => d.tag === enclosing.tagName)
-      const isChildTag = parentDefs.some(d => d.childTags?.includes(def.tag))
+      const parentDef = this.#tagDefs.find(d => d.tag === enclosing.tagName)
+      const isChildTag = parentDef?.childTags?.includes(def.tag) ?? false
       if (!isChildTag) {
         await this.#splitAnnotation(view, from, to, def, attrs, enclosing)
         return

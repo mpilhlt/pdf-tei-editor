@@ -472,4 +472,49 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       document.body.removeChild(container);
     }
   });
+
+  // Regression coverage for `bareAllowed: false` (e.g. `citedRange`/`title`,
+  // which the schema only ever allows with a required attribute): the chip
+  // body must not itself apply a bare-tag no-attrs pick, and clicking it
+  // must open the dropdown instead of being a dead click.
+  it('bareAllowed:false chip body opens the dropdown instead of applying a bare pick', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const requiredAttrDefs = [
+        {
+          tag: 'citedRange',
+          label: 'citedRange',
+          color: '#eee',
+          attributes: [],
+          variants: [
+            { attrs: { unit: 'page' } },
+            { attrs: { unit: 'paragraph' } },
+          ],
+          bareAllowed: false,
+          childTags: [],
+        },
+      ];
+      const parent = document.createElement('p');
+      const citedRange = document.createElement('citedRange'); // no attributes yet
+      parent.appendChild(citedRange);
+      const { overlay, calls } = triggerPopupTracked(container, 'citedRange', citedRange, requiredAttrDefs);
+
+      const chip = findChip(/** @type {HTMLElement} */ (overlay), 'citedRange');
+      const dropdown = overlay?.querySelector('sl-dropdown');
+      assert.ok(dropdown, 'a bareAllowed:false tag with variants must still render a dropdown');
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(calls.length, 0, 'clicking the chip body must not apply a bare-tag pick');
+      assert.strictEqual(/** @type {any} */ (dropdown).open, true,
+        'clicking the chip body must open the dropdown when bareAllowed is false');
+
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'citedRange[page]');
+      item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      assert.strictEqual(parent.firstElementChild?.getAttribute('unit'), 'page');
+      assert.strictEqual(calls.length, 1, 'picking a variant from the dropdown must still apply normally');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
 });

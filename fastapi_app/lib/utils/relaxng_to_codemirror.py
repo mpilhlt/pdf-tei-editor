@@ -20,7 +20,7 @@ Usage:
 """
 
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Set, Optional, Union
+from typing import Dict, List, Set, Optional, Union, TypedDict
 from collections import defaultdict
 import json
 
@@ -29,6 +29,27 @@ import json
 # directly; that is unchanged/out of scope here, so the two conventions
 # intentionally coexist.
 RNG_NS = '{http://relaxng.org/ns/structure/1.0}'
+
+
+class TagVariant(TypedDict):
+    """One attribute-value preset for a tag, e.g. `{'level': 'a'}`."""
+    attrs: Dict[str, str]
+    description: Optional[str]
+
+
+class TagAttribute(TypedDict):
+    """One attribute of a tag, with its enumerated values if any."""
+    name: str
+    values: Optional[List[str]]
+
+
+class TagDefinition(TypedDict):
+    """Per-tag data returned by `extract_tag_definitions()`."""
+    description: Optional[str]
+    children: List[str]
+    attributes: List[TagAttribute]
+    variants: List[TagVariant]
+    bareAllowed: bool
 
 
 class RelaxNGParser:
@@ -447,7 +468,7 @@ class RelaxNGParser:
                 docs[value.text.strip()] = doc
         return docs
 
-    def _extract_grouped_presets(self, choice: ET.Element) -> Optional[List[Dict]]:
+    def _extract_grouped_presets(self, choice: ET.Element) -> Optional[List[TagVariant]]:
         """
         If `choice` (a `<choice>` element) is a set of `<group>`
         alternatives that each assign one or more attributes to a single
@@ -499,7 +520,7 @@ class RelaxNGParser:
                     visited.discard(ref_name)
         return found
 
-    def _extract_variants(self, element: ET.Element) -> "tuple[List[Dict], bool]":
+    def _extract_variants(self, element: ET.Element) -> "tuple[List[TagVariant], bool]":
         """
         Returns `(variants, bare_allowed)` for `element`, covering two
         shapes:
@@ -553,7 +574,7 @@ class RelaxNGParser:
                 variants.append({'attrs': {attr_name: v}, 'description': value_docs.get(v)})
         return variants, not required_attr_found
 
-    def extract_tag_definitions(self, root_tag: str, exclude: "Set[str]" = frozenset()) -> Dict[str, Dict]:
+    def extract_tag_definitions(self, root_tag: str, exclude: "Set[str]" = frozenset()) -> Dict[str, TagDefinition]:
         """
         Extract per-tag data for annotation-chip generation: `root_tag`
         plus every element name allowed as its child in the content model
@@ -580,12 +601,12 @@ class RelaxNGParser:
 
         tag_names = ({root_tag} | set(self._extract_child_elements(root_element))) - set(exclude)
 
-        result = {}
+        result: Dict[str, TagDefinition] = {}
         for tag_name in tag_names:
             element = self._find_element_definition(tag_name)
             if element is None:
                 continue
-            attributes = []
+            attributes: List[TagAttribute] = []
             for attr_name, attr_data in self._extract_attributes(element).items():
                 values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
                 attributes.append({'name': attr_name, 'values': values})

@@ -216,18 +216,27 @@ plus a dropdown if that tag has enumerated attributes":
   Tooltip on each dropdown item = that value's own description if the
   schema provides one, else falls back to the tag-level description.
 
-`AnnotationTagAttribute` (`fastapi_app/lib/models/models_extraction.py`)
-changes shape: `values: Optional[List[str]]` becomes
-`values: Optional[List[AttributeValueOption]]` where
-`AttributeValueOption = {value: str, description: Optional[str]}`, and the
-model gains `required: bool` (default `False`, for the freeform attributes
-that still pass through the model unchanged). `AnnotationTagDef.color`
-and `.description` are unchanged; `.priority` is dropped (ordering is
-alphabetical by tag name now, computed at generation time, not per-def) —
-`xml-annotation-popup.js:339`'s priority sort is replaced with a sort on
-tag name, and `defaultAttributes`/`labelMap`-based multi-entry-per-tag
-patterns in the old data go away since there's exactly one `AnnotationTag`
-per tag name now.
+> **Implementation note:** as implemented, `AnnotationTagAttribute`
+> (`fastapi_app/lib/models/models_extraction.py`) is left unchanged
+> (`name: str`, `values: Optional[List[str]]`) and still covers only
+> freeform/non-enumerated attributes. Enumerated attribute-value
+> combinations and their per-value descriptions live entirely in a new
+> `AnnotationTagVariant` model (`attrs: Dict[str, str]`, `description:
+> Optional[str]`) — `attrs` holds one or more correlated attribute-value
+> pairs (a `<choice>` of `<group>`s becomes one variant per group, e.g.
+> `title`'s `level`+`type` combinations), and `AnnotationTagDef` gains
+> `variants: List[AnnotationTagVariant]` plus `bareAllowed: bool` (replacing
+> the "required" concept below at the whole-tag level rather than
+> per-attribute). This is a cleaner split than the
+> `AttributeValueOption`/`required` shape originally proposed here, since it
+> naturally represents multi-attribute presets that a flat
+> `values`-with-`required`-flag shape cannot. `AnnotationTagDef.color` and
+> `.description` are unchanged; `.priority` is dropped (ordering is
+> alphabetical by tag name now, computed at generation time, not per-def) —
+> `xml-annotation-popup.js`'s `#renderPalette` priority sort is replaced
+> with a sort on tag name, and `defaultAttributes`/`labelMap`-based
+> multi-entry-per-tag patterns in the old data go away since there's
+> exactly one `AnnotationTagDef` per tag name now.
 
 ## Descriptions: schema-side convention
 
