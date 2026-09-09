@@ -218,6 +218,12 @@ export class XmlAnnotationPopup {
 
       const currentVal = element.getAttribute(attr.name) ?? '';
 
+      // Re-sync from `element` itself, not `element.parentNode`: an attribute
+      // edit doesn't restructure the parent's children, and `element` is
+      // always tracked (it came from getDomNodeAt), whereas its parent is
+      // the untracked Document node when `element` is the XML document's
+      // root — as `<bibl>` is for the grobid.training.references variant,
+      // whose schema root tag is `bibl` itself (annotation_tags_scope.py).
       if (attr.values && attr.values.length > 0) {
         const sel = document.createElement('sl-select');
         sel.setAttribute('size', 'small');
@@ -231,7 +237,7 @@ export class XmlAnnotationPopup {
         }
         sel.addEventListener('sl-change', async () => {
           element.setAttribute(attr.name, /** @type {any} */ (sel).value);
-          await this.#editor.updateEditorFromNode(/** @type {Node} */ (element.parentNode));
+          await this.#editor.updateEditorFromNode(element);
         });
         row.appendChild(sel);
       } else {
@@ -241,7 +247,7 @@ export class XmlAnnotationPopup {
         input.style.minWidth = '80px';
         input.addEventListener('sl-change', async () => {
           element.setAttribute(attr.name, /** @type {any} */ (input).value);
-          await this.#editor.updateEditorFromNode(/** @type {Node} */ (element.parentNode));
+          await this.#editor.updateEditorFromNode(element);
         });
         row.appendChild(input);
       }

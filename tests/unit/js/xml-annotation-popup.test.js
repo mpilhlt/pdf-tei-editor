@@ -518,3 +518,85 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
     }
   });
 });
+
+// ── XmlAnnotationPopup editable attributes ─────────────────────────────────
+
+describe('XmlAnnotationPopup - editable attributes', () => {
+  // Regression test: for a variant whose schema root tag IS the annotation
+  // tag itself (e.g. `bibl` for grobid.training.references — see
+  // annotation_tags_scope.py's `"root": "bibl"`), the badge's element is the
+  // XML document's root element, so `element.parentNode` is the Document
+  // node. `linkSyntaxTreeWithDOM` (codemirror-utils.js) only links from the
+  // root *Element* down — the Document node itself is never added to the
+  // dom<->syntax position maps — so calling updateEditorFromNode with
+  // `element.parentNode` throws "Dom node has no attached syntax node" in
+  // xmleditor.js. The element itself is always tracked (it came from
+  // getDomNodeAt), so the fix is to update from `element`, not its parent —
+  // which is also correct for nested (non-root) elements since editing an
+  // attribute doesn't restructure the parent's children.
+  it('updateEditorFromNode is called with the element itself, not its parent, when editing an enumerated attribute', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'type', values: ['footnote', 'decision'] }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const xmlDoc = document.implementation.createDocument(null, 'bibl', null);
+      const bibl = xmlDoc.documentElement;
+      bibl.setAttribute('type', 'footnote');
+      assert.strictEqual(bibl.parentNode, xmlDoc, 'sanity check: root element\'s parent is the Document');
+
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs);
+      const select = overlay?.querySelector('sl-select');
+      assert.ok(select, 'an sl-select must render for an enumerated attribute');
+      /** @type {any} */ (select).value = 'decision';
+      select.dispatchEvent(new dom.window.CustomEvent('sl-change', { bubbles: true }));
+
+      assert.strictEqual(calls.length, 1, 'updateEditorFromNode must be called once');
+      assert.strictEqual(calls[0], bibl,
+        'must be called with the element itself, not its parentNode (the untracked Document for a root element)');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('updateEditorFromNode is called with the element itself, not its parent, when editing a freeform attribute', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'corresp', values: null }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const xmlDoc = document.implementation.createDocument(null, 'bibl', null);
+      const bibl = xmlDoc.documentElement;
+
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs);
+      const input = overlay?.querySelector('sl-input');
+      assert.ok(input, 'an sl-input must render for a freeform attribute');
+      /** @type {any} */ (input).value = '#ref1';
+      input.dispatchEvent(new dom.window.CustomEvent('sl-change', { bubbles: true }));
+
+      assert.strictEqual(calls.length, 1, 'updateEditorFromNode must be called once');
+      assert.strictEqual(calls[0], bibl,
+        'must be called with the element itself, not its parentNode (the untracked Document for a root element)');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
