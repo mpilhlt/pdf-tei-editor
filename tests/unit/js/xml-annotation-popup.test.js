@@ -599,4 +599,72 @@ describe('XmlAnnotationPopup - editable attributes', () => {
       document.body.removeChild(container);
     }
   });
+
+  // Regression test for the real bug: XmlEditorDomSync rebuilds its DOM<->
+  // syntax-tree maps from a freshly re-parsed DOM 1 second after the last
+  // document-changing transaction (xmleditor.js's #delayedUpdateActions
+  // debounce), producing brand new Element objects even when nothing about
+  // the document text changed. A popup routinely stays open longer than
+  // that debounce window while the user reads it, so the Element captured
+  // when the popup opened can be orphaned by the time a deferred action
+  // (attribute edit, merge, remove, retag) actually runs. The popup must
+  // re-resolve the live element at action time via getDomNodeAt(from),
+  // not reuse the one captured at open time.
+  it('re-resolves the live element at action time instead of reusing the one captured when the popup opened', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'type', values: ['footnote', 'decision'] }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      // Two distinct Element objects standing in for "the same document
+      // position, before and after a domSync resync" — a real resync
+      // re-parses the text into a brand new Document, so even an otherwise
+      // identical element is a different object afterward.
+      const staleDoc = document.implementation.createDocument(null, 'bibl', null);
+      const staleEl = staleDoc.documentElement;
+      staleEl.setAttribute('type', 'footnote');
+
+      const freshDoc = document.implementation.createDocument(null, 'bibl', null);
+      const freshEl = freshDoc.documentElement;
+      freshEl.setAttribute('type', 'footnote');
+
+      let getDomNodeAtCalls = 0;
+      const calls = /** @type {Node[]} */ ([]);
+      const mockEditor = {
+        // First resolution (popup opening) returns the "stale" element;
+        // every subsequent resolution (the deferred sl-change handler)
+        // returns the "fresh" one — simulating a resync in between.
+        getDomNodeAt: () => { getDomNodeAtCalls += 1; return getDomNodeAtCalls === 1 ? staleEl : freshEl; },
+        updateEditorFromNode: async (/** @type {Node} */ node) => { calls.push(node); },
+      };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, defWithAttrs);
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        detail: { tag: 'bibl', from: 42, clientX: 10, clientY: 10 },
+      }));
+
+      const overlay = container.querySelector('.ann-popup');
+      const select = overlay?.querySelector('sl-select');
+      assert.ok(select, 'an sl-select must render for an enumerated attribute');
+      /** @type {any} */ (select).value = 'decision';
+      select.dispatchEvent(new dom.window.CustomEvent('sl-change', { bubbles: true }));
+
+      assert.strictEqual(calls.length, 1, 'updateEditorFromNode must be called once');
+      assert.strictEqual(calls[0], freshEl,
+        'must act on the freshly re-resolved element, not the one captured when the popup opened');
+      assert.notStrictEqual(calls[0], staleEl);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
 });

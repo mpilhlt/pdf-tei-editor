@@ -113,10 +113,9 @@ export class XmlAnnotationPopup {
       const { tag, from, clientX = 0, clientY = 0 } = /** @type {CustomEvent} */ (e).detail;
       const def = this.#tagMap.get(tag);
       if (!def) return;
-      let element;
-      try { element = /** @type {Element} */ (this.#editor.getDomNodeAt(from)); } catch { return; }
+      const element = this.#resolveElement(from);
       if (!element) return;
-      this.#show({ clientX, clientY }, def, element);
+      this.#show({ clientX, clientY }, def, element, from);
     });
 
     document.addEventListener('click', (e) => {
@@ -187,11 +186,37 @@ export class XmlAnnotationPopup {
   }
 
   /**
+   * Resolves the CURRENT, live DOM node at a document position via a fresh
+   * getDomNodeAt() call, rather than reusing an Element captured earlier.
+   * `XmlEditorDomSync` rebuilds its DOM<->syntax-tree position maps from a
+   * freshly re-parsed DOM (xmleditor.js's `#delayedUpdateActions`, 1 second
+   * after the last document-changing transaction), which orphans any
+   * Element reference captured before that rebuild — including one from
+   * earlier in the SAME popup session, since a popup routinely stays open
+   * longer than that debounce window while the user reads it. Every
+   * deferred action below (attribute edit, merge, remove, retag) must
+   * re-resolve at the moment it actually runs, not reuse the element the
+   * popup opened with. Hides the popup and returns null if the position no
+   * longer resolves to a live element.
+   * @param {number} from
+   * @returns {Element|null}
+   */
+  #resolveElement(from) {
+    try {
+      return /** @type {Element} */ (this.#editor.getDomNodeAt(from));
+    } catch {
+      this.#hide();
+      return null;
+    }
+  }
+
+  /**
    * @param {{ clientX: number, clientY: number }} coords
    * @param {AnnotationTagDef} def
-   * @param {Element} element
+   * @param {Element} element Freshly resolved element, safe to read synchronously below.
+   * @param {number} from Document position of `element`'s open tag, for re-resolving in deferred handlers.
    */
-  #show(coords, def, element) {
+  #show(coords, def, element, from) {
     if (!this.#overlay) return;
     this.#overlay.innerHTML = '';
 
@@ -218,12 +243,10 @@ export class XmlAnnotationPopup {
 
       const currentVal = element.getAttribute(attr.name) ?? '';
 
-      // Re-sync from `element` itself, not `element.parentNode`: an attribute
-      // edit doesn't restructure the parent's children, and `element` is
-      // always tracked (it came from getDomNodeAt), whereas its parent is
-      // the untracked Document node when `element` is the XML document's
-      // root — as `<bibl>` is for the grobid.training.references variant,
-      // whose schema root tag is `bibl` itself (annotation_tags_scope.py).
+      // Re-sync from the freshly re-resolved live element, not `element.parentNode`
+      // and not `element` itself (see #resolveElement): an attribute edit doesn't
+      // restructure the parent's children, so there's no need to target the parent,
+      // and by the time the user picks a value, `element` may already be orphaned.
       if (attr.values && attr.values.length > 0) {
         const sel = document.createElement('sl-select');
         sel.setAttribute('size', 'small');
@@ -236,8 +259,10 @@ export class XmlAnnotationPopup {
           sel.appendChild(opt);
         }
         sel.addEventListener('sl-change', async () => {
-          element.setAttribute(attr.name, /** @type {any} */ (sel).value);
-          await this.#editor.updateEditorFromNode(element);
+          const live = this.#resolveElement(from);
+          if (!live) return;
+          live.setAttribute(attr.name, /** @type {any} */ (sel).value);
+          await this.#editor.updateEditorFromNode(live);
         });
         row.appendChild(sel);
       } else {
@@ -246,8 +271,10 @@ export class XmlAnnotationPopup {
         input.setAttribute('value', currentVal);
         input.style.minWidth = '80px';
         input.addEventListener('sl-change', async () => {
-          element.setAttribute(attr.name, /** @type {any} */ (input).value);
-          await this.#editor.updateEditorFromNode(element);
+          const live = this.#resolveElement(from);
+          if (!live) return;
+          live.setAttribute(attr.name, /** @type {any} */ (input).value);
+          await this.#editor.updateEditorFromNode(live);
         });
         row.appendChild(input);
       }
@@ -259,8 +286,9 @@ export class XmlAnnotationPopup {
     mergePrevLink.style.cssText = 'margin-top:8px; color:#89dceb; cursor:pointer; font-size:11px;';
     mergePrevLink.textContent = '« Merge with previous';
     mergePrevLink.addEventListener('click', async () => {
-      if (!element.parentNode) return;
-      const parent = mergeWithPrev(element);
+      const live = this.#resolveElement(from);
+      if (!live || !live.parentNode) return;
+      const parent = mergeWithPrev(live);
       await this.#editor.updateEditorFromNode(parent);
       this.#hide();
     });
@@ -270,8 +298,9 @@ export class XmlAnnotationPopup {
     mergeNextLink.style.cssText = 'margin-top:4px; color:#89dceb; cursor:pointer; font-size:11px;';
     mergeNextLink.textContent = '» Merge with next';
     mergeNextLink.addEventListener('click', async () => {
-      if (!element.parentNode) return;
-      const parent = mergeWithNext(element);
+      const live = this.#resolveElement(from);
+      if (!live || !live.parentNode) return;
+      const parent = mergeWithNext(live);
       await this.#editor.updateEditorFromNode(parent);
       this.#hide();
     });
@@ -281,10 +310,12 @@ export class XmlAnnotationPopup {
     removeLink.style.cssText = 'margin-top:8px; color:#f38ba8; cursor:pointer; font-size:11px;';
     removeLink.textContent = '✕ Remove annotation';
     removeLink.addEventListener('click', async () => {
-      const parent = element.parentNode;
+      const live = this.#resolveElement(from);
+      if (!live) return;
+      const parent = live.parentNode;
       if (!parent) return;
-      while (element.firstChild) parent.insertBefore(element.firstChild, element);
-      parent.removeChild(element);
+      while (live.firstChild) parent.insertBefore(live.firstChild, live);
+      parent.removeChild(live);
       await this.#editor.updateEditorFromNode(parent);
       this.#hide();
     });
@@ -301,7 +332,9 @@ export class XmlAnnotationPopup {
 
     this.#renderPalette(this.#overlay, def, element, async (newDef, attrs) => {
       this.#hide();
-      await this.#retag(element, def, newDef, attrs);
+      const live = this.#resolveElement(from);
+      if (!live) return;
+      await this.#retag(live, def, newDef, attrs);
     });
 
     // Position near the badge — extra bottom margin for the "Change to" palette section
