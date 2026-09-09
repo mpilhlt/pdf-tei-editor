@@ -5,8 +5,15 @@ import copy
 from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
 
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core.schema_validator import get_schema_cache_info
 from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES, AnnotationGuide
-from fastapi_app.plugins.grobid.config.annotation_tags import ANNOTATION_TAGS, AnnotationTagsMap
+from fastapi_app.plugins.grobid.config.annotation_tags_generator import (
+    AnnotationTag,
+    AnnotationTagsMap,
+    generate_annotation_tags,
+)
+from fastapi_app.plugins.grobid.config.annotation_tags_scope import ANNOTATION_TAG_SCOPE
 from fastapi_app.plugins.grobid.config.content_locations import VARIANT_CONTENT_LOCATIONS, VariantContentLocations
 from fastapi_app.plugins.grobid.config.form_options import FORM_OPTIONS, FormOptions
 from fastapi_app.plugins.grobid.config.navigation import NAVIGATION_XPATH, NavigationXPath
@@ -191,6 +198,28 @@ def get_annotation_guides() -> list[AnnotationGuide]:
     return ANNOTATION_GUIDES.copy()
 
 
+_ANNOTATION_TAGS_CACHE: dict[str, tuple[float | None, list[AnnotationTag]]] = {}
+
+
 def get_annotation_tags() -> AnnotationTagsMap:
-    """Return annotation tag definitions keyed by variant_id."""
-    return copy.deepcopy(ANNOTATION_TAGS)
+    """
+    Return annotation tag definitions keyed by variant_id, generated from
+    each variant's cached RelaxNG schema (see annotation_tags_generator.py).
+    A variant's chip list is regenerated only when its cached schema
+    file's mtime changes since the last build; a variant whose schema
+    hasn't been downloaded/cached yet gets an empty list rather than an
+    error — a schema declaration is required to get any chips at all.
+    """
+    result: AnnotationTagsMap = {}
+    cache_root = get_settings().schema_cache_dir
+    for variant_id in ANNOTATION_TAG_SCOPE:
+        _, schema_cache_file, _ = get_schema_cache_info(get_schema_url(variant_id), cache_root)
+        mtime = schema_cache_file.stat().st_mtime if schema_cache_file.is_file() else None
+        cached = _ANNOTATION_TAGS_CACHE.get(variant_id)
+        if cached is not None and cached[0] == mtime:
+            result[variant_id] = copy.deepcopy(cached[1])
+            continue
+        tags = generate_annotation_tags(variant_id, schema_cache_file)
+        _ANNOTATION_TAGS_CACHE[variant_id] = (mtime, tags)
+        result[variant_id] = copy.deepcopy(tags)
+    return result
