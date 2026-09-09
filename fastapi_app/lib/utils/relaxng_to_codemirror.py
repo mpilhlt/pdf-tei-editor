@@ -41,6 +41,7 @@ class TagAttribute(TypedDict):
     """One attribute of a tag, with its enumerated values if any."""
     name: str
     values: Optional[List[str]]
+    required: bool
 
 
 class TagDefinition(TypedDict):
@@ -589,11 +590,15 @@ class RelaxNGParser:
         Returns `{tag_name: {
             'description': str | None,
             'children': list[str],
-            'attributes': [{'name': str, 'values': list[str] | None}],
+            'attributes': [{'name': str, 'values': list[str] | None, 'required': bool}],
             'variants': [{'attrs': dict[str, str], 'description': str | None}],
             'bareAllowed': bool,
         }}`. A `root_tag` not found as an `<element>` anywhere in the
-        schema yields an empty dict.
+        schema yields an empty dict. An attribute's `required` is `True`
+        iff it is reachable from the element without passing through an
+        `<optional>` or `<choice>` (see `_is_attribute_required`); the
+        properties popup uses this to decide whether the attribute may be
+        cleared once set.
         """
         root_element = self._find_element_definition(root_tag)
         if root_element is None:
@@ -609,7 +614,8 @@ class RelaxNGParser:
             attributes: List[TagAttribute] = []
             for attr_name, attr_data in self._extract_attributes(element).items():
                 values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
-                attributes.append({'name': attr_name, 'values': values})
+                required = self._is_attribute_required(element, attr_name)
+                attributes.append({'name': attr_name, 'values': values, 'required': required})
             variants, bare_allowed = self._extract_variants(element)
             result[tag_name] = {
                 'description': self._extract_documentation(element),

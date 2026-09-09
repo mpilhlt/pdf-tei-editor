@@ -52,6 +52,33 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
 </grammar>
 """
 
+# Separate fixture (not wired into "text") so the required-attribute-implies
+# bareAllowed=False rule (see _extract_variants) doesn't perturb the
+# bareAllowed/variants assertions the other tests make against div/page.
+FIXTURE_RNG_WITH_REQUIRED_ATTR = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+  xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+  ns="http://example.org/ns">
+  <start><ref name="text"/></start>
+  <define name="text">
+    <element name="text">
+      <zeroOrMore><ref name="note"/></zeroOrMore>
+    </element>
+  </define>
+  <define name="note">
+    <element name="note">
+      <attribute name="n"><text/></attribute>
+      <optional>
+        <attribute name="type">
+          <choice><value>editorial</value><value>author</value></choice>
+        </attribute>
+      </optional>
+      <text/>
+    </element>
+  </define>
+</grammar>
+"""
+
 
 class TestGenerateAnnotationTags(unittest.TestCase):
 
@@ -59,6 +86,8 @@ class TestGenerateAnnotationTags(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.schema_path = Path(self.tmpdir.name) / "grobid.training.segmentation.rng"
         self.schema_path.write_text(FIXTURE_RNG, encoding="utf-8")
+        self.required_attr_schema_path = Path(self.tmpdir.name) / "with-required-attr.rng"
+        self.required_attr_schema_path.write_text(FIXTURE_RNG_WITH_REQUIRED_ATTR, encoding="utf-8")
 
     def tearDown(self):
         self.tmpdir.cleanup()
@@ -109,6 +138,13 @@ class TestGenerateAnnotationTags(unittest.TestCase):
         page = next(t for t in tags if t["tag"] == "page")
         self.assertEqual(page["variants"], [])
         self.assertTrue(page["bareAllowed"])
+
+    def test_attribute_required_flag_reflects_optional_wrapping(self):
+        tags = generate_annotation_tags("grobid.training.segmentation", self.required_attr_schema_path)
+        note = next(t for t in tags if t["tag"] == "note")
+        attrs_by_name = {a["name"]: a for a in note["attributes"]}
+        self.assertTrue(attrs_by_name["n"]["required"], "'n' is not wrapped in <optional>")
+        self.assertFalse(attrs_by_name["type"]["required"], "'type' is wrapped in <optional>")
 
 
 if __name__ == "__main__":

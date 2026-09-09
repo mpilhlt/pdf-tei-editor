@@ -14,7 +14,7 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.document = dom.window.document;
 global.window = dom.window;
 
-const { mergeWithPrev, mergeWithNext, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
+const { mergeWithPrev, mergeWithNext, computeOverlayPosition, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
 
 /**
  * Build a parent <p> element whose innerHTML is set to `html`, then return
@@ -230,6 +230,54 @@ describe('XmlAnnotationPopup - popup title for a tag with variants', () => {
       document.body.removeChild(container);
     }
   });
+
+  // Regression test: the title must use the same name=value form as the
+  // "Change to" dropdown's variant items (bibl[type=footnote], not
+  // bibl[footnote]) — both disambiguating and matching the dropdown text.
+  it('shows the title in name=value form, matching the "Change to" dropdown format', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote');
+      const overlay = triggerPopup(container, 'bibl', bibl);
+      const titleText = overlay?.querySelector('div')?.textContent ?? '';
+      assert.ok(titleText.includes('bibl[type=footnote]'),
+        `expected title to include "bibl[type=footnote]", got: "${titleText}"`);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('shows every variant-controlled attribute in the title, in name=value form, for a multi-attribute variant', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const mixedKeyDefs = [
+        {
+          tag: 'title',
+          label: 'title',
+          color: '#ddd',
+          attributes: [],
+          variants: [
+            { attrs: { level: 'a' } },
+            { attrs: { level: 'm', type: 'legislation' } },
+          ],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const title = document.createElement('title');
+      title.setAttribute('level', 'm');
+      title.setAttribute('type', 'legislation');
+      const overlay = triggerPopup(container, 'title', title, mixedKeyDefs);
+      const titleText = overlay?.querySelector('div')?.textContent ?? '';
+      assert.ok(titleText.includes('title[level=m,type=legislation]'),
+        `expected title to include "title[level=m,type=legislation]", got: "${titleText}"`);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
 });
 
 // ── XmlAnnotationPopup retag via "Change to" palette ───────────────────────
@@ -301,7 +349,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       const bibl = document.createElement('bibl'); // bare, no attributes
       parent.appendChild(bibl);
       const { overlay } = triggerPopupTracked(container, 'bibl', bibl);
-      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[type=footnote]');
       item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       assert.strictEqual(parent.children.length, 1, 'exactly one element remains in parent');
@@ -343,7 +391,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       bibl.setAttribute('type', 'footnote'); // this variant is "active"
       parent.appendChild(bibl);
       const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
-      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[footnote]');
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[type=footnote]');
       item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       assert.strictEqual(parent.children.length, 1);
@@ -382,7 +430,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       bibl.setAttribute('type', 'footnote');
       parent.appendChild(bibl);
       const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl);
-      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[decision]');
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[type=decision]');
       item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
       assert.strictEqual(parent.firstElementChild?.getAttribute('type'), 'decision');
@@ -448,7 +496,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       // First variant {level: 'a'} must NOT be muted: the element has an
       // extra `type` attribute this variant doesn't mention, so picking it
       // is a real change (strip type, set level='a').
-      const firstItem = findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[a]');
+      const firstItem = findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[level=a]');
       assert.ok(!firstItem.disabled, 'first variant must not be disabled');
       firstItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       assert.strictEqual(parent.firstElementChild?.getAttribute('level'), 'a');
@@ -463,7 +511,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       title2.setAttribute('type', 'legislation');
       parent2.appendChild(title2);
       const { overlay: overlay2, calls: calls2 } = triggerPopupTracked(container, 'title', title2, mixedKeyDefs);
-      const secondItem = findMenuItem(/** @type {HTMLElement} */ (overlay2), 'title[m,legislation]');
+      const secondItem = findMenuItem(/** @type {HTMLElement} */ (overlay2), 'title[level=m,type=legislation]');
       secondItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       assert.strictEqual(parent2.firstElementChild?.getAttribute('level'), 'm');
       assert.strictEqual(parent2.firstElementChild?.getAttribute('type'), 'legislation');
@@ -509,7 +557,7 @@ describe('XmlAnnotationPopup - retag via "Change to" palette', () => {
       assert.strictEqual(/** @type {any} */ (dropdown).open, true,
         'clicking the chip body must open the dropdown when bareAllowed is false');
 
-      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'citedRange[page]');
+      const item = findMenuItem(/** @type {HTMLElement} */ (overlay), 'citedRange[unit=page]');
       item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       assert.strictEqual(parent.firstElementChild?.getAttribute('unit'), 'page');
       assert.strictEqual(calls.length, 1, 'picking a variant from the dropdown must still apply normally');
@@ -663,6 +711,395 @@ describe('XmlAnnotationPopup - editable attributes', () => {
       assert.strictEqual(calls[0], freshEl,
         'must act on the freshly re-resolved element, not the one captured when the popup opened');
       assert.notStrictEqual(calls[0], staleEl);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('renders a delete button for an optional attribute and clears it on click', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'corresp', values: null, required: false }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('corresp', '#ref1');
+      parent.appendChild(bibl);
+
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs);
+      const input = overlay?.querySelector('sl-input');
+      assert.ok(input, 'an sl-input must render for the freeform attribute');
+      const row = /** @type {HTMLElement} */ (input).parentElement;
+      const clearBtn = [...(row?.children ?? [])].find((el) => el.textContent === '✕');
+      assert.ok(clearBtn, 'a delete button must render for an optional attribute');
+
+      clearBtn?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(bibl.hasAttribute('corresp'), false, 'attribute must be removed');
+      assert.strictEqual(/** @type {any} */ (input).value, '', 'the control must be cleared too');
+      assert.strictEqual(calls.length, 1, 'updateEditorFromNode must be called once');
+      assert.strictEqual(calls[0], bibl);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not render a delete button for a required attribute', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'corresp', values: null, required: true }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('corresp', '#ref1');
+
+      const { overlay } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs);
+      const input = overlay?.querySelector('sl-input');
+      const row = /** @type {HTMLElement} */ (input).parentElement;
+      const clearBtn = [...(row?.children ?? [])].find((el) => el.textContent === '✕');
+      assert.strictEqual(clearBtn, undefined, 'a required attribute must not offer a delete button');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('treats a missing `required` field as required (no delete button), matching the backend default', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'corresp', values: null }], // no `required` field at all
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('corresp', '#ref1');
+
+      const { overlay } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs);
+      const input = overlay?.querySelector('sl-input');
+      const row = /** @type {HTMLElement} */ (input).parentElement;
+      const clearBtn = [...(row?.children ?? [])].find((el) => el.textContent === '✕');
+      assert.strictEqual(clearBtn, undefined);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
+
+// ── XmlAnnotationPopup - "Change to" variant label format ──────────────────
+
+describe('XmlAnnotationPopup - "Change to" variant label format', () => {
+  it('renders single-attribute variants as name=value, not the bare value', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const bibl = document.createElement('bibl');
+      const overlay = triggerPopup(container, 'bibl', bibl);
+      findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[type=footnote]');
+      findMenuItem(/** @type {HTMLElement} */ (overlay), 'bibl[type=decision]');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('renders multi-attribute variants with each attribute disambiguated by name', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const mixedKeyDefs = [
+        {
+          tag: 'title',
+          label: 'title',
+          color: '#ddd',
+          attributes: [],
+          variants: [
+            { attrs: { level: 'a' } },
+            { attrs: { level: 'm', type: 'legislation' } },
+          ],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const title = document.createElement('title');
+      const overlay = triggerPopup(container, 'title', title, mixedKeyDefs);
+      findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[level=a]');
+      findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[level=m,type=legislation]');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
+
+// ── computeOverlayPosition ───────────────────────────────────────────────
+
+describe('computeOverlayPosition', () => {
+  it('places the overlay below and to the right of the anchor by default', () => {
+    const { left, top } = computeOverlayPosition({
+      x: 100, y: 100, width: 200, height: 150, viewportWidth: 1024, viewportHeight: 768,
+    });
+    assert.strictEqual(left, 100);
+    assert.strictEqual(top, 112); // y + default offset (12)
+  });
+
+  it('flips to the left of the anchor when the default placement would overflow the right edge', () => {
+    const { left } = computeOverlayPosition({
+      x: 900, y: 100, width: 200, height: 150, viewportWidth: 1024, viewportHeight: 768,
+    });
+    // default placement (x=900, width=200) would end at 1100, past the 1024 viewport
+    assert.strictEqual(left, 900 - 200);
+  });
+
+  it('flips above the anchor when the default placement would overflow the bottom edge', () => {
+    const { top } = computeOverlayPosition({
+      x: 100, y: 700, width: 200, height: 150, viewportWidth: 1024, viewportHeight: 768,
+    });
+    // default placement (y=700+12, height=150) would end at 862, past the 768 viewport
+    assert.strictEqual(top, 700 - 150 - 12);
+  });
+
+  it('clamps to the viewport edges when the overlay is larger than the available space', () => {
+    const { left, top } = computeOverlayPosition({
+      x: 900, y: 700, width: 2000, height: 2000, viewportWidth: 1024, viewportHeight: 768,
+    });
+    assert.ok(left >= 8, 'left must not be negative past the margin');
+    assert.ok(top >= 8, 'top must not be negative past the margin');
+  });
+
+  it('never positions the overlay past the right or bottom edge, however it flips', () => {
+    const { left, top } = computeOverlayPosition({
+      x: 1000, y: 750, width: 300, height: 250, viewportWidth: 1024, viewportHeight: 768,
+    });
+    assert.ok(left + 300 <= 1024, `left+width (${left + 300}) must fit in viewport`);
+    assert.ok(top + 250 <= 768, `top+height (${top + 250}) must fit in viewport`);
+  });
+});
+
+// ── XmlAnnotationPopup - viewport-aware positioning ─────────────────────────
+
+describe('XmlAnnotationPopup - viewport-aware positioning', () => {
+  it('flips the popup left/up when opened near the bottom-right corner of the viewport', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const bibl = document.createElement('bibl');
+      const mockEditor = { getDomNodeAt: () => bibl, updateEditorFromNode: async () => {} };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+
+      // jsdom has no layout engine (offsetWidth/offsetHeight are always 0), so
+      // stub a realistic popup size to exercise the flip/clamp logic.
+      Object.defineProperty(overlay, 'offsetWidth', { value: 220, configurable: true });
+      Object.defineProperty(overlay, 'offsetHeight', { value: 260, configurable: true });
+
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        detail: { tag: 'bibl', from: 0, clientX: 1000, clientY: 750 },
+      }));
+
+      const left = parseFloat(overlay.style.left);
+      const top = parseFloat(overlay.style.top);
+      assert.ok(left + 220 <= window.innerWidth, `popup must fit horizontally, left=${left}`);
+      assert.ok(top + 260 <= window.innerHeight, `popup must fit vertically, top=${top}`);
+      assert.notStrictEqual(overlay.style.visibility, 'hidden', 'popup must end up visible');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
+
+// ── XmlAnnotationPopup - follows editor scroll ──────────────────────────────
+
+describe('XmlAnnotationPopup - follows editor scroll', () => {
+  // `scroll` events don't bubble, and in the real app it's an ANCESTOR of
+  // CodeMirror's own view.scrollDOM (app.css's #codemirror-container) that
+  // actually has overflow:auto and scrolls — not view.scrollDOM itself. So
+  // these tests dispatch the (non-bubbling) scroll event on some nested,
+  // document-attached element standing in for that ancestor, to verify the
+  // window-level capture:true listener (see #trackScroll) still catches it.
+  it('repositions the popup on editor scroll using coordsAtPos for the tracked position', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const scrollableAncestor = document.createElement('div');
+    container.appendChild(scrollableAncestor);
+    try {
+      const bibl = document.createElement('bibl');
+      let coords = { left: 50, top: 40, bottom: 60, right: 100 };
+      const mockView = { coordsAtPos: () => coords };
+      const mockEditor = {
+        getDomNodeAt: () => bibl,
+        updateEditorFromNode: async () => {},
+        getView: () => mockView,
+      };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        // clientX/clientY deliberately match the initial coordsAtPos() anchor's
+        // left/bottom exactly, so offsetX/offsetY (see #trackScroll) are zero
+        // and the scroll-time assertions below can compare against the raw
+        // mocked coordsAtPos() values directly.
+        detail: { tag: 'bibl', from: 5, clientX: 50, clientY: 60 },
+      }));
+
+      // Simulate the editor being scrolled: coordsAtPos for the SAME tracked
+      // document position now resolves to a different on-screen location.
+      coords = { left: 300, top: 400, bottom: 420, right: 350 };
+      scrollableAncestor.dispatchEvent(new dom.window.Event('scroll')); // bubbles:false, like a real scroll event
+
+      assert.strictEqual(parseFloat(overlay.style.left), 300);
+      assert.strictEqual(parseFloat(overlay.style.top), 420 + 12, 'top follows coordsAtPos().bottom, plus the default offset');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  // Regression test: a click on a badge lands wherever within its glyph, not
+  // necessarily at the char box's left/bottom edge that coordsAtPos() always
+  // returns — so naively repositioning to raw coordsAtPos() on the first
+  // scroll tick would snap the popup sideways by that click-to-edge offset,
+  // even though the editor only scrolled vertically. #trackScroll must
+  // preserve the open-time offset between the click and the anchor instead.
+  it('preserves the open-time click offset from the anchor when scrolling, instead of snapping to the raw anchor', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const scrollableAncestor = document.createElement('div');
+    container.appendChild(scrollableAncestor);
+    try {
+      const bibl = document.createElement('bibl');
+      // Anchor's left/bottom vs. the click point 15px right / 8px above it —
+      // simulating a click that landed mid-badge, not at its exact edge.
+      let coords = { left: 50, top: 40, bottom: 60, right: 100 };
+      const mockView = { coordsAtPos: () => coords };
+      const mockEditor = {
+        getDomNodeAt: () => bibl,
+        updateEditorFromNode: async () => {},
+        getView: () => mockView,
+      };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        detail: { tag: 'bibl', from: 5, clientX: 65, clientY: 52 }, // anchor.left+15, anchor.bottom-8
+      }));
+      assert.strictEqual(parseFloat(overlay.style.left), 65, 'sanity check: opens at the click point, not the anchor');
+
+      // Scroll vertically only — a real editor's coordsAtPos() would also
+      // return the SAME left/right for a purely vertical scroll.
+      coords = { left: 50, top: 280, bottom: 300, right: 100 };
+      scrollableAncestor.dispatchEvent(new dom.window.Event('scroll'));
+
+      // left must shift by the SAME 15px the popup opened with, not snap to
+      // the anchor's raw (unchanged) left=50.
+      assert.strictEqual(parseFloat(overlay.style.left), 65, 'x must not jump on a purely vertical scroll');
+      assert.strictEqual(parseFloat(overlay.style.top), 300 - 8 + 12, 'y must track the anchor, offset by the original click-to-anchor delta');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('hides the popup once the tracked position scrolls out of the rendered viewport', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const scrollableAncestor = document.createElement('div');
+    container.appendChild(scrollableAncestor);
+    try {
+      const bibl = document.createElement('bibl');
+      let coords = /** @type {any} */ ({ left: 50, top: 40, bottom: 60, right: 100 });
+      const mockView = { coordsAtPos: () => coords };
+      const mockEditor = {
+        getDomNodeAt: () => bibl,
+        updateEditorFromNode: async () => {},
+        getView: () => mockView,
+      };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        // clientX/clientY deliberately match the initial coordsAtPos() anchor's
+        // left/bottom exactly, so offsetX/offsetY (see #trackScroll) are zero
+        // and the scroll-time assertions below can compare against the raw
+        // mocked coordsAtPos() values directly.
+        detail: { tag: 'bibl', from: 5, clientX: 50, clientY: 60 },
+      }));
+
+      // CodeMirror's coordsAtPos() returns null for a position that isn't
+      // currently rendered (scrolled far enough out of view).
+      coords = null;
+      scrollableAncestor.dispatchEvent(new dom.window.Event('scroll'));
+
+      assert.strictEqual(overlay.style.display, 'none');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('stops tracking scroll once the popup is hidden', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const scrollableAncestor = document.createElement('div');
+    container.appendChild(scrollableAncestor);
+    try {
+      const bibl = document.createElement('bibl');
+      let coords = { left: 50, top: 40, bottom: 60, right: 100 };
+      const mockView = { coordsAtPos: () => coords };
+      const mockEditor = {
+        getDomNodeAt: () => bibl,
+        updateEditorFromNode: async () => {},
+        getView: () => mockView,
+      };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+
+      container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
+        bubbles: true,
+        // clientX/clientY deliberately match the initial coordsAtPos() anchor's
+        // left/bottom exactly, so offsetX/offsetY (see #trackScroll) are zero
+        // and the scroll-time assertions below can compare against the raw
+        // mocked coordsAtPos() values directly.
+        detail: { tag: 'bibl', from: 5, clientX: 50, clientY: 60 },
+      }));
+
+      // Click outside the popup to hide it (registered in mount()).
+      document.body.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      assert.strictEqual(overlay.style.display, 'none', 'sanity check: popup is hidden');
+
+      const leftBefore = overlay.style.left;
+      coords = { left: 999, top: 999, bottom: 999, right: 999 };
+      assert.doesNotThrow(() => scrollableAncestor.dispatchEvent(new dom.window.Event('scroll')));
+      assert.strictEqual(overlay.style.left, leftBefore, 'a scroll event after hide must not reposition the popup');
     } finally {
       document.body.removeChild(container);
     }

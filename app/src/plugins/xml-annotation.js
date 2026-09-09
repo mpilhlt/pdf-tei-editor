@@ -23,7 +23,7 @@ import { EditorView } from '@codemirror/view'
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
  * @typedef {{ tag: string, label: string, color: string,
- *   attributes?: Array<{name:string, values?: string[]|null}>|null,
+ *   attributes?: Array<{name:string, values?: string[]|null, required?: boolean}>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
  *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
  */

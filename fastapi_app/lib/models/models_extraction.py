@@ -32,6 +32,11 @@ class AnnotationTagAttribute(BaseModel):
         None,
         description="Allowed values; if None, a free-text input is shown"
     )
+    required: bool = Field(
+        True,
+        description="Whether this attribute must always be present; if False, the "
+                     "properties popup offers a way to clear it once set"
+    )
 
 
 class AnnotationTagVariant(BaseModel):

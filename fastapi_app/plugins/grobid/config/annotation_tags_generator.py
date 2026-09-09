@@ -17,6 +17,7 @@ from fastapi_app.plugins.grobid.config.annotation_tags_scope import ANNOTATION_T
 class AnnotationTagAttribute(TypedDict):
     name: str
     values: list[str] | None
+    required: bool
 
 
 class AnnotationTagVariant(TypedDict):

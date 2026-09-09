@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-06T03:03:40.439Z
+ * Generated from OpenAPI schema at 2026-09-09T18:57:11.260Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -37,6 +37,7 @@
  * @typedef {Object} AnnotationTagAttribute
  * @property {string} name - XML attribute name
  * @property {Array<string>=} values - Allowed values; if None, a free-text input is shown
+ * @property {boolean=} required - Whether this attribute must always be present; if False, the properties popup offers a way to clear it once set
  */
 
 /**

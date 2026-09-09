@@ -7,15 +7,36 @@
  * @import { XMLEditor } from '../xmleditor.js'
  */
 
-import { resolveLabel } from './xml-annotation-decorations.js';
-
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
  * @typedef {{ tag: string, label: string, color: string,
- *   attributes?: Array<{ name: string, values?: string[]|null }>|null,
+ *   attributes?: Array<{ name: string, values?: string[]|null, required?: boolean }>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
  *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
  */
+
+/**
+ * Resolves the popup title for `element` under `tagDef`: the bare tag name,
+ * or `tag[name1=value1,name2=value2]` for the live values of whichever
+ * attributes this tag's variants control — the same `name=value` form the
+ * "Change to" dropdown's variant items use (see `#renderPalette`), so the
+ * title reads identically to the currently-active dropdown entry, and stays
+ * unambiguous for tags whose variants assign more than one attribute (e.g.
+ * `title[level=a,type=decision]`). Deliberately separate from
+ * `resolveLabel` (xml-annotation-decorations.js), which the compact inline
+ * editor badge uses and keeps to bare values only, for space.
+ * @param {AnnotationTagDef} tagDef
+ * @param {Element} element
+ * @returns {string}
+ */
+function resolvePopupTitle(tagDef, element) {
+  const variantAttrNames = [...new Set((tagDef.variants ?? []).flatMap(v => Object.keys(v.attrs)))];
+  const parts = variantAttrNames
+    .map(name => /** @type {[string, string|null]} */ ([name, element.getAttribute(name)]))
+    .filter(([, value]) => value);
+  if (!parts.length) return tagDef.tag;
+  return `${tagDef.tag}[${parts.map(([name, value]) => `${name}=${value}`).join(',')}]`;
+}
 
 /**
  * Merges `element` into its nearest preceding element sibling: element's children and all
@@ -73,6 +94,63 @@ export function mergeWithNext(element) {
   return parent;
 }
 
+/**
+ * Computes the `{left, top}` viewport position (px, for `position:fixed`) of
+ * a `width`x`height` overlay anchored near `(x, y)`. Default placement is
+ * below-and-right of the anchor point (`y + offset`, `x`); flips to
+ * above/left instead when that default would overflow the viewport's
+ * bottom/right edge. Finally clamps to the viewport on all sides — this
+ * both keeps a flipped placement from overflowing the opposite edge and
+ * handles the degenerate case where the overlay is larger than the
+ * viewport itself. Pure/DOM-free so it can be unit-tested without a real
+ * layout engine (jsdom's `offsetWidth`/`offsetHeight` are always 0).
+ * @param {{ x: number, y: number, width: number, height: number,
+ *   viewportWidth: number, viewportHeight: number, offset?: number, margin?: number }} opts
+ * @returns {{ left: number, top: number }}
+ */
+export function computeOverlayPosition({ x, y, width, height, viewportWidth, viewportHeight, offset = 12, margin = 8 }) {
+  let left = x;
+  let top = y + offset;
+  if (left + width > viewportWidth - margin) left = x - width;
+  if (top + height > viewportHeight - margin) top = y - height - offset;
+
+  const maxLeft = Math.max(margin, viewportWidth - width - margin);
+  const maxTop = Math.max(margin, viewportHeight - height - margin);
+  left = Math.min(Math.max(left, margin), maxLeft);
+  top = Math.min(Math.max(top, margin), maxTop);
+  return { left, top };
+}
+
+// Shoelace's built-in "small" sl-button size is still fairly chunky
+// (generous padding/height meant for a normal toolbar) — too big for a
+// compact popup row of three actions that must stay on one line. `::part()`
+// can't be set via an element's inline `style`, so this scoped stylesheet is
+// injected into <head> once, on first mount(), rather than per popup instance.
+let actionButtonStyleInjected = false;
+function ensureActionButtonStyle() {
+  if (actionButtonStyleInjected) return;
+  const style = document.createElement('style');
+  style.textContent = `
+    .ann-popup-action-btn { flex: 1 1 0; min-width: 0; }
+    /* Soft filled pill instead of a hard-edged, high-contrast bordered box —
+       rounded corners + a low-opacity tint of the action's own accent color
+       (cyan for merge, red for remove) read as calmer/"organic" against the
+       dark popup than a stark white or fully-saturated outline. */
+    .ann-popup-action-btn::part(base) {
+      font-size: 11px; padding: 0 10px; height: 24px; line-height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 999px;
+    }
+    .ann-popup-action-btn::part(label) { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ann-popup-action-btn--merge::part(base) { background-color: rgba(137,220,235,.16); color: #89dceb; }
+    .ann-popup-action-btn--merge::part(base):hover { background-color: rgba(137,220,235,.28); }
+    .ann-popup-action-btn--remove::part(base) { background-color: rgba(243,139,168,.16); color: #f38ba8; }
+    .ann-popup-action-btn--remove::part(base):hover { background-color: rgba(243,139,168,.28); }
+  `;
+  document.head.appendChild(style);
+  actionButtonStyleInjected = true;
+}
+
 export class XmlAnnotationPopup {
   /** @param {XMLEditor} editor */
   constructor(editor) {
@@ -94,6 +172,9 @@ export class XmlAnnotationPopup {
   /** @type {((def: AnnotationTagDef, attrs: Record<string,string>) => void)|null} */
   #wrapCallback = null;
 
+  /** @type {{ onScroll: () => void }|null} Active #trackScroll() listener, if any. */
+  #scrollTracker = null;
+
   /**
    * Mount the popup overlay into the editor container.
    * Call once from the annotation plugin's install().
@@ -102,10 +183,17 @@ export class XmlAnnotationPopup {
    */
   mount(parent, tagDefs) {
     this.#buildTagMap(tagDefs);
+    ensureActionButtonStyle();
 
     const overlay = document.createElement('div');
     overlay.className = 'ann-popup';
-    overlay.style.cssText = 'display:none; position:fixed; z-index:10000; background:#313244; border:1px solid #45475a; border-radius:6px; padding:12px 16px; font-size:12px; font-family:monospace; color:#cdd6f4; box-shadow:0 4px 16px rgba(0,0,0,.4); min-width:180px;';
+    // max-width/max-height cap the popup at 30% of viewport width / 45% of viewport height
+    // (the "Change to" chip palette in particular can otherwise grow as wide as
+    // its longest unwrapped row, or as tall as its full attribute+chip content);
+    // overflow-y:auto keeps the rest scrollable rather than spilling off-screen.
+    // box-sizing:border-box makes the cap include padding, matching what
+    // computeOverlayPosition/#positionOverlay then measure via offsetWidth/Height.
+    overlay.style.cssText = 'display:none; position:fixed; z-index:10000; background:#313244; border:1px solid #45475a; border-radius:6px; padding:12px 16px; font-size:12px; font-family:monospace; color:#cdd6f4; box-shadow:0 4px 16px rgba(0,0,0,.4); min-width:180px; max-width:30vw; max-height:45vh; overflow-y:auto; overflow-x:hidden; box-sizing:border-box;';
     parent.appendChild(overlay);
     this.#overlay = overlay;
 
@@ -167,11 +255,7 @@ export class XmlAnnotationPopup {
       this.#wrapCallback?.(def, attrs);
     });
 
-    const x = coords.clientX;
-    const y = coords.clientY;
-    this.#overlay.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
-    this.#overlay.style.top  = `${Math.min(y + 12, window.innerHeight - 200)}px`;
-    this.#overlay.style.display = '';
+    this.#positionOverlay(coords);
   }
 
   // ── Private ────────────────────────────────────────────────────────
@@ -211,6 +295,86 @@ export class XmlAnnotationPopup {
   }
 
   /**
+   * Positions and reveals the overlay near `coords`, flipping to the
+   * opposite side of the anchor point when the default placement would
+   * overflow the viewport (see `computeOverlayPosition`). Must be called
+   * after the overlay's content for this popup has been built, since sizing
+   * depends on it. Measures with `visibility:hidden` rather than
+   * `display:none` — the latter can't be measured (zero-size layout box) —
+   * so there's no visible flash at the wrong position.
+   * @param {{ clientX: number, clientY: number }} coords
+   */
+  #positionOverlay(coords) {
+    const overlay = this.#overlay;
+    if (!overlay) return;
+    overlay.style.visibility = 'hidden';
+    overlay.style.display = '';
+    const { left, top } = computeOverlayPosition({
+      x: coords.clientX,
+      y: coords.clientY,
+      width: overlay.offsetWidth,
+      height: overlay.offsetHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+    overlay.style.left = `${left}px`;
+    overlay.style.top = `${top}px`;
+    overlay.style.visibility = '';
+  }
+
+  /**
+   * Keeps the popup anchored to document position `from` while the user
+   * scrolls the editor. Cheap: CodeMirror's own `view.coordsAtPos()` already
+   * returns viewport-relative coordinates that account for the current
+   * scroll offset, so no manual scroll-delta bookkeeping is needed. Hides
+   * the popup once the position scrolls out of CodeMirror's rendered
+   * viewport (`coordsAtPos` then returns null).
+   *
+   * `coords` is the ORIGINAL open-time anchor (the click point `#show` was
+   * called with), which generally isn't exactly `coordsAtPos(from)` — e.g. a
+   * click lands wherever within the badge glyph, while `coordsAtPos` always
+   * returns the char box's edges. The offset between the two is captured
+   * once here and re-applied on every scroll tick, so the popup tracks the
+   * SAME visual point it opened at instead of snapping to the char box's
+   * edge on the first scroll event (which reads as an x/y jump).
+   *
+   * Listens on `window` with `capture:true` rather than on
+   * `view.scrollDOM` directly: `scroll` events don't bubble, and in this
+   * app it's `#codemirror-container` (app.css) — an ancestor of
+   * `view.scrollDOM`, not `view.scrollDOM` itself — that actually has
+   * `overflow:auto` and scrolls (CodeMirror's own `.cm-scroller` is left
+   * unconstrained in height). A capturing listener on `window` is notified
+   * of a `scroll` event on any descendant on its way down, regardless of
+   * which ancestor actually owns the scrollbar, so this doesn't depend on
+   * that CSS detail. A no-op if the editor doesn't expose `getView()`, or
+   * `from` isn't currently rendered (e.g. a test double, or a popup opened
+   * from something other than a rendered badge).
+   * @param {number} from
+   * @param {{ clientX: number, clientY: number }} coords
+   */
+  #trackScroll(from, coords) {
+    this.#stopTrackingScroll();
+    const view = this.#editor.getView?.();
+    const anchor = view?.coordsAtPos(from);
+    if (!anchor) return;
+    const offsetX = coords.clientX - anchor.left;
+    const offsetY = coords.clientY - anchor.bottom;
+    const onScroll = () => {
+      const c = view.coordsAtPos(from);
+      if (!c) { this.#hide(); return; }
+      this.#positionOverlay({ clientX: c.left + offsetX, clientY: c.bottom + offsetY });
+    };
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    this.#scrollTracker = { onScroll };
+  }
+
+  #stopTrackingScroll() {
+    if (!this.#scrollTracker) return;
+    window.removeEventListener('scroll', this.#scrollTracker.onScroll, { capture: true });
+    this.#scrollTracker = null;
+  }
+
+  /**
    * @param {{ clientX: number, clientY: number }} coords
    * @param {AnnotationTagDef} def
    * @param {Element} element Freshly resolved element, safe to read synchronously below.
@@ -222,8 +386,68 @@ export class XmlAnnotationPopup {
 
     const title = document.createElement('div');
     title.style.cssText = 'font-weight:bold; margin-bottom:10px; font-size:11px; letter-spacing:.05em;';
-    title.textContent = `✏ ${resolveLabel(def, element)}`;
+    title.textContent = `✏ ${resolvePopupTitle(def, element)}`;
     this.#overlay.appendChild(title);
+
+    // One horizontal row of compact Shoelace buttons, evenly spaced across the
+    // full popup width (flex:1 on each, see the injected stylesheet in
+    // ensureActionButtonStyle()). Placed right under the title so these
+    // frequently-used actions are visible without scrolling past the
+    // attribute editors or the "Change to" palette.
+    const actionsRow = document.createElement('div');
+    actionsRow.style.cssText = 'display:flex; gap:6px; width:100%; margin-bottom:8px;';
+    this.#overlay.appendChild(actionsRow);
+
+    const mergePrevBtn = document.createElement('sl-button');
+    mergePrevBtn.className = 'ann-popup-action-btn ann-popup-action-btn--merge';
+    mergePrevBtn.setAttribute('size', 'small');
+    mergePrevBtn.setAttribute('variant', 'text');
+    mergePrevBtn.textContent = '« Merge prev';
+    mergePrevBtn.addEventListener('click', async () => {
+      const live = this.#resolveElement(from);
+      if (!live || !live.parentNode) return;
+      const parent = mergeWithPrev(live);
+      await this.#editor.updateEditorFromNode(parent);
+      this.#hide();
+    });
+    actionsRow.appendChild(mergePrevBtn);
+
+    const mergeNextBtn = document.createElement('sl-button');
+    mergeNextBtn.className = 'ann-popup-action-btn ann-popup-action-btn--merge';
+    mergeNextBtn.setAttribute('size', 'small');
+    mergeNextBtn.setAttribute('variant', 'text');
+    mergeNextBtn.textContent = 'Merge next »';
+    mergeNextBtn.addEventListener('click', async () => {
+      const live = this.#resolveElement(from);
+      if (!live || !live.parentNode) return;
+      const parent = mergeWithNext(live);
+      await this.#editor.updateEditorFromNode(parent);
+      this.#hide();
+    });
+    actionsRow.appendChild(mergeNextBtn);
+
+    const removeBtn = document.createElement('sl-button');
+    removeBtn.className = 'ann-popup-action-btn ann-popup-action-btn--remove';
+    removeBtn.setAttribute('size', 'small');
+    removeBtn.setAttribute('variant', 'text');
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.addEventListener('click', async () => {
+      const live = this.#resolveElement(from);
+      if (!live) return;
+      const parent = live.parentNode;
+      if (!parent) return;
+      while (live.firstChild) parent.insertBefore(live.firstChild, live);
+      parent.removeChild(live);
+      await this.#editor.updateEditorFromNode(parent);
+      this.#hide();
+    });
+    actionsRow.appendChild(removeBtn);
+
+    const actionsDivider = document.createElement('sl-divider');
+    // Shoelace's default divider color reads as a stark, high-contrast line against
+    // this dark popup; --color is sl-divider's own documented custom property for this.
+    actionsDivider.style.cssText = 'margin: 8px 0; --color: rgba(255,255,255,.12);';
+    this.#overlay.appendChild(actionsDivider);
 
     if ((def.attributes?.length ?? 0) > 0) {
       const attrLabel = document.createElement('div');
@@ -237,16 +461,24 @@ export class XmlAnnotationPopup {
       row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:4px;';
 
       const nameEl = document.createElement('span');
-      nameEl.style.color = '#89b4fa';
+      // Fixed width + right-align so labels of different lengths (level, type,
+      // key, …) don't push their input boxes to different starting positions.
+      nameEl.style.cssText = 'color:#89b4fa; min-width:44px; flex-shrink:0; text-align:right;';
       nameEl.textContent = attr.name;
       row.appendChild(nameEl);
 
       const currentVal = element.getAttribute(attr.name) ?? '';
+      // Only an attribute the schema doesn't mark required may be cleared
+      // once set; `required` defaults to true (matches the backend Pydantic
+      // model's default) for tag defs that predate this field.
+      const removable = attr.required === false;
 
       // Re-sync from the freshly re-resolved live element, not `element.parentNode`
       // and not `element` itself (see #resolveElement): an attribute edit doesn't
       // restructure the parent's children, so there's no need to target the parent,
       // and by the time the user picks a value, `element` may already be orphaned.
+      /** @type {HTMLElement} */
+      let control;
       if (attr.values && attr.values.length > 0) {
         const sel = document.createElement('sl-select');
         sel.setAttribute('size', 'small');
@@ -265,6 +497,7 @@ export class XmlAnnotationPopup {
           await this.#editor.updateEditorFromNode(live);
         });
         row.appendChild(sel);
+        control = sel;
       } else {
         const input = document.createElement('sl-input');
         input.setAttribute('size', 'small');
@@ -273,56 +506,35 @@ export class XmlAnnotationPopup {
         input.addEventListener('sl-change', async () => {
           const live = this.#resolveElement(from);
           if (!live) return;
-          live.setAttribute(attr.name, /** @type {any} */ (input).value);
+          const newVal = /** @type {any} */ (input).value;
+          if (newVal) live.setAttribute(attr.name, newVal);
+          else live.removeAttribute(attr.name);
           await this.#editor.updateEditorFromNode(live);
         });
         row.appendChild(input);
+        control = input;
+      }
+
+      if (removable) {
+        const clearBtn = document.createElement('span');
+        clearBtn.textContent = '✕';
+        clearBtn.title = `Remove ${attr.name}`;
+        clearBtn.style.cssText = 'cursor:pointer; color:#f38ba8; font-size:11px;';
+        clearBtn.addEventListener('click', async () => {
+          const live = this.#resolveElement(from);
+          if (!live) return;
+          live.removeAttribute(attr.name);
+          /** @type {any} */ (control).value = '';
+          await this.#editor.updateEditorFromNode(live);
+        });
+        row.appendChild(clearBtn);
       }
 
       this.#overlay.appendChild(row);
     }
 
-    const mergePrevLink = document.createElement('div');
-    mergePrevLink.style.cssText = 'margin-top:8px; color:#89dceb; cursor:pointer; font-size:11px;';
-    mergePrevLink.textContent = '« Merge with previous';
-    mergePrevLink.addEventListener('click', async () => {
-      const live = this.#resolveElement(from);
-      if (!live || !live.parentNode) return;
-      const parent = mergeWithPrev(live);
-      await this.#editor.updateEditorFromNode(parent);
-      this.#hide();
-    });
-    this.#overlay.appendChild(mergePrevLink);
-
-    const mergeNextLink = document.createElement('div');
-    mergeNextLink.style.cssText = 'margin-top:4px; color:#89dceb; cursor:pointer; font-size:11px;';
-    mergeNextLink.textContent = '» Merge with next';
-    mergeNextLink.addEventListener('click', async () => {
-      const live = this.#resolveElement(from);
-      if (!live || !live.parentNode) return;
-      const parent = mergeWithNext(live);
-      await this.#editor.updateEditorFromNode(parent);
-      this.#hide();
-    });
-    this.#overlay.appendChild(mergeNextLink);
-
-    const removeLink = document.createElement('div');
-    removeLink.style.cssText = 'margin-top:8px; color:#f38ba8; cursor:pointer; font-size:11px;';
-    removeLink.textContent = '✕ Remove annotation';
-    removeLink.addEventListener('click', async () => {
-      const live = this.#resolveElement(from);
-      if (!live) return;
-      const parent = live.parentNode;
-      if (!parent) return;
-      while (live.firstChild) parent.insertBefore(live.firstChild, live);
-      parent.removeChild(live);
-      await this.#editor.updateEditorFromNode(parent);
-      this.#hide();
-    });
-    this.#overlay.appendChild(removeLink);
-
     const changeDivider = document.createElement('sl-divider');
-    changeDivider.style.cssText = 'margin: 8px 0;';
+    changeDivider.style.cssText = 'margin: 8px 0; --color: rgba(255,255,255,.12);';
     this.#overlay.appendChild(changeDivider);
 
     const changeLabel = document.createElement('div');
@@ -337,12 +549,8 @@ export class XmlAnnotationPopup {
       await this.#retag(live, def, newDef, attrs);
     });
 
-    // Position near the badge — extra bottom margin for the "Change to" palette section
-    const x = coords.clientX;
-    const y = coords.clientY;
-    this.#overlay.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
-    this.#overlay.style.top  = `${Math.min(y + 12, window.innerHeight - 280)}px`;
-    this.#overlay.style.display = '';
+    this.#positionOverlay(coords);
+    this.#trackScroll(from, coords);
   }
 
   /**
@@ -416,7 +624,9 @@ export class XmlAnnotationPopup {
           const isActiveVariant = isCurrentTag && currentElement != null &&
             variantAttrNames.every(name => currentElement.getAttribute(name) === (variant.attrs[name] ?? null));
           const item = document.createElement('sl-menu-item');
-          const suffix = Object.values(variant.attrs).join(',');
+          // name=value form (not just the bare value): disambiguates variants that
+          // assign more than one attribute, e.g. `title[level=a,type=decision]`.
+          const suffix = Object.entries(variant.attrs).map(([name, value]) => `${name}=${value}`).join(',');
           item.textContent = `${def.tag}[${suffix}]`;
           item.title = variant.description || def.description || def.label;
           if (!isActiveVariant) {
@@ -488,5 +698,6 @@ export class XmlAnnotationPopup {
 
   #hide() {
     if (this.#overlay) this.#overlay.style.display = 'none';
+    this.#stopTrackingScroll();
   }
 }
