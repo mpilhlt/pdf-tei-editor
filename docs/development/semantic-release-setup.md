@@ -3,47 +3,49 @@
 These are repository-admin actions, done once. Day-to-day releasing needs none of
 them (see [contributing.md](contributing.md#release-process)).
 
-## 1. `main` ruleset and the release-bot GitHub App
+## 1. `main` ruleset and the release-bot deploy key
 
-`main` is now governed by a repository **ruleset** named `main` (the old *classic*
+`main` is governed by a repository **ruleset** named `main` (the old *classic*
 branch protection was removed). The ruleset:
 
 - requires a pull request before merging (0 approvals required),
-- requires the `test` status check to pass,
+- requires the `test` status check to pass (strict),
 - blocks force-pushes and branch deletion,
 - allows only **merge** and **rebase** merges (**no squash**) for `devel -> main`,
 - does **not** require linear history.
 
-`semantic-release` pushes the `chore(release): X.Y.Z` commit and the `vX.Y.Z` tag
-straight to `main`, which the ruleset blocks for any actor not on its **Bypass
-list**. The built-in **GitHub Actions** actor (the default `GITHUB_TOKEN`) cannot
-be added to a repo-level ruleset bypass in this org, so releasing goes through a
-dedicated org-owned **GitHub App** ("release bot") that *is* a bypass actor.
-`release.yml` mints a short-lived installation token per run with
-`actions/create-github-app-token` and uses it for the checkout, for
-`semantic-release` itself, and for opening the back-merge PR.
+`semantic-release` must push the `chore(release): X.Y.Z` commit and the `vX.Y.Z`
+tag straight to `main`, which the ruleset blocks for any actor not on its
+**Bypass list**. Neither the built-in **GitHub Actions** actor (the default
+`GITHUB_TOKEN`) nor a GitHub App is available here, so a repo **write deploy key**
+(`release-bot`) is used as the bypass actor. `actions/checkout` is given
+`ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}`, which configures `origin` as an SSH
+remote; `@semantic-release/git` and semantic-release's tag push then go over that
+key and bypass the ruleset.
 
-One-time setup:
+One-time setup (all doable by a repository admin - no org owner needed):
 
-1. **Create the App.** Org Settings -> Developer settings -> GitHub Apps -> New
-   GitHub App. Owner: the org. Repository permissions: **Contents: Read and
-   write**, **Pull requests: Read and write**, and **Issues: Read and write**
-   (`@semantic-release/github` comments on referenced issues, adds a `released`
-   label, and opens a tracking issue on failure). No webhook (uncheck "Active").
-   No account permissions needed.
-2. **Generate a private key** for the App (App settings -> Private keys ->
-   Generate a private key) and download the `.pem`.
-3. **Install the App** on this repository only (App settings -> Install App ->
-   the org -> Only select repositories -> `pdf-tei-editor`).
-4. **Add repo secrets** (Settings -> Secrets and variables -> Actions):
-   - `RELEASE_APP_ID` - the App's numeric App ID.
-   - `RELEASE_APP_PRIVATE_KEY` - the full contents of the downloaded `.pem`.
-5. **Add the App to the ruleset bypass list.** Settings -> Rules -> Rulesets ->
-   `main` -> Bypass list -> Add -> Apps -> the release App -> mode **Always**.
+1. Generate the key pair:
+   `ssh-keygen -t ed25519 -C "pdf-tei-editor release bot" -f ./release-bot-key -N ""`
+   (no passphrase).
+2. Add `release-bot-key.pub` as a repo **deploy key** (Settings -> Deploy keys ->
+   Add deploy key), title `release-bot`, with **Allow write access** checked.
+3. Add the private key `release-bot-key` as repo secret **`RELEASE_DEPLOY_KEY`**
+   (Settings -> Secrets and variables -> Actions) - the full file contents,
+   including the `BEGIN`/`END` lines.
+4. Add the `release-bot` deploy key to the `main` ruleset **Bypass list**
+   (Settings -> Rules -> Rulesets -> `main` -> Bypass list -> Add bypass ->
+   Deploy keys -> `release-bot`).
+5. Delete the local `release-bot-key*` files.
+
+`release.yml` checks out with `ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}`, so
+`origin` is an SSH remote and semantic-release's commit + tag pushes go over the
+key. The GitHub Release and issue comments still use the default `GITHUB_TOKEN`.
 
 `devel` protection is unchanged - the back-merge reaches `devel` through a normal
-PR. Without the App on the bypass list, `@semantic-release/git` fails to push to
-`main` and the Release workflow run errors out with no tag and no GitHub Release.
+PR. Without the deploy key on the bypass list, `@semantic-release/git` fails to
+push to `main` and the Release run errors out after (or before) creating the tag;
+it is safe to re-run once fixed.
 
 ## 2. Merge-button settings
 
@@ -58,8 +60,8 @@ PR. Without the App on the bypass list, `@semantic-release/git` fails to push to
 
 ## 3. Secrets
 
-- `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` - the release-bot GitHub App (see
-  section 1). Required by the `release` and `back-merge` jobs.
+- `RELEASE_DEPLOY_KEY` - the private half of the `release-bot` write deploy key
+  (see section 1). Required by the `release` and `back-merge` jobs.
 - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` - Docker Hub push.
 - `GITHUB_TOKEN` - provided automatically; the `permissions:` block in
   `release.yml` grants it `contents` / `issues` / `pull-requests` write. Still

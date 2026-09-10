@@ -26,17 +26,10 @@ jobs:
       version: ${{ steps.result.outputs.version }}
       release_sha: ${{ steps.result.outputs.release_sha }}
     steps:
-      - name: Mint release-bot token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: true  # required so @semantic-release/git can push
@@ -51,8 +44,8 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
-          git config user.email "${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Capture HEAD before release
         id: before
@@ -60,7 +53,7 @@ jobs:
 
       - name: Run semantic-release
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
       - name: Determine release result
@@ -125,24 +118,17 @@ jobs:
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Mint release-bot token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
           fetch-depth: 0
           ref: main
           persist-credentials: true
 
       - name: Open auto-merge back-merge PR into devel
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ needs.release.outputs.version }}"
           BRANCH="chore/back-merge-v${VERSION}"
@@ -151,16 +137,16 @@ jobs:
             echo "devel already contains main; nothing to back-merge."
             exit 0
           fi
-          git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
-          git config user.email "${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH" origin/main
           git push origin "$BRANCH"
           gh pr create --base devel --head "$BRANCH" \
             --title "chore: back-merge v${VERSION} into devel" \
             --body "Automated back-merge of the \`v${VERSION}\` release commit (\`package.json\` + \`CHANGELOG.md\`) from \`main\` into \`devel\`. Merge with a merge commit." \
           || { echo "PR already exists"; }
-          # PR opened by the release App, so pr-tests.yml runs on it. --auto
-          # merges once required devel checks pass; needs the repo "Allow
-          # auto-merge" setting. Falls back to leaving the PR open.
+          # PR is created with GITHUB_TOKEN, so pr-tests.yml does not run on it.
+          # --auto needs a required check on devel to gate on; without one it
+          # errors and the PR is left open for a manual merge (handled below).
           gh pr merge "$BRANCH" --auto --merge \
           || echo "Auto-merge not enabled or checks pending; leaving PR open for manual merge."
