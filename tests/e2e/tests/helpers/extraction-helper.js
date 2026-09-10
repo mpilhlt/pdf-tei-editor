@@ -58,8 +58,8 @@ export async function performPdfExtraction(page, consoleLogs, pdfFilePath = 'tes
 /**
  * @typedef LoadResult
  * @property {Boolean} success
- * @property {String} reason
- * @property {{xml,pdf}} [loadParams]
+ * @property {String} [reason]
+ * @property {{xml: string, pdf: string}} [loadParams]
  */
 
 /**
@@ -68,6 +68,21 @@ export async function performPdfExtraction(page, consoleLogs, pdfFilePath = 'tes
  * @return {Promise<LoadResult>}
  */
 export async function selectFirstDocuments(page) {
+  // Wait until the source-file (PDF) selectbox has been populated from fileData.
+  // The load triggered further down clears and disables the selectboxes while it
+  // runs, so every step below waits on an explicit condition instead of a fixed
+  // timeout (the load is slower than any fixed delay we could safely pick).
+  try {
+    await page.waitForFunction(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return !ui.toolbar.pdf.disabled &&
+        ui.toolbar.pdf.querySelectorAll('sl-option').length > 0;
+    }, { timeout: 15000 });
+  } catch (error) {
+    return { success: false, reason: `PDF selectbox never populated: ${String(error)}` };
+  }
+
   // Debug: Check what documents are available first
   const beforeSelection = await page.evaluate(() => {
     /** @type {namedElementsTree} */
@@ -86,115 +101,105 @@ export async function selectFirstDocuments(page) {
   });
   debugLog('Before selection:', beforeSelection);
 
-  // Try to select the first PDF by setting value directly (bypass the programmatic check)
+  // Select the first PDF by simulating a genuine user interaction. Dispatching
+  // sl-show first is required so the file-selection plugin's #userOpenedDropdown
+  // guard lets the sl-change handler run; that handler loads the PDF together
+  // with its gold TEI and updates application state.
   const pdfSelected = await page.evaluate(() => {
     /** @type {namedElementsTree} */
     const ui = /** @type {any} */(window).ui;
 
     const pdfOptions = ui.toolbar.pdf.querySelectorAll('sl-option');
-    if (pdfOptions.length > 0) {
-      const firstPdfValue = pdfOptions[0].value;
-      console.log('Attempting to select PDF:', firstPdfValue);
-
-      // Simulate user opening the dropdown (required by #userOpenedDropdown guard)
-      ui.toolbar.pdf.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
-
-      // Try direct value assignment
-      ui.toolbar.pdf.value = firstPdfValue;
-
-      // Try to force the change event with proper event details
-      const changeEvent = new CustomEvent('sl-change', {
-        detail: { value: firstPdfValue },
-        bubbles: true
-      });
-      ui.toolbar.pdf.dispatchEvent(changeEvent);
-
-      return { success: true, selectedValue: firstPdfValue };
+    if (pdfOptions.length === 0) {
+      return { success: false, reason: 'No PDF options available' };
     }
-    return { success: false, reason: 'No PDF options available' };
+    const firstPdfValue = pdfOptions[0].value;
+    console.log('Attempting to select PDF:', firstPdfValue);
+
+    ui.toolbar.pdf.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
+    ui.toolbar.pdf.value = firstPdfValue;
+    ui.toolbar.pdf.dispatchEvent(new CustomEvent('sl-change', {
+      detail: { value: firstPdfValue },
+      bubbles: true
+    }));
+
+    return { success: true, selectedValue: firstPdfValue };
   });
   debugLog('PDF selection result:', pdfSelected);
+  if (!pdfSelected.success) {
+    return pdfSelected;
+  }
 
-  // Wait for PDF selection to process
-  await page.waitForTimeout(2000);
+  // Wait for the PDF selection load to finish: state.pdf reflects the selection
+  // and the selectboxes have been re-enabled and repopulated.
+  try {
+    await page.waitForFunction((expectedPdf) => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      /** @type {any} */
+      const app = /** @type {any} */(window).app;
+      const state = app.getCurrentState();
+      return state.pdf === expectedPdf && !ui.toolbar.pdf.disabled;
+    }, pdfSelected.selectedValue, { timeout: 20000 });
+  } catch (error) {
+    return { success: false, reason: `PDF load did not complete: ${String(error)}` };
+  }
 
-  // Check state after PDF selection and select XML
-  const xmlSelected = await page.evaluate(() => {
+  // The PDF handler loads the gold TEI automatically. If no XML ended up loaded
+  // (e.g. the source has no gold artifact), pick the first version explicitly.
+  const xmlSelected = await page.evaluate(async () => {
     /** @type {namedElementsTree} */
     const ui = /** @type {any} */(window).ui;
-    const xmlOptions = ui.toolbar.xml.querySelectorAll('sl-option');
+    /** @type {any} */
+    const app = /** @type {any} */(window).app;
 
-    const beforeXml = {
-      pdfValue: ui.toolbar.pdf.value,
-      xmlValue: ui.toolbar.xml.value,
-      xmlOptionsCount: xmlOptions.length,
-      xmlOptionValues: Array.from(xmlOptions).map(opt => opt.value)
-    };
-
-    // Try to select the first XML if available
-    if (xmlOptions.length > 0) {
-      const firstXmlValue = xmlOptions[0].value;
-      console.log('Attempting to select XML:', firstXmlValue);
-
-      // Simulate user opening the dropdown (required by #userOpenedDropdown guard)
-      ui.toolbar.xml.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
-
-      // Try direct value assignment
-      ui.toolbar.xml.value = firstXmlValue;
-
-      // Try to force the change event
-      const changeEvent = new CustomEvent('sl-change', {
-        detail: { value: firstXmlValue },
-        bubbles: true
-      });
-      ui.toolbar.xml.dispatchEvent(changeEvent);
-
-      return {
-        success: true,
-        selectedValue: firstXmlValue,
-        before: beforeXml
-      };
+    if (app.getCurrentState().xml) {
+      return { success: true, selectedValue: app.getCurrentState().xml, alreadyLoaded: true };
     }
-    return {
-      success: false,
-      reason: 'No XML options available',
-      before: beforeXml
-    };
+
+    const xmlOptions = ui.toolbar.xml.querySelectorAll('sl-option');
+    if (xmlOptions.length === 0) {
+      return { success: false, reason: 'No XML options available after loading PDF' };
+    }
+    const firstXmlValue = xmlOptions[0].value;
+    console.log('Attempting to select XML:', firstXmlValue);
+
+    ui.toolbar.xml.dispatchEvent(new CustomEvent('sl-show', { bubbles: true }));
+    ui.toolbar.xml.value = firstXmlValue;
+    ui.toolbar.xml.dispatchEvent(new CustomEvent('sl-change', {
+      detail: { value: firstXmlValue },
+      bubbles: true
+    }));
+
+    return { success: true, selectedValue: firstXmlValue };
   });
   debugLog('XML selection result:', xmlSelected);
+  if (!xmlSelected.success) {
+    return xmlSelected;
+  }
 
-  // Actually load the selected documents to trigger proper state updates
-  const loadResult = await page.evaluate(async () => {
-    /** @type {namedElementsTree} */
-    const ui = /** @type {any} */(window).ui;
-    const services = /** @type {any} */(window).services;
+  // Wait for the XML to be loaded into application state.
+  try {
+    await page.waitForFunction((expectedXml) => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      /** @type {any} */
+      const app = /** @type {any} */(window).app;
+      const state = app.getCurrentState();
+      return Boolean(state.xml) && !ui.toolbar.xml.disabled &&
+        (expectedXml ? state.xml === expectedXml : true);
+    }, xmlSelected.alreadyLoaded ? null : xmlSelected.selectedValue, { timeout: 20000 });
+  } catch (error) {
+    return { success: false, reason: `XML load did not complete: ${String(error)}` };
+  }
 
-    // Get the selected values
-    const pdfValue = ui.toolbar.pdf.value;
-    const xmlValue = ui.toolbar.xml.value;
-
-    if (pdfValue || xmlValue) {
-      // Call the load function through services
-      const loadParams = {};
-      if (pdfValue) loadParams.pdf = pdfValue;
-      if (xmlValue) loadParams.xml = xmlValue;
-
-      if (services && services.load) {
-        try {
-          await services.load(loadParams);
-          return { success: true, loadParams };
-        } catch (error) {
-          return { success: false, error: String(error) };
-        }
-      } else {
-        return { success: false, reason: 'services.load not available' };
-      }
-    }
-    return { success: false, reason: 'no files to load' };
+  const loadParams = await page.evaluate(() => {
+    /** @type {any} */
+    const app = /** @type {any} */(window).app;
+    const state = app.getCurrentState();
+    return { pdf: state.pdf, xml: state.xml };
   });
-  debugLog('Load result:', loadResult);
-  // Wait for XML selection to process
-  await page.waitForTimeout(1000);
+  debugLog('Load result:', { success: true, loadParams });
 
-  return loadResult;
+  return { success: true, loadParams };
 }
