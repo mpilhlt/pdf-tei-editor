@@ -194,7 +194,12 @@ jobs:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # write, not read: semantic-release runs an unconditional `git push
+      # --dry-run` auth check (index.js, even under --dry-run) before it will
+      # analyse commits. The checkout below persists the GITHUB_TOKEN, so with
+      # contents: write that check passes and nothing is actually pushed. On
+      # fork PRs the token stays read-only and the preview degrades gracefully.
+      contents: write
       pull-requests: write
     steps:
       - name: Checkout PR head branch
@@ -217,19 +222,19 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
-          # env-ci detects GitHub Actions from GITHUB_ACTIONS and reports the
-          # branch as refs/pull/N/merge (step-level GITHUB_REF / GITHUB_EVENT_NAME
-          # overrides do NOT reach the runner's own GITHUB_* values inside a run
-          # step), which makes semantic-release skip version computation. Unset the
-          # CI markers so env-ci falls back to `git rev-parse --abbrev-ref HEAD` —
-          # the PR source branch that the checkout step left checked out — and pass
-          # --branches so that branch counts as releasable.
+          # env-ci reads GITHUB_ACTIONS and reports a PR run's branch as
+          # refs/pull/N/merge (step-level GITHUB_* overrides do not reach the
+          # runner's own values inside a run step), so semantic-release finds no
+          # matching release branch and computes nothing. Unset the CI markers
+          # and it falls back to `git rev-parse --abbrev-ref HEAD` — the PR
+          # source branch left checked out above — which --branches then treats
+          # as releasable.
           #
-          # --plugins restricts the run to the two analysis plugins. The full
-          # .releaserc.json chain would run @semantic-release/git's
-          # `git push --dry-run` permission check, which github-actions[bot]
-          # cannot pass in a PR job (no write access / deploy key) and which a
-          # preview does not need. --dry-run publishes nothing.
+          # --plugins narrows the run to the two analysis plugins: the preview
+          # only needs the version + notes, not changelog/npm/git/github steps.
+          # (semantic-release still runs its own unconditional `git push
+          # --dry-run` auth check regardless — see the contents: write note.)
+          # --dry-run publishes nothing.
           env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_EVENT_PATH -u GITHUB_REF -u CI \
             npx semantic-release --dry-run --no-ci --branches "$HEAD_REF" \
               --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator \
