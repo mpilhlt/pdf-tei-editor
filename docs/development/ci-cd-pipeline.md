@@ -64,18 +64,21 @@ The project uses GitHub Actions for continuous integration and deployment. The p
    (`release_sha`) and pushing `X.Y.Z` + `latest`.
 2. `release-notes-footer` - appends `docker pull` instructions and the Docker Hub
    link to the GitHub Release notes (runs only if `docker` succeeded; idempotent).
-3. `back-merge` - opens an auto-merge PR `main -> devel` so `devel` picks up the
-   `package.json` / `CHANGELOG.md` release commit. Depends only on the `release`
-   job, so a Docker build failure never blocks branch reconciliation.
+3. `back-merge` - opens a PR `main -> devel` so `devel` picks up the
+   `package.json` / `CHANGELOG.md` release commit. It attempts an immediate merge,
+   falling back to auto-merge and then to leaving the PR open. Depends only on the
+   `release` job, so a Docker build failure never blocks branch reconciliation.
 
 **Requirements:**
 
 - `devel -> main` PRs MUST be merged as a **merge commit** (never squashed), so
-  `semantic-release` sees every `feat:` / `fix:` individually.
-- `github-actions[bot]` must be allowed to bypass branch protection on `main`
-  (see [semantic-release-setup.md](semantic-release-setup.md)).
-- `[skip ci]` in the release commit prevents `release.yml` re-triggering itself;
-  pushes made with `GITHUB_TOKEN` also do not start new workflow runs.
+  `semantic-release` sees every `feat:` / `fix:` individually. The `main` ruleset
+  enforces this by allowing only merge and rebase merges.
+- `semantic-release` pushes the `chore(release)` commit + tag to the
+  ruleset-protected `main` using the `release-bot` **write deploy key**
+  (`ssh-key:` checkout, secret `RELEASE_DEPLOY_KEY`), which is on the ruleset's
+  bypass list (see [semantic-release-setup.md](semantic-release-setup.md)).
+- `[skip ci]` in the release commit prevents `release.yml` re-triggering itself.
 
 **Note:** Tests are NOT re-run here - the required checks on the merged PR
 validated the identical tree.
@@ -118,7 +121,7 @@ graph TD
     J --> K[Create GitHub Release]
     K --> L[docker job: build release commit, push X.Y.Z + latest]
     L --> M[release-notes-footer: append docker pull info]
-    K --> N[back-merge: auto-merge PR main -> devel]
+    K --> N[back-merge: PR main -> devel, immediate merge]
 ```
 
 **Process:**
