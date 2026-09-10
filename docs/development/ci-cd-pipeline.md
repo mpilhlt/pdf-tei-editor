@@ -43,12 +43,17 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 
 **Behavior:**
 
-- Only runs if HEAD commit has a version tag (e.g., `v1.0.0`)
-- Skips if no tag is present (normal commits to main)
+- Reads the version from the committed `package.json` on main HEAD and looks
+  for a matching `v<version>` git tag. Runs the release when that tag exists,
+  skips otherwise (a normal commit to main whose version was already released).
+- Deriving the tag from `package.json` (rather than `git tag --points-at HEAD`)
+  makes it work whether the release PR reached main as a **squash** commit or a
+  merge commit. It can also be re-run for the current main HEAD via
+  `workflow_dispatch`.
 
 **Steps:**
 
-1. Check if HEAD has a version tag
+1. Resolve `v<package.json version>` and confirm the tag exists
 2. Generate changelog from conventional commits (between tags)
 3. Create GitHub release with changelog
 4. Trigger Docker build workflow
@@ -238,10 +243,11 @@ npm run test:changed -- tests/e2e/upload.spec.js
 
 ### Release not created after merging PR
 
-- Verify tag exists at HEAD on main: `git tag --points-at HEAD`
-- Check that tag format matches `v*` pattern
-- Review release workflow logs for tag detection
-- Ensure push to main triggered the workflow
+- Check that `main`'s `package.json` version matches a pushed `v<version>` tag
+  (`git rev-parse "refs/tags/v$(node -p "require('./package.json').version")"`)
+- Confirm `bin/release.js` pushed the tag (`git push --tags`) before the PR merged
+- Review the "Get tag for current commit" step in the release workflow logs
+- Ensure push to main triggered the workflow (or re-run it via `workflow_dispatch`)
 
 ### Docker build failing
 
@@ -265,6 +271,8 @@ npm run test:changed -- tests/e2e/upload.spec.js
 ### Tag not detected in release workflow
 
 - Ensure tag was pushed: `git push --tags`
-- Verify tag is on the commit that was merged to main
+- The tag no longer needs to be reachable from main's history — the workflow
+  matches `v<package.json version>` against the tag list, so squash-merged
+  release PRs are fine
 - Check that tag follows `v*` pattern (e.g., `v1.0.0`)
 - Review "Get tag for current commit" step in workflow logs
