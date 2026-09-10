@@ -12,13 +12,12 @@ env:
 
 concurrency:
   group: tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ !startsWith(github.head_ref, 'release/') }}
 
     steps:
       - name: Checkout code
@@ -52,14 +51,6 @@ jobs:
       - name: Check if tests are needed
         id: check-tests
         run: |
-          # For tag pushes, always run all tests (including E2E)
-          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "needs_tests=true" >> $GITHUB_OUTPUT
-            echo "needs_e2e=true" >> $GITHUB_OUTPUT
-            echo "Tag push - running all tests including E2E"
-            exit 0
-          fi
-
           # Run smart test runner with --names-only to get list of tests
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Checking which tests need to run for changed files..."
@@ -113,7 +104,6 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
 
           # Run unit and API tests natively (faster, no container needed)
-          # Note: Tag pushes will always use container mode (needs_e2e=true)
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Running tests for changed files..."
             npm run test:changed -- ${{ steps.changed-files.outputs.files }}
@@ -144,11 +134,7 @@ jobs:
         if: steps.check-tests.outputs.needs_e2e == 'true'
         run: |
           # Run all tests in container (needed for E2E browser support)
-          # For tag pushes, always run all tests with no file filter
-          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "Tag push - running all tests..."
-            docker run --rm pdf-tei-editor:ci
-          elif [ -n "${{ steps.changed-files.outputs.files }}" ]; then
+          if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Running tests for changed files..."
             docker run --rm pdf-tei-editor:ci ${{ steps.changed-files.outputs.files }}
           else
@@ -200,3 +186,110 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+
+  release-preview:
+    # Only for PRs whose TARGET branch is main (typically devel -> main, also any
+    # hotfix -> main). Never runs on PRs targeting devel. The PR's source branch
+    # is irrelevant.
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      # write, not read: semantic-release runs an unconditional `git push
+      # --dry-run` auth check (index.js, even under --dry-run) before it will
+      # analyse commits. The checkout below persists the GITHUB_TOKEN, so with
+      # contents: write that check passes and nothing is actually pushed. On
+      # fork PRs the token stays read-only and the preview degrades gracefully.
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run semantic-release dry run
+        id: dry
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # env-ci reads GITHUB_ACTIONS and reports a PR run's branch as
+          # refs/pull/N/merge (step-level GITHUB_* overrides do not reach the
+          # runner's own values inside a run step), so semantic-release finds no
+          # matching release branch and computes nothing. Unset the CI markers
+          # and it falls back to `git rev-parse --abbrev-ref HEAD` — the PR
+          # source branch left checked out above — which --branches then treats
+          # as releasable.
+          #
+          # --plugins narrows the run to the two analysis plugins: the preview
+          # only needs the version + notes, not changelog/npm/git/github steps.
+          # (semantic-release still runs its own unconditional `git push
+          # --dry-run` auth check regardless — see the contents: write note.)
+          # --dry-run publishes nothing.
+          env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_EVENT_PATH -u GITHUB_REF -u CI \
+            npx semantic-release --dry-run --no-ci --branches "$HEAD_REF" \
+              --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator \
+            2>&1 | tee "$RUNNER_TEMP/semrel.log" || true
+          NEXT_VERSION="$(grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' "$RUNNER_TEMP/semrel.log" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n1 || true)"
+          {
+            echo "## Release preview"
+            echo ""
+            if [ -n "$NEXT_VERSION" ]; then
+              echo "Merging this PR (as a **merge commit**) will publish **v${NEXT_VERSION}**."
+            else
+              echo "No version-bumping commits found since the last release — **merging will not publish a release.**"
+            fi
+            echo ""
+            echo "<details><summary>semantic-release --dry-run output</summary>"
+            echo ""
+            echo '```'
+            tail -n 80 "$RUNNER_TEMP/semrel.log"
+            echo '```'
+            echo ""
+            echo "</details>"
+            echo ""
+            echo "_Preview generated by \`semantic-release --dry-run\`. Do not squash \`devel → main\` PRs._"
+          } > "$RUNNER_TEMP/preview.md"
+          echo "preview_file=$RUNNER_TEMP/preview.md" >> "$GITHUB_OUTPUT"
+
+      - name: Post / update sticky preview comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_FILE: ${{ steps.dry.outputs.preview_file }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- semantic-release-preview -->';
+            const file = process.env.PREVIEW_FILE || '';
+            const md = file && fs.existsSync(file)
+              ? fs.readFileSync(file, 'utf8')
+              : 'Release preview could not be generated — see the job log.';
+            const body = marker + '\n' + md;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }

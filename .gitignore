@@ -5,6 +5,7 @@
 !.env.test
 !.env.deploy.demo.localhost
 !.env.deploy.example.org
+!.releaserc.json
 *.pyc
 
 # Caches and temp files
