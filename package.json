@@ -91,7 +91,7 @@
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@semantic-release/changelog": "6.0.3",
         "@semantic-release/git": "10.0.1",
-        "@types/node": "^24.9.1",
+        "@types/node": "^26.5.0",
         "@types/uuid": "^10.0.0",
         "adm-zip": "^0.6.0",
         "comment-parser": "^1.4.1",
