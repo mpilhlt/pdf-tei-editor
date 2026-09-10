@@ -344,28 +344,10 @@ docker logs -f pdf-tei-editor-localhost
 
 ### Version Release
 
-```bash
-# 1. Update version in package.json
-npm version 1.2.0
-
-# 2. Build and tag
-bin/image-build-and-push.js --build-only v1.2.0
-
-# 3. Test the version
-bin/deploy-container.sh \
-  --image pdf-tei-editor:v1.2.0 \
-  --fqdn localhost \
-  --port 8080 \
-  --no-ssl \
-  --no-nginx
-
-# 4. Push to Docker Hub
-bin/image-build-and-push.js v1.2.0
-
-# 5. Tag as latest if stable
-docker tag pdf-tei-editor:v1.2.0 cboulanger/pdf-tei-editor:latest
-docker push cboulanger/pdf-tei-editor:latest
-```
+Releases (version bump, changelog, GitHub Release, Docker image build + push) are
+fully automated by `semantic-release` on merge to `main`. See
+[CI/CD Pipeline](ci-cd-pipeline.md) and
+[semantic-release setup](semantic-release-setup.md).
 
 ### Docker Hub Publishing
 

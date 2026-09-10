@@ -15,6 +15,20 @@ of the `main` branch protection rule / ruleset:
 
 `devel` protection is unchanged - the back-merge goes through a normal PR.
 
+**This repo currently uses *classic* branch protection on `main`** (no rulesets),
+which has `enforce_admins` on, `required_linear_history` on, and a required `test`
+status check — none of which a classic rule lets an actor bypass. Before the first
+automated release, `main` must be converted to a **repository ruleset** that:
+
+- lists **GitHub Actions** (`github-actions[bot]`) in **Bypass list**,
+- does **not** require linear history (or bypasses it for that actor), so
+  `devel -> main` PRs can be merged as merge commits,
+- keeps "Require a pull request before merging" for humans but allows the bypass
+  actor to push the `chore(release)` commit and `vX.Y.Z` tag directly.
+
+Without this, `@semantic-release/git` fails to push to `main` and the first
+Release workflow run errors out with no tag and no GitHub Release.
+
 ## 2. Merge-button settings
 
 - Settings -> General -> "Pull Requests":
@@ -35,3 +49,10 @@ of the `main` branch protection rule / ruleset:
 The first `devel -> main` PR after this migration must contain at least one
 `feat:` or `fix:` commit for a release to be produced; a PR of only `chore:` /
 `docs:` commits is a valid no-op.
+
+Also confirm tag reachability once the migration PR is merged: run
+`git fetch origin && git describe --tags origin/main`. It must report `v0.57.2`
+(the current latest tag). If it reports an older tag, an earlier release PR was
+squash-merged and `semantic-release` will recompute the next version from that
+older baseline - re-point/re-tag `v0.57.2` onto `origin/main` HEAD's release
+commit before relying on the first automated release.

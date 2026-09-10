@@ -108,7 +108,7 @@ and pushes the Docker image. There is no local release command.
 To preview what the next release would be:
 
 ```bash
-npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"
+GH_TOKEN=$(gh auth token) npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"
 ```
 
 

@@ -6,12 +6,11 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 
 ## Workflows
 
-### Tests Workflow ([.github/workflows/pr-tests.yml](.github/workflows/pr-tests.yml))
+### Tests Workflow ([.github/workflows/pr-tests.yml](../../.github/workflows/pr-tests.yml))
 
 **Triggers:**
 
 - Pull requests to `main` or `devel` branches
-- Tag pushes matching `v*` pattern
 - Called by other workflows via `workflow_call`
 
 **Behavior:**
@@ -19,7 +18,6 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 | Event Type | Test Strategy | Environment |
 |------------|---------------|-------------|
 | PR to main/devel | Smart testing (changed files only) | Native or container (based on test type) |
-| Tag push (v*) | ALL tests including E2E | Container |
 | Other pushes | No tests run | N/A |
 
 **Test Execution:**
@@ -27,15 +25,14 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 1. Analyzes changed files to determine which tests to run
 2. For unit/API tests: Runs natively (faster)
 3. For E2E tests: Builds Docker container and runs tests inside
-4. For tag pushes: Always runs all tests in container
-5. Comments on PRs with test results (success/failure)
+4. Comments on PRs with test results (success/failure)
 
 **Outputs:**
 
 - `needs_tests`: Whether any tests need to run
 - `needs_e2e`: Whether E2E tests are required
 
-### Release Workflow ([.github/workflows/release.yml](.github/workflows/release.yml))
+### Release Workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml))
 
 **Trigger:**
 
@@ -83,7 +80,7 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 **Note:** Tests are NOT re-run here - the required checks on the merged PR
 validated the identical tree.
 
-### Docker Image Workflow ([.github/workflows/docker-image.yml](.github/workflows/docker-image.yml))
+### Docker Image Workflow ([.github/workflows/docker-image.yml](../../.github/workflows/docker-image.yml))
 
 **Trigger:**
 
@@ -177,7 +174,8 @@ The test workflow uses smart filtering to minimize test execution time:
 ### Concurrency
 
 - PRs: `tests-${{ github.event.pull_request.number }}`
-- Tags: `tests-${{ github.ref }}`
+- The `github.ref` fallback in the concurrency group now only applies to
+  `workflow_call` invocations (no trigger keys on tags anymore)
 - Prevents duplicate runs, cancels in-progress runs for PRs
 
 ### Timeouts
@@ -229,7 +227,7 @@ The test workflow uses smart filtering to minimize test execution time:
 **Modifying the release process:**
 
 1. Edit [.releaserc.json](../../.releaserc.json) - the plugin chain and rules.
-2. Preview effects with `npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"`.
+2. Preview effects with `GH_TOKEN=$(gh auth token) npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"`.
 3. Update this document.
 
 ### Testing Workflow Changes
@@ -250,7 +248,7 @@ npm run test:changed -- tests/e2e/upload.spec.js
 
 1. Create a feature branch
 2. Open PR to see test workflow in action
-3. For release-flow changes, run `npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"` locally
+3. For release-flow changes, run `GH_TOKEN=$(gh auth token) npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"` locally
 4. Verify in GitHub Actions UI before merging
 
 ## Troubleshooting
