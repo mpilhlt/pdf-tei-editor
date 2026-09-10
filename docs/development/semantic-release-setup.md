@@ -54,9 +54,10 @@ it is safe to re-run once fixed.
   - **Allow auto-merge** - ON (lets the back-merge PR merge itself once checks pass).
   - "Allow squash merging" may stay on for feature -> `devel` PRs, but
     **`devel -> main` PRs must never be squashed**.
-- For the back-merge PR's `--auto` merge to actually complete, `devel` must have
-  the `test` status check marked **required** - otherwise `gh pr merge --auto`
-  has nothing to wait on and the PR is left open for manual merge.
+- The `back-merge` job tries an immediate merge of its PR first, which works
+  while `devel` has no required status checks. If `devel` later gains a required
+  check, the job falls back to `--auto` (needs **Allow auto-merge** ON); if that
+  cannot gate either, the PR is left open for a manual merge.
 
 ## 3. Secrets
 
