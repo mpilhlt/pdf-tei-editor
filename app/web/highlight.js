@@ -479,14 +479,17 @@
 		  return match && match.index === 0;
 		}
 
-		// BACKREF_RE matches an open parenthesis or backreference. To avoid
-		// an incorrect parse, it additionally matches the following:
-		// - [...] elements, where the meaning of parentheses and escapes change
-		// - other escape sequences, so we do not misparse escape sequences as
-		//   interesting elements
-		// - non-matching or lookahead parentheses, which do not capture. These
-		//   follow the '(' with a '?'.
-		const BACKREF_RE = /\[(?:[^\\\]]|\\.)*\]|\(\??|\\([1-9][0-9]*)|\\./;
+		// BACKREF_RE matches an open parenthesis or backreference. To avoid an
+		// incorrect parse, it also matches the constructs where the meaning of
+		// parentheses, escapes, or capture counting changes.
+		const BACKREF_RE = new RegExp(either(
+		  /\[(?:[^\\\]]|\\.)*\]/, // a character class, inside which ( and \ lose their meaning
+		  /\(\?<(?![=!])[^>]+>/, // a named capture group `(?<name>` (not a lookbehind `(?<=` / `(?<!`)
+		  /\(\?'[^']+'/, // a named capture group `(?'name'`
+		  /\(\??/, // an opening parenthesis, capturing or non-capturing / lookahead
+		  /\\([1-9][0-9]*)/, // a backreference like `\1`
+		  /\\./ // any other escape sequence
+		));
 
 		// **INTERNAL** Not intended for outside usage
 		// join logically computes regexps.join(separator), but fixes the
@@ -521,7 +524,7 @@
 		        out += '\\' + String(Number(match[1]) + offset);
 		      } else {
 		        out += match[0];
-		        if (match[0] === '(') {
+		        if (match[0] === '(' || /^\(\?[<']/.test(match[0])) {
 		          numCaptures++;
 		        }
 		      }
@@ -1563,7 +1566,7 @@
 		  return mode;
 		}
 
-		var version = "11.11.1";
+		var version = "11.12.0";
 
 		class HTMLInjectionError extends Error {
 		  constructor(reason, html) {
@@ -2085,12 +2088,15 @@
 		        }
 		      }
 
-		      // edge case for when illegal matches $ (end of line) which is technically
+		      // edge case for when illegal matches $ (end of line/text) which is technically
 		      // a 0 width match but not a begin/end match so it's not caught by the
-		      // first handler (when ignoreIllegals is true)
+		      // first handler (when `ignoreIllegals` is true)
 		      if (match.type === "illegal" && lexeme === "") {
-		        // advance so we aren't stuck in an infinite loop
-		        modeBuffer += "\n";
+		        if (match.index === codeToHighlight.length) ; else {
+		          // matched literal `\n` (with `$`) so we must manually add the newline
+		          // itself to the modeBuffer so it is not lost when we advance the cursor
+		          modeBuffer += "\n";
+		        }
 		        return 1;
 		      }
 
@@ -2777,10 +2783,7 @@
 	        starts: {
 	          end: /<\/style>/,
 	          returnEnd: true,
-	          subLanguage: [
-	            'css',
-	            'xml'
-	          ]
+	          subLanguage: 'css'
 	        }
 	      },
 	      {
@@ -2793,11 +2796,7 @@
 	        starts: {
 	          end: /<\/script>/,
 	          returnEnd: true,
-	          subLanguage: [
-	            'javascript',
-	            'handlebars',
-	            'xml'
-	          ]
+	          subLanguage: 'javascript'
 	        }
 	      },
 	      // we need this for now for jSX
@@ -2855,6 +2854,7 @@
 	}
 
 	const IDENT_RE = '[A-Za-z$_][0-9A-Za-z$_]*';
+
 	const KEYWORDS = [
 	  "as", // for exports
 	  "in",
@@ -3005,6 +3005,7 @@
 	  "localStorage",
 	  "sessionStorage",
 	  "module",
+	  "self",
 	  "global" // Node.js
 	];
 
@@ -3402,7 +3403,8 @@
 	      noneOf([
 	        ...BUILT_IN_GLOBALS,
 	        "super",
-	        "import"
+	        "import",
+	        "await",
 	      ].map(x => `${x}\\s*\\(`)),
 	      IDENT_RE$1, regex.lookahead(/\s*\(/)),
 	    className: "title.function",
@@ -3471,7 +3473,7 @@
 	    keywords: KEYWORDS$1,
 	    // this will be extended by TypeScript
 	    exports: { PARAMS_CONTAINS, CLASS_REFERENCE },
-	    illegal: /#(?![$_A-z])/,
+	    illegal: /#(?![$_A-Za-z])/,
 	    contains: [
 	      hljs.SHEBANG({
 	        label: "shebang",
@@ -3622,18 +3624,26 @@
 	  };
 	}
 
+	const EXTENDED_NUMBER_RE = '([-+]?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)|NaN|[-+]?Infinity'; // 0x..., 0..., decimal, float
+
+	const EXTENDED_NUMBER_MODE = {
+	  scope: 'number',
+	  match: EXTENDED_NUMBER_RE,
+	  relevance: 0
+	};
+
 	/*
 	Language: JSON
 	Description: JSON (JavaScript Object Notation) is a lightweight data-interchange format.
-	Author: Ivan Sagalaev <maniac@softwaremaniacs.org>
-	Website: http://www.json.org
+	Websites: http://www.json.org, https://www.json5.org
 	Category: common, protocols, web
 	*/
+
 
 	function json(hljs) {
 	  const ATTRIBUTE = {
 	    className: 'attr',
-	    begin: /"(\\.|[^\\"\r\n])*"(?=\s*:)/,
+	    begin: /(("(\\.|[^\\"\r\n])*")|('(\\.|[^\\'\r\n])*'))(?=\s*:)/,
 	    relevance: 1.01
 	  };
 	  const PUNCTUATION = {
@@ -3658,16 +3668,17 @@
 
 	  return {
 	    name: 'JSON',
-	    aliases: ['jsonc'],
+	    aliases: ['jsonc', 'json5'],
 	    keywords:{
 	      literal: LITERALS,
 	    },
 	    contains: [
 	      ATTRIBUTE,
 	      PUNCTUATION,
+	      hljs.APOS_STRING_MODE,
 	      hljs.QUOTE_STRING_MODE,
 	      LITERALS_MODE,
-	      hljs.C_NUMBER_MODE,
+	      EXTENDED_NUMBER_MODE,
 	      hljs.C_LINE_COMMENT_MODE,
 	      hljs.C_BLOCK_COMMENT_MODE
 	    ],
@@ -3709,6 +3720,7 @@
 	    'in',
 	    'is',
 	    'lambda',
+	    'lazy',
 	    'match',
 	    'nonlocal|10',
 	    'not',
@@ -3725,7 +3737,9 @@
 	  const BUILT_INS = [
 	    '__import__',
 	    'abs',
+	    'aiter',
 	    'all',
+	    'anext',
 	    'any',
 	    'ascii',
 	    'bin',
@@ -3748,6 +3762,7 @@
 	    'filter',
 	    'float',
 	    'format',
+	    'frozendict',
 	    'frozenset',
 	    'getattr',
 	    'globals',
@@ -3780,6 +3795,7 @@
 	    'repr',
 	    'reversed',
 	    'round',
+	    'sentinel',
 	    'set',
 	    'setattr',
 	    'slice',
@@ -3871,7 +3887,7 @@
 	        relevance: 10
 	      },
 	      {
-	        begin: /([fF][rR]|[rR][fF]|[fF])'''/,
+	        begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])'''/,
 	        end: /'''/,
 	        contains: [
 	          hljs.BACKSLASH_ESCAPE,
@@ -3881,7 +3897,7 @@
 	        ]
 	      },
 	      {
-	        begin: /([fF][rR]|[rR][fF]|[fF])"""/,
+	        begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])"""/,
 	        end: /"""/,
 	        contains: [
 	          hljs.BACKSLASH_ESCAPE,
@@ -3909,7 +3925,7 @@
 	        end: /"/
 	      },
 	      {
-	        begin: /([fF][rR]|[rR][fF]|[fF])'/,
+	        begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])'/,
 	        end: /'/,
 	        contains: [
 	          hljs.BACKSLASH_ESCAPE,
@@ -3918,7 +3934,7 @@
 	        ]
 	      },
 	      {
-	        begin: /([fF][rR]|[rR][fF]|[fF])"/,
+	        begin: /([fFtT][rR]|[rR][fFtT]|[fFtT])"/,
 	        end: /"/,
 	        contains: [
 	          hljs.BACKSLASH_ESCAPE,
