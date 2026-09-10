@@ -102,7 +102,7 @@ This schema is used to auto-generate the frontend API client.
 
 ### Generated HTML Documentation
 
-Frontend module documentation is auto-generated from JSDoc comments using the `jsdoc` tool with the `better-docs` theme.
+Frontend module documentation is auto-generated from JSDoc comments using the `jsdoc` tool with its default template.
 
 **Generate frontend docs:**
 
