@@ -52,7 +52,7 @@ entirely by conventional-commit history:
 
 | Workflow | Trigger | Responsibility |
 | --- | --- | --- |
-| `.github/workflows/pr-tests.yml` (extended) | PR to `main` / `devel` | Smart test suite (unchanged). New `release-preview` job on `devel→main` PRs only: `npx semantic-release --dry-run`, post/update a sticky PR comment with the computed next version and release notes (or "no release will be triggered"). |
+| `.github/workflows/pr-tests.yml` (extended) | PR to `main` / `devel` | Smart test suite (unchanged). New `release-preview` job that runs **only when the PR's base branch is `main`** (`github.base_ref == 'main'` — typically `devel→main`, also any hotfix→`main`); it never runs on PRs targeting `devel`. It runs `npx semantic-release --dry-run` and posts/updates a sticky PR comment with the computed next version and release notes (or "no release will be triggered"). |
 | `.github/workflows/release.yml` (rewritten) | `push` to `main` | Job `release`: `npx semantic-release`. Job `docker-build` (`needs: release`, gated on a new release having been published): reusable call to `docker-image.yml`, then append the `docker pull` footer to the GitHub Release notes. Job `back-merge` (`needs: [release, docker-build]`, same gate): open an auto-merge PR `main→devel`. |
 | `.github/workflows/docker-image.yml` (simplified) | `workflow_call` | Build the `production` target, push `<version>` + `latest` to Docker Hub. Version comes from a new `version` workflow input instead of the tag-detection shell (falls back to `package.json`). |
 
@@ -135,9 +135,12 @@ a normal PR for manual resolution.
 - Remove the dead `if: ${{ !startsWith(github.head_ref, 'release/') }}` guard and
   the `refs/tags/*` push-event branches (no more release branches or tag pushes to
   react to).
-- Add `release-preview` job: `if: github.event_name == 'pull_request' && github.base_ref == 'main'`.
-  Checkout `fetch-depth: 0`, `npm ci`, `npx semantic-release --dry-run` with
-  `GITHUB_TOKEN`, capture stdout, post/update a sticky PR comment.
+- Add `release-preview` job, gated on the PR base branch being `main`:
+  `if: github.event_name == 'pull_request' && github.base_ref == 'main'`. This
+  excludes every PR targeting `devel` (feature branches, etc.); the PR's head
+  branch is not considered. Checkout `fetch-depth: 0`, `npm ci`,
+  `npx semantic-release --dry-run` with `GITHUB_TOKEN`, capture stdout,
+  post/update a sticky PR comment.
 
 ### Branch protection (manual prerequisite, documented)
 
