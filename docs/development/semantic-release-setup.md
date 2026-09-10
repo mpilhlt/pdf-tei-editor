@@ -3,31 +3,45 @@
 These are repository-admin actions, done once. Day-to-day releasing needs none of
 them (see [contributing.md](contributing.md#release-process)).
 
-## 1. Branch protection / ruleset bypass on `main`
+## 1. `main` ruleset and the release-bot GitHub App
+
+`main` is now governed by a repository **ruleset** named `main` (the old *classic*
+branch protection was removed). The ruleset:
+
+- requires a pull request before merging (0 approvals required),
+- requires the `test` status check to pass,
+- blocks force-pushes and branch deletion,
+- allows only **merge** and **rebase** merges (**no squash**) for `devel -> main`,
+- does **not** require linear history.
 
 `semantic-release` pushes the `chore(release): X.Y.Z` commit and the `vX.Y.Z` tag
-straight to `main`. Add `github-actions[bot]` (GitHub Actions) to the bypass list
-of the `main` branch protection rule / ruleset:
+straight to `main`, which the ruleset blocks for any actor not on its **Bypass
+list**. The built-in **GitHub Actions** actor (the default `GITHUB_TOKEN`) cannot
+be added to a repo-level ruleset bypass in this org, so releasing goes through a
+dedicated org-owned **GitHub App** ("release bot") that *is* a bypass actor.
+`release.yml` mints a short-lived installation token per run with
+`actions/create-github-app-token` and uses it for the checkout, for
+`semantic-release` itself, and for opening the back-merge PR.
 
-- Settings -> Rules -> Rulesets (or Branches -> branch protection for `main`).
-- Add the **GitHub Actions** actor to the bypass list, or enable "Allow specified
-  actors to bypass required pull requests".
+One-time setup:
 
-`devel` protection is unchanged - the back-merge goes through a normal PR.
+1. **Create the App.** Org Settings -> Developer settings -> GitHub Apps -> New
+   GitHub App. Owner: the org. Repository permissions: **Contents: Read and
+   write** and **Pull requests: Read and write**. No webhook (uncheck "Active").
+   No account permissions needed.
+2. **Generate a private key** for the App (App settings -> Private keys ->
+   Generate a private key) and download the `.pem`.
+3. **Install the App** on this repository only (App settings -> Install App ->
+   the org -> Only select repositories -> `pdf-tei-editor`).
+4. **Add repo secrets** (Settings -> Secrets and variables -> Actions):
+   - `RELEASE_APP_ID` - the App's numeric App ID.
+   - `RELEASE_APP_PRIVATE_KEY` - the full contents of the downloaded `.pem`.
+5. **Add the App to the ruleset bypass list.** Settings -> Rules -> Rulesets ->
+   `main` -> Bypass list -> Add -> Apps -> the release App -> mode **Always**.
 
-**This repo currently uses *classic* branch protection on `main`** (no rulesets),
-which has `enforce_admins` on, `required_linear_history` on, and a required `test`
-status check — none of which a classic rule lets an actor bypass. Before the first
-automated release, `main` must be converted to a **repository ruleset** that:
-
-- lists **GitHub Actions** (`github-actions[bot]`) in **Bypass list**,
-- does **not** require linear history (or bypasses it for that actor), so
-  `devel -> main` PRs can be merged as merge commits,
-- keeps "Require a pull request before merging" for humans but allows the bypass
-  actor to push the `chore(release)` commit and `vX.Y.Z` tag directly.
-
-Without this, `@semantic-release/git` fails to push to `main` and the first
-Release workflow run errors out with no tag and no GitHub Release.
+`devel` protection is unchanged - the back-merge reaches `devel` through a normal
+PR. Without the App on the bypass list, `@semantic-release/git` fails to push to
+`main` and the Release workflow run errors out with no tag and no GitHub Release.
 
 ## 2. Merge-button settings
 
@@ -37,11 +51,14 @@ Release workflow run errors out with no tag and no GitHub Release.
   - "Allow squash merging" may stay on for feature -> `devel` PRs, but
     **`devel -> main` PRs must never be squashed**.
 
-## 3. Secrets (already present, listed for completeness)
+## 3. Secrets
 
+- `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` - the release-bot GitHub App (see
+  section 1). Required by the `release` and `back-merge` jobs.
 - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` - Docker Hub push.
 - `GITHUB_TOKEN` - provided automatically; the `permissions:` block in
-  `release.yml` grants it `contents` / `issues` / `pull-requests` write.
+  `release.yml` grants it `contents` / `issues` / `pull-requests` write. Still
+  used by the `release-notes-footer` job for the Release API.
 - No `NPM_TOKEN` - `@semantic-release/npm` runs with `npmPublish: false`.
 
 ## 4. First release after migration
