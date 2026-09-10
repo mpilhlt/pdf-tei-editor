@@ -39,11 +39,14 @@ class AnnotationTag(TypedDict):
 AnnotationTagsMap = dict[str, list[AnnotationTag]]
 
 
-# Same palette as the previous hand-curated config (Catppuccin Mocha accents).
+# Catppuccin Mocha accents plus two light neutrals (Subtext0/Subtext1) and one
+# extra warm tint. Every entry is light enough to carry the dark badge label
+# text (`.ann-badge { color: #1e1e2e }`); the surface/overlay greys that used to
+# sit in slots 10/14/16 rendered near-black badges and were unreadable (#444).
 PALETTE: list[str] = [
     "#89dceb", "#f38ba8", "#89b4fa", "#cba6f7", "#94e2d5", "#f9e2af",
-    "#a6e3a1", "#f5c2e7", "#74c7ec", "#585b70", "#f2cdcd", "#eba0ac",
-    "#b4befe", "#45475a", "#fab387", "#9399b2", "#d18455",
+    "#a6e3a1", "#f5c2e7", "#74c7ec", "#a6adc8", "#f2cdcd", "#eba0ac",
+    "#b4befe", "#bac2de", "#fab387", "#f5e0dc", "#d18455",
 ]
 
 
