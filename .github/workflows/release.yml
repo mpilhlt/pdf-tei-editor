@@ -46,6 +46,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Capture HEAD before release
+        id: before
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,15 +58,16 @@ jobs:
       - name: Determine release result
         id: result
         run: |
-          # @semantic-release/git leaves local HEAD on the new release commit and
-          # semantic-release tags it. No new release => no commit, HEAD stays the
-          # merge commit and is untagged.
-          if git describe --exact-match --match "v*" HEAD >/dev/null 2>&1; then
+          # A real release makes @semantic-release/git commit CHANGELOG.md +
+          # package.json and advance local HEAD. No new commit => no release.
+          BEFORE="${{ steps.before.outputs.sha }}"
+          AFTER="$(git rev-parse HEAD)"
+          if [ "$BEFORE" != "$AFTER" ]; then
             VERSION="$(node -p "require('./package.json').version")"
             echo "published=true" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-            echo "Released v${VERSION} ($(git rev-parse HEAD))"
+            echo "release_sha=${AFTER}" >> "$GITHUB_OUTPUT"
+            echo "Released v${VERSION} (${AFTER})"
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
             echo "No release produced for this push."
@@ -79,7 +84,7 @@ jobs:
 
   release-notes-footer:
     needs: [release, docker]
-    if: needs.release.outputs.published == 'true'
+    if: ${{ always() && needs.release.outputs.published == 'true' && needs.docker.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Append Docker image info to the GitHub Release notes
@@ -89,7 +94,11 @@ jobs:
         run: |
           VERSION="${{ needs.release.outputs.version }}"
           TAG="v${VERSION}"
-          gh release view "$TAG" --json body --jq .body > /tmp/notes.md
+          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          if grep -q '## Docker Image' "$RUNNER_TEMP/notes.md"; then
+            echo "Docker section already present; nothing to append."
+            exit 0
+          fi
           {
             echo ""
             echo "## Docker Image"
@@ -100,11 +109,11 @@ jobs:
             echo '```'
             echo ""
             echo "[View on Docker Hub](https://hub.docker.com/r/cboulanger/pdf-tei-editor/tags?name=${VERSION})"
-          } >> /tmp/notes.md
-          gh release edit "$TAG" --notes-file /tmp/notes.md
+          } >> "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
   back-merge:
-    needs: [release, docker]
+    needs: [release]
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -120,7 +129,7 @@ jobs:
         run: |
           VERSION="${{ needs.release.outputs.version }}"
           BRANCH="chore/back-merge-v${VERSION}"
-          git fetch origin main devel
+          git fetch origin +refs/heads/main:refs/remotes/origin/main +refs/heads/devel:refs/remotes/origin/devel
           if git diff --quiet origin/main origin/devel; then
             echo "devel already contains main; nothing to back-merge."
             exit 0
@@ -133,5 +142,8 @@ jobs:
             --title "chore: back-merge v${VERSION} into devel" \
             --body "Automated back-merge of the \`v${VERSION}\` release commit (\`package.json\` + \`CHANGELOG.md\`) from \`main\` into \`devel\`. Merge with a merge commit." \
           || { echo "PR already exists"; }
+          # Branch is pushed with GITHUB_TOKEN, so no checks run on it. If devel
+          # has required status checks, --auto waits until they pass; needs the
+          # repo "Allow auto-merge" setting. Falls back to leaving the PR open.
           gh pr merge "$BRANCH" --auto --merge \
           || echo "Auto-merge not enabled or checks pending; leaving PR open for manual merge."
