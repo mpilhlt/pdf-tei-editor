@@ -17,36 +17,18 @@ import { Decoration, WidgetType, EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 
 /**
- * Resolves the display label for a badge given a tag definition and the live XML DOM element.
- *
- * Resolution order:
- *   1. labelMap: first entry whose "attr=value" matches an element attribute wins
- *   2. label template: replace `{@attrName}` tokens; remove surrounding brackets if attr absent
- *   3. plain label: returned as-is
- *
- * @param {{ tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[] }} tagDef
+ * Resolves the display label for a badge: the bare tag name, or
+ * `tag[value1,value2]` listing the live values of whichever attributes
+ * this tag's variants control (e.g. `title[m]` for a `<title level="m">`
+ * whose def has a `level` variant).
+ * @param {{ tag: string, variants?: Array<{attrs: Record<string,string>}>|null }} tagDef
  * @param {Element} element
  * @returns {string}
  */
 export function resolveLabel(tagDef, element) {
-  if (tagDef.labelMap) {
-    for (const [key, mapped] of Object.entries(tagDef.labelMap)) {
-      const eqIdx = key.indexOf('=');
-      if (eqIdx === -1) continue;
-      const attrName = key.slice(0, eqIdx);
-      const attrVal  = key.slice(eqIdx + 1);
-      if (element.getAttribute(attrName) === attrVal) return mapped;
-    }
-  }
-
-  // Template interpolation: replace [{@attrName}] or {@attrName}
-  // If the attribute is absent, drop the whole token including any surrounding [...]
-  return tagDef.label.replace(/\[?\{@([^}]+)\}\]?/g, (match, attrName) => {
-    const val = element.getAttribute(attrName);
-    if (val === null) return '';
-    const hasBrackets = match.startsWith('[');
-    return hasBrackets ? `[${val}]` : val;
-  });
+  const variantAttrNames = [...new Set((tagDef.variants ?? []).flatMap(v => Object.keys(v.attrs)))];
+  const parts = variantAttrNames.map(name => element.getAttribute(name)).filter(Boolean);
+  return parts.length ? `${tagDef.tag}[${parts.join(',')}]` : tagDef.tag;
 }
 
 /**
@@ -119,17 +101,18 @@ class TagMarker extends RangeValue {
 const tagMarker = new TagMarker();
 
 /**
- * Computes a simplified badge label from tagDef.label at decoration-build time.
- * The XML DOM is not available here, so we strip {@attr} tokens and clean up brackets.
- * Full label resolution (via resolveLabel) happens at popup click time.
- * @param {{ label: string, tag: string }} tagDef
+ * Computes the badge label at decoration-build time, mirroring
+ * `resolveLabel()` but reading from the plain attrs object `readAttributes()`
+ * parses from the Lezer syntax tree (no live DOM element exists at this
+ * layer).
+ * @param {{ tag: string, variants?: Array<{attrs: Record<string,string>}>|null }} tagDef
+ * @param {Record<string,string>} elemAttrs
  * @returns {string}
  */
-function simplifiedLabel(tagDef) {
-  return tagDef.label
-    .replace(/\[?\{@[^}]+\}\]?/g, '')
-    .replace(/\[+\]+/g, '')
-    .trim() || tagDef.tag.toUpperCase();
+function badgeLabel(tagDef, elemAttrs) {
+  const variantAttrNames = [...new Set((tagDef.variants ?? []).flatMap(v => Object.keys(v.attrs)))];
+  const parts = variantAttrNames.map(name => elemAttrs[name]).filter(Boolean);
+  return parts.length ? `${tagDef.tag}[${parts.join(',')}]` : tagDef.tag;
 }
 
 /**
@@ -175,7 +158,7 @@ function readAttributes(openTagNode, state) {
  * RangeSetBuilder, which requires strictly ascending order.
  *
  * @param {import('@codemirror/state').EditorState} state
- * @param {Map<string, Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>>} tagMap
+ * @param {Map<string, {tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean, childTags?: string[]|null}>} tagMap
  * @returns {{ decos: import('@codemirror/view').DecorationSet, atomic: import('@codemirror/state').RangeSet<TagMarker> }}
  */
 function buildAll(state, tagMap) {
@@ -184,7 +167,7 @@ function buildAll(state, tagMap) {
 
   const tree = syntaxTree(state);
 
-  /** @type {Array<{from:number, to:number, def: {tag:string,label:string,labelMap?:Record<string,string>|null,color:string,attributes:any[],defaultAttributes?:Record<string,string>|null}, depth:number}>} */
+  /** @type {Array<{from:number, to:number, def: {tag:string,label:string,color:string,attributes:any[],variants?:Array<{attrs: Record<string,string>, description?: string|null}>|null,bareAllowed?:boolean}, depth:number}>} */
   const stack = [];
 
   /** @type {Array<{from:number, to:number, dec: import('@codemirror/view').Decoration}>} */
@@ -204,9 +187,9 @@ function buildAll(state, tagMap) {
           const tagNameNode = firstChild.firstChild?.nextSibling;
           if (!tagNameNode || tagNameNode.name !== 'TagName') return;
           const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
-          const defs = tagMap.get(tagName);
+          const def = tagMap.get(tagName);
 
-          if (!defs) {
+          if (!def) {
             // Non-annotation element: make its open/close tags atomic
             pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
             const lastChild = node.node.lastChild;
@@ -216,24 +199,7 @@ function buildAll(state, tagMap) {
             return;
           }
 
-          // Pick the best matching def: prefer one whose defaultAttributes all match,
-          // fall back to the generic def (defaultAttributes null/undefined).
-          let def = null;
-          let fallbackDef = null;
-          let elemAttrs = /** @type {Record<string,string>|null} */ (null);
-          for (const candidate of defs) {
-            if (!candidate.defaultAttributes) {
-              fallbackDef = candidate;
-            } else {
-              if (!elemAttrs) elemAttrs = readAttributes(firstChild, state);
-              if (elemAttrs && Object.entries(candidate.defaultAttributes).every(([k, v]) => elemAttrs[k] === v)) {
-                def = candidate;
-                break;
-              }
-            }
-          }
-          def = def ?? fallbackDef;
-          if (!def) return;
+          const elemAttrs = (def.variants?.length ?? 0) > 0 ? readAttributes(firstChild, state) : {};
 
           // Determine content region: between OpenTag.to and CloseTag.from
           const closeTag = node.node.lastChild;
@@ -243,7 +209,7 @@ function buildAll(state, tagMap) {
           stack.push({ from: node.from, to: node.to, def, depth });
 
           // Badge for the OpenTag
-          const label = simplifiedLabel(def);
+          const label = badgeLabel(def, elemAttrs);
           pendingDecos.push({
             from: firstChild.from,
             to: firstChild.to,
@@ -349,16 +315,14 @@ export function createNavigationField() {
  * Returns a StateField (decorations + atomic ranges built in one tree walk) and the
  * EditorView.atomicRanges facet that makes non-annotated XML tags uncrossable by cursor motion.
  *
- * @param {Array<{tag: string, label: string, labelMap?: Record<string,string>|null, color: string, attributes: any[], defaultAttributes?: Record<string,string>|null}>} tagDefs
+ * @param {Array<{tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean}>} tagDefs
  * @returns {import('@codemirror/state').Extension[]}
  */
 export function createAnnotationField(tagDefs) {
-  /** @type {Map<string, typeof tagDefs>} */
+  /** @type {Map<string, typeof tagDefs[number]>} */
   const tagMap = new Map();
   for (const d of tagDefs) {
-    const bucket = tagMap.get(d.tag);
-    if (bucket) bucket.push(d);
-    else tagMap.set(d.tag, [d]);
+    tagMap.set(d.tag, d);
   }
 
   const field = StateField.define({

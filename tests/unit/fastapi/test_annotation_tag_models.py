@@ -1,5 +1,5 @@
 """
-Unit tests for AnnotationTagDef models in models_extraction.py
+Unit tests for AnnotationTagDef/AnnotationTagVariant models in models_extraction.py
 
 @testCovers fastapi_app/lib/models/models_extraction.py
 """
@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from fastapi_app.lib.models.models_extraction import (
     AnnotationTagAttribute,
     AnnotationTagDef,
+    AnnotationTagVariant,
     ExtractorInfo,
 )
 
@@ -20,8 +21,8 @@ from fastapi_app.lib.models.models_extraction import (
 class TestAnnotationTagAttribute(unittest.TestCase):
 
     def test_required_fields(self):
-        attr = AnnotationTagAttribute(name="level")
-        self.assertEqual(attr.name, "level")
+        attr = AnnotationTagAttribute(name="key")
+        self.assertEqual(attr.name, "key")
         self.assertIsNone(attr.values)
 
     def test_optional_values(self):
@@ -29,67 +30,62 @@ class TestAnnotationTagAttribute(unittest.TestCase):
         self.assertEqual(attr.values, ["m", "a", "j"])
 
 
+class TestAnnotationTagVariant(unittest.TestCase):
+
+    def test_single_attribute_variant(self):
+        variant = AnnotationTagVariant(attrs={"type": "court"})
+        self.assertEqual(variant.attrs, {"type": "court"})
+        self.assertIsNone(variant.description)
+
+    def test_correlated_multi_attribute_variant(self):
+        variant = AnnotationTagVariant(
+            attrs={"level": "m", "type": "legislation"},
+            description="Title of a statute / legislative act",
+        )
+        self.assertEqual(variant.attrs["level"], "m")
+        self.assertEqual(variant.attrs["type"], "legislation")
+        self.assertEqual(variant.description, "Title of a statute / legislative act")
+
+
 class TestAnnotationTagDef(unittest.TestCase):
 
     def test_minimal(self):
-        tag = AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
+        tag = AnnotationTagDef(tag="bibl", label="bibl", color="#89dceb")
         self.assertEqual(tag.tag, "bibl")
-        self.assertEqual(tag.label, "BIBL")
+        self.assertEqual(tag.label, "bibl")
         self.assertEqual(tag.color, "#89dceb")
-        self.assertIsNone(tag.labelMap)
         self.assertEqual(tag.attributes, [])
+        self.assertEqual(tag.variants, [])
+        self.assertTrue(tag.bareAllowed)
+        self.assertIsNone(tag.description)
+        self.assertEqual(tag.childTags, [])
 
-    def test_with_label_map(self):
+    def test_with_variants(self):
         tag = AnnotationTagDef(
             tag="title",
-            label="TITLE[{@level}]",
-            labelMap={"level=m": "TITLE[M]", "level=a": "TITLE[A]"},
+            label="title",
             color="#a6e3a1",
-            attributes=[AnnotationTagAttribute(name="level", values=["m", "a"])],
+            bareAllowed=False,
+            variants=[
+                AnnotationTagVariant(attrs={"level": "a"}, description="Article or chapter title"),
+                AnnotationTagVariant(attrs={"level": "m", "type": "legislation"}, description="Statute title"),
+            ],
         )
-        self.assertEqual(tag.labelMap["level=m"], "TITLE[M]")
-        self.assertEqual(len(tag.attributes), 1)
+        self.assertFalse(tag.bareAllowed)
+        self.assertEqual(len(tag.variants), 2)
+        self.assertEqual(tag.variants[1].attrs, {"level": "m", "type": "legislation"})
 
     def test_serialization(self):
-        tag = AnnotationTagDef(tag="author", label="AUTHOR", color="#89b4fa")
-        data = tag.model_dump()
-        self.assertEqual(data["tag"], "author")
-        self.assertIsNone(data["labelMap"])
-
-    def test_new_fields_defaults(self):
-        tag = AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
-        self.assertIsNone(tag.description)
-        self.assertEqual(tag.priority, 100)
-        self.assertIsNone(tag.defaultAttributes)
-
-    def test_description_field(self):
         tag = AnnotationTagDef(
-            tag="bibl", label="BIBL", color="#89dceb",
-            description="An individual bibliographic reference"
-        )
-        self.assertEqual(tag.description, "An individual bibliographic reference")
-
-    def test_priority_field(self):
-        tag = AnnotationTagDef(tag="body", label="body", color="#89dceb", priority=1)
-        self.assertEqual(tag.priority, 1)
-
-    def test_default_attributes_field(self):
-        tag = AnnotationTagDef(
-            tag="note", label="note[footnote]", color="#94e2d5",
-            defaultAttributes={"place": "footnote"}
-        )
-        self.assertEqual(tag.defaultAttributes, {"place": "footnote"})
-
-    def test_serialization_with_new_fields(self):
-        tag = AnnotationTagDef(
-            tag="note", label="note[footnote]", color="#94e2d5",
-            priority=5, defaultAttributes={"place": "footnote"},
-            description="A footnote"
+            tag="citedRange", label="citedRange", color="#89b4fa", bareAllowed=False,
+            description="Pinpoint into a statute or decision",
+            variants=[AnnotationTagVariant(attrs={"unit": "page"}, description="Pinpoint by printed page number")],
         )
         data = tag.model_dump()
-        self.assertEqual(data["priority"], 5)
-        self.assertEqual(data["defaultAttributes"], {"place": "footnote"})
-        self.assertEqual(data["description"], "A footnote")
+        self.assertEqual(data["tag"], "citedRange")
+        self.assertFalse(data["bareAllowed"])
+        self.assertEqual(data["variants"][0]["attrs"], {"unit": "page"})
+        self.assertEqual(data["description"], "Pinpoint into a statute or decision")
 
 
 class TestExtractorInfoAnnotationTags(unittest.TestCase):
@@ -107,28 +103,13 @@ class TestExtractorInfoAnnotationTags(unittest.TestCase):
             input=["pdf"], output=["xml"], available=True,
             annotationTags={
                 "grobid.training.references": [
-                    AnnotationTagDef(tag="bibl", label="BIBL", color="#89dceb")
+                    AnnotationTagDef(tag="bibl", label="bibl", color="#89dceb")
                 ]
             },
         )
         tags = info.annotationTags.get("grobid.training.references", [])
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].tag, "bibl")
-
-    def test_annotation_tags_cutoff_default(self):
-        info = ExtractorInfo(
-            id="grobid", name="Grobid", description="Grobid extractor",
-            input=["pdf"], output=["xml"], available=True,
-        )
-        self.assertEqual(info.annotationTagsCutoff, {})
-
-    def test_annotation_tags_cutoff_values(self):
-        info = ExtractorInfo(
-            id="grobid", name="Grobid", description="Grobid extractor",
-            input=["pdf"], output=["xml"], available=True,
-            annotationTagsCutoff={"grobid.training.segmentation": 6}
-        )
-        self.assertEqual(info.annotationTagsCutoff["grobid.training.segmentation"], 6)
 
 
 if __name__ == "__main__":

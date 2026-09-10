@@ -28,7 +28,7 @@
  * @import {Diagnostic} from '@codemirror/lint'
  */
 
-import { syntaxTree, syntaxParserRunning } from '@codemirror/language';
+import { syntaxTree, ensureSyntaxTree } from '@codemirror/language';
 import { linkSyntaxTreeWithDOM, parseXmlError } from './codemirror/codemirror-utils.js';
 
 /**
@@ -148,13 +148,18 @@ export class XmlEditorDomSync {
       return { ok: false, status: 'malformed', diagnostic };
     }
 
-    // Stage 2: wait for the syntax parser if it is still processing the latest text.
-    if (syntaxParserRunning(view)) {
-      while (syntaxParserRunning(view)) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+    // Stage 2: force the syntax parser to fully parse the document.
+    // `syntaxParserRunning()`/`isWorking()` reports "not running" once CodeMirror's
+    // background ParseWorker has caught up to its bounded lookahead (viewport +
+    // 100k chars), NOT once the whole document is parsed. For documents whose tail
+    // lies beyond that bound, that made this stage return immediately with a stale,
+    // truncated syntax tree, causing spurious link failures against a well-formed
+    // DOM. `ensureSyntaxTree` forces parsing up to an explicit document position instead.
+    let newSyntaxTree = ensureSyntaxTree(view.state, content.length, 50);
+    while (!newSyntaxTree) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      newSyntaxTree = ensureSyntaxTree(view.state, content.length, 50);
     }
-    const newSyntaxTree = syntaxTree(view.state);
 
     // Stage 3: link syntax tree to DOM.
     try {
@@ -172,11 +177,24 @@ export class XmlEditorDomSync {
       this.#lastSyncError = null;
       return { ok: true, status: 'wellFormed' };
     } catch (error) {
+      // The DOMParser already succeeded above (stage 1): `doc` IS a well-formed
+      // DOM matching the current editor text. Only the position-mapping between
+      // it and the syntax tree failed, which is an internal bug in the linking
+      // algorithm, not an XML validity problem. Keep the DOM tree current — so
+      // callers like save-on-change keep working from live content instead of a
+      // stale snapshot — but drop the (now unreliable) position maps and mark
+      // the instance unsynced so mapping-dependent features (tag rename, DOM
+      // node lookup) correctly refuse to operate.
+      this.#lastGoodXmlTree = doc;
+      this.#lastGoodSyntaxTree = newSyntaxTree;
+      this.#syntaxToDom = null;
+      this.#domToSyntax = null;
+      this.#processingInstructions = this.#detectProcessingInstructions(doc);
       this.#isSynced = false;
       const err = error instanceof Error ? error : new Error(String(error));
       this.#lastSyncError = { stage: 'link', message: err.message };
-      this.#logger.warn(
-        `XmlEditorDomSync: link failed (${err.message}); keeping previous maps.`
+      this.#logger.error(
+        `XmlEditorDomSync: link failed (${err.message}); XML is well-formed but position maps are unavailable.`
       );
       return { ok: false, status: 'linkFailed', linkError: err };
     }
@@ -197,9 +215,12 @@ export class XmlEditorDomSync {
   }
 
   /**
-   * Returns the most recent successfully-parsed DOM document. This may be stale
-   * if the editor content has since become malformed or the link step has failed;
-   * use {@link isSynced} to determine freshness.
+   * Returns the most recent successfully-parsed DOM document. This is only stale
+   * while the editor content is currently malformed (DOMParser failed) — a DOM/
+   * syntax-tree link failure does NOT make it stale, since the DOM parse itself
+   * always succeeds first; use {@link isSynced} to determine whether the
+   * position-mapping getters ({@link getSyntaxToDom}, {@link getDomToSyntax})
+   * are available and up to date.
    * @returns {Document | null}
    */
   getXmlTree() {

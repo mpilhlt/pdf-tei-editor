@@ -370,7 +370,7 @@ async def download_training_package(
 
     Args:
         collection: Collection ID to process
-        flavor: GROBID processing flavor (e.g. "default", "article/dh-law-footnotes")
+        flavor: GROBID processing flavor (e.g. "default", "article/footnotes-refs")
         force_refresh: Force re-download from GROBID (ignore cached data)
         session_id: Session ID from query parameter
         x_session_id: Session ID from header

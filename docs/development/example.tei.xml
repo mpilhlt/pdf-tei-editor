@@ -60,7 +60,7 @@
         <label>A machine learning software for extracting information from scholarly documents</label>
         <desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
         <label type="revision">e13aa19</label>
-        <label type="flavor">article/dh-law-footnotes</label>
+        <label type="flavor">article/footnotes-refs</label>
         <label type="variant-id">grobid.training.segmentation</label>
         <ref target="https://github.com/kermitt2/grobid"/>
       </application>

@@ -12,6 +12,7 @@ import re
 import json
 import subprocess
 import tempfile
+import time
 import logging
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
@@ -27,6 +28,9 @@ XSD_NAMESPACE = "http://www.w3.org/2001/XMLSchema"
 
 # Validation timeout in seconds
 VALIDATION_TIMEOUT = 30
+
+# How long a cached schema file is trusted before it is re-fetched
+SCHEMA_CACHE_TTL_SECONDS = 3600
 
 # Known schemas with special handling requirements
 SCHEMA_CONFIG = {
@@ -250,6 +254,26 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
     return schema_cache_dir, schema_cache_file, schema_file_name
 
 
+def is_schema_cache_stale(schema_cache_file: Path, ttl_seconds: int = SCHEMA_CACHE_TTL_SECONDS) -> bool:
+    """
+    Check whether a cached schema file needs to be re-fetched.
+
+    A cache entry is stale if it doesn't exist yet, or if it was last written
+    longer than `ttl_seconds` ago.
+
+    Args:
+        schema_cache_file: Path to the cached schema file
+        ttl_seconds: Maximum age in seconds before the cache is considered stale
+
+    Returns:
+        True if the file is missing or older than the TTL
+    """
+    if not schema_cache_file.is_file():
+        return True
+    age_seconds = time.time() - schema_cache_file.stat().st_mtime
+    return age_seconds > ttl_seconds
+
+
 def download_schema_file(
     schema_location: str,
     schema_cache_dir: Path,
@@ -348,8 +372,8 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
 
         schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
 
-        # Download schema if not cached
-        if not schema_cache_file.is_file():
+        # Download schema if not cached, or if the cached copy is older than the TTL
+        if is_schema_cache_stale(schema_cache_file):
             logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
             schema_cache_dir.mkdir(parents=True, exist_ok=True)
             try:
