@@ -217,14 +217,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_REF: ${{ github.head_ref }}
-          # env-ci reports a pull_request run's branch as refs/pull/N/merge, which
-          # makes semantic-release bail before computing a version. Presenting the
-          # run as a push to the PR's source branch lets it analyse those commits.
-          # --branches overrides the configured "main"; --dry-run publishes nothing.
-          GITHUB_EVENT_NAME: push
-          GITHUB_REF: refs/heads/${{ github.head_ref }}
         run: |
-          npx semantic-release --dry-run --no-ci --branches "$HEAD_REF" \
+          # env-ci detects GitHub Actions from GITHUB_ACTIONS and reports the
+          # branch as refs/pull/N/merge (step-level GITHUB_REF / GITHUB_EVENT_NAME
+          # overrides do NOT reach the runner's own GITHUB_* values inside a run
+          # step), which makes semantic-release skip version computation. Unset the
+          # CI markers so env-ci falls back to `git rev-parse --abbrev-ref HEAD` —
+          # the PR source branch that the checkout step left checked out — and pass
+          # --branches so that branch counts as releasable. --dry-run publishes
+          # nothing; GITHUB_TOKEN stays set for @semantic-release/github's repo check.
+          env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_EVENT_PATH -u GITHUB_REF -u CI \
+            npx semantic-release --dry-run --no-ci --branches "$HEAD_REF" \
             2>&1 | tee "$RUNNER_TEMP/semrel.log" || true
           NEXT_VERSION="$(grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' "$RUNNER_TEMP/semrel.log" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n1 || true)"
           {
