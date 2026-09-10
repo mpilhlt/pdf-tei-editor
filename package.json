@@ -9,9 +9,6 @@
         "prepare": "husky",
         "test": "npm run test:all:bail",
         "postinstall": "npm run build",
-        "release:patch": "node bin/release.js patch",
-        "release:minor": "node bin/release.js minor",
-        "release:major": "node bin/release.js major",
         "generate-client": "node bin/generate-api-client.js app/src/modules/api-client-v1.js",
         "generate-client:check": "node bin/check-client-outdated.js",
         "build:ui-types": "node bin/generate-ui-types.js",
@@ -92,6 +89,8 @@
         "@playwright/test": "^1.56.1",
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
+        "@semantic-release/changelog": "6.0.3",
+        "@semantic-release/git": "10.0.1",
         "@types/node": "^24.9.1",
         "@types/uuid": "^10.0.0",
         "adm-zip": "^0.6.0",
@@ -103,7 +102,8 @@
         "jsdoc-to-markdown": "^9.1.3",
         "jsdom": "^26.1.0",
         "madge": "^8.0.0",
-        "rollup": "^4.59.0"
+        "rollup": "^4.59.0",
+        "semantic-release": "24.2.9"
     },
     "overrides": {
         "@napi-rs/canvas": "$@napi-rs/canvas",

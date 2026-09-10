@@ -6,12 +6,11 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 
 ## Workflows
 
-### Tests Workflow ([.github/workflows/pr-tests.yml](.github/workflows/pr-tests.yml))
+### Tests Workflow ([.github/workflows/pr-tests.yml](../../.github/workflows/pr-tests.yml))
 
 **Triggers:**
 
 - Pull requests to `main` or `devel` branches
-- Tag pushes matching `v*` pattern
 - Called by other workflows via `workflow_call`
 
 **Behavior:**
@@ -19,7 +18,6 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 | Event Type | Test Strategy | Environment |
 |------------|---------------|-------------|
 | PR to main/devel | Smart testing (changed files only) | Native or container (based on test type) |
-| Tag push (v*) | ALL tests including E2E | Container |
 | Other pushes | No tests run | N/A |
 
 **Test Execution:**
@@ -27,96 +25,112 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 1. Analyzes changed files to determine which tests to run
 2. For unit/API tests: Runs natively (faster)
 3. For E2E tests: Builds Docker container and runs tests inside
-4. For tag pushes: Always runs all tests in container
-5. Comments on PRs with test results (success/failure)
+4. Comments on PRs with test results (success/failure)
 
 **Outputs:**
 
 - `needs_tests`: Whether any tests need to run
 - `needs_e2e`: Whether E2E tests are required
 
-### Release Workflow ([.github/workflows/release.yml](.github/workflows/release.yml))
+### Release Workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml))
 
 **Trigger:**
 
-- Push to `main` branch (typically via merged PR)
+- `push` to `main` (i.e. a merged `devel -> main` PR), or manual `workflow_dispatch`.
 
 **Behavior:**
 
-- Reads the version from the committed `package.json` on main HEAD and looks
-  for a matching `v<version>` git tag. Runs the release when that tag exists,
-  skips otherwise (a normal commit to main whose version was already released).
-- Deriving the tag from `package.json` (rather than `git tag --points-at HEAD`)
-  makes it work whether the release PR reached main as a **squash** commit or a
-  merge commit. It can also be re-run for the current main HEAD via
-  `workflow_dispatch`.
+- Runs [`semantic-release`](https://github.com/semantic-release/semantic-release)
+  with the config in [.releaserc.json](../../.releaserc.json).
+- `semantic-release` inspects Conventional Commit messages since the last
+  `v*` tag and decides the bump: `fix:` -> patch, `feat:` -> minor,
+  `feat!:` / `BREAKING CHANGE:` -> major.
+- If a release is warranted it:
+  1. Updates `CHANGELOG.md` (`@semantic-release/changelog`).
+  2. Bumps `package.json` version (`@semantic-release/npm`, `npmPublish: false`).
+  3. Commits `chore(release): X.Y.Z [skip ci]` to `main` and pushes it
+     (`@semantic-release/git`).
+  4. Creates the `vX.Y.Z` git tag and the GitHub Release with generated notes
+     (`@semantic-release/github`).
+- If no commit since the last tag changes the version, nothing is published and
+  the workflow ends cleanly.
+- A release is detected by comparing `HEAD` before and after the
+  `semantic-release` run; the job exposes outputs `published`, `version`, and
+  `release_sha`.
 
-**Steps:**
+**Downstream jobs (only when a release was published):**
 
-1. Resolve `v<package.json version>` and confirm the tag exists
-2. Generate changelog from conventional commits (between tags)
-3. Create GitHub release with changelog
-4. Trigger Docker build workflow
+1. `docker` - reusable call to `docker-image.yml`, building the release commit
+   (`release_sha`) and pushing `X.Y.Z` + `latest`.
+2. `release-notes-footer` - appends `docker pull` instructions and the Docker Hub
+   link to the GitHub Release notes (runs only if `docker` succeeded; idempotent).
+3. `back-merge` - opens an auto-merge PR `main -> devel` so `devel` picks up the
+   `package.json` / `CHANGELOG.md` release commit. Depends only on the `release`
+   job, so a Docker build failure never blocks branch reconciliation.
 
-**Changelog Format:**
+**Requirements:**
 
-- Groups commits by type: Features, Bug Fixes, Documentation, Refactoring, Tests, Other
-- Excludes `chore:` commits
-- Includes Docker Hub image information
+- `devel -> main` PRs MUST be merged as a **merge commit** (never squashed), so
+  `semantic-release` sees every `feat:` / `fix:` individually.
+- `github-actions[bot]` must be allowed to bypass branch protection on `main`
+  (see [semantic-release-setup.md](semantic-release-setup.md)).
+- `[skip ci]` in the release commit prevents `release.yml` re-triggering itself;
+  pushes made with `GITHUB_TOKEN` also do not start new workflow runs.
 
-**Note:** Tests are run via PR workflow before merge, not in the release workflow
+**Note:** Tests are NOT re-run here - the required checks on the merged PR
+validated the identical tree.
 
-### Docker Image Workflow ([.github/workflows/docker-image.yml](.github/workflows/docker-image.yml))
+### Docker Image Workflow ([.github/workflows/docker-image.yml](../../.github/workflows/docker-image.yml))
 
 **Trigger:**
 
-- Called by Release workflow via `workflow_call`
+- `workflow_call` only, from `release.yml`'s `docker` job.
 
-**Behavior:**
+**Inputs:**
 
-- Only runs if Release workflow detects a version tag
-- Runs after GitHub release is created
-
-**Build Strategy:**
-
-| Event Type              | Tests Required              | Tags Applied      |
-|-------------------------|-----------------------------|-------------------|
-| Push to main with tag   | Yes (via PR tests)          | `1.2.3`, `latest` |
+| Input | Meaning |
+| --- | --- |
+| `version` | Image tag without leading `v` (e.g. `1.2.3`), from the `semantic-release` output. |
+| `ref` | The release commit SHA to build (contains the bumped `package.json`). |
 
 **Steps:**
 
-1. Extract version from tag at HEAD
-2. Build Docker image with `production` target
-3. Push to Docker Hub (cboulanger/pdf-tei-editor)
+1. Free disk space on the runner.
+2. Checkout `inputs.ref`.
+3. Build the `production` target and push `cboulanger/pdf-tei-editor:<version>`
+   and `:latest` to Docker Hub.
 
 ## Execution Flow
 
-### For Releases (e.g., tag `v1.0.0` on devel, then merge to main)
+### For Releases
 
 ```mermaid
 graph TD
-    A[Tag commit on devel: v1.0.0] --> B[Push tag to remote]
-    B --> C[Create PR: devel → main]
-    C --> D[PR Tests Workflow]
-    D --> E{Tests Pass?}
-    E -->|Yes| F[Manually merge PR]
-    E -->|No| G[Stop - Fix Issues]
-    F --> H[Push to main triggers Release Workflow]
-    H --> I{HEAD has tag?}
-    I -->|Yes| J[Create GitHub Release]
-    I -->|No| K[Skip release]
-    J --> L[Build & Push Docker Image]
+    A[Open PR: devel -> main] --> B[pr-tests.yml: full smart test suite]
+    B --> C[release-preview job comments pending version]
+    C --> D{Reviewer merges as a MERGE COMMIT}
+    D --> E[push to main triggers release.yml]
+    E --> F[semantic-release: analyse commits]
+    F --> G{Version bump needed?}
+    G -->|No| H[Stop - nothing published]
+    G -->|Yes| I[Update CHANGELOG.md + package.json]
+    I --> J[Commit chore(release) to main + tag vX.Y.Z]
+    J --> K[Create GitHub Release]
+    K --> L[docker job: build release commit, push X.Y.Z + latest]
+    L --> M[release-notes-footer: append docker pull info]
+    K --> N[back-merge: auto-merge PR main -> devel]
 ```
 
 **Process:**
 
-1. Run `node bin/release.js patch` (or minor/major) on devel branch
-2. Create PR to merge devel into main
-3. PR tests workflow validates changes
-4. Manually merge PR after tests pass
-5. Push to main triggers release workflow
-6. Release workflow detects tag at HEAD and creates GitHub release
-7. Docker image is built and pushed with version tag + latest
+1. On `devel`, land work with Conventional Commit messages.
+2. Open a `devel -> main` PR. `pr-tests.yml` runs the suite and comments the
+   pending release version.
+3. Merge the PR **as a merge commit** once checks pass.
+4. `release.yml` runs `semantic-release`, which publishes the release and tag.
+5. The Docker image is built and pushed; release notes get the `docker pull`
+   footer.
+6. Merge the automated `main -> devel` back-merge PR.
 
 ### For Pull Requests
 
@@ -137,18 +151,14 @@ graph TD
 2. Runs only relevant tests (smart testing)
 3. Comments on PR with results
 
-### For Branch Pushes (e.g., to main)
+### For Branch Pushes (to `main`)
 
-Pushes to `main` trigger the release workflow, which:
+Every push to `main` triggers `release.yml`, which runs `semantic-release`.
+If no commit since the last tag bumps the version, the run is a no-op.
+`main` is only ever updated by:
 
-1. Checks if HEAD has a version tag
-2. If tagged: Creates release and builds Docker image
-3. If not tagged: Workflow skips without action
-
-The `main` branch should only be updated via:
-
-1. Pull requests (validated by PR tests)
-2. Hotfix merges (must pass PR tests first)
+1. Merged `devel -> main` PRs (validated by `pr-tests.yml`), merged as merge commits.
+2. The `chore(release)` commit that `semantic-release` itself pushes.
 
 ## Test Filtering
 
@@ -164,7 +174,8 @@ The test workflow uses smart filtering to minimize test execution time:
 ### Concurrency
 
 - PRs: `tests-${{ github.event.pull_request.number }}`
-- Tags: `tests-${{ github.ref }}`
+- The `github.ref` fallback in the concurrency group now only applies to
+  `workflow_call` invocations (no trigger keys on tags anymore)
 - Prevents duplicate runs, cancels in-progress runs for PRs
 
 ### Timeouts
@@ -181,6 +192,7 @@ The test workflow uses smart filtering to minimize test execution time:
 - `DOCKERHUB_USERNAME`: Docker Hub username
 - `DOCKERHUB_TOKEN`: Docker Hub access token
 - `GITHUB_TOKEN`: Automatically provided by GitHub Actions (used for creating releases)
+- No `NPM_TOKEN` is needed - `@semantic-release/npm` runs with `npmPublish: false`.
 
 ## Modifying the CI Pipeline
 
@@ -212,11 +224,11 @@ The test workflow uses smart filtering to minimize test execution time:
 2. Consider whether tests should run before/after
 3. Update Dockerfile if needed
 
-**Modifying release process:**
+**Modifying the release process:**
 
-1. Update release.yml steps
-2. Ensure changelog generation logic matches commit conventions
-3. Test with a pre-release tag first
+1. Edit [.releaserc.json](../../.releaserc.json) - the plugin chain and rules.
+2. Preview effects with `GH_TOKEN=$(gh auth token) npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"`.
+3. Update this document.
 
 ### Testing Workflow Changes
 
@@ -236,18 +248,30 @@ npm run test:changed -- tests/e2e/upload.spec.js
 
 1. Create a feature branch
 2. Open PR to see test workflow in action
-3. Create a pre-release tag (e.g., `v1.0.0-beta.1`) to test release workflow
+3. For release-flow changes, run `GH_TOKEN=$(gh auth token) npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"` locally
 4. Verify in GitHub Actions UI before merging
 
 ## Troubleshooting
 
-### Release not created after merging PR
+### No release created after merging a devel -> main PR
 
-- Check that `main`'s `package.json` version matches a pushed `v<version>` tag
-  (`git rev-parse "refs/tags/v$(node -p "require('./package.json').version")"`)
-- Confirm `bin/release.js` pushed the tag (`git push --tags`) before the PR merged
-- Review the "Get tag for current commit" step in the release workflow logs
-- Ensure push to main triggered the workflow (or re-run it via `workflow_dispatch`)
+- Check the commit types since the last `v*` tag: only `feat:`, `fix:`, and
+  `BREAKING CHANGE:` bump the version. A PR of only `chore:` / `docs:` / `test:` /
+  `ci:` / `refactor:` commits publishes nothing - this is expected.
+- Confirm the PR was merged as a **merge commit**, not squashed. A squash collapses
+  all commit messages into one subject and hides the `feat:` / `fix:` types.
+- Read the `release` job log: `semantic-release` prints the analysis and its
+  decision.
+
+### semantic-release push to main rejected
+
+- `github-actions[bot]` needs a branch-protection / ruleset bypass on `main`.
+  See [semantic-release-setup.md](semantic-release-setup.md).
+
+### Back-merge PR has conflicts
+
+- The `back-merge` job leaves the PR open. Resolve `main -> devel` conflicts
+  manually and merge it (as a merge commit).
 
 ### Docker build failing
 
@@ -267,12 +291,3 @@ npm run test:changed -- tests/e2e/upload.spec.js
 - Test locally: `npm run test:changed -- --names-only <files>`
 - Check file patterns in tests/smart-test-runner.js
 - Verify changed files are correctly detected in workflow logs
-
-### Tag not detected in release workflow
-
-- Ensure tag was pushed: `git push --tags`
-- The tag no longer needs to be reachable from main's history — the workflow
-  matches `v<package.json version>` against the tag list, so squash-merged
-  release PRs are fine
-- Check that tag follows `v*` pattern (e.g., `v1.0.0`)
-- Review "Get tag for current commit" step in workflow logs

@@ -2,14 +2,24 @@ name: Build and Push Docker Image
 
 on:
   workflow_call:
+    inputs:
+      version:
+        description: 'Image tag without leading v, e.g. 1.2.3'
+        required: true
+        type: string
+      ref:
+        description: 'Git ref/SHA to build (the release commit)'
+        required: true
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
-concurrency:
-  group: docker-build-${{ github.ref }}
-#  cancel-in-progress: true
+permissions:
+  contents: read
 
+concurrency:
+  group: docker-build-${{ inputs.version }}
 
 jobs:
   docker-build:
@@ -22,29 +32,14 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          fetch-tags: true
+          ref: ${{ inputs.ref }}
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          # Derive the version from the committed package.json (and require a
-          # matching v<version> git tag to exist). Robust to squash-merged
-          # release PRs, unlike inspecting HEAD's tags/second parent — see the
-          # matching note in release.yml's "Get tag for current commit".
-          VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -n 1)
-          if [ -n "$VERSION" ] && git rev-parse "refs/tags/v${VERSION}" >/dev/null 2>&1; then
-            echo "tag=${VERSION}" >> $GITHUB_OUTPUT
-            echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "Docker image tag: ${VERSION}"
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-            echo "is_tag=false" >> $GITHUB_OUTPUT
-            echo "No tag v${VERSION} found, using 'latest'"
-          fi
-
+      # inputs.version MUST equal the package.json version at inputs.ref — the
+      # caller (release.yml) guarantees this by passing the semantic-release
+      # output and the release commit SHA.
       - name: Build and push
         id: docker_build
         uses: mr-smithers-excellent/docker-build-push@v5
@@ -54,7 +49,7 @@ jobs:
           image: ${{ secrets.DOCKERHUB_USERNAME }}/pdf-tei-editor
           registry: docker.io
           pushImage: true
-          tags: ${{ steps.version.outputs.is_tag == 'true' && format('{0},latest', steps.version.outputs.tag) || 'latest' }}
+          tags: ${{ inputs.version }},latest
           target: production
 
       - name: Image digest

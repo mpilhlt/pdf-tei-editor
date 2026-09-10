@@ -128,11 +128,13 @@ See [Branch Workflow](contributing.md#branch-workflow) for detailed workflow and
 
 ### Creating a Release
 
-1. Ensure all changes on `devel` are tested and ready
-2. Run `node bin/release.js patch` (or `minor`/`major`) on `devel` branch
-3. Script creates version tag and triggers GitHub Actions release
-4. Merge `devel` to `main` to sync stable branch
-5. See [Contributing Guide](contributing.md#release-process) for complete workflow
+1. Ensure `devel` is green and your changes are merged into it with Conventional
+   Commit messages.
+2. Open a PR `devel -> main`; check the `release-preview` comment.
+3. Merge it **as a merge commit** (never squash). `semantic-release` publishes the
+   version, changelog, GitHub Release and Docker image automatically.
+4. Merge the automated `main -> devel` back-merge PR.
+5. See [Contributing Guide](contributing.md#release-process) for details.
 
 ## Key Concepts
 
