@@ -30,28 +30,19 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # First check if HEAD itself has a tag
-          TAG=$(git tag --points-at HEAD | grep '^v' | head -n 1)
-
-          # If not, check if this is a merge commit and find the most recent tag in the merge
-          if [ -z "$TAG" ]; then
-            SECOND_PARENT=$(git rev-parse HEAD^2 2>/dev/null || echo "")
-            if [ -n "$SECOND_PARENT" ]; then
-              TAG=$(git tag --merged HEAD --sort=-version:refname | grep '^v' | head -n 1)
-              if [ -n "$TAG" ]; then
-                echo "Found tag from merged branch: $TAG"
-              fi
-            fi
-          fi
-
-          if [ -n "$TAG" ]; then
-            echo "tag=${TAG#v}" >> $GITHUB_OUTPUT
+          # Derive the version from the committed package.json (and require a
+          # matching v<version> git tag to exist). Robust to squash-merged
+          # release PRs, unlike inspecting HEAD's tags/second parent — see the
+          # matching note in release.yml's "Get tag for current commit".
+          VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -n 1)
+          if [ -n "$VERSION" ] && git rev-parse "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "tag=${VERSION}" >> $GITHUB_OUTPUT
             echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "Docker image tag: ${TAG#v}"
+            echo "Docker image tag: ${VERSION}"
           else
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
-            echo "No version tag found, using 'latest'"
+            echo "No tag v${VERSION} found, using 'latest'"
           fi
 
       - name: Build and push
