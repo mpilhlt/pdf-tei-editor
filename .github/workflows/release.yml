@@ -1,187 +1,137 @@
-name: Create Release
+name: Release
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:  # allow re-running a release for the current main HEAD
+  workflow_dispatch:  # allow re-running semantic-release for current main HEAD
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 permissions:
-  contents: write
+  contents: write        # push release commit + tag, push back-merge branch
+  issues: write          # @semantic-release/github
+  pull-requests: write   # @semantic-release/github comments + back-merge PR
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
-    # Only run if the latest commit has a version tag
-    if: startsWith(github.ref, 'refs/heads/main')
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.get_tag.outputs.tag }}
-      has_tag: ${{ steps.get_tag.outputs.has_tag }}
+      published: ${{ steps.result.outputs.published }}
+      version: ${{ steps.result.outputs.version }}
+      release_sha: ${{ steps.result.outputs.release_sha }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for changelog generation
-          fetch-tags: true  # Fetch tags to detect version tags
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: true  # required so @semantic-release/git can push
 
-      - name: Get tag for current commit
-        id: get_tag
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Configure git identity
         run: |
-          # The release tag is always v<package.json version>. Deriving it from
-          # the committed version — not from `git tag --points-at HEAD` / the
-          # merge's second parent — is what makes this work when the release PR
-          # reaches main as a SQUASH commit (no second parent, tag not in
-          # main's history). The old `git rev-parse HEAD^2 || echo ""` also
-          # returned the literal string "HEAD^2" for a non-merge commit, so the
-          # fallback always ran and picked the PREVIOUS release's tag.
-          VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -n 1)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Determine release result
+        id: result
+        run: |
+          # @semantic-release/git leaves local HEAD on the new release commit and
+          # semantic-release tags it. No new release => no commit, HEAD stays the
+          # merge commit and is untagged.
+          if git describe --exact-match --match "v*" HEAD >/dev/null 2>&1; then
+            VERSION="$(node -p "require('./package.json').version")"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            echo "Released v${VERSION} ($(git rev-parse HEAD))"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "No release produced for this push."
+          fi
+
+  docker:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      ref: ${{ needs.release.outputs.release_sha }}
+    secrets: inherit
+
+  release-notes-footer:
+    needs: [release, docker]
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Append Docker image info to the GitHub Release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
           TAG="v${VERSION}"
-          if [ -n "$VERSION" ] && git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "has_tag=true" >> $GITHUB_OUTPUT
-            echo "Release tag: $TAG"
-          else
-            echo "has_tag=false" >> $GITHUB_OUTPUT
-            echo "No tag ${TAG} found for package.json version '${VERSION}'"
-          fi
-
-      - name: Get previous tag
-        if: steps.get_tag.outputs.has_tag == 'true'
-        id: previoustag
-        run: |
-          CURRENT_TAG="${{ steps.get_tag.outputs.tag }}"
-          # Newest version tag (other than the current one) that is actually an
-          # ancestor of HEAD, so the changelog range is meaningful even when the
-          # current tag isn't in main's history (squash-merged release PR).
-          PREVIOUS_TAG=""
-          for t in $(git tag --sort=-version:refname | grep '^v' | grep -v "^${CURRENT_TAG}$"); do
-            if git merge-base --is-ancestor "$t" HEAD 2>/dev/null; then
-              PREVIOUS_TAG="$t"
-              break
-            fi
-          done
-          echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-          echo "Previous tag: $PREVIOUS_TAG"
-
-      - name: Generate changelog
-        if: steps.get_tag.outputs.has_tag == 'true'
-        id: changelog
-        run: |
-          PREVIOUS_TAG="${{ steps.previoustag.outputs.tag }}"
-          CURRENT_TAG="${{ steps.get_tag.outputs.tag }}"
-
-          if [ -z "$PREVIOUS_TAG" ]; then
-            # First release - get all commits
-            COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges)
-          else
-            # Get commits between tags
-            COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges ${PREVIOUS_TAG}..${CURRENT_TAG})
-          fi
-
-          # Parse commits by conventional commit type, filtering out chore
-          FEATURES=""
-          FIXES=""
-          DOCS=""
-          REFACTOR=""
-          TESTS=""
-          OTHER=""
-
-          while IFS= read -r commit; do
-            # Skip empty lines
-            [ -z "$commit" ] && continue
-
-            # Extract type from conventional commit format
-            if [[ "$commit" =~ ^feat[:\(] ]]; then
-              FEATURES="${FEATURES}- ${commit#feat: }\n"
-            elif [[ "$commit" =~ ^fix[:\(] ]]; then
-              FIXES="${FIXES}- ${commit#fix: }\n"
-            elif [[ "$commit" =~ ^docs[:\(] ]]; then
-              DOCS="${DOCS}- ${commit#docs: }\n"
-            elif [[ "$commit" =~ ^refactor[:\(] ]]; then
-              REFACTOR="${REFACTOR}- ${commit#refactor: }\n"
-            elif [[ "$commit" =~ ^test[:\(] ]]; then
-              TESTS="${TESTS}- ${commit#test: }\n"
-            elif [[ "$commit" =~ ^chore[:\(] ]]; then
-              # Skip chore commits
-              continue
-            else
-              # Include non-conventional commits
-              OTHER="${OTHER}- ${commit}\n"
-            fi
-          done <<< "$COMMITS"
-
-          # Create changelog with Docker Hub link
-          DOCKER_IMAGE_TAG="${CURRENT_TAG#v}"  # Remove 'v' prefix for Docker tag
-
+          gh release view "$TAG" --json body --jq .body > /tmp/notes.md
           {
-            echo "## Changes"
             echo ""
-
-            if [ -n "$FEATURES" ]; then
-              echo "### Features"
-              echo ""
-              echo -e "$FEATURES"
-            fi
-
-            if [ -n "$FIXES" ]; then
-              echo "### Bug Fixes"
-              echo ""
-              echo -e "$FIXES"
-            fi
-
-            if [ -n "$DOCS" ]; then
-              echo "### Documentation"
-              echo ""
-              echo -e "$DOCS"
-            fi
-
-            if [ -n "$REFACTOR" ]; then
-              echo "### Refactoring"
-              echo ""
-              echo -e "$REFACTOR"
-            fi
-
-            if [ -n "$TESTS" ]; then
-              echo "### Tests"
-              echo ""
-              echo -e "$TESTS"
-            fi
-
-            if [ -n "$OTHER" ]; then
-              echo "### Other Changes"
-              echo ""
-              echo -e "$OTHER"
-            fi
-
             echo "## Docker Image"
             echo ""
             echo '```bash'
-            echo "docker pull cboulanger/pdf-tei-editor:${DOCKER_IMAGE_TAG}"
+            echo "docker pull cboulanger/pdf-tei-editor:${VERSION}"
             echo "docker pull cboulanger/pdf-tei-editor:latest"
             echo '```'
             echo ""
-            echo "[View on Docker Hub](https://hub.docker.com/r/cboulanger/pdf-tei-editor/tags?name=${DOCKER_IMAGE_TAG})"
-          } > changelog.md
+            echo "[View on Docker Hub](https://hub.docker.com/r/cboulanger/pdf-tei-editor/tags?name=${VERSION})"
+          } >> /tmp/notes.md
+          gh release edit "$TAG" --notes-file /tmp/notes.md
 
-          echo "Changelog generated"
-          cat changelog.md
-
-      - name: Create GitHub Release
-        if: steps.get_tag.outputs.has_tag == 'true'
-        uses: softprops/action-gh-release@v2
+  back-merge:
+    needs: [release, docker]
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          tag_name: ${{ steps.get_tag.outputs.tag }}
-          body_path: changelog.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: main
 
-  docker-build:
-    if: needs.release.outputs.has_tag == 'true'
-    needs: release
-    uses: ./.github/workflows/docker-image.yml
-    secrets: inherit
+      - name: Open auto-merge back-merge PR into devel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
+          BRANCH="chore/back-merge-v${VERSION}"
+          git fetch origin main devel
+          if git diff --quiet origin/main origin/devel; then
+            echo "devel already contains main; nothing to back-merge."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH" origin/main
+          git push origin "$BRANCH"
+          gh pr create --base devel --head "$BRANCH" \
+            --title "chore: back-merge v${VERSION} into devel" \
+            --body "Automated back-merge of the \`v${VERSION}\` release commit (\`package.json\` + \`CHANGELOG.md\`) from \`main\` into \`devel\`. Merge with a merge commit." \
+          || { echo "PR already exists"; }
+          gh pr merge "$BRANCH" --auto --merge \
+          || echo "Auto-merge not enabled or checks pending; leaving PR open for manual merge."
