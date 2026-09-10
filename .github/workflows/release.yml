@@ -138,6 +138,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
           ref: main
+          persist-credentials: true
 
       - name: Open auto-merge back-merge PR into devel
         env:

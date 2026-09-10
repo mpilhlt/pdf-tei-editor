@@ -27,7 +27,9 @@ One-time setup:
 
 1. **Create the App.** Org Settings -> Developer settings -> GitHub Apps -> New
    GitHub App. Owner: the org. Repository permissions: **Contents: Read and
-   write** and **Pull requests: Read and write**. No webhook (uncheck "Active").
+   write**, **Pull requests: Read and write**, and **Issues: Read and write**
+   (`@semantic-release/github` comments on referenced issues, adds a `released`
+   label, and opens a tracking issue on failure). No webhook (uncheck "Active").
    No account permissions needed.
 2. **Generate a private key** for the App (App settings -> Private keys ->
    Generate a private key) and download the `.pem`.
@@ -50,6 +52,9 @@ PR. Without the App on the bypass list, `@semantic-release/git` fails to push to
   - **Allow auto-merge** - ON (lets the back-merge PR merge itself once checks pass).
   - "Allow squash merging" may stay on for feature -> `devel` PRs, but
     **`devel -> main` PRs must never be squashed**.
+- For the back-merge PR's `--auto` merge to actually complete, `devel` must have
+  the `test` status check marked **required** - otherwise `gh pr merge --auto`
+  has nothing to wait on and the PR is left open for manual merge.
 
 ## 3. Secrets
 
