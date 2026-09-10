@@ -22,7 +22,7 @@ dependencies = [
     "uvicorn[standard]>=0.36.0",
     "waitress>=3.0.2",
     "webdav4[fsspec]>=0.10.0",
-    "xmlschema>=3.4.5",
+    "xmlschema>=4.3.2",
     "pypdf>=6.16.1",
 ]
 
@@ -34,12 +34,12 @@ tei-annotator = { git = "https://github.com/cboulanger/tei-annotator" }
 dev = [
     "cheroot>=10.0.0",
     "lxml-stubs>=0.5.1",
-    "mypy>=1.18.2",
+    "mypy>=2.3.1",
     "pdoc>=15.0.0",
     "pydeps>=3.0.1",
     "pytest>=8.4.0",
     "pytest-tap>=3.3",
-    "send2trash>=1.8.0",
+    "send2trash>=2.1.0",
     "wsgidav>=4.3.0",
 ]
 
