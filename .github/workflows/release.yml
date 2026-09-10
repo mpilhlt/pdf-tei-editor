@@ -158,8 +158,8 @@ jobs:
             --title "chore: back-merge v${VERSION} into devel" \
             --body "Automated back-merge of the \`v${VERSION}\` release commit (\`package.json\` + \`CHANGELOG.md\`) from \`main\` into \`devel\`. Merge with a merge commit." \
           || { echo "PR already exists"; }
-          # Branch is pushed with GITHUB_TOKEN, so no checks run on it. If devel
-          # has required status checks, --auto waits until they pass; needs the
-          # repo "Allow auto-merge" setting. Falls back to leaving the PR open.
+          # PR opened by the release App, so pr-tests.yml runs on it. --auto
+          # merges once required devel checks pass; needs the repo "Allow
+          # auto-merge" setting. Falls back to leaving the PR open.
           gh pr merge "$BRANCH" --auto --merge \
           || echo "Auto-merge not enabled or checks pending; leaving PR open for manual merge."
