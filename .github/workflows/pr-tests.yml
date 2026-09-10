@@ -215,7 +215,6 @@ jobs:
       - name: Run semantic-release dry run
         id: dry
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_REF: ${{ github.head_ref }}
         run: |
           # env-ci detects GitHub Actions from GITHUB_ACTIONS and reports the
@@ -224,10 +223,16 @@ jobs:
           # step), which makes semantic-release skip version computation. Unset the
           # CI markers so env-ci falls back to `git rev-parse --abbrev-ref HEAD` —
           # the PR source branch that the checkout step left checked out — and pass
-          # --branches so that branch counts as releasable. --dry-run publishes
-          # nothing; GITHUB_TOKEN stays set for @semantic-release/github's repo check.
+          # --branches so that branch counts as releasable.
+          #
+          # --plugins restricts the run to the two analysis plugins. The full
+          # .releaserc.json chain would run @semantic-release/git's
+          # `git push --dry-run` permission check, which github-actions[bot]
+          # cannot pass in a PR job (no write access / deploy key) and which a
+          # preview does not need. --dry-run publishes nothing.
           env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_EVENT_PATH -u GITHUB_REF -u CI \
             npx semantic-release --dry-run --no-ci --branches "$HEAD_REF" \
+              --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator \
             2>&1 | tee "$RUNNER_TEMP/semrel.log" || true
           NEXT_VERSION="$(grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' "$RUNNER_TEMP/semrel.log" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n1 || true)"
           {
