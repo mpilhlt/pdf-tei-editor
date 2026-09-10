@@ -146,7 +146,9 @@ jobs:
             --body "Automated back-merge of the \`v${VERSION}\` release commit (\`package.json\` + \`CHANGELOG.md\`) from \`main\` into \`devel\`. Merge with a merge commit." \
           || { echo "PR already exists"; }
           # PR is created with GITHUB_TOKEN, so pr-tests.yml does not run on it.
-          # --auto needs a required check on devel to gate on; without one it
-          # errors and the PR is left open for a manual merge (handled below).
-          gh pr merge "$BRANCH" --auto --merge \
-          || echo "Auto-merge not enabled or checks pending; leaving PR open for manual merge."
+          # Try an immediate merge first (works while devel has no required
+          # checks); fall back to auto-merge if devel later gains a required
+          # check; otherwise leave the PR open for a manual merge.
+          gh pr merge "$BRANCH" --merge \
+          || gh pr merge "$BRANCH" --auto --merge \
+          || echo "Back-merge PR left open for manual merge."
