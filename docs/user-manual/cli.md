@@ -100,13 +100,16 @@ Available fields: `status`, `last_revision`
 
 ## Release Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run release:patch` | Bump patch version (0.7.0 → 0.7.1) |
-| `npm run release:minor` | Bump minor version (0.7.0 → 0.8.0) |
-| `npm run release:major` | Bump major version (0.7.0 → 1.0.0) |
+Releases are automated. Merging a `devel -> main` PR (as a merge commit) triggers
+[`semantic-release`](https://github.com/semantic-release/semantic-release), which
+bumps the version, updates `CHANGELOG.md`, creates the GitHub Release, and builds
+and pushes the Docker image. There is no local release command.
 
-Options: `--dry-run`, `--skip-tests`
+To preview what the next release would be:
+
+```bash
+npx semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"
+```
 
 
 ## Related Documentation

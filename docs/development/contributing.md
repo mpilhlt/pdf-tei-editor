@@ -241,79 +241,44 @@ See [Testing Guide](testing.md) for comprehensive testing documentation.
 
 ## Release Process
 
-### Recommended Workflow
+Releases are fully automated by
+[`semantic-release`](https://github.com/semantic-release/semantic-release).
+There is no manual version bump and no release script.
 
-The recommended approach for creating releases:
+### How to cut a release
 
-1. **Ensure `devel` is ready for release**
-   - All features complete and tested
-   - All tests passing: `npm run test:all`
+1. Ensure `devel` is green and the changes you want to ship are merged into it,
+   each with a Conventional Commit message.
+2. Open a PR from `devel` to `main`.
+   - `pr-tests.yml` runs the full smart test suite.
+   - A `release-preview` comment shows the version that merging will publish
+     (from `semantic-release --dry-run`).
+3. When checks pass, **merge the PR as a merge commit — never squash.**
+   Squashing hides the individual `feat:` / `fix:` commit types and breaks
+   version inference.
+4. `release.yml` then, on `main`:
+   - runs `semantic-release`: updates `CHANGELOG.md`, bumps `package.json`,
+     commits `chore(release): X.Y.Z` to `main`, tags `vX.Y.Z`, creates the
+     GitHub Release;
+   - builds and pushes the Docker image (`X.Y.Z` + `latest`);
+   - opens an auto-merge `main -> devel` back-merge PR.
+5. Merge the back-merge PR so `devel` picks up the release commit.
 
-2. **Run release script on `devel`**
+### What determines the version
 
-   ```bash
-   git checkout devel
-   node bin/release.js patch  # or minor/major
-   ```
+| Commit type on `devel` | Effect |
+| --- | --- |
+| `fix:` | patch (`0.0.X`) |
+| `feat:` | minor (`0.X.0`) |
+| `feat!:` or a `BREAKING CHANGE:` footer | major (`X.0.0`) |
+| `chore:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `ci:`, `build:` | no release on their own |
 
-   - Bumps version on `devel`
-   - Creates tag pointing to `devel` commit
-   - Pushes both branch and tag to GitHub
-   - GitHub Actions triggers and creates release
+A `devel -> main` PR containing only non-releasing commits publishes nothing -
+that is expected.
 
-3. **Merge `devel` to `main`**
+### One-time setup
 
-   ```bash
-   git checkout main
-   git merge devel
-   git push origin main
-   ```
-
-### Why Release from `devel`?
-
-- Development happens on `devel`, so version bump occurs where work is done
-- Tag triggers release workflow immediately
-- Merging to `main` brings the release commit into stable branch
-- Simpler than creating intermediate release branches
-- Keeps `main` clean with only merged, tested code
-
-### Release Script Usage
-
-Releases are automated via [bin/release.js](../../bin/release.js):
-
-```bash
-# Bump patch version (0.8.0 -> 0.8.1)
-node bin/release.js patch # shorthand: npm release:patch
-
-# Bump minor version (0.8.0 -> 0.9.0)
-node bin/release.js minor # shorthand: npm release:minor
-
-# Bump major version (0.8.0 -> 1.0.0)
-node bin/release.js major # shorthand: npm release:major
-
-# Test without pushing
-node bin/release.js patch --dry-run # shorthand: npm release:patch -- --dry-run
-
-# Skip test execution
-node bin/release.js patch --skip-tests
-```
-
-The script:
-
-1. Validates working directory is clean
-2. Runs full test suite (unless `--skip-tests`)
-3. Regenerates API client if needed
-4. Bumps version and creates git tag
-5. Pushes changes and tag to GitHub
-6. Creates PR if on main branch (requires `gh` CLI)
-
-GitHub Actions automatically:
-
-- Generates changelog from conventional commits
-- Creates GitHub release
-- Builds and pushes Docker image
-
-See [bin/release.js:3-15](../../bin/release.js#L3-L15) for complete usage.
+See [semantic-release-setup.md](semantic-release-setup.md).
 
 ## Documentation
 
