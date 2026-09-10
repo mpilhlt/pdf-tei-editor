@@ -6,20 +6,47 @@ Run manually:
 
 @testCovers fastapi_app/plugins/grobid/config/__init__.py
 @testCovers fastapi_app/plugins/grobid/config/annotation_tags_generator.py
+
+`get_annotation_tags()` reads each variant's RelaxNG schema from
+`get_settings().schema_cache_dir` (normally `data/schema/cache/`, populated
+on demand from https://mpilhlt.github.io/grobid-footnote-flavour/schema/).
+That directory is empty in a clean checkout / CI container, which would make
+every variant's chip list empty. So these tests point `schema_cache_dir` at
+a committed snapshot of the three real schemas under `fixtures/schema-cache/`
+(same nested layout `get_schema_cache_info()` derives from the schema URL).
+Refresh those fixture files if the upstream schemas change materially.
 """
 
+import types
 import unittest
 from pathlib import Path
 import sys
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
+
+FIXTURE_SCHEMA_CACHE_DIR = Path(__file__).parent / "fixtures" / "schema-cache"
 
 
 class TestGetAnnotationTags(unittest.TestCase):
 
     def setUp(self):
-        from fastapi_app.plugins.grobid.config import get_annotation_tags
-        self.get_annotation_tags = get_annotation_tags
+        import fastapi_app.plugins.grobid.config as grobid_config
+
+        # Regenerate against the fixtures instead of any stale (possibly empty)
+        # result cached from an earlier call in this process.
+        grobid_config._ANNOTATION_TAGS_CACHE.clear()
+
+        self._settings_patch = mock.patch.object(
+            grobid_config,
+            "get_settings",
+            return_value=types.SimpleNamespace(schema_cache_dir=FIXTURE_SCHEMA_CACHE_DIR),
+        )
+        self._settings_patch.start()
+        self.addCleanup(self._settings_patch.stop)
+        self.addCleanup(grobid_config._ANNOTATION_TAGS_CACHE.clear)
+
+        self.get_annotation_tags = grobid_config.get_annotation_tags
 
     def test_returns_dict_with_three_variants(self):
         tags = self.get_annotation_tags()

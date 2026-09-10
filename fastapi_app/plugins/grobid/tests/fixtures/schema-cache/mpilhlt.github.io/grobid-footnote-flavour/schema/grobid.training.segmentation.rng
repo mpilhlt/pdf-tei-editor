@@ -1,0 +1,803 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- AUTO-GENERATED — do not edit directly.
+     Source:      schema/grobid.training.segmentation.rng
+     Regenerate:  python scripts/build-schema.py -->
+
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://www.tei-c.org/ns/1.0">
+
+  <define name="teiHeader">
+    <element name="teiHeader">
+      <zeroOrMore>
+        <choice>
+          <ref name="encodingDesc"/>
+          <ref name="fileDesc"/>
+          <ref name="revisionDesc"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="fileDesc">
+    <element name="fileDesc">
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <zeroOrMore>
+        <choice>
+          <ref name="editionStmt"/>
+          <ref name="publicationStmt"/>
+          <ref name="sourceDesc"/>
+          <ref name="titleStmt"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="titleStmt">
+    <element name="titleStmt">
+      <zeroOrMore>
+        <choice>
+          <ref name="author"/>
+          <ref name="respStmt"/>
+          <ref name="title"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="respStmt">
+    <element name="respStmt">
+      <zeroOrMore>
+        <choice>
+          <ref name="persName"/>
+          <ref name="resp"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="resp">
+    <element name="resp">
+      <text/>
+    </element>
+  </define>
+
+  <define name="editionStmt">
+    <element name="editionStmt">
+      <zeroOrMore>
+        <ref name="edition"/>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="edition">
+    <element name="edition">
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <choice>
+            <ref name="title"/>
+            <ref name="date"/>
+            <ref name="idno"/>
+          </choice>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="publicationStmt">
+    <element name="publicationStmt">
+      <zeroOrMore>
+        <choice>
+          <ref name="availability"/>
+          <ref name="date"/>
+          <ref name="idno"/>
+          <ref name="ptr"/>
+          <ref name="publisher"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="sourceDesc">
+    <element name="sourceDesc">
+      <zeroOrMore>
+        <choice>
+          <ref name="sourceDescBibl"/>
+          <ref name="biblStruct"/>
+          <ref name="licence"/>
+          <ref name="ptr"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="sourceDescBibl">
+    <element name="bibl">
+      <text/>
+    </element>
+  </define>
+
+  <define name="encodingDesc">
+    <element name="encodingDesc">
+      <zeroOrMore>
+        <ref name="appInfo"/>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="appInfo">
+    <element name="appInfo">
+      <zeroOrMore>
+        <ref name="application"/>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="application">
+    <element name="application">
+      <optional>
+        <attribute name="ident"/>
+      </optional>
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <optional>
+        <attribute name="version"/>
+      </optional>
+      <optional>
+        <attribute name="when"/>
+      </optional>
+      <zeroOrMore>
+        <choice>
+          <ref name="desc"/>
+          <ref name="label"/>
+          <ref name="ref"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="desc">
+    <element name="desc">
+      <text/>
+    </element>
+  </define>
+
+  <define name="revisionDesc">
+    <element name="revisionDesc">
+      <zeroOrMore>
+        <ref name="change"/>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="change">
+    <element name="change">
+      <optional>
+        <attribute name="status"/>
+      </optional>
+      <optional>
+        <attribute name="when"/>
+      </optional>
+      <optional>
+        <attribute name="who"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="note"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="desc"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="note">
+    <element name="note">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+
+  <!-- ============================================================ -->
+  <!-- biblStruct and child elements                                -->
+  <!-- ============================================================ -->
+
+  <define name="biblStruct">
+    <element name="biblStruct">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <optional>
+        <attribute name="status"/>
+      </optional>
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <group>
+        <!-- Zero or more analytic elements (for articles, chapters, etc.) -->
+        <zeroOrMore>
+          <ref name="analytic"/>
+        </zeroOrMore>
+        <!-- One or more monogr elements (for books, journals, etc.) -->
+        <oneOrMore>
+          <ref name="monogr"/>
+          <!-- Each monogr can optionally be followed by series elements -->
+          <zeroOrMore>
+            <ref name="series"/>
+          </zeroOrMore>
+        </oneOrMore>
+        <!-- Trailing elements -->
+        <zeroOrMore>
+          <choice>
+            <ref name="bibl-struct_note"/>
+            <ref name="ptr"/>
+            <ref name="ref"/>
+            <ref name="idno"/>
+          </choice>
+        </zeroOrMore>
+      </group>
+    </element>
+  </define>
+
+  <define name="analytic">
+    <element name="analytic">
+      <zeroOrMore>
+        <choice>
+          <ref name="author"/>
+          <ref name="editor"/>
+          <ref name="title"/>
+          <ref name="meeting"/>
+          <ref name="date"/>
+          <ref name="idno"/>
+          <ref name="ptr"/>
+          <ref name="ref"/>
+          <ref name="availability"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="monogr">
+    <element name="monogr">
+      <zeroOrMore>
+        <choice>
+          <ref name="author"/>
+          <ref name="editor"/>
+          <ref name="title"/>
+          <ref name="imprint"/>
+          <ref name="biblScope"/>
+          <ref name="bibl-struct_edition"/>
+          <ref name="date"/>
+          <ref name="idno"/>
+          <ref name="ptr"/>
+          <ref name="ref"/>
+          <ref name="availability"/>
+          <ref name="bibl-struct_note"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="series">
+    <element name="series">
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <choice>
+            <ref name="title"/>
+            <ref name="editor"/>
+            <ref name="biblScope"/>
+            <ref name="idno"/>
+            <ref name="availability"/>
+          </choice>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <!-- ============================================================ -->
+  <!-- Person and name elements                                     -->
+  <!-- ============================================================ -->
+
+  <define name="author">
+    <element name="author">
+      <a:documentation>Complete sequence of author names</a:documentation>
+      <optional>
+        <attribute name="role"/>
+      </optional>
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <choice>
+            <ref name="persName"/>
+            <ref name="forename"/>
+            <ref name="surname"/>
+            <ref name="middlename"/>
+          </choice>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="editor">
+    <element name="editor">
+      <a:documentation>Sequence of editor names</a:documentation>
+      <optional>
+        <attribute name="role"/>
+      </optional>
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <choice>
+            <ref name="persName"/>
+            <ref name="forename"/>
+            <ref name="surname"/>
+            <ref name="middlename"/>
+          </choice>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="persName">
+    <element name="persName">
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="forename"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="surname"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="middlename"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="forename">
+    <element name="forename">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="surname">
+    <element name="surname">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="middlename">
+    <element name="middlename">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <!-- ============================================================ -->
+  <!-- Title, imprint, and publication elements                     -->
+  <!-- ============================================================ -->
+
+  <define name="title">
+    <element name="title">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <optional>
+        <attribute name="level">
+          <choice>
+            <value datatypeLibrary="">a</value>  <!-- analytic -->
+            <value datatypeLibrary="">m</value>  <!-- monographic -->
+            <value datatypeLibrary="">j</value>  <!-- journal -->
+            <value datatypeLibrary="">s</value>  <!-- series -->
+            <value datatypeLibrary="">u</value>  <!-- unpublished -->
+          </choice>
+        </attribute>
+      </optional>
+      <!-- @key: short resolvable key for a named work, e.g. a statute
+           abbreviation (key="UrhG"), so it can later be linked to an
+           external norm/case database. -->
+      <optional>
+        <attribute name="key"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="imprint">
+    <element name="imprint">
+      <zeroOrMore>
+        <choice>
+          <ref name="publisher"/>
+          <ref name="pubPlace"/>
+          <ref name="date"/>
+          <ref name="biblScope"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="publisher">
+    <element name="publisher">
+      <a:documentation>Publisher name; also used for corporate authors such as web pages</a:documentation>
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="pubPlace">
+    <element name="pubPlace">
+      <a:documentation>Publication place or location of publishing institution</a:documentation>
+      <text/>
+    </element>
+  </define>
+
+  <define name="biblScope">
+    <element name="biblScope">
+      <optional>
+        <attribute name="unit"/>
+      </optional>
+      <optional>
+        <attribute name="from"/>
+      </optional>
+      <optional>
+        <attribute name="to"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="date">
+    <element name="date">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <optional>
+        <attribute name="when"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="idno">
+    <element name="idno">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="bibl-struct_edition">
+    <element name="edition">
+      <text/>
+    </element>
+  </define>
+
+  <define name="availability">
+    <element name="availability">
+      <optional>
+        <attribute name="status"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="licence"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="licence">
+    <element name="licence">
+      <optional>
+        <attribute name="target"/>
+      </optional>
+      <empty/>
+    </element>
+  </define>
+
+  <define name="meeting">
+    <element name="meeting">
+      <optional>
+        <attribute name="id" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <!-- ============================================================ -->
+  <!-- Disambiguated note variant for biblStruct context           -->
+  <!-- bibl-struct_note: <note @type?> used inside biblStruct/monogr -->
+  <!-- ============================================================ -->
+
+  <define name="bibl-struct_note">
+    <element name="note">
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+
+  <define name="lb">
+    <element name="lb">
+      <empty/>
+    </element>
+  </define>
+
+  <define name="ptr">
+    <element name="ptr">
+      <attribute name="target"/>
+      <empty/>
+    </element>
+  </define>
+
+  <define name="ref">
+    <element name="ref">
+      <optional>
+        <attribute name="target"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+  <define name="label">
+    <element name="label">
+      <a:documentation>Reference number or footnote marker (e.g. [1], ¹)</a:documentation>
+      <optional>
+        <attribute name="type"/>
+      </optional>
+      <text/>
+    </element>
+  </define>
+
+
+
+  <start>
+    <ref name="TEI"/>
+  </start>
+
+  <define name="TEI">
+    <element name="TEI">
+      <zeroOrMore>
+        <choice>
+          <ref name="teiHeader"/>
+          <ref name="text"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <!-- ============================================================ -->
+  <!-- training.segmentation main elements                          -->
+  <!-- ============================================================ -->
+
+  <define name="text">
+    <element name="text">
+      <optional>
+        <attribute name="lang" ns="http://www.w3.org/XML/1998/namespace"/>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="titlePage"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="toc"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="div"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="body"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="front"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="listBibl"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="segmentation_note"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="page"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="titlePage">
+    <element name="titlePage">
+      <a:documentation>Cover page</a:documentation>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="page"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="toc">
+    <element name="toc">
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="page"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="div">
+    <element name="div">
+      <optional>
+        <attribute name="type">
+          <choice>
+            <group>
+              <a:documentation>Table of contents</a:documentation>
+              <value datatypeLibrary="">toc</value>
+            </group>
+            <group>
+              <a:documentation>Acknowledgement statement in the annex</a:documentation>
+              <value datatypeLibrary="">acknowledgement</value>
+            </group>
+            <group>
+              <a:documentation>Data/code availability statement</a:documentation>
+              <value datatypeLibrary="">availability</value>
+            </group>
+            <group>
+              <a:documentation>Funding information annex</a:documentation>
+              <value datatypeLibrary="">funding</value>
+            </group>
+            <group>
+              <a:documentation>Any other annex section</a:documentation>
+              <value datatypeLibrary="">annex</value>
+            </group>
+            <group>
+              <a:documentation>Conflict of interest statement</a:documentation>
+              <value datatypeLibrary="">conflict</value>
+            </group>
+            <group>
+              <a:documentation>Author contribution statement</a:documentation>
+              <value datatypeLibrary="">contribution</value>
+            </group>
+          </choice>
+        </attribute>
+      </optional>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="page"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="front">
+    <element name="front">
+      <a:documentation>Document header / front matter</a:documentation>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="page"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="page">
+    <element name="page">
+      <a:documentation>Page number indicator</a:documentation>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="body">
+    <element name="body">
+      <a:documentation>The main body of the document</a:documentation>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <define name="listBibl">
+    <element name="listBibl">
+      <a:documentation>Bibliographical section</a:documentation>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+  <!-- ============================================================ -->
+  <!-- Disambiguated note variant for segmentation text context    -->
+  <!-- segmentation_note: <note @place="headnote"|"footnote">      -->
+  <!-- ============================================================ -->
+
+  <define name="segmentation_note">
+    <element name="note">
+      <attribute name="place">
+        <choice>
+          <group>
+            <a:documentation>Page header / running head</a:documentation>
+            <value datatypeLibrary="">headnote</value>
+          </group>
+          <group>
+            <a:documentation>Page footer or numbered footnote</a:documentation>
+            <value datatypeLibrary="">footnote</value>
+          </group>
+        </choice>
+      </attribute>
+      <interleave>
+        <text/>
+        <zeroOrMore>
+          <ref name="lb"/>
+        </zeroOrMore>
+      </interleave>
+    </element>
+  </define>
+
+</grammar>
