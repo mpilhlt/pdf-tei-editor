@@ -592,7 +592,7 @@ export class PDFJSViewer {
 
     const pageModels = await this._getPageModels();
     const { match, candidates } = findBestMatch(pageModels, queryText, { threshold });
-    console.log("PDF text match candidates:", candidates);
+    // console.log("PDF text match candidates:", candidates);
 
     if (!match) {
       this._highlightMatch = null;
