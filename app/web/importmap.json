@@ -12,7 +12,7 @@
     "@codemirror/lint": "../../node_modules/@codemirror/lint/dist/index.js",
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
     "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
-    "markdown-it": "../../node_modules/markdown-it/index.mjs"
+    "markdown-it": "../../node_modules/markdown-it/dist/markdown-it.mjs"
   },
   "scopes": {
     "../../node_modules/@shoelace-style/shoelace/": {
@@ -77,16 +77,16 @@
     },
     "../../node_modules/markdown-it/": {
       "punycode.js": "../../node_modules/punycode.js/punycode.es6.js",
-      "linkify-it": "../../node_modules/linkify-it/index.mjs",
-      "entities": "../../node_modules/markdown-it/node_modules/entities/lib/esm/index.js",
-      "uc.micro": "../../node_modules/uc.micro/index.mjs",
+      "linkify-it": "../../node_modules/linkify-it/build/index.mjs",
+      "entities": "../../node_modules/entities/dist/index.js",
+      "uc.micro": "../../node_modules/uc.micro/build/index.mjs",
       "mdurl": "../../node_modules/mdurl/index.mjs"
     },
     "../../node_modules/@lezer/xml/": {
       "@lezer/lr": "../../node_modules/@lezer/lr/dist/index.js"
     },
     "../../node_modules/linkify-it/": {
-      "uc.micro": "../../node_modules/uc.micro/index.mjs"
+      "uc.micro": "../../node_modules/uc.micro/build/index.mjs"
     },
     "../../node_modules/@lezer/lr/": {
       "@lezer/common": "../../node_modules/@lezer/common/dist/index.js"

@@ -17,6 +17,7 @@ import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { createAnnotationField, annotationTheme, navigateEffect, createNavigationField } from '../modules/codemirror/xml-annotation-decorations.js'
 import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop } from '../modules/codemirror/codemirror-utils.js'
+import { relocatePartialAnnotationTags } from '../modules/codemirror/xml-annotation-ops.js'
 import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
 
@@ -89,6 +90,7 @@ class XmlAnnotationPlugin extends Plugin {
       this.#popup = new XmlAnnotationPopup(this.#xmlEditor)
       this.#popup.mount(editorContainer, this.#tagDefs)
       this.#popup.setWrapCallback((def, attrs) => this.#wrapSelectionWith(def, attrs))
+      this.#popup.setReadOnly(!!initialState.editorReadOnly)
     }
 
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
@@ -234,19 +236,50 @@ class XmlAnnotationPlugin extends Plugin {
   }
 
   /**
+   * Builds the attribute string for an annotation open tag (leading space
+   * included), or `''` for a bare-tag pick.
+   * @param {Record<string,string>} attrs
+   * @returns {string}
+   */
+  #attrString(attrs) {
+    return Object.keys(attrs).length
+      ? ' ' + Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')
+      : ''
+  }
+
+  /**
    * Wraps the current CM selection in the given annotation tag (with the
    * given attribute-value pairs — `{}` for a bare-tag pick) and re-syncs.
-   * If the selection falls inside an existing annotation element whose tag does not
-   * list `def.tag` in `childTags`, the parent element is split around the selection
-   * instead of nesting the new tag inside it.
+   * If the selection only partially covers an existing annotation element (e.g.
+   * it starts inside `<author>` but extends past `</author>`), the dangling
+   * open/close tags are moved out of the selection first so the wrap cannot
+   * produce overlapping XML (issue #443).
+   * Otherwise, if the selection falls inside an existing annotation element whose
+   * tag does not list `def.tag` in `childTags`, the parent element is split
+   * around the selection instead of nesting the new tag inside it.
    * @param {AnnotationTagDef} def
    * @param {Record<string,string>} attrs
    */
   async #wrapSelectionWith(def, attrs) {
+    if (this.state.editorReadOnly) return
     const view = this.#xmlEditor.getView?.()
     if (!view) return
     const { from, to } = view.state.selection.main
     if (from === to) return
+
+    const tagNames = this.#tagDefs.map(d => d.tag)
+    const partial = relocatePartialAnnotationTags(view.state, from, to, tagNames)
+    if (partial) {
+      const attrStr = this.#attrString(attrs)
+      const replacement = `${partial.prepend}<${def.tag}${attrStr}>${partial.cleanedText}</${def.tag}>${partial.append}`
+      view.dispatch({ changes: { from, to, insert: replacement }, userEvent: 'input.annotate' })
+      try {
+        await this.#xmlEditor.sync?.()
+      } catch (e) {
+        this.#logger.debug('[xml-annotation] partial-tag wrap sync failed: ' + String(e))
+      }
+      return
+    }
 
     const enclosing = this.#findEnclosingAnnotation(view.state, from, to)
     if (enclosing) {
@@ -259,9 +292,7 @@ class XmlAnnotationPlugin extends Plugin {
     }
 
     const selectedText = view.state.doc.sliceString(from, to)
-    const attrStr = Object.keys(attrs).length
-      ? ' ' + Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')
-      : ''
+    const attrStr = this.#attrString(attrs)
     const wrapped = `<${def.tag}${attrStr}>${selectedText}</${def.tag}>`
     view.dispatch({ changes: { from, to, insert: wrapped }, userEvent: 'input.annotate' })
     try {
@@ -333,9 +364,7 @@ class XmlAnnotationPlugin extends Plugin {
     const beforeText = state.doc.sliceString(contentFrom, from)
     const selectedText = state.doc.sliceString(from, to)
     const afterText = state.doc.sliceString(to, contentTo)
-    const attrStr = Object.keys(attrs).length
-      ? ' ' + Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')
-      : ''
+    const attrStr = this.#attrString(attrs)
     let replacement = ''
     if (beforeText.length > 0) replacement += `${openTagText}${beforeText}</${tagName}>`
     replacement += `<${def.tag}${attrStr}>${selectedText}</${def.tag}>`
@@ -380,6 +409,9 @@ class XmlAnnotationPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('editorReadOnly')) {
+      this.#popup?.setReadOnly(!!state.editorReadOnly)
+    }
     if (changedKeys.includes('variant')) {
       await this.#updateTagDefs(state)
     }

@@ -291,9 +291,10 @@ describe('XmlAnnotationPopup - popup title for a tag with variants', () => {
  * @param {string} tag
  * @param {Element} domElement - returned by the mock editor's getDomNodeAt
  * @param {AnnotationTagDef[]} [tagDefs]
- * @returns {{ overlay: HTMLElement|null, calls: Node[] }}
+ * @param {boolean} [readOnly] - if true, calls setReadOnly(true) before opening the popup
+ * @returns {{ overlay: HTMLElement, calls: Node[] }}
  */
-function triggerPopupTracked(container, tag, domElement, tagDefs = tagDefsWithVariants) {
+function triggerPopupTracked(container, tag, domElement, tagDefs = tagDefsWithVariants, readOnly = false) {
   const calls = /** @type {Node[]} */ ([]);
   const mockEditor = {
     getDomNodeAt: () => domElement,
@@ -301,11 +302,14 @@ function triggerPopupTracked(container, tag, domElement, tagDefs = tagDefsWithVa
   };
   const popup = new XmlAnnotationPopup(mockEditor);
   popup.mount(container, tagDefs);
+  if (readOnly) popup.setReadOnly(true);
   container.dispatchEvent(new dom.window.CustomEvent('ann-badge-click', {
     bubbles: true,
     detail: { tag, from: 0, clientX: 10, clientY: 10 }
   }));
-  return { overlay: container.querySelector('.ann-popup'), calls };
+  const overlay = container.querySelector('.ann-popup');
+  if (!overlay) throw new Error('popup overlay did not render');
+  return { overlay, calls };
 }
 
 /**
@@ -849,6 +853,137 @@ describe('XmlAnnotationPopup - "Change to" variant label format', () => {
       const overlay = triggerPopup(container, 'title', title, mixedKeyDefs);
       findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[level=a]');
       findMenuItem(/** @type {HTMLElement} */ (overlay), 'title[level=m,type=legislation]');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
+
+// ── XmlAnnotationPopup - read-only mode (issue #420) ────────────────────────
+
+describe('XmlAnnotationPopup - read-only mode', () => {
+  it('disables the merge/remove action buttons and does not mutate on click', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const prev = document.createElement('bibl');
+      const bibl = document.createElement('bibl');
+      parent.append(prev, bibl);
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, tagDefsWithVariants, true);
+
+      const removeBtn = [...overlay.querySelectorAll('sl-button')].find((b) => b.textContent.includes('Remove'));
+      assert.ok(removeBtn, 'remove button must still render');
+      assert.strictEqual(/** @type {any} */ (removeBtn).disabled, true, 'remove button must be disabled');
+
+      removeBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      assert.strictEqual(parent.children.length, 2, 'element must not be removed while read-only');
+      assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called while read-only');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('disables attribute edit controls and does not mutate on change', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'type', values: ['footnote', 'decision'] }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('type', 'footnote');
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs, true);
+
+      const select = overlay.querySelector('sl-select');
+      assert.ok(select, 'an sl-select must still render');
+      assert.strictEqual(/** @type {any} */ (select).hasAttribute('disabled'), true, 'select must be disabled');
+
+      /** @type {any} */ (select).value = 'decision';
+      select.dispatchEvent(new dom.window.CustomEvent('sl-change', { bubbles: true }));
+
+      assert.strictEqual(bibl.getAttribute('type'), 'footnote', 'attribute must not change while read-only');
+      assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called while read-only');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not render the attribute delete button', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const defWithAttrs = [
+        {
+          tag: 'bibl',
+          label: 'bibl',
+          color: '#aaa',
+          attributes: [{ name: 'corresp', values: null, required: false }],
+          variants: [],
+          bareAllowed: true,
+          childTags: [],
+        },
+      ];
+      const bibl = document.createElement('bibl');
+      bibl.setAttribute('corresp', '#ref1');
+      const { overlay } = triggerPopupTracked(container, 'bibl', bibl, defWithAttrs, true);
+
+      const input = overlay.querySelector('sl-input');
+      const row = /** @type {HTMLElement} */ (input).parentElement;
+      const clearBtn = [...(row?.children ?? [])].find((el) => el.textContent === '✕');
+      assert.strictEqual(clearBtn, undefined, 'delete button must not render while read-only');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not retag when a "Change to" dropdown variant is clicked', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const bibl = document.createElement('bibl');
+      parent.appendChild(bibl);
+      const { overlay, calls } = triggerPopupTracked(container, 'bibl', bibl, tagDefsWithVariants, true);
+
+      // No click listener attached while read-only, so dispatching a click must be a no-op.
+      const item = [...overlay.querySelectorAll('sl-menu-item')].find((i) => i.textContent === 'bibl[type=footnote]');
+      assert.ok(item, 'variant item must still render (view-only)');
+      item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(bibl.hasAttribute('type'), false, 'element must not be retagged while read-only');
+      assert.strictEqual(calls.length, 0, 'updateEditorFromNode must not be called while read-only');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not wrap the selection via the "Annotate as…" palette', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      let wrapCalls = 0;
+      const mockEditor = { getDomNodeAt: () => null, updateEditorFromNode: async () => {} };
+      const popup = new XmlAnnotationPopup(mockEditor);
+      popup.mount(container, tagDefsWithVariants);
+      popup.setWrapCallback(() => { wrapCalls += 1; });
+      popup.setReadOnly(true);
+      popup.showForSelection({ clientX: 10, clientY: 10 }, 0, 3);
+
+      const overlay = /** @type {HTMLElement} */ (container.querySelector('.ann-popup'));
+      const chip = [...overlay.querySelectorAll('span')].find((s) => s.textContent === 'bibl');
+      assert.ok(chip, 'chip must still render in the selection palette');
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+      assert.strictEqual(wrapCalls, 0, 'wrap callback must not fire while read-only');
     } finally {
       document.body.removeChild(container);
     }
