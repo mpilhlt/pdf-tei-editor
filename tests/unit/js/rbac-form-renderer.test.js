@@ -12,6 +12,7 @@ import { JSDOM } from 'jsdom'
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>')
 global.document = dom.window.document
 global.window = dom.window
+global.Window = dom.window.Window
 
 // Shoelace components are custom elements — in jsdom they are plain HTMLElements.
 // Stub customElements.define so module-level define calls don't throw.

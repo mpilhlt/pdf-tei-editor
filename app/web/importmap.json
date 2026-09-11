@@ -61,7 +61,8 @@
     },
     "../../node_modules/@codemirror/view/": {
       "w3c-keyname": "../../node_modules/w3c-keyname/index.js",
-      "style-mod": "../../node_modules/style-mod/src/style-mod.js"
+      "style-mod": "../../node_modules/style-mod/src/style-mod.js",
+      "crelt": "../../node_modules/crelt/index.js"
     },
     "../../node_modules/@floating-ui/dom/": {
       "@floating-ui/utils/dom": "../../node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs",
