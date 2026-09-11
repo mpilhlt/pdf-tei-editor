@@ -176,6 +176,15 @@ export class XmlAnnotationPopup {
   #scrollTracker = null;
 
   /**
+   * Whether the underlying document is read-only. While true, every mutating action
+   * (wrap, merge, remove, retag, attribute edit) is disabled — both visually (controls
+   * rendered with `disabled`) and at the handler level, as a defense-in-depth guard
+   * against a stale/disabled-in-appearance-only control (issue #420).
+   * @type {boolean}
+   */
+  #readOnly = false;
+
+  /**
    * Mount the popup overlay into the editor container.
    * Call once from the annotation plugin's install().
    * @param {HTMLElement} parent
@@ -231,6 +240,17 @@ export class XmlAnnotationPopup {
    */
   setWrapCallback(fn) {
     this.#wrapCallback = fn;
+  }
+
+  /**
+   * Enables or disables all mutating actions in the popup (wrap, merge, remove, retag,
+   * attribute edits). Called by the annotation plugin whenever `state.editorReadOnly`
+   * changes, so a document that becomes read-only cannot keep being modified via
+   * annotation-mode UI (issue #420).
+   * @param {boolean} readOnly
+   */
+  setReadOnly(readOnly) {
+    this.#readOnly = readOnly;
   }
 
   /**
@@ -403,7 +423,9 @@ export class XmlAnnotationPopup {
     mergePrevBtn.setAttribute('size', 'small');
     mergePrevBtn.setAttribute('variant', 'text');
     mergePrevBtn.textContent = '« Merge prev';
+    mergePrevBtn.disabled = this.#readOnly;
     mergePrevBtn.addEventListener('click', async () => {
+      if (this.#readOnly) return;
       const live = this.#resolveElement(from);
       if (!live || !live.parentNode) return;
       const parent = mergeWithPrev(live);
@@ -417,7 +439,9 @@ export class XmlAnnotationPopup {
     mergeNextBtn.setAttribute('size', 'small');
     mergeNextBtn.setAttribute('variant', 'text');
     mergeNextBtn.textContent = 'Merge next »';
+    mergeNextBtn.disabled = this.#readOnly;
     mergeNextBtn.addEventListener('click', async () => {
+      if (this.#readOnly) return;
       const live = this.#resolveElement(from);
       if (!live || !live.parentNode) return;
       const parent = mergeWithNext(live);
@@ -431,7 +455,9 @@ export class XmlAnnotationPopup {
     removeBtn.setAttribute('size', 'small');
     removeBtn.setAttribute('variant', 'text');
     removeBtn.textContent = '✕ Remove';
+    removeBtn.disabled = this.#readOnly;
     removeBtn.addEventListener('click', async () => {
+      if (this.#readOnly) return;
       const live = this.#resolveElement(from);
       if (!live) return;
       const parent = live.parentNode;
@@ -484,6 +510,7 @@ export class XmlAnnotationPopup {
         sel.setAttribute('size', 'small');
         sel.setAttribute('value', currentVal);
         sel.style.minWidth = '80px';
+        sel.toggleAttribute('disabled', this.#readOnly);
         for (const v of attr.values) {
           const opt = document.createElement('sl-option');
           opt.setAttribute('value', v);
@@ -491,6 +518,7 @@ export class XmlAnnotationPopup {
           sel.appendChild(opt);
         }
         sel.addEventListener('sl-change', async () => {
+          if (this.#readOnly) return;
           const live = this.#resolveElement(from);
           if (!live) return;
           live.setAttribute(attr.name, /** @type {any} */ (sel).value);
@@ -503,7 +531,9 @@ export class XmlAnnotationPopup {
         input.setAttribute('size', 'small');
         input.setAttribute('value', currentVal);
         input.style.minWidth = '80px';
+        input.toggleAttribute('disabled', this.#readOnly);
         input.addEventListener('sl-change', async () => {
+          if (this.#readOnly) return;
           const live = this.#resolveElement(from);
           if (!live) return;
           const newVal = /** @type {any} */ (input).value;
@@ -515,12 +545,13 @@ export class XmlAnnotationPopup {
         control = input;
       }
 
-      if (removable) {
+      if (removable && !this.#readOnly) {
         const clearBtn = document.createElement('span');
         clearBtn.textContent = '✕';
         clearBtn.title = `Remove ${attr.name}`;
         clearBtn.style.cssText = 'cursor:pointer; color:#f38ba8; font-size:11px;';
         clearBtn.addEventListener('click', async () => {
+          if (this.#readOnly) return;
           const live = this.#resolveElement(from);
           if (!live) return;
           live.removeAttribute(attr.name);
@@ -596,8 +627,8 @@ export class XmlAnnotationPopup {
         textTransform: 'uppercase',
         letterSpacing: '0.04em',
         padding: '2px 6px 3px',
-        cursor: isElementBare ? 'default' : 'pointer',
-        opacity: isElementBare ? '0.4' : '1',
+        cursor: this.#readOnly ? 'not-allowed' : (isElementBare ? 'default' : 'pointer'),
+        opacity: isElementBare || this.#readOnly ? '0.4' : '1',
         userSelect: 'none',
       };
 
@@ -607,7 +638,7 @@ export class XmlAnnotationPopup {
       Object.assign(chip.style, chipStyle);
       wrapper.appendChild(chip);
 
-      if (!isElementBare && bareAllowed) {
+      if (!isElementBare && bareAllowed && !this.#readOnly) {
         chip.addEventListener('click', () => onPick(def, {}));
       }
 
@@ -616,7 +647,7 @@ export class XmlAnnotationPopup {
         const caret = document.createElement('span');
         caret.textContent = '▾';
         caret.slot = 'trigger';
-        Object.assign(caret.style, { ...chipStyle, borderLeft: '1px solid rgba(0,0,0,.25)', padding: '2px 4px 3px', cursor: 'pointer', opacity: '1' });
+        Object.assign(caret.style, { ...chipStyle, borderLeft: '1px solid rgba(0,0,0,.25)', padding: '2px 4px 3px', cursor: this.#readOnly ? 'not-allowed' : 'pointer', opacity: this.#readOnly ? '0.4' : '1' });
         dropdown.appendChild(caret);
 
         const menu = document.createElement('sl-menu');
@@ -629,7 +660,7 @@ export class XmlAnnotationPopup {
           const suffix = Object.entries(variant.attrs).map(([name, value]) => `${name}=${value}`).join(',');
           item.textContent = `${def.tag}[${suffix}]`;
           item.title = variant.description || def.description || def.label;
-          if (!isActiveVariant) {
+          if (!isActiveVariant && !this.#readOnly) {
             item.addEventListener('click', () => onPick(def, variant.attrs));
           } else {
             item.disabled = true;
@@ -638,7 +669,7 @@ export class XmlAnnotationPopup {
         }
         dropdown.appendChild(menu);
 
-        if (!bareAllowed) {
+        if (!bareAllowed && !this.#readOnly) {
           // No bare-tag action: clicking the chip body also opens the dropdown.
           chip.addEventListener('click', () => { dropdown.open = true; });
         }
@@ -666,6 +697,7 @@ export class XmlAnnotationPopup {
    * @param {Record<string,string>} attrs
    */
   async #retag(element, currentDef, newDef, attrs) {
+    if (this.#readOnly) return;
     const tagChanged = element.localName !== newDef.tag;
     const currentVariantAttrNames = new Set((currentDef.variants ?? []).flatMap(v => Object.keys(v.attrs)));
     const attrsChanged = [...currentVariantAttrNames].some(name => element.getAttribute(name) !== (attrs[name] ?? null))

@@ -38,6 +38,21 @@ export class NoValidXmlError extends Error {
 }
 
 /**
+ * Thrown by {@link FiledataPlugin#saveXml} when `state.editorReadOnly` is true and the
+ * caller did not request a new version. This is the last line of defense against saving
+ * a read-only document (see issue #420): the editor itself and all mutating UI (e.g. the
+ * visual annotation mode) must already refuse to modify the document while read-only, but
+ * this check guards against any path that slips through.
+ */
+export class ReadOnlyDocumentError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = 'ReadOnlyDocumentError';
+  }
+}
+
+/**
  * File data management plugin
  */
 class FiledataPlugin extends Plugin {
@@ -298,14 +313,23 @@ class FiledataPlugin extends Plugin {
    * (e.g. XmlEditorPlugin.#saveIfDirty) should pre-check `xmlEditor.getXmlTree()` and keep
    * the user's content in a local draft instead of attempting the save.
    *
+   * If `state.editorReadOnly` is true and `saveAsNewVersion` is not set, this method throws
+   * a {@link ReadOnlyDocumentError} instead of overwriting the document (issue #420). Saving
+   * as a new version is still allowed while read-only, since it creates a separate file
+   * rather than modifying the read-only one.
+   *
    * @param {string} fileHash The hash identifying the XML file on the server
    * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
    * @returns {Promise<{file_id:string, status:string}>} An object with file_id (stable file identifier) and status
+   * @throws {ReadOnlyDocumentError} when the document is read-only and a new version was not requested
    * @throws {NoValidXmlError} when the editor has no parseable XML tree
    * @throws {Error} on transport/server failures
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
     this.#logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+    if (this.state?.editorReadOnly && !saveAsNewVersion) {
+      throw new ReadOnlyDocumentError('Cannot save: the document is read-only.');
+    }
     if (!this.#xmlEditor.getXmlTree()) {
       throw new NoValidXmlError(
         'Cannot save: the XML in the editor is not well-formed. Fix XML errors and try again.'

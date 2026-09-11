@@ -90,6 +90,7 @@ class XmlAnnotationPlugin extends Plugin {
       this.#popup = new XmlAnnotationPopup(this.#xmlEditor)
       this.#popup.mount(editorContainer, this.#tagDefs)
       this.#popup.setWrapCallback((def, attrs) => this.#wrapSelectionWith(def, attrs))
+      this.#popup.setReadOnly(!!initialState.editorReadOnly)
     }
 
     // Rebuild decorations and scroll when a new document is loaded in annotation mode
@@ -260,6 +261,7 @@ class XmlAnnotationPlugin extends Plugin {
    * @param {Record<string,string>} attrs
    */
   async #wrapSelectionWith(def, attrs) {
+    if (this.state.editorReadOnly) return
     const view = this.#xmlEditor.getView?.()
     if (!view) return
     const { from, to } = view.state.selection.main
@@ -407,6 +409,9 @@ class XmlAnnotationPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('editorReadOnly')) {
+      this.#popup?.setReadOnly(!!state.editorReadOnly)
+    }
     if (changedKeys.includes('variant')) {
       await this.#updateTagDefs(state)
     }
