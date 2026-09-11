@@ -135,10 +135,10 @@ class ToolBar extends BasePanel {
     setTimeout(() => {
       // Debug: log the dimensions before overflow check
       const containerRect = this.getBoundingClientRect();
-      console.log('Smart overflow check:', {
-        containerWidth: containerRect.width,
-        widgets: this.getAllWidgetsWithPriority().length
-      });
+      //console.log('Smart overflow check:', {
+      //  containerWidth: containerRect.width,
+      //  widgets: this.getAllWidgetsWithPriority().length
+      //});
       this.checkAndResolveOverflow();
     }, 300);
   }
@@ -150,7 +150,7 @@ class ToolBar extends BasePanel {
     setTimeout(() => {
       // Trigger initialization with default value using the proper flow
       const smartOverflowMode = this.getAttribute('smart-overflow') || 'off';
-      console.log('ToolBar initializing with smart-overflow:', smartOverflowMode);
+      //console.log('ToolBar initializing with smart-overflow:', smartOverflowMode);
       this.handleSmartOverflowChange(smartOverflowMode);
     }, 100);
   }
