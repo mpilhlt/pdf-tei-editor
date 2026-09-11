@@ -13,6 +13,7 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.document = dom.window.document;
 global.window = dom.window;
+global.Window = dom.window.Window;
 
 const { mergeWithPrev, mergeWithNext, computeOverlayPosition, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
 

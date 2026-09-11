@@ -11,6 +11,7 @@ import { JSDOM } from 'jsdom'
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>')
 global.document = dom.window.document
 global.window = dom.window
+global.Window = dom.window.Window
 global.customElements = { define: () => {} }
 
 // Register a minimal filtered-combobox stub in jsdom so document.createElement('filtered-combobox')
