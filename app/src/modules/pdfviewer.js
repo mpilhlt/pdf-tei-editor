@@ -285,7 +285,7 @@ export class PDFJSViewer {
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
         // Load the PDF document
-        const loadingTask = this.pdfjsLib.getDocument(pdfPath);
+        const loadingTask = this.pdfjsLib.getDocument({ url: pdfPath });
         this.pdfDoc = await loadingTask.promise;
 
         console.log(`PDF loaded successfully. Pages: ${this.pdfDoc.numPages}`);
