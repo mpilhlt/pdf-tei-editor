@@ -3,6 +3,7 @@
 
 /**
  * @typedef {object} userMenuItemsPart
+ * @property {import('../ui.js').SlMenuItem} userFullnameMenuItem
  * @property {import('../ui.js').SlMenuItem} profileMenuItem
  * @property {import('../ui.js').SlMenuItem} logoutMenuItem
  */
