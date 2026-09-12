@@ -2,6 +2,22 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.59.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.58.0...v0.59.0) (2026-09-12)
+
+
+### Bug Fixes
+
+* apply gold-standard marking when saving a new copy ([907b74c](https://github.com/mpilhlt/pdf-tei-editor/commit/907b74ce58b0330d10a91a4c371ca5d3df99c372)), closes [#462](https://github.com/mpilhlt/pdf-tei-editor/issues/462)
+* recognize wildcard admin role in update-metadata plugin auth ([b801681](https://github.com/mpilhlt/pdf-tei-editor/commit/b801681648041a7101fbed72377d553c9f952ad8))
+* **tests:** patch get_grobid_server_url at its import site in routes.py ([bc39aa9](https://github.com/mpilhlt/pdf-tei-editor/commit/bc39aa92ae3ce2556abb3c6cef2c077e556d8502))
+
+
+### Features
+
+* add prefix icons to backend plugin menu items ([ea87872](https://github.com/mpilhlt/pdf-tei-editor/commit/ea878724b1347f7dbb6b7c9ba15f59238e5950a7))
+* **grobid:** add reviewer confirmation flow to reload GROBID feature file ([599d93b](https://github.com/mpilhlt/pdf-tei-editor/commit/599d93b217274b4e7b60b09d96a0a3ff54e601e3))
+* ignore leading/trailing whitespace-only line diffs in merge view ([d5af677](https://github.com/mpilhlt/pdf-tei-editor/commit/d5af6775396f43c46f664a2234c762490ffd9591)), closes [#461](https://github.com/mpilhlt/pdf-tei-editor/issues/461)
+
 # [0.58.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.57.4...v0.58.0) (2026-09-12)
 
 
