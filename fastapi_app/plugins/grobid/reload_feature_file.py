@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi_app.lib.models.models import FileMetadata, FileUpdate
+from fastapi_app.lib.permissions.access_control import check_file_access
 from fastapi_app.lib.plugins.plugin_tools import (
     escape_html,
     wrap_html_with_sandbox_client,
@@ -59,18 +60,26 @@ class ReloadResult:
 
 
 def resolve_reload_target(
-    file_repo: FileRepository, file_storage: FileStorage, stable_id: str
+    file_repo: FileRepository,
+    file_storage: FileStorage,
+    stable_id: str,
+    user: dict | None,
 ) -> ReloadTarget:
     """
     Resolve and validate the document a feature-file reload would target.
 
     Read-only: does not contact GROBID or write anything. Raises
     ReloadPreconditionError with a user-facing message if the document
-    cannot be resolved.
+    cannot be resolved, including when *user* lacks edit access to it -
+    the reviewer role alone does not imply edit access to every document
+    (e.g. in owner-based or granular access-control mode).
     """
     file_meta = file_repo.get_file_by_stable_id(stable_id)
     if not file_meta or file_meta.file_type != "tei":
         raise ReloadPreconditionError("No TEI document open.")
+
+    if not check_file_access(file_meta, user, "edit"):
+        raise ReloadPreconditionError("You don't have permission to edit this document.")
 
     content_bytes = file_storage.read_file(file_meta.id, "tei")
     if not content_bytes:

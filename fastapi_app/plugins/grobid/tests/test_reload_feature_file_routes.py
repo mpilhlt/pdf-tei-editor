@@ -139,6 +139,52 @@ class ReloadFeatureFileRoutesTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    # --- document-level write access (reviewer role alone is not enough,
+    #     e.g. in owner-based or granular access-control mode) ---
+
+    def test_preview_blocks_reviewer_without_document_write_access(self):
+        self._set_up_valid_target(revision="rev-1")
+
+        # Denied access must short-circuit before any GROBID network call;
+        # these are mocked to a hard failure so the test would fail loudly
+        # (rather than silently hitting a real server) if that ever regresses.
+        with mock.patch(
+            "fastapi_app.plugins.grobid.reload_feature_file.check_file_access",
+            return_value=False,
+        ) as mock_check, mock.patch(
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
+            side_effect=AssertionError("must not contact GROBID when access is denied"),
+        ):
+            response = self.client.get(
+                "/api/plugins/grobid/reload-feature-file/preview?xml=tei-1&session_id=abc"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("permission", response.text)
+        mock_check.assert_called_once()
+        self.assertEqual(mock_check.call_args[0][2], "edit")
+
+    def test_execute_blocks_reviewer_without_document_write_access(self):
+        self._set_up_valid_target(revision="rev-1")
+
+        with mock.patch(
+            "fastapi_app.plugins.grobid.reload_feature_file.check_file_access",
+            return_value=False,
+        ), mock.patch(
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
+            side_effect=AssertionError("must not contact GROBID when access is denied"),
+        ), mock.patch(
+            "fastapi_app.plugins.grobid.reload_feature_file.perform_reload",
+            new=mock.AsyncMock(),
+        ) as mock_perform:
+            response = self.client.get(
+                "/api/plugins/grobid/reload-feature-file/execute?xml=tei-1&session_id=abc"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("permission", response.text)
+        mock_perform.assert_not_awaited()
+
     # --- preview ---
 
     def test_preview_shows_precondition_error_when_no_document(self):

@@ -125,6 +125,8 @@ The underlying operation re-fetches the training package from GROBID for the cur
 
 All shared logic (precondition checks, the GROBID fetch/cache/patch, and HTML rendering) lives in `reload_feature_file.py`, used by both the routes and (for preconditions) indirectly by the trigger endpoint.
 
+**Authorization:** the reviewer role alone does not imply edit access to any specific document - access control in this app is per-document/collection (owner-based and granular modes restrict editing to the file's owner even for reviewers; see [Access Control Pattern for Documents/Files](../../CLAUDE.md)). `resolve_reload_target()` therefore also calls `check_file_access(file_meta, user, "edit")` (`fastapi_app/lib/permissions/access_control.py`) before doing anything else, so both the preview and execute routes are blocked for a document the current user cannot edit, not just for non-reviewers. There is no equivalent frontend-side check: the backend-plugin menu is built once from the role-only plugin list (`GET /api/v1/plugins`), before any document is open, so it cannot know per-document permissions - the routes are the actual enforcement point.
+
 The execute-result page includes the sandbox client script (`generate_sandbox_client_script()`) and calls `sandbox.notify(...)` and the new `PluginSandbox.reloadCurrentDocument()` method (`app/src/modules/backend-plugin-sandbox.js`) so the open document is reloaded from the server as soon as execution finishes, picking up the refreshed feature file without a manual reopen.
 
 ---
