@@ -30,6 +30,7 @@ class LogViewerPlugin(Plugin):
                     "name": "show_logs",
                     "label": "Show Logs",
                     "description": "Open real-time log viewer",
+                    "icon": "journal-text",
                     "state_params": [],
                 },
             ],

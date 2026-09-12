@@ -469,7 +469,11 @@ class DocumentActionsPlugin extends Plugin {
 
         testLog('NEW_VERSION_LOADED', { fileId: newFileId, editorReadOnly: this.state.editorReadOnly })
 
-        notify("Document was duplicated. You are now editing the copy.")
+        if (saveAsGold) {
+          await this.applyGoldStandardIfRequested(newFileId, "Document was duplicated and marked as Gold version.")
+        } else {
+          notify("Document was duplicated. You are now editing the copy.")
+        }
       } else {
         await this.addTeiHeaderInfo(respStmt, undefined, revisionChange)
         if (!state.xml) throw new Error('No XML file loaded')
@@ -490,15 +494,7 @@ class DocumentActionsPlugin extends Plugin {
         })
 
         if (saveAsGold) {
-          try {
-            await this.#client.apiClient.filesGoldStandard(state.xml)
-            testLog('GOLD_STANDARD_SET', { fileId: state.xml })
-            await this.getDependency('file-selection').reload({ refresh: true })
-            notify("Revision saved and marked as Gold version")
-          } catch (goldError) {
-            console.error("Failed to set gold standard:", goldError)
-            notify("Revision saved, but failed to set as Gold version", "warning")
-          }
+          await this.applyGoldStandardIfRequested(state.xml, "Revision saved and marked as Gold version")
         } else {
           notify("Revision saved successfully")
         }
@@ -514,6 +510,23 @@ class DocumentActionsPlugin extends Plugin {
       notify(`Save failed: ${String(error)}`, 'danger', 'exclamation-octagon')
     } finally {
       this.#ui.documentActions.saveRevision.disabled = false
+    }
+  }
+
+  /**
+   * Mark the given file as the Gold Standard version, notifying the user of success or failure.
+   * @param {string} fileId - The stable_id of the file to mark as Gold Standard
+   * @param {string} successMessage - Notification message shown when marking succeeds
+   */
+  async applyGoldStandardIfRequested(fileId, successMessage) {
+    try {
+      await this.#client.apiClient.filesGoldStandard(fileId)
+      testLog('GOLD_STANDARD_SET', { fileId })
+      await this.getDependency('file-selection').reload({ refresh: true })
+      notify(successMessage)
+    } catch (goldError) {
+      console.error("Failed to set gold standard:", goldError)
+      notify("Saved, but failed to set as Gold version", "warning")
     }
   }
 

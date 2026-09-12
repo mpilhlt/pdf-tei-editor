@@ -151,6 +151,88 @@ test.describe('Document Actions', () => {
     }
   });
 
+  test('should mark new copy as gold when saveToNewCopy and saveAsGold are both checked', async ({ page }) => {
+    // Regression test for issue #462: marking a newly created copy as gold silently
+    // had no effect because the gold-standard API call was only wired into the
+    // in-place save branch, not the "save to new copy" branch.
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await page.waitForTimeout(1000);
+
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+
+      await page.waitForFunction(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return !ui.toolbar.documentActions.saveRevision.disabled;
+      }, { timeout: 5000 });
+
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
+      await page.waitForTimeout(1500);
+
+      // Check both saveToNewCopy AND saveAsGold, as reported in the issue
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.saveDocumentDialog.options.saveToNewCopySection.saveToNewCopy.checked = true;
+        ui.saveDocumentDialog.options.saveToNewCopySection.copyLabel.value = 'Test Gold Copy E2E';
+        ui.saveDocumentDialog.changeDesc.value = 'E2E new copy marked as gold';
+        ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked = true;
+      });
+
+      await page.waitForTimeout(500);
+
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.saveDocumentDialog.submit.click();
+      });
+
+      const newVersionLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_CREATED', 10000);
+      const newFileId = newVersionLog.value.newFileId;
+
+      await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED', 10000);
+
+      // The gold-standard API call must fire for the newly created copy, not be silently skipped
+      const goldLog = await waitForTestMessage(consoleLogs, 'GOLD_STANDARD_SET', 10000);
+      expect(goldLog.value).toHaveProperty('fileId', newFileId);
+
+      await page.waitForTimeout(1500);
+
+      const finalGoldStatus = await page.evaluate((expectedId) => {
+        /** @type {any} */
+        const app = /** @type {any} */(window).app;
+        const state = app.getCurrentState();
+        for (const doc of state.fileData) {
+          if (doc.artifacts) {
+            const artifact = doc.artifacts.find(a => a.id === expectedId);
+            if (artifact) return artifact.is_gold_standard === true;
+          }
+        }
+        return false;
+      }, newFileId);
+
+      expect(finalGoldStatus).toBe(true);
+
+      debugLog('New copy marked as gold test completed successfully');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
   test('should save revision for existing document', async ({ page }) => {
 
     // Set up enhanced console log capture for TEST messages

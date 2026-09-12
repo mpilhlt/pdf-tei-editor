@@ -3,7 +3,12 @@ import re
 import shutil
 
 # --- Configuration ---
-SCAN_DIRECTORY = './app/src'
+# Backend plugins (fastapi_app/plugins/**/plugin.py) send icon names as endpoint
+# metadata (e.g. `"icon": "graph-up-arrow"`) that is only ever assigned to an
+# sl-icon dynamically at runtime (`icon.setAttribute('name', endpoint.icon)`),
+# so those names never appear as a literal in any JS/HTML file. They must be
+# scanned for at their Python source instead.
+SCAN_DIRECTORIES = ['./app/src', './fastapi_app/plugins']
 NODE_MODULES_PATH = './node_modules'
 SHOELACE_ICONS_BASE_PATH = os.path.join(
     NODE_MODULES_PATH,
@@ -20,13 +25,15 @@ DESTINATION_ICONS_DIRECTORY = './app/web/assets/icons'
 # 2. HTML icon attribute: <any-element icon="icon-name">
 # 3. JS property assignment: something.icon = 'icon-name'
 # 4. JS object literal: icon: 'icon-name'
+# 5. Python/JSON dict literal: "icon": "icon-name"
 ICON_PATTERNS = [
     re.compile(r'<sl-icon[^>]*name="([^"]+)"'),  # HTML sl-icon tags
     re.compile(r'\sicon="([^"]+)"'),  # HTML icon attribute
     re.compile(r'\.icon\s*=\s*[\'"]([^"\']+)[\'"]'),  # JS: .icon = 'name'
     re.compile(r'icon:\s*[\'"]([^"\']+)[\'"]'),  # JS: icon: 'name'
+    re.compile(r'[\'"]icon[\'"]\s*:\s*[\'"]([^"\']+)[\'"]'),  # Python/JSON: "icon": "name"
 ]
-SCAN_EXTENSIONS = ['.js', '.html']
+SCAN_EXTENSIONS = ['.js', '.html', '.py']
 
 # --- Script Logic ---
 
@@ -102,12 +109,14 @@ def copy_icons(icon_names, shoelace_base_path, destination_path):
 
 # --- Main ---
 if __name__ == "__main__":
-    used_icons = find_used_icons(SCAN_DIRECTORY, ICON_PATTERNS, SCAN_EXTENSIONS)
+    used_icons = set()
+    for directory in SCAN_DIRECTORIES:
+        used_icons.update(find_used_icons(directory, ICON_PATTERNS, SCAN_EXTENSIONS))
 
     if used_icons:
         copy_icons(used_icons, SHOELACE_ICONS_BASE_PATH, DESTINATION_ICONS_DIRECTORY)
     else:
         import sys
-        print(f"Error: No Shoelace icons found in {SCAN_DIRECTORY}")
+        print(f"Error: No Shoelace icons found in {SCAN_DIRECTORIES}")
         print(f"This usually indicates the source files are missing or the scan pattern is incorrect")
         sys.exit(1)

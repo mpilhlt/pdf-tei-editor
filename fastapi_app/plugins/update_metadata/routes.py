@@ -17,6 +17,7 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
 )
+from fastapi_app.lib.permissions.acl_utils import user_is_admin
 from fastapi_app.lib.sse.sse_utils import ProgressBar, send_notification
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.metadata_update_utils import update_tei_metadata
@@ -86,8 +87,7 @@ def _authenticate_admin(session_id, x_session_id, session_manager, auth_manager)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    user_roles = user.get("roles", [])
-    if "admin" not in user_roles:
+    if not user_is_admin(user):
         raise HTTPException(status_code=403, detail="Admin role required")
 
     return session_id_value, user

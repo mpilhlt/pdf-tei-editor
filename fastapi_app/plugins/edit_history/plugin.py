@@ -36,6 +36,7 @@ class EditHistoryPlugin(Plugin):
                     "name": "show_history",
                     "label": "Show Edit History",
                     "description": "Display recent changes in current collection",
+                    "icon": "clock-history",
                     "state_params": ["collection", "variant"],
                 },
             ],

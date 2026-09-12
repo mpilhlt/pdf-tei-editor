@@ -42,7 +42,22 @@ class GrobidPlugin(Plugin):
                     "label": "Download GROBID Training Data",
                     "description": "Download complete GROBID training package for a collection",
                     "category": "collection",
+                    "icon": "download",
                     "state_params": ["collection"],
+                    "required_roles": ["reviewer"],
+                },
+                {
+                    "name": "reload_feature_file",
+                    "label": "Reload GROBID Feature File",
+                    "description": (
+                        "Re-fetch the raw GROBID training package for the current document "
+                        "and refresh the cached feature file used by the sync-check lint, "
+                        "without re-extracting (and overwriting) the gold-standard annotation. "
+                        "Use this after retraining/swapping a GROBID model."
+                    ),
+                    "category": "document",
+                    "icon": "arrow-repeat",
+                    "state_params": ["xml"],
                     "required_roles": ["reviewer"],
                 },
             ],
@@ -53,6 +68,7 @@ class GrobidPlugin(Plugin):
         """Return available endpoints."""
         return {
             "download_training": self.download_training,
+            "reload_feature_file": self.reload_feature_file,
         }
 
     @classmethod
@@ -182,4 +198,44 @@ class GrobidPlugin(Plugin):
         return {
             "downloadUrl": download_url,
             "collection": collection,
+        }
+
+    async def reload_feature_file(
+        self, context: PluginContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Trigger the reviewer-confirmed "reload feature file" flow.
+
+        Re-fetching training data from GROBID and possibly patching the
+        document's revision label is a destructive-ish, infrequently-needed
+        action that's easy to trigger by accident from a menu, so it follows
+        the preview-then-execute pattern: this only returns URLs for a
+        confirmation page (`outputUrl`) and the actual operation
+        (`executeUrl`); nothing happens until the user reviews the
+        confirmation and clicks Execute. See `reload_feature_file.py` for the
+        precondition checks and business logic, and `routes.py` for the two
+        HTTP routes.
+
+        Args:
+            context: Plugin context (used for the reviewer-role check)
+            params: Must include 'xml' (stable_id of the open gold TEI file)
+
+        Returns:
+            Dict with 'outputUrl'/'executeUrl' on success, or 'error'.
+        """
+        from urllib.parse import quote
+
+        from fastapi_app.lib.permissions.acl_utils import user_has_role
+
+        if not user_has_role(context.user, ["reviewer", "admin"]):
+            return {"error": "Reviewer role required."}
+
+        stable_id = params.get("xml")
+        if not stable_id:
+            return {"error": "No TEI document open. Open a GROBID training file first."}
+
+        query = f"xml={quote(stable_id)}"
+        return {
+            "outputUrl": f"/api/plugins/grobid/reload-feature-file/preview?{query}",
+            "executeUrl": f"/api/plugins/grobid/reload-feature-file/execute?{query}",
         }

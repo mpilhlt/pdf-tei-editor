@@ -33,6 +33,10 @@ const testsToRun = testFiles.length > 0
 // Build node test command
 const nodeArgs = [
   '--test',
+  // Enables node:test's mock.module() for stubbing heavy/non-vital imports
+  // (e.g. DOM-dependent modules) in lightweight unit tests.
+  '--experimental-test-module-mocks',
+  '--disable-warning=ExperimentalWarning',
   ...(tapMode ? ['--test-reporter=tap'] : []),
   ...testsToRun
 ];

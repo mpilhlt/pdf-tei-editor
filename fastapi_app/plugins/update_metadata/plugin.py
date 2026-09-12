@@ -27,6 +27,7 @@ class UpdateMetadataPlugin(Plugin):
                     "name": "update",
                     "label": "Update All Metadata",
                     "description": "Update all TEI files with metadata from CrossRef/DataCite",
+                    "icon": "arrow-repeat",
                     "state_params": []  # No state parameters needed
                 }
             ]

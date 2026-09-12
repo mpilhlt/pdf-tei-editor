@@ -48,6 +48,7 @@ class IAAAnalyzerPlugin(Plugin):
                     "name": "compute_agreement",
                     "label": "Compute Inter-Annotator Agreement",
                     "description": "Analyze agreement between all TEI versions for current PDF and variant",
+                    "icon": "people",
                     "state_params": ["pdf", "variant"],
                 },
             ],
