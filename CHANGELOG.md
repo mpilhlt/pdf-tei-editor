@@ -2,6 +2,21 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.60.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.59.0...v0.60.0) (2026-09-12)
+
+
+### Bug Fixes
+
+* disable merge/diff controls on read-only documents ([292449c](https://github.com/mpilhlt/pdf-tei-editor/commit/292449c8a5b6a8b6b3c66c4a5429e33042ad3f8c)), closes [#410](https://github.com/mpilhlt/pdf-tei-editor/issues/410)
+* **grobid:** enforce per-document write access on reload-feature-file ([3705b72](https://github.com/mpilhlt/pdf-tei-editor/commit/3705b724ff66ed1150743845d01fb3f6a30dbc70))
+* redesign user menu with person icon and fullname header ([bb375a7](https://github.com/mpilhlt/pdf-tei-editor/commit/bb375a75aae785156cb0ab81d7a1b7b07518ca48)), closes [#403](https://github.com/mpilhlt/pdf-tei-editor/issues/403)
+
+
+### Features
+
+* add PDF-TEI favicon with dev/production color variants ([f643e96](https://github.com/mpilhlt/pdf-tei-editor/commit/f643e96e8143415cab0c255c0d162a2d314c9b3e))
+* show logged-in username in browser tab title ([3779d99](https://github.com/mpilhlt/pdf-tei-editor/commit/3779d99b664237b6fcf82dd6f21196dc53b9db5e))
+
 # [0.59.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.58.0...v0.59.0) (2026-09-12)
 
 
