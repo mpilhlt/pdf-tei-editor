@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.60.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.60.0...v0.60.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* annotation progress feedback (issue [#465](https://github.com/mpilhlt/pdf-tei-editor/issues/465)) ([270b503](https://github.com/mpilhlt/pdf-tei-editor/commit/270b503f2cde29df562d7a901fe694a119eb2a1c))
+
 # [0.60.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.59.0...v0.60.0) (2026-09-12)
 
 
