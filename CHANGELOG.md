@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.61.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.60.1...v0.61.0) (2026-09-12)
+
+
+### Features
+
+* ignore inserted/removed linebreaks between tags in merge view diff ([aca1c61](https://github.com/mpilhlt/pdf-tei-editor/commit/aca1c6129fbd639cb85b26bed3b4bc615fff7f6d)), closes [#461](https://github.com/mpilhlt/pdf-tei-editor/issues/461)
+
 ## [0.60.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.60.0...v0.60.1) (2026-09-12)
 
 
