@@ -515,6 +515,16 @@ test('should save file', async () => {
 });
 ```
 
+### Never Mutate the Real Repository's Git State
+
+**NEVER** have a test create, check out, or delete branches - or otherwise change `HEAD` - on the actual working repository (`execSync('git checkout ...')`, `git branch -b/-D`, etc. against `process.cwd()`). This applies even as a "safety" measure to isolate temp files the test creates.
+
+**Why:** `tests/unit/js/smart-test-runner.test.js` used to do exactly this - create a throwaway branch in `before()`, delete it and check back out to the branch that was current when the suite started, in `after()`/on-error cleanup. On 2026-09-12, a `node --test --watch` instance of that file was left running for four days. Every watch cycle repeated the same branch dance against the real repo, and it kept forcing the working copy back to whatever branch was checked out when the watcher first started - overwriting unrelated work in progress elsewhere in the same repo, including a feature branch that had just been checked out for manual testing. It also left orphaned `test-smart-runner-<timestamp>` branches behind from cycles that didn't clean up.
+
+The branch-per-test-run wasn't actually protecting anything a simpler, non-destructive approach couldn't: track every temp file a test creates in an array and delete just those files in cleanup; if a test needs to modify a real source file, read and save its original content first and restore it in a `finally` block. Neither needs a dedicated git branch.
+
+**If a test genuinely needs to exercise git-branch-dependent behavior** (not just "isolate my temp files"), give it its own throwaway clone or `git worktree` in a scratch directory - never the actual working repository, and never assume `--watch` mode won't be used to run it.
+
 ### Suppressing Expected Log Output
 
 When testing code that produces expected warnings or log messages, use `assertLogs` to suppress output and verify the messages:

@@ -847,7 +847,7 @@ npm run test:container -- --all
 
 **Technical Details:**
 
-- Node.js 20.x for JavaScript execution
+- Node.js 24.x for JavaScript execution
 - Python 3.11 for FastAPI backend
 - uv for Python dependency management
 - Docker Buildx for efficient builds

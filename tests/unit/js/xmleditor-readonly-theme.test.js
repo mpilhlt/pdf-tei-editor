@@ -17,6 +17,7 @@ const dom = new JSDOM('<!DOCTYPE html><html><head></head><body><div id="editor">
 dom.window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 dom.window.cancelAnimationFrame = (id) => clearTimeout(id);
 global.window = dom.window;
+global.Window = dom.window.Window;
 global.document = dom.window.document;
 global.MutationObserver = dom.window.MutationObserver;
 global.requestAnimationFrame = dom.window.requestAnimationFrame;

@@ -12,14 +12,15 @@ import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { join, basename } from 'path';
 import SmartTestRunner from '../../smart-test-runner.js';
 
-const testBranch = 'test-smart-runner-' + Date.now();
 const projectRoot = process.cwd();
+
+// Never create/checkout/delete git branches here - use a throwaway clone or
+// worktree if a test needs one. This suite never mutates the real repo.
+let gitAvailable = false;
 
 describe('Smart Test Runner Integration', () => {
 
-  let originalBranch = '';
   let testFiles = [];
-  let testBranchCreated = false;
 
   // Cleanup function that can be called from anywhere
   const cleanup = async () => {
@@ -43,36 +44,16 @@ describe('Smart Test Runner Integration', () => {
     } catch (error) {
       console.warn('Could not clean up cache file:', error.message);
     }
-
-    // Return to original branch and delete test branch
-    if (originalBranch && testBranchCreated) {
-      try {
-        execSync(`git checkout ${originalBranch}`, { stdio: 'pipe' });
-        execSync(`git branch -D ${testBranch}`, { stdio: 'pipe' });
-        console.log(`Cleaned up test branch: ${testBranch}`);
-      } catch (error) {
-        console.warn('Could not clean up test branch:', error.message);
-      }
-    }
   };
 
   before(async () => {
-    // Save current branch
+    // Check git is usable (the "should integrate with git workflow" test below
+    // needs it) without creating or switching any branch.
     try {
-      originalBranch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+      execSync('git rev-parse --is-inside-work-tree', { stdio: 'pipe' });
+      gitAvailable = true;
     } catch (error) {
-      console.warn('Could not get current branch, skipping branch management');
-    }
-
-    // Create test branch
-    if (originalBranch) {
-      try {
-        execSync(`git checkout -b ${testBranch}`, { stdio: 'pipe' });
-        testBranchCreated = true;
-        console.log(`Created test branch: ${testBranch}`);
-      } catch (error) {
-        console.warn('Could not create test branch:', error.message);
-      }
+      console.warn('git not available, skipping git-dependent tests');
     }
 
     // Set up cleanup on uncaught exceptions
@@ -424,7 +405,7 @@ class TestExample(unittest.TestCase):
   });
 
   test('should integrate with git workflow', async () => {
-    if (!originalBranch) {
+    if (!gitAvailable) {
       console.log('Skipping git integration test (no git available)');
       return;
     }
