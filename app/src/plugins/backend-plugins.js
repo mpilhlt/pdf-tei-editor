@@ -6,6 +6,7 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
+import ui from '../ui.js';
 import ep from '../extension-points.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
@@ -292,8 +293,9 @@ export class BackendPluginsPlugin extends Plugin {
    * @param {Record<string, any>} params - Parameters to pass to the endpoint
    */
   async executePlugin(plugin, endpointName, params) {
+    const endpoint = plugin.endpoints?.find(e => e.name === endpointName);
+    ui.spinner.show(endpoint?.label ? `${endpoint.label}, please wait...` : 'Please wait...');
     try {
-     
       // Execute the specified endpoint with provided params
       const result = await this.#client.executeBackendPlugin(plugin.id, endpointName, params);
       // Display the result according to content
@@ -302,6 +304,8 @@ export class BackendPluginsPlugin extends Plugin {
     } catch (error) {
       console.error(`Error executing plugin ${plugin.id}.${endpointName}:`, error);
       notify(`Failed to execute endopoint "${endpointName}" of plugin "${plugin.name}", : ${error.message}`, 'danger', 'exclamation-octagon');
+    } finally {
+      ui.spinner.hide();
     }
   }
 
@@ -453,9 +457,13 @@ export class BackendPluginsPlugin extends Plugin {
             executeUrl.searchParams.set('session_id', this.state.sessionId);
           }
 
-          // Load execute result in the same iframe
+          // Load execute result in the same iframe, with a blocking spinner
+          // for the (potentially slow) navigation - the load can take much
+          // longer than a typical page load since it runs the actual operation.
           const iframe = dialog.content.querySelector('iframe');
           if (iframe) {
+            ui.spinner.show('Please wait...');
+            iframe.addEventListener('load', () => ui.spinner.hide(), { once: true });
             iframe.src = executeUrl.toString();
           }
 
@@ -464,6 +472,7 @@ export class BackendPluginsPlugin extends Plugin {
 
           notify('Executing...', 'primary', 'info-circle');
         } catch (error) {
+          ui.spinner.hide();
           console.error('Execute failed:', error);
           notify(`Execute failed: ${error.message}`, 'danger', 'exclamation-octagon');
         }

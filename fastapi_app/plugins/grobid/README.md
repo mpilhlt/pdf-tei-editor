@@ -109,6 +109,24 @@ node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
 
 `POST /api/plugins/grobid/cancel/{progress_id}` — cancels a running training-package download that was started with progress tracking enabled.
 
+### Reload feature file
+
+Backend-plugin endpoint `reload_feature_file` (`GrobidPlugin.reload_feature_file`, category `document`, reviewer role required) — appears in the document plugin menu when a GROBID training TEI file is open.
+
+The training-data cache ([Cache](#cache-cachepy)) is keyed by `{doc_id}_{grobid_revision}`, where `grobid_revision` comes from GROBID's `/api/version`. If a custom model is retrained/swapped without that version string changing, the cache is never invalidated and the sync-check lint (see [Frontend extension](#frontend-extension-extensionsgrobid-syncjs)) keeps comparing against the stale feature file.
+
+The underlying operation re-fetches the training package from GROBID for the current document and overwrites the cache entry for the *current* revision — without re-running extraction, so the gold-standard `<text>` content and any human corrections are untouched. If the current GROBID revision differs from the one recorded in the TEI's `encodingDesc/revision` label, that label is patched in place (same stable_id, same file record, no new version) so future lookups resolve to the freshly cached data.
+
+**Confirmation flow:** this is an infrequently-needed, easy-to-trigger-by-accident action, so it follows the [Preview-then-Execute pattern](../../../docs/code-assistant/backend-plugins.md#3-preview-then-execute-pattern-for-operations-requiring-confirmation) instead of running immediately:
+
+1. `GrobidPlugin.reload_feature_file` (the menu action) only validates the reviewer role and the open document, then returns `outputUrl`/`executeUrl` pointing at the two routes below — nothing happens yet.
+2. `GET /api/plugins/grobid/reload-feature-file/preview` renders a read-only confirmation page in the dialog's iframe: what the action does, the document/variant, the TEI's recorded revision label, and (if GROBID is reachable) the live server revision, so the reviewer can see up front whether the label would actually change.
+3. Clicking **Execute** navigates the same iframe to `GET /api/plugins/grobid/reload-feature-file/execute`, which performs the actual reload and renders a result page. Closing the dialog (or navigating away) cancels the action — nothing is written until Execute is clicked.
+
+All shared logic (precondition checks, the GROBID fetch/cache/patch, and HTML rendering) lives in `reload_feature_file.py`, used by both the routes and (for preconditions) indirectly by the trigger endpoint.
+
+The execute-result page includes the sandbox client script (`generate_sandbox_client_script()`) and calls `sandbox.notify(...)` and the new `PluginSandbox.reloadCurrentDocument()` method (`app/src/modules/backend-plugin-sandbox.js`) so the open document is reloaded from the server as soon as execution finishes, picking up the refreshed feature file without a manual reopen.
+
 ---
 
 ## Developer reference

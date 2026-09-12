@@ -42,6 +42,26 @@ def parse_encoding_labels(xml_content: str) -> dict[str, str]:
     return result
 
 
+def set_revision_label(xml_content: str, old_revision: str, new_revision: str) -> str:
+    """
+    Replace the text of the extractor's ``revision`` label in encodingDesc.
+
+    Performs a single targeted string substitution of the exact
+    ``<label type="revision">{old_revision}</label>`` element rather than
+    reparsing and reserializing the document, so the rest of the file
+    (including any coincidental occurrences of *old_revision* in the body)
+    is left byte-identical.
+
+    Returns *xml_content* unchanged if the label with *old_revision* is not
+    found (e.g. the value passed does not match what is currently stored).
+    """
+    old_element = f'<label type="revision">{old_revision}</label>'
+    if old_element not in xml_content:
+        return xml_content
+    new_element = f'<label type="revision">{new_revision}</label>'
+    return xml_content.replace(old_element, new_element, 1)
+
+
 def extract_feature_tokens(zip_path: Path, suffix: str) -> list[str] | None:
     """
     Read the feature file for *suffix* from *zip_path* and return its token list.

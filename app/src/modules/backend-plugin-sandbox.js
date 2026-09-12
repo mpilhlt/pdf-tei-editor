@@ -7,6 +7,7 @@
 
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
 import { findCorrespondingSource } from '../modules/file-data-utils.js';
+import { notify as notifyUser } from './sl-utils.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -204,7 +205,34 @@ export class PluginSandbox {
     });
     if (closeDialog) {
       this.closeDialog();
-    } 
+    }
+  }
+
+  /**
+   * Re-load the currently open PDF and/or TEI document from the server,
+   * discarding any unsaved in-memory changes in the editor.
+   *
+   * Use this after a plugin endpoint has modified the open document's
+   * content on the server out from under the editor (e.g. patching a
+   * header label in place) so the UI reflects the fresh content.
+   * @returns {Promise<void>}
+   */
+  async reloadCurrentDocument() {
+    const state = this.context.getCurrentState();
+    await this.context.getDependency('services').load({
+      xml: state.xml || undefined,
+      pdf: state.pdf || undefined
+    });
+  }
+
+  /**
+   * Show a toast notification to the user.
+   * @param {string} message
+   * @param {'primary'|'success'|'warning'|'danger'} [variant='primary']
+   * @param {string} [icon='info-circle']
+   */
+  notify(message, variant = 'primary', icon = 'info-circle') {
+    notifyUser(message, variant, icon);
   }
 
   /**

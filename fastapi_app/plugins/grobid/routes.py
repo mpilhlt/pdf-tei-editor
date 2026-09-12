@@ -14,7 +14,7 @@ import zipfile
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
@@ -194,6 +194,135 @@ async def get_feature_tokens(
 
     line_based = variant_id in LINE_BASED_VARIANTS
     return {"status": "ok", "tokens": tokens, "count": len(tokens), "line_based": line_based}
+
+
+def _authenticate_reviewer(
+    session_id_value: str | None,
+    session_manager: SessionManager,
+    auth_manager: AuthManager,
+) -> dict:
+    """
+    Validate the session and require reviewer/admin role.
+
+    Shared by the reload-feature-file preview/execute routes below, which
+    have identical auth requirements. Raises HTTPException on failure.
+    """
+    from fastapi_app.config import get_settings
+
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    if not user_has_role(user, ["reviewer", "admin"]):
+        raise HTTPException(status_code=403, detail="Reviewer role required")
+
+    return user
+
+
+@router.get("/reload-feature-file/preview", response_class=HTMLResponse)
+async def reload_feature_file_preview(
+    xml: str = Query(..., description="Stable ID of the open gold TEI file"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+):
+    """
+    Render the reviewer confirmation page for reloading a feature file.
+
+    Read-only: validates the target document and, if the GROBID server is
+    reachable, checks its live revision so the page can say whether the
+    document's revision label would change - but never calls GROBID's
+    training endpoint or writes anything. Loaded in the plugin-result
+    iframe (see the 'outputUrl' returned by GrobidPlugin.reload_feature_file).
+    """
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.plugins.grobid.reload_feature_file import (
+        ReloadPreconditionError,
+        check_grobid_revision,
+        render_precondition_error_html,
+        render_preview_html,
+        resolve_reload_target,
+    )
+
+    _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+
+    file_repo = FileRepository(db)
+    try:
+        target = resolve_reload_target(file_repo, file_storage, xml)
+    except ReloadPreconditionError as e:
+        return HTMLResponse(content=render_precondition_error_html(str(e)))
+
+    grobid_server_url = get_grobid_server_url()
+    if not grobid_server_url:
+        return HTMLResponse(
+            content=render_preview_html(target, None, "GROBID server not configured.")
+        )
+
+    try:
+        _, live_revision = check_grobid_revision(grobid_server_url)
+        live_error = None
+    except RuntimeError as e:
+        live_revision = None
+        live_error = str(e)
+
+    return HTMLResponse(content=render_preview_html(target, live_revision, live_error))
+
+
+@router.get("/reload-feature-file/execute", response_class=HTMLResponse)
+async def reload_feature_file_execute(
+    xml: str = Query(..., description="Stable ID of the open gold TEI file"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+):
+    """
+    Perform the feature-file reload and render a result page.
+
+    Called when the reviewer clicks Execute on the confirmation page. Never
+    touches the gold-standard TEI's `<text>` content - see
+    `reload_feature_file.perform_reload` for exactly what changes.
+    """
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.plugins.grobid.reload_feature_file import (
+        ReloadPreconditionError,
+        perform_reload,
+        render_error_html,
+        render_precondition_error_html,
+        render_result_html,
+        resolve_reload_target,
+    )
+
+    _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+
+    file_repo = FileRepository(db)
+    try:
+        target = resolve_reload_target(file_repo, file_storage, xml)
+    except ReloadPreconditionError as e:
+        return HTMLResponse(content=render_precondition_error_html(str(e)))
+
+    grobid_server_url = get_grobid_server_url()
+    if not grobid_server_url:
+        return HTMLResponse(content=render_error_html("GROBID server not configured."))
+
+    try:
+        result = await perform_reload(target, grobid_server_url, file_repo, file_storage)
+    except RuntimeError as e:
+        return HTMLResponse(content=render_error_html(str(e)))
+
+    return HTMLResponse(content=render_result_html(result))
 
 
 @router.post("/cancel/{progress_id}")
