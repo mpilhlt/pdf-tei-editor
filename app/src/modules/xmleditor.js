@@ -61,6 +61,7 @@ import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
+import { ignoreLineWhitespaceInDiff } from './diff-utils.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
  */
@@ -604,9 +605,13 @@ export class XMLEditor extends EventEmitter {
     const currentTitle = this.#extractEditionTitle(this.#original, false);
     const incomingTitle = this.#extractEditionTitle(diff, true);
 
+    // lines that only differ from the current document by leading/trailing
+    // whitespace are rewritten to match it, so they are not shown as changes
+    const normalizedDiff = ignoreLineWhitespaceInDiff(diff, this.#original);
+
     // create and display merge view with the original
     this.#mergeViewExt = unifiedMergeView({
-      original: diff,
+      original: normalizedDiff,
       diffConfig: { scanLimit: 50000, timeout: 20000 }
     })
 

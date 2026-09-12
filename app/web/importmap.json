@@ -12,7 +12,8 @@
     "@codemirror/lint": "../../node_modules/@codemirror/lint/dist/index.js",
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
     "@lezer/highlight": "../../node_modules/@lezer/highlight/dist/index.js",
-    "markdown-it": "../../node_modules/markdown-it/dist/markdown-it.mjs"
+    "markdown-it": "../../node_modules/markdown-it/dist/markdown-it.mjs",
+    "diff": "../../node_modules/diff/libesm/index.js"
   },
   "scopes": {
     "../../node_modules/@shoelace-style/shoelace/": {
