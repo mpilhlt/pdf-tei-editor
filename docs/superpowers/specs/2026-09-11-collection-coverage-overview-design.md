@@ -117,10 +117,18 @@ code" rule.
 
 ### 1. Clarify `variant` semantics
 
-Current code treats both `None` and `""` as "no filter, include every variant."
-That is ambiguous for this plugin, which needs a distinct "untagged annotations
-only" bucket. Since nothing currently calls this function, its semantics are
-changed (not currently a breaking change for any caller):
+There **is** an existing test suite for this function
+(`tests/unit/fastapi/test_statistics.py`, 12 tests, all currently passing) —
+it must keep passing. In particular `test_variant_all_includes_all` asserts
+that `variant="all"` means "no filter, include every variant tagged or not,"
+and that sentinel is kept exactly as-is.
+
+What changes: today, `None` and `""` are *also* treated as "no filter" (same
+branch as `"all"`), which is ambiguous for this plugin — it needs a distinct
+"untagged annotations only" bucket, and no existing test exercises `None`
+against a *mix* of tagged and untagged files (every existing test's TEI
+fixtures are either all-`None`-variant or filtered by an explicit variant
+string), so redefining what `None`/`""` mean is safe against the current suite:
 
 ```python
 def calculate_collection_statistics(
@@ -130,13 +138,14 @@ def calculate_collection_statistics(
     lifecycle_order: Optional[list[str]] = None,
 ) -> dict:
     ...
-    if variant:
+    if variant == "all":
+        pass  # no filtering - unchanged, still every variant, tagged or not
+    elif variant:
         tei_files = [f for f in tei_files if getattr(f, "variant", None) == variant]
     else:
-        # variant is None -> match files with no variant tag (the "untagged" bucket),
-        # not "all variants combined". Every call site now passes a specific
-        # bucket (a real variant string, or None for untagged) - there is no
-        # "all variants at once" mode.
+        # None or "" now means "untagged only" (previously grouped with "all").
+        # This plugin never passes "all" - build_overview_rows always passes
+        # either a concrete variant string or None for the untagged bucket.
         tei_files = [f for f in tei_files if not getattr(f, "variant", None)]
 ```
 
