@@ -85,7 +85,6 @@ async function loadData() {
   STAGE_COLORS = buildStageRamp(LIFECYCLE_ORDER.length);
 
   renderLegend();
-  renderKpis();
   renderFacetPanel('collection');
   renderFacetPanel('variant');
   render();
@@ -120,20 +119,29 @@ function variantLabel(variant) { return variant || '— none —'; }
 
 // -- KPI tiles ------------------------------------------------------------
 
-function renderKpis() {
+function facetFilteredRows() {
+  return ROWS.filter((r) => {
+    const variantKey = r.variant || '__none__';
+    const okCollection = !facetState.collection.size || facetState.collection.has(r.collection_id);
+    const okVariant = !facetState.variant.size || facetState.variant.has(variantKey);
+    return okCollection && okVariant;
+  });
+}
+
+function renderKpis(rows) {
   const distinctCollections = new Map();
-  ROWS.forEach((r) => {
+  rows.forEach((r) => {
     if (!distinctCollections.has(r.collection_id)) {
       distinctCollections.set(r.collection_id, r.total_docs);
     }
   });
   const totalDocs = [...distinctCollections.values()].reduce((a, b) => a + b, 0);
-  const needsAttention = ROWS.filter(isAttention).length;
+  const needsAttention = rows.filter(isAttention).length;
 
   document.getElementById('kpi-collections').textContent = distinctCollections.size;
   document.getElementById('kpi-docs').textContent = totalDocs;
-  document.getElementById('kpi-combinations').textContent = ROWS.length;
-  document.getElementById('kpi-attention').textContent = `${needsAttention} / ${ROWS.length}`;
+  document.getElementById('kpi-combinations').textContent = rows.length;
+  document.getElementById('kpi-attention').textContent = `${needsAttention} / ${rows.length}`;
 }
 
 // -- Table rendering --------------------------------------------------------
@@ -192,7 +200,7 @@ function renderRow(row) {
       </div>
     </td>
     <td class="action">
-      <a href="#" data-progress-url="${escapeHtml(progressUrl)}" onclick="event.preventDefault(); sandbox.openControlledWindow(this.dataset.progressUrl, '_blank', 'width=1200,height=800').catch((err) => alert('Could not open Annotation Progress: ' + err.message));" title="Open Annotation Progress for ${escapeHtml(row.collection_name)} / ${row.variant ? escapeHtml(row.variant) : 'default'}">
+      <a href="#" data-progress-url="${escapeHtml(progressUrl)}" onclick="event.preventDefault(); sandbox.openControlledWindow(this.dataset.progressUrl).catch((err) => alert('Could not open Annotation Progress: ' + err.message));" title="Open Annotation Progress for ${escapeHtml(row.collection_name)} / ${row.variant ? escapeHtml(row.variant) : 'default'}">
         Open progress
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
@@ -340,6 +348,7 @@ function applyFilters() {
     const okAttention = !attentionOnly || tr.dataset.attn === '1';
     tr.style.display = okCollection && okVariant && okAttention ? '' : 'none';
   });
+  renderKpis(facetFilteredRows());
 }
 
 loadData();

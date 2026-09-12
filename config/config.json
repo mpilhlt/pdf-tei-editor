@@ -118,5 +118,9 @@
   "document.id.mode": "doi",
   "document.id.mode.description": "Strategy for generating doc_id on new PDF upload: filename (as-is), doi (filename with DOI override from PDF content, default), collection ({collection_id}-{NNNN}), uuid (UUID4)",
   "document.id.mode.type": "string",
-  "document.id.mode.values": ["filename", "doi", "collection", "uuid"]
+  "document.id.mode.values": ["filename", "doi", "collection", "uuid"],
+  "backend-plugins.open-target": "tab",
+  "backend-plugins.open-target.description": "How backend plugin pages opened via 'Open in new window'-style links are displayed: as a new browser tab, or a separate popup window",
+  "backend-plugins.open-target.type": "string",
+  "backend-plugins.open-target.values": ["tab", "window"]
 }
