@@ -2,6 +2,20 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.58.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.57.4...v0.58.0) (2026-09-12)
+
+
+### Bug Fixes
+
+* **deps:** upgrade pdfjs-dist to v6.3.289 ([6787c60](https://github.com/mpilhlt/pdf-tei-editor/commit/6787c60788e27efc7b116be0621b7f931add00e0)), closes [#450](https://github.com/mpilhlt/pdf-tei-editor/issues/450) [#434](https://github.com/mpilhlt/pdf-tei-editor/issues/434)
+* resolve pytest collection errors in full test suite run ([1148675](https://github.com/mpilhlt/pdf-tei-editor/commit/1148675ed8c9ecc5c9838242f7b1b3b25d5d1002))
+* **tests:** stop smart-test-runner tests from mutating real git branches ([6455d57](https://github.com/mpilhlt/pdf-tei-editor/commit/6455d57bcdd55c27f36e3e6c90faee0093d400d1))
+
+
+### Features
+
+* add Collection Coverage Overview plugin ([329c8fb](https://github.com/mpilhlt/pdf-tei-editor/commit/329c8fb919e4185fa482a169f919bbb042985c1a))
+
 ## [0.57.4](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.57.3...v0.57.4) (2026-09-11)
 
 
