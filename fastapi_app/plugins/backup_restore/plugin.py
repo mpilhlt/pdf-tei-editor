@@ -26,6 +26,7 @@ class BackupRestorePlugin(Plugin):
                     "name": "manage",
                     "label": "Backup & Restore",
                     "description": "Download a backup or restore from a ZIP file",
+                    "icon": "archive",
                     "state_params": [],
                 }
             ],

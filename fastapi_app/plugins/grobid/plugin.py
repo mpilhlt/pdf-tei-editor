@@ -42,6 +42,7 @@ class GrobidPlugin(Plugin):
                     "label": "Download GROBID Training Data",
                     "description": "Download complete GROBID training package for a collection",
                     "category": "collection",
+                    "icon": "download",
                     "state_params": ["collection"],
                     "required_roles": ["reviewer"],
                 },

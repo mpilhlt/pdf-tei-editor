@@ -34,6 +34,7 @@ class AnnotationHistoryPlugin(Plugin):
                     "name": "analyze",
                     "label": "Show Annotation History",
                     "description": "Shows detailed annotation history of the current PDF document",
+                    "icon": "list-check",
                     "state_params": ["pdf", "variant"],
                 },
             ],

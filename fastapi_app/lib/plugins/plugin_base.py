@@ -112,6 +112,8 @@ class Plugin(ABC):
                 - label (str): Display label for menu item
                 - description (str): Optional description shown as tooltip
                 - state_params (list[str]): Required frontend state fields to pass as parameters
+                - icon (str): Optional Shoelace/Bootstrap icon name (e.g. "clock-history")
+                  shown as the menu item's prefix icon. If omitted, no icon is shown.
 
               If not specified, defaults to single menu item calling 'execute' endpoint.
               If empty list, plugin appears in list but adds no menu items.

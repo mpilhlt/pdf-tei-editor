@@ -32,6 +32,7 @@ class RngConverterPlugin(Plugin):
                     "name": "convert_to_rng",
                     "label": "Generate RelaxNG Schema",
                     "description": "Create a RelaxNG schema from the current TEI document",
+                    "icon": "diagram-3",
                     "state_params": ["xml", "variant"],
                 },
             ],

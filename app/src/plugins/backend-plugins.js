@@ -139,7 +139,13 @@ export class BackendPluginsPlugin extends Plugin {
         menuItem.dataset.pluginId = plugin.id;
         menuItem.dataset.endpointName = endpoint.name;
         menuItem.dataset.stateParams = JSON.stringify(endpoint.state_params);
-        menuItem.textContent = endpoint.label;
+        if (endpoint.icon) {
+          const icon = document.createElement('sl-icon');
+          icon.setAttribute('slot', 'prefix');
+          icon.setAttribute('name', endpoint.icon);
+          menuItem.appendChild(icon);
+        }
+        menuItem.appendChild(document.createTextNode(endpoint.label));
         if (endpoint.description) {
           menuItem.title = endpoint.description;
         }

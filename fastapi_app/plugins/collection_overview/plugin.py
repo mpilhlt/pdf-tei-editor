@@ -30,6 +30,7 @@ class CollectionOverviewPlugin(Plugin):
                     "name": "show_overview",
                     "label": "Show Collection Coverage",
                     "description": "Overview of gold-standard coverage and annotation progress across all accessible collections",
+                    "icon": "pie-chart",
                     "state_params": [],
                 },
             ],

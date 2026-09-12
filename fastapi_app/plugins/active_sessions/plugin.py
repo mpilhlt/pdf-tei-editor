@@ -25,6 +25,7 @@ class ActiveSessionsPlugin(Plugin):
                     "name": "execute",
                     "label": "Active Sessions",
                     "description": "View and manage active user sessions",
+                    "icon": "person-check",
                     "state_params": [],
                 }
             ],

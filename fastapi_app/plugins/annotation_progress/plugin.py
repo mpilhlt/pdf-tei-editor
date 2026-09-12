@@ -33,6 +33,7 @@ class AnnotationProgressPlugin(Plugin):
                     "name": "show_progress",
                     "label": "Show Annotation Progress",
                     "description": "Display annotation overview for current collection",
+                    "icon": "graph-up-arrow",
                     "state_params": ["collection", "variant"],
                 },
             ],
