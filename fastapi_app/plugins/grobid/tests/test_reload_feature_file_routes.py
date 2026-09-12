@@ -155,7 +155,7 @@ class ReloadFeatureFileRoutesTestCase(unittest.TestCase):
         self._set_up_valid_target(revision="rev-1")
 
         with mock.patch(
-            "fastapi_app.plugins.grobid.config.get_grobid_server_url",
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
             return_value="http://grobid.example",
         ), mock.patch(
             "fastapi_app.plugins.grobid.reload_feature_file.check_grobid_revision",
@@ -174,7 +174,7 @@ class ReloadFeatureFileRoutesTestCase(unittest.TestCase):
         self._set_up_valid_target(revision="rev-1")
 
         with mock.patch(
-            "fastapi_app.plugins.grobid.config.get_grobid_server_url",
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
             return_value="http://grobid.example",
         ), mock.patch(
             "fastapi_app.plugins.grobid.reload_feature_file.check_grobid_revision",
@@ -203,7 +203,7 @@ class ReloadFeatureFileRoutesTestCase(unittest.TestCase):
         self._set_up_valid_target(revision="rev-1")
 
         with mock.patch(
-            "fastapi_app.plugins.grobid.config.get_grobid_server_url",
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
             return_value="http://grobid.example",
         ), mock.patch(
             "fastapi_app.plugins.grobid.reload_feature_file.perform_reload",
@@ -224,7 +224,7 @@ class ReloadFeatureFileRoutesTestCase(unittest.TestCase):
         self._set_up_valid_target(revision="rev-1")
 
         with mock.patch(
-            "fastapi_app.plugins.grobid.config.get_grobid_server_url",
+            "fastapi_app.plugins.grobid.routes.get_grobid_server_url",
             return_value="http://grobid.example",
         ), mock.patch(
             "fastapi_app.plugins.grobid.reload_feature_file.perform_reload",
