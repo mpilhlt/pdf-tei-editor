@@ -145,25 +145,16 @@ async def view_progress(
                 stage_counts["no-status"] += 1
                 continue
 
-            # Find the most recent status across all annotations for this document
-            newest_timestamp = None
-            newest_status = ""
-            for ann in annotations:
-                ann_timestamp = ann.get("last_change_timestamp")
-                if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
-                    newest_timestamp = ann_timestamp
-                    newest_status = ann.get("last_change_status", "")
+            rep = _select_representative_annotation(annotations, lifecycle_order)
+            status = rep.get("last_change_status", "") if rep else ""
 
-            if newest_status in stage_counts:
-                stage_counts[newest_status] += 1
-            else:
-                stage_counts["no-status"] += 1
-
-            # Calculate progress for this document (0-100%)
-            if newest_status and newest_status in lifecycle_order:
-                current_index = lifecycle_order.index(newest_status)
+            if status in lifecycle_order:
+                stage_counts[status] += 1
+                current_index = lifecycle_order.index(status)
                 doc_progress = ((current_index + 1) / len(lifecycle_order)) * 100
                 total_progress_sum += doc_progress
+            else:
+                stage_counts["no-status"] += 1
 
         # Calculate average progress across all documents
         avg_progress = (total_progress_sum / total_docs) if total_docs > 0 else 0
@@ -176,19 +167,14 @@ async def view_progress(
         for doc_id in sorted(all_doc_ids):
             annotations = doc_annotations[doc_id]
 
-            # Track the newest change across all annotations for this document
-            newest_change_desc = ""
-            newest_annotator = ""
-            newest_status = ""
-            newest_timestamp = None
-
-            for ann in annotations:
-                ann_timestamp = ann.get("last_change_timestamp")
-                if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
-                    newest_timestamp = ann_timestamp
-                    newest_change_desc = ann.get("last_change_desc", "")
-                    newest_annotator = ann.get("last_annotator", "")
-                    newest_status = ann.get("last_change_status", "")
+            # Representative annotation for this document: the version
+            # furthest along the lifecycle, falling back to the most
+            # recently changed one if none carry a recognized status.
+            rep = _select_representative_annotation(annotations, lifecycle_order)
+            newest_change_desc = rep.get("last_change_desc", "") if rep else ""
+            newest_annotator = rep.get("last_annotator", "") if rep else ""
+            newest_status = rep.get("last_change_status", "") if rep else ""
+            newest_timestamp = rep.get("last_change_timestamp") if rep else None
 
             # Format annotations as version history chains
             annotations_cell = _format_version_chains_html(annotations)
@@ -488,6 +474,54 @@ async def export_csv(
     except Exception as e:
         logger.error(f"Failed to export annotation progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _select_representative_annotation(
+    annotations: list[dict], lifecycle_order: list[str]
+) -> dict | None:
+    """
+    Pick the annotation version that represents a document's overall progress.
+
+    Prefers the version whose status is furthest along ``lifecycle_order``,
+    disregarding timestamp entirely, so an older approved version is not
+    shadowed by a newer draft/regression version of the same document. Ties
+    (same status) are broken by the most recent timestamp. Falls back to the
+    most recently changed annotation if none carry a status recognized by
+    ``lifecycle_order``, so the row still shows something meaningful.
+
+    Args:
+        annotations: Annotation info dicts for a single document (as produced
+            by `_extract_annotation_info`)
+        lifecycle_order: Ordered list of lifecycle stages
+
+    Returns:
+        The representative annotation dict, or None if `annotations` is empty
+    """
+    best = None
+    best_index = -1
+    for ann in annotations:
+        status = ann.get("last_change_status", "")
+        if status not in lifecycle_order:
+            continue
+        index = lifecycle_order.index(status)
+        timestamp = ann.get("last_change_timestamp")
+        if index > best_index or (
+            index == best_index
+            and timestamp
+            and (not best.get("last_change_timestamp") or timestamp > best["last_change_timestamp"])
+        ):
+            best = ann
+            best_index = index
+
+    if best is not None:
+        return best
+
+    newest = None
+    for ann in annotations:
+        timestamp = ann.get("last_change_timestamp")
+        if timestamp and (newest is None or timestamp > newest.get("last_change_timestamp")):
+            newest = ann
+    return newest
 
 
 def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:

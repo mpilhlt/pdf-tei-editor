@@ -395,19 +395,27 @@ export class PluginSandbox {
    * from any iframe or popup), so no dedicated listener is created here.
    * @param {string} url - Relative or absolute URL to open
    * @param {string} [name='_blank'] - Window name
-   * @param {string} [features=''] - Window features
-   * @returns {boolean} True once the window was opened. Not the window
-   *   reference itself - callers may be a plugin iframe/popup invoking this
-   *   through the cross-window sandbox RPC, whose response must be
-   *   structured-clone-able, and a Window object is not.
+   * @param {string} [features] - Window features. When omitted, resolved
+   *   from the `backend-plugins.open-target` config value: 'tab' (default)
+   *   opens with no features (a plain new tab in most browsers), 'window'
+   *   opens a sized popup. Pass an explicit string to override either way.
+   * @returns {Promise<boolean>} True once the window was opened. Not the
+   *   window reference itself - callers may be a plugin iframe/popup
+   *   invoking this through the cross-window sandbox RPC, whose response
+   *   must be structured-clone-able, and a Window object is not.
    */
-  openControlledWindow(url, name = '_blank', features = '') {
+  async openControlledWindow(url, name = '_blank', features) {
     const targetUrl = new URL(url, window.location.origin);
     const state = this.context.getCurrentState();
     if (!targetUrl.searchParams.has('session_id') && state?.sessionId) {
       targetUrl.searchParams.set('session_id', state.sessionId);
     }
-    const win = window.open(targetUrl.toString(), name, features);
+    let resolvedFeatures = features;
+    if (resolvedFeatures === undefined) {
+      const openTarget = await this.context.getDependency('config').get('backend-plugins.open-target', 'tab');
+      resolvedFeatures = openTarget === 'window' ? 'width=1200,height=800' : '';
+    }
+    const win = window.open(targetUrl.toString(), name, resolvedFeatures);
 
     if (!win) {
       throw new Error('Failed to open window - popup blocked?');

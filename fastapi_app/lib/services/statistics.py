@@ -98,25 +98,27 @@ def calculate_collection_statistics(
             stage_counts["no-status"] += 1
             continue
 
-        # Find the most recent status across all annotations for this document
-        newest_timestamp = None
-        newest_status = ""
+        # Track the version furthest along the lifecycle, not merely the most
+        # recently touched one - an older approved version must not be
+        # shadowed by a newer draft/regression version of the same document.
+        best_status = ""
+        best_index = -1
         for ann in annotations:
-            ann_timestamp = ann.get("updated_at")
-            if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
-                newest_timestamp = ann_timestamp
-                newest_status = ann.get("status", "")
+            status = ann.get("status", "")
+            if status not in lifecycle_order:
+                continue
+            index = lifecycle_order.index(status)
+            if index > best_index:
+                best_index = index
+                best_status = status
 
-        if newest_status in stage_counts:
-            stage_counts[newest_status] += 1
-        else:
+        if best_index == -1:
             stage_counts["no-status"] += 1
+            continue
 
-        # Calculate progress for this document (0-100%)
-        if newest_status and newest_status in lifecycle_order:
-            current_index = lifecycle_order.index(newest_status)
-            doc_progress = ((current_index + 1) / len(lifecycle_order)) * 100
-            total_progress_sum += doc_progress
+        stage_counts[best_status] += 1
+        doc_progress = ((best_index + 1) / len(lifecycle_order)) * 100
+        total_progress_sum += doc_progress
 
     # Calculate average progress across all documents
     avg_progress = (total_progress_sum / total_docs) if total_docs > 0 else 0

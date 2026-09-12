@@ -13,6 +13,7 @@ from fastapi_app.plugins.annotation_progress.plugin import AnnotationProgressPlu
 from fastapi_app.plugins.annotation_progress.routes import (
     _extract_annotation_info,
     _format_version_chains_html,
+    _select_representative_annotation,
 )
 
 
@@ -157,6 +158,70 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["annotation_label"], "Untitled")
         self.assertEqual(result["revision_count"], 1)
+
+
+class TestSelectRepresentativeAnnotation(unittest.TestCase):
+    """Test cases for _select_representative_annotation."""
+
+    def setUp(self):
+        self.lifecycle_order = ["draft", "review", "final"]
+
+    def test_picks_highest_status_over_newest_timestamp(self):
+        """A newer regression must not shadow an older, further-along version."""
+        from datetime import datetime
+
+        older_but_further = {
+            "last_change_status": "final",
+            "last_change_timestamp": datetime(2024, 1, 1),
+        }
+        newer_but_regressed = {
+            "last_change_status": "draft",
+            "last_change_timestamp": datetime(2024, 1, 5),
+        }
+
+        result = _select_representative_annotation(
+            [newer_but_regressed, older_but_further], self.lifecycle_order
+        )
+
+        self.assertIs(result, older_but_further)
+
+    def test_ties_broken_by_newest_timestamp(self):
+        """Among versions with the same status, prefer the most recent one."""
+        from datetime import datetime
+
+        older = {
+            "last_change_status": "review",
+            "last_change_timestamp": datetime(2024, 1, 1),
+        }
+        newer = {
+            "last_change_status": "review",
+            "last_change_timestamp": datetime(2024, 1, 5),
+        }
+
+        result = _select_representative_annotation([older, newer], self.lifecycle_order)
+
+        self.assertIs(result, newer)
+
+    def test_falls_back_to_newest_when_no_status_recognized(self):
+        """When no annotation's status is in lifecycle_order, fall back to
+        the most recently changed one so the row still shows something."""
+        from datetime import datetime
+
+        older = {
+            "last_change_status": "archived",
+            "last_change_timestamp": datetime(2024, 1, 1),
+        }
+        newer = {
+            "last_change_status": "",
+            "last_change_timestamp": datetime(2024, 1, 5),
+        }
+
+        result = _select_representative_annotation([older, newer], self.lifecycle_order)
+
+        self.assertIs(result, newer)
+
+    def test_empty_list_returns_none(self):
+        self.assertIsNone(_select_representative_annotation([], self.lifecycle_order))
 
 
 class TestFormatVersionChainsHtml(unittest.TestCase):

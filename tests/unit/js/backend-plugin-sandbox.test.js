@@ -13,7 +13,7 @@
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
 
-global.window = { addEventListener: () => {} };
+global.window = { addEventListener: () => {}, location: { origin: 'http://localhost' } };
 
 mock.module('../../../app/src/plugins/xmleditor.js', {
   namedExports: { openDocumentAtLine: () => {} }
@@ -37,6 +37,77 @@ function makeSandbox({ xml = null, pdf = null, servicesLoad = async () => {} } =
   const sandbox = new PluginSandbox(context, /** @type {any} */ ({}));
   return { sandbox, services };
 }
+
+describe('PluginSandbox.openControlledWindow()', () => {
+  let originalOpen;
+  let originalSetInterval;
+  let originalClearInterval;
+
+  beforeEach(() => {
+    originalOpen = window.open;
+    originalSetInterval = global.setInterval;
+    originalClearInterval = global.clearInterval;
+    // Real timers would delay/hang the test runner for no benefit here -
+    // openControlledWindow's own behavior under test finishes synchronously.
+    global.setInterval = () => 0;
+    global.clearInterval = () => {};
+  });
+
+  function restoreGlobals() {
+    window.open = originalOpen;
+    global.setInterval = originalSetInterval;
+    global.clearInterval = originalClearInterval;
+  }
+
+  function makeWindowSandbox({ configValue = 'tab', windowOpenReturns = { closed: false } } = {}) {
+    const configGet = mock.fn(async (_key, defaultValue) => configValue ?? defaultValue);
+    const context = {
+      getCurrentState: () => ({ sessionId: null }),
+      getDependency: (name) => (name === 'config' ? { get: configGet } : undefined)
+    };
+    const sandbox = new PluginSandbox(context, /** @type {any} */ ({}));
+    const windowOpen = mock.fn(() => windowOpenReturns);
+    window.open = windowOpen;
+    return { sandbox, windowOpen, configGet };
+  }
+
+  it("opens with no features (a plain tab) when config says 'tab' and none were given", async () => {
+    const { sandbox, windowOpen, configGet } = makeWindowSandbox({ configValue: 'tab' });
+
+    await sandbox.openControlledWindow('/some/url');
+
+    assert.strictEqual(configGet.mock.callCount(), 1);
+    assert.strictEqual(configGet.mock.calls[0].arguments[0], 'backend-plugins.open-target');
+    assert.strictEqual(windowOpen.mock.calls[0].arguments[2], '');
+    restoreGlobals();
+  });
+
+  it("opens a sized popup when config says 'window' and none were given", async () => {
+    const { sandbox, windowOpen } = makeWindowSandbox({ configValue: 'window' });
+
+    await sandbox.openControlledWindow('/some/url');
+
+    assert.strictEqual(windowOpen.mock.calls[0].arguments[2], 'width=1200,height=800');
+    restoreGlobals();
+  });
+
+  it('lets an explicit features argument override the config default', async () => {
+    const { sandbox, windowOpen, configGet } = makeWindowSandbox({ configValue: 'window' });
+
+    await sandbox.openControlledWindow('/some/url', '_blank', 'width=400,height=300');
+
+    assert.strictEqual(configGet.mock.callCount(), 0);
+    assert.strictEqual(windowOpen.mock.calls[0].arguments[2], 'width=400,height=300');
+    restoreGlobals();
+  });
+
+  it('throws when window.open() returns null (popup blocked)', async () => {
+    const { sandbox } = makeWindowSandbox({ windowOpenReturns: null });
+
+    await assert.rejects(() => sandbox.openControlledWindow('/some/url'), /popup blocked/);
+    restoreGlobals();
+  });
+});
 
 describe('PluginSandbox.reloadCurrentDocument()', () => {
   it('reloads both xml and pdf from current state when both are open', async () => {

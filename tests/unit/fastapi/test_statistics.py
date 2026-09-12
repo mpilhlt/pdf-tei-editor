@@ -170,6 +170,48 @@ class TestCalculateCollectionStatistics(unittest.TestCase):
         self.assertEqual(result["stage_counts"]["review"], 1)
         self.assertEqual(result["stage_counts"]["final"], 0)
 
+    def test_newer_regression_does_not_shadow_higher_status(self):
+        """A newer annotation with a lower lifecycle status must not shadow
+        an older one that already reached a higher stage - the document's
+        status is the furthest stage reached by any of its versions, not
+        whichever version was touched last."""
+        pdf = MagicMock()
+        pdf.doc_id = "doc1"
+        pdf.file_type = "pdf"
+
+        tei1 = MagicMock()
+        tei1.doc_id = "doc1"
+        tei1.file_type = "tei"
+        tei1.label = "Annotation 1"
+        tei1.stable_id = "abc123"
+        tei1.status = "final"
+        tei1.updated_at = datetime(2024, 1, 15, 10, 0, 0)  # Older, but further along
+        tei1.variant = None
+
+        tei2 = MagicMock()
+        tei2.doc_id = "doc1"
+        tei2.file_type = "tei"
+        tei2.label = "Annotation 2"
+        tei2.stable_id = "def456"
+        tei2.status = "draft"
+        tei2.updated_at = datetime(2024, 1, 16, 10, 0, 0)  # Newer, but a regression
+        tei2.variant = None
+
+        self.file_repo.get_files_by_collection.return_value = [pdf, tei1, tei2]
+
+        result = calculate_collection_statistics(
+            file_repo=self.file_repo,
+            collection="test-collection",
+            variant=None,
+            lifecycle_order=self.lifecycle_order
+        )
+
+        # Should use "final" (the highest status reached), not "draft" (the newest)
+        self.assertEqual(result["stage_counts"]["draft"], 0)
+        self.assertEqual(result["stage_counts"]["review"], 0)
+        self.assertEqual(result["stage_counts"]["final"], 1)
+        self.assertAlmostEqual(result["avg_progress"], 100.0, places=2)
+
     def test_variant_filtering(self):
         """Test variant filtering."""
         pdf = MagicMock()
