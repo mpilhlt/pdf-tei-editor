@@ -1140,8 +1140,8 @@ This task has no new automated tests — no existing plugin's `static/*.js` has 
 
   <div class="toolbar">
     <h2>Collection × Variant</h2>
-    <label class="toggle" id="attnToggle" onclick="toggleAttention(event)">
-      <input type="checkbox" id="attnCheck">
+    <label class="toggle" id="attnToggle">
+      <input type="checkbox" id="attnCheck" onchange="toggleAttention()">
       Show needs-attention only
     </label>
   </div>
@@ -1357,6 +1357,7 @@ function oklchToHex(L, C, H) {
 }
 
 function buildStageRamp(n) {
+  if (n === 0) return [];
   if (n <= 1) return [oklchToHex(0.46, RAMP_CHROMA, RAMP_HUE)];
   const ramp = [];
   for (let i = 0; i < n; i++) {
@@ -1454,7 +1455,7 @@ function stageSegBar(row) {
     const n = counts[name] || 0;
     if (!n) return '';
     const share = (n / docs) * 100;
-    return `<span title="${name}: ${n} of ${docs} documents (${Math.round(share)}%)" style="width:${share.toFixed(2)}%;background:${stageColor(i)}"></span>`;
+    return `<span title="${escapeHtml(name)}: ${n} of ${docs} documents (${Math.round(share)}%)" style="width:${share.toFixed(2)}%;background:${stageColor(i)}"></span>`;
   }).join('');
   return `<span class="seg-bar">${segs}</span>`;
 }
@@ -1497,7 +1498,7 @@ function renderRow(row) {
       </div>
     </td>
     <td class="action">
-      <a href="#" onclick="event.preventDefault(); sandbox.navigateIframe('${progressUrl}');" title="Open Annotation Progress for ${escapeHtml(row.collection_name)} / ${row.variant ? escapeHtml(row.variant) : 'default'}">
+      <a href="#" data-progress-url="${escapeHtml(progressUrl)}" onclick="event.preventDefault(); sandbox.navigateIframe(this.dataset.progressUrl);" title="Open Annotation Progress for ${escapeHtml(row.collection_name)} / ${row.variant ? escapeHtml(row.variant) : 'default'}">
         Open progress
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
@@ -1561,8 +1562,8 @@ function renderFacetPanel(facet) {
   const scoped = facet === 'variant' ? facetState.collection : null;
   panel.innerHTML = facetValues(facet, { scopeToCollections: scoped }).map(([value, { label, count }]) => `
     <label class="facet-option">
-      <input type="checkbox" value="${escapeHtml(value)}" ${selected.has(value) ? 'checked' : ''}
-             onchange="onFacetToggle('${facet}', '${value}', this.checked)">
+      <input type="checkbox" data-facet="${facet}" data-value="${escapeHtml(value)}" ${selected.has(value) ? 'checked' : ''}
+             onchange="onFacetToggle(this.dataset.facet, this.dataset.value, this.checked)">
       <span class="opt-label">${escapeHtml(label)}</span>
       <span class="opt-count">${count}</span>
     </label>`).join('');
@@ -1579,7 +1580,7 @@ function renderFacetTags(facet) {
   wrap.innerHTML = selected.map((value) => {
     const found = values.find(([v]) => v === value);
     const label = found ? found[1].label : value;
-    return `<span class="tag-chip">${escapeHtml(label)}<button type="button" onclick="event.stopPropagation(); onFacetToggle('${facet}','${value}', false)">✕</button></span>`;
+    return `<span class="tag-chip">${escapeHtml(label)}<button type="button" data-facet="${facet}" data-value="${escapeHtml(value)}" onclick="event.stopPropagation(); onFacetToggle(this.dataset.facet, this.dataset.value, false)">✕</button></span>`;
   }).join('');
 }
 
@@ -1630,8 +1631,7 @@ window.clearFacets = clearFacets;
 function toggleAttention() {
   const box = document.getElementById('attnCheck');
   const wrap = document.getElementById('attnToggle');
-  attentionOnly = !box.checked;
-  box.checked = attentionOnly;
+  attentionOnly = box.checked;
   wrap.classList.toggle('on', attentionOnly);
   applyFilters();
 }

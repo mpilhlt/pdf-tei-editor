@@ -33,6 +33,12 @@ export class PluginSandbox {
     /** @type {Map<string, {eventType: string, listener: Function, source: WindowProxy|null}>} */
     this._sseSubscriptions = new Map();
 
+    /** Popup windows opened via {@link openControlledWindow}, so closeDialog can close them too. @type {Set<WindowProxy>} */
+    this._controlledWindows = new Set();
+
+    /** Source window of the SANDBOX_COMMAND currently being handled, if any. @type {WindowProxy|null} */
+    this._activeCommandSource = null;
+
     // Set up message listener for iframe/popup window commands
     this.messageHandler = this._createMessageHandler();
     window.addEventListener('message', this.messageHandler);
@@ -93,7 +99,13 @@ export class PluginSandbox {
           throw new Error(`Cannot call private method: ${method}`);
         }
 
-        const result = await this[method](...args);
+        this._activeCommandSource = event.source;
+        let result;
+        try {
+          result = await this[method](...args);
+        } finally {
+          this._activeCommandSource = null;
+        }
 
         // For subscribeSSE, store the source window so we can forward events
         if (method === 'subscribeSSE' && result && this._sseSubscriptions.has(result)) {
@@ -135,10 +147,20 @@ export class PluginSandbox {
   }
 
   /**
-   * Close the result dialog
+   * Close the result dialog. If the command that triggered this originated
+   * from a popup opened via {@link openControlledWindow}, close that popup
+   * too - otherwise it's left stranded with no way back to the dialog it
+   * came from.
    */
   closeDialog() {
     this.resultDialog.hide();
+    const source = this._activeCommandSource;
+    if (source && this._controlledWindows.has(source)) {
+      this._controlledWindows.delete(source);
+      if (!source.closed) {
+        source.close();
+      }
+    }
   }
 
   /**
@@ -338,80 +360,54 @@ export class PluginSandbox {
   }
 
   /**
-   * Open URL in new window with sandbox control capability
-   * @param {string} url - URL to open
+   * Open URL in new window with sandbox control capability, with automatic
+   * session_id injection (same convention as {@link navigateIframe}). The
+   * opened window's SANDBOX_COMMAND messages are handled by the same generic
+   * message handler set up in the constructor (it already handles messages
+   * from any iframe or popup), so no dedicated listener is created here.
+   * @param {string} url - Relative or absolute URL to open
    * @param {string} [name='_blank'] - Window name
    * @param {string} [features=''] - Window features
-   * @returns {Window} Opened window reference
+   * @returns {boolean} True once the window was opened. Not the window
+   *   reference itself - callers may be a plugin iframe/popup invoking this
+   *   through the cross-window sandbox RPC, whose response must be
+   *   structured-clone-able, and a Window object is not.
    */
   openControlledWindow(url, name = '_blank', features = '') {
-    const win = window.open(url, name, features);
+    const targetUrl = new URL(url, window.location.origin);
+    const state = this.context.getCurrentState();
+    if (!targetUrl.searchParams.has('session_id') && state?.sessionId) {
+      targetUrl.searchParams.set('session_id', state.sessionId);
+    }
+    const win = window.open(targetUrl.toString(), name, features);
 
     if (!win) {
       throw new Error('Failed to open window - popup blocked?');
     }
 
-    // Set up message listener for child window commands
-    const messageHandler = async (event) => {
-      // Security: verify origin if needed
-      if (!event.data || event.data.type !== 'SANDBOX_COMMAND') {
-        return;
-      }
+    this._controlledWindows.add(win);
 
-      const { method, args, requestId } = event.data;
-
-      try {
-        // Call sandbox method dynamically
-        if (typeof this[method] !== 'function') {
-          throw new Error(`Unknown or non-callable sandbox method: ${method}`);
-        }
-
-        // Prevent calling private methods (starting with _)
-        if (method.startsWith('_')) {
-          throw new Error(`Cannot call private method: ${method}`);
-        }
-
-        const result = await this[method](...args);
-
-        // Send response
-        win.postMessage({
-          type: 'SANDBOX_RESPONSE',
-          requestId,
-          result
-        }, '*');
-      } catch (error) {
-        // Send error response
-        win.postMessage({
-          type: 'SANDBOX_RESPONSE',
-          requestId,
-          error: error.message
-        }, '*');
-      }
-    };
-
-    window.addEventListener('message', messageHandler);
-
-    // Close child window and clean up when parent window closes
+    // Close child window when parent window closes
     const closeChild = () => {
       if (win && !win.closed) {
         this._cleanupSSESubscriptions(win);
         win.close();
       }
-      window.removeEventListener('message', messageHandler);
+      this._controlledWindows.delete(win);
       clearInterval(checkClosed);
     };
     window.addEventListener('beforeunload', closeChild);
 
-    // Clean up listener when child window closes on its own
+    // Clean up when child window closes on its own
     const checkClosed = setInterval(() => {
       if (win.closed) {
         this._cleanupSSESubscriptions(win);
-        window.removeEventListener('message', messageHandler);
+        this._controlledWindows.delete(win);
         window.removeEventListener('beforeunload', closeChild);
         clearInterval(checkClosed);
       }
     }, 1000);
 
-    return win;
+    return true;
   }
 }

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collection Coverage Overview</title>
+  <link rel="stylesheet" href="/api/plugins/collection-overview/static/styles.css">
+</head>
+<body>
+  <header class="page">
+    <div>
+      <h1>Annotation Coverage Matrix</h1>
+      <p>Every collection you can access, broken down by annotation variant — gold-standard coverage and lifecycle progress side by side, so you can see at a glance where work still needs to happen.</p>
+    </div>
+  </header>
+
+  <div class="filter-bar" id="filterBar">
+    <div class="fake-select" data-facet="collection">
+      <span class="facet-label">Collection</span>
+      <button type="button" class="facet-control" id="ctrl-collection" onclick="toggleFacetPanel('collection')">
+        <span class="facet-tags" id="tags-collection"><span class="placeholder">All collections</span></span>
+        <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="facet-panel" id="panel-collection"></div>
+    </div>
+    <div class="fake-select" data-facet="variant">
+      <span class="facet-label">Variant</span>
+      <button type="button" class="facet-control" id="ctrl-variant" onclick="toggleFacetPanel('variant')">
+        <span class="facet-tags" id="tags-variant"><span class="placeholder">All variants</span></span>
+        <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="facet-panel" id="panel-variant"></div>
+    </div>
+    <button type="button" class="clear-filters" id="clearFilters" hidden onclick="clearFacets()">Clear filters</button>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="label">Collections in scope</div>
+      <div class="value" id="kpi-collections">—</div>
+    </div>
+    <div class="stat">
+      <div class="label">Documents tracked</div>
+      <div class="value" id="kpi-docs">—</div>
+    </div>
+    <div class="stat">
+      <div class="label">Combinations</div>
+      <div class="value" id="kpi-combinations">—</div>
+    </div>
+    <div class="stat flag">
+      <div class="label">Rows needing attention</div>
+      <div class="value" id="kpi-attention">—</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <h2>Collection × Variant</h2>
+    <label class="toggle" id="attnToggle">
+      <input type="checkbox" id="attnCheck" onchange="toggleAttention()">
+      Show needs-attention only
+    </label>
+  </div>
+
+  <div id="app">
+    <div class="table-wrap">
+      <table id="matrix">
+        <thead>
+          <tr>
+            <th onclick="sortBy(0,this)">Collection <span class="arrow">▾</span></th>
+            <th onclick="sortBy(1,this)">Variant <span class="arrow">▾</span></th>
+            <th onclick="sortBy(2,this)" data-num>Documents <span class="arrow">▾</span></th>
+            <th onclick="sortBy(3,this)" data-num>Gold standard <span class="arrow">▾</span></th>
+            <th onclick="sortBy(4,this)" data-num>Progress <span class="arrow">▾</span></th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="legend" id="legend">
+    <span class="scale-legend">
+      <span id="legend-start">—</span><span class="ramp" id="legend-ramp"></span><span id="legend-end">—</span>
+    </span>
+  </footer>
+
+  <script type="module" src="/api/plugins/collection-overview/static/view.js"></script>
+</body>
+</html>
