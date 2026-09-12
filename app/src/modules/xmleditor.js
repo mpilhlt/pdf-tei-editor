@@ -61,7 +61,7 @@ import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
-import { ignoreLineWhitespaceInDiff } from './diff-utils.js';
+import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
  */
@@ -141,6 +141,21 @@ export class XMLEditor extends EventEmitter {
    * @type {string}
    */
   #original = ''
+
+  /**
+   * The unmodified incoming XML content last passed to showMergeView, before
+   * any whitespace normalization. Kept so the merge view can be redrawn when
+   * setIgnoreWhitespaceInDiff() toggles the normalization on/off.
+   * @type {string}
+   */
+  #incomingXml = ''
+
+  /**
+   * Whether leading/trailing line whitespace and insignificant inter-tag
+   * linebreak differences are ignored when computing the merge view diff.
+   * @type {boolean}
+   */
+  #ignoreWhitespaceInDiff = true
 
   /**
    * MutationObserver for merge view buttons
@@ -610,33 +625,66 @@ export class XMLEditor extends EventEmitter {
 
     // fetch xml if it is a path
     const diff = await this.#fetchXml(xmlPathOrString);
+    this.#incomingXml = diff;
 
     // Extract edition titles from both documents
     const currentTitle = this.#extractEditionTitle(this.#original, false);
     const incomingTitle = this.#extractEditionTitle(diff, true);
-
-    // lines that only differ from the current document by leading/trailing
-    // whitespace are rewritten to match it, so they are not shown as changes
-    const normalizedDiff = ignoreLineWhitespaceInDiff(diff, this.#original);
+    this.#mergeViewTitles = { current: currentTitle, incoming: incomingTitle };
 
     // create and display merge view with the original
-    this.#mergeViewExt = unifiedMergeView({
-      original: normalizedDiff,
-      diffConfig: { scanLimit: 50000, timeout: 20000 }
-    })
-
-    this.#view.dispatch({
-      effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
-    });
-
-    // Store titles for button updates
-    this.#mergeViewTitles = { current: currentTitle, incoming: incomingTitle };
+    this.#renderMergeView();
 
     // Set up MutationObserver to update button labels when DOM changes
     this.#setupMergeViewObserver();
 
     // notify listeners
     this.emit(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW)
+  }
+
+  /**
+   * (Re)creates the merge view extension from `#incomingXml` and `#original`,
+   * applying whitespace normalization when `#ignoreWhitespaceInDiff` is enabled,
+   * and dispatches it to the editor view.
+   */
+  #renderMergeView() {
+    // whitespace differences with no significance in XML (leading/trailing
+    // whitespace on a line, inserted/removed linebreaks between tags) are
+    // rewritten to match the current document, so they are not shown as changes
+    const original = this.#ignoreWhitespaceInDiff
+      ? normalizeXmlWhitespaceForDiff(this.#incomingXml, this.#original)
+      : this.#incomingXml;
+
+    this.#mergeViewExt = unifiedMergeView({
+      original,
+      diffConfig: { scanLimit: 50000, timeout: 20000 }
+    })
+
+    this.#view.dispatch({
+      effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
+    });
+  }
+
+  /**
+   * Enables or disables ignoring whitespace-only differences (leading/trailing
+   * line whitespace, inserted/removed linebreaks between tags) in the merge
+   * view diff. If a merge view is currently active, it is redrawn immediately.
+   * @param {boolean} enabled
+   */
+  setIgnoreWhitespaceInDiff(enabled) {
+    this.#ignoreWhitespaceInDiff = enabled;
+    if (this.isMergeViewActive()) {
+      this.#renderMergeView();
+    }
+  }
+
+  /**
+   * Returns whether whitespace-only differences are currently ignored in the
+   * merge view diff.
+   * @returns {boolean}
+   */
+  getIgnoreWhitespaceInDiff() {
+    return this.#ignoreWhitespaceInDiff;
   }
 
   /**
@@ -675,6 +723,7 @@ export class XMLEditor extends EventEmitter {
     });
     this.#mergeViewExt = null;
     this.#original = '';
+    this.#incomingXml = '';
     this.#mergeViewTitles = null;
 
     // notify listeners
