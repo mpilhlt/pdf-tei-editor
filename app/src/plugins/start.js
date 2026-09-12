@@ -15,10 +15,12 @@ import ep from '../extension-points.js'
 import ui, { Spinner, updateUi } from '../ui.js'
 import { testLog } from '../modules/test-log.js'
 import { HeartbeatPlugin } from '../plugin-registry.js'
-import { UrlHash } from '../modules/browser-utils.js'
+import { UrlHash, renderTitleTemplate } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
 class StartPlugin extends Plugin {
+  static extensionPoints = [ep.title.updateSlots];
+
   /** @type {import('./logger.js').default} */
   #logger
   /** @type {ReturnType<import('./config.js').default['getApi']>} */
@@ -33,6 +35,8 @@ class StartPlugin extends Plugin {
   #xmlEditor
   /** @type {import('./authentication.js').default} */
   #authentication
+  /** @type {{appTitle: string, status: string, username: string}} */
+  #titleSlots = { appTitle: document.title, status: '', username: '' }
 
   /** @param {PluginContext} context */
   constructor(context) {
@@ -54,6 +58,8 @@ class StartPlugin extends Plugin {
     this.#validation = this.getDependency('tei-validation')
     this.#xmlEditor = this.getDependency('xmleditor')
     this.#authentication = this.getDependency('authentication')
+
+    this.#updateTitleSlots({ username: state.user?.username ?? '' })
 
     // spinner/blocker
     const spinner = new Spinner
@@ -180,6 +186,35 @@ class StartPlugin extends Plugin {
       this.#dialog.error(String(error))
       throw error
     }
+  }
+
+  /**
+   * @param {ApplicationState['user']} user
+   */
+  onUserChange(user) {
+    this.#updateTitleSlots({ username: user?.username ?? '' })
+  }
+
+  /**
+   * Extension point handler for `ep.title.updateSlots`.
+   * Merges the given slot values into the browser tab title and re-renders it. Called by
+   * any plugin that needs to contribute part of the title (e.g. XmlEditorPlugin for the
+   * unsaved/blocked status marker).
+   * Delegates to {@link StartPlugin#updateTitleSlots}.
+   * @param {Record<string, string>} slots
+   * @returns {void}
+   */
+  [ep.title.updateSlots](slots) {
+    this.#updateTitleSlots(slots)
+  }
+
+  /**
+   * @param {Record<string, string>} slots
+   */
+  #updateTitleSlots(slots) {
+    Object.assign(this.#titleSlots, slots)
+    const title = renderTitleTemplate(this.state.titleTemplate, this.#titleSlots)
+    if (document.title !== title) document.title = title
   }
 
   /**

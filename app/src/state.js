@@ -52,6 +52,9 @@
  * @property {string|null} view - Active editor view mode; 'annotation' for annotation view, null for raw XML
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  * @property {ApplicationState|null} previousState - Links to the previous state object
+ * @property {string} titleTemplate - Template for the browser tab title, with `{slot}`
+ * placeholders. Unresolved/empty slots become empty strings; a resulting empty `()`/`[]`
+ * pair is stripped. See `ep.title.updateSlots` and `StartPlugin`.
  */
 
 /**
@@ -79,6 +82,7 @@ const initialState = {
   maintenanceMode: false,
   view: null,
   ext: {},
+  titleTemplate: '{status}{appTitle} ({username})',
   previousState: null
 }
 

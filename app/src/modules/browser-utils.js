@@ -209,13 +209,30 @@ export function getDescendantByName(node, name, noError) {
 
 /**
  * Escapes the given text to valid html
- * @param {string} text 
+ * @param {string} text
  * @returns {string} The escaped text
  */
 export function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * Renders a title template by substituting `{slotName}` placeholders with values
+ * from `slots`. A placeholder with no matching key (or an empty/falsy value) in
+ * `slots` is substituted with an empty string; any `()` or `[]` pair left empty by
+ * that substitution is then stripped, and whitespace is normalized. Placeholders
+ * not present in `slots` are simply ignored (substituted as empty), and extra
+ * `slots` entries not referenced by `template` have no effect.
+ * @param {string} template
+ * @param {Record<string, string>} slots
+ * @returns {string}
+ */
+export function renderTitleTemplate(template, slots) {
+  let result = template.replace(/\{(\w+)\}/g, (_, name) => slots[name] || '')
+  result = result.replace(/[[(]\s*[)\]]/g, '').replace(/\s{2,}/g, ' ').trim()
+  return result
 }
 
 

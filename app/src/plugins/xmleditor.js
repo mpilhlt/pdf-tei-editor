@@ -233,8 +233,6 @@ class XmlEditorPlugin extends Plugin {
   #syncErrorShownToUser = false;
   /** @type {string|null} */
   #lastLoadedStableId = null;
-  /** @type {string} */
-  #originalDocumentTitle = document.title;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
@@ -1363,19 +1361,17 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Updates the browser tab title to reflect unsaved/error state. Prefixes the original
-   * document title with "● " when there is unsaved work, or with "⚠ " when auto-save is
-   * actively blocked, so users can notice from other tabs.
+   * Updates the browser tab title to reflect unsaved/error state. Reports "● " when there
+   * is unsaved work, or "⚠ " when auto-save is actively blocked, so users can notice from
+   * other tabs.
    */
   #updateBrowserTitle() {
-    const base = this.#originalDocumentTitle;
-    let prefix = '';
     const dirty = this.#xmlEditor.isDirty();
     const blocked = this.#saveStatusWidget?.isConnected;
-    if (blocked) prefix = '⚠ ';
-    else if (dirty) prefix = '● ';
-    const newTitle = prefix + base;
-    if (document.title !== newTitle) document.title = newTitle;
+    let status = '';
+    if (blocked) status = '⚠ ';
+    else if (dirty) status = '● ';
+    this.context.invokePluginEndpoint(ep.title.updateSlots, { status });
   }
 
   /**
