@@ -74,25 +74,58 @@ class ResolveReloadTargetTestCase(unittest.TestCase):
     def setUp(self):
         self.file_repo = mock.Mock()
         self.file_storage = mock.Mock()
+        self.user = {"username": "reviewer1", "roles": ["reviewer"]}
+
+        # Isolate resolve_reload_target's own logic from the real
+        # access-control mode configuration; individual tests override this.
+        check_access_patch = mock.patch(
+            "fastapi_app.plugins.grobid.reload_feature_file.check_file_access",
+            return_value=True,
+        )
+        self.mock_check_access = check_access_patch.start()
+        self.addCleanup(check_access_patch.stop)
+
+    def resolve(self, stable_id="tei-1"):
+        return resolve_reload_target(self.file_repo, self.file_storage, stable_id, self.user)
 
     def test_raises_when_no_tei_document_found(self):
         self.file_repo.get_file_by_stable_id.return_value = None
         with self.assertRaises(ReloadPreconditionError):
-            resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+            self.resolve()
 
     def test_raises_when_file_is_not_tei_type(self):
         meta, _ = make_tei_file()
         meta.file_type = "pdf"
         self.file_repo.get_file_by_stable_id.return_value = meta
         with self.assertRaises(ReloadPreconditionError):
-            resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+            self.resolve()
+
+    def test_raises_when_user_lacks_write_access(self):
+        meta, _ = make_tei_file()
+        self.file_repo.get_file_by_stable_id.return_value = meta
+        self.mock_check_access.return_value = False
+
+        with self.assertRaises(ReloadPreconditionError) as cm:
+            self.resolve()
+        self.assertIn("permission", str(cm.exception))
+        self.mock_check_access.assert_called_once_with(meta, self.user, "edit")
+
+    def test_write_access_check_happens_before_reading_content(self):
+        """Denying access shouldn't require reading/parsing the file content."""
+        meta, _ = make_tei_file()
+        self.file_repo.get_file_by_stable_id.return_value = meta
+        self.mock_check_access.return_value = False
+
+        with self.assertRaises(ReloadPreconditionError):
+            self.resolve()
+        self.file_storage.read_file.assert_not_called()
 
     def test_raises_when_content_missing(self):
         meta, _ = make_tei_file()
         self.file_repo.get_file_by_stable_id.return_value = meta
         self.file_storage.read_file.return_value = None
         with self.assertRaises(ReloadPreconditionError):
-            resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+            self.resolve()
 
     def test_raises_when_not_a_training_document(self):
         meta, content = make_tei_file()
@@ -100,7 +133,7 @@ class ResolveReloadTargetTestCase(unittest.TestCase):
         self.file_repo.get_file_by_stable_id.return_value = meta
         self.file_storage.read_file.return_value = content
         with self.assertRaises(ReloadPreconditionError):
-            resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+            self.resolve()
 
     def test_raises_when_no_pdf_for_document(self):
         meta, content = make_tei_file()
@@ -108,7 +141,7 @@ class ResolveReloadTargetTestCase(unittest.TestCase):
         self.file_storage.read_file.return_value = content
         self.file_repo.get_pdf_for_document.return_value = None
         with self.assertRaises(ReloadPreconditionError):
-            resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+            self.resolve()
 
     def test_returns_target_on_success(self):
         meta, content = make_tei_file(revision="rev-1")
@@ -118,7 +151,7 @@ class ResolveReloadTargetTestCase(unittest.TestCase):
         self.file_repo.get_pdf_for_document.return_value = pdf_meta
         self.file_storage.get_file_path.return_value = Path("/fake/doc.pdf")
 
-        target = resolve_reload_target(self.file_repo, self.file_storage, "tei-1")
+        target = self.resolve()
 
         self.assertEqual(target.doc_id, "doc-1")
         self.assertEqual(target.variant_id, "grobid.training.segmentation")

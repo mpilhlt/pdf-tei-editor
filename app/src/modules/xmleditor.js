@@ -428,12 +428,22 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
+   * `EditorView.editable` only disables the contentEditable DOM surface, so it does not stop
+   * a merge view's built-in per-chunk accept/reject controls, which dispatch transactions
+   * programmatically (tagged "accept"/"revert") rather than through DOM input. A
+   * transactionFilter is added to block those transactions outright while read-only.
    * @param {Boolean} value
    */
   async setReadOnly(value) {
     this.#editorIsReadOnly = Boolean(value)
+    const extensions = [EditorView.editable.of(!this.#editorIsReadOnly)];
+    if (this.#editorIsReadOnly) {
+      extensions.push(EditorState.transactionFilter.of(
+        tr => (tr.isUserEvent("accept") || tr.isUserEvent("revert")) ? [] : tr
+      ));
+    }
     this.#view.dispatch({
-      effects: [this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))]
+      effects: [this.#readOnlyCompartment.reconfigure(extensions)]
     });
     await this.emit("editorReadOnly", this.#editorIsReadOnly)
   }

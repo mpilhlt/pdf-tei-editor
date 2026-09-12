@@ -97,6 +97,10 @@ test.describe('Authentication Workflow', () => {
     });
     expect(toolbarMenuButtonEnabled).toBe(true);
 
+    // Verify the browser tab title now includes the username
+    const titleAfterLogin = await page.title();
+    expect(titleAfterLogin).toContain('testuser');
+
     // Clear console logs for logout test
     consoleLogs.length = 0;
 
@@ -128,6 +132,10 @@ test.describe('Authentication Workflow', () => {
       return ui.loginDialog.open === true;
     });
     expect(loginDialogVisibleAgain).toBe(true);
+
+    // Verify the browser tab title no longer includes the username after logout
+    const titleAfterLogout = await page.title();
+    expect(titleAfterLogout).not.toContain('testuser');
 
     // Verify successful logout message in console logs
     await page.waitForTimeout(1000);

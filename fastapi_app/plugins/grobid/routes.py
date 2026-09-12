@@ -254,11 +254,11 @@ async def reload_feature_file_preview(
         resolve_reload_target,
     )
 
-    _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+    user = _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
 
     file_repo = FileRepository(db)
     try:
-        target = resolve_reload_target(file_repo, file_storage, xml)
+        target = resolve_reload_target(file_repo, file_storage, xml, user)
     except ReloadPreconditionError as e:
         return HTMLResponse(content=render_precondition_error_html(str(e)))
 
@@ -305,11 +305,11 @@ async def reload_feature_file_execute(
         resolve_reload_target,
     )
 
-    _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+    user = _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
 
     file_repo = FileRepository(db)
     try:
-        target = resolve_reload_target(file_repo, file_storage, xml)
+        target = resolve_reload_target(file_repo, file_storage, xml, user)
     except ReloadPreconditionError as e:
         return HTMLResponse(content=render_precondition_error_html(str(e)))
 

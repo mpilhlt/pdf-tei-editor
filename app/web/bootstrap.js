@@ -6,6 +6,27 @@
 // check whether we are supposed to run the source or the built version
 const loadFromSource = new URLSearchParams(window.location.search).has('dev')
 
+// point the favicon at the dev (amber) or production (blue) variant;
+// runs synchronously so the correct icon shows before first paint
+const faviconBase = loadFromSource ? 'favicon-dev' : 'favicon'
+let svgIcon = document.querySelector('link[rel="icon"][type="image/svg+xml"]')
+if (!svgIcon) {
+  svgIcon = document.createElement('link')
+  svgIcon.rel = 'icon'
+  svgIcon.type = 'image/svg+xml'
+  document.head.appendChild(svgIcon)
+}
+svgIcon.href = `${faviconBase}.svg`
+
+let icoIcon = document.querySelector('link[rel="icon"][sizes="any"]')
+if (!icoIcon) {
+  icoIcon = document.createElement('link')
+  icoIcon.rel = 'icon'
+  icoIcon.sizes = 'any'
+  document.head.appendChild(icoIcon)
+}
+icoIcon.href = `${faviconBase}.ico`
+
 window.addEventListener('DOMContentLoaded', async () => {
   if (loadFromSource) {
     // add importmap 

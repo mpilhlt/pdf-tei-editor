@@ -73,6 +73,7 @@ class UserAccountPlugin extends Plugin {
     this.#menuUi.logoutMenuItem.addEventListener('click', () => this.logout());
 
     this._setupFormHandlers();
+    this._updateUserFullname(initialState.user);
   }
 
   async start() {
@@ -84,6 +85,14 @@ class UserAccountPlugin extends Plugin {
    */
   onUserChange(user) {
     this.getDependency('toolbar').setMenuButtonDisabled(user === null);
+    this._updateUserFullname(user);
+  }
+
+  /**
+   * @param {ApplicationState['user']} user
+   */
+  _updateUserFullname(user) {
+    this.#menuUi.userFullnameMenuItem.textContent = user?.fullname || '';
   }
 
   async showProfileDialog() {

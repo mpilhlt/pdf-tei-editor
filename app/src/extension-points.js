@@ -139,6 +139,15 @@ const extensionPoints = {
      * Function signature: () => Array<{element: HTMLElement, group?: string}>
      */
     contextMenuItems: "xmlEditor.contextMenuItems",
+  },
+  title: {
+    /**
+     * Merges the given slot values into the browser tab title (see `state.titleTemplate`)
+     * and re-renders `document.title`. Slot names not present in the current template are
+     * ignored. Handled by StartPlugin.
+     * Function signature: (slots: Record<string, string>) => void
+     */
+    updateSlots: "title.updateSlots"
   }
 }
 

@@ -160,6 +160,10 @@ class XmlEditorPlugin extends Plugin {
   #rejectAllBtn;
   /** @type {StatusButton} */
   #acceptAllBtn;
+  // Whether the merge (diff) view is currently shown, independent of read-only state
+  #mergeViewActive = false;
+  /** @type {() => void} */
+  #updateDiffButtons = () => {};
   /** @type {StatusButton} */
   #validateBtn;
   /** @type {StatusButton} */
@@ -229,8 +233,6 @@ class XmlEditorPlugin extends Plugin {
   #syncErrorShownToUser = false;
   /** @type {string|null} */
   #lastLoadedStableId = null;
-  /** @type {string} */
-  #originalDocumentTitle = document.title;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
@@ -764,26 +766,29 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // dis/enable diff buttons
+    // dis/enable diff buttons based on merge-view state and read-only state
     const diffBtns = [
       this.#prevDiffBtn,
       this.#nextDiffBtn,
       this.#rejectAllBtn,
       this.#acceptAllBtn
     ];
-    const enableDiffButtons = (value) => {
+    this.#updateDiffButtons = () => {
+      const enabled = this.#mergeViewActive && !this.state?.editorReadOnly;
       for (let btn of diffBtns) {
-        btn.disabled = !value;
-        btn.classList.toggle('xmleditor-toolbar-highlight', value);
+        btn.disabled = !enabled;
+        btn.classList.toggle('xmleditor-toolbar-highlight', enabled);
       }
     };
     this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
-      enableDiffButtons(true);
+      this.#mergeViewActive = true;
+      this.#updateDiffButtons();
     });
     this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, () => {
-      enableDiffButtons(false);
+      this.#mergeViewActive = false;
+      this.#updateDiffButtons();
     });
-    enableDiffButtons(false);
+    this.#updateDiffButtons();
 
     // Collect context menu contributions from all plugins that declare ep.xmlEditor.contextMenuItems
     const contributions = await this.context.invokePluginEndpoint(
@@ -898,6 +903,7 @@ class XmlEditorPlugin extends Plugin {
       this.#xmlEditor.setReadOnly(state.editorReadOnly);
       this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     }
+    this.#updateDiffButtons();
 
     // Update visual indicators based on state
     if (state.editorReadOnly) {
@@ -1355,19 +1361,17 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Updates the browser tab title to reflect unsaved/error state. Prefixes the original
-   * document title with "● " when there is unsaved work, or with "⚠ " when auto-save is
-   * actively blocked, so users can notice from other tabs.
+   * Updates the browser tab title to reflect unsaved/error state. Reports "● " when there
+   * is unsaved work, or "⚠ " when auto-save is actively blocked, so users can notice from
+   * other tabs.
    */
   #updateBrowserTitle() {
-    const base = this.#originalDocumentTitle;
-    let prefix = '';
     const dirty = this.#xmlEditor.isDirty();
     const blocked = this.#saveStatusWidget?.isConnected;
-    if (blocked) prefix = '⚠ ';
-    else if (dirty) prefix = '● ';
-    const newTitle = prefix + base;
-    if (document.title !== newTitle) document.title = newTitle;
+    let status = '';
+    if (blocked) status = '⚠ ';
+    else if (dirty) status = '● ';
+    this.context.invokePluginEndpoint(ep.title.updateSlots, { status });
   }
 
   /**
