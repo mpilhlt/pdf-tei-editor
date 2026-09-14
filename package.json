@@ -79,7 +79,7 @@
         "glob": "^13.0.6",
         "highlight.js": "^11.12.0",
         "js-plugin": "^1.1.0",
-        "markdown-it": "^15.0.1",
+        "markdown-it": "^15.0.2",
         "markdown-it-container": "^4.0.0",
         "pdfjs-dist": "6.3.289",
         "uuid": "^14.0.2"
