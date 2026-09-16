@@ -6,7 +6,7 @@ from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_co
 from fastapi_app.lib.utils.config_utils import get_config
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.core.schema_validator import get_schema_cache_info
+from fastapi_app.lib.core.schema_validator import get_schema_cache_info, register_schema_redirect
 from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES, AnnotationGuide
 from fastapi_app.plugins.grobid.config.annotation_tags_generator import (
     AnnotationTag,
@@ -54,6 +54,15 @@ def init_plugin_config() -> None:
     """Register plugin config keys from environment variables."""
     for spec in PLUGIN_CONFIG_SPECS:
         get_plugin_config(**spec)
+
+    # The schema repo (mpilhlt/grobid-footnote-flavour) was renamed to mpilhlt/fossil,
+    # which also moved its GitHub Pages site; the old Pages URL now 404s outright
+    # instead of redirecting. Documents extracted before the rename still embed the
+    # old schema URL, so keep resolving it to the new location.
+    register_schema_redirect(
+        "https://mpilhlt.github.io/grobid-footnote-flavour/",
+        "https://mpilhlt.github.io/fossil/",
+    )
 
 
 SCHEMA_BASE_URL = "https://mpilhlt.github.io/fossil/schema"

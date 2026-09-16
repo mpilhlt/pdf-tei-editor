@@ -40,6 +40,60 @@ SCHEMA_CONFIG = {
     }
 }
 
+# Redirects for schema URLs that have permanently moved (e.g. a renamed GitHub
+# repository, whose Pages site does not itself serve HTTP redirects). Maps an
+# old URL prefix to its new URL prefix; see register_schema_redirect().
+_SCHEMA_URL_REDIRECTS: Dict[str, str] = {}
+
+
+def register_schema_redirect(old_url_prefix: str, new_url_prefix: str) -> None:
+    """
+    Register a redirect for schema URLs that have permanently moved.
+
+    Existing documents (already extracted/saved TEI files) embed the schema URL
+    that was current at the time they were created. If that URL later moves
+    (e.g. the upstream repository is renamed) and the old location stops serving
+    the schema, validation would break for every such document. Call this once
+    - typically from a plugin's __init__ or config module - for each schema
+    location the plugin owns that has moved, so old references keep resolving.
+
+    Any schema location starting with `old_url_prefix` is rewritten by replacing
+    that prefix with `new_url_prefix` before it is cached or fetched. This is
+    prefix-based (not an exact-URL match) so a single registration covers every
+    file under a moved base URL (e.g. a whole schema directory).
+
+    Args:
+        old_url_prefix: The obsolete URL, or URL prefix, to redirect from
+        new_url_prefix: The URL, or URL prefix, to redirect to
+    """
+    _SCHEMA_URL_REDIRECTS[old_url_prefix] = new_url_prefix
+
+
+def unregister_schema_redirect(old_url_prefix: str) -> None:
+    """Remove a previously registered schema redirect (e.g. on plugin cleanup)."""
+    _SCHEMA_URL_REDIRECTS.pop(old_url_prefix, None)
+
+
+def resolve_schema_location(schema_location: str) -> str:
+    """
+    Apply the longest matching registered redirect to a schema location.
+
+    Returns the rewritten URL if a registered old prefix matches, otherwise the
+    original URL unchanged. When multiple registered prefixes match, the longest
+    (most specific) one wins.
+    """
+    best_match = max(
+        (prefix for prefix in _SCHEMA_URL_REDIRECTS if schema_location.startswith(prefix)),
+        key=len,
+        default=None
+    )
+    if best_match is None:
+        return schema_location
+    new_prefix = _SCHEMA_URL_REDIRECTS[best_match]
+    resolved = new_prefix + schema_location[len(best_match):]
+    logger.info(f"Redirecting schema location {schema_location} -> {resolved}")
+    return resolved
+
 
 class ValidationTimeoutError(Exception):
     """Raised when schema validation times out"""
@@ -348,7 +402,7 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
 
     for sl in schema_locations:
         namespace = sl['namespace']
-        schema_location = sl['schemaLocation']
+        schema_location = resolve_schema_location(sl['schemaLocation'])
         schema_type = sl.get('type', 'unknown')
 
         if not schema_location.startswith("http"):

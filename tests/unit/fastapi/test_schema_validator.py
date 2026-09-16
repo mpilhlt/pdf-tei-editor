@@ -14,6 +14,9 @@ from unittest.mock import patch
 from fastapi_app.lib.core.schema_validator import (
     SCHEMA_CACHE_TTL_SECONDS,
     is_schema_cache_stale,
+    register_schema_redirect,
+    resolve_schema_location,
+    unregister_schema_redirect,
     validate,
 )
 
@@ -99,6 +102,78 @@ class TestValidateRedownloadsStaleSchema(unittest.TestCase):
 
         validate(XML_WITH_RELAXNG_MODEL, cache_root=self.cache_root)
 
+        mock_download.assert_not_called()
+
+
+class TestSchemaUrlRedirect(unittest.TestCase):
+    """Test the generic schema URL redirect registry (#477 follow-up)."""
+
+    def tearDown(self):
+        # Registrations are process-global; never leak one between tests.
+        unregister_schema_redirect("https://old.example.com/repo/")
+        unregister_schema_redirect("https://old.example.com/repo/nested/")
+
+    def test_unmatched_url_is_unchanged(self):
+        url = "https://example.com/schema/tei.rng"
+        self.assertEqual(resolve_schema_location(url), url)
+
+    def test_matching_prefix_is_rewritten(self):
+        register_schema_redirect("https://old.example.com/repo/", "https://new.example.com/repo2/")
+        self.assertEqual(
+            resolve_schema_location("https://old.example.com/repo/schema/tei.rng"),
+            "https://new.example.com/repo2/schema/tei.rng"
+        )
+
+    def test_unregister_stops_redirecting(self):
+        register_schema_redirect("https://old.example.com/repo/", "https://new.example.com/repo2/")
+        unregister_schema_redirect("https://old.example.com/repo/")
+        url = "https://old.example.com/repo/schema/tei.rng"
+        self.assertEqual(resolve_schema_location(url), url)
+
+    def test_longest_matching_prefix_wins(self):
+        register_schema_redirect("https://old.example.com/repo/", "https://new.example.com/repo2/")
+        register_schema_redirect("https://old.example.com/repo/nested/", "https://other.example.com/special/")
+        self.assertEqual(
+            resolve_schema_location("https://old.example.com/repo/nested/schema.rng"),
+            "https://other.example.com/special/schema.rng"
+        )
+        self.assertEqual(
+            resolve_schema_location("https://old.example.com/repo/schema.rng"),
+            "https://new.example.com/repo2/schema.rng"
+        )
+
+
+class TestValidateAppliesSchemaRedirect(unittest.TestCase):
+    """Integration test: validate() resolves a redirected schema location before fetching."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.cache_root = Path(self.temp_dir.name)
+        register_schema_redirect("https://old.example.com/schema/", "https://example.com/schema/")
+        # Pre-populate the cache at the *new* location, since that's what
+        # get_schema_cache_info should now derive the path from.
+        self.schema_cache_dir = self.cache_root / "example.com" / "schema"
+        self.schema_cache_dir.mkdir(parents=True)
+        self.schema_cache_file = self.schema_cache_dir / "tei.rng"
+        self.schema_cache_file.write_text(RELAXNG_SCHEMA)
+        recent_time = time.time() - 60
+        os.utime(self.schema_cache_file, (recent_time, recent_time))
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+        unregister_schema_redirect("https://old.example.com/schema/")
+
+    @patch("fastapi_app.lib.core.schema_validator.validate_with_timeout", return_value=[])
+    @patch("fastapi_app.lib.core.schema_validator.download_schema_file")
+    def test_redirected_schema_uses_new_location_cache(self, mock_download, _mock_validate):
+        xml_with_old_url = XML_WITH_RELAXNG_MODEL.replace(
+            "https://example.com/schema/tei.rng", "https://old.example.com/schema/tei.rng"
+        )
+
+        validate(xml_with_old_url, cache_root=self.cache_root)
+
+        # Cache already fresh under the new location, so no download is needed -
+        # this only succeeds if the redirect was applied before the cache lookup.
         mock_download.assert_not_called()
 
 
