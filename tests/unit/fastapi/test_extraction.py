@@ -6,6 +6,7 @@ Tests that extractors set the correct fileref (doc_id) in extracted TEI.
 @testCovers fastapi_app/plugins/test_plugin/extractor.py
 @testCovers fastapi_app/plugins/grobid/extractor.py
 @testCovers fastapi_app/plugins/llamore_extractor/extractor.py
+@testCovers fastapi_app/routers/extraction.py
 """
 
 import unittest
@@ -160,6 +161,97 @@ class TestMockExtractorVariants(unittest.TestCase):
         variant_ids = set(info['variants'])
         self.assertTrue(xpath_keys.issubset(variant_ids),
                         f"navigation_xpath keys {xpath_keys - variant_ids} not in variants")
+
+
+class TestExtractionFailurePreservesCollection(unittest.TestCase):
+    """
+    Test that a PDF is moved into the user-selected collection before extraction
+    is attempted, so a failed extraction (e.g. Grobid down) doesn't leave it stuck
+    in the upload-time default "_inbox" collection (#477).
+    """
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_failed_extraction_still_moves_pdf_out_of_inbox(self):
+        import hashlib
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+
+        from fastapi_app.config import Settings, get_settings
+        from fastapi_app.lib.core.database import DatabaseManager
+        from fastapi_app.lib.repository.file_repository import FileRepository
+        from fastapi_app.lib.storage.file_storage import FileStorage
+        from fastapi_app.lib.models.models import FileCreate
+        from fastapi_app.lib.core.dependencies import (
+            get_file_repository,
+            get_file_storage,
+            require_authenticated_user,
+        )
+        from fastapi_app.main import app
+
+        db = DatabaseManager(self.test_dir / "test.db")
+        repo = FileRepository(db)
+        storage = FileStorage(self.test_dir / "files", db)
+
+        pdf_content = b"%PDF-1.4 test content for issue 477"
+        file_hash = hashlib.sha256(pdf_content).hexdigest()
+        storage.save_file(pdf_content, 'pdf')
+        repo.insert_file(FileCreate(
+            id=file_hash,
+            filename=f"{file_hash}.pdf",
+            doc_id="test-doc-477",
+            file_type='pdf',
+            file_size=len(pdf_content),
+            label="Test doc",
+            doc_collections=["_inbox"],
+        ))
+
+        class _FailingExtractor:
+            """Stands in for an extractor whose backend (e.g. Grobid) is down."""
+
+            @classmethod
+            def get_info(cls):
+                return {'input': ['pdf'], 'output': ['tei-document']}
+
+            async def extract(self, pdf_path=None, xml_content=None, options=None):
+                raise RuntimeError("Grobid server down")
+
+        fake_settings = Settings(DATA_ROOT=str(self.test_dir))
+
+        app.dependency_overrides[get_file_repository] = lambda: repo
+        app.dependency_overrides[get_file_storage] = lambda: storage
+        app.dependency_overrides[require_authenticated_user] = lambda: {
+            "username": "testuser", "roles": ["admin"]
+        }
+        app.dependency_overrides[get_settings] = lambda: fake_settings
+
+        try:
+            with patch("fastapi_app.routers.extraction.create_extractor", return_value=_FailingExtractor()):
+                client = TestClient(app)
+                with self.assertLogs('fastapi_app.routers.extraction', level='ERROR'):
+                    response = client.post(
+                        "/api/v1/extract",
+                        json={
+                            "extractor": "mock-extractor",
+                            "file_id": file_hash,
+                            "options": {"collection": "my_project_collection"}
+                        }
+                    )
+            self.assertEqual(response.status_code, 500)
+
+            updated = repo.get_file_by_id(file_hash)
+            self.assertEqual(
+                updated.doc_collections,
+                ["my_project_collection"],
+                "PDF should be moved to the selected collection even though extraction failed"
+            )
+        finally:
+            app.dependency_overrides.clear()
 
 
 if __name__ == '__main__':

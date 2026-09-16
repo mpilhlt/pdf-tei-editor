@@ -232,8 +232,13 @@ class StartPlugin extends Plugin {
       const node = this.#xmlEditor.selectedNode
 
       if (this.getDependency('pdfviewer').isAutoSearchEnabled() && node && node !== lastNode) {
-        await this.#services.searchNodeContentsInPdf(node)
+        // Record the node before awaiting the search: "selectionChanged" can fire
+        // several times in quick succession for the same effective selection (e.g.
+        // during initial document load), each scheduling this async handler. Without
+        // updating lastNode synchronously here, all of them would still see the stale
+        // value while the first search is in flight and re-trigger the PDF lookup.
         lastNode = node
+        await this.#services.searchNodeContentsInPdf(node)
       }
     })
   }

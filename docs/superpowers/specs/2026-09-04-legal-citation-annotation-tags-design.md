@@ -20,7 +20,7 @@ missing/broken:
    which no-ops the instant the tag name matches — so switching between
    `title[a]` and `title[j]` (or any bibl subtype) silently does nothing.
 
-Separately, the mpilhlt/grobid-footnote-flavour project has proposed a
+Separately, the mpilhlt/fossil project has proposed a
 schema extension for labelling German-language legal citations (statutes,
 court rulings) inside footnotes — see
 `docs/spec-legal-references.md` in that repo. It introduces:

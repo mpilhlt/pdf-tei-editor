@@ -3,3 +3,4 @@ assets/
 app.js
 templates.json
 version.js
+sandbox-client.js

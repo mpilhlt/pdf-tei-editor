@@ -20,13 +20,33 @@ def _safe_doc_id(doc_id: str) -> str:
     return doc_id.replace("/", "_").replace("\\", "_")
 
 
-def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict | None:
+def _safe_flavor(flavor: str) -> str:
+    """Return a filesystem-safe version of flavor (replace path separators)."""
+    return flavor.replace("/", "-").replace("\\", "-")
+
+
+def get_cache_key(doc_id: str, revision: str, flavor: str) -> str:
     """
-    Check if cached training data exists for doc_id and revision.
+    Build the cache key for a (doc_id, revision, flavor) combination.
+
+    The flavor is part of the key because different flavors make GROBID emit
+    different feature columns; reusing a cache entry across flavors would
+    silently serve a feature file missing the other flavor's columns (#480).
+    """
+    safe_id = _safe_doc_id(doc_id)
+    safe_flavor = _safe_flavor(flavor)
+    key = f"{safe_id}_{revision}" if revision != "unknown" else safe_id
+    return key if safe_flavor == "default" else f"{key}_{safe_flavor}"
+
+
+def check_cache(doc_id: str, revision: str, flavor: str = "default", force_refresh: bool = False) -> dict | None:
+    """
+    Check if cached training data exists for doc_id, revision and flavor.
 
     Args:
         doc_id: Document ID
         revision: GROBID revision string
+        flavor: GROBID processing flavor used for the extraction
         force_refresh: If True, ignore cache
 
     Returns:
@@ -36,8 +56,7 @@ def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict
         return None
 
     cache_dir = get_cache_dir()
-    safe_id = _safe_doc_id(doc_id)
-    cache_key = f"{safe_id}_{revision}" if revision != "unknown" else safe_id
+    cache_key = get_cache_key(doc_id, revision, flavor)
     cache_path = cache_dir / cache_key
 
     zip_path = cache_path / "training.zip"
@@ -45,7 +64,7 @@ def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict
         return None
 
     # Extract to temp location
-    temp_dir = tempfile.mkdtemp(prefix=f"grobid_cache_{safe_id}_")
+    temp_dir = tempfile.mkdtemp(prefix=f"grobid_cache_{_safe_doc_id(doc_id)}_")
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(temp_dir)
 
@@ -53,19 +72,19 @@ def check_cache(doc_id: str, revision: str, force_refresh: bool = False) -> dict
     return {"temp_dir": temp_dir, "files": files}
 
 
-def cache_training_data(doc_id: str, revision: str, temp_dir: str, files: list[str]) -> None:
+def cache_training_data(doc_id: str, revision: str, flavor: str, temp_dir: str, files: list[str]) -> None:
     """
     Cache training data for a document.
 
     Args:
         doc_id: Document ID
         revision: GROBID revision string
+        flavor: GROBID processing flavor used for the extraction
         temp_dir: Temp directory with training files
         files: List of files in temp_dir
     """
     cache_dir = get_cache_dir()
-    safe_id = _safe_doc_id(doc_id)
-    cache_key = f"{safe_id}_{revision}" if revision != "unknown" else safe_id
+    cache_key = get_cache_key(doc_id, revision, flavor)
     cache_path = cache_dir / cache_key
     cache_path.mkdir(parents=True, exist_ok=True)
 
@@ -81,6 +100,7 @@ def cache_training_data(doc_id: str, revision: str, temp_dir: str, files: list[s
     metadata = {
         "doc_id": doc_id,
         "grobid_revision": revision,
+        "flavor": flavor,
         "files": files,
         "cached_at": datetime.now().isoformat()
     }

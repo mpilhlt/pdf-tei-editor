@@ -54,7 +54,7 @@
   "docs.from-github.description": "Load documentation from GitHub instead of the local server",
   "sse.enabled": true,
   "sse.enabled.description": "Enable Server-Sent Events for real-time notifications",
-  "schema.base-url": "https://mpilhlt.github.io/grobid-footnote-flavour/schema",
+  "schema.base-url": "https://mpilhlt.github.io/fossil/schema",
   "schema.base-url.description": "Base URL for TEI schema files used for XML validation",
   "annotation.lifecycle.order": [
     "extraction",

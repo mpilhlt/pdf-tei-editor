@@ -34,7 +34,7 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
-from ..lib.models import FileCreate
+from ..lib.models import FileCreate, FileUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extract", tags=["extraction"])
@@ -155,6 +155,17 @@ async def extract_metadata(
                 status_code=400,
                 detail=f"Extractor {request.extractor} expects {expected_types_str} input, but file has type: {file_metadata.file_type}"
             )
+
+        # Move the PDF into the user-selected collection before attempting extraction,
+        # so that a failed extraction (e.g. Grobid down) doesn't leave the file stuck in
+        # the upload-time default collection with no way to move or delete it (#477)
+        if file_metadata.file_type == 'pdf':
+            selected_collection = (request.options or {}).get('collection')
+            if selected_collection and selected_collection not in (file_metadata.doc_collections or []):
+                file_metadata = repo.update_file(
+                    file_metadata.id,
+                    FileUpdate(doc_collections=[selected_collection])
+                )
 
         # Get physical file path from hash-sharded storage
         # Note: files are stored in data_root/files subdirectory

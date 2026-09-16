@@ -108,7 +108,7 @@ class DocumentActionsPlugin extends Plugin {
     const isPdfOwner = Boolean(userData?.username && pdfData?.source?.created_by === userData.username)
 
     if (isAnnotator || isReviewer || isPdfOwner) {
-      da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || (!isReviewer && !isPdfOwner)
+      da.deleteAll.disabled = !Boolean(state.pdf) || (!isReviewer && !isPdfOwner)
       da.deleteAllVersions.disabled = !isReviewer || this.getDependency('file-selection').getOptionValues('xml').length < 2
       da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(state.xml) && !isReviewer)
     } else {

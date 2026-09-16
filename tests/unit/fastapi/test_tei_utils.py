@@ -198,7 +198,7 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
         from fastapi_app.lib.utils.tei_utils import extract_processing_instructions
 
         xml_string = """<?xml version="1.0"?>
-<?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader/>
 </TEI>"""
@@ -215,10 +215,10 @@ class TestCreateSchemaProcessingInstruction(unittest.TestCase):
 
     def test_creates_correct_processing_instruction(self):
         """Test that the function creates a valid processing instruction."""
-        schema_url = "https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng"
+        schema_url = "https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng"
         result = create_schema_processing_instruction(schema_url)
 
-        expected = '<?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+        expected = '<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
         self.assertEqual(result, expected)
 
     def test_works_with_llamore_schema(self):

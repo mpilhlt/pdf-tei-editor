@@ -125,7 +125,7 @@ function fixApplicationChildOrder(xmlDoc, ns) {
  */
 const SCHEMA_BASE_URLS = {
   "llamore": "https://mpilhlt.github.io/llamore/schema",
-  "grobid":  "https://mpilhlt.github.io/grobid-footnote-flavour/schema",
+  "grobid":  "https://mpilhlt.github.io/fossil/schema",
 };
 
 /**

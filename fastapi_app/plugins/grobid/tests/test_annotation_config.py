@@ -9,7 +9,7 @@ Run manually:
 
 `get_annotation_tags()` reads each variant's RelaxNG schema from
 `get_settings().schema_cache_dir` (normally `data/schema/cache/`, populated
-on demand from https://mpilhlt.github.io/grobid-footnote-flavour/schema/).
+on demand from https://mpilhlt.github.io/fossil/schema/).
 That directory is empty in a clean checkout / CI container, which would make
 every variant's chip list empty. So these tests point `schema_cache_dir` at
 a committed snapshot of the three real schemas under `fixtures/schema-cache/`

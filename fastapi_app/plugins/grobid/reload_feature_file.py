@@ -143,7 +143,7 @@ async def perform_reload(
         target.flavor,
     )
     try:
-        cache_training_data(target.doc_id, grobid_revision, temp_dir, extracted_files)
+        cache_training_data(target.doc_id, grobid_revision, target.flavor, temp_dir, extracted_files)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
