@@ -2,6 +2,22 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.62.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.61.0...v0.62.0) (2026-09-16)
+
+
+### Bug Fixes
+
+* include flavor in GROBID training-data cache key ([f0197cb](https://github.com/mpilhlt/pdf-tei-editor/commit/f0197cb8c47e93968b6750083581927eb52b01c1)), closes [#480](https://github.com/mpilhlt/pdf-tei-editor/issues/480)
+* move PDF into selected collection before extraction and allow deleting PDF-only docs ([87aa216](https://github.com/mpilhlt/pdf-tei-editor/commit/87aa2169093a3570e9d5e8060828b68cae28bb8f)), closes [#477](https://github.com/mpilhlt/pdf-tei-editor/issues/477)
+* pre-generate backend plugin sandbox client script for production ([1154718](https://github.com/mpilhlt/pdf-tei-editor/commit/115471857272611e9f398f3c902f6f7fb5bd3eea)), closes [#478](https://github.com/mpilhlt/pdf-tei-editor/issues/478)
+* prevent duplicate PDF autosearch toasts for the same node ([1773f52](https://github.com/mpilhlt/pdf-tei-editor/commit/1773f5237e56e674283a0bb7cd6f1ebd2e8ef5a3))
+
+
+### Features
+
+* add generic schema URL redirect registry, fix dead grobid schema link ([8bd6fc6](https://github.com/mpilhlt/pdf-tei-editor/commit/8bd6fc6c8f00516c3c207769cbbdff8e747eb909))
+* purge GROBID training-data cache during garbage collection ([b43e7f6](https://github.com/mpilhlt/pdf-tei-editor/commit/b43e7f6d530c09a3a6374500b186a3ab21936eb9))
+
 # [0.61.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.60.1...v0.61.0) (2026-09-12)
 
 
