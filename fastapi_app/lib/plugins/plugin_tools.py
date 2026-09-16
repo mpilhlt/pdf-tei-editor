@@ -192,6 +192,16 @@ def generate_sandbox_client_script() -> str:
         </html>
         '''
     """
+    # In production, app/src is removed after the frontend build (see Dockerfile),
+    # so the source file backing _extract_sandbox_methods() is no longer available.
+    # Fall back to the script pre-generated from it at build time (see
+    # bin/generate-sandbox-client-script.py) instead of live extraction.
+    sandbox_file = get_settings().project_root_dir / 'app' / 'src' / 'modules' / 'backend-plugin-sandbox.js'
+    if not sandbox_file.exists():
+        cached_script = get_settings().project_root_dir / 'app' / 'web' / 'sandbox-client.js'
+        if cached_script.exists():
+            return cached_script.read_text(encoding='utf-8')
+
     # Extract available methods
     methods = _extract_sandbox_methods()
     if not methods:
