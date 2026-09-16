@@ -417,7 +417,7 @@ def create_encoding_desc_with_extractor(
         ...     variant_id="grobid-segmentation",
         ...     additional_labels=[
         ...         ("revision", "abc123"),
-        ...         ("flavor", "grobid-footnote-flavour"),
+        ...         ("flavor", "fossil"),
         ...     ],
         ...     refs=[
         ...         "https://github.com/kermitt2/grobid",

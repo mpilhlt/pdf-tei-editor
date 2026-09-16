@@ -942,7 +942,7 @@ git rm fastapi_app/plugins/grobid/config/annotation_tags.py
 - [ ] **Step 3: Verify the module imports cleanly**
 
 Run: `cd /Users/cboulanger/Code/pdf-tei-editor && uv run python -c "from fastapi_app.plugins.grobid.config import get_annotation_tags; import json; print(json.dumps(get_annotation_tags(), indent=2)[:2000])"`
-Expected: prints JSON with keys `grobid.training.segmentation`, `grobid.training.references.referenceSegmenter`, `grobid.training.references` (each a list — populated if the schema is already cached at `data/schema/cache/mpilhlt.github.io/grobid-footnote-flavour/schema/`, otherwise `[]`; both are correct depending on whether validation has run recently in this checkout).
+Expected: prints JSON with keys `grobid.training.segmentation`, `grobid.training.references.referenceSegmenter`, `grobid.training.references` (each a list — populated if the schema is already cached at `data/schema/cache/mpilhlt.github.io/fossil/schema/`, otherwise `[]`; both are correct depending on whether validation has run recently in this checkout).
 
 - [ ] **Step 4: Commit**
 

@@ -8,8 +8,8 @@ visual XML editor) are hand-authored in
 `ANNOTATION_TAGS: AnnotationTagsMap`). This has two costs:
 
 1. **Drift.** The RelaxNG schemas at
-   `data/schema/cache/mpilhlt.github.io/grobid-footnote-flavour/schema/*.rng`
-   (downloaded from the external `mpilhlt/grobid-footnote-flavour` repo) are
+   `data/schema/cache/mpilhlt.github.io/fossil/schema/*.rng`
+   (downloaded from the external `mpilhlt/fossil` repo) are
    the actual source of truth for what's valid, but nothing keeps the manual
    config in sync. Concretely, today's config is already stale in both
    directions: `orgName@type` allows 6 values in the schema but only 2
@@ -58,7 +58,7 @@ visual XML editor) are hand-authored in
 ### Data flow
 
 ```text
-mpilhlt/grobid-footnote-flavour (external repo)
+mpilhlt/fossil (external repo)
   schema/grobid.training.*.rng  (source, hand-authored, gets <a:documentation>)
         │  build-schema.py (lives in that repo)
         ▼
@@ -241,7 +241,7 @@ plus a dropdown if that tag has enumerated attributes":
 ## Descriptions: schema-side convention
 
 Descriptions move into the RNG **source** in the upstream
-`mpilhlt/grobid-footnote-flavour` repo (`schema/grobid.training.*.rng`,
+`mpilhlt/fossil` repo (`schema/grobid.training.*.rng`,
 pre-build — not the generated/published `.rng`, and not the local
 `data/schema/cache/` copy, which is a downloaded build artifact silently
 overwritten by `schema_validator.py` once its mtime crosses the 1-hour
@@ -542,7 +542,7 @@ rather than take them as final wording.
    `references_idno`, `references_biblScope` local overrides and the
    other enum/required-ness fixes from "Required schema fixes." Tracked
    as its own implementation plan: `docs/2026-09-05-annotation-chip-schema-changes-plan.md`
-   in the `grobid-footnote-flavour` repo.
+   in the `fossil` repo.
 2. This repo: extend `RelaxNGParser` (per-value docs, attribute-group
    presets), add `annotation_tags_generator.py` and
    `annotation_tags_scope.py`, wire `get_annotation_tags()` to the

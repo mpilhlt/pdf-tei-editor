@@ -56,7 +56,7 @@ def init_plugin_config() -> None:
         get_plugin_config(**spec)
 
 
-SCHEMA_BASE_URL = "https://mpilhlt.github.io/grobid-footnote-flavour/schema"
+SCHEMA_BASE_URL = "https://mpilhlt.github.io/fossil/schema"
 
 
 def get_schema_url(variant_id: str) -> str:

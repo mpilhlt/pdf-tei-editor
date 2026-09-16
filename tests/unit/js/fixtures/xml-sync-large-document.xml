@@ -1,4 +1,4 @@
-<?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.references.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
     <fileDesc xml:id="_10.25364__01.10_x3A_2023.2.1">
@@ -54,7 +54,7 @@
           <label type="flavor">article/footnotes-refs</label>
           <label type="variant-id">grobid.training.references</label>
           <label type="revision">0.9.1-53-g0e80a72f8</label>
-        <ref target="https://github.com/grobidOrg/grobid"/><ref target="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.references.rng"/></application>
+        <ref target="https://github.com/grobidOrg/grobid"/><ref target="https://mpilhlt.github.io/fossil/schema/grobid.training.references.rng"/></application>
       </appInfo>
     </encodingDesc>
     <revisionDesc>
