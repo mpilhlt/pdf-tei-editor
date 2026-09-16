@@ -216,7 +216,7 @@ class PerformReloadTestCase(unittest.TestCase):
 
         self.assertEqual(result.grobid_revision, "new-rev-2")
         mocks["cache_training_data"].assert_called_once_with(
-            "doc-1", "new-rev-2", "/tmp/fake-temp-dir", ["doc-1.training.segmentation"]
+            "doc-1", "new-rev-2", "default", "/tmp/fake-temp-dir", ["doc-1.training.segmentation"]
         )
 
     def test_patches_revision_label_in_place_when_revision_changed(self):

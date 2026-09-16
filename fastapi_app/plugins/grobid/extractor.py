@@ -147,7 +147,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                 doc_id = os.path.splitext(pdf_name)[0]
 
             # Check cache
-            cached_data = check_cache(doc_id, grobid_revision, force_refresh=is_grobid_cache_disabled())
+            cached_data = check_cache(doc_id, grobid_revision, flavor, force_refresh=is_grobid_cache_disabled())
 
             if cached_data:
                 # Use cached data - find the specific variant file
@@ -173,7 +173,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                 )
 
                 # Cache the training data
-                cache_training_data(doc_id, grobid_revision, temp_dir, extracted_files)
+                cache_training_data(doc_id, grobid_revision, flavor, temp_dir, extracted_files)
 
                 # Find and read the specific variant file
                 suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'

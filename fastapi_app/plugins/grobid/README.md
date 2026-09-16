@@ -62,7 +62,10 @@ Raw GROBID output (the ZIP returned by `/api/createTraining`) is cached at:
 
 ```text
 data/plugins/grobid/extractions/{doc_id}_{grobid_revision}/
+data/plugins/grobid/extractions/{doc_id}_{grobid_revision}_{flavor}/   (non-default flavor)
 ```
+
+The flavor is part of the key (via `cache.get_cache_key()`) because different flavors make GROBID emit different feature columns; without it, re-extracting or re-downloading a document under a different flavor than the one already cached would silently serve the wrong flavor's feature file (#480). The `default` flavor keeps the plain `{doc_id}_{grobid_revision}` key for backward compatibility with existing cache directories.
 
 The directory is created automatically. To force a fresh extraction for a document, delete its cache directory, set `GROBID_DISABLE_CACHE=true` to disable caching globally, or use the `force_refresh=true` query parameter on the download endpoint.
 
@@ -113,7 +116,7 @@ node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
 
 Backend-plugin endpoint `reload_feature_file` (`GrobidPlugin.reload_feature_file`, category `document`, reviewer role required) — appears in the document plugin menu when a GROBID training TEI file is open.
 
-The training-data cache ([Cache](#cache-cachepy)) is keyed by `{doc_id}_{grobid_revision}`, where `grobid_revision` comes from GROBID's `/api/version`. If a custom model is retrained/swapped without that version string changing, the cache is never invalidated and the sync-check lint (see [Frontend extension](#frontend-extension-extensionsgrobid-syncjs)) keeps comparing against the stale feature file.
+The training-data cache ([Cache](#cache-cachepy)) is keyed by `{doc_id}_{grobid_revision}` (plus the flavor, for non-default flavors), where `grobid_revision` comes from GROBID's `/api/version`. If a custom model is retrained/swapped without that version string changing, the cache is never invalidated and the sync-check lint (see [Frontend extension](#frontend-extension-extensionsgrobid-syncjs)) keeps comparing against the stale feature file.
 
 The underlying operation re-fetches the training package from GROBID for the current document and overwrites the cache entry for the *current* revision — without re-running extraction, so the gold-standard `<text>` content and any human corrections are untouched. If the current GROBID revision differs from the one recorded in the TEI's `encodingDesc/revision` label, that label is patched in place (same stable_id, same file record, no new version) so future lookups resolve to the freshly cached data.
 
@@ -170,10 +173,11 @@ Variants not listed in this mapping are passed through unchanged.
 For each document the route:
 
 1. Reads all gold-standard TEI files whose `variant` starts with `grobid.training.`.
-2. Calls `denormalize_grobid_content` on each to reconstruct the GROBID-native structure.
-3. Derives the corpus path from the TEI `encodingDesc` labels (`model`, `flavor`) via `_corpus_base_path`.
-4. Fetches the raw GROBID feature file from cache (or re-fetches from GROBID if not cached), identified by matching file suffix.
-5. Writes both files into the ZIP under `{collection}-training-data-{timestamp}/{model}/{flavor}/corpus/{tei,raw}/`.
+2. Determines the document's flavor from the `encodingDesc/appInfo/application[@type='extractor']/label[@type='flavor']` label of its gold TEI (falling back to the `flavor` query parameter only when the TEI has no such label) - **not** from the query parameter alone. This matters because the raw feature file's column count depends on the flavor GROBID was actually invoked with; using the wrong flavor here would silently fetch/cache a feature file missing the other flavor's columns (#480).
+3. Calls `denormalize_grobid_content` on each variant to reconstruct the GROBID-native structure.
+4. Derives the corpus path from the same resolved flavor (and the TEI's `model` label) via `_corpus_base_path`.
+5. Fetches the raw GROBID feature file from cache — keyed by `(doc_id, grobid_revision, flavor)`, see [Cache](#cache-cachepy) — or re-fetches from GROBID with the resolved flavor if not cached.
+6. Writes both files into the ZIP under `{collection}-training-data-{timestamp}/{model}/{flavor}/corpus/{tei,raw}/`.
 
 The resulting ZIP mirrors `grobid-trainer/resources/dataset/` and can be unpacked directly into that directory.
 
@@ -182,7 +186,7 @@ The resulting ZIP mirrors `grobid-trainer/resources/dataset/` and can be unpacke
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `collection` | required | Collection ID |
-| `flavor` | `default` | Processing flavor |
+| `flavor` | `default` | Fallback processing flavor, used only for documents whose gold TEI has no `flavor` label |
 | `force_refresh` | `false` | Bypass cache and re-fetch from GROBID |
 | `no_progress` | `true` | Suppress SSE progress events (set to `false` for UI usage) |
 

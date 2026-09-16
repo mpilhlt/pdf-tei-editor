@@ -146,7 +146,7 @@ async def get_feature_tokens(
     """
     from fastapi_app.config import get_settings
     from fastapi_app.lib.repository.file_repository import FileRepository
-    from fastapi_app.plugins.grobid.cache import get_cache_dir
+    from fastapi_app.plugins.grobid.cache import get_cache_dir, get_cache_key
     from fastapi_app.plugins.grobid.config import get_feature_suffix, LINE_BASED_VARIANTS
     from fastapi_app.plugins.grobid.sync import extract_feature_tokens, parse_encoding_labels
 
@@ -174,12 +174,13 @@ async def get_feature_tokens(
     labels = parse_encoding_labels(content_bytes.decode("utf-8"))
     variant_id = labels.get("variant-id")
     revision = labels.get("revision")
+    flavor = labels.get("flavor", "default")
     doc_id = file_meta.doc_id
 
     if not variant_id or not revision or not doc_id:
         return {"status": "no_feature_file", "tokens": [], "count": 0}
 
-    cache_key = f"{doc_id}_{revision}" if revision != "unknown" else doc_id
+    cache_key = get_cache_key(doc_id, revision, flavor)
     zip_path = get_cache_dir() / cache_key / "training.zip"
     suffix = get_feature_suffix(variant_id)
 
@@ -510,6 +511,7 @@ async def download_training_package(
     from fastapi_app.config import get_settings
     from fastapi_app.lib.repository.file_repository import FileRepository
     from fastapi_app.lib.permissions.user_utils import user_has_collection_access
+    from fastapi_app.plugins.grobid.sync import parse_encoding_labels
 
     # Extract session ID (header takes precedence)
     session_id_value = x_session_id or session_id
@@ -635,8 +637,21 @@ async def download_training_package(
                         continue
                     variants_to_process = list(gold_by_variant.keys())
 
+                    # Determine the flavor this document was actually annotated
+                    # with (all its variants share one flavor), falling back to
+                    # the query-param default when the TEI has no flavor label.
+                    # Using the raw query param here instead would silently fetch
+                    # the wrong flavor's feature columns for documents annotated
+                    # under a non-default flavor (#480).
+                    doc_flavor = flavor
+                    for variant_content in gold_by_variant.values():
+                        tei_flavor = parse_encoding_labels(variant_content).get("flavor")
+                        if tei_flavor:
+                            doc_flavor = tei_flavor
+                            break
+
                     # Check cache first
-                    cached_data = check_cache(doc_id, grobid_revision, force_refresh or is_grobid_cache_disabled())
+                    cached_data = check_cache(doc_id, grobid_revision, doc_flavor, force_refresh or is_grobid_cache_disabled())
 
                     if cached_data:
                         temp_dir = cached_data["temp_dir"]
@@ -646,10 +661,10 @@ async def download_training_package(
                             # Run blocking GROBID fetch in thread pool to allow SSE events
                             temp_dir, extracted_files = await asyncio.to_thread(
                                 training_handler._fetch_training_package,
-                                str(pdf_path), grobid_server_url, flavor
+                                str(pdf_path), grobid_server_url, doc_flavor
                             )
                             # Cache the training data
-                            cache_training_data(doc_id, grobid_revision, temp_dir, extracted_files)
+                            cache_training_data(doc_id, grobid_revision, doc_flavor, temp_dir, extracted_files)
                         except Exception as e:
                             logger.warning(f"Failed to fetch training data for {doc_id}: {e}")
                             documents_skipped += 1
@@ -659,7 +674,7 @@ async def download_training_package(
                         for variant in variants_to_process:
                             grobid_suffix = variant.removeprefix("grobid.")
                             tei_content = denormalize_grobid_content(gold_by_variant[variant], variant)
-                            base_path = _corpus_base_path(tei_content, variant, flavor)
+                            base_path = _corpus_base_path(tei_content, variant, doc_flavor)
                             model_name = variant.removeprefix("grobid.")
 
                             # Write gold TEI to corpus/tei/
