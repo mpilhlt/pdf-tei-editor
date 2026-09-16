@@ -333,6 +333,7 @@
  * @property {number} files_deleted
  * @property {number} storage_freed
  * @property {number=} orphaned_xml_deleted
+ * @property {number=} grobid_cache_deleted
  */
 
 /**
