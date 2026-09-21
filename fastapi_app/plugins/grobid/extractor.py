@@ -17,6 +17,7 @@ from fastapi_app.plugins.grobid.config import (
     get_annotation_guides,
     get_annotation_tags,
     get_form_options,
+    get_grobid_hf_space,
     get_grobid_server_timeout,
     get_grobid_server_url,
     get_model_path,
@@ -25,6 +26,7 @@ from fastapi_app.plugins.grobid.config import (
     get_supported_variants,
     is_grobid_cache_disabled,
 )
+from fastapi_app.plugins.grobid.hf_space import check_space_running
 from fastapi_app.plugins.grobid.handlers import (
     GrobidHandler,
     TrainingHandler,
@@ -128,6 +130,9 @@ class GrobidTrainingExtractor(BaseExtractor):
         grobid_server_url = get_grobid_server_url()
         if grobid_server_url is None:
             raise ValueError("GROBID server URL not configured")
+        hf_error = check_space_running(grobid_server_url, get_grobid_server_timeout(), get_grobid_hf_space())
+        if hf_error:
+            raise RuntimeError(hf_error)
         self._check_grobid_health(grobid_server_url)
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
 

@@ -51,6 +51,8 @@ A running GROBID instance accessible from the application server. The plugin is 
 | --- | --- | --- | --- |
 | `GROBID_SERVER_URL` | Yes | — | Base URL of the GROBID server, e.g. `http://localhost:8070` |
 | `GROBID_SERVER_TIMEOUT` | No | `10` | Timeout in seconds for health and version checks |
+| `GROBID_HF_SPACE` | No | — | Hugging Face Space ID (`owner/repo`) hosting the GROBID server. Before each extraction the Space state is checked via the Hugging Face API; if it is sleeping or paused, extraction fails immediately with a link to start it. Auto-detected (best effort) for `*.hf.space` URLs when unset; set it explicitly if the Space name contains underscores or dots |
+| `HF_TOKEN` | No | — | Hugging Face access token, needed for the Space check on private Spaces |
 | `GROBID_EXTRACTION_TIMEOUT` | No | `300` | Timeout in seconds for extraction requests (PDF processing can be slow) |
 | `GROBID_DISABLE_CACHE` | No | `false` | Set to `true` to always fetch fresh data from GROBID, bypassing the training data cache |
 
