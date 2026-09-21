@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart unhealthy podman containers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/podman-healthwatch.sh

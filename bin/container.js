@@ -55,6 +55,28 @@ function detectContainerTool() {
 }
 
 /**
+ * Check whether the detected podman supports `--health-on-failure` (added in podman 4.3).
+ * Docker has no equivalent flag, so this always returns false for docker.
+ * @returns {boolean}
+ */
+function supportsHealthOnFailure() {
+  if (containerCmd !== 'podman') {
+    return false;
+  }
+  try {
+    const output = execSync('podman --version', { encoding: 'utf8' });
+    const match = output.match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!match) {
+      return false;
+    }
+    const [, major, minor] = match.map(Number);
+    return major > 4 || (major === 4 && minor >= 3);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Load environment variables from .env file
  */
 function loadEnv() {
@@ -538,7 +560,8 @@ function processEnvParameters(runArgs, envSpecs) {
  *   restart?: string,
  *   env?: string[],
  *   volumes?: Array<{host: string, container: string}>,
- *   additionalEnvVars?: Array<{key: string, value: string}>
+ *   additionalEnvVars?: Array<{key: string, value: string}>,
+ *   health?: {cmd: string, interval?: string, timeout?: string, retries?: number, startPeriod?: string, onFailure?: string}
  * }} config
  * @returns {Promise<string|undefined>} Container ID if detached, undefined otherwise
  */
@@ -551,7 +574,8 @@ async function startContainer(config) {
     restart,
     env = [],
     volumes = [],
-    additionalEnvVars = []
+    additionalEnvVars = [],
+    health
   } = config;
 
   // Build run command
@@ -566,6 +590,26 @@ async function startContainer(config) {
   // Add restart policy if specified
   if (restart) {
     runArgs.push('--restart', restart);
+  }
+
+  // Add healthcheck if specified - lets the container engine detect a hung
+  // process (port refusing connections) even when it never exits, which a
+  // bare --restart policy cannot catch since it only fires on process exit
+  if (health && health.cmd) {
+    runArgs.push('--health-cmd', health.cmd);
+    runArgs.push('--health-interval', health.interval || '30s');
+    runArgs.push('--health-timeout', health.timeout || '5s');
+    runArgs.push('--health-retries', String(health.retries || 3));
+    runArgs.push('--health-start-period', health.startPeriod || '30s');
+
+    if (health.onFailure) {
+      if (supportsHealthOnFailure()) {
+        runArgs.push('--health-on-failure', health.onFailure);
+      } else {
+        console.log(`[WARNING] ${containerCmd} does not support --health-on-failure (requires podman >= 4.3)`);
+        console.log('[WARNING] Container will be marked unhealthy but not automatically recovered');
+      }
+    }
   }
 
   // Add additional environment variables (e.g., DATA_ROOT)
@@ -1473,7 +1517,15 @@ async function handleDeploy(options) {
       restart: 'unless-stopped',
       env: options.env,
       volumes,
-      additionalEnvVars
+      additionalEnvVars,
+      health: {
+        cmd: 'curl -fsS http://localhost:8000/health || exit 1',
+        interval: '30s',
+        timeout: '5s',
+        retries: 3,
+        startPeriod: '30s',
+        onFailure: 'restart'
+      }
     });
   } catch (err) {
     console.log('[ERROR] Failed to start container');
