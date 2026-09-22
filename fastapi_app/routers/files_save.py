@@ -38,7 +38,7 @@ from ..lib.permissions.user_utils import user_has_collection_access
 from ..config import get_settings
 from ..lib.models import FileCreate, FileUpdate
 from ..lib.models.models_files import SaveFileRequest, SaveFileResponse
-from ..lib.utils.tei_utils import serialize_tei_with_formatted_header, update_fileref_in_xml
+from ..lib.utils.tei_utils import serialize_tei_with_formatted_header, update_fileref_in_xml, extract_fileref
 from ..lib.sse.sse_service import SSEService
 from ..lib.core.sessions import SessionManager
 from ..lib.sse.sse_utils import broadcast_to_other_sessions
@@ -117,9 +117,9 @@ def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], log
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
 
-        # Extract file_id from fileref
-        fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
-        file_id = fileref_elem.text if fileref_elem is not None else None
+        # Extract file_id: primary is fileDesc/@xml:id, with a deprecated
+        # fallback to editionStmt/edition/idno[@type="fileref"] for old documents.
+        file_id = extract_fileref(xml_root)
 
         # Extract variant from extractor application metadata
         variant_xpath = 'string((.//tei:application[@type="extractor"]/tei:label[@type="variant-id"])[1])'

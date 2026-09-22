@@ -28,9 +28,7 @@ Not used anywhere in this app: `notesStmt`, `profileDesc`, `xenoData`.
 The primary identifier for a document. Encoded/decoded for NCName-safety (leading digits, legacy `$XX$` escaping) via `encodeFileIdForXmlId()`/`decodeXmlIdToFileId()` in [tei-utils.js](../../app/src/modules/tei-utils.js).
 
 - Write: `update_fileref_in_xml()` in [tei_utils.py](../../fastapi_app/lib/utils/tei_utils.py) sets `fileDesc/@xml:id`.
-- Read: `extract_tei_metadata()` and `extract_fileref()`, both in the same module, read `fileDesc/@xml:id`.
-
-> **Known inconsistency:** `fastapi_app/routers/files_save.py`'s `_extract_metadata_from_xml()` (run on every save) still reads the file id from the deprecated `idno[@type="fileref"]` path rather than `fileDesc/@xml:id`. Verify before relying on it for new code; this may need fixing to match the documented primary/fallback order above.
+- Read: `extract_tei_metadata()` and `extract_fileref()`, both in the same module, read `fileDesc/@xml:id`. `fastapi_app/routers/files_save.py`'s `_extract_metadata_from_xml()` (run on every save) also goes through `extract_fileref()`.
 
 ## fileDesc/titleStmt
 
