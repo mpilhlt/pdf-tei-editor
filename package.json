@@ -106,7 +106,7 @@
         "jsdom": "^30.0.1",
         "madge": "^8.0.0",
         "rollup": "^4.59.0",
-        "semantic-release": "24.2.9"
+        "semantic-release": "25.0.9"
     },
     "overrides": {
         "@napi-rs/canvas": "$@napi-rs/canvas",
