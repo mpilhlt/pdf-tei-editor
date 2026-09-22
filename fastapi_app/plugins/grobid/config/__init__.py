@@ -34,6 +34,12 @@ PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
         "description": "Timeout in seconds for GROBID server health-check requests",
     },
     {
+        "config_key": "plugin.grobid.server.hf_space",
+        "env_var":    "GROBID_HF_SPACE",
+        "default":     "",
+        "description": "Hugging Face Space ID (owner/repo) hosting the GROBID server; checked before extraction to detect sleeping Spaces. Auto-detected for *.hf.space URLs if empty",
+    },
+    {
         "config_key": "plugin.grobid.extraction.timeout",
         "env_var":    "GROBID_EXTRACTION_TIMEOUT",
         "default":     300,
@@ -119,6 +125,20 @@ def get_grobid_extraction_timeout() -> int:
     config = get_config()
     value = config.get("plugin.grobid.extraction.timeout", default=300)
     return int(value)
+
+
+def get_grobid_hf_space() -> str | None:
+    """
+    Get the Hugging Face Space ID (owner/repo) hosting the GROBID server from config.
+
+    The config value is initialized from the GROBID_HF_SPACE environment variable.
+
+    Returns:
+        The Space ID, or None if not configured.
+    """
+    config = get_config()
+    space = config.get("plugin.grobid.server.hf_space")
+    return space if space else None
 
 
 def get_grobid_server_url() -> str | None:

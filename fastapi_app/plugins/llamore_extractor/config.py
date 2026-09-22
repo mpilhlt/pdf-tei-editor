@@ -74,12 +74,14 @@ NAVIGATION_XPATH = {
 # Annotation guide URLs for each variant
 ANNOTATION_GUIDES = [
     {
-        "variant_id": "llamore-default",
+        "variant_ids": ["llamore-default"],
+        "category": "primary",
         "type": "markdown",
         "url": "https://pad.gwdg.de/s/LSqaEtZyT/download"
     },
     {
-        "variant_id": "llamore-default",
+        "variant_ids": ["llamore-default"],
+        "category": "primary",
         "type": "html",
         "url": "https://pad.gwdg.de/s/LSqaEtZyT"
     }

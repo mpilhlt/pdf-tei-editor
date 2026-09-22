@@ -9,6 +9,7 @@
  */
 
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import { linkifyUrls } from '../modules/browser-utils.js';
 import Plugin from '../modules/plugin-base.js';
 
 /**
@@ -48,7 +49,7 @@ class DialogPlugin extends Plugin {
   info(message) {
     this.#ui.setAttribute('label', 'Information');
     this.#ui.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-    this.#ui.message.innerHTML = message;
+    this.#ui.message.innerHTML = linkifyUrls(message);
     this.#ui.show();
   }
 
@@ -58,7 +59,7 @@ class DialogPlugin extends Plugin {
   error(message) {
     this.#ui.setAttribute('label', 'Error');
     this.#ui.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
-    this.#ui.message.innerHTML = message;
+    this.#ui.message.innerHTML = linkifyUrls(message);
     this.#ui.show();
   }
 
@@ -68,7 +69,7 @@ class DialogPlugin extends Plugin {
   success(message) {
     this.#ui.setAttribute('label', 'Success');
     this.#ui.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
-    this.#ui.message.innerHTML = message;
+    this.#ui.message.innerHTML = linkifyUrls(message);
     this.#ui.show();
   }
 
@@ -81,7 +82,7 @@ class DialogPlugin extends Plugin {
     return new Promise((resolve) => {
       this.#ui.setAttribute('label', title);
       this.#ui.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
-      this.#ui.message.innerHTML = message;
+      this.#ui.message.innerHTML = linkifyUrls(message);
 
       this.#ui.closeBtn.style.display = 'none';
       this.#ui.cancelBtn.style.display = '';
@@ -118,7 +119,7 @@ class DialogPlugin extends Plugin {
     return new Promise((resolve) => {
       this.#ui.setAttribute('label', title);
       this.#ui.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
-      this.#ui.message.innerHTML = message;
+      this.#ui.message.innerHTML = linkifyUrls(message);
 
       this.#ui.promptInput.style.display = '';
       this.#ui.promptInput.value = defaultValue;

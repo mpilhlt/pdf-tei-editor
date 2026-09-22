@@ -9,10 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnnotationGuideInfo(BaseModel):
-    """Information about an annotation guide for a variant."""
-    variant_id: str = Field(
+    """Information about an annotation guide for one or more variants."""
+    variant_ids: List[str] = Field(
         ...,
-        description="The variant identifier this guide applies to"
+        description="The variant identifier(s) this guide applies to; \"*\" means every variant"
+    )
+    category: Optional[str] = Field(
+        None,
+        description="The rule category this guide belongs to (e.g. \"primary\"); "
+                    "not every extractor plugin populates this"
     )
     type: str = Field(
         ...,

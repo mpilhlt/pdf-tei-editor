@@ -326,6 +326,86 @@ async def reload_feature_file_execute(
     return HTMLResponse(content=render_result_html(result))
 
 
+@router.get("/refresh-annotation-rules/preview", response_class=HTMLResponse)
+async def refresh_annotation_rules_preview(
+    xml: str = Query(..., description="Stable ID of the open TEI file"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+):
+    """
+    Render the reviewer confirmation page for refreshing annotation rules.
+
+    Read-only. Loaded in the plugin-result iframe (see the 'outputUrl'
+    returned by GrobidPlugin.refresh_annotation_rules).
+    """
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.plugins.grobid.annotation_rules_refresh import (
+        RefreshPreconditionError,
+        render_precondition_error_html,
+        render_preview_html,
+        resolve_refresh_target,
+    )
+
+    user = _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+
+    file_repo = FileRepository(db)
+    try:
+        target = resolve_refresh_target(file_repo, file_storage, xml, user)
+    except RefreshPreconditionError as e:
+        return HTMLResponse(content=render_precondition_error_html(str(e)))
+
+    return HTMLResponse(content=render_preview_html(target))
+
+
+@router.get("/refresh-annotation-rules/execute", response_class=HTMLResponse)
+async def refresh_annotation_rules_execute(
+    xml: str = Query(..., description="Stable ID of the open TEI file"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager: SessionManager = Depends(get_session_manager),
+    auth_manager: AuthManager = Depends(get_auth_manager),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+):
+    """
+    Perform the annotation-rules refresh and render a result page.
+
+    Called when the reviewer clicks Execute on the confirmation page. Only
+    replaces `editorialDecl` and appends a `revisionDesc/change` entry - the
+    document's `<text>` is never touched. See
+    `annotation_rules_refresh.perform_refresh` for exactly what changes.
+    """
+    from fastapi_app.lib.repository.file_repository import FileRepository
+    from fastapi_app.plugins.grobid.annotation_rules_refresh import (
+        RefreshPreconditionError,
+        perform_refresh,
+        render_error_html,
+        render_precondition_error_html,
+        render_result_html,
+        resolve_refresh_target,
+    )
+
+    user = _authenticate_reviewer(x_session_id or session_id, session_manager, auth_manager)
+
+    file_repo = FileRepository(db)
+    try:
+        target = resolve_refresh_target(file_repo, file_storage, xml, user)
+    except RefreshPreconditionError as e:
+        return HTMLResponse(content=render_precondition_error_html(str(e)))
+
+    who = user.get("username") if isinstance(user, dict) else None
+    try:
+        result = await perform_refresh(target, file_repo, file_storage, who)
+    except RuntimeError as e:
+        return HTMLResponse(content=render_error_html(str(e)))
+
+    return HTMLResponse(content=render_result_html(result))
+
+
 @router.post("/cancel/{progress_id}")
 async def cancel_progress(progress_id: str):
     """

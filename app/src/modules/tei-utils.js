@@ -706,6 +706,65 @@ export function getDocumentMetadata(xmlDoc) {
 }
 
 /**
+ * Extracts annotation-rules references from a TEI document's editorialDecl.
+ *
+ * Reads `editorialDecl/interpretation[@type]` entries, each containing one
+ * or two nested `<ref>` descendants distinguished by `@subtype` ("human":
+ * a heading-anchor URL for the drawer; "machine": an auto-derived
+ * line-range URL for token-bounded fetching) - see
+ * docs/superpowers/specs/2026-09-22-annotation-guide-dual-target-refs-design.md.
+ * The interpretation's own `@type` is the rule category (e.g. "primary",
+ * "footnote-annotation"); each ref's own `@type` is its content type
+ * ("markdown" or "html") - independent from both `@subtype` and the
+ * interpretation's `@type`.
+ *
+ * Note: this uses plain tag-name traversal (`getElementsByTagName`) rather
+ * than XPath, because JSDOM's XPath engine does not reliably resolve
+ * namespace-prefixed expressions against a default-namespaced XML document
+ * (see "JSDOM Limitations for Browser-Targeted Code" in
+ * docs/code-assistant/testing-guide.md). All TEI documents handled here use
+ * a single default namespace, so unprefixed tag names are unambiguous.
+ *
+ * An interpretation missing `@type`, or whose only `<ref>`(s) are missing
+ * `@target` or carry an unrecognized/missing `@subtype`, is skipped
+ * entirely (not returned with an empty refs list).
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @returns {Array<{category: string, refs: Array<{target: string, contentType: string|null, subtype: 'human'|'machine'}>}>}
+ */
+export function getEditorialDeclGuides(xmlDoc) {
+  if (!xmlDoc || typeof xmlDoc.getElementsByTagName !== 'function') {
+    throw new Error('Valid XML Document is required');
+  }
+
+  const editorialDecl = xmlDoc.getElementsByTagName('editorialDecl')[0];
+  if (!editorialDecl) {
+    return [];
+  }
+
+  const guides = [];
+  for (const interpretation of editorialDecl.getElementsByTagName('interpretation')) {
+    const category = interpretation.getAttribute('type');
+    if (!category) continue;
+
+    const refs = [];
+    for (const ref of interpretation.getElementsByTagName('ref')) {
+      const target = ref.getAttribute('target');
+      const subtype = ref.getAttribute('subtype');
+      if (!target || (subtype !== 'human' && subtype !== 'machine')) continue;
+      refs.push({
+        target,
+        contentType: ref.getAttribute('type'),
+        subtype
+      });
+    }
+    if (refs.length === 0) continue;
+    guides.push({ category, refs });
+  }
+  return guides;
+}
+
+/**
  * Ensures the extractor variant metadata is present in the TEI XML.
  * This preserves the variant when creating new versions from existing files.
  *

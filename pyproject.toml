@@ -30,6 +30,11 @@ dependencies = [
 llamore = { git = "https://github.com/mpilhlt/llamore.git" }
 tei-annotator = { git = "https://github.com/cboulanger/tei-annotator" }
 
+[tool.uv]
+# scipy <1.16.0 ships a _propack binary with a malformed Mach-O __thread_bss
+# section that macOS 27's dyld rejects at import time (upstream fixed in 1.16.0).
+constraint-dependencies = ["scipy>=1.16.0"]
+
 [dependency-groups]
 dev = [
     "cheroot>=10.0.0",

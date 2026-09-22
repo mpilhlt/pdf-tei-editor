@@ -51,6 +51,8 @@ A running GROBID instance accessible from the application server. The plugin is 
 | --- | --- | --- | --- |
 | `GROBID_SERVER_URL` | Yes | — | Base URL of the GROBID server, e.g. `http://localhost:8070` |
 | `GROBID_SERVER_TIMEOUT` | No | `10` | Timeout in seconds for health and version checks |
+| `GROBID_HF_SPACE` | No | — | Hugging Face Space ID (`owner/repo`) hosting the GROBID server. Before each extraction the Space state is checked via the Hugging Face API; if it is sleeping or paused, extraction fails immediately with a link to start it. Auto-detected (best effort) for `*.hf.space` URLs when unset; set it explicitly if the Space name contains underscores or dots |
+| `HF_TOKEN` | No | — | Hugging Face access token, needed for the Space check on private Spaces |
 | `GROBID_EXTRACTION_TIMEOUT` | No | `300` | Timeout in seconds for extraction requests (PDF processing can be slow) |
 | `GROBID_DISABLE_CACHE` | No | `false` | Set to `true` to always fetch fresh data from GROBID, bypassing the training data cache |
 
@@ -114,7 +116,9 @@ node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
 
 ### Reload feature file
 
-Backend-plugin endpoint `reload_feature_file` (`GrobidPlugin.reload_feature_file`, category `document`, reviewer role required) — appears in the document plugin menu when a GROBID training TEI file is open.
+Backend-plugin endpoint `reload_feature_file` (`GrobidPlugin.reload_feature_file`, category `grobid`, reviewer role required) — appears in the document plugin menu when a GROBID training TEI file is open.
+
+A sibling endpoint, `refresh_annotation_rules` (`GrobidPlugin.refresh_annotation_rules`, same `grobid` category, same reviewer-role gating), re-derives a document's annotation rules reference so it resolves to the guidelines' latest commit; it follows the identical preview-then-execute trigger shape described below, backed by `annotation_rules_refresh.py`. Its HTTP routes are added separately.
 
 The training-data cache ([Cache](#cache-cachepy)) is keyed by `{doc_id}_{grobid_revision}` (plus the flavor, for non-default flavors), where `grobid_revision` comes from GROBID's `/api/version`. If a custom model is retrained/swapped without that version string changing, the cache is never invalidated and the sync-check lint (see [Frontend extension](#frontend-extension-extensionsgrobid-syncjs)) keeps comparing against the stale feature file.
 

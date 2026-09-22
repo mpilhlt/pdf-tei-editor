@@ -139,6 +139,11 @@ class Settings(BaseSettings):
         return self.data_root / "schema" / "cache"
 
     @property
+    def annotation_rules_cache_dir(self) -> Path:
+        """Annotation-rules fetch cache directory - always data_root/annotation-rules/cache"""
+        return self.data_root / "annotation-rules" / "cache"
+
+    @property
     def log_dir(self) -> Path:
         """Directory for log files. Configurable via LOG_DIR env var."""
         if self.LOG_DIR:

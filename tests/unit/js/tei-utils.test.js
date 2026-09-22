@@ -16,7 +16,172 @@ import {
   ensureExtractorVariant,
   encodeFileIdForXmlId,
   decodeXmlIdToFileId,
+  getEditorialDeclGuides,
 } from '../../../app/src/modules/tei-utils.js';
+
+describe('getEditorialDeclGuides', () => {
+  function parseXml(xmlString) {
+    const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
+    return dom.window.document;
+  }
+
+  it('returns human and machine refs for one interpretation', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p>
+            <ref subtype="human" target="https://example.com/g.md#seg" type="markdown">Guide</ref>
+            <ref subtype="machine" target="https://example.com/g.md#L1-L20" type="markdown">Guide</ref>
+          </p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    const guides = getEditorialDeclGuides(xmlDoc);
+    assert.strictEqual(guides.length, 1);
+    assert.deepStrictEqual(guides[0], {
+      category: 'primary',
+      refs: [
+        { target: 'https://example.com/g.md#seg', contentType: 'markdown', subtype: 'human' },
+        { target: 'https://example.com/g.md#L1-L20', contentType: 'markdown', subtype: 'machine' },
+      ]
+    });
+  });
+
+  it('returns multiple interpretations', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p><ref subtype="human" target="https://example.com/g.md#seg" type="markdown">Guide</ref></p>
+        </interpretation>
+        <interpretation type="footnote-annotation">
+          <p><ref subtype="machine" target="https://example.com/g.md#L120-L180" type="markdown">Footnotes</ref></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    const guides = getEditorialDeclGuides(xmlDoc);
+    assert.strictEqual(guides.length, 2);
+    assert.strictEqual(guides[0].category, 'primary');
+    assert.strictEqual(guides[1].category, 'footnote-annotation');
+  });
+
+  it('returns an empty array when there is no editorialDecl', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader/></TEI>`);
+    assert.deepStrictEqual(getEditorialDeclGuides(xmlDoc), []);
+  });
+
+  it('returns contentType: null when a ref has no type attribute', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p><ref subtype="human" target="https://example.com/g.md#seg">Guide</ref></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    const guides = getEditorialDeclGuides(xmlDoc);
+    assert.deepStrictEqual(guides, [
+      { category: 'primary', refs: [
+        { target: 'https://example.com/g.md#seg', contentType: null, subtype: 'human' }
+      ] }
+    ]);
+  });
+
+  it('skips an interpretation missing its type attribute', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation>
+          <p><ref subtype="human" target="https://example.com/g.md#seg" type="markdown">Guide</ref></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    assert.deepStrictEqual(getEditorialDeclGuides(xmlDoc), []);
+  });
+
+  it('skips an interpretation whose only ref has no target attribute', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p><ref subtype="human" type="markdown">Guide</ref></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    assert.deepStrictEqual(getEditorialDeclGuides(xmlDoc), []);
+  });
+
+  it('skips a ref with an unrecognized subtype but keeps its sibling', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p>
+            <ref subtype="robot" target="https://example.com/g.md#odd" type="markdown">Odd</ref>
+            <ref subtype="human" target="https://example.com/g.md#seg" type="markdown">Guide</ref>
+          </p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    const guides = getEditorialDeclGuides(xmlDoc);
+    assert.deepStrictEqual(guides, [
+      { category: 'primary', refs: [
+        { target: 'https://example.com/g.md#seg', contentType: 'markdown', subtype: 'human' }
+      ] }
+    ]);
+  });
+
+  it('skips an interpretation whose only ref has a missing subtype attribute', () => {
+    const xmlDoc = parseXml(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p><ref target="https://example.com/g.md#seg" type="markdown">Guide</ref></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`);
+    assert.deepStrictEqual(getEditorialDeclGuides(xmlDoc), []);
+  });
+
+  it('throws for a plain object argument lacking getElementsByTagName', () => {
+    assert.throws(() => getEditorialDeclGuides({}));
+    assert.throws(() => getEditorialDeclGuides('not a document'));
+  });
+
+  it('throws for a non-XML-document argument', () => {
+    assert.throws(() => getEditorialDeclGuides(null));
+  });
+});
 
 describe('TEI Utils', () => {
   describe('addEdition (deprecated no-op)', () => {
