@@ -200,5 +200,29 @@ class TestGetAnnotationTags(unittest.TestCase):
             )
 
 
+class TestAnnotationGuidesCategory(unittest.TestCase):
+    """Test that every configured guide has a category, variant_ids, and a fossil-hosted URL."""
+
+    def test_every_entry_has_a_category(self):
+        from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES
+        for guide in ANNOTATION_GUIDES:
+            self.assertIn("category", guide)
+            self.assertTrue(guide["category"])
+
+    def test_every_entry_has_variant_ids(self):
+        from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES
+        for guide in ANNOTATION_GUIDES:
+            self.assertIn("variant_ids", guide)
+            self.assertIsInstance(guide["variant_ids"], list)
+            self.assertTrue(guide["variant_ids"])
+
+    def test_segmentation_guide_points_at_fossil(self):
+        from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES
+        segmentation = [g for g in ANNOTATION_GUIDES if "grobid.training.segmentation" in g["variant_ids"]]
+        self.assertEqual(len(segmentation), 1)
+        self.assertEqual(segmentation[0]["category"], "primary")
+        self.assertIn("github.com/mpilhlt/fossil", segmentation[0]["url"])
+
+
 if __name__ == "__main__":
     unittest.main()

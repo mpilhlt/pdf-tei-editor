@@ -48,14 +48,28 @@ class GrobidPlugin(Plugin):
                 },
                 {
                     "name": "reload_feature_file",
-                    "label": "Reload GROBID Feature File",
+                    "label": "Reload Feature File",
                     "description": (
                         "Re-fetch the raw GROBID training package for the current document "
                         "and refresh the cached feature file used by the sync-check lint, "
                         "without re-extracting (and overwriting) the gold-standard annotation. "
                         "Use this after retraining/swapping a GROBID model."
                     ),
-                    "category": "document",
+                    "category": "grobid",
+                    "icon": "arrow-repeat",
+                    "state_params": ["xml"],
+                    "required_roles": ["reviewer"],
+                },
+                {
+                    "name": "refresh_annotation_rules",
+                    "label": "Refresh Annotation Rules",
+                    "description": (
+                        "Re-derive this document's annotation rules reference from the "
+                        "current configuration, re-resolving it to the guidelines' latest "
+                        "commit. Use this when the guidelines document has been updated "
+                        "and you want this document to point at the new version."
+                    ),
+                    "category": "grobid",
                     "icon": "arrow-repeat",
                     "state_params": ["xml"],
                     "required_roles": ["reviewer"],
@@ -69,6 +83,7 @@ class GrobidPlugin(Plugin):
         return {
             "download_training": self.download_training,
             "reload_feature_file": self.reload_feature_file,
+            "refresh_annotation_rules": self.refresh_annotation_rules,
         }
 
     @classmethod
@@ -238,4 +253,42 @@ class GrobidPlugin(Plugin):
         return {
             "outputUrl": f"/api/plugins/grobid/reload-feature-file/preview?{query}",
             "executeUrl": f"/api/plugins/grobid/reload-feature-file/execute?{query}",
+        }
+
+    async def refresh_annotation_rules(
+        self, context: PluginContext, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Trigger the reviewer-confirmed "refresh annotation rules" flow.
+
+        Follows the same preview-then-execute pattern as reload_feature_file:
+        this only returns URLs for a confirmation page (`outputUrl`) and the
+        actual operation (`executeUrl`); nothing happens until the user
+        reviews the confirmation and clicks Execute. See
+        annotation_rules_refresh.py for the precondition checks and business
+        logic; the two HTTP routes these URLs point to will be added to
+        routes.py separately.
+
+        Args:
+            context: Plugin context (used for the reviewer-role check)
+            params: Must include 'xml' (stable_id of the open TEI file)
+
+        Returns:
+            Dict with 'outputUrl'/'executeUrl' on success, or 'error'.
+        """
+        from urllib.parse import quote
+
+        from fastapi_app.lib.permissions.acl_utils import user_has_role
+
+        if not user_has_role(context.user, ["reviewer", "admin"]):
+            return {"error": "Reviewer role required."}
+
+        stable_id = params.get("xml")
+        if not stable_id:
+            return {"error": "No TEI document open."}
+
+        query = f"xml={quote(stable_id)}"
+        return {
+            "outputUrl": f"/api/plugins/grobid/refresh-annotation-rules/preview?{query}",
+            "executeUrl": f"/api/plugins/grobid/refresh-annotation-rules/execute?{query}",
         }

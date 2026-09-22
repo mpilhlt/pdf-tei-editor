@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-10T09:18:46.656Z
+ * Generated from OpenAPI schema at 2026-09-22T13:55:18.501Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -28,7 +28,8 @@
 
 /**
  * @typedef {Object} AnnotationGuideInfo
- * @property {string} variant_id - The variant identifier this guide applies to
+ * @property {Array<string>} variant_ids - The variant identifier(s) this guide applies to; "*" means every variant
+ * @property {string=} category - The rule category this guide belongs to (e.g. "primary"); not every extractor plugin populates this
  * @property {string} type - The content type: 'html' or 'markdown'
  * @property {string} url - The URL to fetch the guide from
  */

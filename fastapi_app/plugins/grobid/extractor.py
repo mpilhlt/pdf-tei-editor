@@ -44,6 +44,9 @@ from fastapi_app.lib.utils.tei_utils import (
 from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 from fastapi_app.lib.utils.config_utils import get_config
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.plugins.grobid.annotation_rules import build_editorial_decl_entries
 
 
 class GrobidTrainingExtractor(BaseExtractor):
@@ -267,35 +270,12 @@ class GrobidTrainingExtractor(BaseExtractor):
             tei_header.remove(existing_encodingDesc)
 
         # Create encodingDesc with PDF-TEI-Editor and GROBID applications.
-        # For training variants, include model/flavor/variant-id labels in the
-        # desired order via additional_labels (variant_id param would insert before them).
-        schema_url = get_schema_url(variant_id)
-        if variant_id.startswith("grobid.training."):
-            model_name = get_model_path(variant_id)
-            enc_variant_id = None
-            enc_labels: list[tuple[str, str]] = [
-                ("model", model_name),
-                ("flavor", flavor),
-                ("variant-id", variant_id),
-                ("revision", grobid_revision),
-            ]
-        else:
-            enc_variant_id = variant_id
-            enc_labels = [
-                ("revision", grobid_revision),
-                ("flavor", flavor),
-            ]
-        encodingDesc = create_encoding_desc_with_extractor(
+        encodingDesc = self._build_encoding_desc(
             timestamp=timestamp,
-            extractor_name="GROBID",
-            extractor_ident="GROBID",
-            extractor_version=grobid_version,
-            variant_id=enc_variant_id,
-            additional_labels=enc_labels,
-            refs=[
-                "https://github.com/grobidOrg/grobid",
-                schema_url,
-            ],
+            grobid_version=grobid_version,
+            grobid_revision=grobid_revision,
+            variant_id=variant_id,
+            flavor=flavor,
         )
         tei_header.append(encodingDesc)
 
@@ -356,6 +336,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             p_elem.text = "No text content available."
 
         # Create processing instruction for schema validation
+        schema_url = get_schema_url(variant_id)
         processing_instructions = []
         schema_pi = create_schema_processing_instruction(schema_url)
         processing_instructions.append(schema_pi)
@@ -370,6 +351,62 @@ class GrobidTrainingExtractor(BaseExtractor):
 
         return result_xml
 
+
+    def _build_encoding_desc(
+        self,
+        *,
+        timestamp: str,
+        grobid_version: str,
+        grobid_revision: str,
+        variant_id: str,
+        flavor: str,
+    ) -> etree._Element:
+        """
+        Build the GROBID-specific encodingDesc for an extracted document.
+
+        For training variants, model/flavor/variant-id labels are included in
+        the desired order via additional_labels (a `variant_id` kwarg to
+        create_encoding_desc_with_extractor() would insert its label before
+        them), so `enc_variant_id` is None and the variant-id label is emitted
+        via additional_labels instead.
+
+        The editorialDecl entries are always looked up using `variant_id`
+        (e.g. "grobid.training.segmentation") - never `enc_variant_id`, which
+        is None for training variants.
+        """
+        schema_url = get_schema_url(variant_id)
+        if variant_id.startswith("grobid.training."):
+            model_name = get_model_path(variant_id)
+            enc_variant_id = None
+            enc_labels: list[tuple[str, str]] = [
+                ("model", model_name),
+                ("flavor", flavor),
+                ("variant-id", variant_id),
+                ("revision", grobid_revision),
+            ]
+        else:
+            enc_variant_id = variant_id
+            enc_labels = [
+                ("revision", grobid_revision),
+                ("flavor", flavor),
+            ]
+
+        rules_cache = UrlCache(get_settings().annotation_rules_cache_dir)
+        editorial_decl_entries = build_editorial_decl_entries(variant_id, rules_cache)
+
+        return create_encoding_desc_with_extractor(
+            timestamp=timestamp,
+            extractor_name="GROBID",
+            extractor_ident="GROBID",
+            extractor_version=grobid_version,
+            variant_id=enc_variant_id,
+            additional_labels=enc_labels,
+            refs=[
+                "https://github.com/grobidOrg/grobid",
+                schema_url,
+            ],
+            editorial_decl_entries=editorial_decl_entries,
+        )
 
     def _clean_invalid_xml_attributes(self, xml_content: str) -> str:
         """Clean invalid XML attributes that cause parsing errors."""

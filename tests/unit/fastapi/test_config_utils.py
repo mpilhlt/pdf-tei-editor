@@ -228,5 +228,17 @@ class TestConfigUtils(unittest.TestCase):
         self.assertEqual(config_data['some.key.type'], 'string')
 
 
+class TestAnnotationRulesCacheDir(unittest.TestCase):
+    """Test Settings.annotation_rules_cache_dir."""
+
+    def test_derived_from_data_root(self):
+        from fastapi_app.config import Settings
+        settings = Settings(DATA_ROOT="/tmp/test-data-root")
+        self.assertEqual(
+            str(settings.annotation_rules_cache_dir),
+            "/tmp/test-data-root/annotation-rules/cache",
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

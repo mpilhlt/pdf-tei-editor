@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from fastapi_app.lib.core.schema_validator import (
     SCHEMA_CACHE_TTL_SECONDS,
+    extract_schema_locations,
     is_schema_cache_stale,
     register_schema_redirect,
     resolve_schema_location,
@@ -175,6 +176,45 @@ class TestValidateAppliesSchemaRedirect(unittest.TestCase):
         # Cache already fresh under the new location, so no download is needed -
         # this only succeeds if the redirect was applied before the cache lookup.
         mock_download.assert_not_called()
+
+
+class TestExtractSchemaLocationsSchemaRef(unittest.TestCase):
+    """Test extract_schema_locations() falling back to encodingDesc/schemaRef."""
+
+    def test_schema_ref_only(self):
+        xml = """<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <schemaRef target="https://example.com/schema/tei.rng" type="RELAXNG"/>
+    </encodingDesc>
+  </teiHeader>
+</TEI>
+"""
+        results = extract_schema_locations(xml)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["schemaLocation"], "https://example.com/schema/tei.rng")
+        self.assertEqual(results[0]["type"], "relaxng")
+        self.assertEqual(results[0]["namespace"], "http://www.tei-c.org/ns/1.0")
+
+    def test_xml_model_pi_takes_precedence_over_schema_ref(self):
+        xml = """<?xml version="1.0"?>
+<?xml-model href="https://example.com/schema/pi.rng" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <schemaRef target="https://example.com/schema/ref.rng" type="RELAXNG"/>
+    </encodingDesc>
+  </teiHeader>
+</TEI>
+"""
+        results = extract_schema_locations(xml)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["schemaLocation"], "https://example.com/schema/pi.rng")
+
+    def test_no_schema_declaration_at_all(self):
+        xml = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader/></TEI>'
+        self.assertEqual(extract_schema_locations(xml), [])
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from lxml import etree
 
 from fastapi_app.lib.services.metadata_extraction import BibliographicMetadata
 from fastapi_app.lib.utils.doi_utils import encode_for_xml_id, decode_from_xml_id
+from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef
 
 
 class ExtractedTeiMetadata(BibliographicMetadata, total=False):
@@ -388,13 +389,17 @@ def create_encoding_desc_with_extractor(
     variant_id: Optional[str] = None,
     additional_labels: Optional[List[Tuple[str, str]]] = None,
     refs: Optional[List[str]] = None,
+    editorial_decl_entries: Optional[List[AnnotationRuleRef]] = None,
 ) -> etree._Element:  # type: ignore[name-defined]
     """
-    Create an encodingDesc element with PDF-TEI-Editor and extractor application info.
+    Create an encodingDesc element with PDF-TEI-Editor and extractor applications.
 
     This is a generic version of create_encoding_desc_with_grobid() that can be
     used by any extractor. It always includes the PDF-TEI-Editor application first,
-    followed by the extractor-specific application.
+    followed by the extractor-specific application, and - if editorial_decl_entries
+    is given - an editorialDecl before both, documenting the annotation rules that
+    apply to this document. See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
+    (Part A) for the editorialDecl shape.
 
     Args:
         timestamp: ISO timestamp string
@@ -404,6 +409,12 @@ def create_encoding_desc_with_extractor(
         variant_id: Optional variant identifier
         additional_labels: List of (type, text) tuples for extra labels on extractor app
         refs: List of target URLs for ref elements on extractor app.
+        editorial_decl_entries: Optional list of AnnotationRuleRef entries (as
+            returned by annotation_rules_utils.extract_annotation_rule_refs()),
+            one per <interpretation> to emit, each holding one or two <ref>
+            children (a "human" heading-anchor ref and/or an auto-derived
+            "machine" line-range ref). Omitted or empty: no editorialDecl is
+            added.
 
     Returns:
         encodingDesc element
@@ -422,10 +433,29 @@ def create_encoding_desc_with_extractor(
         ...     refs=[
         ...         "https://github.com/kermitt2/grobid",
         ...         "https://example.com/schema/grobid-segmentation.rng",
-        ...     ]
+        ...     ],
+        ...     editorial_decl_entries=[
+        ...         {"category": "primary", "refs": [
+        ...             {"target": "https://example.com/guide.md#seg", "content_type": "markdown", "subtype": "human"},
+        ...         ]},
+        ...     ],
         ... )
     """
     encodingDesc = etree.Element("encodingDesc")
+
+    # editorialDecl, if any entries were given, precedes appInfo (TEI content-model
+    # convention: editorialDecl, schemaRef, appInfo).
+    if editorial_decl_entries:
+        editorialDecl = etree.SubElement(encodingDesc, "editorialDecl")
+        for entry in editorial_decl_entries:
+            interpretation = etree.SubElement(editorialDecl, "interpretation", type=entry["category"])
+            p = etree.SubElement(interpretation, "p")
+            for ref_entry in entry["refs"]:
+                ref = etree.SubElement(p, "ref", target=ref_entry["target"], subtype=ref_entry["subtype"])
+                content_type = ref_entry["content_type"]
+                if content_type is not None:
+                    ref.set("type", content_type)
+
     appInfo = etree.SubElement(encodingDesc, "appInfo")
 
     # PDF-TEI-Editor application (always first)
@@ -461,7 +491,7 @@ def create_encoding_desc_with_extractor(
         for label_type, label_text in additional_labels:
             label = etree.SubElement(extractor_app, "label", type=label_type)
             label.text = label_text
-            
+
     # Add ref elements
     if refs:
         for ref_target in refs:

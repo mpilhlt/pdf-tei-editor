@@ -12,7 +12,6 @@ import re
 import json
 import subprocess
 import tempfile
-import time
 import logging
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
@@ -20,6 +19,8 @@ from lxml import etree  # type: ignore
 from lxml.etree import XMLSyntaxError
 import xmlschema
 import requests
+
+from fastapi_app.lib.core.url_cache import get_cache_info, is_cache_stale
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +248,8 @@ def extract_schema_locations(xml_string: str) -> List[Dict[str, str]]:
 
     Supports both XSD and RelaxNG approaches:
     - XSD: uses xsi:schemaLocation attribute
-    - RelaxNG: uses xml-model processing instruction
+    - RelaxNG: uses the xml-model processing instruction, falling back to
+      encodingDesc/schemaRef if no PI is present
 
     Args:
         xml_string: XML document as string
@@ -269,13 +271,19 @@ def extract_schema_locations(xml_string: str) -> List[Dict[str, str]]:
                 "type": "xsd"
             })
 
-    # Then try RelaxNG-style xml-model processing instruction
+    # Then try RelaxNG-style xml-model processing instruction; fall back to
+    # the standard TEI schemaRef element only if no PI is present, so an
+    # existing PI stays authoritative when both are declared.
     xml_model_match = re.search(
         r'<\?xml-model\s+href="([^"]+)"[^>]*schematypens="http://relaxng\.org/ns/structure/1\.0"[^>]*\?>',
         xml_string
     )
-    if xml_model_match:
-        schema_location = xml_model_match.group(1)
+    schema_location = xml_model_match.group(1) if xml_model_match else None
+    if schema_location is None:
+        schema_ref_match = re.search(r'<schemaRef\s+[^>]*target="([^"]+)"', xml_string)
+        schema_location = schema_ref_match.group(1) if schema_ref_match else None
+
+    if schema_location:
         # Extract namespace from root element (assuming TEI)
         namespace_match = re.search(r'<\w+[^>]*xmlns="([^"]+)"', xml_string)
         namespace = namespace_match.group(1) if namespace_match else "http://www.tei-c.org/ns/1.0"
@@ -292,6 +300,10 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
     """
     Extract cache directory and file information for a schema location.
 
+    Thin wrapper around the generic url_cache.get_cache_info(), kept under
+    its original name because other modules (e.g. the grobid plugin's
+    annotation-tags generator) import it directly by this name.
+
     Args:
         schema_location: URL of the schema
         cache_root: Root directory for schema cache
@@ -299,21 +311,14 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
     Returns:
         Tuple of (cache_dir, cache_file, filename)
     """
-    schema_location_parts = schema_location.split("/")[2:-1]
-    # Replace filesystem-incompatible characters (e.g. colon in "localhost:8000")
-    schema_location_parts = [re.sub(r'[<>:"|?*]', '_', part) for part in schema_location_parts]
-    schema_cache_dir = cache_root / Path(*schema_location_parts)
-    schema_file_name = re.sub(r'[<>:"|?*]', '_', os.path.basename(schema_location))
-    schema_cache_file = schema_cache_dir / schema_file_name
-    return schema_cache_dir, schema_cache_file, schema_file_name
+    return get_cache_info(schema_location, cache_root)
 
 
 def is_schema_cache_stale(schema_cache_file: Path, ttl_seconds: int = SCHEMA_CACHE_TTL_SECONDS) -> bool:
     """
     Check whether a cached schema file needs to be re-fetched.
 
-    A cache entry is stale if it doesn't exist yet, or if it was last written
-    longer than `ttl_seconds` ago.
+    Thin wrapper around the generic url_cache.is_cache_stale().
 
     Args:
         schema_cache_file: Path to the cached schema file
@@ -322,10 +327,7 @@ def is_schema_cache_stale(schema_cache_file: Path, ttl_seconds: int = SCHEMA_CAC
     Returns:
         True if the file is missing or older than the TTL
     """
-    if not schema_cache_file.is_file():
-        return True
-    age_seconds = time.time() - schema_cache_file.stat().st_mtime
-    return age_seconds > ttl_seconds
+    return is_cache_stale(schema_cache_file, ttl_seconds)
 
 
 def download_schema_file(
