@@ -219,6 +219,20 @@ export function escapeHtml(text) {
 }
 
 /**
+ * Escapes the given plain text and turns any bare http(s) URLs it contains into
+ * clickable links that open in a new tab. Use this instead of assigning raw text
+ * to `innerHTML` whenever the text may contain a URL that should be clickable.
+ * @param {string} text
+ * @returns {string} HTML-safe markup with URLs replaced by `<a>` tags
+ */
+export function linkifyUrls(text) {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]]/g, url =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
+}
+
+/**
  * Renders a title template by substituting `{slotName}` placeholders with values
  * from `slots`. A placeholder with no matching key (or an empty/falsy value) in
  * `slots` is substituted with an empty string; any `()` or `[]` pair left empty by
