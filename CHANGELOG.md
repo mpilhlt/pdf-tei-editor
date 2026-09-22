@@ -2,6 +2,23 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.63.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.62.0...v0.63.0) (2026-09-22)
+
+
+### Bug Fixes
+
+* bump scipy floor to 1.16.0 for macOS 27 dyld compatibility ([9fa2758](https://github.com/mpilhlt/pdf-tei-editor/commit/9fa2758f4a146d45c3436491b074d0a8f8477ccd))
+* **deps:** bump adm-zip to 0.6.1 to fix memory allocation DoS ([eac64f5](https://github.com/mpilhlt/pdf-tei-editor/commit/eac64f5d362e1aab830f8df9d4815138d49b5d8b)), closes [#156](https://github.com/mpilhlt/pdf-tei-editor/issues/156)
+* read file_id via extract_fileref() in files_save.py ([56002f9](https://github.com/mpilhlt/pdf-tei-editor/commit/56002f9fcc6fdecc71b39bdb85a9a7b4fbd875f8))
+* render clickable links in dialog messages ([cf4aff8](https://github.com/mpilhlt/pdf-tei-editor/commit/cf4aff8e97a1dd4ece7f767efe41bc8131a0e755))
+
+
+### Features
+
+* add container healthcheck to deploy and podman watchdog ([80285bd](https://github.com/mpilhlt/pdf-tei-editor/commit/80285bdc64f6035f8bdefca872988f933de49a8c))
+* add editorialDecl annotation-rules integration for GROBID ([c463fb8](https://github.com/mpilhlt/pdf-tei-editor/commit/c463fb8a7f7f1e35af450ebeb3a905981406964b))
+* fail fast when the GROBID Hugging Face Space is not running ([ba403cb](https://github.com/mpilhlt/pdf-tei-editor/commit/ba403cb954f0f984224d497d877973730b47ec8a))
+
 # [0.62.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.61.0...v0.62.0) (2026-09-16)
 
 
