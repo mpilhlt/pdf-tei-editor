@@ -40,6 +40,7 @@ New to the project? Start here:
 - **[Testing](testing.md)** - Testing infrastructure, API tests, E2E tests, debugging
 - **[Deployment](deployment.md)** - Production deployment, Docker, configuration
 - **[Validation](validation.md)** - XML/TEI schema validation, autocomplete system
+- **[TEI Header Integrations](tei-header-integrations.md)** - Which teiHeader elements the app reads/writes, and where (fileDesc, encodingDesc, editorialDecl, revisionDesc)
 
 ## Documentation by Topic
 
@@ -75,6 +76,7 @@ New to the project? Start here:
 | [Testing](testing.md) | How to write and run tests |
 | [Testing PDF Viewer Code](testing-pdf-viewer.md) | How to test PDF Viewer / text-matching code with Node, no browser |
 | [Validation](validation.md) | How XML validation and autocomplete work |
+| [TEI Header Integrations](tei-header-integrations.md) | Which teiHeader elements to read/write, and how to hook a validation plugin into editorialDecl |
 | [Deployment](deployment.md) | How to deploy to production |
 
 ## Branch Workflow

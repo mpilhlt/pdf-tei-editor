@@ -51,6 +51,20 @@
     </sourceDesc>
   </fileDesc>
   <encodingDesc>
+    <editorialDecl>
+      <interpretation type="primary">
+        <p>
+          <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#document-segmentation-model" subtype="human" type="markdown"/>
+          <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#L42-L88" subtype="machine"/>
+        </p>
+      </interpretation>
+      <interpretation type="data-correction">
+        <p>
+          <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#data-correction" subtype="human" type="markdown"/>
+          <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#L120-L145" subtype="machine"/>
+        </p>
+      </interpretation>
+    </editorialDecl>
     <appInfo>
       <application version="1.0" ident="pdf-tei-editor" type="editor">
         <label>PDF-TEI-Editor</label>
