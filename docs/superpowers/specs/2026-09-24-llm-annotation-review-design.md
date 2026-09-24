@@ -71,10 +71,15 @@ capability the way `ServiceRegistry` does.
 `fastapi_app/lib/llm/base.py`:
 
 ```python
+class ModelStatus(TypedDict):
+    availability: Literal["available", "busy", "very_busy"]
+    detail: str  # human-readable elaboration for a warning tooltip, e.g. "demand: 5"
+
 class LLMModel(TypedDict):
     id: str
     label: str
     capabilities: frozenset[str]  # extensible tags, e.g. {"chat", "json_mode"}
+    status: ModelStatus | None  # None when the provider exposes no live status
 
 class LLMProvider(ABC):
     id: str
@@ -96,6 +101,20 @@ typed fields (`context_window: int`, `supports_vision: bool`, ...) —
 simplest thing that lets a future consumer filter on a tag it cares about
 (e.g. `"json_mode"`) without the registry needing to know every provider's
 feature matrix up front.
+
+`ModelStatus` is deliberately provider-agnostic: `availability` is a fixed
+3-tier enum any provider can normalize its own live-load signal onto (this
+codebase's only current example, Kisski's numeric "demand", is one such
+signal — a future provider with a different raw busy-indicator maps onto
+the same three values rather than inventing its own vocabulary the frontend
+would need to special-case). `detail` carries whatever provider-specific
+elaboration is useful in a tooltip (e.g. Kisski's raw demand number as
+text). `list_models()` returns `status: None` per model for any provider
+that doesn't expose this (most commercial APIs) — absence of data, not an
+implicit "available". Don't confuse this with `LLMProvider.is_available()`:
+that's whether the *provider* is configured/usable at all (API key present);
+`ModelStatus.availability` is a *model's* live load state, queried only for
+providers that support it.
 
 `fastapi_app/lib/llm/openai_compatible.py`:
 
@@ -183,6 +202,40 @@ call is unified with the shared client. Kisski's config keys
 `KisskiService` (already registered in the generic `ServiceRegistry`,
 `fastapi_app/plugins/kisski/plugin.py`) actually does, to confirm it's
 unrelated to chat completion and there's no overlap to reconcile.
+
+### Live model status (demand/busy warning)
+
+Kisski's `/models` endpoint reports a per-model `demand` integer, letting a
+caller avoid picking an over-loaded model that's likely to time out. A
+sibling project (`/Users/cboulanger/Code/zotero-rag/backend/utils/kisski.py`)
+already implements this classification — reused here as the canonical
+thresholds rather than inventing new ones:
+
+```python
+def _demand_to_availability(demand: int) -> Literal["available", "busy", "very_busy"]:
+    if demand == 0:
+        return "available"
+    if demand <= 5:
+        return "busy"
+    return "very_busy"
+```
+
+Kisski's provider's `list_models()` populates each `LLMModel.status` with
+`ModelStatus(availability=_demand_to_availability(demand), detail=f"demand: {demand}")`.
+This is Kisski-specific logic, not part of `OpenAICompatibleProvider` — that
+base class always returns `status: None`, since a live demand signal isn't
+part of the standard OpenAI wire format; only Kisski's concrete provider
+class overrides model listing to populate it. A future provider with its
+own busy-signal (if one ever exposes one) would write its own analogous
+mapping onto the same `ModelStatus.availability` vocabulary.
+
+**Verify during implementation**: the sibling project's backend fetches
+this via `POST {base_url}/models` specifically to get the demand-augmented
+response, while this codebase's existing `KisskiExtractor._fetch_models_from_api`
+does a plain `GET {base_url}/models` (per earlier research,
+`fastapi_app/plugins/kisski/extractor.py:60-82`) — confirm whether GET also
+returns `demand`, or whether the new provider's `list_models()` genuinely
+needs the POST variant, before assuming either shape.
 
 ## Part C — `annotation_review` backend plugin
 
@@ -337,6 +390,16 @@ for (const provider of providers) {
     item.type = 'checkbox'; // single-select via manual toggle, see below
     item.textContent = model.label;
     item.addEventListener('click', () => this.setDefaultModel(provider.id, model.id));
+    if (model.status && model.status.availability !== 'available') {
+      const tooltip = document.createElement('sl-tooltip');
+      tooltip.content = `This model is currently ${model.status.availability.replace('_', ' ')}` +
+        (model.status.detail ? ` (${model.status.detail})` : '') + ' and may time out.';
+      const icon = document.createElement('sl-icon');
+      icon.name = 'exclamation-triangle';
+      icon.slot = 'suffix';
+      tooltip.appendChild(icon);
+      item.appendChild(tooltip);
+    }
     submenu.appendChild(item);
   }
 }
@@ -347,6 +410,17 @@ here) — `xmleditor.js:336-360`'s theme picker and `prompt-editor.js:173-179`
 both use `sl-menu-item[type=checkbox]` with manual check/uncheck toggling
 across a dynamic list to implement single-selection; this plugin follows
 the same approach rather than introducing a different selection widget.
+
+**Busy warning**: a model's `status` (Part A/B) is `None` for providers
+that don't expose live load data (most commercial APIs) — no icon is shown
+for those, silence rather than a false "available" signal. When present and
+not `"available"`, a warning icon + `sl-tooltip` is attached to that
+model's menu item (shown above), explaining why — this is purely
+informational, it doesn't block selecting a busy model; the goal is to let
+the user *avoid* picking one that's likely to time out, not prevent it.
+Re-checking status at actual review-call time (Part C) is out of scope for
+this round — only the picker shows it, at whatever staleness the last
+submenu-open fetch left it at.
 
 **Data source**: `GET /api/v1/llm/providers` (Part A's core route) — one
 fetch, used both to populate this submenu and to validate that a previously
@@ -399,7 +473,9 @@ API", per direction.
   `chat_completion`/`list_models`).
 - Part B: unit test confirming `KisskiExtractor._call_llm` delegates to the
   shared connector and existing Kisski extractor tests still pass unchanged
-  (behavioral BC check).
+  (behavioral BC check); unit tests for `_demand_to_availability` boundary
+  values (0, 1, 5, 6) and for `list_models()` populating `status` from a
+  mocked demand-augmented response.
 - Part C: unit tests for prompt construction from multiple `editorialDecl`
   categories, and for finding validation (the exactly-once `old`-match
   check: absent, unique, and ambiguous/duplicate cases).
@@ -410,7 +486,9 @@ API", per direction.
   construction for "Propose fix".
 - Part F: JS unit tests for `getDefaultModel()`/`setDefaultModel()` against
   a mocked `UIStorage`, including the "stored default no longer available"
-  fallback-to-`null` case.
+  fallback-to-`null` case; a test that the busy-warning icon/tooltip is
+  only attached when `status.availability !== 'available'`, and not at all
+  when `status` is `null`.
 - Test locations follow existing conventions: plugin-specific tests in
   `fastapi_app/plugins/annotation_review/tests/` and
   `fastapi_app/plugins/kisski/tests/`, generic core-utility tests in
@@ -428,3 +506,11 @@ API", per direction.
   (Part F) behaves correctly when nested two levels deep (category label +
   provider label + item), since the existing precedents
   (`xmleditor.js`/`prompt-editor.js`) only nest one level.
+- Confirm whether Kisski's `GET {base_url}/models` (already used by
+  `KisskiExtractor._fetch_models_from_api`) returns a `demand` field, or
+  whether populating `ModelStatus` genuinely requires the `POST` variant
+  the sibling zotero-rag project uses (Part B).
+- Confirm a `sl-tooltip` wrapping an `sl-icon` renders/positions correctly
+  as a suffix inside a nested `sl-menu-item[type=checkbox]` (Part F) — no
+  existing precedent in this codebase combines a tooltip with a menu-item
+  checkbox.
