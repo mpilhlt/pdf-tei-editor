@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.extraction import LLMBaseExtractor, get_retry_session
+from fastapi_app.lib.llm.openai_compatible import chat_completion_sync
 from fastapi_app.lib.utils.config_utils import get_config
 
 logger = logging.getLogger(__name__)
@@ -107,37 +108,26 @@ class KisskiExtractor(LLMBaseExtractor):
         model: str | None = None,
         temperature: float = 0.1,
     ) -> str:
-        """Call the KISSKI API and return the response text with retry logic."""
-        base_url = get_config().get("plugin.kisski.api.url")
-        url = f"{base_url}/chat/completions"
+        """Call the KISSKI API and return the response text with retry logic.
 
+        Delegates the actual HTTP call to the shared
+        fastapi_app.lib.llm.openai_compatible.chat_completion_sync, so this
+        codebase has one implementation of the OpenAI-compatible
+        chat/completions call, reused by both the extraction feature and
+        the LLM provider registry (fastapi_app/plugins/kisski/llm_provider.py).
+        """
         if not model or model == "":
             raise RuntimeError("No model given")
 
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self.client}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": temperature,
-        }
-
-        session = get_retry_session(retries=3, backoff_factor=2.0)
-        response = session.post(url, headers=headers, json=data, timeout=120)
-        response.raise_for_status()
-
-        result = response.json()
-        if "choices" in result and len(result["choices"]) > 0:
-            return result["choices"][0]["message"]["content"]
-
-        return ""
+        base_url = get_config().get("plugin.kisski.api.url")
+        return chat_completion_sync(
+            base_url=base_url,
+            api_key=self.client,
+            model_id=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+        )
 
     def _call_llm_multimodal(
         self,

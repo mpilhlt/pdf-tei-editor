@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-22T13:55:18.501Z
+ * Generated from OpenAPI schema at 2026-09-24T17:44:54.714Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -402,6 +402,20 @@
  */
 
 /**
+ * @typedef {Object} ModelResponse
+ * @property {string} id
+ * @property {string} label
+ * @property {Array<string>} capabilities
+ * @property {ModelStatusResponse} status
+ */
+
+/**
+ * @typedef {Object} ModelStatusResponse
+ * @property {string} availability
+ * @property {string} detail
+ */
+
+/**
  * @typedef {Object} MoveFilesRequest
  * @property {string} pdf_id
  * @property {string} destination_collection
@@ -442,6 +456,13 @@
  * @typedef {Object} ProjectConfigSetRequest
  * @property {string} key
  * @property {any} value
+ */
+
+/**
+ * @typedef {Object} ProviderResponse
+ * @property {string} id
+ * @property {string} label
+ * @property {Array<ModelResponse>} models
  */
 
 /**
@@ -1292,6 +1313,19 @@ export class ApiClientV1 {
   async extract(requestBody) {
     const endpoint = `/extract`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List available LLM providers and their models.
+   * A provider whose list_models() call fails (network error, malformed
+   * response, etc.) is skipped rather than failing the whole request -
+   * other providers should still be listed.
+   *
+   * @returns {Promise<Array<ProviderResponse>>}
+   */
+  async llmProviders() {
+    const endpoint = `/llm/providers`
+    return this.callApi(endpoint);
   }
 
   /**
