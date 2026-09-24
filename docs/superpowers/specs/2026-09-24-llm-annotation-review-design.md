@@ -33,9 +33,9 @@ Modular, independently implementable/deferrable parts:
 | A | Core LLM Provider Registry (`fastapi_app/lib/llm/`) |
 | B | Kisski migration onto the registry (BC-preserving) |
 | C | `annotation_review` backend plugin (rule reading, prompting, review endpoint) |
-| D | Frontend trigger wiring (repurpose the xmleditor "validate" button) |
+| D | Tools-menu trigger, "Annotation" category |
 | E | Diagnostics + scoped "Propose fix" diff UI |
-| F | Endpoint/model selection UI |
+| F | Default-model selection plugin, "Inference" category |
 
 Out of scope, not built in this round:
 
@@ -48,6 +48,14 @@ Out of scope, not built in this round:
   nothing to strip later and no "enhancement" plugin is needed for this.
 - Automatic/background review (e.g. on save, or on a schedule) — this is a
   manually triggered, single-document, single-run action only.
+- Any change to the xmleditor "validate" toolbar button. Direction reversed
+  mid-design: it's left exactly as-is (still `tei-validation`'s manual
+  re-check + toast). Removing it entirely is a possible separate, later,
+  unrelated task — not part of this design.
+- A per-call provider/model override UI in the review action itself. The
+  backend API (Part C) accepts an optional override, but no frontend control
+  is built for it in this round — the review action always uses Part F's
+  shared default.
 
 ## Part A — Core LLM Provider Registry
 
@@ -132,14 +140,30 @@ into both `ExtractorRegistry` and `ServiceRegistry` — guarded by an
 availability check so a missing API key results in a skipped registration
 and a logged warning, never a startup failure.
 
-Consumers (Part C's review plugin) never declare a plugin `dependencies`
-relationship on any specific provider plugin. HTTP routes only start
-receiving requests after every plugin's `initialize()` has completed
-(`PluginManager.initialize_plugins()` finishes, then routes are mounted), so
-querying `LLMProviderRegistry.get_instance().list_providers()` lazily inside
-a route handler is always safe regardless of provider/consumer plugin
-ordering — this is what gives the "switch providers without hardcoded
-coupling" property asked for.
+Consumers (Part C's review plugin, Part F's default-model picker) never
+declare a plugin `dependencies` relationship on any specific provider
+plugin. HTTP routes only start receiving requests after every plugin's
+`initialize()` has completed (`PluginManager.initialize_plugins()`
+finishes, then routes are mounted), so querying
+`LLMProviderRegistry.get_instance().list_providers()` lazily inside a route
+handler is always safe regardless of provider/consumer plugin ordering —
+this is what gives the "switch providers without hardcoded coupling"
+property asked for.
+
+### Core listing route
+
+The registry itself is a bare library module, not a `Plugin` — nothing
+"owns" it the way `annotation_review` will own its own routes. Precedent:
+`ExtractorRegistry` (`fastapi_app/lib/extraction/registry.py`) is exposed
+generically via a core router, `fastapi_app/routers/extraction.py`'s `GET
+/extract/list`, not by any single extractor plugin. A new core router,
+`fastapi_app/routers/llm.py`, follows the same shape: `GET
+/api/v1/llm/providers` → `LLMProviderRegistry.get_instance().list_providers(available_only=True)`,
+each with `list_models()`, shaped for consumption by both Part C's review
+action and Part F's default-model picker — neither needs its own
+provider-listing endpoint. Registered in `fastapi_app/main.py` alongside
+the other core routers; regenerating `app/src/modules/api-client-v1.js`
+(auto-generated from the OpenAPI schema) picks it up automatically.
 
 ## Part B — Kisski migration
 
@@ -169,13 +193,14 @@ for the backend-plugin-registers-a-frontend-extension shape.
 
 **Routes** (`routes.py`):
 
-- `GET /api/plugins/annotation-review/providers` → `LLMProviderRegistry.get_instance().list_providers(available_only=True)`,
-  each with its `list_models()`, shaped for the frontend's endpoint/model
-  picker (Part F).
-- `POST /api/plugins/annotation-review/review` → body `{xml, provider_id,
-  model_id}` (the **current, possibly-unsaved editor content** is sent
+- `POST /api/plugins/annotation-review/review` → body `{xml, provider_id?,
+  model_id?}` (the **current, possibly-unsaved editor content** is sent
   directly, not a file reference — the review must reflect what's on screen,
-  not the last-saved revision). Returns `{findings: [{id, old, new,
+  not the last-saved revision). `provider_id`/`model_id` are an explicit
+  per-call override; when omitted, the frontend extension fills them from
+  Part F's shared default before calling this route — the backend route
+  itself has no notion of "default", it just requires a resolved
+  provider+model on every call. Returns `{findings: [{id, old, new,
   rationale}]}`.
 
 **Review logic**: reads the document's `editorialDecl` via
@@ -212,30 +237,40 @@ registered via `FrontendExtensionRegistry` in the plugin's `initialize()`
 other plugins can depend on and call it exactly like any built-in plugin.
 Exposes:
 
-- `review()` — calls the two routes above via `callPluginApi()`, drives the
-  diagnostics (Part E).
+- `review()` — resolves provider/model from `getDependency('inference-settings').getDefaultModel()`
+  (Part F) unless called with an explicit override, calls the `review` route
+  via `callPluginApi()`, drives the diagnostics (Part E).
 - `hasReviewableRules(xmlDoc)` — `true` if `getEditorialDeclGuides(xmlDoc)`
   finds at least one category with a `subtype="machine"` ref. Drives the
-  toolbar button's disabled state (Part D).
+  Tools-menu item's disabled state (Part D).
 
-## Part D — frontend trigger wiring
+## Part D — Tools-menu trigger
 
-`app/src/plugins/xmleditor.js`'s existing `#validateBtn` click handler
-currently calls `getDependency('tei-validation').validate()`
-(`xmleditor.js:488-491`) — confirmed this is a real, working manual
-re-check + toast, not dead code, but it duplicates the always-on
-`tei-validation` linter's coverage. Per direction, it's repurposed anyway:
+The xmleditor "validate" toolbar button is left untouched (see "Out of
+scope" — this direction was reversed mid-design). Instead, `annotation-review.js`
+adds its own entry to the Tools menu, following the exact pattern already
+proven by `fastapi_app/plugins/tei_annotator/extensions/tei-annotator.js:59-78`
+(a plain `sl-menu-item`, not a submenu, since there's only one action):
 
-- Click handler is changed to call `getDependency('annotation-review').review()`.
-- The button's disabled state is driven by `hasReviewableRules()` on the
-  currently loaded document, re-evaluated on document load/change. This is
-  new gating behavior for this button — the research done for this design
-  didn't establish that `tei-validation` currently disables/enables it
-  conditionally, so this isn't a case of mirroring existing logic; verify
-  during implementation how `#validateBtn`'s enabled/disabled state is
-  currently wired in `xmleditor.js` before changing it.
-- `tei-validation.js`'s linter (the always-on gutter/diagnostics source)
-  is untouched — only the toolbar button's manual-trigger role moves.
+```js
+const item = document.createElement('sl-menu-item');
+item.textContent = 'Review Annotations';
+item.disabled = true; // toggled by hasReviewableRules() on document load/change
+item.addEventListener('click', () => this.review());
+this.getDependency('tools').addMenuItems([item], 'annotation');
+```
+
+- `'annotation'` is an existing category (already used by `tei_annotator`,
+  `fastapi_app/plugins/tei_annotator/plugin.py:33`) — the item groups under
+  the Tools menu's existing "Annotation" heading, no new category needed.
+- `disabled` starts `true` and is toggled by `hasReviewableRules()`,
+  re-evaluated on document load/change (state-update hook in the frontend
+  extension), mirroring how `tei-annotator.js` keeps a reference to its own
+  menu item(s) and toggles them post-construction.
+- `tools.addMenuItems(elements, category)` (`app/src/plugins/tools.js:94`)
+  is the generic imperative Tools-menu API; both core `app/src/plugins/*.js`
+  plugins and backend-plugin frontend extensions call the identical method
+  — no template or `tools.js` change needed for this part.
 
 ## Part E — diagnostics + scoped "Propose fix" diff
 
@@ -269,19 +304,80 @@ render coherently together in the same gutter/panel.
   never-actioned findings leave the document untouched; nothing needs
   cleaning up afterward.
 
-## Part F — endpoint/model selection UI
+## Part F — default-model selection plugin
 
-A small dropdown/popover, opened from the (repurposed) toolbar button,
-listing `GET .../providers` results (provider → its models). Last choice is
-remembered via `UIStorage` (`docs/code-assistant/ui-storage.md`'s existing
-localStorage-wrapper pattern), so a reviewer doesn't re-pick every time.
+New **core** frontend plugin, `app/src/plugins/inference-settings.js`
+(dependency name `inference-settings`) — not a backend-plugin extension,
+since it isn't owned by any single backend plugin; it's generic
+infrastructure any current/future LLM-consuming plugin can use. Confirmed
+no such "shared default, per-call overridable" pattern exists anywhere in
+the codebase today (closest precedent, `ConfigPlugin.get(key, defaultValue)`,
+is a per-call fallback, not a settable shared default) — this is genuinely
+new, not an extension of existing scaffolding.
+
+**Menu contribution**: a new `"inference"` Tools-menu category (does not
+exist yet, unlike `"annotation"`), containing one entry, "Default Model",
+that opens a nested submenu grouped by provider — the exact structural
+pattern already proven by `tei-annotator.js:59-78` (parent `sl-menu-item` +
+child `<sl-menu slot="submenu">`), extended with a `<small>` provider-label
+row before each provider's model items (mirroring the visual convention
+`tools.js` itself uses for its own top-level category labels, reimplemented
+locally since this inner grouping is inside a manually-built submenu, not
+`tools.addMenuItems`'s own category mechanism):
+
+```js
+const submenu = document.createElement('sl-menu');
+submenu.slot = 'submenu';
+for (const provider of providers) {
+  const label = document.createElement('small');
+  label.textContent = provider.label;
+  submenu.appendChild(label);
+  for (const model of provider.models) {
+    const item = document.createElement('sl-menu-item');
+    item.type = 'checkbox'; // single-select via manual toggle, see below
+    item.textContent = model.label;
+    item.addEventListener('click', () => this.setDefaultModel(provider.id, model.id));
+    submenu.appendChild(item);
+  }
+}
+```
+
+Single-select-via-checkbox is an existing, proven pattern (not invented
+here) — `xmleditor.js:336-360`'s theme picker and `prompt-editor.js:173-179`
+both use `sl-menu-item[type=checkbox]` with manual check/uncheck toggling
+across a dynamic list to implement single-selection; this plugin follows
+the same approach rather than introducing a different selection widget.
+
+**Data source**: `GET /api/v1/llm/providers` (Part A's core route) — one
+fetch, used both to populate this submenu and to validate that a previously
+stored default is still available.
+
+**Persistence & API**: the selected `{providerId, modelId}` is stored via
+`UIStorage` (`docs/code-assistant/ui-storage.md`'s existing
+localStorage-wrapper pattern — per-browser, consistent with how other
+"remembered choice" UI state already works in this app). The plugin exposes:
+
+- `getDefaultModel()` → `{providerId, modelId} | null` (`null` if nothing
+  has been selected yet, or the stored value no longer matches an available
+  provider/model).
+- `setDefaultModel(providerId, modelId)` → persists and updates the
+  submenu's checked state.
+
+Any plugin (starting with `annotation_review`, Part C) calls
+`getDependency('inference-settings').getDefaultModel()` and falls back to
+it unless it has its own explicit override — "the model selected here is
+the default one used by plugins unless they specifically override via the
+API", per direction.
 
 ## Error handling
 
-- No `editorialDecl` machine-subtype rules present → button stays disabled
-  (existing disabled-button pattern, just repointed to
-  `hasReviewableRules()`).
-- LLM/network failure calling the chosen provider → toast error, button
+- No `editorialDecl` machine-subtype rules present → Tools-menu item stays
+  disabled (`hasReviewableRules()`).
+- No default model selected yet (Part F never configured, or the stored
+  default no longer matches an available provider/model) → `review()`
+  surfaces a toast directing the user to Tools → Inference → Default Model,
+  rather than silently failing or guessing a provider.
+- LLM/network failure calling the chosen provider → toast error, menu item
   re-enabled, no partial diagnostics left behind.
 - Malformed/non-JSON LLM response → treated as zero findings, plus a toast
   noting the response couldn't be parsed (logged for debugging).
@@ -291,10 +387,10 @@ localStorage-wrapper pattern), so a reviewer doesn't re-pick every time.
 - A finding whose `old` no longer matches the live editor text by the time
   the response arrives (document edited meanwhile) → dropped client-side,
   silently.
-- Provider/model becomes unavailable between listing and use (e.g. config
-  removed mid-session) → the `POST .../review` call fails with a clear
-  error surfaced as a toast; the picker (Part F) re-fetches `GET
-  .../providers` on next open so it self-corrects.
+- Provider/model becomes unavailable between Part F's listing and actual use
+  (e.g. config removed mid-session) → the `POST .../review` call fails with
+  a clear error surfaced as a toast; Part F re-fetches `GET
+  /api/v1/llm/providers` on next submenu open so it self-corrects.
 
 ## Testing
 
@@ -307,9 +403,14 @@ localStorage-wrapper pattern), so a reviewer doesn't re-pick every time.
 - Part C: unit tests for prompt construction from multiple `editorialDecl`
   categories, and for finding validation (the exactly-once `old`-match
   check: absent, unique, and ambiguous/duplicate cases).
-- Part D/E: JS unit tests building diagnostics from fixture findings
+- Part D: JS unit test that the Tools-menu item's disabled state tracks
+  `hasReviewableRules()` across a document-change fixture.
+- Part E: JS unit tests building diagnostics from fixture findings
   (including the stale-match-drop case), and the single-hunk modified-doc
   construction for "Propose fix".
+- Part F: JS unit tests for `getDefaultModel()`/`setDefaultModel()` against
+  a mocked `UIStorage`, including the "stored default no longer available"
+  fallback-to-`null` case.
 - Test locations follow existing conventions: plugin-specific tests in
   `fastapi_app/plugins/annotation_review/tests/` and
   `fastapi_app/plugins/kisski/tests/`, generic core-utility tests in
@@ -323,3 +424,7 @@ localStorage-wrapper pattern), so a reviewer doesn't re-pick every time.
   in the CodeMirror lint panel and gutter (Part E).
 - Confirm the exact merge-view accept/reject command names already used by
   `tei-wizard.js` (Part E), rather than assuming an API shape.
+- Confirm `sl-menu-item[type=checkbox]`'s manual check/uncheck toggling
+  (Part F) behaves correctly when nested two levels deep (category label +
+  provider label + item), since the existing precedents
+  (`xmleditor.js`/`prompt-editor.js`) only nest one level.
