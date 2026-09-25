@@ -31,7 +31,7 @@ New flow:
 
 ### 1. Update Migration Script
 
-**File**: `bin/migrate-tei-biblstruct.py` → `bin/update-tei-metadata.py`
+**File**: `bin/migrate-tei-biblstruct.py` → `bin/migrations/update-tei-metadata.py`
 
 **Changes**:
 - Rename to reflect broader scope
@@ -202,7 +202,7 @@ if (meta.url) {
 - [ ] `fastapi_app/lib/tei_utils.py` - Update `extract_tei_metadata()`
 - [ ] `fastapi_app/lib/metadata_extraction.py` - No changes (already supports DOI + LLM)
 - [ ] `fastapi_app/plugins/metadata_extraction/enhancements/enrich-tei-header.js` - Update to use `biblStruct`
-- [ ] `bin/migrate-tei-biblstruct.py` → `bin/update-tei-metadata.py` - Expand functionality
+- [ ] `bin/migrate-tei-biblstruct.py` → `bin/migrations/update-tei-metadata.py` - Expand functionality
 
 ### Documentation
 - [ ] `docs/development/example.tei.xml` - Show complete `biblStruct`
@@ -245,16 +245,16 @@ if (meta.url) {
 
 ```bash
 # Dry run to preview changes
-uv run python bin/update-tei-metadata.py --dry-run
+uv run python bin/migrations/update-tei-metadata.py --dry-run
 
 # Test on limited set
-uv run python bin/update-tei-metadata.py --limit 10 --verbose
+uv run python bin/migrations/update-tei-metadata.py --limit 10 --verbose
 
 # Full migration
-uv run python bin/update-tei-metadata.py --verbose
+uv run python bin/migrations/update-tei-metadata.py --verbose
 
 # Force update even if biblStruct exists
-uv run python bin/update-tei-metadata.py --force
+uv run python bin/migrations/update-tei-metadata.py --force
 ```
 
 ## Implementation Progress
@@ -291,7 +291,7 @@ uv run python bin/update-tei-metadata.py --force
    - Removed GROBID schema reference (biblStruct not part of that schema)
    - Updated bibl citation to include page range
 
-5. ✅ **Created new migration script** (`bin/update-tei-metadata.py`)
+5. ✅ **Created new migration script** (`bin/migrations/update-tei-metadata.py`)
    - Renamed from `migrate-tei-biblstruct.py` to reflect broader scope
    - Uses `get_metadata_for_document()` for DOI lookup + LLM fallback
    - Updates both TEI biblStruct and database doc_metadata
@@ -319,7 +319,7 @@ uv run python bin/update-tei-metadata.py --force
 - Extracted from biblStruct when saving TEI files
 - Migration script updates doc_metadata for all files
 
-6. ✅ **Fixed migration script database schema understanding** (`bin/update-tei-metadata.py`)
+6. ✅ **Fixed migration script database schema understanding** (`bin/migrations/update-tei-metadata.py`)
    - **Critical fix**: Script now correctly uses PDF→TEI relationship via `doc_id`
    - Workflow: Query PDF entries → find linked TEI files → update TEI files
    - Added DOI extraction from encoded `doc_id` using `decode_filename()` + `validate_doi()`

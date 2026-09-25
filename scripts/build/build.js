@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+
+/**
+ * PDF TEI Editor Build Script
+ *
+ * Usage:
+ *   node scripts/build/build.js                    # Run all steps
+ *   node scripts/build/build.js --steps=step1,step2  # Run specific steps
+ *   node scripts/build/build.js --skip=step1,step2   # Skip specific steps
+ *
+ * Available steps:
+ *   - plugins: Generate plugin-registry.js and validate plugins.js
+ *   - modules: Generate module-registry.js from @registerModule-tagged sources
+ *   - importmap: Update the importmap
+ *   - icons: Compile the app icons
+ *   - templates: Bundle templates
+ *   - version: Generate version.js from package.json
+ *   - pdfjs: Copy PDF.js files for production
+ *   - highlight: Bundle highlight.js for syntax highlighting
+ *   - bundle: Bundle application with Rollup
+ */
+
+import { execSync } from 'child_process';
+import path from 'path';
+
+/**
+ * @param {string} command
+ * @param {string} description
+ */
+function runCommand(command, description) {
+  console.log(`${description}...`);
+  try {
+    execSync(command, { stdio: 'inherit', cwd: process.cwd() });
+  } catch (error) {
+    console.error(`Error running: ${command}`);
+    process.exit(1);
+  }
+}
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+let stepsToRun = new Set(['plugins', 'modules', 'importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle']);
+let stepsToSkip = new Set();
+
+args.forEach(arg => {
+  if (arg.startsWith('--steps=')) {
+    const requestedSteps = arg.split('=')[1].split(',');
+    stepsToRun = new Set(requestedSteps);
+  } else if (arg.startsWith('--skip=')) {
+    const skipSteps = arg.split('=')[1].split(',');
+    stepsToSkip = new Set(skipSteps);
+  }
+});
+
+// Remove skipped steps
+stepsToSkip.forEach(step => stepsToRun.delete(step));
+
+console.log(`[INFO] Running build steps: ${Array.from(stepsToRun).join(', ')}`);
+if (stepsToSkip.size > 0) {
+  console.log(`[INFO] Skipping steps: ${Array.from(stepsToSkip).join(', ')}`);
+}
+
+// Define build steps
+/** @type {Record<string, () => void>} */
+const buildSteps = {
+  plugins: () => runCommand('node scripts/build/generate-plugins.js', 'Generating plugin registry'),
+  modules: () => runCommand('node scripts/build/generate-modules.js', 'Generating module registry'),
+  importmap: () => runCommand('node scripts/build/generate-importmap.js', 'Updating the importmap'),
+  icons: () => runCommand('uv run python scripts/build/compile-sl-icons.py', 'Compiling the app icons'),
+  templates: () => runCommand('node scripts/build/bundle-templates.js', 'Bundling templates'),
+  version: () => runCommand('node scripts/build/generate-version.js', 'Generating version file'),
+  pdfjs: () => runCommand('node scripts/build/copy-pdfjs.js', 'Copying PDF.js files for production'),
+  highlight: () => {
+    const rollupPath = path.join('node_modules', '.bin', 'rollup');
+    runCommand(`"${rollupPath}" -c rollup.config.highlight.js`, 'Bundling highlight.js');
+  },
+  bundle: () => {
+    const rollupPath = path.join('node_modules', '.bin', 'rollup');
+    runCommand(`"${rollupPath}" -c rollup.config.js`, 'Bundling application');
+  }
+};
+
+// Execute selected steps in order
+const stepOrder = ['plugins', 'modules', 'importmap', 'icons', 'templates', 'version', 'pdfjs', 'highlight', 'bundle'];
+stepOrder.forEach(step => {
+  if (stepsToRun.has(step) && buildSteps[step]) {
+    buildSteps[step]();
+  }
+});

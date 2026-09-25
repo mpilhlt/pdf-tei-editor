@@ -252,14 +252,14 @@ If you're adding a new database, see [Adding New Databases](adding-new-databases
 
 ### Manual Migration (CLI)
 
-Use the `bin/run-migration.py` script to run migrations manually:
+Use the `bin/migrations/run-migration.py` script to run migrations manually:
 
 ```bash
 # Run all pending migrations
-uv run python bin/run-migration.py data/db/metadata.db
+uv run python bin/migrations/run-migration.py data/db/metadata.db
 
 # Show migration history
-uv run python bin/run-migration.py data/db/metadata.db --history
+uv run python bin/migrations/run-migration.py data/db/metadata.db --history
 ```
 
 ### Manual Migration (Python)
@@ -468,7 +468,7 @@ This document describes **database schema migrations** - versioned changes to da
 
 **Data migrations** are different - they update file contents or data format without changing database schema. Data migrations:
 
-- Live in `bin/` directory (not `fastapi_app/lib/migrations/versions/`)
+- Live in `bin/migrations/` directory (not `fastapi_app/lib/migrations/versions/`)
 - Run manually via command line (not automatically on startup)
 - Update file contents in content-addressed storage
 - Don't use the `Migration` base class or `MigrationManager`

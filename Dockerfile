@@ -55,9 +55,9 @@ RUN uv sync --frozen && npm install --ignore-scripts --no-audit --no-fund
 COPY . .
 
 # Run the build and cleanup in one layer
-RUN uv run python bin/compile-sl-icons.py \
-    && node bin/build.js --steps=templates,version,pdfjs,bundle \
-    && uv run python bin/generate-sandbox-client-script.py \
+RUN uv run python scripts/build/compile-sl-icons.py \
+    && node scripts/build/build.js --steps=templates,version,pdfjs,bundle \
+    && uv run python scripts/build/generate-sandbox-client-script.py \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \
     && npm cache clean --force \
@@ -91,6 +91,7 @@ COPY --from=builder /app/docs /app/docs
 
 # Set production mode in the container
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
+# bin/ only: scripts/ (build, dev and deploy tooling) is intentionally not shipped
 COPY --from=builder /app/bin /app/bin
 COPY --from=builder /app/schema /app/schema
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
@@ -128,7 +129,7 @@ RUN npx playwright install --with-deps
 COPY . .
 
 # Build the application (needed for some tests)
-RUN node bin/build.js
+RUN node scripts/build/build.js
 
 # Set environment for unbuffered output (critical for streaming)
 ENV PYTHONUNBUFFERED=1 \

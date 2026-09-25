@@ -75,7 +75,7 @@ timeout lapses. No forced mass logout on deploy.
 ## Getting the real client IP
 
 Nginx is the documented production front door
-(`docs/development/securing-server.md`, `bin/generate-nginx-config.sh`) but
+(`docs/development/securing-server.md`, `scripts/deploy/generate-nginx-config.sh`) but
 is not enforced by the app — `deploy.js`/`container.js` support
 `--no-nginx`, and nothing prevents uvicorn from being exposed directly.
 `X-Forwarded-For`/`X-Real-IP` are currently set by nginx but ignored

@@ -42,7 +42,8 @@ Read [docs/code-assistant/architecture-frontend.md](docs/code-assistant/architec
   - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
   - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
   - `app/src/templates` - html templates used by the plugins to create UI parts
-- `bin` - executable files used on the command line
+- `bin` - scripts shipped in the production image (server start, admin CLIs, import/export); `bin/migrations` - one-off migrations for live instances
+- `scripts` - never shipped: `scripts/build` (build pipeline, generators), `scripts/dev` (developer helpers such as `debug-api.js`), `scripts/deploy` (container/deployment tooling)
 - `config` - the default content of files in `data/db`
 - `data` - file data
 - `data/db` - application data stored in subject-specific json files and SQLite databases
@@ -70,16 +71,16 @@ Before using any method on a class or module:
 
 ### Debugging Live Application
 
-When debugging, you can also use a running instance of the application and use `bin/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
+When debugging, you can also use a running instance of the application and use `scripts/dev/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
 
 ```bash
 # Authenticate and call any endpoint
-node bin/debug-api.js <method> <path> [json-params]
+node scripts/dev/debug-api.js <method> <path> [json-params]
 
 # Examples:
-node bin/debug-api.js GET /api/v1/plugins
-node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
-node bin/debug-api.js GET /api/v1/collections/test/files
+node scripts/dev/debug-api.js GET /api/v1/plugins
+node scripts/dev/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+node scripts/dev/debug-api.js GET /api/v1/collections/test/files
 ```
 
 The script:

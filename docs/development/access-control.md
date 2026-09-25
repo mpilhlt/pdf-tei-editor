@@ -487,7 +487,7 @@ The startup migration (`fastapi_app/lib/utils/project_utils.py`) automatically c
 To create a project granting all existing users access to a collection:
 
 ```bash
-node bin/debug-api.js POST /api/v1/projects '{"id":"default","name":"Default","members":["user1","user2"],"collections":["default"]}'
+node scripts/dev/debug-api.js POST /api/v1/projects '{"id":"default","name":"Default","members":["user1","user2"],"collections":["default"]}'
 ```
 
 ## Document-Level Access Control Modes

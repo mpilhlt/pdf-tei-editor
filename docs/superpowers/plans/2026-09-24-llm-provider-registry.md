@@ -964,7 +964,7 @@ Expected: `OK: /api/v1/llm/providers is mounted`
 - [ ] **Step 7: Regenerate the frontend API client**
 
 Run: `npm run generate-client`
-Expected: exits 0, and `app/src/modules/api-client-v1.js` now contains a generated method for `GET /api/v1/llm/providers` (grep the file for `llmProviders` or similar generated method name to confirm — exact naming is determined by `bin/generate-api-client.js`'s own convention, not hand-written).
+Expected: exits 0, and `app/src/modules/api-client-v1.js` now contains a generated method for `GET /api/v1/llm/providers` (grep the file for `llmProviders` or similar generated method name to confirm — exact naming is determined by `scripts/build/generate-api-client.js`'s own convention, not hand-written).
 
 - [ ] **Step 8: Commit**
 

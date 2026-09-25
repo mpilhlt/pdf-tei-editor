@@ -18,7 +18,7 @@
 - `app/src/plugins/xmleditor.js` `getApi()` proxies the inner `NavXmlEditor`: `getView()`, `addUpdateListener(fn)`, `on(event, fn)`, `getXmlTree()`, `getEditorContent()`, `showMergeView(xmlString)` (async, replaces an existing merge view), events `editorReady`, `editorXmlNotWellFormed`, `editorXmlWellFormed`, `editorAfterLoad`.
 - Accept/reject of a merge view is done with the existing toolbar buttons ("accept all"/"reject all", `acceptAllDiffs`/`rejectAllDiffs`); nothing new is needed. The merge view diffs the live document against the string given to `showMergeView`.
 - `tei-validation.js:45` registers its own `linter(...)`; its `#removeDiagnosticsInChangedRanges` (`tei-validation.js:~262-290`) rebuilds diagnostics via `forEachDiagnostic` copying only `column/from/to/severity/message`.
-- Modules tagged `@registerModule` in their source are auto-registered by `node bin/generate-modules.js` into `app/src/module-registry.js` under the file's base name (e.g. `sl-utils`, `tei-utils`).
+- Modules tagged `@registerModule` in their source are auto-registered by `node scripts/build/generate-modules.js` into `app/src/module-registry.js` under the file's base name (e.g. `sl-utils`, `tei-utils`).
 - Menu API as in `tei-annotator.js`: `this.getDependency('tools').addMenuItems([item], 'annotation')`; spinner: `this.getDependency('ui').spinner.show(msg)` / `.hide()`; toasts: `this.getDependency('sl-utils').notify(msg, variant, icon)`.
 - The extension (Part C) currently has `deps: []`, methods `hasReviewableRules(xmlDoc)` and `review(override)` (returns `findings|null`, notifies on failure). Findings are `{id, old, new, rationale}`; `old` occurs exactly once in the `<text>` element's **raw** text.
 - Extensions may have named exports besides the default class (precedent: `tei-annotator.js` exports `getIndentation`), which is how pure helpers are unit-tested.
@@ -30,7 +30,7 @@
 **Files:**
 - Create: `app/src/modules/lint-utils.js`
 - Create: `tests/unit/js/lint-utils.test.js`
-- Modify (generated): `app/src/module-registry.js` via `node bin/generate-modules.js`
+- Modify (generated): `app/src/module-registry.js` via `node scripts/build/generate-modules.js`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -195,7 +195,7 @@ export function replacesDiagnostics(update) {
 
 - [ ] **Step 4: Regenerate the module registry and run tests**
 
-Run: `node bin/generate-modules.js`
+Run: `node scripts/build/generate-modules.js`
 Expected: `app/src/module-registry.js` now contains `'lint-utils': lintUtils` and the matching import; nothing else changes (check `git diff app/src/module-registry.js`).
 
 Run: `npm run test:unit:js -- tests/unit/js/lint-utils.test.js`

@@ -132,7 +132,7 @@ git commit -m "build: add semantic-release config and changelog seed"
 
 - [ ] **Step 1: Replace the file contents**
 
-The current file derives the version from a `git tag`/`package.json` shell. Replace it so the caller passes `version` (image tag, no leading `v`) and `ref` (the exact commit to build — the `semantic-release` release commit, which contains the bumped `package.json` that `bin/build.js` bakes into `version.js`).
+The current file derives the version from a `git tag`/`package.json` shell. Replace it so the caller passes `version` (image tag, no leading `v`) and `ref` (the exact commit to build — the `semantic-release` release commit, which contains the bumped `package.json` that `scripts/build/build.js` bakes into `version.js`).
 
 New `.github/workflows/docker-image.yml`:
 ```yaml
@@ -1085,5 +1085,5 @@ Not code steps — operational, done by a maintainer:
 ## Self-Review notes
 
 - **Spec coverage:** trigger model (Tasks 3, 4), commit-back (Task 1 `.releaserc.json`), back-merge PR (Task 3 `back-merge` job), merge-commit requirement (Tasks 6-9 docs), `GITHUB_TOKEN` + bypass (Task 9 setup doc), standard semver (Task 1, no `releaseRules`), dry-run preview gated on `base_ref == main` (Task 4), no re-test on merge (Task 3 has no test job), removals (Task 5), doc + agent updates (Tasks 6-9). All covered.
-- **Version source of truth:** `@semantic-release/npm` (`npmPublish:false`) keeps bumping `package.json`, so `bin/generate-version.js` and the Docker `version` build step are untouched — the Docker job checks out the release commit (`ref` input) so `version.js` is baked from the bumped `package.json`.
+- **Version source of truth:** `@semantic-release/npm` (`npmPublish:false`) keeps bumping `package.json`, so `scripts/build/generate-version.js` and the Docker `version` build step are untouched — the Docker job checks out the release commit (`ref` input) so `version.js` is baked from the bumped `package.json`.
 - **Naming consistency:** job outputs `published` / `version` / `release_sha` are produced in Task 3 step "Determine release result" and consumed by the `docker`, `release-notes-footer`, `back-merge` jobs with the same names; `docker-image.yml` inputs `version` / `ref` (Task 2) match the `with:` block in Task 3.

@@ -14,7 +14,7 @@
 
 ## File Structure
 
-- **Create** `bin/migrate-tei-flavor-rename.py` — the generic rename script. One responsibility: rewrite the flavor label value across stored TEI documents and re-queue affected records. Contains a pure transform (`rename_flavor_in_tei`) and an I/O runner (`run_migration`).
+- **Create** `bin/migrations/migrate-tei-flavor-rename.py` — the generic rename script. One responsibility: rewrite the flavor label value across stored TEI documents and re-queue affected records. Contains a pure transform (`rename_flavor_in_tei`) and an I/O runner (`run_migration`).
 - **Modify** `fastapi_app/plugins/grobid/config/variants.py` — `PROCESSING_FLAVORS` list value.
 - **Modify** `fastapi_app/lib/utils/tei_utils.py` — hardcoded literal in the (callerless, legacy) `create_encoding_desc_with_grobid`.
 - **Modify** `fastapi_app/plugins/grobid/routes.py` — docstring example.
@@ -48,11 +48,11 @@ Expected: one commit created on branch `feat/tei-flavor-rename`.
 ## Task 2: Create the generic flavor-rename script
 
 **Files:**
-- Create: `bin/migrate-tei-flavor-rename.py`
+- Create: `bin/migrations/migrate-tei-flavor-rename.py`
 
 - [ ] **Step 1: Write the script**
 
-Create `bin/migrate-tei-flavor-rename.py` with exactly this content:
+Create `bin/migrations/migrate-tei-flavor-rename.py` with exactly this content:
 
 ```python
 #!/usr/bin/env python3
@@ -72,7 +72,7 @@ framework. It is idempotent: a second run reports already-migrated files and
 changes nothing.
 
 Usage:
-    uv run python bin/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [options]
+    uv run python bin/migrations/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [options]
 
 Options:
     --dry-run     Show what would change without writing
@@ -80,7 +80,7 @@ Options:
     -v/--verbose  Enable debug logging
 
 Example:
-    uv run python bin/migrate-tei-flavor-rename.py \\
+    uv run python bin/migrations/migrate-tei-flavor-rename.py \\
         article/dh-law-footnotes article/footnotes-refs --dry-run
 """
 
@@ -295,12 +295,12 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Smoke-test argument parsing**
 
-Run: `uv run python bin/migrate-tei-flavor-rename.py --help`
+Run: `uv run python bin/migrations/migrate-tei-flavor-rename.py --help`
 Expected: usage text listing positional `old_flavor` / `new_flavor` and `--dry-run`, `--limit`, `-v` options. Exit code 0.
 
 - [ ] **Step 3: Verify imports resolve (no DB mutation)**
 
-Run: `uv run python -c "import importlib.util, pathlib, sys; sys.path.insert(0, 'bin'); spec = importlib.util.spec_from_file_location('m', 'bin/migrate-tei-flavor-rename.py'); mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); print(mod.rename_flavor_in_tei(b'<TEI xmlns=\"http://www.tei-c.org/ns/1.0\"><teiHeader><encodingDesc><appInfo><application type=\"extractor\"><label type=\"flavor\">article/dh-law-footnotes</label></application></appInfo></encodingDesc></teiHeader></TEI>', 'article/dh-law-footnotes', 'article/footnotes-refs'))"`
+Run: `uv run python -c "import importlib.util, pathlib, sys; sys.path.insert(0, 'bin'); spec = importlib.util.spec_from_file_location('m', 'bin/migrations/migrate-tei-flavor-rename.py'); mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); print(mod.rename_flavor_in_tei(b'<TEI xmlns=\"http://www.tei-c.org/ns/1.0\"><teiHeader><encodingDesc><appInfo><application type=\"extractor\"><label type=\"flavor\">article/dh-law-footnotes</label></application></appInfo></encodingDesc></teiHeader></TEI>', 'article/dh-law-footnotes', 'article/footnotes-refs'))"`
 Expected: prints a tuple whose second element is `'updated'` and whose first element is `bytes` containing `article/footnotes-refs` and not `article/dh-law-footnotes`.
 
 - [ ] **Step 4: Verify the no-op / other-flavor / no-label branches**
@@ -309,7 +309,7 @@ Run:
 ```bash
 uv run python -c "
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location('m', 'bin/migrate-tei-flavor-rename.py')
+spec = importlib.util.spec_from_file_location('m', 'bin/migrations/migrate-tei-flavor-rename.py')
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 f = mod.rename_flavor_in_tei
 ns = 'xmlns=\"http://www.tei-c.org/ns/1.0\"'
@@ -329,8 +329,8 @@ skipped:no-flavor-label
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bin/migrate-tei-flavor-rename.py
-git commit -m "feat: add bin/migrate-tei-flavor-rename.py
+git add bin/migrations/migrate-tei-flavor-rename.py
+git commit -m "feat: add bin/migrations/migrate-tei-flavor-rename.py
 
 Generic one-off data migration: rewrites the extractor flavor <label>
 value across all stored TEI documents and repoints the DB records at the
@@ -501,7 +501,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Dry run**
 
-Run: `uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run -v`
+Run: `uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run -v`
 Expected (dry run against the current metadata DB): `DRY RUN - no files written` banner, `Distinct TEI hashes : 816`, `Updated : 739`, `Already migrated : 0`, `Skipped : 77`, `Errors : 0`. Two of the updated docs (`10.16995__olh.13`, `10.1111__1467-6478.00046`) log an INFO `updated:extra-occurrences:1` line — expected, not an error. If `Errors` is non-zero, stop and report the `error:` lines.
 
 - [ ] **Step 2: Present dry-run results and get confirmation**
@@ -510,7 +510,7 @@ Report the counts from Step 1 to the user and ask for explicit approval to run t
 
 - [ ] **Step 3: Real run (only after approval)**
 
-Run: `uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs -v`
+Run: `uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs -v`
 Expected: summary with `Updated` matching the dry-run count, `Errors: 0`.
 
 - [ ] **Step 4: Verify content was rewritten**
@@ -556,7 +556,7 @@ Expected: a `('modified', N)` row where `N` is at least the migrated-document co
 
 - [ ] **Step 6: Re-run to confirm idempotency**
 
-Run: `uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run`
+Run: `uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run`
 Expected: `Updated: 0`; every previously-migrated hash now reported under `Already migrated`.
 
 - [ ] **Step 7: No commit**
@@ -577,4 +577,4 @@ This task changes only local runtime data (`data/db/`, content storage), which i
 
 **Placeholder scan:** No TBD/TODO/"handle edge cases"/"similar to Task N". All code shown in full. ✅
 
-**Type consistency:** `rename_flavor_in_tei(xml_bytes, old_flavor, new_flavor) -> tuple[bytes | None, str]` used identically in Task 2 Step 1 (definition), Step 3/4 (smoke tests), and `run_migration` call site. `FileUpdate(id=..., file_size=...)`, `FileStorage.save_file(bytes, "tei", increment_ref=False)`, `FileStorage.read_file(id, "tei")`, `FileRepository.list_files(file_type="tei")`, `DatabaseManager(path)` — all match the signatures used in the reference script `bin/migrate-tei-fileref-to-xml-id.py`. ✅
+**Type consistency:** `rename_flavor_in_tei(xml_bytes, old_flavor, new_flavor) -> tuple[bytes | None, str]` used identically in Task 2 Step 1 (definition), Step 3/4 (smoke tests), and `run_migration` call site. `FileUpdate(id=..., file_size=...)`, `FileStorage.save_file(bytes, "tei", increment_ref=False)`, `FileStorage.read_file(id, "tei")`, `FileRepository.list_files(file_type="tei")`, `DatabaseManager(path)` — all match the signatures used in the reference script `bin/migrations/migrate-tei-fileref-to-xml-id.py`. ✅

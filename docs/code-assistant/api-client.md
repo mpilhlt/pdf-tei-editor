@@ -9,7 +9,7 @@ For comprehensive API client documentation, see the full guide at [fastapi_app/p
 The FastAPI backend provides an automatically-generated JavaScript client with complete JSDoc type annotations for all API endpoints.
 
 **Client File**: `app/src/modules/api-client-v1.js`
-**Generator**: `bin/generate-api-client.js`
+**Generator**: `scripts/build/generate-api-client.js`
 
 ## Quick Start
 
