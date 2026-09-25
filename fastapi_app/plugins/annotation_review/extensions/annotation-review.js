@@ -96,6 +96,10 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     this._rendering = false;
     /** @type {HTMLElement|undefined} The Tools-menu item, created in start(). */
     this._menuItem = undefined;
+    /** @type {number} Debounce (ms) before dropping findings whose text was edited away. */
+    this._pruneDelayMs = 300;
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    this._pruneTimer = undefined;
   }
 
   /**
@@ -118,6 +122,9 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
       if (this.getDependency('lint-utils').replacesDiagnostics(update) && !this._rendering && this._findings.length) {
         // CodeMirror forbids dispatching from inside an update listener
         setTimeout(() => this._renderFindings(false), 0);
+      } else if (update.docChanged && !this._rendering && this._findings.length) {
+        clearTimeout(this._pruneTimer);
+        this._pruneTimer = setTimeout(() => this._pruneFindings(), this._pruneDelayMs);
       }
     });
   }
@@ -141,6 +148,19 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     if (!this._findings.length) return;
     this._findings = [];
     this._renderFindings();
+  }
+
+  /**
+   * Drop findings whose `old` text no longer occurs exactly once (e.g. after
+   * a proposed fix was applied), so no stale highlights remain.
+   * @returns {void}
+   */
+  _pruneFindings() {
+    const docText = this.getDependency('xmleditor').getView().state.doc.toString();
+    const kept = this._findings.filter(f => locateFinding(f, docText) !== null);
+    if (kept.length === this._findings.length) return;
+    this._findings = kept;
+    this._renderFindings(false);
   }
 
   /**

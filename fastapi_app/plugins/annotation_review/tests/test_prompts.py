@@ -26,6 +26,11 @@ class TestBuildSystemPrompt(unittest.TestCase):
         prompt = build_system_prompt()
         self.assertIn("exactly once", prompt)
 
+    def test_asks_for_minimal_non_overlapping_snippets(self):
+        prompt = build_system_prompt()
+        self.assertIn("SMALLEST", prompt)
+        self.assertIn("non-overlapping", prompt)
+
 
 class TestBuildUserPrompt(unittest.TestCase):
     def test_includes_each_category_and_excerpt(self):

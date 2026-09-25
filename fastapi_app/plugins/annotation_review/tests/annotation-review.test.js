@@ -593,3 +593,39 @@ describe('chunked review', () => {
     assert.deepStrictEqual(lintCalls.map(c => c.options.openPanel), [true, false]);
   });
 });
+
+describe('pruning findings after edits', () => {
+  it('drops findings whose old text was edited away and re-renders', async () => {
+    const { ext, lintCalls, updateListeners } = buildExtension({ docText: 'x BBB y' });
+    await ext.start();
+    ext._pruneDelayMs = 1;
+    ext._findings = [
+      { id: 0, old: 'AAA', new: 'a', rationale: 'gone' },
+      { id: 1, old: 'BBB', new: 'b', rationale: 'still there' },
+    ];
+    updateListeners[0]({ transactions: [], docChanged: true });
+    await new Promise(r => setTimeout(r, 20));
+    assert.deepStrictEqual(ext._findings.map(f => f.old), ['BBB']);
+    assert.strictEqual(lintCalls.at(-1).own.length, 1);
+  });
+
+  it('does not re-render when every finding still matches', async () => {
+    const { ext, lintCalls, updateListeners } = buildExtension({ docText: 'x AAA y' });
+    await ext.start();
+    ext._pruneDelayMs = 1;
+    ext._findings = [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }];
+    updateListeners[0]({ transactions: [], docChanged: true });
+    await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual(lintCalls.length, 0);
+  });
+
+  it('debounces bursts of edits into one check', async () => {
+    const { ext, lintCalls, updateListeners } = buildExtension({ docText: 'x y' });
+    await ext.start();
+    ext._pruneDelayMs = 10;
+    ext._findings = [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }];
+    for (let i = 0; i < 5; i++) updateListeners[0]({ transactions: [], docChanged: true });
+    await new Promise(r => setTimeout(r, 40));
+    assert.strictEqual(lintCalls.length, 1);
+  });
+});

@@ -48,11 +48,18 @@ def build_system_prompt() -> str:
         'Example: [{"old": "<persName>J. Doe</persName>", '
         '"new": "<persName ref=\\"#p1\\">J. Doe</persName>", '
         '"rationale": "..."}]\n\n'
-        "CRITICAL: \"old\" must be copied verbatim from the given text and "
-        "must occur exactly once in it. Include enough surrounding context "
-        "in \"old\" to make it uniquely identifying — a finding whose \"old\" "
-        "is missing or ambiguous will be discarded. If there is nothing to "
-        "fix, respond with an empty JSON array: []"
+        "CRITICAL: \"old\" must be copied character for character from the "
+        "given text (do not reformat, re-indent or normalize anything) and "
+        "must occur exactly once in it. A finding whose \"old\" is missing or "
+        "ambiguous will be discarded.\n\n"
+        "Use the SMALLEST snippet that fixes the problem and is still unique: "
+        "the single element or attribute that must change, plus only as much "
+        "adjacent text as is needed to make it unique. Do not copy a whole "
+        "enclosing element when only a part of it changes. Report every "
+        "distinct problem as its own finding with its own snippet; if one "
+        "element has several problems, give one finding per problem, each "
+        "with a non-overlapping \"old\". If there is nothing to fix, respond "
+        "with an empty JSON array: []"
     )
 
 
@@ -194,4 +201,5 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
             "new": new,
             "rationale": rationale,
         })
+    logger.info(f"annotation-review: kept {len(kept)} of {len(parsed)} findings")
     return kept
