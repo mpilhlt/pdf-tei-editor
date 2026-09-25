@@ -3,7 +3,7 @@
 Storage Garbage Collection CLI Tool
 
 Usage:
-    python fastapi_app/cli_storage_gc.py [--dry-run] [--rebuild-refs]
+    python bin/cli_storage_gc.py [--dry-run] [--rebuild-refs]
 
 Options:
     --dry-run        Show what would be deleted without actually deleting
@@ -12,7 +12,7 @@ Options:
 
 Examples:
     # Dry run (see what would be deleted)
-    python fastapi_app/cli_storage_gc.py --dry-run
+    python bin/cli_storage_gc.py --dry-run
 
     # Actual cleanup
     python fastapi_app/cli_storage_gc.py

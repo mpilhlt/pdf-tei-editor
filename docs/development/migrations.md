@@ -468,7 +468,7 @@ This document describes **database schema migrations** - versioned changes to da
 
 **Data migrations** are different - they update file contents or data format without changing database schema. Data migrations:
 
-- Live in `bin/` directory (not `fastapi_app/lib/migrations/versions/`)
+- Live in `bin/migrations/` directory (not `fastapi_app/lib/migrations/versions/`)
 - Run manually via command line (not automatically on startup)
 - Update file contents in content-addressed storage
 - Don't use the `Migration` base class or `MigrationManager`
