@@ -2,6 +2,40 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.64.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.63.1...v0.64.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **annotation-review:** report Gemini API errors as 502 instead of an unhandled 500 ([fa3890f](https://github.com/mpilhlt/pdf-tei-editor/commit/fa3890fd29184376476b90bca40cea24e2602012))
+* **annotation-review:** retry Anthropic calls without temperature, report provider errors as 502 ([e8cd93f](https://github.com/mpilhlt/pdf-tei-editor/commit/e8cd93f8478b731d3cf26ca767daf85c0f3f5c86))
+* **annotation-review:** show determinate progress from the first chunk via a plan request ([5f5108b](https://github.com/mpilhlt/pdf-tei-editor/commit/5f5108b01c2d8eb555b419fd98bf659c6cd29768))
+* **annotation-review:** tolerate truncated or wrapped LLM output and report unusable responses ([0c33084](https://github.com/mpilhlt/pdf-tei-editor/commit/0c33084c353f8b864f509f75728cd2e58f71f865))
+* **anthropic:** allow 300s for messages and do not re-send requests after a read timeout ([71d7237](https://github.com/mpilhlt/pdf-tei-editor/commit/71d7237ea1305feb9dcd914c966869c06724a61e))
+* **build:** bundle icons used in ternary .icon assignments ([0c237a9](https://github.com/mpilhlt/pdf-tei-editor/commit/0c237a9239940ee4af05dbdf01191ec5c1eefdac))
+* **config-editor:** don't cache the real value for masked keys after save ([f13621d](https://github.com/mpilhlt/pdf-tei-editor/commit/f13621dfa8de788d4a5ddea3ee36d8f73fec160e)), closes [originalConfig/#modifiedConfig](https://github.com/mpilhlt/pdf-tei-editor/issues/modifiedConfig)
+* **inference-settings:** make no LLM requests without a session and reset on logout ([abf6aec](https://github.com/mpilhlt/pdf-tei-editor/commit/abf6aece51f21b4795ccb95e6075f92853ed1a59))
+* **llm:** treat an unquoted model-filter value as one pattern; explain why Review Annotations is disabled ([e68e5c6](https://github.com/mpilhlt/pdf-tei-editor/commit/e68e5c676a921c4310dc9849462bd1e82985e52a))
+* **worktrees:** base new worktrees on local HEAD, not origin/main ([911968d](https://github.com/mpilhlt/pdf-tei-editor/commit/911968d01a7aaa677caf34306e2a9feb67690465))
+
+
+### Features
+
+* **annotation-review:** add LLM-based annotation review backend plugin ([a0f1fa4](https://github.com/mpilhlt/pdf-tei-editor/commit/a0f1fa4465271c5f34124491d5ef76e4a4469d27))
+* **annotation-review:** add Tools-menu trigger and diagnostics UI ([531a8d2](https://github.com/mpilhlt/pdf-tei-editor/commit/531a8d2e980a0b480e9278fad9eb8bf398f243d9))
+* **annotation-review:** ask for minimal non-overlapping snippets, log kept counts, prune stale findings after edits ([c5a0f18](https://github.com/mpilhlt/pdf-tei-editor/commit/c5a0f189d391d849376007ed46f9b4139e696675))
+* **annotation-review:** confirm before reviewing and show the model in the spinner ([fa0ce8a](https://github.com/mpilhlt/pdf-tei-editor/commit/fa0ce8a44d99168fd6709f84114be0fb726310fa))
+* **annotation-review:** review documents chunk by chunk with a cancellable progress widget ([e924fb0](https://github.com/mpilhlt/pdf-tei-editor/commit/e924fb0c452820bed54a9ebafbac5dda391a068d))
+* **inference-settings:** add default LLM model picker plugin ([d012c76](https://github.com/mpilhlt/pdf-tei-editor/commit/d012c7639db5eb382c6fa40fb0bfa26dd7533358))
+* **inference-settings:** admin-only default model, per-session choice, non-free models disabled for non-admins ([2649b7a](https://github.com/mpilhlt/pdf-tei-editor/commit/2649b7a00d488514d80b8ae6de98368f1cb0c197))
+* **inference-settings:** show selected model and toast on change; filter non-chat Gemini models ([a431908](https://github.com/mpilhlt/pdf-tei-editor/commit/a431908365a8263c4b9b34b94f5835381163df23))
+* **llm:** add admin-configurable model allow-list filter ([b58368f](https://github.com/mpilhlt/pdf-tei-editor/commit/b58368f8b609239bb2083ed6409df2c923cbaeb5))
+* **llm:** add Anthropic Claude LLM provider plugin ([0b54f75](https://github.com/mpilhlt/pdf-tei-editor/commit/0b54f75963cd00f9d21cc173c857ab1301f5e70f))
+* **llm:** add core LLM provider registry and migrate Kisski onto it ([10f8450](https://github.com/mpilhlt/pdf-tei-editor/commit/10f845002faef2b7e8c26a24d0ef11147d80929e))
+* **llm:** add Google Gemini LLM provider plugin ([7bb7355](https://github.com/mpilhlt/pdf-tei-editor/commit/7bb735540ae12376a7462af3386accd2a3c2bcde))
+* **llm:** admin-set default model, free-model flag, include/exclude model filters ([880c88a](https://github.com/mpilhlt/pdf-tei-editor/commit/880c88a52ad724d5fc1ea2ebd1561fae6752f6af))
+* **security:** harden secret handling for .env and config.json ([fd2466a](https://github.com/mpilhlt/pdf-tei-editor/commit/fd2466af6794f56d20d89d95f812ff8aaf72db00))
+
 ## [0.63.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.63.0...v0.63.1) (2026-09-22)
 
 
