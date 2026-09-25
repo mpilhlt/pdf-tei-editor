@@ -25,6 +25,9 @@
  * `mouseenter` - close enough to "about to open" to self-correct a stale
  * busy-status or a since-removed provider/model without a dedicated poll.
  *
+ * Requests are only made while a session exists (state.sessionId); without
+ * one - before login or after logout - _refresh() resets the plugin instead.
+ *
  * Startup-blocking and auth timing: this plugin is registered (plugins.js)
  * and started (application.js's sequential ep.start) well before
  * StartPlugin, which is what calls ensureAuthenticated(). That means (a)
@@ -401,6 +404,10 @@ export class InferenceSettingsPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async _refresh() {
+    if (!this.state?.sessionId) {
+      this._resetUnauthenticated();
+      return;
+    }
     if (this._refreshPromise) {
       this._refreshQueued = true;
       return this._refreshPromise;
@@ -415,6 +422,21 @@ export class InferenceSettingsPlugin extends Plugin {
         this._refresh();
       }
     }
+  }
+
+  /**
+   * No session (before login, after logout): make no request, drop the
+   * previous user's data and hide the menu entry.
+   * @returns {void}
+   */
+  _resetUnauthenticated() {
+    this._providers = [];
+    this._configuredDefault = null;
+    this._menuSignature = '';
+    this._storeSessionModel(null);
+    if (this._menuItem) this._menuItem.style.display = 'none';
+    if (this._submenu) this._submenu.innerHTML = '';
+    this._updateMenuItemLabel();
   }
 
   /**

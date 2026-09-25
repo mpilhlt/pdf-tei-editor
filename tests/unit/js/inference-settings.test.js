@@ -60,7 +60,10 @@ const { InferenceSettingsPlugin } = await import('../../../app/src/plugins/infer
 function makePlugin() {
   const app = new Application(new PluginManager(), new StateManager());
   const ctx = app.getPluginContext();
-  return new InferenceSettingsPlugin(ctx);
+  const plugin = new InferenceSettingsPlugin(ctx);
+  // most tests run as a logged-in user; unauthenticated ones override this
+  Object.defineProperty(plugin, 'state', { get: () => ({ sessionId: 'test-session' }), configurable: true });
+  return plugin;
 }
 
 /**
@@ -844,5 +847,24 @@ describe('InferenceSettingsPlugin default vs session model', () => {
     plugin._isAdmin = () => true;
     await plugin._refresh();
     assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
+  });
+});
+
+describe('InferenceSettingsPlugin without a session', () => {
+  it('makes no request and resets when there is no sessionId (logged out)', async () => {
+    const plugin = makePlugin();
+    Object.defineProperty(plugin, 'state', { get: () => ({ sessionId: null }), configurable: true });
+    let requested = false;
+    plugin.getDependency = () => ({ apiClient: { llmProviders: async () => { requested = true; return []; }, llmListDefaultModel: async () => null } });
+    plugin._providers = [{ id: 'k', label: 'K', models: [{ id: 'm', label: 'M', free: true }] }];
+    plugin._configuredDefault = { providerId: 'k', modelId: 'm' };
+    plugin.setSessionModel('k', 'm');
+    plugin._menuItem = document.createElement('sl-menu-item');
+    plugin.onUserChange();
+    await flushMicrotasks();
+    assert.strictEqual(requested, false);
+    assert.deepStrictEqual(plugin._providers, []);
+    assert.strictEqual(plugin.getDefaultModel(), null);
+    assert.strictEqual(plugin._menuItem.style.display, 'none');
   });
 });
