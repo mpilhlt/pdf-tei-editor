@@ -469,6 +469,7 @@ const dialog = createSingleFromTemplate('dialog', parent, { title: 'Save' });
 - [Plugin System Overview](./plugin-system.md) - Frontend and backend plugin comparison
 - [Frontend Plugin System](./plugin-system-frontend.md) - Frontend plugin architecture
 - [Backend Plugin System](./plugin-system-backend.md) - Backend plugin architecture
+- [LLM Provider Registry](./llm-registry.md) - Pluggable LLM inference providers, model filter, access control
 - [State Management](./state-management.md) - State patterns and best practices
 - [Database](./database.md) - SQLite schema and migrations
 - [Access Control](./access-control.md) - RBAC implementation
