@@ -72,7 +72,7 @@ export default MyPlugin;
 
 After creating a plugin class:
 
-1. Run `node bin/build.js --steps=plugins` — this adds the class to `app/src/plugin-registry.js`
+1. Run `node scripts/build/build.js --steps=plugins` — this adds the class to `app/src/plugin-registry.js`
 2. In `app/src/plugins.js`, import the class from `./plugin-registry.js` and add it to the `plugins` array
 
 ```javascript

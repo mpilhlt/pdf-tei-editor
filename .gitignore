@@ -56,3 +56,6 @@ tests/pdf-match/report.html
 tests/pdf-match/rejected.json
 # pdf-match test pipeline: source PDFs are fetched on demand, not committed (see sources/README.md)
 tests/pdf-match/sources/*.pdf
+
+# Personal Claude Code preferences
+.claude/settings.local.json

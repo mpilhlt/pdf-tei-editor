@@ -1,0 +1,386 @@
+/**
+ * Annotation Review frontend extension.
+ *
+ * Adds a "Review Annotations" item to the Tools menu (annotation category),
+ * enabled only when the open document has machine-readable rules. Running it
+ * calls the backend review endpoint and shows the findings as diagnostics
+ * merged into the editor's diagnostic set, each with a "Propose fix" action
+ * that opens the merge view. See
+ * docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
+ * for the design rationale.
+ *
+ * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
+ * @import { Diagnostic } from '@codemirror/lint'
+ */
+
+/** Diagnostic source tag identifying this plugin's diagnostics. */
+const SOURCE = 'annotation-review';
+
+/**
+ * @typedef {{id: number, old: string, new: string, rationale: string}} Finding
+ */
+
+/**
+ * Locate the single occurrence of `finding.old` in the current document text.
+ * Returns null when it is absent or ambiguous - the document may have changed
+ * since the review request was sent, and such findings are dropped silently.
+ * @param {Finding} finding
+ * @param {string} docText
+ * @returns {{from: number, to: number}|null}
+ */
+export function locateFinding(finding, docText) {
+  const from = docText.indexOf(finding.old);
+  if (from === -1 || docText.indexOf(finding.old, from + 1) !== -1) return null;
+  return { from, to: from + finding.old.length };
+}
+
+/**
+ * Build the document text with only this finding applied, for the merge view.
+ * Returns null if the text at [from, to) is no longer exactly `finding.old`.
+ * @param {string} docText
+ * @param {number} from
+ * @param {number} to
+ * @param {Finding} finding
+ * @returns {string|null}
+ */
+export function buildModifiedText(docText, from, to, finding) {
+  if (docText.slice(from, to) !== finding.old) return null;
+  return docText.slice(0, from) + finding.new + docText.slice(to);
+}
+
+/**
+ * Turn findings into CodeMirror diagnostics positioned in the current text.
+ * @param {Finding[]} findings
+ * @param {string} docText
+ * @param {(finding: Finding, from: number, to: number) => void} onProposeFix
+ * @returns {Diagnostic[]}
+ */
+export function findingsToDiagnostics(findings, docText, onProposeFix) {
+  /** @type {Diagnostic[]} */
+  const diagnostics = [];
+  for (const finding of findings) {
+    const range = locateFinding(finding, docText);
+    if (!range) continue;
+    diagnostics.push({
+      from: range.from,
+      to: range.to,
+      severity: 'info',
+      message: finding.rationale,
+      actions: [{
+        name: 'Propose fix',
+        apply: (_view, from, to) => onProposeFix(finding, from, to),
+      }],
+    });
+  }
+  return diagnostics;
+}
+
+/**
+ * Escape text for use in the dialog's HTML message.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
+  /**
+   * @param {PluginContext} context
+   */
+  constructor(context) {
+    super(context, { name: 'annotation-review', deps: ['xmleditor', 'tools'] });
+    /** @type {Finding[]} Findings of the last review, shown as diagnostics. */
+    this._findings = [];
+    /** @type {boolean} True while this plugin dispatches its own diagnostics. */
+    this._rendering = false;
+    /** @type {HTMLElement|undefined} The Tools-menu item, created in start(). */
+    this._menuItem = undefined;
+    /** @type {number} Debounce (ms) before dropping findings whose text was edited away. */
+    this._pruneDelayMs = 300;
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    this._pruneTimer = undefined;
+  }
+
+  /**
+   * Add the Tools-menu item and re-merge stored findings whenever another
+   * source replaces the diagnostics.
+   * @returns {Promise<void>}
+   */
+  async start() {
+    const item = document.createElement('sl-menu-item');
+    item.textContent = 'Review Annotations';
+    item.disabled = true;
+    item.addEventListener('click', () => this.runReview());
+    this._menuItem = item;
+    this.getDependency('tools').addMenuItems([item], 'annotation');
+    const xmleditor = this.getDependency('xmleditor');
+    xmleditor.on('editorReady', () => this._updateMenuState());
+    this._updateMenuState();
+
+    xmleditor.addUpdateListener(update => {
+      if (this.getDependency('lint-utils').replacesDiagnostics(update) && !this._rendering && this._findings.length) {
+        // CodeMirror forbids dispatching from inside an update listener
+        setTimeout(() => this._renderFindings(false), 0);
+      } else if (update.docChanged && !this._rendering && this._findings.length) {
+        clearTimeout(this._pruneTimer);
+        this._pruneTimer = setTimeout(() => this._pruneFindings(), this._pruneDelayMs);
+      }
+    });
+  }
+
+  /**
+   * Store findings and display them as diagnostics.
+   * @param {Finding[]} findings
+   * @param {boolean} [openPanel] Open the lint panel if it is closed
+   * @returns {void}
+   */
+  showFindings(findings, openPanel = true) {
+    this._findings = findings;
+    this._renderFindings(openPanel);
+  }
+
+  /**
+   * Remove all findings and their diagnostics.
+   * @returns {void}
+   */
+  clearFindings() {
+    if (!this._findings.length) return;
+    this._findings = [];
+    this._renderFindings();
+  }
+
+  /**
+   * Drop findings whose `old` text no longer occurs exactly once (e.g. after
+   * a proposed fix was applied), so no stale highlights remain.
+   * @returns {void}
+   */
+  _pruneFindings() {
+    const docText = this.getDependency('xmleditor').getView().state.doc.toString();
+    const kept = this._findings.filter(f => locateFinding(f, docText) !== null);
+    if (kept.length === this._findings.length) return;
+    this._findings = kept;
+    this._renderFindings(false);
+  }
+
+  /**
+   * Merge diagnostics for the stored findings into the editor's diagnostics.
+   * @param {boolean} [openPanel] Open the lint panel if it is closed (only for user-initiated display)
+   * @returns {void}
+   */
+  _renderFindings(openPanel = false) {
+    const view = this.getDependency('xmleditor').getView();
+    const own = findingsToDiagnostics(
+      this._findings,
+      view.state.doc.toString(),
+      (finding, from, to) => this._proposeFix(finding, from, to)
+    );
+    this._rendering = true;
+    try {
+      this.getDependency('lint-utils').applyMergedDiagnostics(view, SOURCE, own, { openPanel });
+    } finally {
+      this._rendering = false;
+    }
+  }
+
+  /**
+   * Open the merge view showing only the given finding's change.
+   * @param {Finding} finding
+   * @param {number} from
+   * @param {number} to
+   * @returns {Promise<void>}
+   */
+  async _proposeFix(finding, from, to) {
+    const xmleditor = this.getDependency('xmleditor');
+    const modified = buildModifiedText(xmleditor.getView().state.doc.toString(), from, to, finding);
+    if (modified === null) {
+      this.getDependency('sl-utils').notify(
+        'The document changed; this finding no longer applies.',
+        'warning',
+        'exclamation-triangle'
+      );
+      return;
+    }
+    try {
+      await xmleditor.showMergeView(modified);
+    } catch (err) {
+      this.getDependency('sl-utils').notify(
+        `Could not show the proposed fix: ${err.message}`,
+        'danger',
+        'exclamation-octagon'
+      );
+    }
+  }
+
+  /**
+   * A different document was loaded; drop stale findings.
+   * @param {string} [_doc] New document identifier
+   * @returns {Promise<void>}
+   */
+  async onXmlChange(_doc) {
+    this.clearFindings();
+    this._updateMenuState();
+  }
+
+  /**
+   * Enable the menu item only if a document is open and has reviewable rules.
+   * No-op before start() has created the item.
+   * @returns {void}
+   */
+  _updateMenuState() {
+    if (!this._menuItem) return;
+    const tree = this.getDependency('xmleditor').getXmlTree();
+    this._menuItem.disabled = !tree || !this.hasReviewableRules(tree);
+    this._menuItem.title = this._menuItem.disabled ? 'Requires an open document whose editorialDecl has machine-readable annotation rules (a ref with subtype="machine").' : '';
+  }
+
+  /**
+   * Ask for confirmation naming the provider/model, then review the document
+   * chunk by chunk behind a minimizable, cancellable progress widget. Findings
+   * are displayed as each chunk completes; cancelling keeps those found so
+   * far. review() notifies on its own failure paths (including "no default
+   * model"), so a null result is silent.
+   * @param {{providerId: string, modelId: string}} [override]
+   * @returns {Promise<void>}
+   */
+  async runReview(override) {
+    const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
+    let label = '';
+    if (resolved) {
+      label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
+      const confirmed = await this.getDependency('dialog').confirm(
+        `Review the annotations in the current document using ${escapeHtml(label)}?`,
+        'Review Annotations'
+      );
+      if (!confirmed) return;
+    }
+    const progress = this.getDependency('progress');
+    const progressId = 'annotation-review';
+    const heading = label ? `Reviewing annotations using ${label}…` : 'Reviewing annotations…';
+    const xmlBefore = this.state?.xml;
+    const documentChanged = () => this.state?.xml !== xmlBefore;
+    let cancelled = false;
+    let done = 0;
+    let total = 0;
+    progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true; } });
+    try {
+      const findings = await this.review(resolved ?? undefined, {
+        onStart: (chunksTotal) => {
+          total = chunksTotal;
+          progress.setValue(progressId, 0);
+          progress.setLabel(progressId, `${heading} (part 1 of ${chunksTotal})`);
+        },
+        isCancelled: () => cancelled || documentChanged(),
+        onProgress: (chunksDone, chunksTotal, foundSoFar) => {
+          done = chunksDone;
+          total = chunksTotal;
+          progress.setValue(progressId, Math.round((chunksDone / chunksTotal) * 100));
+          progress.setLabel(progressId, `${heading} (part ${Math.min(chunksDone + 1, chunksTotal)} of ${chunksTotal})`);
+          // findings from a different document must not attach to another one
+          if (documentChanged()) return;
+          this.showFindings(foundSoFar, this._findings.length === 0);
+        },
+      });
+      if (findings === null || documentChanged()) return;
+      const count = findings.length;
+      if (cancelled) {
+        this.getDependency('sl-utils').notify(
+          `Review cancelled after ${done} of ${total} parts; ${count} suggestion(s) so far.`,
+          'warning',
+          'exclamation-triangle'
+        );
+        return;
+      }
+      this.getDependency('sl-utils').notify(
+        count ? `${count} suggestion(s) - see the highlighted passages.` : 'No issues found.',
+        count ? 'primary' : 'success',
+        count ? 'info-circle' : 'check-circle'
+      );
+    } finally {
+      progress.hide(progressId);
+    }
+  }
+
+  /**
+   * True if the given document has at least one editorialDecl category with
+   * a "machine"-subtype ref — i.e. there is something to review against.
+   * @param {Document} xmlDoc
+   * @returns {boolean}
+   */
+  hasReviewableRules(xmlDoc) {
+    const guides = this.getDependency('tei-utils').getEditorialDeclGuides(xmlDoc);
+    return guides.some(g => g.refs.some(r => r.subtype === 'machine'));
+  }
+
+  /**
+   * Review the current editor document's annotations against its own
+   * editorialDecl rules, one backend chunk at a time. Resolves provider/model
+   * from the given override, or from the shared default (Part F), unless one
+   * isn't configured.
+   * @param {{providerId: string, modelId: string}} [override]
+   * @param {{isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
+   *   onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
+   * @returns {Promise<Finding[]|null>}
+   *   The findings (possibly partial if cancelled); null when the review could not be started or a chunk failed (user already notified).
+   */
+  async review(override, hooks = {}) {
+    const xmleditorApi = this.getDependency('xmleditor');
+    const xmlDoc = xmleditorApi.getXmlTree();
+    if (!xmlDoc) {
+      this.getDependency('sl-utils').notify('No document open.', 'warning', 'exclamation-triangle');
+      return null;
+    }
+
+    if (!this.hasReviewableRules(xmlDoc)) {
+      this.getDependency('sl-utils').notify(
+        'This document has no machine-readable annotation rules to review against.',
+        'warning',
+        'exclamation-triangle'
+      );
+      return null;
+    }
+
+    const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
+    if (!resolved) {
+      this.getDependency('sl-utils').notify(
+        'No default model configured. Set one via Tools → Inference → Default Model.',
+        'warning',
+        'exclamation-triangle'
+      );
+      return null;
+    }
+
+    const xml = xmleditorApi.getEditorContent();
+    /** @type {Finding[]} */
+    const findings = [];
+    let total;
+    try {
+      ({ chunk_count: total } = await this.callPluginApi('/api/plugins/annotation-review/plan', 'POST', { xml }));
+    } catch (err) {
+      this.getDependency('sl-utils').notify(`Annotation review failed: ${err.message}`, 'danger', 'exclamation-octagon');
+      return null;
+    }
+    hooks.onStart?.(total);
+    for (let index = 0; index < total; index++) {
+      if (index > 0 && hooks.isCancelled?.()) break;
+      try {
+        const response = await this.callPluginApi(
+          '/api/plugins/annotation-review/review',
+          'POST',
+          { xml, provider_id: resolved.providerId, model_id: resolved.modelId, chunk_index: index }
+        );
+        total = response.chunk_count ?? total;
+        for (const finding of response.findings) findings.push({ ...finding, id: findings.length });
+      } catch (err) {
+        this.getDependency('sl-utils').notify(
+          `Annotation review failed${total > 1 ? ` in part ${index + 1} of ${total}` : ''}: ${err.message}`,
+          'danger',
+          'exclamation-octagon'
+        );
+        return null;
+      }
+      hooks.onProgress?.(index + 1, total, [...findings]);
+    }
+    return findings;
+  }
+}

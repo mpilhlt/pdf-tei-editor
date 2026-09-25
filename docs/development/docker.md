@@ -301,18 +301,18 @@ Features:
 - Persistent volume management
 - Container lifecycle management (stop old, start new)
 
-### Cron Setup (`bin/setup-cron.sh`)
+### Cron Setup (`scripts/deploy/setup-cron.sh`)
 
 Automated demo resets:
 
 ```bash
 # Nightly reset at 2 AM
-bin/setup-cron.sh \
+scripts/deploy/setup-cron.sh \
   --image cboulanger/pdf-tei-editor:latest \
   --fqdn demo.example.com
 
 # Custom schedule
-bin/setup-cron.sh \
+scripts/deploy/setup-cron.sh \
   --image cboulanger/pdf-tei-editor:latest \
   --fqdn demo.example.com \
   --time "0 3 * * *"

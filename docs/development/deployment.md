@@ -8,19 +8,19 @@ This guide covers deployment implementation details for developers working on th
 
 The deployment system consists of three layers:
 
-1. **User-facing wrapper** (`bin/deploy.js`) - Environment file-based deployment
-2. **Container management** (`bin/container.js deploy`) - Low-level container operations
+1. **User-facing wrapper** (`scripts/deploy/deploy.js`) - Environment file-based deployment
+2. **Container management** (`scripts/deploy/container.js deploy`) - Low-level container operations
 3. **Container runtime** - Docker/Podman commands
 
 ## Deployment Wrapper Script
 
 ### Overview
 
-`bin/deploy.js` provides a simplified deployment interface using `.env` files:
+`scripts/deploy/deploy.js` provides a simplified deployment interface using `.env` files:
 
 ```bash
 npm run deploy .env.deploy.example.org
-# Executes: node bin/deploy.js .env.deploy.example.org
+# Executes: node scripts/deploy/deploy.js .env.deploy.example.org
 ```
 
 ### Implementation
@@ -36,9 +36,9 @@ The script:
    - `DEPLOY_REBUILD=(''|0|false|off)` → (omitted)
 4. Detects localhost deployments (`localhost` or `127.0.0.1`) and adds `--no-nginx --no-ssl`
 5. Passes all non-`DEPLOY_*` variables to container via `--env VAR_NAME`
-6. Executes `bin/container.js deploy` with constructed arguments
+6. Executes `scripts/deploy/container.js deploy` with constructed arguments
 
-**Source:** [bin/deploy.js](../../bin/deploy.js)
+**Source:** [scripts/deploy/deploy.js](../../scripts/deploy/deploy.js)
 
 ### Example Environment File
 
@@ -58,7 +58,7 @@ LOG_LEVEL=WARNING
 Translates to:
 
 ```bash
-node bin/container.js deploy \
+node scripts/deploy/container.js deploy \
   --fqdn editor.company.com \
   --type production \
   --data-dir /opt/pdf-tei-editor/data \
@@ -72,10 +72,10 @@ node bin/container.js deploy \
 
 ### Deploy Command
 
-`bin/container.js deploy` handles the complete deployment workflow:
+`scripts/deploy/container.js deploy` handles the complete deployment workflow:
 
 ```bash
-node bin/container.js deploy \
+node scripts/deploy/container.js deploy \
   --fqdn editor.company.com \
   --type production \
   --data-dir /opt/pdf-tei-editor/data \
@@ -85,7 +85,7 @@ node bin/container.js deploy \
 
 ### Implementation Details
 
-The deploy command ([bin/container.js](../../bin/container.js:1245-1476)):
+The deploy command ([scripts/deploy/container.js](../../scripts/deploy/container.js:1245-1476)):
 
 1. **Platform check** - Ensures Linux for nginx/SSL features
 2. **FQDN validation** - Requires `--fqdn` parameter
@@ -100,7 +100,7 @@ The deploy command ([bin/container.js](../../bin/container.js:1245-1476)):
 
 ### Key Functions
 
-**`startContainer(config)`** ([bin/container.js](../../bin/container.js:545-611))
+**`startContainer(config)`** ([scripts/deploy/container.js](../../scripts/deploy/container.js:545-611))
 
 Creates and starts a container with specified configuration:
 
@@ -132,7 +132,7 @@ podman run -d \
   pdf-tei-editor:latest
 ```
 
-**`setupNginx(fqdn, port)`** ([bin/container.js](../../bin/container.js:1042-1144))
+**`setupNginx(fqdn, port)`** ([scripts/deploy/container.js](../../scripts/deploy/container.js:1042-1144))
 
 Generates nginx configuration with:
 
@@ -144,7 +144,7 @@ Generates nginx configuration with:
 
 Writes to `/etc/nginx/sites-available/pdf-tei-editor-{fqdn}` and symlinks to `sites-enabled`.
 
-**`setupSSL(fqdn, email)`** ([bin/container.js](../../bin/container.js:1200-1225))
+**`setupSSL(fqdn, email)`** ([scripts/deploy/container.js](../../scripts/deploy/container.js:1200-1225))
 
 Requests SSL certificate:
 
@@ -314,14 +314,14 @@ sudo npm run deploy .env.deploy.production
 
 ### Environment Variable Processing
 
-**In `bin/deploy.js`:**
+**In `scripts/deploy/deploy.js`:**
 
 The `processEnvParameters()` function handles two formats:
 
 - `--env FOO` → Transfers `FOO` from host environment to container
 - `--env FOO=bar` → Sets `FOO=bar` in container
 
-**In `bin/container.js`:**
+**In `scripts/deploy/container.js`:**
 
 The `startContainer()` function processes three environment variable sources:
 

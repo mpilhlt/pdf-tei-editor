@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-22T13:55:18.501Z
+ * Generated from OpenAPI schema at 2026-09-25T13:56:07.408Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -214,6 +214,12 @@
  */
 
 /**
+ * @typedef {Object} DefaultModelResponse
+ * @property {string} provider_id
+ * @property {string} model_id
+ */
+
+/**
  * @typedef {Object} DeleteFilesRequest
  * @property {Array<string>} files
  */
@@ -323,6 +329,14 @@
  */
 
 /**
+ * @typedef {Object} FindingResponse
+ * @property {number} id
+ * @property {string} old
+ * @property {string} new
+ * @property {string} rationale
+ */
+
+/**
  * @typedef {Object} GarbageCollectRequest
  * @property {string} deleted_before
  * @property {string=} sync_status
@@ -402,6 +416,21 @@
  */
 
 /**
+ * @typedef {Object} ModelResponse
+ * @property {string} id
+ * @property {string} label
+ * @property {Array<string>} capabilities
+ * @property {ModelStatusResponse} status
+ * @property {boolean} free
+ */
+
+/**
+ * @typedef {Object} ModelStatusResponse
+ * @property {string} availability
+ * @property {string} detail
+ */
+
+/**
  * @typedef {Object} MoveFilesRequest
  * @property {string} pdf_id
  * @property {string} destination_collection
@@ -410,6 +439,16 @@
 /**
  * @typedef {Object} MoveFilesResponse
  * @property {string} new_pdf_id
+ */
+
+/**
+ * @typedef {Object} PlanRequest
+ * @property {string} xml
+ */
+
+/**
+ * @typedef {Object} PlanResponse
+ * @property {number} chunk_count
  */
 
 /**
@@ -445,6 +484,13 @@
  */
 
 /**
+ * @typedef {Object} ProviderResponse
+ * @property {string} id
+ * @property {string} label
+ * @property {Array<ModelResponse>} models
+ */
+
+/**
  * @typedef {Object} ReleaseLockRequest
  * @property {string} file_id
  */
@@ -476,6 +522,20 @@
  * @property {boolean} success
  * @property {Array<FieldResult>} results
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} ReviewRequest
+ * @property {string} xml
+ * @property {string} provider_id
+ * @property {string} model_id
+ * @property {number=} chunk_index
+ */
+
+/**
+ * @typedef {Object} ReviewResponse
+ * @property {Array<FindingResponse>} findings
+ * @property {number} chunk_count
  */
 
 /**
@@ -1292,6 +1352,43 @@ export class ApiClientV1 {
   async extract(requestBody) {
     const endpoint = `/extract`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List available LLM providers and their models.
+   * A provider whose list_models() call fails (network error, malformed
+   * response, etc.) is skipped rather than failing the whole request -
+   * other providers should still be listed. Models rejected by the
+   * admin-configured `llm.model-filter.include`/`.exclude` filters (see
+   * fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
+   * returned with a flag - the picker should simply never offer them.
+   *
+   * @returns {Promise<Array<ProviderResponse>>}
+   */
+  async llmProviders() {
+    const endpoint = `/llm/providers`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * The installation-wide default model set by an admin, or null if none is set.
+   *
+   * @returns {Promise<(DefaultModelResponse | null)>}
+   */
+  async llmListDefaultModel() {
+    const endpoint = `/llm/default-model`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Set the installation-wide default model (admin only). The model must exist and pass the model filter.
+   *
+   * @param {DefaultModelResponse} requestBody
+   * @returns {Promise<DefaultModelResponse>}
+   */
+  async llmUpdateDefaultModel(requestBody) {
+    const endpoint = `/llm/default-model`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**

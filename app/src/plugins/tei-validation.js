@@ -267,19 +267,22 @@ class TeiValidationPlugin extends Plugin {
     const changedRangeValues = Object.values(update.changedRanges[0]);
     const minRange = Math.min(...changedRangeValues);
     const maxRange = Math.max(...changedRangeValues);
-    forEachDiagnostic(viewState, (d) => {
-      if (d.from > maxRange || d.to < minRange) {
+    // the callback's from/to are mapped through document changes; d.from/d.to are not
+    forEachDiagnostic(viewState, (d, from, to) => {
+      if (from > maxRange || to < minRange) {
         const docLength = viewState.doc.length;
-        const validFrom = Math.max(0, Math.min(d.from, docLength - 1));
-        const validTo = Math.min(Math.max(validFrom + 1, d.to), docLength);
+        const validFrom = Math.max(0, Math.min(from, docLength - 1));
+        const validTo = Math.min(Math.max(validFrom + 1, to), docLength);
         if (validFrom < validTo && validFrom < docLength) {
-          diagnostics.push({ column: null, from: validFrom, to: validTo, severity: d.severity, message: d.message });
+          diagnostics.push({ ...d, from: validFrom, to: validTo });
         }
       } else {
         this.#logger.debug('Removing diagnostic ' + JSON.stringify(d));
       }
     });
-    this.#lastDiagnostics = diagnostics;
+    // the full merged set is dispatched, but only our own diagnostics are remembered:
+    // an explicit `source` marks a diagnostic owned by another plugin, which re-applies it itself
+    this.#lastDiagnostics = diagnostics.filter(d => !d.source);
     try {
       this.#xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
     } catch (error) {

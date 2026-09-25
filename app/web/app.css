@@ -553,3 +553,25 @@ sl-menu[name="pluginsMenu"] small {
   text-decoration-thickness: 2px;
   text-decoration-color: var(--ann-color);
 }
+
+/* CodeMirror lint tooltips: bounded width, action buttons on their own line below the message */
+.cm-tooltip-lint {
+  max-width: min(32em, calc(100vw - 2em));
+  overflow-wrap: anywhere;
+}
+
+.cm-tooltip-lint .cm-diagnostic {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.cm-tooltip-lint .cm-diagnosticSource {
+  order: 1;
+}
+
+.cm-tooltip-lint .cm-diagnosticAction {
+  order: 2;
+  margin: 0.5em 0 0.2em 0;
+  padding: 0.25em 0.6em;
+}

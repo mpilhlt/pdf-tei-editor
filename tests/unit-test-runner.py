@@ -27,6 +27,7 @@ import os
 import unittest
 import warnings
 import re
+import logging
 from pathlib import Path
 from glob import glob
 
@@ -126,6 +127,10 @@ def main():
     # These are false positives from mocked database connections in tests
     if not os.environ.get('PYTHONWARNINGS'):
         warnings.filterwarnings('ignore', category=ResourceWarning)
+
+    # Suppress log output from code under test (no root handler -> logging's last-resort
+    # handler prints WARNINGs to stderr). assertLogs still works: it installs its own handler.
+    logging.getLogger().addHandler(logging.NullHandler())
 
     # Discover tests
     test_files = discover_tests(

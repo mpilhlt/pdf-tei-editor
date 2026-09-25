@@ -27,6 +27,7 @@ import {
   FileSelectionPlugin,
   HeartbeatPlugin,
   HelpPlugin,
+  InferenceSettingsPlugin,
   InfoPlugin,
   LayoutPlugin,
   LoggerPlugin,
@@ -90,6 +91,7 @@ const plugins = [
   ServicesPlugin,
   ExtractionPlugin,
   ToolsPlugin,
+  InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   PromptEditorPlugin,
   TeiWizardPlugin,
   TeiValidationPlugin,

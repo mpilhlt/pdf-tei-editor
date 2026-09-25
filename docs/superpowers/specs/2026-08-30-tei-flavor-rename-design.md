@@ -32,20 +32,20 @@ content-addressed storage and their database records marked for re-sync.
 Out of scope: schema migration framework changes; rollback tooling; GROBID
 server-side configuration.
 
-## Part A — `bin/migrate-tei-flavor-rename.py`
+## Part A — `bin/migrations/migrate-tei-flavor-rename.py`
 
-Generic script following the pattern of `bin/migrate-tei-fileref-to-xml-id.py`.
+Generic script following the pattern of `bin/migrations/migrate-tei-fileref-to-xml-id.py`.
 It takes the search and replacement flavor strings as positional arguments, so
 it can be reused for any future flavor rename:
 
 ```bash
-uv run python bin/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [--dry-run] [--limit N] [-v]
+uv run python bin/migrations/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [--dry-run] [--limit N] [-v]
 ```
 
 For the current task it is invoked as:
 
 ```bash
-uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs
+uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs
 ```
 
 ### Pure transform (no I/O)
@@ -158,8 +158,8 @@ No automated test. The existing `bin/migrate-tei-*.py` scripts ship none, and
 this is a one-off invocation of a generic script. Verification is manual:
 
 ```bash
-uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run -v
-uv run python bin/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs -v
+uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs --dry-run -v
+uv run python bin/migrations/migrate-tei-flavor-rename.py article/dh-law-footnotes article/footnotes-refs -v
 ```
 
 Then spot-check a rewritten document's flavor label and confirm the affected
@@ -167,7 +167,7 @@ Then spot-check a rewritten document's flavor label and confirm the affected
 
 ## Files added / changed
 
-- add: `bin/migrate-tei-flavor-rename.py`
+- add: `bin/migrations/migrate-tei-flavor-rename.py`
 - edit: `fastapi_app/plugins/grobid/config/variants.py`
 - edit: `fastapi_app/lib/utils/tei_utils.py`
 - edit: `fastapi_app/plugins/grobid/routes.py`

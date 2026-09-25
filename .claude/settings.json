@@ -1,8 +1,32 @@
 {
+  "worktree": {
+    "baseRef": "head"
+  },
   "permissions": {
-    "allow": [
-      "Bash(node:*)",
-      "Read(//Volumes/Hub/Users/christianboulanger/Code/tei-annotator/tei_annotator/postprocessing/**)"
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Bash(cat .env)",
+      "Bash(cat .env.*)",
+      "Bash(cat ./.env)",
+      "Bash(cat ./.env.*)",
+      "Bash(cat */.env)",
+      "Bash(cat */.env.*)",
+      "Bash(head .env)",
+      "Bash(head .env.*)",
+      "Bash(tail .env)",
+      "Bash(tail .env.*)",
+      "Bash(less .env)",
+      "Bash(less .env.*)",
+      "Bash(more .env)",
+      "Bash(more .env.*)",
+      "Bash(bat .env)",
+      "Bash(bat .env.*)",
+      "Bash(strings .env)",
+      "Bash(xxd .env)",
+      "Bash(od .env)"
     ]
   }
 }

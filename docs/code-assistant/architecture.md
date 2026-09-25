@@ -135,5 +135,5 @@ async function install(state) {
 ### Build System Integration
 
 - **Development**: Templates loaded via fetch from `app/src/templates/`
-- **Production**: `bin/bundle-templates.js` analyzes code and generates `templates.json`
+- **Production**: `scripts/build/bundle-templates.js` analyzes code and generates `templates.json`
 - **Build process**: Template bundling runs automatically during `npm run build`

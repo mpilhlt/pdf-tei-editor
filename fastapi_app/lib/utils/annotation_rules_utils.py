@@ -48,7 +48,7 @@ def resolve_forge_permalink(url: str, cache: UrlCache) -> str:
         return url
 
 
-def fetch_rule_excerpt(url: str, cache: UrlCache) -> str:
+def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) -> str:
     """
     Fetch the raw text a rules-document URL points to, sliced to its
     line-range fragment if one is present (e.g. "#L10-L40" or GitLab's
@@ -58,6 +58,11 @@ def fetch_rule_excerpt(url: str, cache: UrlCache) -> str:
     fragment doesn't parse as a recognized line-range. Line numbers are
     1-based and inclusive; out-of-range values are clamped to the available
     lines.
+
+    `allow_redirects` defaults to True (preserving prior behavior for
+    existing callers); pass False when the caller has validated `url`
+    itself and needs the fetch to hit that exact host, not wherever it
+    redirects to (see the annotation-review plugin's SSRF mitigation).
 
     Raises:
         RuleFetchError: if the fetched content's Content-Type is text/html,
@@ -70,7 +75,7 @@ def fetch_rule_excerpt(url: str, cache: UrlCache) -> str:
 
     text = cache.get_text(fetch_url)
     if text is None:
-        response = requests.get(fetch_url, timeout=30)
+        response = requests.get(fetch_url, timeout=30, allow_redirects=allow_redirects)
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "")
         if "text/html" in content_type:

@@ -19,7 +19,7 @@
 | Modify | `app/src/modules/plugin-context.js` | Add `getUIStorage(namespace)` factory |
 | Modify | `app/src/modules/plugin-base.js` | Add `uiStorage` lazy getter |
 | Create | `app/src/plugins/layout.js` | `LayoutPlugin` — split panel persistence |
-| Run | `node bin/build.js --steps=plugins` | Regenerate `app/src/plugin-registry.js` |
+| Run | `node scripts/build/build.js --steps=plugins` | Regenerate `app/src/plugin-registry.js` |
 | Modify | `app/src/plugins.js` | Import and register `LayoutPlugin` |
 | Modify | `app/src/plugins/tei-tools.js` | Migrate module-level localStorage helpers |
 | Modify | `app/src/plugins/xmleditor.js` | Migrate `#getLineWrappingPreference`, `#getXpathPreference` |
@@ -438,7 +438,7 @@ git commit -m "feat: expose UIStorage via PluginContext and Plugin base class"
 
 **Files:**
 - Create: `app/src/plugins/layout.js`
-- Run: `node bin/build.js --steps=plugins` (regenerates `app/src/plugin-registry.js`)
+- Run: `node scripts/build/build.js --steps=plugins` (regenerates `app/src/plugin-registry.js`)
 - Modify: `app/src/plugins.js`
 
 - [ ] **Step 3.1: Create `app/src/plugins/layout.js`**
@@ -484,7 +484,7 @@ export default LayoutPlugin;
 - [ ] **Step 3.2: Regenerate plugin registry**
 
 ```bash
-node bin/build.js --steps=plugins
+node scripts/build/build.js --steps=plugins
 ```
 
 Expected output includes: `Generated app/src/plugin-registry.js (35 plugins, 35 re-exports)`

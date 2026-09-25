@@ -877,7 +877,7 @@ In `fastapi_app/main.py`, find the `lifespan` function (around line 22). After t
 The dev server auto-reloads on file changes. Confirm no errors appear in the server log. If the server is not running, ask the user to start it with the usual command.
 
 ```bash
-node bin/debug-api.js GET /api/v1/projects
+node scripts/dev/debug-api.js GET /api/v1/projects
 ```
 
 Expected: JSON array (may be empty or contain migrated projects from groups).
@@ -1085,13 +1085,13 @@ Make sure `load_full_config` is imported at the top of the file from `..lib.util
 - [ ] **Step 2: Verify the endpoint**
 
 ```bash
-node bin/debug-api.js GET /api/v1/config/list
+node scripts/dev/debug-api.js GET /api/v1/config/list
 ```
 
 Expected: JSON config dict.
 
 ```bash
-node bin/debug-api.js GET "/api/v1/config/list?project=nonexistent"
+node scripts/dev/debug-api.js GET "/api/v1/config/list?project=nonexistent"
 ```
 
 Expected: same config dict (no error, graceful fallback).
@@ -1209,7 +1209,7 @@ default_editability = (
 - [ ] **Step 3: Verify server still accepts file uploads**
 
 ```bash
-node bin/debug-api.js GET /api/v1/projects
+node scripts/dev/debug-api.js GET /api/v1/projects
 ```
 
 Confirm no server errors in the log.
@@ -1253,7 +1253,7 @@ Add `project: Optional[str] = None` query parameter to the repopulate endpoint. 
 - [ ] **Step 3: Verify**
 
 ```bash
-node bin/debug-api.js GET /api/v1/validation
+node scripts/dev/debug-api.js GET /api/v1/validation
 ```
 
 Expected: normal validation response (no errors).

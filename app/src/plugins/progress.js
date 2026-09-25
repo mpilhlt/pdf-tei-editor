@@ -42,7 +42,9 @@
  *
  * When the user clicks the cancel button, a POST request is sent to the
  * `cancelUrl` provided in the progressShow event. The backend route that
- * created the progress widget should implement this endpoint.
+ * created the progress widget should implement this endpoint. Widgets created
+ * directly via `show()` by client-side code can pass an `onCancel` callback
+ * instead.
  *
  * ## Widget Behavior
  *
@@ -66,6 +68,9 @@ class ProgressPlugin extends Plugin {
 
   /** @type {Map<string, string>} Map of progress_id -> cancel URL */
   #cancelUrls = new Map()
+
+  /** @type {Map<string, () => void>} Map of progress_id -> client-side cancel callback */
+  #cancelHandlers = new Map()
 
   /** @type {HTMLTemplateElement|null} */
   #widgetTemplate = null
@@ -165,6 +170,7 @@ class ProgressPlugin extends Plugin {
       widget.remove()
       this.#activeWidgets.delete(progressId)
       this.#cancelUrls.delete(progressId)
+      this.#cancelHandlers.delete(progressId)
       this.#updateStackIndices()
     }
   }
@@ -197,6 +203,7 @@ class ProgressPlugin extends Plugin {
   /** @param {string} progressId */
   async #handleCancel(progressId) {
     this.getDependency('logger').debug(`Progress cancel requested for ${progressId}`)
+    this.#cancelHandlers.get(progressId)?.()
     const cancelUrl = this.#cancelUrls.get(progressId)
     if (cancelUrl) {
       try {
@@ -270,11 +277,13 @@ class ProgressPlugin extends Plugin {
    * @param {number|null} [options.value]
    * @param {boolean} [options.cancellable=true]
    * @param {string} [options.cancelUrl]
+   * @param {() => void} [options.onCancel] Called when the user clicks cancel (for client-driven work)
    */
   show(progressId, options = {}) {
-    const { label = '', value = null, cancellable = true, cancelUrl } = options
+    const { label = '', value = null, cancellable = true, cancelUrl, onCancel } = options
     const widget = this.#getOrCreateWidget(progressId)
     if (cancelUrl) this.#cancelUrls.set(progressId, cancelUrl)
+    if (onCancel) this.#cancelHandlers.set(progressId, onCancel)
     this.#applyMinimizedState(widget, this.#getMinimizedState(progressId))
     this.#setWidgetValue(widget, value)
     this.#setWidgetLabel(widget, label)

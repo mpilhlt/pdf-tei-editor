@@ -13,7 +13,7 @@ The `manage-remote.js` script provides a command-line interface for managing use
 Applies pending database migrations to update the schema or fix data integrity issues.
 
 ```bash
-python bin/run-migration.py [options]
+python bin/migrations/run-migration.py [options]
 ```
 
 | Option | Description |

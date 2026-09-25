@@ -2,6 +2,8 @@
 
 Quick reference for common development tasks. Always use `uv run python` for Python commands and `node` for Node.js commands.
 
+Script layout: see [bin/README.md](../../bin/README.md), [bin/migrations/README.md](../../bin/migrations/README.md) and [scripts/README.md](../../scripts/README.md).
+
 ## Development Server
 
 ```bash

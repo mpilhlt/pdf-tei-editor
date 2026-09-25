@@ -9,11 +9,14 @@ import logging
 from typing import Any, Callable
 
 from fastapi_app.lib.extraction import ExtractorRegistry
+from fastapi_app.lib.llm import LLMProviderRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.services.service_registry import get_service_registry
+from fastapi_app.lib.utils.config_utils import get_config
 
 from .extractor import KisskiExtractor
+from .llm_provider import KisskiLLMProvider
 from .service import KisskiService
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,27 @@ class KisskiPlugin(Plugin):
         else:
             logger.warning("KISSKI service not available - missing API key")
 
+        # Register LLM provider connector (new functionality)
+        # Skip in test mode, mirroring the service-registration guard above, so a
+        # live-network-capable provider never silently registers during test runs.
+        api_key = get_config().get("plugin.kisski.api.key")
+        base_url = get_config().get("plugin.kisski.api.url")
+        if app_mode == "testing":
+            logger.info("KISSKI LLM provider not registered in testing mode")
+        elif api_key:
+            llm_registry = LLMProviderRegistry.get_instance()
+            llm_registry.register(
+                KisskiLLMProvider(
+                    id="kisski",
+                    label="KISSKI Academic Cloud",
+                    base_url=base_url,
+                    api_key=api_key,
+                )
+            )
+            logger.info("KISSKI LLM provider registered")
+        else:
+            logger.warning("KISSKI LLM provider not registered - missing API key")
+
         logger.info(
             f"KISSKI extractor plugin initialized (PDF support: {pdf_support})"
         )
@@ -95,5 +119,8 @@ class KisskiPlugin(Plugin):
         # Unregister service (new functionality)
         service_registry = get_service_registry()
         service_registry.unregister_service("kisski-extractor")
+
+        # Unregister LLM provider (new functionality)
+        LLMProviderRegistry.get_instance().unregister("kisski")
 
         logger.info("KISSKI extractor plugin cleaned up")

@@ -42,7 +42,8 @@ Read [docs/code-assistant/architecture-frontend.md](docs/code-assistant/architec
   - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
   - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
   - `app/src/templates` - html templates used by the plugins to create UI parts
-- `bin` - executable files used on the command line
+- `bin` - scripts shipped in the production image (server start, admin CLIs, import/export); `bin/migrations` - one-off migrations for live instances
+- `scripts` - never shipped: `scripts/build` (build pipeline, generators), `scripts/dev` (developer helpers such as `debug-api.js`), `scripts/deploy` (container/deployment tooling)
 - `config` - the default content of files in `data/db`
 - `data` - file data
 - `data/db` - application data stored in subject-specific json files and SQLite databases
@@ -70,16 +71,16 @@ Before using any method on a class or module:
 
 ### Debugging Live Application
 
-When debugging, you can also use a running instance of the application and use `bin/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
+When debugging, you can also use a running instance of the application and use `scripts/dev/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
 
 ```bash
 # Authenticate and call any endpoint
-node bin/debug-api.js <method> <path> [json-params]
+node scripts/dev/debug-api.js <method> <path> [json-params]
 
 # Examples:
-node bin/debug-api.js GET /api/v1/plugins
-node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
-node bin/debug-api.js GET /api/v1/collections/test/files
+node scripts/dev/debug-api.js GET /api/v1/plugins
+node scripts/dev/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+node scripts/dev/debug-api.js GET /api/v1/collections/test/files
 ```
 
 The script:
@@ -120,6 +121,7 @@ See the OpenAPI specification at `http://localhost:8000/openapi.json` for all av
 - When asked to create a github issue or other github maintenance issues, use the `gh` tool and ask the user to install it if it is not available
 - **Markdown formatting** — follow these rules in all `.md` files: (1) Table cells must have spaces around the content: `| value |`, not `|value|`; separator rows must be `| --- |`, not `|---|`. (2) Fenced code blocks must always specify a language identifier (bash, python, text, etc.) — never use a bare triple-backtick fence. (3) Anchor links must exactly match a heading in the file after lowercasing and replacing spaces/punctuation with hyphens; verify the target heading exists before writing the link.
 - **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
+- **Secret handling (`.env`, `.env.*`, and other credential files)** - NEVER read or print the raw contents of `.env`, `.env.*`, or other secret-bearing files (no `Read` tool, no `cat`/`head`/`tail`/etc.). This is enforced as a technical backstop by a `permissions.deny` rule in `.claude/settings.json` (denying `Read(.env)`/`Read(.env.*)` and direct-read shell commands), so agents don't need to be told this every session. Shell commands that source secrets into a subprocess's environment (e.g. `set -a && source .env && set +a && <command using $SOME_VAR>`) remain allowed and are the correct way to use secrets for live calls, tests, etc. To verify a credential's presence or validity without ever exposing its value, use indirect checks: compare lengths, compare hashes, do a redacted grep that only proves a key exists (e.g. `source .env && env | grep -c '^SOME_VAR='`), or make a live API call and report only status/success - never echo the secret itself into command output or into conversation context.
 
 ## Missing or incorrect documentation
 

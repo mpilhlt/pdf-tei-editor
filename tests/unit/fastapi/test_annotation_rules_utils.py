@@ -161,8 +161,23 @@ class TestFetchRuleExcerpt(unittest.TestCase):
         mock_fetch_get.assert_called_once_with(
             "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guidelines.md",
             timeout=30,
+            allow_redirects=True,
         )
         self.assertEqual(result, "line 1\nline 2")
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_passes_through_allow_redirects_false(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = None
+        mock_get.return_value = self._mock_response(SAMPLE_TEXT)
+
+        fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache, allow_redirects=False)
+
+        mock_get.assert_called_once_with(
+            "https://pad.gwdg.de/s/abc/download",
+            timeout=30,
+            allow_redirects=False,
+        )
 
 
 class TestIsLineRangeFragment(unittest.TestCase):
