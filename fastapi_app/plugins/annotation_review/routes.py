@@ -46,6 +46,7 @@ class ReviewRequest(BaseModel):
     xml: str
     provider_id: str
     model_id: str
+    chunk_index: int = 0
 
 
 class FindingResponse(BaseModel):
@@ -57,6 +58,7 @@ class FindingResponse(BaseModel):
 
 class ReviewResponse(BaseModel):
     findings: list[FindingResponse]
+    chunk_count: int
 
 
 @router.post("/review", response_model=ReviewResponse)
@@ -65,8 +67,10 @@ async def review(
     current_user: dict = Depends(require_authenticated_user),
 ) -> ReviewResponse:
     """
-    Review the given (possibly unsaved) document content against its own
-    editorialDecl rules, using the given provider/model.
+    Review one chunk of the given (possibly unsaved) document content against
+    its own editorialDecl rules, using the given provider/model. The response
+    reports how many chunks the document has; the client requests each
+    chunk_index in turn.
     """
     try:
         provider = LLMProviderRegistry.get_instance().get_provider(body.provider_id)
@@ -76,7 +80,7 @@ async def review(
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 
     try:
-        findings = await run_review(body.xml, provider, body.model_id, cache)
+        findings, chunk_count = await run_review(body.xml, provider, body.model_id, cache, body.chunk_index)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except NoRuleExcerptsError as e:
@@ -87,4 +91,4 @@ async def review(
         logger.warning(f"annotation-review: provider '{body.provider_id}' request failed: {e}")
         raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e
 
-    return ReviewResponse(findings=[FindingResponse(**f) for f in findings])
+    return ReviewResponse(findings=[FindingResponse(**f) for f in findings], chunk_count=chunk_count)

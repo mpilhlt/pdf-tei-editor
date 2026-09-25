@@ -172,11 +172,39 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
             '[{"old": "<persName>J. Doe</persName>", '
             '"new": "<persName ref=\\"#p1\\">J. Doe</persName>", "rationale": "add ref"}]'
         )
-        findings = await run_review(TEI_DOC, provider, "stub-model", cache=mock.MagicMock())
+        findings, chunk_count = await run_review(TEI_DOC, provider, "stub-model", cache=mock.MagicMock())
+        self.assertEqual(chunk_count, 1)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["old"], "<persName>J. Doe</persName>")
         self.assertEqual(provider.calls[0]["model_id"], "stub-model")
         self.assertIn("persName must have a ref attribute", provider.calls[0]["user_prompt"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_reviews_only_the_requested_chunk_and_validates_against_the_whole_text(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        bibls = "".join(f"<bibl>Author {i:03d}, <title>Title {i:03d}</title>.</bibl>\n" for i in range(400))
+        doc = TEI_DOC.replace(
+            "<persName>J. Doe</persName> wrote <title>A Paper</title>.", f"<listBibl>{bibls}</listBibl>"
+        )
+        old = "<title>Title 399</title>"
+        provider = _StubProvider(f'[{{"old": "{old}", "new": "<title level=\\"a\\">Title 399</title>", "rationale": "r"}}]')
+
+        first, count = await run_review(doc, provider, "m", cache=mock.MagicMock(), chunk_index=0)
+        self.assertGreater(count, 2)
+        self.assertNotIn("Title 399", provider.calls[0]["user_prompt"])
+        self.assertIn(f"fragment 1 of {count}", provider.calls[0]["user_prompt"])
+        self.assertEqual(len(first), 1)
+
+        await run_review(doc, provider, "m", cache=mock.MagicMock(), chunk_index=count - 1)
+        self.assertIn("Title 399", provider.calls[1]["user_prompt"])
+        self.assertNotIn("Title 000", provider.calls[1]["user_prompt"])
+
+    async def test_raises_when_chunk_index_is_out_of_range(self):
+        provider = _StubProvider("[]")
+        with self.assertRaises(ValueError):
+            await run_review(TEI_DOC, provider, "m", cache=mock.MagicMock(), chunk_index=5)
+        self.assertEqual(provider.calls, [])
 
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
     async def test_raises_when_no_excerpts_could_be_gathered(self, mock_fetch):

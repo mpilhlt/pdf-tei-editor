@@ -22,6 +22,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     fetch_rule_excerpt,
 )
 
+from .chunking import split_into_chunks
 from .prompts import (
     Finding,
     build_system_prompt,
@@ -150,21 +151,27 @@ async def run_review(
     provider: LLMProvider,
     model_id: str,
     cache: UrlCache,
-) -> list[Finding]:
+    chunk_index: int = 0,
+) -> tuple[list[Finding], int]:
     """
-    Full review flow: extract the document's <text>, gather rule excerpts,
-    build the prompt, call the LLM, and return validated findings.
+    Review one chunk of the document's <text>: gather rule excerpts, build the
+    prompt, call the LLM, and return (validated findings, total chunk count).
+    Findings are validated against the whole <text>, so "old" must be unique
+    in the document, not just in the chunk.
 
     Raises:
-        ValueError: document is malformed or has no <text> element.
+        ValueError: document is malformed, has no <text> element, or chunk_index is out of range.
         NoRuleExcerptsError: no rule excerpt could be resolved for any category.
     """
     text_content = extract_text_content(xml_string)
+    chunks = split_into_chunks(text_content)
+    if not 0 <= chunk_index < len(chunks):
+        raise ValueError(f"chunk_index {chunk_index} out of range (document has {len(chunks)} chunks)")
     rule_excerpts = await asyncio.to_thread(gather_rule_excerpts, xml_string, cache)
     if not rule_excerpts:
         raise NoRuleExcerptsError("No rule excerpts could be resolved for this document")
 
     system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(rule_excerpts, text_content)
+    user_prompt = build_user_prompt(rule_excerpts, chunks[chunk_index], (chunk_index + 1, len(chunks)))
     raw_response = await provider.chat_completion(model_id, system_prompt, user_prompt)
-    return parse_and_validate_findings(raw_response, text_content)
+    return parse_and_validate_findings(raw_response, text_content), len(chunks)

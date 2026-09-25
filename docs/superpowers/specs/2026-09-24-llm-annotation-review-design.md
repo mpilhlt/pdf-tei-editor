@@ -297,6 +297,22 @@ Exposes:
   finds at least one category with a `subtype="machine"` ref. Drives the
   Tools-menu item's disabled state (Part D).
 
+### Chunked review
+
+Reviewing a long document in one call is slow and can exceed the model's
+output limit, and most of the document is irrelevant to judging any single
+annotation. The route therefore reviews one chunk per call: the request takes
+an optional `chunk_index` (default 0) and the response adds `chunk_count`.
+`chunking.split_into_chunks()` splits the raw `<text>` string at element
+boundaries (shallowest depth at which every unit fits `CHUNK_MAX_CHARS`), so
+chunks are exact substrings and a finding's `old` still matches the editor
+text. Findings are validated for uniqueness against the whole `<text>`, not
+the chunk. The rule excerpts are re-sent with every chunk (cheap with
+provider prompt caching). The extension's `review()` requests chunks
+sequentially; `runReview()` shows them behind the shared progress widget
+(minimizable, cancellable via `onCancel`), displays findings as each chunk
+completes, and keeps partial results on cancel or on a failed chunk.
+
 ## Part D — Tools-menu trigger
 
 The xmleditor "validate" toolbar button is left untouched (see "Out of

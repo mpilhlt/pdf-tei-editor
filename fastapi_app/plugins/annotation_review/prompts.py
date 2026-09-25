@@ -56,10 +56,15 @@ def build_system_prompt() -> str:
     )
 
 
-def build_user_prompt(rule_excerpts: list[tuple[str, str]], text_content: str) -> str:
+def build_user_prompt(
+    rule_excerpts: list[tuple[str, str]],
+    text_content: str,
+    chunk_position: tuple[int, int] | None = None,
+) -> str:
     """
-    Combine every (category, excerpt) pair with the document's <text> content
-    into a single prompt.
+    Combine every (category, excerpt) pair with the document text into a
+    single prompt. chunk_position is (1-based index, total) when text_content
+    is only one fragment of a longer document.
     """
     sections = []
     for category, excerpt in rule_excerpts:
@@ -67,7 +72,17 @@ def build_user_prompt(rule_excerpts: list[tuple[str, str]], text_content: str) -
     rules_block = "\n\n".join(sections)
     return (
         f"{rules_block}\n\n"
-        f"## Document text\n\n{text_content}"
+        f"{_document_heading(chunk_position)}\n\n{text_content}"
+    )
+
+
+def _document_heading(chunk_position: tuple[int, int] | None) -> str:
+    if chunk_position is None or chunk_position[1] == 1:
+        return "## Document text"
+    index, total = chunk_position
+    return (
+        f"## Document text (fragment {index} of {total} of a longer document; "
+        f"review only this fragment, and its tags may be unbalanced at the edges)"
     )
 
 

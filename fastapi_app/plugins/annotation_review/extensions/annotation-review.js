@@ -125,11 +125,12 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   /**
    * Store findings and display them as diagnostics.
    * @param {Finding[]} findings
+   * @param {boolean} [openPanel] Open the lint panel if it is closed
    * @returns {void}
    */
-  showFindings(findings) {
+  showFindings(findings, openPanel = true) {
     this._findings = findings;
-    this._renderFindings(true);
+    this._renderFindings(openPanel);
   }
 
   /**
@@ -213,42 +214,64 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Ask for confirmation naming the provider/model, then run a review with a
-   * spinner, show the findings and report the result. review() notifies on
-   * its own failure paths (including "no default model"), so a null result
-   * is silent.
+   * Ask for confirmation naming the provider/model, then review the document
+   * chunk by chunk behind a minimizable, cancellable progress widget. Findings
+   * are displayed as each chunk completes; cancelling keeps those found so
+   * far. review() notifies on its own failure paths (including "no default
+   * model"), so a null result is silent.
    * @param {{providerId: string, modelId: string}} [override]
    * @returns {Promise<void>}
    */
   async runReview(override) {
     const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
-    let spinnerText = 'Reviewing annotations…';
+    let label = '';
     if (resolved) {
-      const label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
+      label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
       const confirmed = await this.getDependency('dialog').confirm(
         `Review the annotations in the current document using ${escapeHtml(label)}?`,
         'Review Annotations'
       );
       if (!confirmed) return;
-      spinnerText = `Reviewing annotations using ${label}…`;
     }
-    const ui = this.getDependency('ui');
-    ui.spinner.show(spinnerText);
+    const progress = this.getDependency('progress');
+    const progressId = 'annotation-review';
+    const heading = label ? `Reviewing annotations using ${label}…` : 'Reviewing annotations…';
     const xmlBefore = this.state?.xml;
+    const documentChanged = () => this.state?.xml !== xmlBefore;
+    let cancelled = false;
+    let done = 0;
+    let total = 0;
+    progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true; } });
     try {
-      const findings = await this.review(resolved ?? undefined);
-      if (findings === null) return;
-      // findings from a different document must not attach to another one
-      if (this.state?.xml !== xmlBefore) return;
-      this.showFindings(findings);
+      const findings = await this.review(resolved ?? undefined, {
+        isCancelled: () => cancelled || documentChanged(),
+        onProgress: (chunksDone, chunksTotal, foundSoFar) => {
+          done = chunksDone;
+          total = chunksTotal;
+          progress.setValue(progressId, Math.round((chunksDone / chunksTotal) * 100));
+          progress.setLabel(progressId, `${heading} (part ${Math.min(chunksDone + 1, chunksTotal)} of ${chunksTotal})`);
+          // findings from a different document must not attach to another one
+          if (documentChanged()) return;
+          this.showFindings(foundSoFar, this._findings.length === 0);
+        },
+      });
+      if (findings === null || documentChanged()) return;
       const count = findings.length;
+      if (cancelled) {
+        this.getDependency('sl-utils').notify(
+          `Review cancelled after ${done} of ${total} parts; ${count} suggestion(s) so far.`,
+          'warning',
+          'exclamation-triangle'
+        );
+        return;
+      }
       this.getDependency('sl-utils').notify(
         count ? `${count} suggestion(s) - see the highlighted passages.` : 'No issues found.',
         count ? 'primary' : 'success',
         count ? 'info-circle' : 'check-circle'
       );
     } finally {
-      ui.spinner.hide();
+      progress.hide(progressId);
     }
   }
 
@@ -265,13 +288,16 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
 
   /**
    * Review the current editor document's annotations against its own
-   * editorialDecl rules. Resolves provider/model from the given override,
-   * or from the shared default (Part F), unless one isn't configured.
+   * editorialDecl rules, one backend chunk at a time. Resolves provider/model
+   * from the given override, or from the shared default (Part F), unless one
+   * isn't configured.
    * @param {{providerId: string, modelId: string}} [override]
-   * @returns {Promise<Array<{id: number, old: string, new: string, rationale: string}>|null>}
-   *   null when the review could not be started or failed (user already notified).
+   * @param {{isCancelled?: () => boolean, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
+   *   isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
+   * @returns {Promise<Finding[]|null>}
+   *   The findings (possibly partial if cancelled); null when the review could not be started or a chunk failed (user already notified).
    */
-  async review(override) {
+  async review(override, hooks = {}) {
     const xmleditorApi = this.getDependency('xmleditor');
     const xmlDoc = xmleditorApi.getXmlTree();
     if (!xmlDoc) {
@@ -298,24 +324,30 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
       return null;
     }
 
-    try {
-      const { findings } = await this.callPluginApi(
-        '/api/plugins/annotation-review/review',
-        'POST',
-        {
-          xml: xmleditorApi.getEditorContent(),
-          provider_id: resolved.providerId,
-          model_id: resolved.modelId,
-        }
-      );
-      return findings;
-    } catch (err) {
-      this.getDependency('sl-utils').notify(
-        `Annotation review failed: ${err.message}`,
-        'danger',
-        'exclamation-octagon'
-      );
-      return null;
+    const xml = xmleditorApi.getEditorContent();
+    /** @type {Finding[]} */
+    const findings = [];
+    let total = 1;
+    for (let index = 0; index < total; index++) {
+      if (index > 0 && hooks.isCancelled?.()) break;
+      try {
+        const response = await this.callPluginApi(
+          '/api/plugins/annotation-review/review',
+          'POST',
+          { xml, provider_id: resolved.providerId, model_id: resolved.modelId, chunk_index: index }
+        );
+        total = response.chunk_count ?? 1;
+        for (const finding of response.findings) findings.push({ ...finding, id: findings.length });
+      } catch (err) {
+        this.getDependency('sl-utils').notify(
+          `Annotation review failed${total > 1 ? ` in part ${index + 1} of ${total}` : ''}: ${err.message}`,
+          'danger',
+          'exclamation-octagon'
+        );
+        return null;
+      }
+      hooks.onProgress?.(index + 1, total, [...findings]);
     }
+    return findings;
   }
 }

@@ -74,6 +74,14 @@ class TestReviewRoute(unittest.TestCase):
         body = response.json()
         self.assertEqual(len(body["findings"]), 1)
         self.assertEqual(body["findings"][0]["old"], "<persName>J. Doe</persName>")
+        self.assertEqual(body["chunk_count"], 1)
+
+    def test_out_of_range_chunk_index_returns_422(self):
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1", "chunk_index": 9},
+        )
+        self.assertEqual(response.status_code, 422)
 
     def test_unknown_provider_returns_404(self):
         response = self.client.post(

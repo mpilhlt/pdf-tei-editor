@@ -35,10 +35,15 @@ const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, fi
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], spinnerCalls = [], handlers = {};
+  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
-    ui: { spinner: { show: (m) => spinnerCalls.push(['show', m]), hide: () => spinnerCalls.push(['hide']) } },
+    progress: {
+      show: (id, o) => { progressOpts.show = o; progressCalls.push(['show', o.label]); },
+      setValue: (id, v) => progressCalls.push(['value', v]),
+      setLabel: (id, l) => progressCalls.push(['label', l]),
+      hide: () => progressCalls.push(['hide']),
+    },
     'lint-utils': {
       replacesDiagnostics: opts.replacesDiagnostics ?? (() => false),
       applyMergedDiagnostics: (view, source, own, options) => lintCalls.push({ view, source, own, options }),
@@ -67,7 +72,7 @@ function buildExtension(opts = {}) {
   };
   if (opts.state) ext.state = opts.state;
   ext.callPluginApi = opts.callPluginApiImpl ?? (async () => { throw new Error('unexpected call'); });
-  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, spinnerCalls, handlers };
+  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers };
 }
 
 describe('hasReviewableRules', () => {
@@ -138,6 +143,7 @@ describe('review', () => {
       xml: '<TEI>content</TEI>',
       provider_id: 'kisski',
       model_id: 'gemma-3',
+      chunk_index: 0,
     });
     assert.deepStrictEqual(result, [{ id: 0, old: 'a', new: 'b', rationale: 'r' }]);
   });
@@ -316,15 +322,15 @@ describe('menu item', () => {
 describe('runReview', () => {
   const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
 
-  it('shows a spinner, displays findings and reports the count', async () => {
-    const { ext, spinnerCalls, notifyCalls, lintCalls } = buildExtension({
+  it('shows a progress widget, displays findings and reports the count', async () => {
+    const { ext, progressCalls, notifyCalls, lintCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
       docText: 'x AAA y',
       callPluginApiImpl: async () => ({ findings: [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }] }),
     });
     await ext.runReview();
-    assert.deepStrictEqual(spinnerCalls.map(c => c[0]), ['show', 'hide']);
+    assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'show' || c[0] === 'hide').map(c => c[0]), ['show', 'hide']);
     assert.strictEqual(lintCalls.at(-1).own.length, 1);
     assert.match(notifyCalls.at(-1)[0], /1 suggestion/);
   });
@@ -339,14 +345,14 @@ describe('runReview', () => {
     assert.strictEqual(notifyCalls.at(-1)[1], 'success');
   });
 
-  it('hides the spinner and shows nothing when review() fails', async () => {
-    const { ext, spinnerCalls, lintCalls } = buildExtension({
+  it('hides the progress widget and shows nothing when review() fails', async () => {
+    const { ext, progressCalls, lintCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
       callPluginApiImpl: async () => { throw new Error('boom'); },
     });
     await ext.runReview();
-    assert.deepStrictEqual(spinnerCalls.map(c => c[0]), ['show', 'hide']);
+    assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'show' || c[0] === 'hide').map(c => c[0]), ['show', 'hide']);
     assert.strictEqual(lintCalls.length, 0);
   });
 });
@@ -414,8 +420,8 @@ describe('hardening', () => {
 describe('runReview confirmation', () => {
   const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
 
-  it('asks for confirmation naming the provider/model and puts it in the spinner text', async () => {
-    const { ext, confirmCalls, spinnerCalls } = buildExtension({
+  it('asks for confirmation naming the provider/model and puts it in the progress label', async () => {
+    const { ext, confirmCalls, progressCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'kisski', modelId: 'gemma' },
       callPluginApiImpl: async () => ({ findings: [] }),
@@ -425,12 +431,12 @@ describe('runReview confirmation', () => {
       confirmCalls[0].message,
       'Review the annotations in the current document using kisski label/gemma label?'
     );
-    assert.strictEqual(spinnerCalls[0][1], 'Reviewing annotations using kisski label/gemma label…');
+    assert.strictEqual(progressCalls[0][1], 'Reviewing annotations using kisski label/gemma label…');
   });
 
   it('does nothing when the user cancels', async () => {
     let apiCalled = false;
-    const { ext, spinnerCalls, lintCalls } = buildExtension({
+    const { ext, progressCalls, lintCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'kisski', modelId: 'gemma' },
       confirmAnswer: false,
@@ -438,7 +444,7 @@ describe('runReview confirmation', () => {
     });
     await ext.runReview();
     assert.strictEqual(apiCalled, false);
-    assert.deepStrictEqual(spinnerCalls, []);
+    assert.deepStrictEqual(progressCalls, []);
     assert.strictEqual(lintCalls.length, 0);
   });
 
@@ -469,5 +475,121 @@ describe('runReview confirmation', () => {
     await ext.runReview({ providerId: 'other', modelId: 'big' });
     assert.ok(confirmCalls[0].message.includes('other label/big label'));
     assert.strictEqual(calls[0].provider_id, 'other');
+  });
+});
+
+describe('chunked review', () => {
+  const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+  const finding = (old) => ({ id: 0, old, new: 'n', rationale: 'r' });
+
+  it('review() requests every chunk, merges the findings and renumbers ids', async () => {
+    const indexes = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async (e, m, params) => {
+        indexes.push(params.chunk_index);
+        return { findings: [finding(`A${params.chunk_index}`)], chunk_count: 3 };
+      },
+    });
+    const result = await ext.review();
+    assert.deepStrictEqual(indexes, [0, 1, 2]);
+    assert.deepStrictEqual(result.map(f => [f.id, f.old]), [[0, 'A0'], [1, 'A1'], [2, 'A2']]);
+  });
+
+  it('review() reports progress after each chunk with the findings so far', async () => {
+    const seen = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async (e, m, params) => ({ findings: [finding(`A${params.chunk_index}`)], chunk_count: 2 }),
+    });
+    await ext.review(undefined, { onProgress: (done, total, found) => seen.push([done, total, found.length]) });
+    assert.deepStrictEqual(seen, [[1, 2, 1], [2, 2, 2]]);
+  });
+
+  it('review() stops before the next chunk when cancelled and returns what it has', async () => {
+    let cancelled = false;
+    const indexes = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async (e, m, params) => {
+        indexes.push(params.chunk_index);
+        return { findings: [finding('A')], chunk_count: 5 };
+      },
+    });
+    const result = await ext.review(undefined, { isCancelled: () => cancelled, onProgress: () => { cancelled = true; } });
+    assert.deepStrictEqual(indexes, [0]);
+    assert.strictEqual(result.length, 1);
+  });
+
+  it('review() names the failing part and returns null when a later chunk fails', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async (e, m, params) => {
+        if (params.chunk_index === 1) throw new Error('boom');
+        return { findings: [], chunk_count: 3 };
+      },
+    });
+    assert.strictEqual(await ext.review(), null);
+    assert.match(notifyCalls.at(-1)[0], /part 2 of 3: boom/);
+  });
+
+  it('runReview shows findings as chunks complete and keeps them when a later chunk fails', async () => {
+    const { ext, lintCalls, progressCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText: 'A0 A1 A2',
+      callPluginApiImpl: async (e, m, params) => {
+        if (params.chunk_index === 1) throw new Error('boom');
+        return { findings: [finding('A0')], chunk_count: 3 };
+      },
+    });
+    await ext.runReview();
+    assert.strictEqual(lintCalls.at(-1).own.length, 1);
+    assert.strictEqual(progressCalls.at(-1)[0], 'hide');
+  });
+
+  it('runReview updates the progress value and label per chunk', async () => {
+    const { ext, progressCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async () => ({ findings: [], chunk_count: 2 }),
+    });
+    await ext.runReview();
+    assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'value').map(c => c[1]), [50, 100]);
+    assert.match(progressCalls.find(c => c[0] === 'label')[1], /part 2 of 2/);
+  });
+
+  it('cancelling via the widget stops the review and reports the partial result', async () => {
+    const indexes = [];
+    let ctx;
+    ctx = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText: 'A0 A1 A2',
+      callPluginApiImpl: async (e, m, params) => {
+        indexes.push(params.chunk_index);
+        if (params.chunk_index === 0) ctx.progressOpts.show.onCancel();
+        return { findings: [finding(`A${params.chunk_index}`)], chunk_count: 3 };
+      },
+    });
+    await ctx.ext.runReview();
+    assert.deepStrictEqual(indexes, [0]);
+    assert.match(ctx.notifyCalls.at(-1)[0], /cancelled after 1 of 3 parts; 1 suggestion/);
+    assert.strictEqual(ctx.progressCalls.at(-1)[0], 'hide');
+  });
+
+  it('opens the lint panel only for the first batch of findings', async () => {
+    const { ext, lintCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText: 'A0 A1',
+      callPluginApiImpl: async (e, m, params) => ({ findings: [finding(`A${params.chunk_index}`)], chunk_count: 2 }),
+    });
+    await ext.runReview();
+    assert.deepStrictEqual(lintCalls.map(c => c.options.openPanel), [true, false]);
   });
 });
