@@ -74,6 +74,11 @@ if __name__ == '__main__':
 
     if not disable_reload:
         cmd.insert(3, '--reload')
+        # Uvicorn's default ".*" exclude only matches the file name, so files inside dot-directories
+        # (.claude, .git, .venv, ...) would still trigger reloads. Exclude them by absolute path.
+        for dot_dir in sorted(project_root.glob('.*')):
+            if dot_dir.is_dir():
+                cmd.extend(['--reload-exclude', str(dot_dir)])
 
     try:
         # Run uvicorn and stream output to log file
