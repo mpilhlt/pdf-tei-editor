@@ -76,10 +76,14 @@ runner (JS), `unittest`/`TestClient` (Python).
   `Document`.
 - `getDependency('inference-settings').getDefaultModel()` (Part F, already
   built) returns `{providerId, modelId} | null`.
-- Python plugin-colocated tests run via `node tests/backend-test-runner.js
-  --test-dir fastapi_app/plugins/annotation_review/tests`. JS
-  plugin-colocated tests run via the normal `npm run test:unit:js`
-  discovery (precedent: `fastapi_app/plugins/tei_annotator/tests/tei-annotator.test.js`).
+- Python plugin-colocated tests run via `uv run python
+  tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
+  (NOT `backend-test-runner.js` — that runner only discovers `*.test.js`
+  files, it never touches `.py` files; confirmed by reading
+  `tests/backend-test-runner.js`'s `discoverTests()`, which globs
+  `**/*.test.js` only). JS plugin-colocated tests run via the normal `npm
+  run test:unit:js` discovery (precedent:
+  `fastapi_app/plugins/tei_annotator/tests/tei-annotator.test.js`).
 
 ---
 
@@ -207,7 +211,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: FAIL/ERROR — `prompts.py` doesn't exist yet (`ModuleNotFoundError`)
 
 - [ ] **Step 3: Write `prompts.py`**
@@ -329,7 +333,7 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[dic
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: PASS (all `test_prompts.py` cases)
 
 - [ ] **Step 5: Commit**
@@ -504,7 +508,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: FAIL/ERROR — `review_logic.py` doesn't exist yet
 
 - [ ] **Step 3: Write `review_logic.py`**
@@ -527,7 +531,7 @@ from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.llm import LLMProvider
 from fastapi_app.lib.utils.annotation_rules_utils import extract_annotation_rule_refs, fetch_rule_excerpt
 
-from .prompts import build_system_prompt, build_user_prompt, parse_and_validate_findings
+from .prompts import Finding, build_system_prompt, build_user_prompt, parse_and_validate_findings
 
 logger = logging.getLogger(__name__)
 
@@ -587,7 +591,7 @@ async def run_review(
     provider: LLMProvider,
     model_id: str,
     cache: UrlCache,
-) -> list[dict]:
+) -> list[Finding]:
     """
     Full review flow: extract the document's <text>, gather rule excerpts,
     build the prompt, call the LLM, and return validated findings.
@@ -609,7 +613,7 @@ async def run_review(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: PASS (all `test_review_logic.py` cases; `test_prompts.py` still passing)
 
 - [ ] **Step 5: Commit**
@@ -646,7 +650,6 @@ from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderRegistry
-from fastapi_app.plugins.annotation_review.review_logic import NoRuleExcerptsError
 from fastapi_app.plugins.annotation_review.routes import router
 
 TEI_DOC = """<?xml version="1.0"?>
@@ -690,7 +693,9 @@ class TestReviewRoute(unittest.TestCase):
         LLMProviderRegistry.reset_instance()
         self.app.dependency_overrides.clear()
 
-    def test_returns_validated_findings(self):
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    def test_returns_validated_findings(self, mock_fetch):
+        mock_fetch.return_value = "Rule: persName must have a ref attribute."
         response = self.client.post(
             "/api/plugins/annotation-review/review",
             json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
@@ -744,7 +749,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: FAIL/ERROR — `routes.py` doesn't exist yet
 
 - [ ] **Step 3: Write `routes.py`**
@@ -823,7 +828,7 @@ async def review(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: PASS (all `test_routes.py` cases; Tasks 1-2 tests still passing)
 
 - [ ] **Step 5: Commit**
@@ -901,7 +906,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: FAIL/ERROR — `plugin.py` doesn't exist yet
 
 - [ ] **Step 3: Write `plugin.py`**
@@ -974,7 +979,7 @@ __all__ = ["AnnotationReviewPlugin", "router"]
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: PASS (all tests across Tasks 1-4)
 
 - [ ] **Step 5: Commit**
@@ -1160,7 +1165,7 @@ resolves guides internally via `getDependency('tei-utils').getEditorialDeclGuide
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npm run test:unit:js -- --grep annotation-review`
+Run: `npm run test:unit:js -- fastapi_app/plugins/annotation_review/tests/annotation-review.test.js`
 Expected: FAIL/ERROR — `extensions/annotation-review.js` doesn't exist yet
 
 - [ ] **Step 3: Write `extensions/annotation-review.js`**
@@ -1254,7 +1259,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npm run test:unit:js -- --grep annotation-review`
+Run: `npm run test:unit:js -- fastapi_app/plugins/annotation_review/tests/annotation-review.test.js`
 Expected: PASS (all `annotation-review.test.js` cases)
 
 - [ ] **Step 5: Commit**
@@ -1271,7 +1276,7 @@ git commit -m "feat(annotation-review): add frontend extension with review()/has
 
 - [ ] Run the full backend plugin test suite once more:
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/annotation_review/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/annotation_review/tests`
 Expected: PASS (all tests, Tasks 1-4)
 
 - [ ] Run the full JS unit suite once more (confirm no unrelated regressions):
