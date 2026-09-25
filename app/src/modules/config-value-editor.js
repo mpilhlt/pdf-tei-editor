@@ -145,7 +145,8 @@ export function createMaskedValueEditor(key, currentValue, isReadOnly = true, on
   const input = document.createElement('sl-input')
   input.setAttribute('type', 'password')
   input.setAttribute('size', 'small')
-  input.setAttribute('password-toggle', '')
+  // No password-toggle: input.value is always '' (see below), so a reveal
+  // icon would only ever toggle visibility of an empty field.
   const isSentinel = currentValue === '****'
   input.setAttribute('placeholder', isSentinel ? '(set but hidden)' : '(not set)')
   input.value = ''
