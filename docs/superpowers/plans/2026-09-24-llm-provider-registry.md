@@ -1081,7 +1081,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_llm_provider`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_llm_provider`
 Expected: FAIL with `ModuleNotFoundError: No module named 'fastapi_app.plugins.kisski.llm_provider'`
 
 - [ ] **Step 3: Write the implementation**
@@ -1151,7 +1151,7 @@ class KisskiLLMProvider(OpenAICompatibleProvider):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_llm_provider`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_llm_provider`
 Expected: PASS (7 tests)
 
 - [ ] **Step 5: Manual verification (not automatable in this plan — record the outcome as a follow-up note, do not skip)**
@@ -1279,7 +1279,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_plugin_llm_registration`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_plugin_llm_registration`
 Expected: FAIL — `LLMProviderRegistry.get_instance().get_provider("kisski")` raises `KeyError` in the first test (provider not yet registered, since `KisskiPlugin.initialize()` doesn't do this yet).
 
 - [ ] **Step 3: Modify `fastapi_app/plugins/kisski/plugin.py`**
@@ -1327,12 +1327,12 @@ In `cleanup()`, after the existing `service_registry.unregister_service("kisski-
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_plugin_llm_registration`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_plugin_llm_registration`
 Expected: PASS (3 tests)
 
 - [ ] **Step 5: Run the full Kisski plugin test suite to confirm no regression**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests`
 Expected: All tests pass, including the pre-existing `test_extractor.py` (534 lines, unaffected by this task) and `test_llm_provider.py` (Task 6).
 
 - [ ] **Step 6: Commit**
@@ -1362,7 +1362,7 @@ This is a pure internal refactor — no test changes, since `fastapi_app/plugins
 
 - [ ] **Step 1: Run the existing extractor test suite to establish the baseline (must pass before touching anything)**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_extractor`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_extractor`
 Expected: PASS (all pre-existing tests green)
 
 - [ ] **Step 2: Modify `_call_llm` in `fastapi_app/plugins/kisski/extractor.py`**
@@ -1452,7 +1452,7 @@ Note: `get_retry_session` is still imported at the top of the file (used elsewhe
 
 - [ ] **Step 3: Run the existing extractor test suite again to confirm no regression**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_extractor`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_extractor`
 Expected: PASS, identical results to Step 1 (these tests mock `_call_llm` entirely, so this refactor is invisible to them — this confirms the mocking boundary, not the new code path directly).
 
 - [ ] **Step 4: Write a focused new test exercising the refactored `_call_llm`'s real (mocked-HTTP) path**
@@ -1513,12 +1513,12 @@ if __name__ == "__main__":
 
 - [ ] **Step 5: Run to verify it passes**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests --grep test_call_llm_delegation`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests --grep test_call_llm_delegation`
 Expected: PASS (2 tests)
 
 - [ ] **Step 6: Run the entire Kisski test suite one final time**
 
-Run: `node tests/backend-test-runner.js --test-dir fastapi_app/plugins/kisski/tests`
+Run: `uv run python tests/unit-test-runner.py fastapi_app/plugins/kisski/tests`
 Expected: All tests pass (existing `test_extractor.py`, plus this plan's new `test_llm_provider.py`, `test_plugin_llm_registration.py`, `test_call_llm_delegation.py`).
 
 - [ ] **Step 7: Commit**
