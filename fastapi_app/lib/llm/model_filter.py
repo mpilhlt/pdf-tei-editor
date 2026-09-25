@@ -1,5 +1,5 @@
 """
-Admin-configurable allow-list filter for LLM models.
+Admin-configurable include/exclude filter for LLM models.
 
 Not owned by any single provider plugin - it applies uniformly across every
 registered provider (see registry.py), filtered against the same
@@ -8,7 +8,7 @@ shows (app/src/plugins/inference-settings.js), letting an admin block
 expensive/premium models or restrict usage to e.g. only "flash" models
 without needing to know each provider's internal model ids.
 
-Registered as a flat `llm.*` config key rather than `plugin.<name>.*` since
+Registered as flat `llm.*` config keys rather than `plugin.<name>.*` since
 it isn't provider-specific - see docs/code-assistant/backend-plugins.md's
 naming convention for plugin-owned keys, which this deliberately departs
 from for that reason.
@@ -19,33 +19,41 @@ import re
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
 
-MODEL_FILTER_CONFIG_KEY = "llm.model-filter"
-MODEL_FILTER_ENV_VAR = "LLM_MODEL_FILTER"
+INCLUDE_CONFIG_KEY = "llm.model-filter.include"
+EXCLUDE_CONFIG_KEY = "llm.model-filter.exclude"
+INCLUDE_ENV_VAR = "LLM_MODEL_FILTER_INCLUDE"
+EXCLUDE_ENV_VAR = "LLM_MODEL_FILTER_EXCLUDE"
+
+_PATTERN_SYNTAX = (
+    'Comma-separated, double-quoted regular expressions matched (substring search) against '
+    'each model\'s "<Provider>/<Model>" label (as shown in the frontend default-model picker). '
+)
 
 _registered = False
 
 
 def _ensure_registered() -> None:
     """
-    Seed the config key (env var fallback + description metadata) exactly
+    Seed the config keys (env var fallback + description metadata) exactly
     once per process. get_plugin_config() writes to config.json on every
     call (atomic write + file lock), so - like every other plugin config key
     in this codebase - it must be registered once, not re-invoked on every
-    read; get_model_filter_patterns() reads the live value via get_config()
-    afterwards, so a config.json edit still takes effect without a restart.
+    read; the getters read the live value via get_config() afterwards, so a
+    config.json edit still takes effect without a restart.
     """
     global _registered
     if not _registered:
         get_plugin_config(
-            MODEL_FILTER_CONFIG_KEY,
-            MODEL_FILTER_ENV_VAR,
+            INCLUDE_CONFIG_KEY,
+            INCLUDE_ENV_VAR,
             default="",
-            description=(
-                'Comma-separated, double-quoted regular expressions matched against '
-                'each model\'s "<Provider>/<Model>" label (as shown in the frontend '
-                'default-model picker). If non-empty, only models matching at least '
-                'one pattern are listed or usable; empty means no filtering.'
-            ),
+            description=_PATTERN_SYNTAX + "If non-empty, only models matching at least one pattern are listed or usable; empty means no include filtering.",
+        )
+        get_plugin_config(
+            EXCLUDE_CONFIG_KEY,
+            EXCLUDE_ENV_VAR,
+            default="",
+            description=_PATTERN_SYNTAX + "Models matching at least one pattern are neither listed nor usable, even if they match an include pattern; empty means nothing is excluded.",
         )
         _registered = True
 
@@ -61,21 +69,31 @@ def _parse_patterns(raw: str) -> list[re.Pattern[str]]:
     return [re.compile(pattern) for pattern in re.findall(r'"([^"]*)"', raw or "")]
 
 
-def get_model_filter_patterns() -> list[re.Pattern[str]]:
-    """The currently configured allow-list patterns (empty means no filtering)."""
+def get_include_patterns() -> list[re.Pattern[str]]:
+    """The currently configured include patterns (empty means no include filtering)."""
     _ensure_registered()
-    raw = get_config().get(MODEL_FILTER_CONFIG_KEY, "")
-    return _parse_patterns(raw)
+    return _parse_patterns(get_config().get(INCLUDE_CONFIG_KEY, ""))
+
+
+def get_exclude_patterns() -> list[re.Pattern[str]]:
+    """The currently configured exclude patterns (empty means nothing is excluded)."""
+    _ensure_registered()
+    return _parse_patterns(get_config().get(EXCLUDE_CONFIG_KEY, ""))
+
+
+def has_model_filter() -> bool:
+    """True if any include or exclude pattern is configured."""
+    return bool(get_include_patterns() or get_exclude_patterns())
 
 
 def is_model_allowed(label: str) -> bool:
     """
-    True if `label` (a "<Provider>/<Model>" string) matches at least one
-    configured allow-list pattern, or the allow-list is empty (no filtering
-    configured). Matching is a substring search (`re.search`), not a full
-    match, so a pattern like "flash" allows any label containing it.
+    True if `label` (a "<Provider>/<Model>" string) matches no exclude
+    pattern and - if include patterns are configured - at least one include
+    pattern. Matching is a substring search (`re.search`), not a full match,
+    so a pattern like "flash" matches any label containing it.
     """
-    patterns = get_model_filter_patterns()
-    if not patterns:
-        return True
-    return any(pattern.search(label) for pattern in patterns)
+    if any(pattern.search(label) for pattern in get_exclude_patterns()):
+        return False
+    include = get_include_patterns()
+    return not include or any(pattern.search(label) for pattern in include)

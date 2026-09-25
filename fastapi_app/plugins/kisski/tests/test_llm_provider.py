@@ -64,6 +64,7 @@ class TestKisskiLLMProviderListModels(unittest.TestCase):
         self.assertEqual(models[0]["status"]["detail"], "demand: 0")
         self.assertEqual(models[1]["status"]["availability"], "busy")
         self.assertEqual(models[2]["status"]["availability"], "very_busy")
+        self.assertTrue(all(m["free"] for m in models))
 
     @patch("fastapi_app.plugins.kisski.llm_provider.get_retry_session")
     def test_list_models_defaults_missing_demand_to_zero(self, mock_get_session):

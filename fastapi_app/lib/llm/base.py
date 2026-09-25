@@ -30,12 +30,18 @@ class ModelStatus(TypedDict):
 
 
 class LLMModel(TypedDict):
-    """One model offered by an LLMProvider."""
+    """One model offered by an LLMProvider.
+
+    `free` is True when using the model costs the operator nothing (e.g.
+    KISSKI's academic cloud); paid models are False and are restricted to
+    admins unless an admin picked them as the default model.
+    """
 
     id: str
     label: str
     capabilities: frozenset[str]
     status: ModelStatus | None
+    free: bool
 
 
 class LLMProvider(ABC):

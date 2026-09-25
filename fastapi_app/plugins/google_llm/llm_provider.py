@@ -57,6 +57,7 @@ class GoogleLLMProvider(LLMProvider):
                     label=model.display_name or model_id,
                     capabilities=frozenset({"chat"}),
                     status=None,
+                    free=False,
                 )
             )
         return models

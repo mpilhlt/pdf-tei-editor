@@ -19,7 +19,7 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.llm import LLMProviderError, LLMProviderRegistry
-from fastapi_app.lib.llm.model_filter import get_model_filter_patterns, is_model_allowed
+from fastapi_app.lib.llm.model_access import ModelAccessDenied, check_model_access
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
@@ -99,17 +99,10 @@ async def review(
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
-    # Only consult list_models() (a live provider round-trip for some
-    # providers) when an admin has actually configured a filter - see
-    # fastapi_app/lib/llm/model_filter.py. With no filter configured, this
-    # is a no-op and behavior is unchanged.
-    if get_model_filter_patterns():
-        model_label = next((m["label"] for m in provider.list_models() if m["id"] == body.model_id), None)
-        if model_label is None or not is_model_allowed(f"{provider.label}/{model_label}"):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Model '{provider.label}/{body.model_id}' is not permitted by the configured model filter",
-            )
+    try:
+        check_model_access(provider, body.model_id, current_user)
+    except ModelAccessDenied as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
 
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 

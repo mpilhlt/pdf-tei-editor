@@ -163,5 +163,72 @@ class TestListProvidersRouteModelFilter(unittest.TestCase):
         self.assertEqual(body[0]["models"], [])
 
 
+class TestDefaultModelRoutes(unittest.TestCase):
+    """Test GET/PUT /llm/default-model."""
+
+    def setUp(self):
+        self.app = FastAPI()
+        self.app.include_router(router)
+        self.user = {"username": "u", "roles": ["user"]}
+        self.app.dependency_overrides[require_authenticated_user] = lambda: self.user
+        self.client = TestClient(self.app)
+        LLMProviderRegistry.reset_instance()
+        LLMProviderRegistry.get_instance().register(
+            _StubProvider(
+                id="kisski",
+                label="KISSKI",
+                models=[LLMModel(id="gemma-3", label="Gemma 3", capabilities=frozenset({"chat"}), status=None, free=True)],
+            )
+        )
+
+    def tearDown(self):
+        LLMProviderRegistry.reset_instance()
+        self.app.dependency_overrides.clear()
+
+    @mock.patch("fastapi_app.routers.llm.get_default_model", return_value=("kisski", "gemma-3"))
+    def test_get_returns_the_configured_default_to_any_user(self, _):
+        response = self.client.get("/llm/default-model")
+        self.assertEqual(response.json(), {"provider_id": "kisski", "model_id": "gemma-3"})
+
+    @mock.patch("fastapi_app.routers.llm.get_default_model", return_value=None)
+    def test_get_returns_null_when_no_default_is_set(self, _):
+        response = self.client.get("/llm/default-model")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json())
+
+    @mock.patch("fastapi_app.routers.llm.set_default_model")
+    def test_put_is_forbidden_for_non_admins(self, mock_set):
+        response = self.client.put("/llm/default-model", json={"provider_id": "kisski", "model_id": "gemma-3"})
+        self.assertEqual(response.status_code, 403)
+        mock_set.assert_not_called()
+
+    @mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True)
+    @mock.patch("fastapi_app.routers.llm.set_default_model")
+    def test_put_stores_the_default_for_admins(self, mock_set, _):
+        self.user["roles"] = ["admin"]
+        response = self.client.put("/llm/default-model", json={"provider_id": "kisski", "model_id": "gemma-3"})
+        self.assertEqual(response.status_code, 200)
+        mock_set.assert_called_once_with("kisski", "gemma-3")
+
+    @mock.patch("fastapi_app.routers.llm.set_default_model")
+    def test_put_rejects_unknown_provider_and_model(self, mock_set):
+        self.user["roles"] = ["admin"]
+        self.assertEqual(self.client.put("/llm/default-model", json={"provider_id": "nope", "model_id": "x"}).status_code, 404)
+        self.assertEqual(self.client.put("/llm/default-model", json={"provider_id": "kisski", "model_id": "x"}).status_code, 404)
+        mock_set.assert_not_called()
+
+    @mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=False)
+    @mock.patch("fastapi_app.routers.llm.set_default_model")
+    def test_put_rejects_a_model_excluded_by_the_filter(self, mock_set, _):
+        self.user["roles"] = ["admin"]
+        response = self.client.put("/llm/default-model", json={"provider_id": "kisski", "model_id": "gemma-3"})
+        self.assertEqual(response.status_code, 403)
+        mock_set.assert_not_called()
+
+    def test_providers_response_includes_the_free_flag(self):
+        body = self.client.get("/llm/providers").json()
+        self.assertTrue(body[0]["models"][0]["free"])
+
+
 if __name__ == "__main__":
     unittest.main()

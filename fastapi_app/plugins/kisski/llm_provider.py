@@ -58,6 +58,7 @@ class KisskiLLMProvider(OpenAICompatibleProvider):
                     label=entry.get("name", entry["id"]),
                     capabilities=frozenset({"chat"}),
                     status=status,
+                    free=True,
                 )
             )
         return models

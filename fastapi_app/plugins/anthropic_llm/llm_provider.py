@@ -57,6 +57,7 @@ class AnthropicLLMProvider(LLMProvider):
                 label=entry.get("display_name", entry["id"]),
                 capabilities=frozenset({"chat"}),
                 status=None,
+                free=False,
             )
             for entry in entries
             if "id" in entry

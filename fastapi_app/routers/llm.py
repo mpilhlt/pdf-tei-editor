@@ -10,11 +10,12 @@ fastapi_app/routers/extraction.py's GET /extract/list route.
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+import requests
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..lib.core.dependencies import require_authenticated_user
-from ..lib.llm import LLMProviderRegistry, is_model_allowed
+from ..lib.core.dependencies import require_admin_user, require_authenticated_user
+from ..lib.llm import LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -30,6 +31,7 @@ class ModelResponse(BaseModel):
     label: str
     capabilities: list[str]
     status: ModelStatusResponse | None
+    free: bool
 
 
 class ProviderResponse(BaseModel):
@@ -47,7 +49,7 @@ def list_providers(
     A provider whose list_models() call fails (network error, malformed
     response, etc.) is skipped rather than failing the whole request -
     other providers should still be listed. Models rejected by the
-    admin-configured `llm.model-filter` allow-list (see
+    admin-configured `llm.model-filter.include`/`.exclude` filters (see
     fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
     returned with a flag - the picker should simply never offer them.
     """
@@ -67,6 +69,7 @@ def list_providers(
                         id=model["id"],
                         label=model["label"],
                         capabilities=sorted(model["capabilities"]),
+                        free=model.get("free", False),
                         status=(
                             ModelStatusResponse(**model["status"])
                             if model["status"] is not None
@@ -79,3 +82,44 @@ def list_providers(
             )
         )
     return result
+
+
+class DefaultModelResponse(BaseModel):
+    provider_id: str
+    model_id: str
+
+
+@router.get("/default-model", response_model=DefaultModelResponse | None)
+def get_default(
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> DefaultModelResponse | None:
+    """The installation-wide default model set by an admin, or null if none is set."""
+    default = get_default_model()
+    return DefaultModelResponse(provider_id=default[0], model_id=default[1]) if default else None
+
+
+@router.put("/default-model", response_model=DefaultModelResponse)
+def set_default(
+    body: DefaultModelResponse,
+    current_user: dict[str, Any] = Depends(require_admin_user),
+) -> DefaultModelResponse:
+    """Set the installation-wide default model (admin only). The model must exist and pass the model filter."""
+    try:
+        provider = LLMProviderRegistry.get_instance().get_provider(body.provider_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    try:
+        models = provider.list_models()
+    except (requests.RequestException, RuntimeError) as e:
+        raise HTTPException(status_code=502, detail=f"Could not list models of '{provider.label}': {e}") from e
+    model = next((m for m in models if m["id"] == body.model_id), None)
+    if model is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model '{body.model_id}' for provider '{provider.label}'")
+    if not is_model_allowed(f"{provider.label}/{model['label']}"):
+        raise HTTPException(status_code=403, detail="This model is excluded by the configured model filter")
+    try:
+        set_default_model(body.provider_id, body.model_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    logger.info(f"User {current_user.get('username')} set the default LLM model to {body.provider_id}/{body.model_id}")
+    return body
