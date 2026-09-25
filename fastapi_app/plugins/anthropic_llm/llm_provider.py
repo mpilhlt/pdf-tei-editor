@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 ANTHROPIC_API_VERSION = "2023-06-01"
 # Anthropic's Messages API requires max_tokens; LLMProvider.chat_completion has no
 # such parameter, so this is a fixed, generous ceiling rather than a per-call knob.
-DEFAULT_MAX_TOKENS = 4096
+DEFAULT_MAX_TOKENS = 16384
 
 
 class AnthropicLLMProvider(LLMProvider):

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderRegistry
+from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.routes import router
 
 TEI_DOC = """<?xml version="1.0"?>
@@ -124,6 +125,16 @@ class TestReviewRoute(unittest.TestCase):
         )
         self.assertEqual(result.status_code, 502)
         self.assertIn("LLM provider request failed", result.json()["detail"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    def test_unusable_model_response_returns_502(self, mock_run_review):
+        mock_run_review.side_effect = UnusableResponseError("The model returned an empty response")
+        result = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(result.status_code, 502)
+        self.assertIn("empty response", result.json()["detail"])
 
     def test_requires_authentication(self):
         self.app.dependency_overrides.clear()

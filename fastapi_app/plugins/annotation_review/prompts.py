@@ -16,9 +16,11 @@ from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 
-_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
-
 _REQUIRED_KEYS = ("old", "new", "rationale")
+
+
+class UnusableResponseError(Exception):
+    """The LLM's response contained no JSON list of findings (empty, prose only, wrong shape)."""
 
 
 class Finding(TypedDict):
@@ -69,31 +71,83 @@ def build_user_prompt(rule_excerpts: list[tuple[str, str]], text_content: str) -
     )
 
 
+def _salvage_truncated_list(raw_response: str) -> list[object]:
+    """
+    Recover the complete objects from a JSON array that was cut off mid-way (an LLM hitting its
+    output token limit). Returns [] if the response has no array start or no complete object.
+    """
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\[", raw_response):
+        objects: list[object] = []
+        index = match.end()
+        while True:
+            while index < len(raw_response) and raw_response[index] in " \t\r\n,":
+                index += 1
+            try:
+                value, index = decoder.raw_decode(raw_response, index)
+            except json.JSONDecodeError:
+                break
+            if not isinstance(value, dict):
+                objects = []
+                break
+            objects.append(value)
+        if objects:
+            return objects
+    return []
+
+
+def _extract_json_list(raw_response: str) -> list[object]:
+    """
+    Find the JSON array of findings in an LLM response. Models often wrap the array in a
+    markdown fence or surround it with prose despite being told not to, so every "[" is tried
+    as the start of a JSON value and the first one that decodes to a list of objects (or an
+    empty list) wins.
+
+    Raises:
+        UnusableResponseError: if the response contains no such array. The start of the
+            response is logged, since it is the only way to tell why.
+    """
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\[", raw_response):
+        try:
+            value, _ = decoder.raw_decode(raw_response[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            return value
+    salvaged = _salvage_truncated_list(raw_response)
+    if salvaged:
+        logger.warning(
+            f"annotation-review: LLM response looks truncated (length {len(raw_response)}, probably hit the "
+            f"output token limit); using its {len(salvaged)} complete finding(s)"
+        )
+        return salvaged
+    snippet = raw_response.strip()[:300]
+    logger.warning(
+        f"annotation-review: no JSON list of findings in LLM response "
+        f"(length {len(raw_response)}), starts with: {snippet!r}"
+    )
+    raise UnusableResponseError(
+        f"The model did not return a JSON list of findings (response starts with: {snippet[:120]!r})"
+        if snippet else "The model returned an empty response"
+    )
+
+
 def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Finding]:
     """
     Parse the LLM's JSON array response and keep only findings whose "old"
-    occurs exactly once in source_text — the primary defense against
-    hallucinated or under-specified findings. Malformed JSON, a non-list
-    response, a finding missing a required key, or a finding whose "old",
-    "new", or "rationale" is not a string is dropped (logged), never raised:
-    a partially-bad response still yields whatever findings are trustworthy.
-    Kept findings are assigned a sequential integer "id" (0-based, over the
-    kept findings only, in response order).
+    occurs exactly once in source_text - the primary defense against
+    hallucinated or under-specified findings. A finding missing a required
+    key, or one whose "old", "new" or "rationale" is not a string, is dropped
+    (logged): a partially-bad response still yields whatever findings are
+    trustworthy. Kept findings are assigned a sequential integer "id"
+    (0-based, over the kept findings only, in response order).
+
+    Raises:
+        UnusableResponseError: if the response contains no JSON list at all.
+            That is not "no findings" but a failed review.
     """
-    text = raw_response.strip()
-    fence_match = _CODE_FENCE_RE.match(text)
-    if fence_match:
-        text = fence_match.group(1).strip()
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as e:
-        logger.warning(f"annotation-review: could not parse LLM response as JSON: {e}")
-        return []
-
-    if not isinstance(parsed, list):
-        logger.warning("annotation-review: LLM response JSON was not a list, dropping")
-        return []
+    parsed = _extract_json_list(raw_response)
 
     kept: list[Finding] = []
     for item in parsed:

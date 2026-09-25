@@ -7,6 +7,7 @@ Unit tests for prompt building and response validation.
 import unittest
 
 from fastapi_app.plugins.annotation_review.prompts import (
+    UnusableResponseError,
     build_system_prompt,
     build_user_prompt,
     parse_and_validate_findings,
@@ -89,13 +90,51 @@ class TestParseAndValidateFindings(unittest.TestCase):
         findings = parse_and_validate_findings(raw, self.SOURCE)
         self.assertEqual(findings, [])
 
-    def test_malformed_json_returns_empty_list(self):
-        findings = parse_and_validate_findings("not json at all", self.SOURCE)
-        self.assertEqual(findings, [])
+    def test_unparseable_response_raises_with_the_response_text_logged(self):
+        with (
+            self.assertLogs("fastapi_app.plugins.annotation_review.prompts", level="WARNING") as logs,
+            self.assertRaises(UnusableResponseError),
+        ):
+            parse_and_validate_findings("not json at all", self.SOURCE)
+        self.assertIn("not json at all", "\n".join(logs.output))
 
-    def test_non_list_json_returns_empty_list(self):
-        findings = parse_and_validate_findings('{"old": "x"}', self.SOURCE)
-        self.assertEqual(findings, [])
+    def test_empty_response_raises(self):
+        with self.assertRaises(UnusableResponseError):
+            parse_and_validate_findings("   ", self.SOURCE)
+
+    def test_non_list_json_raises(self):
+        with self.assertRaises(UnusableResponseError):
+            parse_and_validate_findings('{"old": "x"}', self.SOURCE)
+
+    def test_salvages_complete_findings_from_a_truncated_response(self):
+        raw = (
+            '```json\n[\n  {"old": "<persName>J. Doe</persName>", "new": "n", "rationale": "r"},\n'
+            '  {"old": "<title>A Paper</title>", "new": "n2", "rationale": "r2"},\n'
+            '  {"old": "<title>A Pa'
+        )
+        with self.assertLogs("fastapi_app.plugins.annotation_review.prompts", level="WARNING") as logs:
+            findings = parse_and_validate_findings(raw, self.SOURCE)
+        self.assertEqual([f["new"] for f in findings], ["n", "n2"])
+        self.assertIn("truncated", "\n".join(logs.output))
+
+    def test_truncated_response_without_any_complete_finding_raises(self):
+        with self.assertRaises(UnusableResponseError):
+            parse_and_validate_findings('```json\n[\n  {"old": "<persName>J. Do', self.SOURCE)
+
+    def test_empty_list_is_a_valid_result(self):
+        self.assertEqual(parse_and_validate_findings("[]", self.SOURCE), [])
+
+    def test_extracts_array_surrounded_by_prose(self):
+        raw = 'Here are my findings:\n[{"old": "<title>A Paper</title>", "new": "n", "rationale": "r"}]\nHope this helps!'
+        self.assertEqual(len(parse_and_validate_findings(raw, self.SOURCE)), 1)
+
+    def test_extracts_fenced_array_followed_by_prose(self):
+        raw = '```json\n[{"old": "<title>A Paper</title>", "new": "n", "rationale": "r"}]\n```\nLet me know if you need more.'
+        self.assertEqual(len(parse_and_validate_findings(raw, self.SOURCE)), 1)
+
+    def test_bracket_in_prose_does_not_break_extraction(self):
+        raw = 'See [1] below.\n[{"old": "<title>A Paper</title>", "new": "n", "rationale": "r"}]'
+        self.assertEqual(len(parse_and_validate_findings(raw, self.SOURCE)), 1)
 
     def test_ids_are_sequential_over_kept_findings_only(self):
         raw = (
