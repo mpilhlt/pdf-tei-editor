@@ -22,6 +22,7 @@ export { default as FileSelectionPlugin } from './plugins/file-selection.js';
 export { default as FiledataPlugin } from './plugins/filedata.js';
 export { default as HeartbeatPlugin } from './plugins/heartbeat.js';
 export { default as HelpPlugin } from './plugins/help.js';
+export { default as InferenceSettingsPlugin } from './plugins/inference-settings.js';
 export { default as InfoPlugin } from './plugins/info.js';
 export { default as LayoutPlugin } from './plugins/layout.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
@@ -61,6 +62,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   filedata: import('./plugins/filedata.js').default,
  *   heartbeat: import('./plugins/heartbeat.js').default,
  *   help: import('./plugins/help.js').default,
+ *   "inference-settings": import('./plugins/inference-settings.js').default,
  *   info: import('./plugins/info.js').default,
  *   layout: import('./plugins/layout.js').default,
  *   logger: import('./plugins/logger.js').default,
