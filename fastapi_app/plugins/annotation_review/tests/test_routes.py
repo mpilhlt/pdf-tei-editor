@@ -7,6 +7,7 @@ Unit tests for the annotation-review route.
 import unittest
 from unittest import mock
 
+import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -101,6 +102,28 @@ class TestReviewRoute(unittest.TestCase):
             json={"xml": "<not well formed", "provider_id": "stub", "model_id": "m1"},
         )
         self.assertEqual(response.status_code, 422)
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    def test_upstream_provider_failure_returns_502_with_the_provider_message(self, mock_run_review):
+        response = mock.MagicMock()
+        response.json.return_value = {"error": {"message": "`temperature` is deprecated for this model."}}
+        mock_run_review.side_effect = requests.HTTPError("400 Client Error: Bad Request", response=response)
+        result = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(result.status_code, 502)
+        self.assertIn("`temperature` is deprecated", result.json()["detail"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    def test_upstream_connection_failure_returns_502(self, mock_run_review):
+        mock_run_review.side_effect = requests.ConnectionError("no route to host")
+        result = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(result.status_code, 502)
+        self.assertIn("LLM provider request failed", result.json()["detail"])
 
     def test_requires_authentication(self):
         self.app.dependency_overrides.clear()

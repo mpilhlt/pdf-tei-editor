@@ -7,6 +7,8 @@ Unit tests for the Anthropic Claude LLM provider connector.
 import unittest
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from fastapi_app.plugins.anthropic_llm.llm_provider import AnthropicLLMProvider
 
 
@@ -95,6 +97,47 @@ class TestAnthropicLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
         result = await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
 
         self.assertEqual(result, "")
+
+
+class TestAnthropicLLMProviderTemperatureRejected(unittest.IsolatedAsyncioTestCase):
+    """Newer Claude models reject `temperature` with a 400; the request is retried without it."""
+
+    @staticmethod
+    def _response(status_code: int, body: dict) -> MagicMock:
+        response = MagicMock()
+        response.status_code = status_code
+        response.json.return_value = body
+        if status_code >= 400:
+            response.raise_for_status.side_effect = requests.HTTPError(f"{status_code} Client Error", response=response)
+        return response
+
+    @patch("fastapi_app.plugins.anthropic_llm.llm_provider.get_retry_session")
+    async def test_retries_without_temperature_when_model_rejects_it(self, mock_get_session):
+        rejected = self._response(400, {"error": {"type": "invalid_request_error", "message": "`temperature` is deprecated for this model."}})
+        accepted = self._response(200, {"content": [{"type": "text", "text": "ok"}]})
+        mock_session = MagicMock()
+        mock_session.post.side_effect = [rejected, accepted]
+        mock_get_session.return_value = mock_session
+
+        provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="k")
+        result = await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u", temperature=0.2)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(mock_session.post.call_count, 2)
+        self.assertIn("temperature", mock_session.post.call_args_list[0][1]["json"])
+        self.assertNotIn("temperature", mock_session.post.call_args_list[1][1]["json"])
+
+    @patch("fastapi_app.plugins.anthropic_llm.llm_provider.get_retry_session")
+    async def test_other_400_errors_are_not_retried(self, mock_get_session):
+        rejected = self._response(400, {"error": {"type": "invalid_request_error", "message": "max_tokens: too large"}})
+        mock_session = MagicMock()
+        mock_session.post.return_value = rejected
+        mock_get_session.return_value = mock_session
+
+        provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="k")
+        with self.assertRaises(requests.HTTPError):
+            await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
+        self.assertEqual(mock_session.post.call_count, 1)
 
 
 if __name__ == "__main__":

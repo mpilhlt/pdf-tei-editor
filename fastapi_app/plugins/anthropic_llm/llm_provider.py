@@ -12,6 +12,8 @@ than adding the anthropic SDK as a new project dependency.
 import asyncio
 import logging
 
+import requests
+
 from fastapi_app.lib.extraction.http_utils import get_retry_session
 from fastapi_app.lib.llm.base import LLMModel, LLMProvider
 
@@ -91,8 +93,21 @@ class AnthropicLLMProvider(LLMProvider):
             "temperature": temperature,
         }
         response = session.post(url, headers=self._headers(), json=data, timeout=120)
+        if response.status_code == 400 and self._error_message(response).startswith("`temperature`"):
+            # Newer Claude models reject `temperature` ("is deprecated for this model"), older ones
+            # accept it: send it optimistically and retry once without it.
+            data_without_temperature = {key: value for key, value in data.items() if key != "temperature"}
+            response = session.post(url, headers=self._headers(), json=data_without_temperature, timeout=120)
         response.raise_for_status()
         for block in response.json().get("content", []):
             if block.get("type") == "text":
                 return block.get("text", "")
         return ""
+
+    @staticmethod
+    def _error_message(response: requests.Response) -> str:
+        """The `error.message` of an Anthropic error response, or "" if it has none."""
+        try:
+            return str(response.json().get("error", {}).get("message", ""))
+        except ValueError:
+            return ""

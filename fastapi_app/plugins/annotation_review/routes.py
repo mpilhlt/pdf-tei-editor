@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -24,6 +25,18 @@ from fastapi_app.plugins.annotation_review.review_logic import (
 )
 
 logger = logging.getLogger(__name__)
+
+def _upstream_error_message(error: requests.RequestException) -> str:
+    """The provider's own error message if the failed response carries one, else the exception text."""
+    if error.response is not None:
+        try:
+            message = error.response.json().get("error", {}).get("message")
+        except (ValueError, AttributeError):
+            message = None
+        if isinstance(message, str) and message:
+            return message
+    return str(error)
+
 
 router = APIRouter(prefix="/api/plugins/annotation-review", tags=["annotation-review"])
 
@@ -67,5 +80,8 @@ async def review(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except NoRuleExcerptsError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    except requests.RequestException as e:
+        logger.warning(f"annotation-review: provider '{body.provider_id}' request failed: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e
 
     return ReviewResponse(findings=[FindingResponse(**f) for f in findings])
