@@ -231,6 +231,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     if (!this._menuItem) return;
     const tree = this.getDependency('xmleditor').getXmlTree();
     this._menuItem.disabled = !tree || !this.hasReviewableRules(tree);
+    this._menuItem.title = this._menuItem.disabled ? 'Requires an open document whose editorialDecl has machine-readable annotation rules (a ref with subtype="machine").' : '';
   }
 
   /**

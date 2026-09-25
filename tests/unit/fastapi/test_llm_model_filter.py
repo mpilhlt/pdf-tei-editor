@@ -97,6 +97,13 @@ class TestExcludeFilter(unittest.TestCase):
 
     @mock.patch("fastapi_app.lib.llm.model_filter.get_plugin_config")
     @mock.patch("fastapi_app.lib.llm.model_filter.get_config")
+    def test_unquoted_value_is_a_single_pattern(self, mock_get_config, _):
+        self._config(mock_get_config, include="[Ff]lash")
+        self.assertTrue(model_filter.is_model_allowed("Google Gemini/Gemini Flash"))
+        self.assertFalse(model_filter.is_model_allowed("Anthropic/Claude Opus"))
+
+    @mock.patch("fastapi_app.lib.llm.model_filter.get_plugin_config")
+    @mock.patch("fastapi_app.lib.llm.model_filter.get_config")
     def test_exclude_wins_over_include(self, mock_get_config, _):
         self._config(mock_get_config, include='"Google"', exclude='"pro"')
         self.assertTrue(model_filter.is_model_allowed("Google Gemini/gemini-flash"))

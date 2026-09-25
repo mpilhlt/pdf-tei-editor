@@ -65,8 +65,15 @@ def reset_registration() -> None:
 
 
 def _parse_patterns(raw: str) -> list[re.Pattern[str]]:
-    """Extract each double-quoted regex from a comma-separated, quoted list."""
-    return [re.compile(pattern) for pattern in re.findall(r'"([^"]*)"', raw or "")]
+    """
+    Extract each double-quoted regex from a comma-separated, quoted list. A
+    non-empty value without any double quotes is taken as one single pattern,
+    so a plain `[Ff]lash` does not silently disable the filter.
+    """
+    raw = (raw or "").strip()
+    quoted = re.findall(r'"([^"]*)"', raw)
+    patterns = quoted if quoted else ([raw] if raw else [])
+    return [re.compile(pattern) for pattern in patterns]
 
 
 def get_include_patterns() -> list[re.Pattern[str]]:
