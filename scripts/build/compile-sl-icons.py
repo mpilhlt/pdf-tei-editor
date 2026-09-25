@@ -32,6 +32,9 @@ ICON_PATTERNS = [
     re.compile(r'\.icon\s*=\s*[\'"]([^"\']+)[\'"]'),  # JS: .icon = 'name'
     re.compile(r'icon:\s*[\'"]([^"\']+)[\'"]'),  # JS: icon: 'name'
     re.compile(r'[\'"]icon[\'"]\s*:\s*[\'"]([^"\']+)[\'"]'),  # Python/JSON: "icon": "name"
+    # JS ternary: .icon = cond ? 'name-a' : 'name-b' (both branches)
+    re.compile(r'\.icon\s*=[^;\n?]*\?\s*[\'"]([^"\']+)[\'"]\s*:\s*[\'"][^"\']+[\'"]'),
+    re.compile(r'\.icon\s*=[^;\n?]*\?\s*[\'"][^"\']+[\'"]\s*:\s*[\'"]([^"\']+)[\'"]'),
 ]
 SCAN_EXTENSIONS = ['.js', '.html', '.py']
 
