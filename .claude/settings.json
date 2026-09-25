@@ -3,10 +3,6 @@
     "baseRef": "head"
   },
   "permissions": {
-    "allow": [
-      "Bash(node:*)",
-      "Read(//Volumes/Hub/Users/christianboulanger/Code/tei-annotator/tei_annotator/postprocessing/**)"
-    ],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
