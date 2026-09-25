@@ -23,6 +23,7 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 # Anthropic's Messages API requires max_tokens; LLMProvider.chat_completion has no
 # such parameter, so this is a fixed, generous ceiling rather than a per-call knob.
 DEFAULT_MAX_TOKENS = 16384
+REQUEST_TIMEOUT_SECONDS = 300
 
 
 class AnthropicLLMProvider(LLMProvider):
@@ -83,7 +84,7 @@ class AnthropicLLMProvider(LLMProvider):
         user_prompt: str,
         temperature: float,
     ) -> str:
-        session = get_retry_session(retries=3, backoff_factor=2.0)
+        session = get_retry_session(retries=3, backoff_factor=2.0, read_retries=0)
         url = f"{self._base_url}/messages"
         data = {
             "model": model_id,
@@ -92,12 +93,12 @@ class AnthropicLLMProvider(LLMProvider):
             "messages": [{"role": "user", "content": user_prompt}],
             "temperature": temperature,
         }
-        response = session.post(url, headers=self._headers(), json=data, timeout=120)
+        response = session.post(url, headers=self._headers(), json=data, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code == 400 and self._error_message(response).startswith("`temperature`"):
             # Newer Claude models reject `temperature` ("is deprecated for this model"), older ones
             # accept it: send it optimistically and retry once without it.
             data_without_temperature = {key: value for key, value in data.items() if key != "temperature"}
-            response = session.post(url, headers=self._headers(), json=data_without_temperature, timeout=120)
+            response = session.post(url, headers=self._headers(), json=data_without_temperature, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         for block in response.json().get("content", []):
             if block.get("type") == "text":
