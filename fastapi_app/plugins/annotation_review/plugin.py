@@ -2,9 +2,9 @@
 Annotation Review plugin.
 
 Reviews a document's annotations against its own editorialDecl-linked
-rules using an LLM, via the shared LLMProviderRegistry (Parts A/B). Exposes
-a frontend extension with review()/hasReviewableRules() for later parts
-(D: Tools-menu trigger, E: diagnostics UI) to call.
+rules using an LLM, via the shared LLMProviderRegistry. The routes are in
+routes.py; the frontend extension adds the Tools-menu trigger and shows the
+findings as editor diagnostics. See README.md.
 
 See docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
 (Part C) for the design rationale.
