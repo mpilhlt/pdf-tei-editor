@@ -295,8 +295,16 @@ class ConfigEditorPlugin extends Plugin {
 
       await this.getDependency('client').apiClient.configSet({ key, value: valueToSave })
 
-      this.#originalConfig[key] = valueToSave
-      this.#modifiedConfig[key] = valueToSave
+      // Masked keys must never cache the real value client-side after a save -
+      // the placeholder logic in createMaskedValueEditor() only recognizes the
+      // literal '****' sentinel as "set", matching what configList()/configGet()
+      // return for a masked key. Caching the just-typed plaintext here made the
+      // editor show "(not set)" right after a successful save.
+      const isMasked = this.#originalConfig[`${key}.masked`] === true
+      const cachedValue = isMasked ? '****' : valueToSave
+
+      this.#originalConfig[key] = cachedValue
+      this.#modifiedConfig[key] = cachedValue
       this.#modifiedKeys.delete(key)
       this.#editingKey = null
 
