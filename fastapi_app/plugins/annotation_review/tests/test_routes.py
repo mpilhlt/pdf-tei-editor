@@ -48,6 +48,10 @@ class _StubProvider(LLMProvider):
 
 class TestReviewRoute(unittest.TestCase):
     def setUp(self):
+        # model access is covered in test_llm_model_access.py; keep these tests independent of the real config
+        patcher = mock.patch("fastapi_app.plugins.annotation_review.routes.check_model_access")
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser", "roles": ["admin"]}

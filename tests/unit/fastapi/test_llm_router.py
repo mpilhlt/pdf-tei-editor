@@ -35,6 +35,10 @@ class TestListProvidersRoute(unittest.TestCase):
     """Test GET /llm/providers."""
 
     def setUp(self):
+        # independent of the real llm.model-filter config; the filter itself is tested separately
+        patcher = mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser"}
@@ -167,6 +171,10 @@ class TestDefaultModelRoutes(unittest.TestCase):
     """Test GET/PUT /llm/default-model."""
 
     def setUp(self):
+        # independent of the real llm.model-filter config; the filter itself is tested separately
+        patcher = mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.app = FastAPI()
         self.app.include_router(router)
         self.user = {"username": "u", "roles": ["user"]}
