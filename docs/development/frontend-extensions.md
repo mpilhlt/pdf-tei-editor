@@ -266,6 +266,41 @@ test('Extension custom endpoint is invocable', async ({ page }) => {
 });
 ```
 
+## Contributing editor diagnostics
+
+CodeMirror keeps one global diagnostic set, and `setDiagnostics` replaces it wholesale. An extension that adds its own diagnostics must therefore merge them into the current set instead of dispatching them directly. Extensions are IIFEs and cannot import `@codemirror/lint`, so use the `lint-utils` module via `this.getDependency('lint-utils')`:
+
+| Function | Purpose |
+| --- | --- |
+| `collectDiagnostics(state)` | Diagnostics currently stored in the editor state |
+| `mergeDiagnostics(state, source, own)` | Current diagnostics with those of `source` replaced by `own` |
+| `applyMergedDiagnostics(view, source, own, options)` | Merge and dispatch in one step; `options.openPanel` (default `false`) |
+| `replacesDiagnostics(update)` | True if a view update replaced the diagnostic set |
+
+Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal:
+
+```js
+xmleditor.addUpdateListener(update => {
+  if (lintUtils.replacesDiagnostics(update) && !this._rendering && this._items.length) {
+    setTimeout(() => this._render(false), 0);
+  }
+});
+
+_render(openPanel = false) {
+  const view = this.getDependency('xmleditor').getView();
+  this._rendering = true;
+  try {
+    this.getDependency('lint-utils').applyMergedDiagnostics(view, 'my-plugin', this._diagnostics(), { openPanel });
+  } finally {
+    this._rendering = false;
+  }
+}
+```
+
+`tei-validation` configures its linter with `autoPanel: true`, so any non-empty diagnostic set opens the lint panel. `applyMergedDiagnostics` therefore closes a panel that was closed before the dispatch, unless `options.openPanel` is true. Pass `openPanel: true` only when displaying results the user just asked for, never for the re-apply from the update listener (otherwise the panel reopens after every validation run).
+
+See `fastapi_app/plugins/annotation_review/extensions/annotation-review.js` for a complete example.
+
 ## Migration from Function-Based Extensions
 
 Old function-based extension format (removed):

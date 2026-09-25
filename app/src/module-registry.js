@@ -6,6 +6,7 @@
  * Re-run the build step after adding or removing @registerModule tags.
  */
 
+import * as lintUtils from './modules/lint-utils.js';
 import * as slUtils from './modules/sl-utils.js';
 import * as teiUtils from './modules/tei-utils.js';
 import ui from './ui.js';
@@ -18,6 +19,7 @@ import ui from './ui.js';
 export function registerModules(pluginManager) {
   /** @type {Record<string, unknown>} */
   const modules = {
+    'lint-utils': lintUtils,
     'sl-utils': slUtils,
     'tei-utils': teiUtils,
     'ui': ui,

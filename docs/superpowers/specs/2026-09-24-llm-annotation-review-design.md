@@ -308,17 +308,20 @@ proven by `fastapi_app/plugins/tei_annotator/extensions/tei-annotator.js:59-78`
 ```js
 const item = document.createElement('sl-menu-item');
 item.textContent = 'Review Annotations';
-item.disabled = true; // toggled by hasReviewableRules() on document load/change
-item.addEventListener('click', () => this.review());
+item.disabled = true; // refreshed via hasReviewableRules(), see below
+item.addEventListener('click', () => this.runReview());
 this.getDependency('tools').addMenuItems([item], 'annotation');
 ```
 
 - `'annotation'` is an existing category (already used by `tei_annotator`,
   `fastapi_app/plugins/tei_annotator/plugin.py:33`) — the item groups under
   the Tools menu's existing "Annotation" heading, no new category needed.
-- `disabled` starts `true` and is toggled by `hasReviewableRules()`,
-  re-evaluated on document load/change (state-update hook in the frontend
-  extension), mirroring how `tei-annotator.js` keeps a reference to its own
+- The item is added in `start()`. `disabled` starts `true` and is refreshed
+  from `hasReviewableRules()` on the `editorReady` event and on document
+  change (`onXmlChange`). It is not disabled for malformed XML (`getXmlTree()`
+  returns the last good tree); the backend answers 422 and the user gets the
+  "Annotation review failed" notice,
+  mirroring how `tei-annotator.js` keeps a reference to its own
   menu item(s) and toggles them post-construction.
 - `tools.addMenuItems(elements, category)` (`app/src/plugins/tools.js:94`)
   is the generic imperative Tools-menu API; both core `app/src/plugins/*.js`
@@ -327,10 +330,15 @@ this.getDependency('tools').addMenuItems([item], 'annotation');
 
 ## Part E — diagnostics + scoped "Propose fix" diff
 
-Findings become a **second `linter()` source** composed alongside
-`tei-validation`'s existing one (CodeMirror supports multiple simultaneous
-lint sources) — verify during implementation that both sources' diagnostics
-render coherently together in the same gutter/panel.
+Findings are merged into CodeMirror's single global diagnostic set through
+the `lint-utils` module (`app/src/modules/lint-utils.js`, reachable via
+`getDependency('lint-utils')`). A second `linter()` source is not viable:
+`setDiagnostics` replaces the whole set, so it would overwrite (or be
+overwritten by) `tei-validation`'s results. The extension stores its findings,
+tags its diagnostics with `source: 'annotation-review'`, and merges them with
+the foreign diagnostics currently in the editor. An `xmleditor` update listener
+re-merges the stored findings (deferred with `setTimeout`) whenever another
+source replaces the set.
 
 - Each finding becomes a `severity: "info"` `Diagnostic`, positioned at
   wherever `old` is found in the **current** editor text (re-verified
@@ -498,8 +506,6 @@ API", per direction.
 
 - Confirm `KisskiService`'s existing `ServiceRegistry` role doesn't overlap
   with the new registration (Part B).
-- Confirm multiple simultaneous `linter()` sources compose visibly/correctly
-  in the CodeMirror lint panel and gutter (Part E).
 - Confirm the exact merge-view accept/reject command names already used by
   `tei-wizard.js` (Part E), rather than assuming an API shape.
 - Confirm `sl-menu-item[type=checkbox]`'s manual check/uncheck toggling
