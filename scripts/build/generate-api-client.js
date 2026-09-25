@@ -17,7 +17,9 @@
  *   node scripts/build/generate-api-client.js app/src/modules/api-client-v1.js
  */
 
+/** @import { ChildProcess } from 'child_process' */
 import { spawn } from 'child_process';
+import { createServer } from 'net';
 import { writeFile, mkdir, readFile, utimes } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -27,8 +29,38 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..', '..');
 
-const SERVER_PORT = 8001;
-const API_URL = `http://localhost:${SERVER_PORT}`;
+// Chosen at startup (see findFreePort) so a stale server left on a fixed port
+// can never answer the schema request with an outdated OpenAPI document.
+let SERVER_PORT = 0;
+let API_URL = '';
+
+/**
+ * Ask the OS for an unused TCP port
+ * @returns {Promise<number>}
+ */
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Kill the server and its uvicorn child (`uv run` does not forward SIGTERM to it)
+ * @param {ChildProcess} serverProcess
+ */
+function stopServer(serverProcess) {
+  try {
+    process.kill(-serverProcess.pid, 'SIGTERM');
+  } catch {
+    serverProcess.kill();
+  }
+}
 
 // Parse output path from command line or use default
 const OUTPUT_FILE = process.argv[2]
@@ -39,11 +71,14 @@ const OUTPUT_FILE = process.argv[2]
  * Start FastAPI server on a specific port
  */
 async function startServer() {
+  SERVER_PORT = await findFreePort();
+  API_URL = `http://localhost:${SERVER_PORT}`;
   console.log(`Starting FastAPI server on port ${SERVER_PORT}...`);
 
   const serverProcess = spawn('uv', ['run', 'uvicorn', 'run_fastapi:app', '--port', SERVER_PORT.toString()], {
     cwd: ROOT_DIR,
-    stdio: 'pipe'
+    stdio: 'pipe',
+    detached: true
   });
 
   // Wait for server to be ready
@@ -51,7 +86,7 @@ async function startServer() {
     let output = '';
 
     const timeout = setTimeout(() => {
-      serverProcess.kill();
+      stopServer(serverProcess);
       reject(new Error('Server startup timeout'));
     }, 30000);
 
@@ -508,12 +543,12 @@ async function main() {
 
   } catch (error) {
     console.error('❌ Error generating client:', error.message);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     // Stop server
     if (serverProcess) {
       console.log('Stopping server...');
-      serverProcess.kill();
+      stopServer(serverProcess);
 
       // Wait for clean shutdown
       await new Promise(resolve => setTimeout(resolve, 1000));
