@@ -12,9 +12,9 @@ this mirrors: same model-listing filter, same GEMINI_API_KEY convention).
 import logging
 
 from google import genai
-from google.genai import types
+from google.genai import errors as genai_errors, types
 
-from fastapi_app.lib.llm.base import LLMModel, LLMProvider
+from fastapi_app.lib.llm.base import LLMModel, LLMProvider, LLMProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +70,15 @@ class GoogleLLMProvider(LLMProvider):
     ) -> str:
         if self._client is None:
             raise RuntimeError("Google LLM provider not configured (missing API key)")
-        response = await self._client.aio.models.generate_content(
-            model=model_id,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=temperature,
-            ),
-        )
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=model_id,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=temperature,
+                ),
+            )
+        except genai_errors.APIError as e:
+            raise LLMProviderError(f"{e.code} {e.message}") from e
         return response.text or ""

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.core.url_cache import UrlCache
-from fastapi_app.lib.llm import LLMProviderRegistry
+from fastapi_app.lib.llm import LLMProviderError, LLMProviderRegistry
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
@@ -87,6 +87,9 @@ async def review(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except UnusableResponseError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    except LLMProviderError as e:
+        logger.warning(f"annotation-review: provider '{body.provider_id}' failed: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM provider request failed: {e}") from e
     except requests.RequestException as e:
         logger.warning(f"annotation-review: provider '{body.provider_id}' request failed: {e}")
         raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e

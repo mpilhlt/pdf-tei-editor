@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.dependencies import require_authenticated_user
-from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderRegistry
+from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.routes import router
 
@@ -123,6 +123,16 @@ class TestReviewRoute(unittest.TestCase):
         )
         self.assertEqual(result.status_code, 502)
         self.assertIn("`temperature` is deprecated", result.json()["detail"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    def test_provider_error_returns_502_with_its_message(self, mock_run_review):
+        mock_run_review.side_effect = LLMProviderError("503 high demand")
+        result = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(result.status_code, 502)
+        self.assertIn("503 high demand", result.json()["detail"])
 
     @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
     def test_upstream_connection_failure_returns_502(self, mock_run_review):

@@ -72,3 +72,7 @@ class LLMProvider(ABC):
     ) -> str:
         """Run a single chat completion and return the response text."""
         ...
+
+
+class LLMProviderError(Exception):
+    """A provider's service rejected or failed a request (rate limit, overload, bad request); the message is user-presentable."""

@@ -7,6 +7,7 @@ Unit tests for the Google Gemini LLM provider connector.
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi_app.lib.llm import LLMProviderError
 from fastapi_app.plugins.google_llm.llm_provider import GoogleLLMProvider
 
 
@@ -127,6 +128,19 @@ class TestGoogleLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["contents"], "usr")
         self.assertEqual(call_kwargs["config"].system_instruction, "sys")
         self.assertEqual(call_kwargs["config"].temperature, 0.4)
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    async def test_sdk_api_errors_become_llm_provider_errors(self, mock_client_cls):
+        from google.genai import errors as genai_errors
+
+        error = genai_errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+        mock_client = MagicMock()
+        mock_client.aio.models.generate_content = AsyncMock(side_effect=error)
+        mock_client_cls.return_value = mock_client
+
+        provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
+        with self.assertRaisesRegex(LLMProviderError, "503.*high demand"):
+            await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
 
 
 if __name__ == "__main__":
