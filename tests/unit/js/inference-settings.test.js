@@ -127,6 +127,22 @@ describe('InferenceSettingsPlugin.getDefaultModel/setDefaultModel', () => {
   });
 });
 
+describe('InferenceSettingsPlugin.getModelLabel', () => {
+  it('returns "<provider label>/<model label>" for a known pair', () => {
+    const plugin = makePlugin();
+    plugin._providers = [{
+      id: 'kisski', label: 'KISSKI',
+      models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
+    }];
+    assert.strictEqual(plugin.getModelLabel('kisski', 'gemma-3'), 'KISSKI/Gemma 3');
+  });
+
+  it('falls back to the raw ids for an unknown pair', () => {
+    const plugin = makePlugin();
+    assert.strictEqual(plugin.getModelLabel('kisski', 'gemma-3'), 'kisski/gemma-3');
+  });
+});
+
 describe('InferenceSettingsPlugin._buildModelItem', () => {
   it('builds a checkbox item with provider/model data attributes', () => {
     const plugin = makePlugin();

@@ -75,6 +75,15 @@ export function findingsToDiagnostics(findings, docText, onProposeFix) {
   return diagnostics;
 }
 
+/**
+ * Escape text for use in the dialog's HTML message.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   /**
    * @param {PluginContext} context
@@ -204,17 +213,30 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Run a review with a spinner, show the findings and report the result.
-   * review() notifies on its own failure paths, so a null result is silent.
+   * Ask for confirmation naming the provider/model, then run a review with a
+   * spinner, show the findings and report the result. review() notifies on
+   * its own failure paths (including "no default model"), so a null result
+   * is silent.
    * @param {{providerId: string, modelId: string}} [override]
    * @returns {Promise<void>}
    */
   async runReview(override) {
+    const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
+    let spinnerText = 'Reviewing annotations…';
+    if (resolved) {
+      const label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
+      const confirmed = await this.getDependency('dialog').confirm(
+        `Review the annotations in the current document using ${escapeHtml(label)}?`,
+        'Review Annotations'
+      );
+      if (!confirmed) return;
+      spinnerText = `Reviewing annotations using ${label}…`;
+    }
     const ui = this.getDependency('ui');
-    ui.spinner.show('Reviewing annotations…');
+    ui.spinner.show(spinnerText);
     const xmlBefore = this.state?.xml;
     try {
-      const findings = await this.review(override);
+      const findings = await this.review(resolved ?? undefined);
       if (findings === null) return;
       // findings from a different document must not attach to another one
       if (this.state?.xml !== xmlBefore) return;

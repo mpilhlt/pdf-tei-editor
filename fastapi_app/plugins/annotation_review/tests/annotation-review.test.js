@@ -35,7 +35,7 @@ const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, fi
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], spinnerCalls = [], handlers = {};
+  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], spinnerCalls = [], handlers = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
     ui: { spinner: { show: (m) => spinnerCalls.push(['show', m]), hide: () => spinnerCalls.push(['hide']) } },
@@ -59,11 +59,15 @@ function buildExtension(opts = {}) {
     },
     'inference-settings': {
       getDefaultModel: () => opts.defaultModel ?? null,
+      getModelLabel: (providerId, modelId) => `${providerId} label/${modelId} label`,
+    },
+    dialog: {
+      confirm: async (message, title) => { confirmCalls.push({ message, title }); return opts.confirmAnswer ?? true; },
     },
   };
   if (opts.state) ext.state = opts.state;
   ext.callPluginApi = opts.callPluginApiImpl ?? (async () => { throw new Error('unexpected call'); });
-  return { ext, notifyCalls, lintCalls, updateListeners, mergeViews, menuAdds, spinnerCalls, handlers };
+  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, spinnerCalls, handlers };
 }
 
 describe('hasReviewableRules', () => {
@@ -404,5 +408,66 @@ describe('hardening', () => {
     const { ext, handlers } = buildExtension();
     await ext.start();
     assert.strictEqual('editorXmlNotWellFormed' in handlers, false);
+  });
+});
+
+describe('runReview confirmation', () => {
+  const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+
+  it('asks for confirmation naming the provider/model and puts it in the spinner text', async () => {
+    const { ext, confirmCalls, spinnerCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'kisski', modelId: 'gemma' },
+      callPluginApiImpl: async () => ({ findings: [] }),
+    });
+    await ext.runReview();
+    assert.strictEqual(
+      confirmCalls[0].message,
+      'Review the annotations in the current document using kisski label/gemma label?'
+    );
+    assert.strictEqual(spinnerCalls[0][1], 'Reviewing annotations using kisski label/gemma label…');
+  });
+
+  it('does nothing when the user cancels', async () => {
+    let apiCalled = false;
+    const { ext, spinnerCalls, lintCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'kisski', modelId: 'gemma' },
+      confirmAnswer: false,
+      callPluginApiImpl: async () => { apiCalled = true; return { findings: [] }; },
+    });
+    await ext.runReview();
+    assert.strictEqual(apiCalled, false);
+    assert.deepStrictEqual(spinnerCalls, []);
+    assert.strictEqual(lintCalls.length, 0);
+  });
+
+  it('escapes HTML in the label shown in the dialog', async () => {
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'a<b>', modelId: 'm&n' },
+      callPluginApiImpl: async () => ({ findings: [] }),
+    });
+    await ext.runReview();
+    assert.ok(confirmCalls[0].message.includes('a&lt;b&gt; label/m&amp;n label'));
+  });
+
+  it('skips the dialog and lets review() notify when no model is configured', async () => {
+    const { ext, confirmCalls, notifyCalls } = buildExtension({ getEditorialDeclGuides: () => rules });
+    await ext.runReview();
+    assert.strictEqual(confirmCalls.length, 0);
+    assert.match(notifyCalls[0][0], /No default model/);
+  });
+
+  it('uses an explicit override for the label and the request', async () => {
+    const calls = [];
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'kisski', modelId: 'gemma' },
+      callPluginApiImpl: async (e, m, params) => { calls.push(params); return { findings: [] }; },
+    });
+    await ext.runReview({ providerId: 'other', modelId: 'big' });
+    assert.ok(confirmCalls[0].message.includes('other label/big label'));
+    assert.strictEqual(calls[0].provider_id, 'other');
   });
 });

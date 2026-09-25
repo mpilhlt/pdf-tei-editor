@@ -122,6 +122,20 @@ export class InferenceSettingsPlugin extends Plugin {
   }
 
   /**
+   * Human-readable "<provider>/<model>" name for a provider/model pair, using
+   * the labels from the last fetch. Falls back to the raw ids for a pair that
+   * is not (or not yet) in `_providers`.
+   * @param {string} providerId
+   * @param {string} modelId
+   * @returns {string}
+   */
+  getModelLabel(providerId, modelId) {
+    const provider = this._providers.find(p => p.id === providerId);
+    const model = provider?.models.find(m => m.id === modelId);
+    return `${provider?.label ?? providerId}/${model?.label ?? modelId}`;
+  }
+
+  /**
    * Persist the default model and, if the submenu has been built, update
    * its checked state so only this item appears selected.
    * @param {string} providerId
