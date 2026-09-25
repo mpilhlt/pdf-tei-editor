@@ -955,7 +955,7 @@ from fastapi_app.lib.plugins.plugin_tools import escape_html
 safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
 ```
 
-**`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use). In development it extracts the API live from `app/src/modules/backend-plugin-sandbox.js`. In production that source directory is removed after the frontend build (see `Dockerfile`), so it instead reads the script pre-generated at build time into `app/web/sandbox-client.js` by `bin/generate-sandbox-client-script.py`. If you add a method to `PluginSandbox` (`backend-plugin-sandbox.js`), no action is needed beyond the normal build - the script is regenerated as part of the Docker build automatically.
+**`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use). In development it extracts the API live from `app/src/modules/backend-plugin-sandbox.js`. In production that source directory is removed after the frontend build (see `Dockerfile`), so it instead reads the script pre-generated at build time into `app/web/sandbox-client.js` by `scripts/build/generate-sandbox-client-script.py`. If you add a method to `PluginSandbox` (`backend-plugin-sandbox.js`), no action is needed beyond the normal build - the script is regenerated as part of the Docker build automatically.
 
 **`load_plugin_html()`** - Load an HTML template from `static/` and inject the sandbox client automatically:
 

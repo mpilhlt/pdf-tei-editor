@@ -3,7 +3,7 @@
 Quick script to inspect a TEI file structure.
 
 Usage:
-    uv run python bin/inspect-tei.py <stable_id>
+    uv run python scripts/dev/inspect-tei.py <stable_id>
 """
 
 import sys
@@ -98,7 +98,7 @@ def inspect_tei(stable_id: str):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: uv run python bin/inspect-tei.py <stable_id>")
+        print("Usage: uv run python scripts/dev/inspect-tei.py <stable_id>")
         sys.exit(1)
 
     inspect_tei(sys.argv[1])

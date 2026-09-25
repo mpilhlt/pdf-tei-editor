@@ -3,8 +3,8 @@
 Recursively scan files and perform replacements in both filenames and file contents.
 
 Usage:
-    python bin/fix-doc-ids.py <path>
-    python bin/fix-doc-ids.py <path> --dry-run
+    python bin/migrations/fix-doc-ids.py <path>
+    python bin/migrations/fix-doc-ids.py <path> --dry-run
 """
 
 import argparse

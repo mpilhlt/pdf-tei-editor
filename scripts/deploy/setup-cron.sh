@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Setup cron job for nightly demo reset
-# Usage: ./bin/setup-cron.sh --image <IMAGE> --fqdn <FQDN> [OPTIONS]
-# Example: ./bin/setup-cron.sh --image cboulanger/pdf-tei-editor:latest --fqdn demo.example.com
+# Usage: ./scripts/deploy/setup-cron.sh --image <IMAGE> --fqdn <FQDN> [OPTIONS]
+# Example: ./scripts/deploy/setup-cron.sh --image cboulanger/pdf-tei-editor:latest --fqdn demo.example.com
 
 set -e
 

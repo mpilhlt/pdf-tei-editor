@@ -1286,7 +1286,7 @@ Expected: PASS
 
 - [ ] Manual verification: with a running dev server and a document whose
   `editorialDecl` has at least one `machine`-subtype ref and a configured
-  default model (Part F), confirm via `node bin/debug-api.js POST
+  default model (Part F), confirm via `node scripts/dev/debug-api.js POST
   /api/plugins/annotation-review/review '{"xml": "...", "provider_id":
   "...", "model_id": "..."}'` that the endpoint returns a `findings` array
   shaped as expected. There is no UI trigger yet (Part D) — this is a

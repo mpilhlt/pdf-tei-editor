@@ -70,16 +70,16 @@ Before using any method on a class or module:
 
 ### Debugging Live Application
 
-When debugging, you can also use a running instance of the application and use `bin/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
+When debugging, you can also use a running instance of the application and use `scripts/dev/debug-api.js` to test API endpoints directly. If it is not running, ask the user to start it.
 
 ```bash
 # Authenticate and call any endpoint
-node bin/debug-api.js <method> <path> [json-params]
+node scripts/dev/debug-api.js <method> <path> [json-params]
 
 # Examples:
-node bin/debug-api.js GET /api/v1/plugins
-node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
-node bin/debug-api.js GET /api/v1/collections/test/files
+node scripts/dev/debug-api.js GET /api/v1/plugins
+node scripts/dev/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+node scripts/dev/debug-api.js GET /api/v1/collections/test/files
 ```
 
 The script:

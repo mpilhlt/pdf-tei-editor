@@ -9,7 +9,7 @@ This script enriches TEI documents with complete metadata from:
 Updates both TEI biblStruct and database doc_metadata.
 
 Usage:
-    uv run python bin/update-tei-metadata.py [--dry-run] [--limit N] [--force]
+    uv run python bin/migrations/update-tei-metadata.py [--dry-run] [--limit N] [--force]
 
 Options:
     --dry-run    Show what would be changed without saving

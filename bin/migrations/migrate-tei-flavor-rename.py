@@ -15,7 +15,7 @@ framework. It is idempotent: a second run reports already-migrated files and
 changes nothing.
 
 Usage:
-    uv run python bin/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [options]
+    uv run python bin/migrations/migrate-tei-flavor-rename.py <old-flavor> <new-flavor> [options]
 
 Options:
     --dry-run     Show what would change without writing
@@ -23,7 +23,7 @@ Options:
     -v/--verbose  Enable debug logging
 
 Example:
-    uv run python bin/migrate-tei-flavor-rename.py \\
+    uv run python bin/migrations/migrate-tei-flavor-rename.py \\
         article/dh-law-footnotes article/footnotes-refs --dry-run
 """
 

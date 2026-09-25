@@ -6,7 +6,7 @@
  * with @typedef declarations that mirror the createNavigableElement() hierarchy
  * produced at runtime by ui-system.js.
  *
- * Usage: node bin/generate-ui-types.js
+ * Usage: node scripts/build/generate-ui-types.js
  */
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from 'fs'

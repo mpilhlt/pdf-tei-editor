@@ -3,7 +3,7 @@
 Run database migrations manually.
 
 Usage:
-    python bin/run-migration.py [--db-path PATH] [--dry-run]
+    python bin/migrations/run-migration.py [--db-path PATH] [--dry-run]
 """
 
 import argparse

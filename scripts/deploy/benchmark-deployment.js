@@ -4,7 +4,7 @@
  * Benchmarks response times between two deployments of the same application.
  *
  * Usage:
- *   node bin/benchmark-deployment.js [options]
+ *   node scripts/deploy/benchmark-deployment.js [options]
  *
  * Options:
  *   --rounds <n>         Number of rounds per endpoint (default: 10)

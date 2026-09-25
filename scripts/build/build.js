@@ -4,9 +4,9 @@
  * PDF TEI Editor Build Script
  *
  * Usage:
- *   node bin/build.js                    # Run all steps
- *   node bin/build.js --steps=step1,step2  # Run specific steps
- *   node bin/build.js --skip=step1,step2   # Skip specific steps
+ *   node scripts/build/build.js                    # Run all steps
+ *   node scripts/build/build.js --steps=step1,step2  # Run specific steps
+ *   node scripts/build/build.js --skip=step1,step2   # Skip specific steps
  *
  * Available steps:
  *   - plugins: Generate plugin-registry.js and validate plugins.js
@@ -63,13 +63,13 @@ if (stepsToSkip.size > 0) {
 // Define build steps
 /** @type {Record<string, () => void>} */
 const buildSteps = {
-  plugins: () => runCommand('node bin/generate-plugins.js', 'Generating plugin registry'),
-  modules: () => runCommand('node bin/generate-modules.js', 'Generating module registry'),
-  importmap: () => runCommand('node bin/generate-importmap.js', 'Updating the importmap'),
-  icons: () => runCommand('uv run python bin/compile-sl-icons.py', 'Compiling the app icons'),
-  templates: () => runCommand('node bin/bundle-templates.js', 'Bundling templates'),
-  version: () => runCommand('node bin/generate-version.js', 'Generating version file'),
-  pdfjs: () => runCommand('node bin/copy-pdfjs.js', 'Copying PDF.js files for production'),
+  plugins: () => runCommand('node scripts/build/generate-plugins.js', 'Generating plugin registry'),
+  modules: () => runCommand('node scripts/build/generate-modules.js', 'Generating module registry'),
+  importmap: () => runCommand('node scripts/build/generate-importmap.js', 'Updating the importmap'),
+  icons: () => runCommand('uv run python scripts/build/compile-sl-icons.py', 'Compiling the app icons'),
+  templates: () => runCommand('node scripts/build/bundle-templates.js', 'Bundling templates'),
+  version: () => runCommand('node scripts/build/generate-version.js', 'Generating version file'),
+  pdfjs: () => runCommand('node scripts/build/copy-pdfjs.js', 'Copying PDF.js files for production'),
   highlight: () => {
     const rollupPath = path.join('node_modules', '.bin', 'rollup');
     runCommand(`"${rollupPath}" -c rollup.config.highlight.js`, 'Bundling highlight.js');

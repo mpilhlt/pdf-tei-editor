@@ -10,7 +10,7 @@
  * - Exits with container's exit code
  *
  * Usage:
- *   node bin/test-container.js [--no-cache] [test args...]
+ *   node scripts/deploy/test-container.js [--no-cache] [test args...]
  *   npm run test:container [-- [--no-cache] [test args...]]
  *
  * Examples:

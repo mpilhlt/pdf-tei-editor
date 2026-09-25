@@ -2,8 +2,8 @@
 
 # Maintenance script for data/db/metadata.db.
 # Usage:
-#   python bin/update-metadata.py run <function_name>
-#   python bin/update-metadata.py revert
+#   python bin/migrations/update-metadata.py run <function_name>
+#   python bin/migrations/update-metadata.py revert
 
 import sys
 import sqlite3
@@ -37,8 +37,8 @@ def print_help() -> None:
     functions_list = '\n'.join(f'  {n}  -  {_runnable_functions[n].__doc__ or ""}' for n in names)
     print(
         "Usage:\n"
-        "  python bin/update-metadata.py run <function_name>\n"
-        "  python bin/update-metadata.py revert\n"
+        "  python bin/migrations/update-metadata.py run <function_name>\n"
+        "  python bin/migrations/update-metadata.py revert\n"
         "\n"
         "Commands:\n"
         "  run <function_name>  Create a timestamped backup, then run the named function\n"

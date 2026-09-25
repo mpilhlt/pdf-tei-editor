@@ -7,7 +7,7 @@
  * the script exits with code 1 to signal that regeneration is needed.
  *
  * Usage:
- *   node bin/check-client-outdated.js
+ *   node scripts/build/check-client-outdated.js
  *   Returns 0 if client is up-to-date, 1 if outdated
  *
  * Typically used in:

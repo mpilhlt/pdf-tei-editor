@@ -9,12 +9,12 @@
  * 4. Writes to specified output file
  *
  * Usage:
- *   node bin/generate-api-client.js [output-path]
+ *   node scripts/build/generate-api-client.js [output-path]
  *
  * Examples:
- *   node bin/generate-api-client.js
- *   node bin/generate-api-client.js fastapi_app/api-client-v1.js
- *   node bin/generate-api-client.js app/src/modules/api-client-v1.js
+ *   node scripts/build/generate-api-client.js
+ *   node scripts/build/generate-api-client.js fastapi_app/api-client-v1.js
+ *   node scripts/build/generate-api-client.js app/src/modules/api-client-v1.js
  */
 
 import { spawn } from 'child_process';

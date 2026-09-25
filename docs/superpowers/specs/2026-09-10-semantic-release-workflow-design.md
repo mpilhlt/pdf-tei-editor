@@ -87,7 +87,7 @@ New dev dependencies: `semantic-release`, `@semantic-release/changelog`,
   the bot's push to `main`. (Belt and braces: pushes made with `GITHUB_TOKEN` do
   not start new workflow runs either.)
 - `@semantic-release/npm` with `npmPublish: false` bumps `package.json` only, so
-  `bin/generate-version.js` and the Docker `version` build step need no changes.
+  `scripts/build/generate-version.js` and the Docker `version` build step need no changes.
 - `CHANGELOG.md` is a new committed file at the repo root, seeded with the current
   `0.57.2` entry.
 - The GitHub-Release `docker pull` footer (previously produced by the shell in

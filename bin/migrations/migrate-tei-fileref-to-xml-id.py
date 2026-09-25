@@ -9,7 +9,7 @@ For each TEI file in the database:
 - Serializes back using serialize_tei_with_formatted_header()
 
 Usage:
-    uv run python bin/migrate-tei-fileref-to-xml-id.py [--dry-run] [--limit N]
+    uv run python bin/migrations/migrate-tei-fileref-to-xml-id.py [--dry-run] [--limit N]
 
 Options:
     --dry-run    Show what would be changed without saving

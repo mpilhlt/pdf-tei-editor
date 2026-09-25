@@ -108,7 +108,7 @@ def main():
                 print(f"  Got: {file_path}")
         
         # Stage and commit the changes
-        run_command("node bin/generate-api-client.js")
+        run_command("node scripts/build/generate-api-client.js")
         run_command("git add .")
         run_command(f"git commit --no-verify -m \"Committing changes for branch {branch_name}\"")
         print(f"  Committed changes for {branch_name}")

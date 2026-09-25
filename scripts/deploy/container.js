@@ -297,7 +297,7 @@ async function handleBuild(options) {
   console.log('[SUCCESS] Build completed successfully!');
   console.log('[INFO] Image available locally for testing:');
   console.log(`[INFO]   ${containerCmd} run -p 8000:8000 ${APP_NAME}:${tag}`);
-  console.log(`[INFO] To push to registry, use: node bin/container.js push --tag ${tag}`);
+  console.log(`[INFO] To push to registry, use: node scripts/deploy/container.js push --tag ${tag}`);
 }
 
 // ============================================================================
@@ -758,7 +758,7 @@ async function handleStart(options) {
         console.error(`\nTried:`);
         console.error(`   1. Local image: ${localImageName}`);
         console.error(`   2. Registry image: ${registryImageName}`);
-        console.error(`\nBuild locally with: node bin/container.js build --tag ${tag}`);
+        console.error(`\nBuild locally with: node scripts/deploy/container.js build --tag ${tag}`);
         process.exit(1);
       }
     }
@@ -804,7 +804,7 @@ async function handleStart(options) {
       console.log(`\nTo view logs:`);
       console.log(`   ${containerCmd} logs -f ${name}`);
       console.log(`\nTo stop:`);
-      console.log(`   node bin/container.js stop --name ${name}`);
+      console.log(`   node scripts/deploy/container.js stop --name ${name}`);
     }
   } catch (error) {
     process.exit(1);
@@ -1323,7 +1323,7 @@ async function handleDeploy(options) {
     console.log('[ERROR] Deploy requires Linux-specific tools: nginx, certbot, systemctl');
     console.log();
     console.log('[INFO] For Windows deployment, use the basic start command:');
-    console.log('[INFO]   node bin/container.js start --tag <tag> --port <port>');
+    console.log('[INFO]   node scripts/deploy/container.js start --tag <tag> --port <port>');
     console.log();
     console.log('[INFO] Or deploy on a Linux server using this command');
     process.exit(1);
@@ -1332,7 +1332,7 @@ async function handleDeploy(options) {
   // Validate FQDN
   if (!options.fqdn) {
     console.log('[ERROR] FQDN is required for deployment');
-    console.log('[INFO] Usage: node bin/container.js deploy --fqdn <FQDN>');
+    console.log('[INFO] Usage: node scripts/deploy/container.js deploy --fqdn <FQDN>');
     process.exit(1);
   }
 
@@ -1343,9 +1343,9 @@ async function handleDeploy(options) {
   // Check for root access FIRST if nginx/ssl needed
   if ((useNginx || useSSL) && process.getuid && process.getuid() !== 0) {
     console.log('[ERROR] This command needs to be run with sudo for nginx/SSL configuration');
-    console.log('[INFO] Usage: sudo env "PATH=$PATH" node bin/container.js deploy --fqdn <FQDN>');
+    console.log('[INFO] Usage: sudo env "PATH=$PATH" node scripts/deploy/container.js deploy --fqdn <FQDN>');
     console.log('[INFO] Or configure sudoers to preserve PATH: Defaults env_keep += "PATH"');
-    console.log('[INFO] To skip nginx/SSL, use: node bin/container.js deploy --fqdn <FQDN> --no-nginx --no-ssl');
+    console.log('[INFO] To skip nginx/SSL, use: node scripts/deploy/container.js deploy --fqdn <FQDN> --no-nginx --no-ssl');
     process.exit(1);
   }
 
@@ -1532,7 +1532,7 @@ async function handleDeploy(options) {
     console.log('[ERROR]', err instanceof Error ? err.message : String(err));
     console.log();
     console.log(`[INFO] You can retry with:`);
-    console.log(`   node bin/container.js start \\`);
+    console.log(`   node scripts/deploy/container.js start \\`);
     console.log(`     --name ${containerName} \\`);
     console.log(`     --port ${port} \\`);
     console.log(`     --restart unless-stopped`);
@@ -1706,41 +1706,41 @@ program
   .addHelpText('after', `
 Examples:
   # Production deployment with external data directory
-  sudo env "PATH=$PATH" node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn editor.company.com \\
     --data-dir /opt/${APP_NAME}/data \\
     --pull
 
   # Demo deployment (no external volumes, no persistence)
-  sudo env "PATH=$PATH" node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn demo.example.com \\
     --type demo \\
     --pull
 
   # Deploy without SSL (HTTP only)
-  sudo env "PATH=$PATH" node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn local.test \\
     --no-ssl
 
   # Deploy without nginx/SSL (just container)
-  node bin/container.js deploy \\
+  node scripts/deploy/container.js deploy \\
     --fqdn test.local \\
     --no-nginx --no-ssl
 
   # With environment variables (transfer from host)
-  GEMINI_API_KEY=your-key LOG_LEVEL=WARNING sudo env "PATH=$PATH" node bin/container.js deploy \\
+  GEMINI_API_KEY=your-key LOG_LEVEL=WARNING sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn app.example.com \\
     --env GEMINI_API_KEY \\
     --env LOG_LEVEL
 
   # With environment variables (specify values directly)
-  sudo env "PATH=$PATH" node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn app.example.com \\
     --env GEMINI_API_KEY=your-key \\
     --env LOG_LEVEL=WARNING
 
   # Automated deployment (skip confirmation)
-  sudo env "PATH=$PATH" node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn app.example.com \\
     --data-dir /opt/${APP_NAME}/data \\
     --yes

@@ -31,8 +31,8 @@ Target structure:
     └── collection2/
 
 Usage:
-    python bin/preprocess_legacy_files.py data/webdav-data data/webdav-data-preprocessed
-    python bin/preprocess_legacy_files.py data/webdav-data data/webdav-data-preprocessed --dry-run
+    python bin/migrations/preprocess_legacy_files.py data/webdav-data data/webdav-data-preprocessed
+    python bin/migrations/preprocess_legacy_files.py data/webdav-data data/webdav-data-preprocessed --dry-run
 """
 
 import argparse

@@ -4,15 +4,15 @@
  * Deployment Wrapper Script
  *
  * Reads environment variables from a file and deploys a container
- * using bin/container.js deploy with appropriate parameters.
+ * using scripts/deploy/container.js deploy with appropriate parameters.
  *
  * Usage:
- *   node bin/deploy.js <env-file>
+ *   node scripts/deploy/deploy.js <env-file>
  *
  * Examples:
- *   node bin/deploy.js .env.example.org
- *   node bin/deploy.js config/production.env
- *   node bin/deploy.js /path/to/deployment.env
+ *   node scripts/deploy/deploy.js .env.example.org
+ *   node scripts/deploy/deploy.js config/production.env
+ *   node scripts/deploy/deploy.js /path/to/deployment.env
  *
  * The script:
  * - Passes all regular variables via --env VAR_NAME
@@ -82,12 +82,12 @@ function main() {
   if (args.length === 0) {
     console.error('[ERROR] Missing required parameter: <env-file>');
     console.error();
-    console.error('Usage: node bin/deploy.js <env-file>');
+    console.error('Usage: node scripts/deploy/deploy.js <env-file>');
     console.error();
     console.error('Examples:');
-    console.error('  node bin/deploy.js .env.example.org');
-    console.error('  node bin/deploy.js config/production.env');
-    console.error('  node bin/deploy.js /path/to/deployment.env');
+    console.error('  node scripts/deploy/deploy.js .env.example.org');
+    console.error('  node scripts/deploy/deploy.js config/production.env');
+    console.error('  node scripts/deploy/deploy.js /path/to/deployment.env');
     process.exit(1);
   }
 
@@ -130,7 +130,7 @@ function main() {
   dotenv.config({ path: resolvedPath });
 
   // Build command
-  const cmdParts = ['node', 'bin/container.js', 'deploy'];
+  const cmdParts = ['node', 'scripts/deploy/container.js', 'deploy'];
   cmdParts.push(...deployOptions);
   cmdParts.push(...containerEnv);
 

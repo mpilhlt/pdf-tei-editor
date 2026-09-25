@@ -100,14 +100,14 @@ The directory is created automatically. To force a fresh extraction for a docume
 - `internet_access:1.1.1.1` succeeds but `grobid_health` fails → problem is specific to the GROBID host (overloaded, sleeping HF Space, etc.)
 - Both `internet_access` and `grobid_health` fail → the server has no outbound internet
 
-**Example (using `bin/debug-api.js`):**
+**Example (using `scripts/dev/debug-api.js`):**
 
 ```bash
 # Local instance
-node bin/debug-api.js GET /api/plugins/grobid/diagnostics
+node scripts/dev/debug-api.js GET /api/plugins/grobid/diagnostics
 
 # Remote instance with separate credentials
-node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
+node scripts/dev/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
 ```
 
 ### Cancel in-progress download

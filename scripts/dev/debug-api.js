@@ -4,16 +4,16 @@
  * Debug API - Call any API endpoint with authentication
  *
  * Usage:
- *   node bin/debug-api.js [--env-path <file>] <method> <path> [json-params]
+ *   node scripts/dev/debug-api.js [--env-path <file>] <method> <path> [json-params]
  *
  * Options:
  *   --env-path <file>  Path to a custom .env file (default: .env)
  *
  * Examples:
- *   node bin/debug-api.js GET /api/v1/plugins
- *   node bin/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
- *   node bin/debug-api.js GET /api/v1/collections/test/files
- *   node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
+ *   node scripts/dev/debug-api.js GET /api/v1/plugins
+ *   node scripts/dev/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
+ *   node scripts/dev/debug-api.js GET /api/v1/collections/test/files
+ *   node scripts/dev/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
  */
 
 import { createHash } from 'crypto';
@@ -120,11 +120,11 @@ async function main() {
   }
 
   if (args.length < 2) {
-    console.error('Usage: node bin/debug-api.js [--env-path <file>] <method> <path> [json-params]');
+    console.error('Usage: node scripts/dev/debug-api.js [--env-path <file>] <method> <path> [json-params]');
     console.error('\nExamples:');
-    console.error('  node bin/debug-api.js GET /api/v1/plugins');
-    console.error('  node bin/debug-api.js POST /api/v1/extract \'{"extractor":"grobid","file_id":"abc"}\'');
-    console.error('  node bin/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics');
+    console.error('  node scripts/dev/debug-api.js GET /api/v1/plugins');
+    console.error('  node scripts/dev/debug-api.js POST /api/v1/extract \'{"extractor":"grobid","file_id":"abc"}\'');
+    console.error('  node scripts/dev/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics');
     process.exit(1);
   }
 
