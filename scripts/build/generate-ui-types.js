@@ -14,7 +14,7 @@ import { join, dirname, basename } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const TEMPLATES_DIR = join(__dirname, '../..', 'app', 'src', 'templates')
+const TEMPLATES_DIR = join(__dirname, '..', '..', 'app', 'src', 'templates')
 
 /** @type {Record<string, string>} Shoelace/HTML tag → JSDoc type name */
 const TAG_TYPE_MAP = {

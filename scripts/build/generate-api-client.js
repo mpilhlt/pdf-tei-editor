@@ -25,7 +25,7 @@ import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const ROOT_DIR = join(__dirname, '../..');
+const ROOT_DIR = join(__dirname, '..', '..');
 
 const SERVER_PORT = 8001;
 const API_URL = `http://localhost:${SERVER_PORT}`;
