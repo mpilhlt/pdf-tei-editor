@@ -110,7 +110,7 @@ async function loadTemplateFile(filePath) {
 export async function main() {
   console.log('🔍 Analyzing template registrations...');
   
-  const projectRoot = resolve(__dirname, '..');
+  const projectRoot = resolve(__dirname, '..', '..');
   const appSrcDir = join(projectRoot, 'app', 'src');
   const outputPath = join(projectRoot, 'app', 'web', 'templates.json');
   

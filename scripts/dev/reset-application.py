@@ -32,8 +32,8 @@ def reset_application():
     """
     Reset the application by moving the data directory and log files to trash.
     """
-    # Get the project root directory (parent of bin/)
-    project_root = Path(__file__).resolve().parent.parent
+    # Get the project root directory (repository root)
+    project_root = Path(__file__).resolve().parent.parent.parent
     data_dir = project_root / 'data'
     log_dir = project_root / 'log'
 
@@ -112,7 +112,7 @@ def reset_application():
         print("Restarting development server...")
         try:
             # Get the project root directory
-            project_root = Path(__file__).resolve().parent.parent
+            project_root = Path(__file__).resolve().parent.parent.parent
             start_dev_script = project_root / 'bin' / 'start-dev'
 
             subprocess.run(

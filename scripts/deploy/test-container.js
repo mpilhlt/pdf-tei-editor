@@ -26,7 +26,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(__dirname);
+const projectRoot = dirname(dirname(__dirname));
 
 /**
  * Detect container tool (podman or docker)

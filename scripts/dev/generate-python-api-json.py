@@ -15,7 +15,7 @@ from typing import Any
 from datetime import datetime
 
 # Add project root to path so fastapi_app can be imported
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def extract_module_api(module_name: str) -> dict[str, Any]:

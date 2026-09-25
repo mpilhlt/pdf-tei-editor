@@ -1,6 +1,6 @@
 import { writeImportmaps } from "@jsenv/importmap-node-module";
 
-const directoryUrl = new URL("./..", import.meta.url);
+const directoryUrl = new URL("./../..", import.meta.url);
 
 // @ts-ignore
 await writeImportmaps({

@@ -13,7 +13,7 @@ falls back to when `app/src` is missing.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script

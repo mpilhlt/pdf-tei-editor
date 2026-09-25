@@ -19,7 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.join(__dirname, '..');
+const projectRoot = path.join(__dirname, '../..');
 const modulesDir = path.join(projectRoot, 'app', 'src', 'modules');
 const srcDir = path.join(projectRoot, 'app', 'src');
 const outputPath = path.join(srcDir, 'module-registry.js');
