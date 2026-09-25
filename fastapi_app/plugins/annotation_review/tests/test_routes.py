@@ -15,6 +15,7 @@ from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
+from fastapi_app.plugins.annotation_review import routes as routes_module
 from fastapi_app.plugins.annotation_review.routes import router
 
 TEI_DOC = """<?xml version="1.0"?>
@@ -49,7 +50,7 @@ class _StubProvider(LLMProvider):
 class TestReviewRoute(unittest.TestCase):
     def setUp(self):
         # model access is covered in test_llm_model_access.py; keep these tests independent of the real config
-        patcher = mock.patch("fastapi_app.plugins.annotation_review.routes.check_model_access")
+        patcher = mock.patch.object(routes_module, "check_model_access")
         patcher.start()
         self.addCleanup(patcher.stop)
         self.app = FastAPI()
@@ -127,7 +128,7 @@ class TestReviewRoute(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
 
-    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    @mock.patch.object(routes_module, "run_review")
     def test_upstream_provider_failure_returns_502_with_the_provider_message(self, mock_run_review):
         response = mock.MagicMock()
         response.json.return_value = {"error": {"message": "`temperature` is deprecated for this model."}}
@@ -139,7 +140,7 @@ class TestReviewRoute(unittest.TestCase):
         self.assertEqual(result.status_code, 502)
         self.assertIn("`temperature` is deprecated", result.json()["detail"])
 
-    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    @mock.patch.object(routes_module, "run_review")
     def test_provider_error_returns_502_with_its_message(self, mock_run_review):
         mock_run_review.side_effect = LLMProviderError("503 high demand")
         result = self.client.post(
@@ -149,7 +150,7 @@ class TestReviewRoute(unittest.TestCase):
         self.assertEqual(result.status_code, 502)
         self.assertIn("503 high demand", result.json()["detail"])
 
-    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    @mock.patch.object(routes_module, "run_review")
     def test_upstream_connection_failure_returns_502(self, mock_run_review):
         mock_run_review.side_effect = requests.ConnectionError("no route to host")
         result = self.client.post(
@@ -159,7 +160,7 @@ class TestReviewRoute(unittest.TestCase):
         self.assertEqual(result.status_code, 502)
         self.assertIn("LLM provider request failed", result.json()["detail"])
 
-    @mock.patch("fastapi_app.plugins.annotation_review.routes.run_review")
+    @mock.patch.object(routes_module, "run_review")
     def test_unusable_model_response_returns_502(self, mock_run_review):
         mock_run_review.side_effect = UnusableResponseError("The model returned an empty response")
         result = self.client.post(
@@ -193,7 +194,7 @@ class TestReviewRouteModelAccess(unittest.TestCase):
         LLMProviderRegistry.reset_instance()
         self.app.dependency_overrides.clear()
 
-    @mock.patch("fastapi_app.plugins.annotation_review.routes.check_model_access", side_effect=ModelAccessDenied("nope"))
+    @mock.patch.object(routes_module, "check_model_access", side_effect=ModelAccessDenied("nope"))
     def test_denied_model_returns_403_without_calling_the_provider(self, mock_check):
         response = self.client.post(
             "/api/plugins/annotation-review/review",
