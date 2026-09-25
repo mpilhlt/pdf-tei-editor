@@ -106,13 +106,16 @@ class MyPlugin(Plugin):
 
 ### Plugin Registration
 
-In `__init__.py`:
+Plugins are discovered from the filesystem: `PluginRegistry` imports `fastapi_app.plugins.<dir>.plugin`, finds the `Plugin` subclass in it and instantiates it. No registration code is required. By convention `__init__.py` re-exports the plugin class (and the router, if any):
 
 ```python
+# __init__.py
 from .plugin import MyPlugin
 
-plugin = MyPlugin()
+__all__ = ["MyPlugin"]
 ```
+
+Do not put required initialization in `__init__.py` (see [Initialization Pattern](#initialization-pattern)).
 
 ## Service Registry
 
@@ -216,21 +219,22 @@ Plugins often need configuration that can be set via environment variables or co
 
 ### Initialization Pattern
 
-**Initialize configuration values at plugin registration time** in `__init__.py`. This ensures config keys are created from environment variables when the plugin is loaded:
+**Initialize configuration values in the plugin class `__init__()`**, not in the package's `__init__.py`. Importing `plugin.py` does run `__init__.py` as a side effect, but the fallback loader (`spec_from_file_location` on `plugin.py`) and route loading (`routes.py` by file path) bypass it, so nothing there is guaranteed to run. The plugin constructor always runs when the plugin is loaded, so config keys are created from environment variables at that point:
 
 ```python
-# __init__.py
+# plugin.py
+from fastapi_app.lib.plugins.plugin_base import Plugin
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
-# Initialize config values from environment variables
-get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
-get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
-get_plugin_config("plugin.my-plugin.timeout", "MY_PLUGIN_TIMEOUT", default=30, value_type="number")
-
-from .plugin import MyPlugin
-
-plugin = MyPlugin()
+class MyPlugin(Plugin):
+    def __init__(self) -> None:
+        # Initialize config values from environment variables
+        get_plugin_config("plugin.my-plugin.enabled", "MY_PLUGIN_ENABLED", default=False, value_type="boolean")
+        get_plugin_config("plugin.my-plugin.api-key", "MY_PLUGIN_API_KEY", default=None)
+        get_plugin_config("plugin.my-plugin.timeout", "MY_PLUGIN_TIMEOUT", default=30, value_type="number")
 ```
+
+For plugins with many keys, put them in an `init_plugin_config()` function in a `config.py` and call it from the constructor (see `tei_annotator/config.py`, `webdav_sync/config.py`).
 
 **Access configuration in plugin methods** using `get_config()`:
 
@@ -265,7 +269,7 @@ async def custom_action():
 
 **Key points**:
 
-- Initialize config in `__init__.py` using `get_plugin_config()` (creates keys from env vars)
+- Initialize config in the plugin class `__init__()` using `get_plugin_config()` (creates keys from env vars)
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - Config values are automatically created from environment variables on first initialization
 - Routes and plugin methods use the same `get_config()` pattern
