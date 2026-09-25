@@ -383,6 +383,19 @@ source replaces the set.
 
 ## Part F — default-model selection plugin
 
+> **Access model (supersedes the per-browser default below):** the default
+> model is installation-wide and only admins can set it
+> (`PUT /api/v1/llm/default-model`, stored as `llm.default-model.provider` /
+> `llm.default-model.model` in the config). Any user can pick a model for
+> their own session (sessionStorage), which takes precedence over the
+> default. Providers flag each model `free` (KISSKI: true, others: false);
+> non-admins can only select free models or the configured default, and
+> `annotation-review`'s `/review` route enforces the same rule server-side
+> (`lib/llm/model_access.py`). The model filter is configured with
+> `llm.model-filter.include` and `llm.model-filter.exclude` (env
+> `LLM_MODEL_FILTER_INCLUDE` / `LLM_MODEL_FILTER_EXCLUDE`): comma-separated,
+> double-quoted regexes matched against `"<Provider>/<Model>"`; exclude wins.
+
 New **core** frontend plugin, `app/src/plugins/inference-settings.js`
 (dependency name `inference-settings`) — not a backend-plugin extension,
 since it isn't owned by any single backend plugin; it's generic

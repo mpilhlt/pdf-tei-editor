@@ -30,6 +30,16 @@ global.localStorage = (() => {
   };
 })();
 
+global.sessionStorage = (() => {
+  const store = {};
+  return {
+    getItem: (key) => store[key] ?? null,
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+    clear: () => { Object.keys(store).forEach(k => delete store[k]); }
+  };
+})();
+
 // notify()'s real implementation instantiates Shoelace's SlAlert and calls
 // .toast(), which under jsdom leaves a dangling promise (waiting on a CSS
 // transitionend event that jsdom never fires) - stub it, following the
@@ -71,7 +81,7 @@ function flushMicrotasks() {
 // leak into unrelated later tests - previously invisible because the menu
 // item's label was static, but now that it reflects the stored default
 // (_updateMenuItemLabel()), a leaked selection changes what later tests see.
-beforeEach(() => { global.localStorage.clear(); });
+beforeEach(() => { global.localStorage.clear(); global.sessionStorage.clear(); });
 
 describe('InferenceSettingsPlugin construction', () => {
   it('has the expected name and dependencies', () => {
@@ -95,7 +105,7 @@ describe('InferenceSettingsPlugin.getDefaultModel/setDefaultModel', () => {
       id: 'kisski', label: 'KISSKI',
       models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
     }];
-    plugin.setDefaultModel('kisski', 'gemma-3');
+    plugin.setSessionModel('kisski', 'gemma-3');
     assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'gemma-3' });
   });
 
@@ -105,7 +115,7 @@ describe('InferenceSettingsPlugin.getDefaultModel/setDefaultModel', () => {
       id: 'kisski', label: 'KISSKI',
       models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
     }];
-    plugin.setDefaultModel('kisski', 'gemma-3');
+    plugin.setSessionModel('kisski', 'gemma-3');
     plugin._providers = []; // provider no longer present on the next fetch
     assert.strictEqual(plugin.getDefaultModel(), null);
   });
@@ -116,14 +126,14 @@ describe('InferenceSettingsPlugin.getDefaultModel/setDefaultModel', () => {
       id: 'kisski', label: 'KISSKI',
       models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
     }];
-    plugin.setDefaultModel('kisski', 'gemma-3');
+    plugin.setSessionModel('kisski', 'gemma-3');
     plugin._providers = [{ id: 'kisski', label: 'KISSKI', models: [] }]; // model removed
     assert.strictEqual(plugin.getDefaultModel(), null);
   });
 
   it('setDefaultModel does not throw when no submenu has been built yet', () => {
     const plugin = makePlugin();
-    assert.doesNotThrow(() => plugin.setDefaultModel('kisski', 'gemma-3'));
+    assert.doesNotThrow(() => plugin.setSessionModel('kisski', 'gemma-3'));
   });
 });
 
@@ -257,7 +267,7 @@ describe('InferenceSettingsPlugin._populateSubmenu', () => {
     plugin._submenu = document.createElement('sl-menu');
     const providers = [{ id: 'kisski', label: 'KISSKI', models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }] }];
     plugin._providers = providers;
-    plugin.setDefaultModel('kisski', 'gemma-3');
+    plugin.setSessionModel('kisski', 'gemma-3');
     plugin._populateSubmenu(providers);
     const item = plugin._submenu.querySelector('sl-menu-item');
     assert.strictEqual(item.checked, true);
@@ -315,7 +325,7 @@ describe('InferenceSettingsPlugin._onSelect', () => {
 });
 
 describe('InferenceSettingsPlugin toast notification on selection', () => {
-  beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
+  beforeEach(() => { global.localStorage.clear(); global.sessionStorage.clear(); notifyCalls.length = 0; });
 
   it('shows a toast naming the newly selected provider/model', () => {
     const plugin = makePlugin();
@@ -332,7 +342,7 @@ describe('InferenceSettingsPlugin toast notification on selection', () => {
     plugin._onSelect({ detail: { item } });
 
     assert.strictEqual(notifyCalls.length, 1);
-    assert.strictEqual(notifyCalls[0][0], 'Default inference model is now: KISSKI/Gemma 3');
+    assert.strictEqual(notifyCalls[0][0], 'Inference model for this session is now: KISSKI/Gemma 3');
   });
 
   it('does not show a toast for a selected item with no provider/model data', () => {
@@ -345,7 +355,7 @@ describe('InferenceSettingsPlugin toast notification on selection', () => {
 });
 
 describe('InferenceSettingsPlugin default-model menu item label', () => {
-  beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
+  beforeEach(() => { global.localStorage.clear(); global.sessionStorage.clear(); notifyCalls.length = 0; });
 
   it('shows "Default Model" when nothing is selected yet', async () => {
     const plugin = makePlugin();
@@ -399,7 +409,7 @@ describe('InferenceSettingsPlugin default-model menu item label', () => {
     };
     await plugin.start();
     await flushMicrotasks();
-    plugin.setDefaultModel('kisski', 'gemma-3');
+    plugin.setSessionModel('kisski', 'gemma-3');
     assert.strictEqual(addedItems[0].childNodes[0].textContent, 'KISSKI/Gemma 3');
 
     plugin.getDependency = (name) => {
@@ -727,5 +737,112 @@ describe('InferenceSettingsPlugin.start', () => {
     await flushMicrotasks();
 
     assert.strictEqual(addedItems[0].style.display, '');
+  });
+});
+
+describe('InferenceSettingsPlugin default vs session model', () => {
+  const providers = [{
+    id: 'kisski', label: 'KISSKI', models: [
+      { id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null, free: true },
+      { id: 'llama-3', label: 'Llama 3', capabilities: ['chat'], status: null, free: true },
+    ]
+  }, {
+    id: 'anthropic', label: 'Anthropic', models: [
+      { id: 'opus', label: 'Opus', capabilities: ['chat'], status: null, free: false },
+      { id: 'haiku', label: 'Haiku', capabilities: ['chat'], status: null, free: false },
+    ]
+  }];
+
+  beforeEach(() => { global.sessionStorage.clear(); notifyCalls.length = 0; });
+
+  /** @param {{admin?: boolean, configured?: object|null, updateImpl?: Function}} [opts] */
+  function setup(opts = {}) {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    plugin._providers = providers;
+    plugin._isAdmin = () => !!opts.admin;
+    plugin._configuredDefault = opts.configured ?? null;
+    const updates = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        llmProviders: async () => providers,
+        llmListDefaultModel: async () => opts.configured
+          ? { provider_id: opts.configured.providerId, model_id: opts.configured.modelId } : null,
+        llmUpdateDefaultModel: async (body) => { updates.push(body); if (opts.updateImpl) return opts.updateImpl(body); },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    plugin._populateSubmenu(providers);
+    return { plugin, updates };
+  }
+
+  const itemFor = (plugin, modelId) => [...plugin._submenu.querySelectorAll('sl-menu-item')].find(i => i.dataset.modelId === modelId);
+
+  it('the configured default is used when the session has no choice', () => {
+    const { plugin } = setup({ configured: { providerId: 'kisski', modelId: 'gemma-3' } });
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'gemma-3' });
+  });
+
+  it('a session choice takes precedence over the configured default', () => {
+    const { plugin } = setup({ configured: { providerId: 'kisski', modelId: 'gemma-3' } });
+    plugin.setSessionModel('kisski', 'llama-3');
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'llama-3' });
+  });
+
+  it('non-admins get non-free models disabled, free ones enabled', () => {
+    const { plugin } = setup();
+    assert.strictEqual(itemFor(plugin, 'opus').disabled, true);
+    assert.strictEqual(!!itemFor(plugin, 'gemma-3').disabled, false);
+  });
+
+  it('a non-free model that is the configured default stays selectable for non-admins', () => {
+    const { plugin } = setup({ configured: { providerId: 'anthropic', modelId: 'opus' } });
+    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
+    assert.strictEqual(itemFor(plugin, 'haiku').disabled, true);
+  });
+
+  it('admins can select non-free models', () => {
+    const { plugin } = setup({ admin: true });
+    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
+  });
+
+  it('a non-admin selection is session-only: no server call, toast says so', async () => {
+    const { plugin, updates } = setup();
+    await plugin._onSelect({ detail: { item: itemFor(plugin, 'llama-3') } });
+    assert.deepStrictEqual(updates, []);
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'llama-3' });
+    assert.match(notifyCalls[0][0], /for this session/);
+  });
+
+  it('an admin selection is stored on the server, replaces the default and clears the own session choice', async () => {
+    const { plugin, updates } = setup({ admin: true, configured: { providerId: 'kisski', modelId: 'gemma-3' } });
+    plugin.setSessionModel('kisski', 'llama-3');
+    await plugin._onSelect({ detail: { item: itemFor(plugin, 'opus') } });
+    assert.deepStrictEqual(updates, [{ provider_id: 'anthropic', model_id: 'opus' }]);
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'anthropic', modelId: 'opus' });
+    assert.strictEqual(notifyCalls[0][0], 'Default inference model is now: Anthropic/Opus');
+  });
+
+  it('a failed admin update keeps the previous state and reports the error', async () => {
+    const { plugin } = setup({ admin: true, configured: { providerId: 'kisski', modelId: 'gemma-3' }, updateImpl: async () => { throw new Error('boom'); } });
+    await plugin._onSelect({ detail: { item: itemFor(plugin, 'opus') } });
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'gemma-3' });
+    assert.match(notifyCalls[0][0], /Could not set the default model: boom/);
+  });
+
+  it('_refresh loads the configured default from the server', async () => {
+    const { plugin } = setup({ configured: { providerId: 'kisski', modelId: 'llama-3' } });
+    plugin._configuredDefault = null;
+    await plugin._refresh();
+    assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'llama-3' });
+  });
+
+  it('_refresh rebuilds the submenu when the admin status changed', async () => {
+    const { plugin } = setup();
+    await plugin._refresh();
+    assert.strictEqual(itemFor(plugin, 'opus').disabled, true);
+    plugin._isAdmin = () => true;
+    await plugin._refresh();
+    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
   });
 });

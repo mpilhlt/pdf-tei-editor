@@ -1,9 +1,16 @@
 /**
  * Inference Settings Plugin
  *
- * Generic core plugin exposing a shared "default LLM model" that any
+ * Generic core plugin exposing the "LLM model to use" that any
  * LLM-consuming plugin can read via getDefaultModel() and fall back to
- * unless it has its own explicit per-call override. Adds a Tools menu entry
+ * unless it has its own explicit per-call override.
+ *
+ * Two levels: the installation-wide default, which only admins can set (it
+ * is stored in the server config, GET/PUT /api/v1/llm/default-model), and a
+ * per-session choice any user can make - e.g. when the default is busy -
+ * kept in sessionStorage and taking precedence over the default. Models that
+ * are not free (`model.free`) are disabled in the menu for non-admins,
+ * except the configured default itself. Adds a Tools menu entry
  * (new "inference" category) listing every available provider's models,
  * fetched from GET /api/v1/llm/providers, with a warning icon when a
  * model's live status isn't "available". The entry's own label reads
@@ -33,6 +40,9 @@
 
 import { Plugin } from '../modules/plugin-base.js';
 import { notify } from '../modules/sl-utils.js';
+import { userIsAdmin } from '../modules/acl-utils.js';
+
+const SESSION_MODEL_KEY = 'inference-settings.sessionModel';
 
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
@@ -103,22 +113,71 @@ export class InferenceSettingsPlugin extends Plugin {
   _refreshQueued = false;
 
   /**
-   * The currently selected default model, or null if nothing has been
-   * selected yet, or the stored value no longer matches an available
-   * provider/model in the last successful fetch (_providers). Note that
-   * this can legitimately return null for a valid stored default until
-   * the first successful _refresh() completes - start() does not await
-   * its own fetch (see module doc-comment), so _providers stays empty
-   * from construction until either that fetch or onSessionIdChange()'s
-   * post-login refresh succeeds.
+   * The installation-wide default set by an admin (from the last fetch),
+   * or null if none is set.
+   * @type {{providerId: string, modelId: string}|null}
+   */
+  _configuredDefault = null;
+
+  /**
+   * Signature of the data the submenu was last built from (providers,
+   * configured default, admin status); the submenu is only rebuilt when it
+   * changes.
+   * @type {string}
+   */
+  _menuSignature = '';
+
+  /** @returns {boolean} True if the current user has the admin role. */
+  _isAdmin() {
+    return userIsAdmin(this.state?.user ?? null);
+  }
+
+  /**
+   * The model chosen for this browser session, or null.
+   * @returns {{providerId: string, modelId: string}|null}
+   */
+  _getSessionModel() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_MODEL_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * @param {{providerId: string, modelId: string}|null} value
+   */
+  _storeSessionModel(value) {
+    try {
+      if (value) sessionStorage.setItem(SESSION_MODEL_KEY, JSON.stringify(value));
+      else sessionStorage.removeItem(SESSION_MODEL_KEY);
+    } catch {
+      // sessionStorage unavailable: the choice then only lasts until reload
+    }
+  }
+
+  /**
+   * @param {{providerId: string, modelId: string}|null} pair
+   * @returns {{providerId: string, modelId: string}|null} pair if it exists in the last fetch, else null
+   */
+  _validated(pair) {
+    if (!pair) return null;
+    const provider = this._providers.find(p => p.id === pair.providerId);
+    return provider?.models.some(m => m.id === pair.modelId) ? pair : null;
+  }
+
+  /**
+   * The model to use: this session's choice if there is one, else the
+   * admin-configured default, else null. A stored value that no longer
+   * matches an available provider/model in the last successful fetch
+   * (_providers) is ignored; this can legitimately return null until the
+   * first successful _refresh() completes - start() does not await its own
+   * fetch (see module doc-comment).
    * @returns {{providerId: string, modelId: string}|null}
    */
   getDefaultModel() {
-    const stored = this.uiStorage.get('defaultModel', null);
-    if (!stored) return null;
-    const provider = this._providers.find(p => p.id === stored.providerId);
-    const model = provider?.models.find(m => m.id === stored.modelId);
-    return model ? stored : null;
+    return this._validated(this._getSessionModel()) ?? this._validated(this._configuredDefault);
   }
 
   /**
@@ -136,18 +195,37 @@ export class InferenceSettingsPlugin extends Plugin {
   }
 
   /**
-   * Persist the default model and, if the submenu has been built, update
-   * its checked state so only this item appears selected.
+   * Choose the model for this browser session (any user).
    * @param {string} providerId
    * @param {string} modelId
    */
-  setDefaultModel(providerId, modelId) {
-    this.uiStorage.set('defaultModel', { providerId, modelId });
+  setSessionModel(providerId, modelId) {
+    this._storeSessionModel({ providerId, modelId });
+    this._afterSelectionChange();
+  }
+
+  /**
+   * Set the installation-wide default (admin only; the server enforces it).
+   * Clears the caller's own session choice so the new default takes effect.
+   * @param {string} providerId
+   * @param {string} modelId
+   * @returns {Promise<void>}
+   */
+  async setDefaultModel(providerId, modelId) {
+    await this.#client.apiClient.llmUpdateDefaultModel({ provider_id: providerId, model_id: modelId });
+    this._configuredDefault = { providerId, modelId };
+    this._storeSessionModel(null);
+    this._afterSelectionChange();
+  }
+
+  /** Refresh the label and checked state after the effective model changed. */
+  _afterSelectionChange() {
     this._updateMenuItemLabel();
     if (!this._submenu) return;
+    const current = this.getDefaultModel();
     this._submenu.querySelectorAll('sl-menu-item').forEach(el => {
       /** @type {HTMLElement & {checked: boolean}} */ (el).checked =
-        el.dataset.providerId === providerId && el.dataset.modelId === modelId;
+        !!current && el.dataset.providerId === current.providerId && el.dataset.modelId === current.modelId;
     });
   }
 
@@ -211,6 +289,12 @@ export class InferenceSettingsPlugin extends Plugin {
     item.dataset.modelId = model.id;
     item.checked = !!current && current.providerId === provider.id && current.modelId === model.id;
 
+    const isConfiguredDefault = this._configuredDefault?.providerId === provider.id && this._configuredDefault?.modelId === model.id;
+    if (!model.free && !isConfiguredDefault && !this._isAdmin()) {
+      /** @type {HTMLElement & {disabled: boolean}} */ (item).disabled = true;
+      item.title = 'This model is not free; only administrators can select it.';
+    }
+
     if (model.status && model.status.availability !== 'available') {
       const tooltip = /** @type {HTMLElement & {content: string, slot: string}} */ (document.createElement('sl-tooltip'));
       tooltip.slot = 'suffix';
@@ -225,22 +309,32 @@ export class InferenceSettingsPlugin extends Plugin {
   }
 
   /**
-   * Handle `sl-select` on the submenu: persist the clicked item's
-   * provider/model as the new default and toast a confirmation naming it. A
+   * Handle `sl-select` on the submenu: admins set the clicked item's
+   * provider/model as the installation-wide default, other users choose it
+   * for their session; a toast confirms either. A
    * bare item with no data-provider-id/data-model-id (e.g. a future
    * non-model entry) is ignored rather than persisting an incomplete
    * selection or toasting a bogus confirmation.
    * @param {CustomEvent} event
+   * @returns {Promise<void>}
    */
-  _onSelect(event) {
+  async _onSelect(event) {
     const item = /** @type {HTMLElement} */ (event.detail.item);
     const { providerId, modelId } = item.dataset;
     if (!providerId || !modelId) return;
-    this.setDefaultModel(providerId, modelId);
     const provider = this._providers.find(p => p.id === providerId);
     const model = provider?.models.find(m => m.id === modelId);
-    if (provider && model) {
-      notify(`Default inference model is now: ${provider.label}/${model.label}`);
+    const name = provider && model ? `${provider.label}/${model.label}` : `${providerId}/${modelId}`;
+    if (!this._isAdmin()) {
+      this.setSessionModel(providerId, modelId);
+      notify(`Inference model for this session is now: ${name}`);
+      return;
+    }
+    try {
+      await this.setDefaultModel(providerId, modelId);
+      notify(`Default inference model is now: ${name}`);
+    } catch (error) {
+      notify(`Could not set the default model: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon');
     }
   }
 
@@ -284,6 +378,11 @@ export class InferenceSettingsPlugin extends Plugin {
    * and never throws.
    */
   onSessionIdChange() {
+    this._refresh();
+  }
+
+  /** Rebuild the submenu when the user (and thus admin status) changes. */
+  onUserChange() {
     this._refresh();
   }
 
@@ -332,7 +431,15 @@ export class InferenceSettingsPlugin extends Plugin {
       console.warn('inference-settings: could not load LLM providers:', error);
       return;
     }
-    const changed = JSON.stringify(providers) !== JSON.stringify(this._providers);
+    try {
+      const configured = await this.#client.apiClient.llmListDefaultModel();
+      this._configuredDefault = configured ? { providerId: configured.provider_id, modelId: configured.model_id } : null;
+    } catch (error) {
+      console.warn('inference-settings: could not load the default model:', error);
+    }
+    const signature = JSON.stringify([providers, this._configuredDefault, this._isAdmin()]);
+    const changed = signature !== this._menuSignature;
+    this._menuSignature = signature;
     this._providers = providers;
     if (this._menuItem) {
       this._menuItem.style.display = providers.length === 0 ? 'none' : '';
