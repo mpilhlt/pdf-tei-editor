@@ -264,6 +264,11 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true; } });
     try {
       const findings = await this.review(resolved ?? undefined, {
+        onStart: (chunksTotal) => {
+          total = chunksTotal;
+          progress.setValue(progressId, 0);
+          progress.setLabel(progressId, `${heading} (part 1 of ${chunksTotal})`);
+        },
         isCancelled: () => cancelled || documentChanged(),
         onProgress: (chunksDone, chunksTotal, foundSoFar) => {
           done = chunksDone;
@@ -312,8 +317,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
    * from the given override, or from the shared default (Part F), unless one
    * isn't configured.
    * @param {{providerId: string, modelId: string}} [override]
-   * @param {{isCancelled?: () => boolean, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
-   *   isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
+   * @param {{isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
+   *   onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
    * @returns {Promise<Finding[]|null>}
    *   The findings (possibly partial if cancelled); null when the review could not be started or a chunk failed (user already notified).
    */
@@ -347,7 +352,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     const xml = xmleditorApi.getEditorContent();
     /** @type {Finding[]} */
     const findings = [];
-    let total = 1;
+    let total;
+    try {
+      ({ chunk_count: total } = await this.callPluginApi('/api/plugins/annotation-review/plan', 'POST', { xml }));
+    } catch (err) {
+      this.getDependency('sl-utils').notify(`Annotation review failed: ${err.message}`, 'danger', 'exclamation-octagon');
+      return null;
+    }
+    hooks.onStart?.(total);
     for (let index = 0; index < total; index++) {
       if (index > 0 && hooks.isCancelled?.()) break;
       try {
@@ -356,7 +368,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
           'POST',
           { xml, provider_id: resolved.providerId, model_id: resolved.modelId, chunk_index: index }
         );
-        total = response.chunk_count ?? 1;
+        total = response.chunk_count ?? total;
         for (const finding of response.findings) findings.push({ ...finding, id: findings.length });
       } catch (err) {
         this.getDependency('sl-utils').notify(

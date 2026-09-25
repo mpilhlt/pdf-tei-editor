@@ -146,6 +146,16 @@ def gather_rule_excerpts(xml_string: str, cache: UrlCache) -> list[tuple[str, st
     return excerpts
 
 
+def count_chunks(xml_string: str) -> int:
+    """
+    Number of chunks the document's <text> is reviewed in.
+
+    Raises:
+        ValueError: document is malformed or has no <text> element.
+    """
+    return len(split_into_chunks(extract_text_content(xml_string)))
+
+
 async def run_review(
     xml_string: str,
     provider: LLMProvider,

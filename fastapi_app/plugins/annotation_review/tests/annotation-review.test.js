@@ -71,7 +71,15 @@ function buildExtension(opts = {}) {
     },
   };
   if (opts.state) ext.state = opts.state;
-  ext.callPluginApi = opts.callPluginApiImpl ?? (async () => { throw new Error('unexpected call'); });
+  const impl = opts.callPluginApiImpl ?? (async () => { throw new Error('unexpected call'); });
+  ext.callPluginApi = async (endpoint, ...rest) => {
+    if (endpoint.endsWith('/plan')) {
+      if (opts.planImpl) return opts.planImpl();
+      // the plan request only counts chunks; existing impls answer review requests
+      return { chunk_count: opts.chunkCount ?? 1 };
+    }
+    return impl(endpoint, ...rest);
+  };
   return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers };
 }
 
@@ -487,6 +495,7 @@ describe('chunked review', () => {
     const { ext } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 3,
       callPluginApiImpl: async (e, m, params) => {
         indexes.push(params.chunk_index);
         return { findings: [finding(`A${params.chunk_index}`)], chunk_count: 3 };
@@ -502,6 +511,7 @@ describe('chunked review', () => {
     const { ext } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 2,
       callPluginApiImpl: async (e, m, params) => ({ findings: [finding(`A${params.chunk_index}`)], chunk_count: 2 }),
     });
     await ext.review(undefined, { onProgress: (done, total, found) => seen.push([done, total, found.length]) });
@@ -514,6 +524,7 @@ describe('chunked review', () => {
     const { ext } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 5,
       callPluginApiImpl: async (e, m, params) => {
         indexes.push(params.chunk_index);
         return { findings: [finding('A')], chunk_count: 5 };
@@ -528,6 +539,7 @@ describe('chunked review', () => {
     const { ext, notifyCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 3,
       callPluginApiImpl: async (e, m, params) => {
         if (params.chunk_index === 1) throw new Error('boom');
         return { findings: [], chunk_count: 3 };
@@ -542,6 +554,7 @@ describe('chunked review', () => {
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
       docText: 'A0 A1 A2',
+      chunkCount: 3,
       callPluginApiImpl: async (e, m, params) => {
         if (params.chunk_index === 1) throw new Error('boom');
         return { findings: [finding('A0')], chunk_count: 3 };
@@ -556,11 +569,12 @@ describe('chunked review', () => {
     const { ext, progressCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 2,
       callPluginApiImpl: async () => ({ findings: [], chunk_count: 2 }),
     });
     await ext.runReview();
-    assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'value').map(c => c[1]), [50, 100]);
-    assert.match(progressCalls.find(c => c[0] === 'label')[1], /part 2 of 2/);
+    assert.match(progressCalls.filter(c => c[0] === 'label').map(c => c[1]).join('|'), /part 1 of 2.*part 2 of 2/);
+    assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'value').map(c => c[1]), [0, 50, 100]);
   });
 
   it('cancelling via the widget stops the review and reports the partial result', async () => {
@@ -570,6 +584,7 @@ describe('chunked review', () => {
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
       docText: 'A0 A1 A2',
+      chunkCount: 3,
       callPluginApiImpl: async (e, m, params) => {
         indexes.push(params.chunk_index);
         if (params.chunk_index === 0) ctx.progressOpts.show.onCancel();
@@ -587,6 +602,7 @@ describe('chunked review', () => {
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
       docText: 'A0 A1',
+      chunkCount: 2,
       callPluginApiImpl: async (e, m, params) => ({ findings: [finding(`A${params.chunk_index}`)], chunk_count: 2 }),
     });
     await ext.runReview();
@@ -627,5 +643,33 @@ describe('pruning findings after edits', () => {
     for (let i = 0; i < 5; i++) updateListeners[0]({ transactions: [], docChanged: true });
     await new Promise(r => setTimeout(r, 40));
     assert.strictEqual(lintCalls.length, 1);
+  });
+});
+
+describe('plan request', () => {
+  const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+
+  it('asks for the chunk count before any review request and reports it to onStart', async () => {
+    const endpoints = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      chunkCount: 2,
+      callPluginApiImpl: async (endpoint) => { endpoints.push(endpoint); return { findings: [], chunk_count: 2 }; },
+    });
+    const started = [];
+    await ext.review(undefined, { onStart: (t) => started.push(t) });
+    assert.deepStrictEqual(started, [2]);
+    assert.deepStrictEqual(endpoints, ['/api/plugins/annotation-review/review', '/api/plugins/annotation-review/review']);
+  });
+
+  it('notifies and returns null when the plan request fails', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      planImpl: async () => { throw new Error('not well-formed'); },
+    });
+    assert.strictEqual(await ext.review(), null);
+    assert.match(notifyCalls.at(-1)[0], /not well-formed/);
   });
 });

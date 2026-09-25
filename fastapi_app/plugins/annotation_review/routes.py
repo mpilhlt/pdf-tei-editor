@@ -23,6 +23,7 @@ from fastapi_app.lib.llm.model_filter import get_model_filter_patterns, is_model
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
+    count_chunks,
     run_review,
 )
 
@@ -60,6 +61,26 @@ class FindingResponse(BaseModel):
 class ReviewResponse(BaseModel):
     findings: list[FindingResponse]
     chunk_count: int
+
+
+class PlanRequest(BaseModel):
+    xml: str
+
+
+class PlanResponse(BaseModel):
+    chunk_count: int
+
+
+@router.post("/plan", response_model=PlanResponse)
+async def plan(
+    body: PlanRequest,
+    current_user: dict = Depends(require_authenticated_user),
+) -> PlanResponse:
+    """Report how many chunks /review will need for the given document (no LLM call)."""
+    try:
+        return PlanResponse(chunk_count=count_chunks(body.xml))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post("/review", response_model=ReviewResponse)
