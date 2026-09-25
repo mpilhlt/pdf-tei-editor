@@ -3,10 +3,12 @@
  *
  * Generic core plugin exposing a shared "default LLM model" that any
  * LLM-consuming plugin can read via getDefaultModel() and fall back to
- * unless it has its own explicit per-call override. Adds a "Default Model"
- * entry to the Tools menu (new "inference" category) listing every
- * available provider's models, fetched from GET /api/v1/llm/providers,
- * with a warning icon when a model's live status isn't "available".
+ * unless it has its own explicit per-call override. Adds a Tools menu entry
+ * (new "inference" category) listing every available provider's models,
+ * fetched from GET /api/v1/llm/providers, with a warning icon when a
+ * model's live status isn't "available". The entry's own label reads
+ * "Default Model" until a selection is made, then "<provider>/<model>";
+ * selecting a model also toasts a confirmation naming it.
  *
  * See docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
  * (Part F) for the design rationale.
@@ -30,6 +32,7 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js';
+import { notify } from '../modules/sl-utils.js';
 
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
@@ -68,6 +71,17 @@ export class InferenceSettingsPlugin extends Plugin {
    * @type {HTMLElement|null}
    */
   _menuItem = null;
+
+  /**
+   * The text node holding the parent item's own label (created once in
+   * start(), before the submenu is appended as a sibling child). Kept
+   * separate from the submenu so updating the label via `nodeValue` never
+   * touches - or is clobbered by resetting - `_menuItem.textContent`, which
+   * would wipe the submenu since it's also a child of `_menuItem`. Null
+   * until start() has run.
+   * @type {Text|null}
+   */
+  _labelNode = null;
 
   /**
    * The in-flight _refresh() promise, or null if no fetch is currently
@@ -115,11 +129,32 @@ export class InferenceSettingsPlugin extends Plugin {
    */
   setDefaultModel(providerId, modelId) {
     this.uiStorage.set('defaultModel', { providerId, modelId });
+    this._updateMenuItemLabel();
     if (!this._submenu) return;
     this._submenu.querySelectorAll('sl-menu-item').forEach(el => {
       /** @type {HTMLElement & {checked: boolean}} */ (el).checked =
         el.dataset.providerId === providerId && el.dataset.modelId === modelId;
     });
+  }
+
+  /**
+   * Sync the parent item's own label (its `_labelNode`, not its
+   * `textContent` - see that field's doc-comment) to the currently stored
+   * default: "Default Model" when nothing is selected, or the currently
+   * matching provider/model no longer resolves against the last fetched
+   * `_providers` (e.g. it was removed server-side); "<provider>/<model>"
+   * otherwise.
+   */
+  _updateMenuItemLabel() {
+    if (!this._labelNode) return;
+    const current = this.getDefaultModel();
+    if (!current) {
+      this._labelNode.nodeValue = 'Default Model';
+      return;
+    }
+    const provider = this._providers.find(p => p.id === current.providerId);
+    const model = provider?.models.find(m => m.id === current.modelId);
+    this._labelNode.nodeValue = provider && model ? `${provider.label}/${model.label}` : 'Default Model';
   }
 
   /**
@@ -177,9 +212,10 @@ export class InferenceSettingsPlugin extends Plugin {
 
   /**
    * Handle `sl-select` on the submenu: persist the clicked item's
-   * provider/model as the new default. A bare item with no
-   * data-provider-id/data-model-id (e.g. a future non-model entry) is
-   * ignored rather than persisting an incomplete selection.
+   * provider/model as the new default and toast a confirmation naming it. A
+   * bare item with no data-provider-id/data-model-id (e.g. a future
+   * non-model entry) is ignored rather than persisting an incomplete
+   * selection or toasting a bogus confirmation.
    * @param {CustomEvent} event
    */
   _onSelect(event) {
@@ -187,6 +223,11 @@ export class InferenceSettingsPlugin extends Plugin {
     const { providerId, modelId } = item.dataset;
     if (!providerId || !modelId) return;
     this.setDefaultModel(providerId, modelId);
+    const provider = this._providers.find(p => p.id === providerId);
+    const model = provider?.models.find(m => m.id === modelId);
+    if (provider && model) {
+      notify(`Default inference model is now: ${provider.label}/${model.label}`);
+    }
   }
 
   /**
@@ -196,8 +237,10 @@ export class InferenceSettingsPlugin extends Plugin {
    */
   async start() {
     const parentItem = document.createElement('sl-menu-item');
-    parentItem.textContent = 'Default Model';
+    const labelNode = document.createTextNode('Default Model');
+    parentItem.appendChild(labelNode);
     this._menuItem = parentItem;
+    this._labelNode = labelNode;
 
     const submenu = document.createElement('sl-menu');
     submenu.slot = 'submenu';
@@ -280,6 +323,7 @@ export class InferenceSettingsPlugin extends Plugin {
     if (this._menuItem) {
       this._menuItem.style.display = providers.length === 0 ? 'none' : '';
     }
+    this._updateMenuItemLabel();
     if (this._submenu && changed) {
       this._populateSubmenu(providers);
     }

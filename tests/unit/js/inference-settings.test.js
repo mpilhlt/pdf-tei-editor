@@ -5,7 +5,7 @@
  * @testCovers app/src/plugins/inference-settings.js
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
 
@@ -30,6 +30,17 @@ global.localStorage = (() => {
   };
 })();
 
+// notify()'s real implementation instantiates Shoelace's SlAlert and calls
+// .toast(), which under jsdom leaves a dangling promise (waiting on a CSS
+// transitionend event that jsdom never fires) - stub it, following the
+// precedent in config-editor-masked-value.test.js.
+const notifyCalls = [];
+mock.module('../../../app/src/modules/sl-utils.js', {
+  namedExports: {
+    notify: (...args) => { notifyCalls.push(args); }
+  }
+});
+
 const { default: PluginManager } = await import('../../../app/src/modules/plugin-manager.js');
 const { default: StateManager } = await import('../../../app/src/modules/state-manager.js');
 const { Application } = await import('../../../app/src/modules/application.js');
@@ -53,6 +64,14 @@ function makePlugin() {
 function flushMicrotasks() {
   return new Promise((resolve) => setImmediate(resolve));
 }
+
+// Every test in this file shares the module-level global.localStorage stub
+// (UIStorage's persistence layer), so a selection persisted by one test
+// (setDefaultModel/_onSelect/a submenu 'sl-select' dispatch) would otherwise
+// leak into unrelated later tests - previously invisible because the menu
+// item's label was static, but now that it reflects the stored default
+// (_updateMenuItemLabel()), a leaked selection changes what later tests see.
+beforeEach(() => { global.localStorage.clear(); });
 
 describe('InferenceSettingsPlugin construction', () => {
   it('has the expected name and dependencies', () => {
@@ -276,6 +295,103 @@ describe('InferenceSettingsPlugin._onSelect', () => {
     const bareItem = document.createElement('sl-menu-item');
     plugin._onSelect({ detail: { item: bareItem } });
     assert.strictEqual(plugin.getDefaultModel(), null);
+  });
+});
+
+describe('InferenceSettingsPlugin toast notification on selection', () => {
+  beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
+
+  it('shows a toast naming the newly selected provider/model', () => {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    const providers = [{
+      id: 'kisski', label: 'KISSKI', models: [
+        { id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null },
+      ]
+    }];
+    plugin._providers = providers;
+    plugin._populateSubmenu(providers);
+    const item = plugin._submenu.querySelector('sl-menu-item');
+
+    plugin._onSelect({ detail: { item } });
+
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.strictEqual(notifyCalls[0][0], 'Default inference model is now: KISSKI/Gemma 3');
+  });
+
+  it('does not show a toast for a selected item with no provider/model data', () => {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    const bareItem = document.createElement('sl-menu-item');
+    plugin._onSelect({ detail: { item: bareItem } });
+    assert.strictEqual(notifyCalls.length, 0);
+  });
+});
+
+describe('InferenceSettingsPlugin default-model menu item label', () => {
+  beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
+
+  it('shows "Default Model" when nothing is selected yet', async () => {
+    const plugin = makePlugin();
+    let addedItems;
+    const providers = [{
+      id: 'kisski', label: 'KISSKI',
+      models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
+    }];
+    plugin.getDependency = (name) => {
+      if (name === 'tools') return { addMenuItems: (items) => { addedItems = items; } };
+      if (name === 'client') return { apiClient: { llmProviders: async () => providers } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin.start();
+    await flushMicrotasks();
+    assert.strictEqual(addedItems[0].childNodes[0].textContent, 'Default Model');
+  });
+
+  it('shows "Provider/Model" once a model has been selected through the submenu', async () => {
+    const plugin = makePlugin();
+    let addedItems;
+    const providers = [{
+      id: 'kisski', label: 'KISSKI',
+      models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
+    }];
+    plugin.getDependency = (name) => {
+      if (name === 'tools') return { addMenuItems: (items) => { addedItems = items; } };
+      if (name === 'client') return { apiClient: { llmProviders: async () => providers } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin.start();
+    await flushMicrotasks();
+    const submenu = addedItems[0].querySelector('sl-menu');
+    const modelItem = submenu.querySelector('sl-menu-item');
+    submenu.dispatchEvent(new dom.window.CustomEvent('sl-select', { detail: { item: modelItem } }));
+
+    assert.strictEqual(addedItems[0].childNodes[0].textContent, 'KISSKI/Gemma 3');
+  });
+
+  it('reverts to "Default Model" once the selected model no longer appears in a refresh', async () => {
+    const plugin = makePlugin();
+    let addedItems;
+    const providers = [{
+      id: 'kisski', label: 'KISSKI',
+      models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }]
+    }];
+    plugin.getDependency = (name) => {
+      if (name === 'tools') return { addMenuItems: (items) => { addedItems = items; } };
+      if (name === 'client') return { apiClient: { llmProviders: async () => providers } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin.start();
+    await flushMicrotasks();
+    plugin.setDefaultModel('kisski', 'gemma-3');
+    assert.strictEqual(addedItems[0].childNodes[0].textContent, 'KISSKI/Gemma 3');
+
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { llmProviders: async () => [] } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refresh();
+    assert.strictEqual(addedItems[0].childNodes[0].textContent, 'Default Model');
   });
 });
 

@@ -18,6 +18,14 @@ from fastapi_app.lib.llm.base import LLMModel, LLMProvider
 
 logger = logging.getLogger(__name__)
 
+# The google-genai SDK's Model type exposes no modality/capability field
+# beyond `supported_actions` (which only distinguishes generateContent from
+# embedContent/bidiGenerateContent/etc). Image-generation, TTS, transcription
+# and computer-use models all support generateContent but don't behave like
+# a plain text chat model, so they're recognized by name suffix instead
+# (verified against the live API's actual model names).
+_NON_CHAT_NAME_MARKERS = ("-image", "-tts", "-transcribe", "-computer-use")
+
 
 class GoogleLLMProvider(LLMProvider):
     """LLM provider connector for Google's Gemini API."""
@@ -41,6 +49,8 @@ class GoogleLLMProvider(LLMProvider):
             if "generateContent" not in (model.supported_actions or []):
                 continue
             model_id = model.name.replace("models/", "")
+            if any(marker in model_id for marker in _NON_CHAT_NAME_MARKERS):
+                continue
             models.append(
                 LLMModel(
                     id=model_id,

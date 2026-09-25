@@ -61,6 +61,48 @@ class TestGoogleLLMProviderListModels(unittest.TestCase):
         provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="")
         self.assertEqual(provider.list_models(), [])
 
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    def test_list_models_excludes_image_tts_and_transcribe_models(self, mock_client_cls):
+        # These all support generateContent (so pass the existing filter) but
+        # are not text chat models - the SDK exposes no modality field to
+        # distinguish them, so they're recognized by their name suffix
+        # instead (confirmed against the live API's actual model names).
+        model_chat = MagicMock()
+        model_chat.name = "models/gemini-2.5-flash"
+        model_chat.display_name = "Gemini 2.5 Flash"
+        model_chat.supported_actions = ["generateContent"]
+
+        model_image = MagicMock()
+        model_image.name = "models/gemini-2.5-flash-image"
+        model_image.display_name = "Gemini 2.5 Flash Image"
+        model_image.supported_actions = ["generateContent"]
+
+        model_tts = MagicMock()
+        model_tts.name = "models/gemini-2.5-flash-preview-tts"
+        model_tts.display_name = "Gemini 2.5 Flash TTS"
+        model_tts.supported_actions = ["generateContent"]
+
+        model_transcribe = MagicMock()
+        model_transcribe.name = "models/gemini-3.5-transcribe"
+        model_transcribe.display_name = "Gemini Transcribe"
+        model_transcribe.supported_actions = ["generateContent"]
+
+        model_computer_use = MagicMock()
+        model_computer_use.name = "models/gemini-2.5-computer-use-preview-10-2025"
+        model_computer_use.display_name = "Gemini Computer Use"
+        model_computer_use.supported_actions = ["generateContent"]
+
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = [
+            model_chat, model_image, model_tts, model_transcribe, model_computer_use,
+        ]
+        mock_client_cls.return_value = mock_client
+
+        provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
+        models = provider.list_models()
+
+        self.assertEqual([m["id"] for m in models], ["gemini-2.5-flash"])
+
 
 class TestGoogleLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
     """Test chat_completion() delegates to the SDK's async generate_content."""
