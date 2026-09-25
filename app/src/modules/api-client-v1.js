@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-24T17:44:54.714Z
+ * Generated from OpenAPI schema at 2026-09-25T13:23:40.134Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -323,6 +323,14 @@
  */
 
 /**
+ * @typedef {Object} FindingResponse
+ * @property {number} id
+ * @property {string} old
+ * @property {string} new
+ * @property {string} rationale
+ */
+
+/**
  * @typedef {Object} GarbageCollectRequest
  * @property {string} deleted_before
  * @property {string=} sync_status
@@ -497,6 +505,20 @@
  * @property {boolean} success
  * @property {Array<FieldResult>} results
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} ReviewRequest
+ * @property {string} xml
+ * @property {string} provider_id
+ * @property {string} model_id
+ * @property {number=} chunk_index
+ */
+
+/**
+ * @typedef {Object} ReviewResponse
+ * @property {Array<FindingResponse>} findings
+ * @property {number} chunk_count
  */
 
 /**
@@ -1319,7 +1341,10 @@ export class ApiClientV1 {
    * List available LLM providers and their models.
    * A provider whose list_models() call fails (network error, malformed
    * response, etc.) is skipped rather than failing the whole request -
-   * other providers should still be listed.
+   * other providers should still be listed. Models rejected by the
+   * admin-configured `llm.model-filter` allow-list (see
+   * fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
+   * returned with a flag - the picker should simply never offer them.
    *
    * @returns {Promise<Array<ProviderResponse>>}
    */

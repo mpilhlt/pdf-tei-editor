@@ -33,12 +33,13 @@ TEI_DOC = """<?xml version="1.0"?>
 
 
 class _StubProvider(LLMProvider):
-    def __init__(self, id: str = "stub"):
+    def __init__(self, id: str = "stub", models: list[LLMModel] | None = None):
         self.id = id
         self.label = "Stub"
+        self._models = models if models is not None else []
 
     def list_models(self) -> list[LLMModel]:
-        return []
+        return self._models
 
     async def chat_completion(self, model_id, system_prompt, user_prompt, temperature=0.2) -> str:
         return '[{"old": "<persName>J. Doe</persName>", "new": "<persName ref=\\"#p1\\">J. Doe</persName>", "rationale": "add ref"}]'
@@ -161,6 +162,66 @@ class TestReviewRoute(unittest.TestCase):
             json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
         )
         self.assertEqual(response.status_code, 401)
+
+
+class TestReviewRouteModelFilter(unittest.TestCase):
+    """Test that /review enforces the admin-configured model filter before calling the provider."""
+
+    def setUp(self):
+        self.app = FastAPI()
+        self.app.include_router(router)
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser"}
+        self.client = TestClient(self.app)
+        LLMProviderRegistry.reset_instance()
+        LLMProviderRegistry.get_instance().register(
+            _StubProvider(
+                models=[LLMModel(id="m1", label="Model One", capabilities=frozenset({"chat"}), status=None)]
+            )
+        )
+
+    def tearDown(self):
+        LLMProviderRegistry.reset_instance()
+        self.app.dependency_overrides.clear()
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.is_model_allowed", return_value=False)
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.get_model_filter_patterns", return_value=["dummy"])
+    def test_disallowed_model_returns_403_without_calling_the_provider(self, mock_patterns, mock_allowed):
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(response.status_code, 403)
+        mock_allowed.assert_called_once_with("Stub/Model One")
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.is_model_allowed", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.get_model_filter_patterns", return_value=["dummy"])
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    def test_allowed_model_proceeds_normally(self, mock_fetch, mock_is_safe, mock_patterns, mock_allowed):
+        mock_fetch.return_value = "Rule: persName must have a ref attribute."
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.get_model_filter_patterns", return_value=["dummy"])
+    def test_unknown_model_id_with_filter_active_returns_403(self, mock_patterns):
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "does-not-exist"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    @mock.patch("fastapi_app.plugins.annotation_review.routes.get_model_filter_patterns", return_value=[])
+    def test_no_filter_configured_skips_the_check_entirely(self, mock_patterns):
+        # model_id doesn't even appear in list_models() - proves list_models()
+        # is never consulted (and no 403 is raised) when no filter is active.
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "totally-unlisted"},
+        )
+        self.assertNotEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

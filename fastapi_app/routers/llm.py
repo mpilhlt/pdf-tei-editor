@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_authenticated_user
-from ..lib.llm import LLMProviderRegistry
+from ..lib.llm import LLMProviderRegistry, is_model_allowed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -46,7 +46,10 @@ def list_providers(
 
     A provider whose list_models() call fails (network error, malformed
     response, etc.) is skipped rather than failing the whole request -
-    other providers should still be listed.
+    other providers should still be listed. Models rejected by the
+    admin-configured `llm.model-filter` allow-list (see
+    fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
+    returned with a flag - the picker should simply never offer them.
     """
     result: list[ProviderResponse] = []
     for provider in LLMProviderRegistry.get_instance().list_providers(available_only=True):
@@ -71,6 +74,7 @@ def list_providers(
                         ),
                     )
                     for model in models
+                    if is_model_allowed(f"{provider.label}/{model['label']}")
                 ],
             )
         )
