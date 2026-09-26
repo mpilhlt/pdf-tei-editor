@@ -2,6 +2,15 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.65.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.64.1...v0.65.0) (2026-09-26)
+
+
+### Features
+
+* **dev:** add ui-screenshot script and CLAUDE.md rules for testing and worktrees ([1d9b24c](https://github.com/mpilhlt/pdf-tei-editor/commit/1d9b24cb117b58f0f213e8c48d51b39f2eeb3f3b))
+* **plugins:** admin plugin manager to enable/disable plugins at runtime ([815bbcf](https://github.com/mpilhlt/pdf-tei-editor/commit/815bbcf7d220e39b7ee8b089802c48c0b7c45ae5))
+* **ui:** move prompt editor button to Inference tools menu ([10f2a3e](https://github.com/mpilhlt/pdf-tei-editor/commit/10f2a3ef3e527c8b33edb2a653a218c454c5b2c7))
+
 ## [0.64.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.64.0...v0.64.1) (2026-09-25)
 
 
