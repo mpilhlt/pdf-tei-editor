@@ -93,20 +93,20 @@ GROBID also stores a training-data-id label on its own `application[@ident="GROB
 
 Links each document to the annotation-guide rules that apply to it, split into one or more independent **categories** (e.g. the main per-variant guide a human annotator should read, plus optional category-specific excerpts for automated checks). This is the element a validation/linting plugin should read to find out which rules apply to the document it's validating.
 
-Design rationale: [2026-09-22-editorial-decl-annotation-rules-design.md](../superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md) (why editorialDecl at all) and [2026-09-22-annotation-guide-dual-target-refs-design.md](../superpowers/specs/2026-09-22-annotation-guide-dual-target-refs-design.md) (why each ref has a human/machine pair).
+Design rationale: [2026-09-22-editorial-decl-annotation-rules-design.md](../superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md) (why editorialDecl at all), [2026-09-22-annotation-guide-dual-target-refs-design.md](../superpowers/specs/2026-09-22-annotation-guide-dual-target-refs-design.md) (why each ref has a human/machine pair), and [2026-09-27-document-rules-registry-design.md](../superpowers/specs/2026-09-27-document-rules-registry-design.md) (the `@n` label, added so a category can be shown to a user without exposing its `@type` slug or its `ref/@target` URL).
 
 ### Shape
 
 ```xml
 <encodingDesc>
   <editorialDecl>
-    <interpretation type="primary">
+    <interpretation type="primary" n="Document segmentation">
       <p>
         <ref target="https://github.com/mpilhlt/fossil/blob/<sha>/docs/guidelines.md#document-segmentation-model" subtype="human" type="markdown"/>
         <ref target="https://github.com/mpilhlt/fossil/blob/<sha>/docs/guidelines.md#L42-L88" subtype="machine"/>
       </p>
     </interpretation>
-    <interpretation type="data-correction">
+    <interpretation type="data-correction" n="Data correction">
       <p>
         <ref target="https://github.com/mpilhlt/fossil/blob/<sha>/docs/guidelines.md#data-correction" subtype="human" type="markdown"/>
         <ref target="https://github.com/mpilhlt/fossil/blob/<sha>/docs/guidelines.md#L120-L145" subtype="machine"/>
@@ -120,6 +120,7 @@ Design rationale: [2026-09-22-editorial-decl-annotation-rules-design.md](../supe
 `editorialDecl` precedes `appInfo` (TEI content-model convention: editorialDecl, schemaRef, appInfo) and is only emitted at all if there's at least one entry.
 
 - `interpretation/@type` — the rule **category**. `"primary"` is the sentinel for the one main guide a human annotator should read for this variant; other categories (e.g. `"data-correction"`, `"footnote-annotation"`) are optional, additional excerpts, typically for machine/LLM validation rather than the drawer UI. An extractor plugin's config decides which categories apply to a given variant (see below).
+- `interpretation/@n` — a short, human-readable label for the category (e.g. `"Data correction"`), from TEI's generic `att.global.attribute.n`. `interpretation`'s content model (`oneOrMore(p|ab)`, per `schema/rng/tei-bib.rng`) does not allow a `desc` child, so `@n` is the label's home; a category can therefore be shown to a user (e.g. a menu of the document's rule categories) without exposing its `@type` slug. Optional — a document written before this addition simply has none; readers fall back to `@type`.
 - Each `interpretation` holds one or two `<ref>` children, distinguished by `@subtype`:
   - `subtype="human"` — a heading-anchor URL (`#some-heading`) meant for a human to open in the Annotation Guide drawer. `@type` on the ref is its content type, `"markdown"` or `"html"`.
   - `subtype="machine"` — auto-derived from the human ref's heading anchor by scanning the target Markdown document for ATX headings and translating the anchor to a line-range URL fragment (`#L42-L88`). Never hand-authored; regenerating it re-derives it from the human ref, so the two can't drift out of sync. Has no `@type` (line-range content isn't associated with a content type the same way). May be absent if anchor-to-line-range translation failed (e.g. the anchor wasn't found) — treat a missing machine ref as "fall back to fetching the whole document" rather than an error.
