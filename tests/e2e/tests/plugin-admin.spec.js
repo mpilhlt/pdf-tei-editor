@@ -56,13 +56,16 @@ test.describe('Plugin manager', () => {
 
       const before = await pluginStatuses(page);
       expect(before['tei-wizard']).toBe('active');
-      expect(before['grobid']).toBe('active');
+      // grobid is only available where a GROBID server URL is configured (not in CI)
+      const grobidActive = before['grobid'] === 'active';
 
       // Disabling tei-wizard warns about its dependents; cancelling changes nothing
       await page.locator('sl-switch[data-id="tei-wizard"]').click();
       const confirm = page.locator('sl-dialog[name="pluginAdminConfirmDialog"]');
       await expect(confirm).toHaveAttribute('open', '');
-      await expect(confirm.locator('ul[name="affectedList"]')).toContainText('grobid');
+      if (grobidActive) {
+        await expect(confirm.locator('ul[name="affectedList"]')).toContainText('grobid');
+      }
       await expect(confirm.locator('ul[name="affectedList"]')).toContainText('metadata-extraction');
       await page.waitForTimeout(500);
       await confirm.locator('sl-button[name="cancelBtn"]').click();
@@ -77,7 +80,7 @@ test.describe('Plugin manager', () => {
 
       await expect.poll(() => pluginStatuses(page)).toMatchObject({
         'tei-wizard': 'disabled',
-        'grobid': 'inactive',
+        ...(grobidActive ? { 'grobid': 'inactive' } : {}),
         'metadata-extraction': 'inactive'
       });
 
@@ -88,14 +91,14 @@ test.describe('Plugin manager', () => {
         return result.plugins.map((/** @type {any} */ p) => p.id);
       });
       expect(offered).not.toContain('tei-wizard');
-      expect(offered).not.toContain('grobid');
+      if (grobidActive) expect(offered).not.toContain('grobid');
     } finally {
       // Restore state so other tests are not affected
       await page.evaluate(async () => {
         const client = /** @type {any} */(window).client;
         await client.apiClient.pluginsAdminEnable('tei-wizard', { cascade: false });
       });
-      expect(await pluginStatuses(page)).toMatchObject({ 'tei-wizard': 'active', 'grobid': 'active' });
+      expect(await pluginStatuses(page)).toMatchObject({ 'tei-wizard': 'active', 'metadata-extraction': 'active' });
       stopErrorMonitoring();
       try {
         await performLogout(page);
