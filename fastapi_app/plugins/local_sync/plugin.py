@@ -33,6 +33,10 @@ class LocalSyncPlugin(Plugin):
         }
 
     @classmethod
+    def unavailable_reason(cls) -> str | None:
+        return "Not enabled or no repository path configured (plugin.local-sync.*)"
+
+    @classmethod
     def is_available(cls) -> bool:
         """Only available if enabled, repo path configured, and user has reviewer role."""
         from fastapi_app.lib.plugins.plugin_tools import get_plugin_config

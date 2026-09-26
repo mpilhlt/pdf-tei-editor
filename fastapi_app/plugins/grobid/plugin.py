@@ -115,6 +115,7 @@ class GrobidPlugin(Plugin):
         # todo: create auto-discover reusable utility func
         tei_wizard = context.get_dependency("tei-wizard")
         if isinstance(tei_wizard, TeiWizardPlugin):
+            self._wizard = tei_wizard
             for enhancement_filename in ["split-bibl.js", "segment-footnotes.js", "desegment-footnotes.js"]:
                 enhancement_file = Path(__file__).parent / "enhancements" / enhancement_filename
                 if enhancement_file.exists():
@@ -134,6 +135,11 @@ class GrobidPlugin(Plugin):
         # Unregister event handler
         event_bus = get_event_bus()
         event_bus.off("file.deleted", self._on_file_deleted)
+
+        wizard = getattr(self, "_wizard", None)
+        if wizard is not None:
+            wizard.unregister_enhancements(self.metadata["id"])
+            self._wizard = None
 
         logger.info("GROBID extractor plugin cleaned up")
 

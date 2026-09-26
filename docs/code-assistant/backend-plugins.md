@@ -197,7 +197,7 @@ class MyPlugin(Plugin):
 
 **Behavior:**
 
-- Unavailable plugins are skipped during discovery (not registered)
+- Unavailable plugins are not registered, but are listed in the plugin manager with the reason from `unavailable_reason()`
 - Default implementation returns `True` (always available)
 - Checked once at startup during plugin discovery
 
@@ -212,6 +212,17 @@ def is_available(cls) -> bool:
     app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
     return app_mode == "testing"
 ```
+
+## Runtime Enable/Disable
+
+Administrators can enable and disable plugins at runtime from the Tools menu ("Manage Plugins", see the [user manual](../user-manual/plugin-manager.md)). Plugins stay imported and their routes stay mounted; a persisted state (config key `plugins.disabled`, managed by the plugin manager, hidden in the config editor) gates them. Consequences for plugin authors:
+
+- **`initialize()` and `cleanup()` must be re-entrant and symmetric.** `cleanup()` must undo everything `initialize()` did (service/extractor/provider registrations, event handlers, registrations with other plugins such as `tei-wizard` enhancements) so that `initialize()` can safely run again. Frontend extensions registered through `FrontendExtensionRegistry` are removed automatically. The test `TestBuiltinLifecycleConformance` in `tests/unit/fastapi/test_plugin_management.py` runs `initialize -> cleanup -> initialize` for all built-in plugins.
+- **Disabling cascades along `dependencies`.** Disabling a plugin makes its dependents `inactive`; they return when it is enabled again (unless they are disabled explicitly). Dependents are cleaned up first, dependencies are initialized first.
+- **Inactive plugins answer 404.** Custom routes (`routes.py`) are gated with a router dependency and `static/` mounts with `GatedStaticFiles`; `/api/v1/plugins` and `/extensions.js` list only active plugins.
+- **Module-level code and `__init__()` still run at startup** for disabled plugins, so keep them free of side effects.
+- **Status** is derived: `active`, `disabled`, `inactive` (dependency not active), `unavailable` (`is_available()` is false; override `unavailable_reason()` to explain why), `failed` (import error, unresolved dependency, or `initialize()` raised).
+- **Optional metadata:** `"protected": True` prevents disabling (use for plugins the admin tooling depends on); `"readme_url"` overrides the README link shown in the manager (built-in plugins with a `README.md` link to GitHub automatically).
 
 ## Plugin Configuration with Environment Variables
 

@@ -155,6 +155,16 @@ class Plugin(ABC):
         """
         return True
 
+    @classmethod
+    def unavailable_reason(cls) -> str | None:
+        """
+        Human-readable reason shown in the plugin manager when is_available() is False.
+
+        Returns:
+            str | None: Reason text, or None for a generic message
+        """
+        return None
+
     async def initialize(self, context: PluginContext) -> None:
         """
         Optional initialization hook called when plugin is loaded.

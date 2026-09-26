@@ -38,6 +38,7 @@ class MetadataExtractionPlugin(Plugin):
         """Register the TEI header enrichment enhancement with tei-wizard."""
         tei_wizard = context.get_dependency("tei-wizard")
         if isinstance(tei_wizard, TeiWizardPlugin):
+            self._wizard = tei_wizard
             enhancement_file = Path(__file__).parent / "enhancements" / "enrich-tei-header.js"
             if enhancement_file.exists():
                 tei_wizard.register_enhancement(enhancement_file, self.metadata["id"])
@@ -45,3 +46,10 @@ class MetadataExtractionPlugin(Plugin):
                 logger.warning(f"Enhancement file not found: {enhancement_file}")
         else:
             logger.debug("tei-wizard dependency not available")
+
+    async def cleanup(self) -> None:
+        """Remove the enhancement registered with tei-wizard."""
+        wizard = getattr(self, "_wizard", None)
+        if wizard is not None:
+            wizard.unregister_enhancements(self.metadata["id"])
+            self._wizard = None

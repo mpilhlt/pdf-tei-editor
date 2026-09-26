@@ -1,0 +1,22 @@
+<sl-dialog name="pluginAdminDialog" label="Plugins" class="plugin-admin-dialog" style="--width: 60rem;">
+  <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+    <div name="summary" style="color: var(--sl-color-neutral-600); font-size: 0.85em;"></div>
+    <sl-alert name="reloadBanner" variant="warning" open style="display: none;">
+      <sl-icon slot="icon" name="exclamation-triangle"></sl-icon>
+      <div style="display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap;">
+        <span>Changes apply to open pages after a reload.</span>
+        <sl-button name="reloadBtn" variant="primary" size="small">Reload now</sl-button>
+      </div>
+    </sl-alert>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+      <sl-input name="searchInput" placeholder="Filter by name, description or category" clearable size="small" style="flex: 1; min-width: 14rem;">
+        <sl-icon slot="prefix" name="search"></sl-icon>
+      </sl-input>
+      <div name="statusChips" style="display: flex; gap: 0.35rem; flex-wrap: wrap;"></div>
+    </div>
+    <div name="pluginList" style="overflow-y: auto; max-height: 55vh; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium);"></div>
+  </div>
+  <div slot="footer">
+    <sl-button name="closeBtn" variant="default">Close</sl-button>
+  </div>
+</sl-dialog>

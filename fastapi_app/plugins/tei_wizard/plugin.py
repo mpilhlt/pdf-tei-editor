@@ -75,6 +75,16 @@ class TeiWizardPlugin(Plugin):
         self._enhancement_files.append((file_path, plugin_id))
         logger.info(f"Registered enhancement: {file_path.name} from {plugin_id}")
 
+    def unregister_enhancements(self, plugin_id: str) -> None:
+        """Remove all enhancement files registered by a plugin."""
+        self._enhancement_files = [
+            (f, pid) for f, pid in self._enhancement_files if pid != plugin_id
+        ]
+
+    async def cleanup(self) -> None:
+        """Drop all enhancements; dependent plugins re-register in their own initialize()."""
+        self._enhancement_files = []
+
     def get_enhancement_files(self) -> list[tuple[Path, str]]:
         """Return all registered enhancement files."""
         return self._enhancement_files.copy()

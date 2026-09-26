@@ -19,6 +19,7 @@ import {
   ClientPlugin,
   ConfigEditorPlugin,
   ConfigPlugin,
+  PluginAdminPlugin,
   DialogPlugin,
   DocumentActionsPlugin,
   ExtractionPlugin,
@@ -75,6 +76,7 @@ const plugins = [
   FiledataPlugin,      // Garbage Collection
   RbacManagerPlugin,   // Manage Users & Roles
   ConfigEditorPlugin,  // Configuration Editor
+  PluginAdminPlugin,   // Manage Plugins
 
   // Other plugins
   InfoPlugin,          // User Manual (first)

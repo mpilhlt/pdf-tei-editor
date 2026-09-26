@@ -21,6 +21,7 @@ class BackupRestorePlugin(Plugin):
             "category": "admin",
             "version": "1.0.0",
             "required_roles": ["admin"],
+            "protected": True,
             "endpoints": [
                 {
                     "name": "manage",

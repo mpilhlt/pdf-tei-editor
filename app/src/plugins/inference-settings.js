@@ -130,6 +130,30 @@ export class InferenceSettingsPlugin extends Plugin {
    */
   _menuSignature = '';
 
+  /**
+   * Listeners notified after `_providers` was (re)set.
+   * @type {Set<(hasProviders: boolean) => void>}
+   */
+  _providerListeners = new Set();
+
+  /** @returns {boolean} True if at least one inference provider is configured. */
+  hasProviders() {
+    return this._providers.length > 0;
+  }
+
+  /**
+   * Register a listener called with `hasProviders()` whenever the provider
+   * list has been refreshed or reset.
+   * @param {(hasProviders: boolean) => void} listener
+   */
+  onProvidersChange(listener) {
+    this._providerListeners.add(listener);
+  }
+
+  _notifyProvidersChange() {
+    this._providerListeners.forEach(fn => fn(this.hasProviders()));
+  }
+
   /** @returns {boolean} True if the current user has the admin role. */
   _isAdmin() {
     return userIsAdmin(this.state?.user ?? null);
@@ -437,6 +461,7 @@ export class InferenceSettingsPlugin extends Plugin {
     if (this._menuItem) this._menuItem.style.display = 'none';
     if (this._submenu) this._submenu.innerHTML = '';
     this._updateMenuItemLabel();
+    this._notifyProvidersChange();
   }
 
   /**
@@ -470,6 +495,7 @@ export class InferenceSettingsPlugin extends Plugin {
     if (this._submenu && changed) {
       this._populateSubmenu(providers);
     }
+    this._notifyProvidersChange();
   }
 }
 

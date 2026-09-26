@@ -122,5 +122,8 @@
   "backend-plugins.open-target": "tab",
   "backend-plugins.open-target.description": "How backend plugin pages opened via 'Open in new window'-style links are displayed: as a new browser tab, or a separate popup window",
   "backend-plugins.open-target.type": "string",
-  "backend-plugins.open-target.values": ["tab", "window"]
+  "backend-plugins.open-target.values": ["tab", "window"],
+  "plugins.disabled": [],
+  "plugins.disabled.description": "IDs of backend plugins disabled by an administrator (managed by the Plugin Manager)",
+  "plugins.disabled.type": "array"
 }

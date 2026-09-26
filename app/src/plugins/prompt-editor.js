@@ -15,12 +15,11 @@ import { SlMenuItem, SlOption } from '../ui.js'
 
 // Register templates at module level
 await registerTemplate('prompt-editor', 'prompt-editor.html')
-await registerTemplate('prompt-editor-button', 'prompt-editor-button.html')
 
 class PromptEditorPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'prompt-editor', deps: ['extraction', 'logger'] })
+    super(context, { name: 'prompt-editor', deps: ['tools', 'inference-settings', 'logger'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -48,10 +47,24 @@ class PromptEditorPlugin extends Plugin {
     this.#ui.duplicate.addEventListener('click', () => this.duplicate())
     this.#ui.cancel.addEventListener('click', () => this.close())
     this.#ui.delete.addEventListener('click', () => this.delete())
+  }
 
-    const promptEditorButton = createSingleFromTemplate('prompt-editor-button')
-    this.getDependency('extraction').addButton(promptEditorButton)
-    promptEditorButton.addEventListener('click', () => this.open())
+  /** Adds the menu item; the tools UI is not available during install() */
+  async start() {
+    await super.start()
+
+    const menuItem = document.createElement('sl-menu-item')
+    menuItem.textContent = 'Edit the prompt instructions'
+    menuItem.addEventListener('click', () => this.open())
+    this.getDependency('tools').addMenuItems([menuItem], 'inference')
+
+    // only show if an inference provider has been configured
+    const inferenceSettings = this.getDependency('inference-settings')
+    const updateVisibility = (/** @type {boolean} */ hasProviders) => {
+      menuItem.style.display = hasProviders ? '' : 'none'
+    }
+    updateVisibility(inferenceSettings.hasProviders())
+    inferenceSettings.onProvidersChange(updateVisibility)
   }
 
   /**

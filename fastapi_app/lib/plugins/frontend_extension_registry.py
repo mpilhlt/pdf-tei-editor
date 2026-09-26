@@ -54,6 +54,12 @@ class FrontendExtensionRegistry:
         """Return all registered extension files."""
         return self._extension_files.copy()
 
+    def unregister_plugin(self, plugin_id: str) -> None:
+        """Remove all extension files registered by a plugin."""
+        self._extension_files = [
+            (f, pid) for f, pid in self._extension_files if pid != plugin_id
+        ]
+
     def clear(self) -> None:
         """Clear all registered extensions."""
         self._extension_files.clear()

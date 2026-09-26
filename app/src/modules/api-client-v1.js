@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-25T13:56:07.408Z
+ * Generated from OpenAPI schema at 2026-09-26T16:23:57.358Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -105,6 +105,25 @@
  */
 
 /**
+ * @typedef {Object} CascadeRequiredResponse
+ * @property {string} detail
+ * @property {Array<string>} affected
+ * @property {string} direction
+ */
+
+/**
+ * @typedef {Object} ChangeRequest
+ * @property {boolean=} cascade
+ */
+
+/**
+ * @typedef {Object} ChangeResult
+ * @property {Object<string, any>} changed
+ * @property {Object<string, any>} errors
+ * @property {boolean} reload_required
+ */
+
+/**
  * @typedef {Object} CheckLockRequest
  * @property {string} file_id
  */
@@ -166,6 +185,32 @@
 /**
  * @typedef {Object} ConfigSetResponse
  * @property {string} result
+ */
+
+/**
+ * @typedef {Object} ConflictInfo
+ * @property {string} file_id
+ * @property {string} stable_id
+ * @property {string} filename
+ * @property {string} doc_id
+ * @property {string} local_modified_at
+ * @property {string} local_hash
+ * @property {string} remote_modified_at
+ * @property {string} remote_hash
+ * @property {string} conflict_type
+ */
+
+/**
+ * @typedef {Object} ConflictListResponse
+ * @property {Array<ConflictInfo>} conflicts
+ * @property {number} total
+ */
+
+/**
+ * @typedef {Object} ConflictResolution
+ * @property {string} file_id
+ * @property {string} resolution
+ * @property {string=} new_variant - Variant name when using 'keep_both' resolution
  */
 
 /**
@@ -452,6 +497,32 @@
  */
 
 /**
+ * @typedef {Object} PluginAdminInfo
+ * @property {string} id
+ * @property {string} name
+ * @property {string} version
+ * @property {string} description
+ * @property {string} category
+ * @property {Array<string>} required_roles
+ * @property {string} status
+ * @property {string} status_reason
+ * @property {boolean} enabled
+ * @property {boolean} protected
+ * @property {Array<string>} dependencies
+ * @property {Array<string>} dependents
+ * @property {string} source
+ * @property {string} readme_url
+ * @property {boolean} has_routes
+ * @property {boolean} has_frontend_extension
+ * @property {number} menu_endpoints
+ */
+
+/**
+ * @typedef {Object} PluginAdminListResponse
+ * @property {Array<PluginAdminInfo>} plugins
+ */
+
+/**
  * @typedef {Object} PluginListResponse
  * @property {Array<Object<string, any>>} plugins
  */
@@ -583,6 +654,36 @@
  * @property {string} username
  * @property {string=} fullname
  * @property {Array<string>=} roles
+ */
+
+/**
+ * @typedef {Object} SyncRequest
+ * @property {boolean=} force - Force sync even if quick check indicates no changes needed
+ */
+
+/**
+ * @typedef {Object} SyncStatusResponse
+ * @property {boolean} needs_sync
+ * @property {number} local_version
+ * @property {number} remote_version
+ * @property {number} unsynced_count
+ * @property {string=} last_sync_time
+ * @property {boolean=} sync_in_progress
+ */
+
+/**
+ * @typedef {Object} SyncSummary
+ * @property {boolean=} skipped
+ * @property {number=} uploaded
+ * @property {number=} downloaded
+ * @property {number=} deleted_local
+ * @property {number=} deleted_remote
+ * @property {number=} metadata_synced
+ * @property {number=} conflicts
+ * @property {number=} errors
+ * @property {number=} new_version
+ * @property {number=} duration_ms
+ * @property {string=} message
  */
 
 /**
@@ -1956,6 +2057,40 @@ export class ApiClientV1 {
   async maintenanceReload() {
     const endpoint = `/maintenance/reload`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * List all discovered plugins with status, dependencies and README link.
+   *
+   * @returns {Promise<PluginAdminListResponse>}
+   */
+  async pluginsAdmin() {
+    const endpoint = `/plugins/admin`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Enable a plugin (and, with cascade, the disabled plugins it requires).
+   *
+   * @param {string} plugin_id
+   * @param {ChangeRequest} requestBody
+   * @returns {Promise<ChangeResult>}
+   */
+  async pluginsAdminEnable(plugin_id, requestBody) {
+    const endpoint = `/plugins/admin/${plugin_id}/enable`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Disable a plugin (and, with cascade, deactivate the plugins that depend on it).
+   *
+   * @param {string} plugin_id
+   * @param {ChangeRequest} requestBody
+   * @returns {Promise<ChangeResult>}
+   */
+  async pluginsAdminDisable(plugin_id, requestBody) {
+    const endpoint = `/plugins/admin/${plugin_id}/disable`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**
