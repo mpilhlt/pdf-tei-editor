@@ -146,6 +146,10 @@ class TestPlugin(Plugin):
         }
 
     @classmethod
+    def unavailable_reason(cls) -> str | None:
+        return "Only available when FASTAPI_APPLICATION_MODE=testing"
+
+    @classmethod
     def is_available(cls) -> bool:
         """Test plugin available only in testing mode."""
         app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")

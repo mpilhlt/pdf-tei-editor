@@ -59,6 +59,10 @@ class AnthropicLLMPlugin(Plugin):
         return {}
 
     @classmethod
+    def unavailable_reason(cls) -> str | None:
+        return "API key not configured (plugin.anthropic-llm.api.key)"
+
+    @classmethod
     def is_available(cls) -> bool:
         """Check if the Anthropic LLM provider is available (API key configured)."""
         return bool(get_config().get("plugin.anthropic-llm.api.key"))

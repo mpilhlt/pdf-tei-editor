@@ -25,6 +25,7 @@ class LogViewerPlugin(Plugin):
             "version": "1.0.0",
             "category": "admin",
             "required_roles": ["admin"],
+            "protected": True,
             "endpoints": [
                 {
                     "name": "show_logs",
