@@ -10,6 +10,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv(override=False)  # Don't override existing env vars
 
+GITHUB_REPO_URL = "https://github.com/mpilhlt/pdf-tei-editor"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from .env.fastapi (or custom env file)"""
 

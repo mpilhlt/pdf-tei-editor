@@ -5,18 +5,42 @@ This module provides a singleton manager that handles plugin discovery,
 initialization, route registration, and execution.
 """
 
+import asyncio
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import PluginContext
-from fastapi_app.lib.plugins.plugin_registry import PluginRegistry
+from fastapi_app.lib.plugins.plugin_gate import GatedStaticFiles, plugin_gate
+from fastapi_app.lib.plugins.plugin_registry import ChangePlan, PluginRegistry
+from fastapi_app.lib.utils.config_utils import get_config
 
 logger = logging.getLogger(__name__)
+
+DISABLED_CONFIG_KEY = "plugins.disabled"
+
+
+class CascadeRequired(Exception):
+    """Raised when a toggle affects other plugins and the caller did not confirm."""
+
+    def __init__(self, affected: list[str], direction: str):
+        super().__init__(f"Cascade required ({direction}): {', '.join(affected)}")
+        self.affected = affected
+        self.direction = direction
+
+
+class PluginChangeError(Exception):
+    """Raised when a plugin cannot be toggled; carries the HTTP status to report."""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
 
 
 class PluginManager:
@@ -34,6 +58,7 @@ class PluginManager:
         self.registry = PluginRegistry()
         self._app: FastAPI | None = None
         self._initialized = False
+        self._lock = asyncio.Lock()
 
     @classmethod
     def get_instance(cls) -> "PluginManager":
@@ -72,7 +97,13 @@ class PluginManager:
                     plugin_dirs.append(Path(path_str))
 
         logger.info(f"Discovering plugins from {len(plugin_dirs)} directories")
-        self.registry.discover_plugins(plugin_dirs)
+        self.registry.discover_plugins(plugin_dirs, builtin_dir=builtin_dir)
+        self.load_disabled()
+
+    def load_disabled(self) -> None:
+        """Load the explicitly disabled plugin ids from config."""
+        disabled = get_config().get(DISABLED_CONFIG_KEY, default=[])
+        self.registry.set_disabled({str(p) for p in disabled})
 
     def register_plugin_routes(self, app: FastAPI) -> None:
         """
@@ -144,7 +175,9 @@ class PluginManager:
 
                         # Look for 'router' in the module
                         if hasattr(module, "router"):
-                            app.include_router(module.router)
+                            app.include_router(
+                                module.router, dependencies=[Depends(plugin_gate(plugin_id))]
+                            )
                             logger.info(f"Registered custom routes for plugin: {plugin_id}")
                             return
                         else:
@@ -164,8 +197,6 @@ class PluginManager:
             app: FastAPI application instance
             plugin_id: Plugin identifier
         """
-        from fastapi.staticfiles import StaticFiles
-
         plugin_dirs = self._get_plugin_dirs()
         dir_names = [plugin_id, plugin_id.replace("-", "_")]
 
@@ -180,7 +211,7 @@ class PluginManager:
                         mount_path = f"/api/plugins/{plugin_id}/static"
                         app.mount(
                             mount_path,
-                            StaticFiles(directory=str(static_dir)),
+                            GatedStaticFiles(plugin_id=plugin_id, directory=str(static_dir)),
                             name=f"plugin_{plugin_id}_static"
                         )
                         logger.info(f"Mounted static files for plugin {plugin_id} at {mount_path}")
@@ -268,7 +299,7 @@ class PluginManager:
             ValueError: If plugin or endpoint not found
         """
         plugin = self.registry.get_plugin(plugin_id)
-        if plugin is None:
+        if plugin is None or not self.registry.is_active(plugin_id):
             raise ValueError(f"Plugin not found: {plugin_id}")
 
         endpoints = plugin.get_endpoints()
@@ -287,3 +318,107 @@ class PluginManager:
 
         # Execute endpoint (pass both context and params)
         return await endpoint_func(context, params)
+
+    async def set_plugin_enabled(
+        self, plugin_id: str, enabled: bool, cascade: bool = False, user: dict | None = None
+    ) -> dict[str, Any]:
+        """
+        Enable or disable a plugin and apply lifecycle hooks without a restart.
+
+        Args:
+            plugin_id: Plugin identifier
+            enabled: True to enable, False to disable
+            cascade: Confirm that other plugins may be (de)activated as a consequence
+            user: Acting user (for the audit log line)
+
+        Returns:
+            {"changed": {id: status}, "errors": {id: message}, "reload_required": True}
+
+        Raises:
+            PluginChangeError: unknown plugin (404); protected, unavailable or failed (409);
+                config write failed (500)
+            CascadeRequired: other plugins are affected and cascade is False
+        """
+        async with self._lock:
+            registry = self.registry
+            record = registry.get_record(plugin_id)
+            if record is None:
+                raise PluginChangeError(404, f"Plugin not found: {plugin_id}")
+            if record.load_status != "ok":
+                raise PluginChangeError(409, f"Plugin is {record.load_status}: {record.error}")
+            if not enabled and record.metadata.get("protected", False):
+                raise PluginChangeError(409, f"Plugin {plugin_id} is protected and cannot be disabled")
+
+            disabled = registry.disabled
+            if enabled:
+                needed = [d for d in registry.dependencies(plugin_id, transitive=True) if d in disabled]
+                if needed and not cascade:
+                    raise CascadeRequired(needed, "enable")
+                new_disabled = disabled - {plugin_id} - set(needed)
+            else:
+                new_disabled = disabled | {plugin_id}
+                affected = [p for p in registry.plan(new_disabled).deactivate if p != plugin_id]
+                if affected and not cascade:
+                    raise CascadeRequired(affected, "disable")
+
+            plan = registry.plan(new_disabled)
+            ok, message = get_config().set(
+                DISABLED_CONFIG_KEY,
+                sorted(new_disabled),
+                value_type="array",
+                description="IDs of backend plugins disabled by an administrator (managed by the Plugin Manager)",
+            )
+            if not ok:
+                raise PluginChangeError(500, f"Could not save plugin state: {message}")
+            registry.set_disabled(new_disabled)
+
+            errors = await self._apply_plan(plan)
+            logger.info(
+                "Plugin %s %s by %s (deactivated: %s, activated: %s)",
+                plugin_id,
+                "enabled" if enabled else "disabled",
+                (user or {}).get("username", "unknown"),
+                plan.deactivate,
+                plan.activate,
+            )
+            touched = {plugin_id, *plan.deactivate, *plan.activate}
+            return {
+                "changed": {p: registry.status(p)[0] for p in touched},
+                "errors": errors,
+                "reload_required": True,
+            }
+
+    async def _apply_plan(self, plan: ChangePlan) -> dict[str, str]:
+        """
+        Run cleanup() for deactivated and initialize() for activated plugins.
+
+        Returns:
+            Error messages by plugin id
+        """
+        errors: dict[str, str] = {}
+        ext_registry = FrontendExtensionRegistry.get_instance()
+        for pid in plan.deactivate:
+            record = self.registry.get_record(pid)
+            if record is None or record.plugin is None:
+                continue
+            if record.initialized:
+                try:
+                    await record.plugin.cleanup()
+                except Exception as e:
+                    logger.error(f"Error cleaning up plugin {pid}: {e}", exc_info=True)
+                    errors[pid] = f"cleanup() failed: {e}"
+            record.initialized = False
+            ext_registry.unregister_plugin(pid)
+        for pid in plan.activate:
+            record = self.registry.get_record(pid)
+            if record is None or record.plugin is None or not self.registry.is_active(pid):
+                continue
+            context = PluginContext(app=self._app, plugin_id=pid, registry=self.registry)
+            try:
+                await record.plugin.initialize(context)
+                record.initialized = True
+            except Exception as e:
+                logger.error(f"Error initializing plugin {pid}: {e}", exc_info=True)
+                self.registry.mark_failed(pid, f"initialize() failed: {e}")
+                errors[pid] = str(e)
+        return errors

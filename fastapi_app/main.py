@@ -208,6 +208,7 @@ app.add_middleware(
 from .api import auth, config
 from .routers import (
     plugins,
+    plugins_admin,
     files_list,
     files_serve,
     files_upload,
@@ -264,6 +265,7 @@ api_v1.include_router(files_metadata.router)  # Metadata update endpoint
 api_v1.include_router(files_permissions.router)  # Document permissions (granular mode)
 api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
+api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router
 api_v1.include_router(plugins.router)  # Plugin system endpoints
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 

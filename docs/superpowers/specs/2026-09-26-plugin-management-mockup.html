@@ -1,0 +1,303 @@
+<title>Plugin Manager Mockup</title>
+<style>
+:root {
+  --bg: #e9edf2;
+  --surface: #ffffff;
+  --surface-2: #f4f6f9;
+  --line: #d9dfe7;
+  --text: #1c2530;
+  --muted: #5d6b7c;
+  --accent: #0b6bcb;
+  --accent-soft: #e3f0fd;
+  --ok: #1a7f4b;
+  --ok-soft: #e0f4e9;
+  --warn: #9a5b00;
+  --warn-soft: #fdf0d8;
+  --bad: #b3261e;
+  --bad-soft: #fde7e5;
+  --off: #6b7684;
+  --off-soft: #e8ebef;
+  --shadow: 0 12px 40px rgba(20, 35, 55, .18);
+  --scrim: rgba(20, 30, 45, .35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12171e; --surface: #1b222b; --surface-2: #232c37; --line: #33404e;
+    --text: #e6ebf1; --muted: #9aa8b8; --accent: #5aa9f5; --accent-soft: #1b3350;
+    --ok: #56c98b; --ok-soft: #173a29; --warn: #f0b458; --warn-soft: #3b2d12;
+    --bad: #f28b82; --bad-soft: #43201d; --off: #9aa8b8; --off-soft: #2a333e;
+    --shadow: 0 12px 40px rgba(0, 0, 0, .55); --scrim: rgba(0, 0, 0, .5);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12171e; --surface: #1b222b; --surface-2: #232c37; --line: #33404e;
+  --text: #e6ebf1; --muted: #9aa8b8; --accent: #5aa9f5; --accent-soft: #1b3350;
+  --ok: #56c98b; --ok-soft: #173a29; --warn: #f0b458; --warn-soft: #3b2d12;
+  --bad: #f28b82; --bad-soft: #43201d; --off: #9aa8b8; --off-soft: #2a333e;
+  --shadow: 0 12px 40px rgba(0, 0, 0, .55); --scrim: rgba(0, 0, 0, .5);
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding-inline: 16px; padding-block: 16px 40px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.stage { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.note { color: var(--muted); font-size: 12.5px; }
+.note b { color: var(--text); font-weight: 600; }
+
+/* faux app chrome */
+.appbar { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: relative; }
+.appbar .fake { height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); display: inline-flex; align-items: center; font-size: 13px; }
+.appbar .spacer { flex: 1; }
+.tools-btn { height: 28px; padding: 0 12px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.menu { position: absolute; top: 44px; left: 12px; z-index: 5; width: 250px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 6px 0; }
+.menu small { display: block; padding: 6px 14px 2px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+.menu .mi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 14px; background: none; border: 0; text-align: left; }
+.menu .mi:hover, .menu .mi.hl { background: var(--accent-soft); }
+.menu .mi svg { flex: none; color: var(--muted); }
+.menu .mi.hl svg { color: var(--accent); }
+.menu .mi.hl { font-weight: 600; }
+
+/* dialog */
+.dialog { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.dlg-head h1 { margin: 0; font-size: 17px; font-weight: 650; }
+.dlg-head .sub { color: var(--muted); font-size: 12.5px; }
+.x { border: 0; background: none; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); font-size: 18px; line-height: 1; }
+.x:hover { background: var(--surface-2); }
+
+.banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 18px; background: var(--warn-soft); color: var(--warn); border-bottom: 1px solid var(--line); font-weight: 500; }
+.banner .grow { flex: 1; min-width: 200px; }
+.btn { height: 30px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-weight: 550; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.danger:hover { background: var(--bad); filter: brightness(1.08); }
+
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.toolbar input { flex: 1; min-width: 180px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12.5px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip .n { font-variant-numeric: tabular-nums; opacity: .8; margin-left: 4px; }
+
+.list { max-height: 560px; overflow-y: auto; }
+.row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); align-items: start; transition: background .3s; }
+.row:last-child { border-bottom: 0; }
+.row.flash { background: var(--accent-soft); }
+.row.dim .title, .row.dim .desc { opacity: .6; }
+.switch { position: relative; width: 40px; height: 22px; margin-top: 2px; border-radius: 11px; border: 0; background: var(--line); padding: 0; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); }
+.switch:disabled { opacity: .45; cursor: not-allowed; }
+.title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.title strong { font-size: 14.5px; }
+.ver { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+.badge.active { background: var(--ok-soft); color: var(--ok); }
+.badge.disabled { background: var(--off-soft); color: var(--off); }
+.badge.inactive { background: var(--warn-soft); color: var(--warn); }
+.badge.unavailable { background: var(--warn-soft); color: var(--warn); }
+.badge.failed { background: var(--bad-soft); color: var(--bad); }
+.badge.protected { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.desc { margin: 3px 0 0; color: var(--muted); max-width: 62ch; }
+.reason { margin: 6px 0 0; font-size: 12.5px; color: var(--warn); }
+.reason.bad { color: var(--bad); }
+.deps { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.deps .grp { display: inline-flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.dep { border: 1px solid var(--line); background: var(--surface-2); border-radius: 4px; padding: 0 7px; height: 20px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.dep:hover { border-color: var(--accent); color: var(--accent); }
+.meta { margin-top: 6px; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.readme { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); text-decoration: none; font-size: 12.5px; white-space: nowrap; }
+.readme:hover { background: var(--accent-soft); }
+.readme.none { visibility: hidden; }
+.empty { padding: 30px; text-align: center; color: var(--muted); }
+
+/* confirm layer */
+.scrim { position: absolute; inset: 0; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; padding: 90px 16px 16px; z-index: 10; }
+.confirm { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); width: 100%; max-width: 460px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.confirm h2 { margin: 0; font-size: 15.5px; }
+.confirm p { margin: 0; color: var(--muted); }
+.confirm ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.confirm li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.confirm .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 8px 14px; border-radius: 6px; font-size: 13px; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+
+@media (max-width: 560px) {
+  .row { grid-template-columns: 48px 1fr; }
+  .row .readme { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after, .row { transition: none; } }
+</style>
+
+<div class="stage">
+  <p class="note"><b>Concept, not the real UI.</b> Toggle switches, filter, click a dependency chip. Try disabling <code>tei-wizard</code> or enabling <code>collection-overview</code>. The real dialog will use Shoelace components; state here is only in this page.</p>
+
+  <div class="appbar" aria-label="Application toolbar (context)">
+    <span class="fake">PDF-TEI Editor</span>
+    <span class="fake">Document ▾</span>
+    <button class="tools-btn" type="button" aria-expanded="true">Tools ▾</button>
+    <span class="spacer"></span>
+    <span class="fake">admin</span>
+    <div class="menu" role="menu">
+      <small>Extraction</small>
+      <button class="mi" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h7l3 3v9H3z"/><path d="M10 2v3h3"/></svg>Extract references</button>
+      <hr>
+      <small>Administration</small>
+      <button class="mi" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg>Edit configuration</button>
+      <button class="mi hl" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0zM8 12v2"/></svg>Manage plugins</button>
+      <button class="mi" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4zM6 5h4M6 8h4M6 11h2"/></svg>Show logs</button>
+    </div>
+  </div>
+
+  <section class="dialog" aria-labelledby="dlg-title" style="margin-top: 150px;">
+    <header class="dlg-head">
+      <div>
+        <h1 id="dlg-title">Plugins</h1>
+        <div class="sub" id="summary"></div>
+      </div>
+      <button class="x" type="button" aria-label="Close">×</button>
+    </header>
+    <div class="banner" id="banner" hidden>
+      <span class="grow">Changes apply to open pages after a reload.</span>
+      <button class="btn primary" type="button" id="reload">Reload now</button>
+    </div>
+    <div class="toolbar">
+      <input id="filter" type="search" placeholder="Filter by name, description or category" aria-label="Filter plugins">
+      <div class="chips" id="chips" role="group" aria-label="Filter by status"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="scrim" id="scrim" hidden>
+      <div class="confirm" role="alertdialog" aria-labelledby="c-title">
+        <h2 id="c-title"></h2>
+        <p id="c-text"></p>
+        <ul id="c-list"></ul>
+        <div class="actions">
+          <button class="btn" type="button" id="c-cancel">Cancel</button>
+          <button class="btn" type="button" id="c-ok"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const REPO = 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/fastapi_app/plugins/';
+// load: ok | unavailable | failed. `off` = explicitly disabled.
+const P = [
+  { id: 'tei-wizard', name: 'TEI Wizard', v: '1.2.0', cat: 'document', desc: 'Step-by-step enhancement of TEI documents with pluggable enhancement handlers.', deps: [], dir: 'tei_wizard', menu: 1, ext: true },
+  { id: 'grobid', name: 'GROBID', v: '2.0.1', cat: 'extractor', desc: 'Reference and metadata extraction from PDFs using a GROBID server.', deps: ['tei-wizard'], dir: 'grobid', menu: 2, ext: true },
+  { id: 'metadata-extraction', name: 'Metadata Extraction', v: '1.0.0', cat: 'extractor', desc: 'Extracts bibliographic metadata and adds it to the TEI header.', deps: ['tei-wizard'], dir: 'metadata_extraction', menu: 1, ext: true },
+  { id: 'annotation-progress', name: 'Annotation Progress', v: '1.1.0', cat: 'document', desc: 'Tracks annotation lifecycle stages per document and collection.', deps: [], dir: 'annotation_progress', menu: 1, ext: false },
+  { id: 'collection-overview', name: 'Collection Overview', v: '1.0.0', cat: 'document', desc: 'Summary table of annotation status across all documents in a collection.', deps: ['annotation-progress'], dir: 'collection_overview', menu: 1, ext: false, off: true },
+  { id: 'webdav-sync', name: 'WebDAV Sync', v: '0.9.0', cat: 'sync', desc: 'Synchronizes collections with a remote WebDAV share.', deps: [], dir: 'webdav_sync', menu: 2, ext: false, off: true },
+  { id: 'anthropic-llm', name: 'Anthropic LLM', v: '1.0.0', cat: 'extractor', desc: 'LLM-based extraction using the Anthropic API.', deps: [], dir: 'anthropic_llm', menu: 1, ext: false, load: 'unavailable', reason: 'ANTHROPIC_API_KEY is not set' },
+  { id: 'llamore-extractor', name: 'LLamore Extractor', v: '0.4.0', cat: 'extractor', desc: 'Reference extraction with the LLamore library.', deps: [], dir: 'llamore_extractor', menu: 1, ext: false, load: 'failed', reason: 'ImportError: No module named "llamore"' },
+  { id: 'log-viewer', name: 'Log Viewer', v: '1.0.0', cat: 'admin', desc: 'View application logs in real time.', deps: [], dir: 'log_viewer', menu: 1, ext: false, prot: true },
+  { id: 'backup-restore', name: 'Backup and Restore', v: '1.3.0', cat: 'admin', desc: 'Create and restore backups of application data.', deps: [], dir: 'backup_restore', menu: 2, ext: false, prot: true },
+  { id: 'acme-export', name: 'ACME Export', v: '0.2.0', cat: 'exporter', desc: 'Site-specific export to the ACME repository format.', deps: [], external: true, menu: 1, ext: false },
+];
+const byId = Object.fromEntries(P.map(p => [p.id, p]));
+const dependents = id => P.filter(p => p.deps.includes(id)).map(p => p.id);
+const allDependents = (id, seen = new Set()) => { for (const d of dependents(id)) if (!seen.has(d)) { seen.add(d); allDependents(d, seen); } return seen; };
+const allDeps = (id, seen = new Set()) => { for (const d of byId[id].deps) if (!seen.has(d)) { seen.add(d); allDeps(d, seen); } return seen; };
+
+function status(p) {
+  if (p.load === 'unavailable') return { s: 'unavailable', why: p.reason };
+  if (p.load === 'failed') return { s: 'failed', why: p.reason };
+  if (p.off) return { s: 'disabled' };
+  const bad = p.deps.filter(d => status(byId[d]).s !== 'active');
+  if (bad.length) return { s: 'inactive', why: 'Waiting for ' + bad.join(', ') };
+  return { s: 'active' };
+}
+
+const $ = id => document.getElementById(id);
+let filterText = '', filterStatus = 'all', pendingReload = false;
+const LABEL = { active: 'Active', disabled: 'Disabled', inactive: 'Inactive', unavailable: 'Unavailable', failed: 'Failed' };
+const BOOK = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h6a3 3 0 0 1 3 3V14H6a3 3 0 0 1-3-3zM3 11a3 3 0 0 1 3-3h6"/></svg>';
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+const chip = id => `<button class="dep" type="button" data-go="${id}">${id}</button>`;
+
+function render() {
+  const counts = { all: P.length };
+  for (const p of P) { const s = status(p).s; counts[s] = (counts[s] || 0) + 1; }
+  $('summary').textContent = `${counts.active || 0} of ${P.length} plugins active`;
+  $('chips').innerHTML = ['all', 'active', 'disabled', 'inactive', 'unavailable', 'failed'].filter(k => k === 'all' || counts[k])
+    .map(k => `<button class="chip" type="button" data-f="${k}" aria-pressed="${filterStatus === k}">${k === 'all' ? 'All' : LABEL[k]}<span class="n">${counts[k]}</span></button>`).join('');
+
+  const q = filterText.toLowerCase();
+  const rows = P.filter(p => (filterStatus === 'all' || status(p).s === filterStatus) && (!q || (p.id + p.name + p.desc + p.cat).toLowerCase().includes(q)));
+  $('list').innerHTML = rows.length ? rows.map(p => {
+    const { s, why } = status(p);
+    const canToggle = !p.prot && p.load !== 'unavailable' && p.load !== 'failed';
+    const checked = !p.off && !p.load;
+    const rev = allDependents(p.id);
+    const direct = dependents(p.id);
+    const readme = p.external ? '' : `<a class="readme" href="${REPO}${p.dir}/README.md" target="_blank" rel="noopener">${BOOK}README</a>`;
+    return `<div class="row ${s === 'active' ? '' : 'dim'}" id="row-${p.id}">
+      <button class="switch" type="button" role="switch" aria-checked="${checked}" aria-label="Enable ${esc(p.name)}" data-t="${p.id}" ${canToggle ? '' : 'disabled'} title="${p.prot ? 'Protected plugin, cannot be disabled' : ''}"></button>
+      <div>
+        <div class="title"><strong>${esc(p.name)}</strong><span class="ver">v${p.v}</span>
+          <span class="badge ${s}">${LABEL[s]}</span>${p.prot ? '<span class="badge protected">Protected</span>' : ''}</div>
+        <p class="desc">${esc(p.desc)}</p>
+        ${why ? `<p class="reason ${s === 'failed' ? 'bad' : ''}">${esc(why)}</p>` : ''}
+        ${p.deps.length || direct.length ? `<div class="deps">
+          ${p.deps.length ? `<span class="grp">Requires ${p.deps.map(chip).join('')}</span>` : ''}
+          ${direct.length ? `<span class="grp">Required by ${direct.map(chip).join('')}</span>` : ''}</div>` : ''}
+        <div class="meta"><span>${p.cat}</span><span>${p.external ? 'external (FASTAPI_PLUGIN_PATHS)' : 'built-in'}</span><span>${p.menu} menu ${p.menu === 1 ? 'item' : 'items'}</span>${p.ext ? '<span>frontend extension</span>' : ''}</div>
+      </div>
+      ${readme || '<span class="readme none"></span>'}
+    </div>`;
+  }).join('') : '<div class="empty">No plugins match this filter.</div>';
+}
+
+let onOk = null;
+function confirmDialog({ title, text, ids, okLabel, danger, ok }) {
+  $('c-title').textContent = title; $('c-text').textContent = text;
+  $('c-list').innerHTML = ids.map(i => `<li><span><strong>${esc(byId[i].name)}</strong> <span class="ver">${i}</span></span><span class="badge ${status(byId[i]).s}">${LABEL[status(byId[i]).s]}</span></li>`).join('');
+  const b = $('c-ok'); b.textContent = okLabel; b.className = 'btn ' + (danger ? 'danger' : 'primary');
+  onOk = ok; $('scrim').hidden = false; b.focus();
+}
+const closeConfirm = () => { $('scrim').hidden = true; onOk = null; };
+$('c-cancel').onclick = closeConfirm;
+$('c-ok').onclick = () => { const f = onOk; closeConfirm(); f && f(); };
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
+function changed(msg) { pendingReload = true; $('banner').hidden = false; render(); toast(msg); }
+
+function toggle(id) {
+  const p = byId[id];
+  if (!p.off) { // disable
+    const affected = [...allDependents(id)].filter(d => status(byId[d]).s === 'active');
+    const run = () => { p.off = true; changed(`Disabled ${p.name}` + (affected.length ? ` and deactivated ${affected.length} dependent plugin${affected.length > 1 ? 's' : ''}` : '')); };
+    if (affected.length) confirmDialog({ title: `Disable ${p.name}?`, text: `${affected.length === 1 ? 'This plugin depends' : 'These plugins depend'} on ${p.name} and will be deactivated as well:`, ids: affected, okLabel: 'Disable all', danger: true, ok: run });
+    else run();
+  } else { // enable
+    const need = [...allDeps(id)].filter(d => byId[d].off);
+    const run = () => { need.forEach(d => byId[d].off = false); p.off = false; changed(`Enabled ${p.name}` + (need.length ? ` and ${need.length} required plugin${need.length > 1 ? 's' : ''}` : '')); };
+    if (need.length) confirmDialog({ title: `Enable ${p.name}?`, text: `${p.name} requires ${need.length === 1 ? 'a plugin that is' : 'plugins that are'} currently disabled. Enable ${need.length === 1 ? 'it' : 'them'} as well?`, ids: need, okLabel: 'Enable all', ok: run });
+    else run();
+  }
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-t]'); if (t) return toggle(t.dataset.t);
+  const f = e.target.closest('[data-f]'); if (f) { filterStatus = f.dataset.f; return render(); }
+  const g = e.target.closest('[data-go]');
+  if (g) {
+    filterText = ''; filterStatus = 'all'; $('filter').value = ''; render();
+    const row = $('row-' + g.dataset.go); row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1200);
+  }
+});
+$('filter').addEventListener('input', e => { filterText = e.target.value; render(); });
+$('reload').onclick = () => { $('banner').hidden = true; toast('Page would reload now (concept only)'); };
+render();
+</script>
