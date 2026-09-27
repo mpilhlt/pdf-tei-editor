@@ -36,6 +36,11 @@ import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { createMarkdownRenderer } from '../modules/markdown-utils.js'
+import { EditorState, Compartment } from '@codemirror/state'
+import { EditorView, keymap, lineNumbers } from '@codemirror/view'
+import { xml } from '@codemirror/lang-xml'
+import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
+import { getTheme } from '../modules/codemirror/editor-themes.js'
 
 // Register templates at module level
 await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
@@ -88,6 +93,12 @@ class DocumentRulesPlugin extends Plugin {
   /** @type {string} */
   _currentOriginalText = ''
 
+  /** @type {EditorView} */
+  _cmView = null
+
+  /** @type {Compartment} */
+  _cmReadOnlyCompartment = new Compartment()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -97,6 +108,21 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi = this.createUi(dialog)
 
     this._md = createMarkdownRenderer()
+
+    this._cmView = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          lineNumbers(),
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          xml(),
+          getTheme('default').extensions,
+          this._cmReadOnlyCompartment.of([EditorView.editable.of(false)])
+        ]
+      }),
+      parent: this._editorDialogUi.xmlBody.xmlContainer
+    })
 
     this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
     this._editorDialogUi.newOverrideBtn.addEventListener('click', () => this._onNewOverride())
@@ -421,11 +447,24 @@ class DocumentRulesPlugin extends Plugin {
     this._renderEditorDialog()
   }
 
-  /** @param {string} _text @param {boolean} _readOnly */
-  _setXmlContent(_text, _readOnly) { /* replaced in Task 6 */ }
+  /**
+   * Replace the CodeMirror doc's full content and toggle its read-only
+   * compartment - same reconfigure-in-place pattern as
+   * app/src/modules/xmleditor.js's setReadOnly().
+   * @param {string} text
+   * @param {boolean} readOnly
+   */
+  _setXmlContent(text, readOnly) {
+    this._cmView.dispatch({
+      changes: { from: 0, to: this._cmView.state.doc.length, insert: text },
+      effects: this._cmReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly)])
+    })
+  }
 
   /** @returns {string} */
-  _currentXmlText() { return '' /* replaced in Task 6 */ }
+  _currentXmlText() {
+    return this._cmView.state.doc.toString()
+  }
 
   /**
    * Preview, confirm, then execute a "Refresh document rules" pass on the
