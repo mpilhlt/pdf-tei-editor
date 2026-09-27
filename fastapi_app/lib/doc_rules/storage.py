@@ -51,9 +51,21 @@ class DocumentRulesStore:
             """,
             (override_id, kind, resource_key, owner, note, text, format, base_url, base_hash, now, now),
         )
-        override = self.get_override(override_id)
-        assert override is not None
-        return override
+        # Built from the values just inserted rather than re-queried, so this
+        # can never race with a concurrent delete of the row we just wrote.
+        return {
+            "id": override_id,
+            "kind": kind,
+            "resource_key": resource_key,
+            "owner": owner,
+            "note": note,
+            "text": text,
+            "format": format,
+            "base_url": base_url,
+            "base_hash": base_hash,
+            "created_at": now,
+            "updated_at": now,
+        }
 
     def update_override(
         self, override_id: str, owner: str, note: Optional[str], text: Optional[str]
@@ -105,7 +117,14 @@ class DocumentRulesStore:
         )
 
     def reset_selection(self, owner: str, resources: list[tuple[str, str]]) -> None:
-        """Clear the selection for each (kind, resource_key) pair, keeping all overrides."""
+        """
+        Clear the selection for each (kind, resource_key) pair, keeping all
+        overrides. Each pair is cleared in its own transaction; a failure
+        partway through leaves earlier pairs cleared and later ones
+        untouched rather than rolling back as a whole. Acceptable given the
+        expected size of `resources` (the rule/schema resources of one
+        document, typically single digits).
+        """
         for kind, resource_key in resources:
             self.set_selection(kind, resource_key, owner, None)
 

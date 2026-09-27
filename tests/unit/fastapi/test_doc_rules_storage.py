@@ -56,11 +56,17 @@ class TestDocumentRulesStore(unittest.TestCase):
         rejected = self.store.update_override(created["id"], "bob", note="hijack", text=None)
         self.assertIsNone(rejected)
 
+    def test_update_nonexistent_override_returns_none(self):
+        self.assertIsNone(self.store.update_override("no-such-id", "alice", note="x", text=None))
+
     def test_delete_override_owner_only(self):
         created = self._create(owner="alice")
         self.assertFalse(self.store.delete_override(created["id"], "bob"))
         self.assertTrue(self.store.delete_override(created["id"], "alice"))
         self.assertIsNone(self.store.get_override(created["id"]))
+
+    def test_delete_nonexistent_override_returns_false(self):
+        self.assertFalse(self.store.delete_override("no-such-id", "alice"))
 
     def test_selection_roundtrip(self):
         created = self._create(owner="alice")
@@ -85,6 +91,14 @@ class TestDocumentRulesStore(unittest.TestCase):
         self._create(owner="alice")
         self.assertIsNone(
             self.store.get_selected_override_text("interpretation-ref", "https://example.com/rules.md", "alice")
+        )
+
+    def test_get_selected_override_text_returns_selected_text(self):
+        created = self._create(owner="alice", text="override text")
+        self.store.set_selection("interpretation-ref", "https://example.com/rules.md", "alice", created["id"])
+        self.assertEqual(
+            self.store.get_selected_override_text("interpretation-ref", "https://example.com/rules.md", "alice"),
+            "override text",
         )
 
     def test_reset_selection_keeps_overrides(self):
