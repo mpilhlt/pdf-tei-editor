@@ -363,7 +363,11 @@ def download_schema_file(
         raise ValidationError(f"Failed to download schema: {str(e)}")
 
 
-def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
+def validate(
+    xml_string: str,
+    cache_root: Optional[Path] = None,
+    schema_text_override: Optional[Dict[str, str]] = None,
+) -> List[Dict]:
     """
     Validate an XML string using the schema declaration in the document.
 
@@ -372,6 +376,15 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
     Args:
         xml_string: XML document to validate
         cache_root: Root directory for schema cache (default: schema/cache)
+        schema_text_override: Optional map of resolved schema location -> schema
+            text to validate against instead of the shared, TTL-cached file for
+            that location. Keyed by the location *after* resolve_schema_location()
+            is applied (i.e. after any registered redirect), matching how this
+            function resolves each location internally. A location with no entry
+            uses the shared cache exactly as before; None (the default) is
+            byte-for-byte today's behavior. The override text is written to a
+            private temporary file for the duration of this call and never
+            touches the shared schema cache other callers read from.
 
     Returns:
         List of error dictionaries with keys: message, line, column, severity (optional)
@@ -426,84 +439,98 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
                 f"{schema_config.get('reason', '')}"
             )
 
-        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
+        override_text = (schema_text_override or {}).get(schema_location)
+        temp_schema_path: Optional[Path] = None
+        if override_text is not None:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.schema', delete=False, encoding='utf-8') as tmp:
+                tmp.write(override_text)
+                temp_schema_path = Path(tmp.name)
+            schema_file_to_validate = temp_schema_path
+            logger.debug(f"Using override text for {schema_location} instead of the shared cache")
+        else:
+            schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
 
-        # Download schema if not cached, or if the cached copy is older than the TTL
-        if is_schema_cache_stale(schema_cache_file):
-            logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
-            schema_cache_dir.mkdir(parents=True, exist_ok=True)
+            # Download schema if not cached, or if the cached copy is older than the TTL
+            if is_schema_cache_stale(schema_cache_file):
+                logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
+                schema_cache_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    if schema_type == "relaxng":
+                        # Download the RelaxNG schema file
+                        download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
+                    else:
+                        # For XSD, use xmlschema which handles includes/imports
+                        xmlschema.download_schemas(str(schema_location), target=str(schema_cache_dir), save_remote=True)
+                except requests.HTTPError as e:
+                    raise ValidationError(
+                        f"Failed to download schema for {namespace} from {schema_location} - check the URL: {e}"
+                    )
+                except xmlschema.XMLSchemaParseError as e:
+                    raise ValidationError(
+                        f"Failed to parse schema for {namespace} from {schema_location}: {str(e)}"
+                    )
+            else:
+                logger.debug(f"Using cached version at {schema_cache_file}")
+            schema_file_to_validate = schema_cache_file
+
+        try:
+            # Parse schema to determine actual type from file content
             try:
-                if schema_type == "relaxng":
-                    # Download the RelaxNG schema file
-                    download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
-                else:
-                    # For XSD, use xmlschema which handles includes/imports
-                    xmlschema.download_schemas(str(schema_location), target=str(schema_cache_dir), save_remote=True)
-            except requests.HTTPError as e:
-                raise ValidationError(
-                    f"Failed to download schema for {namespace} from {schema_location} - check the URL: {e}"
+                schema_tree = etree.parse(str(schema_file_to_validate))
+                root_namespace = schema_tree.getroot().tag.split('}')[0][1:]
+            except Exception as e:
+                raise ValidationError(f"Failed to parse schema file {schema_file_to_validate}: {str(e)}")
+
+            if root_namespace not in [XSD_NAMESPACE, RELAXNG_NAMESPACE]:
+                raise ValidationError(f'Unsupported schema namespace: {root_namespace}')
+
+            # Prepare XML document for validation based on schema type
+            if root_namespace == RELAXNG_NAMESPACE:
+                # For RelaxNG, remove schemaLocation attribute if present to avoid validation errors
+                validation_xml = re.sub(r'\s+xmlns:xsi="[^"]*"', '', xml_string)
+                validation_xml = re.sub(r'\s+xsi:schemaLocation="[^"]*"', '', validation_xml)
+                validation_xml_bytes = validation_xml.encode('utf-8') if isinstance(validation_xml, str) else validation_xml
+            else:
+                # For XSD, use original XML
+                validation_xml_bytes = xml_string.encode('utf-8') if isinstance(xml_string, str) else xml_string
+
+            # Perform validation with timeout protection using subprocess isolation
+            try:
+                logger.debug(f"Starting validation with {validation_timeout}s timeout")
+                validation_errors = validate_with_timeout(
+                    str(schema_file_to_validate),
+                    validation_xml_bytes,
+                    root_namespace,
+                    timeout=validation_timeout
                 )
-            except xmlschema.XMLSchemaParseError as e:
-                raise ValidationError(
-                    f"Failed to parse schema for {namespace} from {schema_location}: {str(e)}"
+                errors.extend(validation_errors)
+                logger.debug(f"Validation completed with {len(validation_errors)} errors")
+
+            except ValidationTimeoutError as e:
+                logger.warning(
+                    f"VALIDATION TIMEOUT: {namespace} schema validation timed out after "
+                    f"{validation_timeout}s - {schema_location}"
                 )
-        else:
-            logger.debug(f"Using cached version at {schema_cache_file}")
-
-        # Parse schema to determine actual type from file content
-        try:
-            schema_tree = etree.parse(str(schema_cache_file))
-            root_namespace = schema_tree.getroot().tag.split('}')[0][1:]
-        except Exception as e:
-            raise ValidationError(f"Failed to parse schema file {schema_cache_file}: {str(e)}")
-
-        if root_namespace not in [XSD_NAMESPACE, RELAXNG_NAMESPACE]:
-            raise ValidationError(f'Unsupported schema namespace: {root_namespace}')
-
-        # Prepare XML document for validation based on schema type
-        if root_namespace == RELAXNG_NAMESPACE:
-            # For RelaxNG, remove schemaLocation attribute if present to avoid validation errors
-            validation_xml = re.sub(r'\s+xmlns:xsi="[^"]*"', '', xml_string)
-            validation_xml = re.sub(r'\s+xsi:schemaLocation="[^"]*"', '', validation_xml)
-            validation_xml_bytes = validation_xml.encode('utf-8') if isinstance(validation_xml, str) else validation_xml
-        else:
-            # For XSD, use original XML
-            validation_xml_bytes = xml_string.encode('utf-8') if isinstance(xml_string, str) else xml_string
-
-        # Perform validation with timeout protection using subprocess isolation
-        try:
-            logger.debug(f"Starting validation with {validation_timeout}s timeout")
-            validation_errors = validate_with_timeout(
-                str(schema_cache_file),
-                validation_xml_bytes,
-                root_namespace,
-                timeout=validation_timeout
-            )
-            errors.extend(validation_errors)
-            logger.debug(f"Validation completed with {len(validation_errors)} errors")
-
-        except ValidationTimeoutError as e:
-            logger.warning(
-                f"VALIDATION TIMEOUT: {namespace} schema validation timed out after "
-                f"{validation_timeout}s - {schema_location}"
-            )
-            errors.append({
-                "message": (
-                    f"Schema validation timed out after {validation_timeout} seconds. "
-                    "The schema may be too complex or the document too large. "
-                    "Validation was skipped for performance reasons."
-                ),
-                "line": 1,
-                "column": 1,
-                "severity": "warning"
-            })
-        except ValidationError as e:
-            logger.error(f"Validation failed for {namespace}: {str(e)}")
-            errors.append({
-                "message": f"Validation error: {str(e)}",
-                "line": 1,
-                "column": 1
-            })
+                errors.append({
+                    "message": (
+                        f"Schema validation timed out after {validation_timeout} seconds. "
+                        "The schema may be too complex or the document too large. "
+                        "Validation was skipped for performance reasons."
+                    ),
+                    "line": 1,
+                    "column": 1,
+                    "severity": "warning"
+                })
+            except ValidationError as e:
+                logger.error(f"Validation failed for {namespace}: {str(e)}")
+                errors.append({
+                    "message": f"Validation error: {str(e)}",
+                    "line": 1,
+                    "column": 1
+                })
+        finally:
+            if temp_schema_path is not None:
+                temp_schema_path.unlink(missing_ok=True)
 
     return errors
 
