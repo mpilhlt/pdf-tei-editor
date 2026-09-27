@@ -24,6 +24,7 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
+ * @import { UserData } from './authentication.js'
  * @import { SlMenuItem, SlDialog } from '../ui.js'
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
@@ -104,7 +105,7 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Show/hide the reviewer/admin-gated "Refresh document rules" item.
-   * @param {any} newUser
+   * @param {UserData|null} newUser
    */
   onUserChange(newUser) {
     this._refreshMenuItem.style.display = userHasRole(newUser, ['reviewer', 'admin']) ? '' : 'none'
@@ -168,8 +169,10 @@ class DocumentRulesPlugin extends Plugin {
       const response = await this.#client.apiClient.documentRulesList({ xml_string: xmlString })
       this._resources = response.resources
     } catch (error) {
+      // Mirrors inference-settings.js's #doRefresh(): on a failed fetch, keep
+      // whatever _resources this plugin already had (stale data is more
+      // useful than an empty/hidden menu) rather than clearing it.
       this.#logger.warn('document-rules: could not list document resources: ' + String(error))
-      this._resources = []
     }
 
     this._editMenuItem.style.display = ''
