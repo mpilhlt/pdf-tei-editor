@@ -158,11 +158,13 @@ async def set_selection(
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Select an override (or `null` for the original) for one resource."""
+    resource_key = normalize_resource_key(request.fragment_url)
     if request.override_id is not None:
         override = store.get_override(request.override_id)
         if override is None or override["owner"] != user["username"]:
             raise HTTPException(status_code=404, detail="Override not found or not owned by you")
-    resource_key = normalize_resource_key(request.fragment_url)
+        if override["kind"] != request.kind or override["resource_key"] != resource_key:
+            raise HTTPException(status_code=400, detail="Override does not belong to this resource")
     store.set_selection(request.kind, resource_key, user["username"], request.override_id)
     return OkResponse()
 
