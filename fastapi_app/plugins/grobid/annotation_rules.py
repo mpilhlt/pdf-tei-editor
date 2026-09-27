@@ -1,13 +1,16 @@
 """
 Resolves this plugin's annotation-guide config into editorialDecl-ready
-entries, shared by extraction-time generation (extractor.py) and the
-"Refresh Annotation Rules" reviewer action (annotation_rules_refresh.py) so
-both regenerate editorialDecl the same way. See
-docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
+entries, shared by extraction-time generation (extractor.py) and the core
+"Refresh document rules" reviewer action (see
+fastapi_app/lib/doc_rules/rules_refresh.py, dispatched to this plugin via
+GrobidRulesProvider below) so both regenerate editorialDecl the same way.
+See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 (Parts B and G) and
 docs/superpowers/specs/2026-09-22-annotation-guide-dual-target-refs-design.md
 (the variant_ids/"primary" schema and dual human/machine refs).
 """
+
+from typing import Optional
 
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.utils.annotation_rules_utils import (
@@ -17,7 +20,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     resolve_forge_permalink,
     translate_anchor_to_line_range,
 )
-from fastapi_app.plugins.grobid.config import AnnotationGuide, get_annotation_guides
+from fastapi_app.plugins.grobid.config import AnnotationGuide, get_annotation_guides, get_schema_url
 
 
 def build_editorial_decl_entries(variant_id: str, cache: UrlCache) -> list[AnnotationRuleRef]:
@@ -87,3 +90,18 @@ def _build_refs_for_guide(guide: AnnotationGuide, cache: UrlCache) -> list[Annot
                 "subtype": "machine",
             })
     return refs
+
+
+class GrobidRulesProvider:
+    """
+    Adapts this plugin's existing annotation-guide/schema config to the
+    DocumentRulesProvider protocol so "Refresh document rules" (a core
+    action, see fastapi_app/lib/doc_rules/rules_refresh.py) can dispatch to
+    it. Registered once, in GrobidPlugin.initialize().
+    """
+
+    def build_editorial_decl_entries(self, variant_id: str, cache: UrlCache) -> list[AnnotationRuleRef]:
+        return build_editorial_decl_entries(variant_id, cache)
+
+    def get_schema_url(self, variant_id: str) -> Optional[str]:
+        return get_schema_url(variant_id)

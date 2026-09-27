@@ -118,7 +118,7 @@ node scripts/dev/debug-api.js --env-path .env.remote GET /api/plugins/grobid/dia
 
 Backend-plugin endpoint `reload_feature_file` (`GrobidPlugin.reload_feature_file`, category `grobid`, reviewer role required) — appears in the document plugin menu when a GROBID training TEI file is open.
 
-A sibling endpoint, `refresh_annotation_rules` (`GrobidPlugin.refresh_annotation_rules`, same `grobid` category, same reviewer-role gating), re-derives a document's annotation rules reference so it resolves to the guidelines' latest commit; it follows the identical preview-then-execute trigger shape described below, backed by `annotation_rules_refresh.py`. Its HTTP routes are added separately.
+(Re-deriving a document's annotation rules reference/schema PI is now the core, extractor-agnostic "Refresh document rules" action — see `fastapi_app/lib/doc_rules/rules_refresh.py` and `POST /api/v1/document-rules/refresh/{preview,execute}`. GROBID participates in it via `GrobidRulesProvider` in `annotation_rules.py`, registered in `GrobidPlugin.initialize()`.)
 
 The training-data cache ([Cache](#cache-cachepy)) is keyed by `{doc_id}_{grobid_revision}` (plus the flavor, for non-default flavors), where `grobid_revision` comes from GROBID's `/api/version`. If a custom model is retrained/swapped without that version string changing, the cache is never invalidated and the sync-check lint (see [Frontend extension](#frontend-extension-extensionsgrobid-syncjs)) keeps comparing against the stale feature file.
 
