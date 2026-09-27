@@ -13,7 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_settings
 from ..lib.core.database import DatabaseManager
-from ..lib.core.dependencies import get_db, get_document_rules_store, get_file_storage, require_authenticated_user
+from ..lib.core.dependencies import (
+    get_db,
+    get_document_rules_store,
+    get_file_storage,
+    require_authenticated_user,
+    require_reviewer_or_admin,
+)
 from ..lib.core.url_cache import UrlCache
 from ..lib.doc_rules.kinds import get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
@@ -24,7 +30,6 @@ from ..lib.doc_rules.rules_refresh import (
     resolve_refresh_target,
 )
 from ..lib.doc_rules.storage import DocumentRulesStore
-from ..lib.permissions.acl_utils import user_has_role
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.models.models_document_rules import (
@@ -190,22 +195,6 @@ async def reset_selection(
     return OkResponse()
 
 
-def require_reviewer_or_admin(user: dict = Depends(require_authenticated_user)) -> dict:
-    """
-    Dependency: authenticated user with reviewer or admin role.
-
-    Only the two refresh endpoints below need this - the rest of this
-    router is intentionally open to any authenticated user (see
-    validation.py's own comment on why schema overrides aren't
-    reviewer-gated: they only ever affect the calling user's own
-    validation/extraction, unlike a refresh, which rewrites the shared
-    document).
-    """
-    if not user_has_role(user, ["reviewer", "admin"]):
-        raise HTTPException(status_code=403, detail="Reviewer role required")
-    return user
-
-
 def _outcome_response(outcome) -> RefreshOutcomeResponse:
     return RefreshOutcomeResponse(
         available=outcome.available,
@@ -219,6 +208,12 @@ def _outcome_response(outcome) -> RefreshOutcomeResponse:
 @router.post("/refresh/preview", response_model=RefreshOutcomeResponse)
 async def refresh_preview(
     request: RefreshRequest,
+    # Only these two refresh endpoints are reviewer/admin-gated - the rest
+    # of this router is intentionally open to any authenticated user (see
+    # validation.py's own comment on why schema overrides aren't
+    # reviewer-gated: they only ever affect the calling user's own
+    # validation/extraction, unlike a refresh, which rewrites the shared
+    # document).
     user: dict = Depends(require_reviewer_or_admin),
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
