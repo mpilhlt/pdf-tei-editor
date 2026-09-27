@@ -38,6 +38,11 @@ router = APIRouter(prefix="/validate", tags=["validation"])
 def validate_xml(
     request: ValidateRequest,
     settings=Depends(get_settings),
+    # Any authenticated user, not reviewer/admin: a schema override only ever
+    # affects the calling user's own validation (see build_schema_text_override
+    # / DocumentRulesStore's owner-scoped lookups) - unlike the separate,
+    # reviewer/admin-gated "Refresh document rules" action described in the
+    # same design spec. Don't role-gate this to match that sibling feature.
     user: dict = Depends(require_authenticated_user),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> ValidateResponse:
@@ -81,6 +86,11 @@ def validate_xml(
             logger.error(f"Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Also catches a build_schema_text_override() failure (e.g. a
+        # document-rules DB error) - folded into the same generic handler
+        # deliberately rather than a separate except clause, but note for
+        # debugging that "Validation failed" can mean the rules lookup
+        # failed, not necessarily the schema validation itself.
         logger.error(f"Unexpected error during validation: {e}")
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
