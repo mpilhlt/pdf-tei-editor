@@ -46,7 +46,6 @@ import './modules/panels/index.js';
  *
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
- * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {saveDocumentDialogPart} from './templates/save-document-dialog.types.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
@@ -89,7 +88,6 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
- * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)

@@ -42,14 +42,6 @@ import { getFileDataById } from '../modules/file-data-utils.js'
  */
 
 /**
- * Instruction data object
- * @typedef {object} InstructionData
- * @property {string} label - Display label for the instruction
- * @property {string[]} text - Array of instruction text lines
- * @property {string[]} [extractor] - Array of extractor IDs this instruction supports
- */
-
-/**
  * Extraction result object
  * @typedef {object} ExtractionResult
  * @property {string} xml - Hash or content of the extracted XML
@@ -76,7 +68,6 @@ import { getFileDataById } from '../modules/file-data-utils.js'
  * @property {string} collection - Selected collection
  * @property {string} extractor - Selected extractor ID
  * @property {string} [variant_id] - Selected variant ID
- * @property {string} [instructions] - Instructions text
  * @property {string} [flavor] - Extractor flavor
  */
 
@@ -92,7 +83,6 @@ import { getFileDataById } from '../modules/file-data-utils.js'
  * @property {string|null} [collection]
  * @property {string|null} [variant_id]
  * @property {string} [extractor]
- * @property {string} [instructions]
  * @property {Record<string, any>} [dynamicOptions] - Additional extractor-specific options
  */
 
@@ -301,10 +291,6 @@ class ExtractionPlugin extends Plugin {
     const logger = this.getDependency('logger')
     const dialogUi = this.#dialogUi
 
-    const instructionsData = await this.#client.loadInstructions()
-    /** @type {string[]} */
-    const instructions = []
-
     /** @type {DocumentMetadata} */
     let documentMetadata = {}
     try {
@@ -497,41 +483,6 @@ class ExtractionPlugin extends Plugin {
         }
 
         return { element: select, chosenValue }
-      } else if (optionKey === 'instructions' && extractorId && instructionsData) {
-        const select = Object.assign(new SlSelect, {
-          name: 'instructions',
-          label: 'Instructions',
-          size: 'small'
-        })
-        select.setAttribute('help-text', 'Choose the instruction set that is added to the prompt')
-
-        let instructionIndex = 0
-        for (const instructionData of instructionsData) {
-          /** @type {InstructionData} */
-          const instructionDataTyped = /** @type {InstructionData} */(instructionData)
-          const { label, text, extractor = [] } = instructionDataTyped
-
-          if (extractor.includes(extractorId)) {
-            const option = Object.assign(new SlOption, {
-              value: String(instructionIndex),
-              textContent: label
-            })
-            instructions[instructionIndex] = text.join('\n')
-            select.appendChild(option)
-            instructionIndex++
-          }
-        }
-
-        if (instructionIndex === 0) {
-          const option = Object.assign(new SlOption, {
-            value: '0',
-            textContent: 'No custom instructions'
-          })
-          instructions[0] = ''
-          select.appendChild(option)
-        }
-
-        return { element: select, chosenValue: '0' }
       } else if (optionConfig.type === 'string') {
         const input = Object.assign(new SlInput, {
           name: optionKey,
@@ -587,10 +538,6 @@ class ExtractionPlugin extends Plugin {
         const typedInput = /** @type {SlSelect|SlInput} */(input)
         const name = typedInput.name
         let value = typedInput.value
-
-        if (name === 'instructions' && instructions[parseInt(String(value))]) {
-          value = instructions[parseInt(String(value))]
-        }
 
         if (name === 'variant_id' && (!value || value === '')) {
           continue
