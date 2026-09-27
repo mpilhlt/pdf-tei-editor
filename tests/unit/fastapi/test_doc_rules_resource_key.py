@@ -30,6 +30,14 @@ class TestNormalizeResourceKey(unittest.TestCase):
         url = "https://example.com/schema/tei.rng"
         self.assertEqual(normalize_resource_key(url), url)
 
+    def test_malformed_github_url_falls_back_to_verbatim_instead_of_raising(self):
+        # Matches GitHubAdapter.matches() (github.com host, "/blob/" in path)
+        # but has no file path after the ref, so GitHubAdapter.strip_ref()'s
+        # internal parsing fails - this must degrade to "used verbatim",
+        # not raise, since a hand-edited ref/@target can be malformed.
+        url = "https://github.com/owner/repo/blob/main"
+        self.assertEqual(normalize_resource_key(url), url)
+
 
 class TestInferFormat(unittest.TestCase):
     def test_markdown_extension(self):
