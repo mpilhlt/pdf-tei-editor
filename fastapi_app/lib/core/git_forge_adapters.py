@@ -44,6 +44,10 @@ class BaseGitForgeAdapter(ABC):
     def resolve_ref_to_sha(self, url: str, cache: UrlCache) -> str:
         """Return `url` with its branch/tag ref replaced by the current commit SHA, fragment preserved."""
 
+    @abstractmethod
+    def strip_ref(self, url: str) -> str:
+        """Return `url` (fragment removed) with its branch/tag/SHA ref segment replaced by a fixed placeholder, so two URLs to the same file differing only in ref normalize to the same string."""
+
 
 class GitHubAdapter(BaseGitForgeAdapter):
     """Adapter for github.com blob URLs."""
@@ -86,6 +90,11 @@ class GitHubAdapter(BaseGitForgeAdapter):
         resolved = f"https://github.com/{m['owner']}/{m['repo']}/blob/{sha}/{m['path']}"
         return f"{resolved}#{fragment}" if fragment else resolved
 
+    def strip_ref(self, url: str) -> str:
+        base_url, _, _ = url.partition("#")
+        m = self._parse(base_url)
+        return f"https://github.com/{m['owner']}/{m['repo']}/blob/_/{m['path']}"
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -122,6 +131,11 @@ class GitLabAdapter(BaseGitForgeAdapter):
             cache.set_text(api_url, sha)
         resolved = f"{origin}/{project_path}/-/blob/{sha}/{file_path}"
         return f"{resolved}#{fragment}" if fragment else resolved
+
+    def strip_ref(self, url: str) -> str:
+        base_url, _, _ = url.partition("#")
+        origin, project_path, _ref, file_path = self._split(base_url)
+        return f"{origin}/{project_path}/-/blob/_/{file_path}"
 
 
 class GitForgeAdapterRegistry:

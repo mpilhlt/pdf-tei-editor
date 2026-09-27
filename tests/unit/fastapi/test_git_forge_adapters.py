@@ -25,6 +25,9 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def resolve_ref_to_sha(self, url: str, cache) -> str:
         return "sha:" + url
 
+    def strip_ref(self, url: str) -> str:
+        return "stripped:" + url
+
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -34,6 +37,9 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
     def resolve_ref_to_sha(self, url: str, cache) -> str:
+        raise AssertionError("should not be called")
+
+    def strip_ref(self, url: str) -> str:
         raise AssertionError("should not be called")
 
 
@@ -168,3 +174,30 @@ class TestGitLabAdapter(unittest.TestCase):
         cache.set_text.assert_called_once_with(
             "https://gitlab.com/api/v4/projects/group%2Fproject/repository/commits/main", "b" * 40
         )
+
+
+class TestGitHubAdapterStripRef(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+
+    def test_sha_and_branch_urls_normalize_to_the_same_key(self):
+        sha_url = "https://github.com/mpilhlt/pdf-tei-editor/blob/abc123def456/rules.md"
+        branch_url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md"
+        self.assertEqual(self.adapter.strip_ref(sha_url), self.adapter.strip_ref(branch_url))
+
+    def test_strip_ref_keeps_owner_repo_and_path(self):
+        url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/rules.md"
+        stripped = self.adapter.strip_ref(url)
+        self.assertIn("mpilhlt/pdf-tei-editor", stripped)
+        self.assertIn("docs/rules.md", stripped)
+        self.assertNotIn("/main/", stripped)
+
+
+class TestGitLabAdapterStripRef(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+
+    def test_sha_and_branch_urls_normalize_to_the_same_key(self):
+        sha_url = "https://gitlab.com/group/project/-/blob/abc123/rules.md"
+        branch_url = "https://gitlab.com/group/project/-/blob/main/rules.md"
+        self.assertEqual(self.adapter.strip_ref(sha_url), self.adapter.strip_ref(branch_url))
