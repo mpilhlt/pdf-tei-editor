@@ -4,14 +4,18 @@ Unit tests for the annotation-review route.
 @testCovers fastapi_app/plugins/annotation_review/routes.py
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from fastapi_app.lib.core.dependencies import require_authenticated_user
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.core.dependencies import get_document_rules_store, require_authenticated_user
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
@@ -53,9 +57,16 @@ class TestReviewRoute(unittest.TestCase):
         patcher = mock.patch.object(routes_module, "check_model_access")
         patcher.start()
         self.addCleanup(patcher.stop)
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        db = DatabaseManager(Path(self.temp_dir.name) / "test.db")
+        self.store = DocumentRulesStore(db)
+
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser", "roles": ["admin"]}
+        self.app.dependency_overrides[get_document_rules_store] = lambda: self.store
         self.client = TestClient(self.app)
         LLMProviderRegistry.reset_instance()
         LLMProviderRegistry.get_instance().register(_StubProvider())
@@ -183,9 +194,15 @@ class TestReviewRouteModelAccess(unittest.TestCase):
     """The route delegates model authorization to check_model_access and maps a denial to 403."""
 
     def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        db = DatabaseManager(Path(self.temp_dir.name) / "test.db")
+        self.store = DocumentRulesStore(db)
+
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser", "roles": ["user"]}
+        self.app.dependency_overrides[get_document_rules_store] = lambda: self.store
         self.client = TestClient(self.app)
         LLMProviderRegistry.reset_instance()
         LLMProviderRegistry.get_instance().register(_StubProvider())

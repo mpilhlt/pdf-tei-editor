@@ -18,6 +18,13 @@ from fastapi_app.plugins.annotation_review.review_logic import (
     run_review,
 )
 
+def _no_override_store() -> mock.MagicMock:
+    """A DocumentRulesStore stand-in reporting no selected override for anything."""
+    store = mock.MagicMock()
+    store.get_selected_override_text.return_value = None
+    return store
+
+
 TEI_DOC = """<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
@@ -29,6 +36,26 @@ TEI_DOC = """<?xml version="1.0"?>
         </interpretation>
         <interpretation type="footnote-annotation">
           <p><ref target="https://raw.example.org/footnote-rules.md" subtype="machine" type="markdown"/></p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <persName>J. Doe</persName> wrote <title>A Paper</title>.
+    </body>
+  </text>
+</TEI>
+"""
+
+SINGLE_CATEGORY_TEI_DOC = """<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p>See <ref target="https://example.org/rules.md#L1-L5" subtype="human" type="markdown"/>
+          <ref target="https://raw.example.org/rules.md#L1-L5" subtype="machine" type="markdown"/></p>
         </interpretation>
       </editorialDecl>
     </encodingDesc>
@@ -111,7 +138,7 @@ class TestGatherRuleExcerpts(unittest.TestCase):
         # deliberately non-resolvable (test isolation from real DNS/network), which
         # would otherwise make the real safety check fail closed.
         mock_fetch.side_effect = lambda url, cache, **kwargs: f"excerpt for {url}"
-        excerpts = gather_rule_excerpts(TEI_DOC, cache=mock.MagicMock())
+        excerpts = gather_rule_excerpts(TEI_DOC, cache=mock.MagicMock(), store=_no_override_store(), owner="alice")
         self.assertEqual(len(excerpts), 2)
         categories = [c for c, _ in excerpts]
         self.assertIn("primary", categories)
@@ -119,7 +146,9 @@ class TestGatherRuleExcerpts(unittest.TestCase):
 
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
     def test_skips_category_with_no_machine_ref(self, mock_fetch):
-        excerpts = gather_rule_excerpts(NO_MACHINE_REF_DOC, cache=mock.MagicMock())
+        excerpts = gather_rule_excerpts(
+            NO_MACHINE_REF_DOC, cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
         self.assertEqual(excerpts, [])
         mock_fetch.assert_not_called()
 
@@ -128,7 +157,7 @@ class TestGatherRuleExcerpts(unittest.TestCase):
     def test_skips_category_whose_fetch_raises(self, mock_fetch, mock_is_safe):
         mock_fetch.side_effect = RuleFetchError("got HTML")
         with self.assertLogs("fastapi_app.plugins.annotation_review.review_logic", level="WARNING"):
-            excerpts = gather_rule_excerpts(TEI_DOC, cache=mock.MagicMock())
+            excerpts = gather_rule_excerpts(TEI_DOC, cache=mock.MagicMock(), store=_no_override_store(), owner="alice")
         self.assertEqual(excerpts, [])
 
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic.socket.getaddrinfo")
@@ -154,11 +183,75 @@ class TestGatherRuleExcerpts(unittest.TestCase):
             "fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt"
         ) as mock_fetch:
             mock_fetch.return_value = "footnote rule excerpt"
-            excerpts = gather_rule_excerpts(unsafe_doc, cache=cache)
+            excerpts = gather_rule_excerpts(unsafe_doc, cache=cache, store=_no_override_store(), owner="alice")
             mock_fetch.assert_called_once_with(
                 "https://raw.example.org/footnote-rules.md", cache, allow_redirects=False
             )
         self.assertEqual(excerpts, [("footnote-annotation", "footnote rule excerpt")])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    def test_uses_the_selected_override_instead_of_fetching(self, mock_fetch):
+        # SINGLE_CATEGORY_TEI_DOC (not the shared, two-category TEI_DOC) is used here:
+        # the mocked store below returns the same override text unconditionally, so a
+        # second category (as in TEI_DOC) would spuriously "match" too and either
+        # over-assert the single-element result or fall through to an unmocked, DNS-
+        # dependent fetch for that second category. See test 2 below for the
+        # human-vs-machine-ref key targeting, which needs a store keyed on the resource.
+        store = mock.MagicMock()
+        store.get_selected_override_text.return_value = "Overridden rule text."
+
+        excerpts = gather_rule_excerpts(SINGLE_CATEGORY_TEI_DOC, cache=mock.MagicMock(), store=store, owner="alice")
+
+        self.assertEqual(excerpts, [("primary", "Overridden rule text.")])
+        mock_fetch.assert_not_called()
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    def test_override_lookup_uses_the_human_ref_key_not_the_machine_ref_key(self, mock_fetch):
+        from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+
+        doc_with_human_and_machine_refs = """<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p>
+            <ref target="https://raw.example.org/guide.md#heading" subtype="human" type="markdown"/>
+            <ref target="https://raw.example.org/guide.md#L10-L20" subtype="machine"/>
+          </p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+  <text><body>x</body></text>
+</TEI>
+"""
+        store = mock.MagicMock()
+        store.get_selected_override_text.return_value = "Overridden."
+
+        gather_rule_excerpts(doc_with_human_and_machine_refs, cache=mock.MagicMock(), store=store, owner="alice")
+
+        store.get_selected_override_text.assert_called_once_with(
+            "interpretation-ref",
+            normalize_resource_key("https://raw.example.org/guide.md#heading"),
+            "alice",
+        )
+        mock_fetch.assert_not_called()
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    def test_falls_back_to_fetch_when_owner_has_no_selected_override(self, mock_fetch, mock_is_safe):
+        # SINGLE_CATEGORY_TEI_DOC, not the shared two-category TEI_DOC - see the
+        # comment in test_uses_the_selected_override_instead_of_fetching above;
+        # assert_called_once() below needs exactly one category.
+        mock_fetch.return_value = "Fetched rule text."
+
+        excerpts = gather_rule_excerpts(
+            SINGLE_CATEGORY_TEI_DOC, cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
+
+        self.assertEqual(excerpts, [("primary", "Fetched rule text.")])
+        mock_fetch.assert_called_once()
 
 
 class TestRunReview(unittest.IsolatedAsyncioTestCase):
@@ -172,7 +265,9 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
             '[{"old": "<persName>J. Doe</persName>", '
             '"new": "<persName ref=\\"#p1\\">J. Doe</persName>", "rationale": "add ref"}]'
         )
-        findings, chunk_count = await run_review(TEI_DOC, provider, "stub-model", cache=mock.MagicMock())
+        findings, chunk_count = await run_review(
+            TEI_DOC, provider, "stub-model", cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
         self.assertEqual(chunk_count, 1)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["old"], "<persName>J. Doe</persName>")
@@ -190,34 +285,46 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         old = "<title>Title 399</title>"
         provider = _StubProvider(f'[{{"old": "{old}", "new": "<title level=\\"a\\">Title 399</title>", "rationale": "r"}}]')
 
-        first, count = await run_review(doc, provider, "m", cache=mock.MagicMock(), chunk_index=0)
+        first, count = await run_review(
+            doc, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", chunk_index=0
+        )
         self.assertGreater(count, 2)
         self.assertNotIn("Title 399", provider.calls[0]["user_prompt"])
         self.assertIn(f"fragment 1 of {count}", provider.calls[0]["user_prompt"])
         self.assertEqual(len(first), 1)
 
-        await run_review(doc, provider, "m", cache=mock.MagicMock(), chunk_index=count - 1)
+        await run_review(
+            doc, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", chunk_index=count - 1
+        )
         self.assertIn("Title 399", provider.calls[1]["user_prompt"])
         self.assertNotIn("Title 000", provider.calls[1]["user_prompt"])
 
     async def test_raises_when_chunk_index_is_out_of_range(self):
         provider = _StubProvider("[]")
         with self.assertRaises(ValueError):
-            await run_review(TEI_DOC, provider, "m", cache=mock.MagicMock(), chunk_index=5)
+            await run_review(
+                TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", chunk_index=5
+            )
         self.assertEqual(provider.calls, [])
 
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
     async def test_raises_when_no_excerpts_could_be_gathered(self, mock_fetch):
         provider = _StubProvider("[]")
         with self.assertRaises(NoRuleExcerptsError):
-            await run_review(NO_MACHINE_REF_DOC, provider, "stub-model", cache=mock.MagicMock())
+            await run_review(
+                NO_MACHINE_REF_DOC, provider, "stub-model",
+                cache=mock.MagicMock(), store=_no_override_store(), owner="alice",
+            )
         provider_calls_before = len(provider.calls)
         self.assertEqual(provider_calls_before, 0)
 
     async def test_raises_on_malformed_document(self):
         provider = _StubProvider("[]")
         with self.assertRaises(ValueError):
-            await run_review("<not-well-formed", provider, "stub-model", cache=mock.MagicMock())
+            await run_review(
+                "<not-well-formed", provider, "stub-model",
+                cache=mock.MagicMock(), store=_no_override_store(), owner="alice",
+            )
 
 
 class TestIsSafeFetchUrl(unittest.TestCase):

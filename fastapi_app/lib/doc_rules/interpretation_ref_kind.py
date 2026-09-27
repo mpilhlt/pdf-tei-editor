@@ -17,7 +17,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 )
 
 
-def _representative_ref(refs: list[AnnotationRuleRefTarget]) -> Optional[AnnotationRuleRefTarget]:
+def representative_ref(refs: list[AnnotationRuleRefTarget]) -> Optional[AnnotationRuleRefTarget]:
     """
     The one ref of an interpretation entry that represents it as a single
     editable resource: its "human" ref (the whole section a person edits)
@@ -25,7 +25,12 @@ def _representative_ref(refs: list[AnnotationRuleRefTarget]) -> Optional[Annotat
     a pre-set line-range fragment and no heading anchor). A "machine" ref
     alongside a "human" one is auto-derived from it (see
     grobid/annotation_rules.py's _build_refs_for_guide) and is never
-    treated as a second, independently editable resource.
+    treated as a second, independently editable resource. Exported (not
+    module-private) so other consumers of editorialDecl (e.g.
+    annotation_review/review_logic.py) can compute the same resource key
+    this kind's discover() reports, when they need to look up an override
+    by a different ref of the same entry (e.g. a "machine" ref used for a
+    narrower fetch) - see that module's gather_rule_excerpts().
     """
     for ref in refs:
         if ref["subtype"] == "human":
@@ -39,7 +44,7 @@ class InterpretationRefKind(ResourceKind):
     def discover(self, xml_string: str) -> list[ResourceDescriptor]:
         descriptors: list[ResourceDescriptor] = []
         for entry in extract_annotation_rule_refs(xml_string):
-            ref = _representative_ref(entry["refs"])
+            ref = representative_ref(entry["refs"])
             if ref is None:
                 continue
             label = entry.get("n") or entry["category"]
