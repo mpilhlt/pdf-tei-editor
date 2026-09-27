@@ -24,6 +24,11 @@ def build_schema_text_override(xml_string: str, store: DocumentRulesStore, owner
     benefit. Locations with no selection, and non-RelaxNG locations (XSD
     is out of scope for v1 - see the design spec's Deferred section), are
     omitted entirely.
+
+    Duplicates the extract_schema_locations() scan validate() already
+    does internally - a second cheap regex pass per /validate call,
+    deliberately accepted rather than threading pre-extracted locations
+    through validate()'s signature for this.
     """
     overrides: dict[str, str] = {}
     for location in extract_schema_locations(xml_string):

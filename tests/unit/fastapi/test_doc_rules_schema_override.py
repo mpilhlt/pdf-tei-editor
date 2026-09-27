@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+from fastapi_app.lib.doc_rules.schema_kind import SchemaKind
 from fastapi_app.lib.doc_rules.schema_override import build_schema_text_override
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 
@@ -114,3 +115,29 @@ class TestBuildSchemaTextOverride(unittest.TestCase):
         # Selected/keyed by the raw (old) URL, but the dict validate() needs
         # must be keyed by the resolved (new) URL.
         self.assertEqual(result, {new_location: "<grammar/>"})
+
+    def test_key_agrees_with_schema_kind_discover(self):
+        # Guards against SchemaKind.discover() and build_schema_text_override()
+        # drifting apart on how they derive a resource's key - selects an
+        # override using the exact key discover() reports, then confirms
+        # build_schema_text_override() (which re-derives the key itself
+        # rather than reusing discover()'s output) still finds it.
+        descriptors = SchemaKind().discover(XML_RELAXNG)
+        self.assertEqual(len(descriptors), 1)
+        resource_key_from_discover = descriptors[0].key
+
+        override = self.store.create_override(
+            kind="schema",
+            resource_key=resource_key_from_discover,
+            owner="alice",
+            note="",
+            text="<grammar/>",
+            format="xml",
+            base_url=RELAXNG_LOCATION,
+            base_hash="hash",
+        )
+        self.store.set_selection("schema", resource_key_from_discover, "alice", override["id"])
+
+        result = build_schema_text_override(XML_RELAXNG, self.store, "alice")
+
+        self.assertEqual(result, {RELAXNG_LOCATION: "<grammar/>"})
