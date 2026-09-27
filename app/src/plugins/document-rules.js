@@ -99,6 +99,16 @@ class DocumentRulesPlugin extends Plugin {
   /** @type {Compartment} */
   _cmReadOnlyCompartment = new Compartment()
 
+  /**
+   * Wraps history() so it can be cleared on every _setXmlContent() call -
+   * without this, undo/redo would leak content across different resources/
+   * overrides shown in the same long-lived CM instance (see
+   * app/src/modules/xmleditor.js's loadXml(), which clears history the same
+   * way on every document load).
+   * @type {Compartment}
+   */
+  _cmHistoryCompartment = new Compartment()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -109,16 +119,22 @@ class DocumentRulesPlugin extends Plugin {
 
     this._md = createMarkdownRenderer()
 
+    // Reuse the user's own XML-editor theme choice (persisted the same way
+    // xmleditor.js reads it) rather than hardcoding 'default' - otherwise a
+    // user who switched the main editor to dark mode would see this dialog's
+    // schema view rendered in light mode regardless.
+    const themeId = this.uiStorage.get('editorTheme', 'default')
+
     this._cmView = new EditorView({
       state: EditorState.create({
         doc: '',
         extensions: [
           lineNumbers(),
-          history(),
+          this._cmHistoryCompartment.of(history()),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           xml(),
-          getTheme('default').extensions,
-          this._cmReadOnlyCompartment.of([EditorView.editable.of(false)])
+          getTheme(themeId).extensions,
+          this._cmReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
         ]
       }),
       parent: this._editorDialogUi.xmlBody.xmlContainer
@@ -448,17 +464,26 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Replace the CodeMirror doc's full content and toggle its read-only
-   * compartment - same reconfigure-in-place pattern as
-   * app/src/modules/xmleditor.js's setReadOnly().
+   * Replace the CodeMirror doc's full content, toggle its read-only
+   * compartment (both the DOM-level EditorView.editable and the
+   * command-level EditorState.readOnly facet - the latter is what actually
+   * makes CodeMirror's own undo/redo refuse to run while read-only; toggling
+   * only `editable` leaves Ctrl+Z/Ctrl+Y still active), and clear undo/redo
+   * history so a previous resource's/override's content can never resurface
+   * via undo in what's now showing a different one. Mirrors
+   * app/src/modules/xmleditor.js's setReadOnly() and clearHistory().
    * @param {string} text
    * @param {boolean} readOnly
    */
   _setXmlContent(text, readOnly) {
     this._cmView.dispatch({
       changes: { from: 0, to: this._cmView.state.doc.length, insert: text },
-      effects: this._cmReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly)])
+      effects: [
+        this._cmReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]),
+        this._cmHistoryCompartment.reconfigure([])
+      ]
     })
+    this._cmView.dispatch({ effects: this._cmHistoryCompartment.reconfigure(history()) })
   }
 
   /** @returns {string} */
