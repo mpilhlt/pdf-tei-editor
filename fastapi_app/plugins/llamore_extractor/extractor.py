@@ -123,7 +123,7 @@ class LLamoreExtractor(BaseExtractor):
         Args:
             pdf_path: Path to the PDF file
             xml_content: Not used by this extractor
-            options: Extraction options (doi, instructions)
+            options: Extraction options (doi, username, ...)
 
         Returns:
             Complete TEI document as XML string
@@ -231,6 +231,17 @@ class LLamoreExtractor(BaseExtractor):
         the text to feed the prompter (the user's selected override, if
         any, else the shipped default) and the one editorialDecl entry
         documenting it.
+
+        The entry has only a "human" ref, no "machine" ref, so
+        annotation_review/review_logic.py's gather_rule_excerpts() (which
+        only surfaces categories with a "machine" ref) never includes it
+        in the review LLM's prompt - deliberate, not an oversight: these
+        are extraction-time instructions, not an annotation guide to
+        review a document against.
+
+        for_extraction() is called with exactly one descriptor, so
+        `fragments[0]` is safe; if a second descriptor is ever added here,
+        this indexing must be updated to iterate accordingly.
         """
         store = get_document_rules_store(get_db())
         fragments = for_extraction(username, [
@@ -259,6 +270,9 @@ class LLamoreExtractor(BaseExtractor):
         gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
         model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
 
+        # Named "_text" (not "additional_instructions") so it isn't shadowed
+        # by user_prompt()'s own same-named parameter below, which llamore's
+        # LineByLinePrompter base class defines and this override extends.
         class CustomPrompter(LineByLinePrompter):
             def user_prompt(self, text=None, additional_instructions="") -> str:
                 if additional_instructions_text:
