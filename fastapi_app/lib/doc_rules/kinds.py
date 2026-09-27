@@ -15,9 +15,9 @@ class ResourceDescriptor:
     """One resource a document references, as found by a kind's discover()."""
 
     kind: str
-    url: str            # exact URL as found in the document (may be SHA-pinned)
-    key: str             # normalized resource key (see resource_key.py)
-    label: str           # human-readable label for the UI
+    url: str    # exact URL as found in the document (may be SHA-pinned)
+    key: str    # normalized resource key (see resource_key.py)
+    label: str  # human-readable label for the UI
     format: Literal["markdown", "text", "xml"]
 
 
@@ -53,13 +53,21 @@ class ResourceKindRegistry:
         return cls._instance
 
     def register(self, kind: ResourceKind) -> None:
-        """Register a kind. Called once by core at startup for the two built-in kinds, or by a plugin for a custom one."""
+        """
+        Register a kind. Called once by core at startup for the two
+        built-in kinds, or by a plugin for a custom one. A second
+        registration under a name already in use silently replaces the
+        first (last registration wins) - callers are responsible for
+        name uniqueness; this registry does not warn on collision.
+        """
         self._kinds[kind.name] = kind
 
     def get(self, name: str) -> Optional[ResourceKind]:
+        """The registered kind named `name`, or None if nothing has registered under that name."""
         return self._kinds.get(name)
 
     def all(self) -> list[ResourceKind]:
+        """Every registered kind, in registration order."""
         return list(self._kinds.values())
 
 
@@ -74,7 +82,13 @@ def get_resource_kind(name: str) -> Optional[ResourceKind]:
 
 
 def list_resources(xml_string: str) -> list[ResourceDescriptor]:
-    """Every resource every registered kind finds referenced by the document."""
+    """
+    Every resource every registered kind finds referenced by the
+    document. A kind whose discover() raises propagates that exception
+    to the caller rather than being skipped - deliberately deferred
+    rather than an oversight, since no kind implementation exists yet
+    at this point in the plan; revisit once the built-in kinds land.
+    """
     results: list[ResourceDescriptor] = []
     for kind in ResourceKindRegistry.get_instance().all():
         results.extend(kind.discover(xml_string))
