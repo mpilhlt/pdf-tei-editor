@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-27T16:03:51.864Z
+ * Generated from OpenAPI schema at 2026-09-27T19:17:20.724Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -433,13 +433,6 @@
  */
 
 /**
- * @typedef {Object} InstructionItem
- * @property {string} label
- * @property {Array<string>} extractor
- * @property {Array<string>} text
- */
-
-/**
  * @typedef {Object} ListResourcesRequest
  * @property {string} xml_string
  */
@@ -694,11 +687,6 @@
  * @typedef {Object} SaveFileResponse
  * @property {string} status
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} SaveInstructionsResponse
- * @property {string} result
  */
 
 /**
@@ -996,30 +984,6 @@ export class ApiClientV1 {
    */
   async configSet(requestBody) {
     const endpoint = `/config/set`
-    return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Get extraction instructions.
-   * Requires authentication.
-   * Returns list of instruction items.
-   *
-   * @returns {Promise<Array<InstructionItem>>}
-   */
-  async configListInstructions() {
-    const endpoint = `/config/instructions`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Save extraction instructions.
-   * Requires authentication.
-   *
-   * @param {Array<InstructionItem>} requestBody
-   * @returns {Promise<SaveInstructionsResponse>}
-   */
-  async configSaveInstructions(requestBody) {
-    const endpoint = `/config/instructions`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
