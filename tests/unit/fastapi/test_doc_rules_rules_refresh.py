@@ -170,6 +170,25 @@ class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(outcome.available)
         file_storage.save_file.assert_not_called()
 
+    async def test_perform_refresh_does_not_write_when_nothing_changed(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(
+            entries=[{"category": "primary", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/oldsha/docs/guidelines.md#seg",
+                 "content_type": "markdown", "subtype": "human"},
+            ]}],
+            schema_url="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng",
+        ))
+        target = self._target(TEI_WITH_PI_AND_DECL)
+        file_repo = mock.MagicMock()
+        file_storage = mock.MagicMock()
+
+        outcome = await perform_refresh(target, file_repo, file_storage, "reviewer1", cache=mock.MagicMock())
+
+        self.assertTrue(outcome.available)
+        self.assertFalse(outcome.changed)
+        file_storage.save_file.assert_not_called()
+        file_repo.update_file.assert_not_called()
+
     def test_preview_reports_unchanged_when_nothing_differs(self):
         register_document_rules_provider("GROBID", "grobid", FakeProvider(
             entries=[{"category": "primary", "refs": [

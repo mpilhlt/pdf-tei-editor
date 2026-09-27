@@ -107,7 +107,9 @@ def _current_schema_location(tei_content: str) -> Optional[str]:
     return None
 
 
-_XML_MODEL_PI_RE = re.compile(r"<\?xml-model\b[^>]*\?>\n?")
+_XML_MODEL_PI_RE = re.compile(
+    r'<\?xml-model\s+[^>]*schematypens="http://relaxng\.org/ns/structure/1\.0"[^>]*\?>\n?'
+)
 _XML_DECL_RE = re.compile(r"^<\?xml\b[^>]*\?>\n?")
 
 
@@ -125,6 +127,12 @@ def _replace_schema_pi(tei_content: str, schema_url: str) -> str:
     Inserted immediately after the XML declaration if present (documents
     this app saves never have one - see serialize_tei_with_formatted_header()
     - so in practice this always inserts at the very start of the string).
+
+    Only removes an xml-model PI whose schematypens is RelaxNG, scoped
+    identically to _current_schema_location()'s own detection (v1 scope:
+    RelaxNG only) - a document that also carried some other kind of
+    xml-model PI (e.g. Schematron) would otherwise have it silently deleted
+    here despite this module never having detected or accounted for it.
     """
     without_existing = _XML_MODEL_PI_RE.sub("", tei_content)
     new_pi = create_schema_processing_instruction(schema_url) + "\n"
