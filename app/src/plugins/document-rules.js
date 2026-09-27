@@ -35,6 +35,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
+import { createMarkdownRenderer } from '../modules/markdown-utils.js'
 
 // Register templates at module level
 await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
@@ -72,6 +73,21 @@ class DocumentRulesPlugin extends Plugin {
   /** @type {boolean} */
   _refreshQueued = false
 
+  /** @type {ReturnType<typeof createMarkdownRenderer>} */
+  _md = null
+
+  /** Resource descriptor the dialog currently shows, or null if closed. @type {ResourceDescriptorModel|null} */
+  _currentResource = null
+
+  /** @type {Array<OverrideModel>} */
+  _currentOverrides = []
+
+  /** Selected override id, or null when "Original" is selected. @type {string|null} */
+  _currentSelectedId = null
+
+  /** @type {string} */
+  _currentOriginalText = ''
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -79,7 +95,20 @@ class DocumentRulesPlugin extends Plugin {
 
     const dialog = createSingleFromTemplate('document-rules-editor-dialog', document.body)
     this._editorDialogUi = this.createUi(dialog)
+
+    this._md = createMarkdownRenderer()
+
     this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
+    this._editorDialogUi.newOverrideBtn.addEventListener('click', () => this._onNewOverride())
+    this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
+    this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
+    this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
+    this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', (event) => {
+      if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
+        const text = this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
+        this._editorDialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+      }
+    })
   }
 
   async start() {
@@ -194,8 +223,192 @@ class DocumentRulesPlugin extends Plugin {
     }
   }
 
-  /** @param {ResourceDescriptorModel} _resource */
-  async _openResourceEditor(_resource) { /* replaced in Task 5 */ }
+  /**
+   * Query one resource's original text, overrides, and current selection,
+   * then render and show the editor dialog for it.
+   * @param {ResourceDescriptorModel} resource
+   * @returns {Promise<void>}
+   */
+  async _openResourceEditor(resource) {
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesQuery({ kind: resource.kind, url: resource.url })
+    } catch (error) {
+      notify(`Could not load resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentResource = resource
+    this._currentOverrides = response.overrides
+    this._currentSelectedId = response.selected_override_id
+    this._currentOriginalText = response.original_text
+    this._renderEditorDialog()
+    this._editorDialogUi.show()
+  }
+
+  /**
+   * Read the text currently displayed in whichever body is active (the
+   * source of truth for New override/Save, before it's persisted).
+   * @returns {string}
+   */
+  _currentShownText() {
+    if (this._currentResource.format === 'xml') {
+      return this._currentXmlText()
+    }
+    return this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
+  }
+
+  /** Full re-render of the dialog for `_currentResource`/`_currentOverrides`/`_currentSelectedId`. */
+  _renderEditorDialog() {
+    const resource = this._currentResource
+    const dialogUi = this._editorDialogUi
+    dialogUi.setAttribute('label', resource.label)
+    this._renderOverrideRow()
+
+    const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+    dialogUi.noteInput.style.display = selected ? '' : 'none'
+    dialogUi.noteInput.value = selected ? selected.note : ''
+
+    const text = selected ? selected.text : this._currentOriginalText
+    const readOnly = selected === null
+
+    if (resource.format === 'xml') {
+      dialogUi.textBody.style.display = 'none'
+      dialogUi.xmlBody.style.display = ''
+      this._setXmlContent(text, readOnly)
+    } else {
+      dialogUi.xmlBody.style.display = 'none'
+      dialogUi.textBody.style.display = ''
+      dialogUi.textBody.textTabs.editPanel.textArea.value = text
+      dialogUi.textBody.textTabs.editPanel.textArea.readonly = readOnly
+      dialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+    }
+
+    dialogUi.saveBtn.style.display = selected ? '' : 'none'
+    dialogUi.deleteBtn.style.display = selected ? '' : 'none'
+    dialogUi.resetBtn.style.display = selected ? '' : 'none'
+  }
+
+  /** Rebuild the "Original"/"Override N" button row. */
+  _renderOverrideRow() {
+    const row = this._editorDialogUi.overrideRow
+    row.innerHTML = ''
+
+    const originalBtn = document.createElement('sl-button')
+    originalBtn.setAttribute('size', 'small')
+    originalBtn.textContent = 'Original'
+    originalBtn.variant = this._currentSelectedId === null ? 'primary' : 'default'
+    originalBtn.addEventListener('click', () => this._selectOverride(null))
+    row.appendChild(originalBtn)
+
+    this._currentOverrides.forEach((override, index) => {
+      const btn = document.createElement('sl-button')
+      btn.setAttribute('size', 'small')
+      btn.textContent = `Override ${index + 1}`
+      btn.variant = this._currentSelectedId === override.id ? 'primary' : 'default'
+      if (override.note) btn.title = override.note
+      btn.addEventListener('click', () => this._selectOverride(override.id))
+      row.appendChild(btn)
+    })
+  }
+
+  /**
+   * Select the original (null) or one override for `_currentResource`,
+   * persisting the choice immediately - per the spec, clicking a row entry
+   * "uses it immediately", it is not a staged/unsaved choice.
+   * @param {string|null} overrideId
+   * @returns {Promise<void>}
+   */
+  async _selectOverride(overrideId) {
+    if (overrideId === this._currentSelectedId) return
+    try {
+      await this.#client.apiClient.documentRulesSelection({
+        kind: this._currentResource.kind,
+        fragment_url: this._currentResource.url,
+        override_id: overrideId
+      })
+    } catch (error) {
+      notify(`Could not change selection: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentSelectedId = overrideId
+    this._renderEditorDialog()
+  }
+
+  /** Copy the currently shown text into a new override and select it. */
+  async _onNewOverride() {
+    const text = this._currentShownText()
+    let override
+    try {
+      override = await this.#client.apiClient.documentRulesOverrides({
+        kind: this._currentResource.kind,
+        fragment_url: this._currentResource.url,
+        note: '',
+        text
+      })
+    } catch (error) {
+      notify(`Could not create override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides.push(override)
+    await this._selectOverride(override.id)
+  }
+
+  /** Persist the currently selected override's note + shown text. */
+  async _onSave() {
+    if (this._currentSelectedId === null) return
+    const note = this._editorDialogUi.noteInput.value
+    const text = this._currentShownText()
+    let updated
+    try {
+      updated = await this.#client.apiClient.documentRulesUpdateOverrides(this._currentSelectedId, { note, text })
+    } catch (error) {
+      notify(`Could not save override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    const index = this._currentOverrides.findIndex(o => o.id === updated.id)
+    if (index !== -1) this._currentOverrides[index] = updated
+    notify('Override saved.', 'success', 'check-circle')
+  }
+
+  /** Delete the currently selected override (owner-only, enforced server-side). */
+  async _onDelete() {
+    if (this._currentSelectedId === null) return
+    const confirmed = await this.getDependency('dialog').confirm('Delete this override? This cannot be undone.', 'Delete override')
+    if (!confirmed) return
+    const id = this._currentSelectedId
+    try {
+      await this.#client.apiClient.documentRulesDeleteOverrides(id)
+    } catch (error) {
+      notify(`Could not delete override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides = this._currentOverrides.filter(o => o.id !== id)
+    this._currentSelectedId = null
+    this._renderEditorDialog()
+  }
+
+  /** Clear the selection for this resource (keeps all overrides). */
+  async _onReset() {
+    if (this._currentSelectedId === null) return
+    try {
+      await this.#client.apiClient.documentRulesSelection({
+        kind: this._currentResource.kind,
+        fragment_url: this._currentResource.url,
+        override_id: null
+      })
+    } catch (error) {
+      notify(`Could not reset selection: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentSelectedId = null
+    this._renderEditorDialog()
+  }
+
+  /** @param {string} _text @param {boolean} _readOnly */
+  _setXmlContent(_text, _readOnly) { /* replaced in Task 6 */ }
+
+  /** @returns {string} */
+  _currentXmlText() { return '' /* replaced in Task 6 */ }
 
   /**
    * Preview, confirm, then execute a "Refresh document rules" pass on the
