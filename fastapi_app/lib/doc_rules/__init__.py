@@ -5,6 +5,7 @@ override/selection storage for the resources a TEI document references
 docs/superpowers/specs/2026-09-27-document-rules-registry-design.md.
 """
 
+from fastapi_app.lib.doc_rules.extraction_contribution import ExtractionFragment, ResolvedFragment, for_extraction
 from fastapi_app.lib.doc_rules.kinds import (
     ResourceDescriptor,
     ResourceKind,
@@ -24,4 +25,7 @@ __all__ = [
     "normalize_resource_key",
     "infer_format",
     "DocumentRulesStore",
+    "ExtractionFragment",
+    "ResolvedFragment",
+    "for_extraction",
 ]
