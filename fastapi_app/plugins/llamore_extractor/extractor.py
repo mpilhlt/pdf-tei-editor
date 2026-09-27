@@ -232,12 +232,17 @@ class LLamoreExtractor(BaseExtractor):
         any, else the shipped default) and the one editorialDecl entry
         documenting it.
 
-        The entry has only a "human" ref, no "machine" ref, so
-        annotation_review/review_logic.py's gather_rule_excerpts() (which
-        only surfaces categories with a "machine" ref) never includes it
-        in the review LLM's prompt - deliberate, not an oversight: these
-        are extraction-time instructions, not an annotation guide to
-        review a document against.
+        The entry has only a "human" ref, no "machine" ref. With no
+        override selected for this resource, annotation_review/
+        review_logic.py's gather_rule_excerpts() requires a "machine" ref
+        to fetch from and so skips this category - these are
+        extraction-time instructions, not an annotation guide, and were
+        never meant to reach the review LLM's prompt in that case. But if
+        a user *does* select an override for this resource (exactly the
+        feature this mechanism exists to offer), gather_rule_excerpts()'s
+        override short-circuit surfaces it anyway, ahead of the
+        machine-ref requirement - not excluded categorically, only when
+        unoverridden. See gather_rule_excerpts()'s own docstring.
 
         for_extraction() is called with exactly one descriptor, so
         `fragments[0]` is safe; if a second descriptor is ever added here,
