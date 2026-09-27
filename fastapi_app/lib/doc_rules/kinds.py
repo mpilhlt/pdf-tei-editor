@@ -9,6 +9,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar, Literal, Optional
 
+# The one place this literal is defined; resource_key.py and
+# models_document_rules.py both import it rather than repeating it, so a
+# future fourth format can't drift out of sync between the domain type,
+# format inference, and the REST models.
+ResourceFormat = Literal["markdown", "text", "xml"]
+
 
 @dataclass(frozen=True)
 class ResourceDescriptor:
@@ -18,7 +24,7 @@ class ResourceDescriptor:
     url: str    # exact URL as found in the document (may be SHA-pinned)
     key: str    # normalized resource key (see resource_key.py)
     label: str  # human-readable label for the UI
-    format: Literal["markdown", "text", "xml"]
+    format: ResourceFormat
 
 
 class ResourceKind(ABC):

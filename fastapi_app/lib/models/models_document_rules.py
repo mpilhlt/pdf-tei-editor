@@ -4,10 +4,10 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 ("REST API").
 """
 
-from typing import Literal, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
-ResourceFormat = Literal["markdown", "text", "xml"]
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat
 
 
 class ResourceDescriptorModel(BaseModel):
@@ -35,7 +35,13 @@ class QueryResourceRequest(BaseModel):
 
 
 class OverrideModel(BaseModel):
-    """One user-owned editable copy of a resource."""
+    """
+    One user-owned editable copy of a resource, as exposed over the REST
+    API. DocumentRulesStore's raw override dict also carries kind,
+    resource_key, owner, base_url, and base_hash - intentionally not
+    exposed here; the router builds this model from a subset of that
+    dict's fields, not by passing it through wholesale.
+    """
     id: str
     note: str
     text: str

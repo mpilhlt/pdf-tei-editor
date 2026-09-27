@@ -5,10 +5,10 @@ registry. See docs/superpowers/specs/2026-09-27-document-rules-registry-design.m
 """
 
 import logging
-from typing import Literal
 from urllib.parse import urlsplit
 
 from fastapi_app.lib.core.git_forge_adapters import GitForgeAdapterRegistry
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def normalize_resource_key(url: str) -> str:
     return f"{key_base}#{fragment}" if fragment else key_base
 
 
-def infer_format(url: str) -> Literal["markdown", "text", "xml"]:
+def infer_format(url: str) -> ResourceFormat:
     """
     Infer a resource's editor format from its URL's file extension
     (fragment ignored): ".md"/".markdown" -> "markdown"; ".xml"/".rng" ->
