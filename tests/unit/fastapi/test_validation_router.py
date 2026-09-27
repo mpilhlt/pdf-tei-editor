@@ -21,6 +21,10 @@ from fastapi_app.routers.validation import router
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.core.schema_validator import get_schema_cache_info
+from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.core.dependencies import get_document_rules_store
+from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 
 RELAXNG_SCHEMA = """<?xml version="1.0" encoding="UTF-8"?>
 <grammar xmlns="http://relaxng.org/ns/structure/1.0">
@@ -98,6 +102,105 @@ class TestAutocompleteDataInvalidateCache(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_download.assert_not_called()
+
+
+PERMISSIVE_RELAXNG_SCHEMA = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="">
+  <start>
+    <element name="root" ns="http://www.tei-c.org/ns/1.0">
+      <zeroOrMore><element name="child" ns="http://www.tei-c.org/ns/1.0"><empty/></element></zeroOrMore>
+    </element>
+  </start>
+</grammar>
+"""
+
+STRICT_RELAXNG_SCHEMA_FORBIDDING_CHILD = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="">
+  <start>
+    <element name="root" ns="http://www.tei-c.org/ns/1.0">
+      <empty/>
+    </element>
+  </start>
+</grammar>
+"""
+
+
+class TestValidateXmlWithSchemaOverride(unittest.TestCase):
+    """A selected schema override must actually change /validate's outcome."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.cache_root = Path(self.temp_dir.name) / "schema-cache"
+        self.db = DatabaseManager(Path(self.temp_dir.name) / "test.db")
+        self.store = DocumentRulesStore(self.db)
+
+        self.schema_location = "https://example.com/schema/tei.rng"
+        cache_dir, cache_file, _ = get_schema_cache_info(self.schema_location, self.cache_root)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(PERMISSIVE_RELAXNG_SCHEMA, encoding="utf-8")
+
+        self.xml = (
+            '<?xml version="1.0"?>'
+            f'<?xml-model href="{self.schema_location}" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+            '<root xmlns="http://www.tei-c.org/ns/1.0"><child/></root>'
+        )
+
+        self.app = FastAPI()
+        self.app.include_router(router)
+        self.mock_settings = MagicMock()
+        self.mock_settings.schema_cache_dir = self.cache_root
+        self.app.dependency_overrides[get_settings] = lambda: self.mock_settings
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice"}
+        self.app.dependency_overrides[get_document_rules_store] = lambda: self.store
+        self.client = TestClient(self.app)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_no_selection_uses_the_cached_schema(self):
+        response = self.client.post("/validate", json={"xml_string": self.xml})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["errors"], [])
+
+    def test_selected_override_changes_the_validation_outcome(self):
+        override = self.store.create_override(
+            kind="schema",
+            resource_key=normalize_resource_key(self.schema_location),
+            owner="alice",
+            note="",
+            text=STRICT_RELAXNG_SCHEMA_FORBIDDING_CHILD,
+            format="xml",
+            base_url=self.schema_location,
+            base_hash="hash",
+        )
+        self.store.set_selection(
+            "schema", normalize_resource_key(self.schema_location), "alice", override["id"]
+        )
+
+        response = self.client.post("/validate", json={"xml_string": self.xml})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["errors"], "expected the override's stricter schema to reject <child/>")
+
+    def test_another_users_selection_does_not_affect_this_caller(self):
+        override = self.store.create_override(
+            kind="schema",
+            resource_key=normalize_resource_key(self.schema_location),
+            owner="bob",
+            note="",
+            text=STRICT_RELAXNG_SCHEMA_FORBIDDING_CHILD,
+            format="xml",
+            base_url=self.schema_location,
+            base_hash="hash",
+        )
+        self.store.set_selection(
+            "schema", normalize_resource_key(self.schema_location), "bob", override["id"]
+        )
+
+        response = self.client.post("/validate", json={"xml_string": self.xml})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["errors"], [])
 
 
 if __name__ == "__main__":

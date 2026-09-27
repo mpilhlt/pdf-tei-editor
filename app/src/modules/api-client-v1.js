@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-27T13:43:12.078Z
+ * Generated from OpenAPI schema at 2026-09-27T16:03:51.864Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1471,6 +1471,8 @@ export class ApiClientV1 {
    * Supports both XSD (xsi:schemaLocation) and RelaxNG (xml-model) schemas.
    * Automatically downloads and caches schemas on first use.
    * Uses subprocess isolation for timeout protection on complex schemas.
+   * If the caller has selected a schema override via the document rules
+   * registry, validates against that instead of the shared cached schema.
    * Returns:
    * List of validation errors. Empty list if validation passed.
    *

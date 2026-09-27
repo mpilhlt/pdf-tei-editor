@@ -14,7 +14,7 @@ import json
 import logging
 
 from ..config import get_settings
-from ..lib.core.dependencies import require_authenticated_user
+from ..lib.core.dependencies import require_authenticated_user, get_document_rules_store
 from ..lib.models.models_validation import (
     ValidateRequest,
     ValidateResponse,
@@ -23,6 +23,8 @@ from ..lib.models.models_validation import (
     AutocompleteDataResponse
 )
 from ..lib.core.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
+from ..lib.doc_rules.schema_override import build_schema_text_override
+from ..lib.doc_rules.storage import DocumentRulesStore
 from ..lib.utils.autocomplete_generator import generate_autocomplete_map
 
 # For internet connectivity check
@@ -36,7 +38,8 @@ router = APIRouter(prefix="/validate", tags=["validation"])
 def validate_xml(
     request: ValidateRequest,
     settings=Depends(get_settings),
-    user: dict = Depends(require_authenticated_user)
+    user: dict = Depends(require_authenticated_user),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> ValidateResponse:
     """
     Validate XML document against embedded schema references.
@@ -44,13 +47,21 @@ def validate_xml(
     Supports both XSD (xsi:schemaLocation) and RelaxNG (xml-model) schemas.
     Automatically downloads and caches schemas on first use.
     Uses subprocess isolation for timeout protection on complex schemas.
+    If the caller has selected a schema override via the document rules
+    registry, validates against that instead of the shared cached schema.
 
     Returns:
         List of validation errors. Empty list if validation passed.
     """
     try:
+        schema_text_override = build_schema_text_override(request.xml_string, store, user["username"])
+
         # Perform validation using framework-agnostic library
-        errors = validate(request.xml_string, cache_root=settings.schema_cache_dir)
+        errors = validate(
+            request.xml_string,
+            cache_root=settings.schema_cache_dir,
+            schema_text_override=schema_text_override,
+        )
 
         # Convert to Pydantic models
         error_models = [
