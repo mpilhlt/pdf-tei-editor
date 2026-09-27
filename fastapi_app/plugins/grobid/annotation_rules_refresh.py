@@ -178,6 +178,12 @@ async def perform_refresh(
     entries = build_editorial_decl_entries(target.variant_id, cache)
 
     existing_entries = extract_annotation_rule_refs(target.tei_content)
+    # NOTE: extract_annotation_rule_refs() can return entries carrying an "n"
+    # key (interpretation/@n); build_editorial_decl_entries() never sets it.
+    # This comparison only stays symmetric because nothing currently writes
+    # @n. If a future change starts producing @n here (or in
+    # _replace_editorial_decl()), update both sides together, or every
+    # document with @n will look "changed" and lose its label on refresh.
     changed = entries != existing_entries
     if changed:
         try:
