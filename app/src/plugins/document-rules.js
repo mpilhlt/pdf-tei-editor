@@ -239,7 +239,18 @@ class DocumentRulesPlugin extends Plugin {
     }
 
     if (outcome.changed) {
-      await this.getDependency('services').load({ xml: state.xml })
+      try {
+        await this.getDependency('services').load({ xml: state.xml })
+      } catch (error) {
+        // The refresh itself already succeeded server-side; only the
+        // editor reload failed, so still confirm the refresh and report
+        // the reload failure separately rather than losing both messages
+        // to an unhandled rejection (services.load() can rethrow on a
+        // lock/permission error even for a file the caller already holds).
+        notify(outcome.message, 'success', 'check-circle')
+        notify(`Refresh succeeded, but reloading the editor failed: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+        return
+      }
     }
     notify(outcome.message, outcome.changed ? 'success' : 'primary', 'check-circle')
   }
