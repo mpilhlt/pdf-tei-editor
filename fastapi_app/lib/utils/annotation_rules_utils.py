@@ -72,8 +72,9 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     base_url, _, fragment = url.partition("#")
     adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
     fetch_url = adapter.to_raw_url(base_url) if adapter else base_url
+    pinned = adapter.is_sha_pinned(base_url) if adapter else False
 
-    text = cache.get_text(fetch_url)
+    text = cache.get_text(fetch_url, ignore_ttl=pinned)
     if text is None:
         response = requests.get(fetch_url, timeout=30, allow_redirects=allow_redirects)
         response.raise_for_status()

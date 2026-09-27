@@ -179,6 +179,43 @@ class TestFetchRuleExcerpt(unittest.TestCase):
             allow_redirects=False,
         )
 
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_sha_pinned_github_url_reads_cache_with_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        result = fetch_rule_excerpt(url, cache)
+
+        self.assertEqual(result, "cached content")
+        cache.get_text.assert_called_once_with(
+            f"https://raw.githubusercontent.com/mpilhlt/fossil/{'a' * 40}/docs/guidelines.md",
+            ignore_ttl=True,
+        )
+        mock_get.assert_not_called()
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_branch_ref_github_url_reads_cache_without_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        fetch_rule_excerpt(url, cache)
+
+        cache.get_text.assert_called_once_with(
+            "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guidelines.md",
+            ignore_ttl=False,
+        )
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_unrecognized_host_reads_cache_without_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache)
+
+        cache.get_text.assert_called_once_with("https://pad.gwdg.de/s/abc/download", ignore_ttl=False)
+
 
 class TestIsLineRangeFragment(unittest.TestCase):
     def test_recognizes_github_style_range(self):

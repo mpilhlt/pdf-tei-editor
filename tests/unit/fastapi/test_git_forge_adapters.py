@@ -28,6 +28,9 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def strip_ref(self, url: str) -> str:
         return "stripped:" + url
 
+    def is_sha_pinned(self, url: str) -> bool:
+        return False
+
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -40,6 +43,9 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
     def strip_ref(self, url: str) -> str:
+        raise AssertionError("should not be called")
+
+    def is_sha_pinned(self, url: str) -> bool:
         raise AssertionError("should not be called")
 
 
@@ -201,3 +207,33 @@ class TestGitLabAdapterStripRef(unittest.TestCase):
         sha_url = "https://gitlab.com/group/project/-/blob/abc123/rules.md"
         branch_url = "https://gitlab.com/group/project/-/blob/main/rules.md"
         self.assertEqual(self.adapter.strip_ref(sha_url), self.adapter.strip_ref(branch_url))
+
+
+class TestGitHubAdapterIsShaPinned(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+
+    def test_branch_ref_is_not_pinned(self):
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        self.assertFalse(self.adapter.is_sha_pinned(url))
+
+    def test_sha_ref_is_pinned(self):
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        self.assertTrue(self.adapter.is_sha_pinned(url))
+
+    def test_fragment_is_ignored(self):
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md#L1-L5"
+        self.assertTrue(self.adapter.is_sha_pinned(url))
+
+
+class TestGitLabAdapterIsShaPinned(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+
+    def test_branch_ref_is_not_pinned(self):
+        url = "https://gitlab.com/group/project/-/blob/main/docs/guidelines.md"
+        self.assertFalse(self.adapter.is_sha_pinned(url))
+
+    def test_sha_ref_is_pinned(self):
+        url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guidelines.md"
+        self.assertTrue(self.adapter.is_sha_pinned(url))

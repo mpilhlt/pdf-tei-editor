@@ -53,6 +53,10 @@ class BaseGitForgeAdapter(ABC):
         branch/tag is itself named the same as the placeholder.
         """
 
+    @abstractmethod
+    def is_sha_pinned(self, url: str) -> bool:
+        """True if `url`'s ref segment is already a 40-character commit SHA (immutable content)."""
+
 
 class GitHubAdapter(BaseGitForgeAdapter):
     """Adapter for github.com blob URLs."""
@@ -100,6 +104,11 @@ class GitHubAdapter(BaseGitForgeAdapter):
         m = self._parse(base_url)
         return f"https://github.com/{m['owner']}/{m['repo']}/blob/_/{m['path']}"
 
+    def is_sha_pinned(self, url: str) -> bool:
+        base_url, _, _ = url.partition("#")
+        m = self._parse(base_url)
+        return bool(_SHA_RE.match(m['ref']))
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -141,6 +150,11 @@ class GitLabAdapter(BaseGitForgeAdapter):
         base_url, _, _ = url.partition("#")
         origin, project_path, _ref, file_path = self._split(base_url)
         return f"{origin}/{project_path}/-/blob/_/{file_path}"
+
+    def is_sha_pinned(self, url: str) -> bool:
+        base_url, _, _ = url.partition("#")
+        _origin, _project_path, ref, _file_path = self._split(base_url)
+        return bool(_SHA_RE.match(ref))
 
 
 class GitForgeAdapterRegistry:

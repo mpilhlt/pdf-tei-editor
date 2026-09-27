@@ -55,7 +55,8 @@ class TestIsCacheStale(unittest.TestCase):
 class TestUrlCache(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.cache = UrlCache(Path(self.temp_dir.name), ttl_seconds=3600)
+        self.cache_root = Path(self.temp_dir.name)
+        self.cache = UrlCache(self.cache_root, ttl_seconds=3600)
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -72,3 +73,15 @@ class TestUrlCache(unittest.TestCase):
         stale_cache.set_text("https://example.com/a/b/c.md", "hello world")
         time.sleep(0.01)
         self.assertIsNone(stale_cache.get_text("https://example.com/a/b/c.md"))
+
+    def test_get_text_ignores_staleness_when_ignore_ttl_is_true(self):
+        cache = UrlCache(self.cache_root, ttl_seconds=0)
+        cache.set_text("https://example.com/a/b.txt", "content")
+        # ttl_seconds=0 means the entry is immediately stale under the default check...
+        self.assertIsNone(cache.get_text("https://example.com/a/b.txt"))
+        # ...but ignore_ttl=True returns it anyway, regardless of age.
+        self.assertEqual(cache.get_text("https://example.com/a/b.txt", ignore_ttl=True), "content")
+
+    def test_get_text_with_ignore_ttl_still_returns_none_when_never_cached(self):
+        cache = UrlCache(self.cache_root)
+        self.assertIsNone(cache.get_text("https://example.com/never/cached.txt", ignore_ttl=True))
