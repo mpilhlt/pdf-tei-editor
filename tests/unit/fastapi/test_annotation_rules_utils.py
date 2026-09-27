@@ -440,3 +440,29 @@ class TestExtractAnnotationRuleRefs(unittest.TestCase):
         refs = extract_annotation_rule_refs(xml)
         self.assertEqual(len(refs), 1)
         self.assertIsNone(refs[0]["refs"][0]["content_type"])
+
+
+class TestExtractAnnotationRuleRefsLabel(unittest.TestCase):
+    def test_includes_n_when_present(self):
+        xml = """<?xml version="1.0"?>
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+          <teiHeader><encodingDesc><editorialDecl>
+            <interpretation type="data-correction" n="Data correction">
+              <p><ref target="https://example.com/rules.md" subtype="human"/></p>
+            </interpretation>
+          </editorialDecl></encodingDesc></teiHeader>
+        </TEI>"""
+        entries = extract_annotation_rule_refs(xml)
+        self.assertEqual(entries[0].get("n"), "Data correction")
+
+    def test_omits_n_key_entirely_when_absent(self):
+        xml = """<?xml version="1.0"?>
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+          <teiHeader><encodingDesc><editorialDecl>
+            <interpretation type="primary">
+              <p><ref target="https://example.com/rules.md" subtype="human"/></p>
+            </interpretation>
+          </editorialDecl></encodingDesc></teiHeader>
+        </TEI>"""
+        entries = extract_annotation_rule_refs(xml)
+        self.assertNotIn("n", entries[0])

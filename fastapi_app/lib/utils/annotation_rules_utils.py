@@ -8,7 +8,7 @@ See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 
 import logging
 import re
-from typing import Literal, Optional, TypedDict
+from typing import Literal, NotRequired, Optional, TypedDict
 
 import requests
 from lxml import etree
@@ -224,9 +224,13 @@ class AnnotationRuleRef(TypedDict):
     One editorialDecl/interpretation entry: a rule category and its one or two refs.
 
     "category" is interpretation/@type (e.g. "primary", "footnote-annotation").
+    "n" is interpretation/@n, a short display label (TEI's att.global.attribute.n);
+    absent (not merely None) when the document has no @n, so equality checks
+    against entries built before this attribute existed are unaffected.
     """
 
     category: str
+    n: NotRequired[Optional[str]]
     refs: list[AnnotationRuleRefTarget]
 
 
@@ -276,5 +280,10 @@ def extract_annotation_rule_refs(xml_string: str) -> list[AnnotationRuleRef]:
 
         if not refs:
             continue
-        results.append({"category": category, "refs": refs})
+
+        entry: AnnotationRuleRef = {"category": category, "refs": refs}
+        n = interpretation.get("n")
+        if n is not None:
+            entry["n"] = n
+        results.append(entry)
     return results
