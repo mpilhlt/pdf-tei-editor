@@ -18,8 +18,8 @@ For fileDesc/publicationStmt/sourceDesc metadata semantics beyond what's listed 
 | `fileDesc/titleStmt` | extractors (`create_tei_header()`), metadata-extraction enhancement, `saveRevision()` (respStmt only) | `extract_tei_metadata()` (title/author fallback), revision-history UI (respStmt) |
 | `fileDesc/publicationStmt`, `fileDesc/sourceDesc` | extractors, metadata-update job, metadata-extraction enhancement, `addLicenseElement()` (licence only) | `extract_tei_metadata()` (biblStruct-first, publicationStmt-fallback) |
 | `encodingDesc/appInfo/application` | extractors, `ensureExtractorVariant()` (copy-on-save) | variant/extractor-provenance readers across backend and frontend (see below) |
-| `encodingDesc/editorialDecl` | extractors (at extraction time), "Refresh Annotation Rules" action | `getEditorialDeclGuides()`, `extract_annotation_rule_refs()`, Annotation Guide drawer |
-| `revisionDesc/change` | `create_tei_header()` (seed), extractors (replace), "Save Revision" action, "Refresh Annotation Rules" action | revision-history UI, edit-history/annotation-history reporting plugins, `extract_tei_metadata()` (last status/label) |
+| `encodingDesc/editorialDecl` | extractors (at extraction time), "Refresh document rules" action | `getEditorialDeclGuides()`, `extract_annotation_rule_refs()`, Annotation Guide drawer |
+| `revisionDesc/change` | `create_tei_header()` (seed), extractors (replace), "Save Revision" action, "Refresh document rules" action | revision-history UI, edit-history/annotation-history reporting plugins, `extract_tei_metadata()` (last status/label) |
 
 Not used anywhere in this app: `notesStmt`, `profileDesc`, `xenoData`.
 
@@ -83,7 +83,7 @@ Built by `create_encoding_desc_with_extractor()` in `tei_utils.py`, called by ev
 
 **This is the only place a document's own variant is recorded.** There is no live "current document variant" read in the frontend — `state.variant` in `app/src/state.js` is a UI **filter** value (populated from the DB's per-file `variant` column, itself populated at save/extraction time by the backend parsing this same `label[@type="variant-id"]`), not something re-parsed from the open document on every read. If you need the open document's own variant, read `encodingDesc/appInfo/application[@type="extractor"]/label[@type="variant-id"]` directly (e.g. via `getDocumentMetadata()`'s `variant_id` field in `tei-utils.js`) rather than assuming `state.variant` matches it.
 
-Other readers: `parse_encoding_labels()` in `fastapi_app/plugins/grobid/sync.py` (used by the annotation-rules-refresh precondition check and the training-feature-tokens route to locate cached GROBID artifacts by variant/revision/flavor); `extract_variant_id()` in `tei_utils.py` (used by `local_sync` and `files_save.py` to populate the DB `variant` column on every save).
+Other readers: `parse_encoding_labels()` in `fastapi_app/plugins/grobid/sync.py` (used by the training-feature-tokens route to locate cached GROBID artifacts by variant/revision/flavor); `extract_extractor_provenance()` in `fastapi_app/lib/doc_rules/rules_providers.py` (used by the "Refresh document rules" action to dispatch to the right extractor's `DocumentRulesProvider`, generically across extractors - see [2026-09-27-document-rules-registry-design.md](../superpowers/specs/2026-09-27-document-rules-registry-design.md)); `extract_variant_id()` in `tei_utils.py` (used by `local_sync` and `files_save.py` to populate the DB `variant` column on every save).
 
 `ensureExtractorVariant()` in `tei-utils.js` is the one frontend writer: it re-stamps `label[@type="variant-id"]` when a document is saved as a new copy, so the variant survives the copy.
 
@@ -139,7 +139,7 @@ class AnnotationGuide(TypedDict):
     url: str
 ```
 
-At extraction time, `build_editorial_decl_entries(variant_id, cache)` (per-plugin, e.g. `fastapi_app/plugins/grobid/annotation_rules.py`) matches the document's variant against each guide's `variant_ids` (exact match or `"*"` wildcard), resolves the permalink, derives the machine ref, and returns the `AnnotationRuleRef` list that `create_encoding_desc_with_extractor()` writes into `editorialDecl`. A reviewer-facing "Refresh Annotation Rules" action (`annotation_rules_refresh.py`) re-runs the same resolution on demand, so an already-extracted document can pick up rules changes without re-extraction; it also appends a `revisionDesc/change` noting the update.
+At extraction time, `build_editorial_decl_entries(variant_id, cache)` (per-plugin, e.g. `fastapi_app/plugins/grobid/annotation_rules.py`) matches the document's variant against each guide's `variant_ids` (exact match or `"*"` wildcard), resolves the permalink, derives the machine ref, and returns the `AnnotationRuleRef` list that `create_encoding_desc_with_extractor()` writes into `editorialDecl`. A reviewer-facing "Refresh document rules" core action (`fastapi_app/lib/doc_rules/rules_refresh.py`, exposed at `POST /api/v1/document-rules/refresh/{preview,execute}`) re-runs the same resolution on demand, dispatching to whichever extractor plugin produced the document via `get_document_rules_provider_for_document()`/`DocumentRulesProvider` (`fastapi_app/lib/doc_rules/rules_providers.py`) — so an already-extracted document can pick up rules changes without re-extraction, regardless of which extractor produced it; it also appends a `revisionDesc/change` noting the update and regenerates the schema processing instruction.
 
 ### Reading editorialDecl
 
@@ -174,7 +174,7 @@ Writers:
 
 - `create_tei_header()` — seeds an initial `created`-status change; extractors immediately replace this with their own `extraction`-status change (`create_revision_desc_with_status()`).
 - `saveRevision()` in `document-actions.js` — the "Save Revision" toolbar action; the primary way `revisionDesc` grows during normal editing. Auto-advances status from `extraction` to the next lifecycle state or `unfinished` if the user doesn't pick one.
-- `_add_revision_change()` in `annotation_rules_refresh.py` — appended by "Refresh Annotation Rules"; has no `@status`.
+- `_add_revision_change()` in `fastapi_app/lib/doc_rules/rules_refresh.py` — appended by "Refresh document rules"; has no `@status`.
 
 Readers:
 
