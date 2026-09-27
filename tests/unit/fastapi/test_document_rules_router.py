@@ -7,13 +7,14 @@ Integration tests for the document rules REST router.
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
-from fastapi_app.lib.core.dependencies import require_authenticated_user
+from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
+from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError
 from fastapi_app.routers.document_rules import get_db, router
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
@@ -164,6 +165,79 @@ class TestQueryAndOverrideLifecycle(DocumentRulesRouterTestCase):
             "/document-rules/query", json={"kind": "no-such-kind", "url": self.url}
         )
         self.assertEqual(response.status_code, 400)
+
+
+class TestRefreshEndpoints(DocumentRulesRouterTestCase):
+    def setUp(self):
+        super().setUp()
+        self.file_storage = MagicMock()
+        self.app.dependency_overrides[get_file_storage] = lambda: self.file_storage
+
+    def _set_user_roles(self, roles):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": roles}
+
+    def test_preview_requires_reviewer_or_admin_role(self):
+        self._set_user_roles(["user"])
+        response = self.client.post("/document-rules/refresh/preview", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_execute_requires_reviewer_or_admin_role(self):
+        self._set_user_roles(["user"])
+        response = self.client.post("/document-rules/refresh/execute", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_preview_reports_precondition_error_as_bad_request(self):
+        self._set_user_roles(["reviewer"])
+        with patch(
+            "fastapi_app.routers.document_rules.resolve_refresh_target",
+            side_effect=RefreshPreconditionError("No TEI document open."),
+        ):
+            response = self.client.post("/document-rules/refresh/preview", json={"xml": "missing"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("No TEI document open", response.json()["detail"])
+
+    def test_preview_reports_unavailable_when_no_provider(self):
+        self._set_user_roles(["reviewer"])
+        with patch("fastapi_app.routers.document_rules.resolve_refresh_target") as mock_resolve, \
+             patch("fastapi_app.routers.document_rules.preview_refresh") as mock_preview:
+            mock_resolve.return_value = MagicMock()
+            mock_preview.return_value = MagicMock(
+                available=False, changed=False, entry_count=0, variant_id=None,
+                message="No rule-refresh provider for this document's extractor.",
+            )
+            response = self.client.post("/document-rules/refresh/preview", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["available"])
+
+    def test_execute_calls_perform_refresh_and_returns_outcome(self):
+        self._set_user_roles(["admin"])
+        with patch("fastapi_app.routers.document_rules.resolve_refresh_target") as mock_resolve, \
+             patch(
+                 "fastapi_app.routers.document_rules.perform_refresh",
+                 new=AsyncMock(return_value=MagicMock(
+                     available=True, changed=True, entry_count=2,
+                     variant_id="grobid.training.segmentation", message="Updated the annotation rules reference.",
+                 )),
+             ):
+            mock_resolve.return_value = MagicMock()
+            response = self.client.post("/document-rules/refresh/execute", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["changed"])
+        self.assertEqual(body["entry_count"], 2)
+
+    def test_execute_reports_runtime_error_as_unprocessable(self):
+        self._set_user_roles(["reviewer"])
+        with patch("fastapi_app.routers.document_rules.resolve_refresh_target") as mock_resolve, \
+             patch(
+                 "fastapi_app.routers.document_rules.perform_refresh",
+                 new=AsyncMock(side_effect=RuntimeError("Could not parse document XML for refresh: boom")),
+             ):
+            mock_resolve.return_value = MagicMock()
+            response = self.client.post("/document-rules/refresh/execute", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Could not parse document XML for refresh", response.json()["detail"])
 
 
 if __name__ == "__main__":

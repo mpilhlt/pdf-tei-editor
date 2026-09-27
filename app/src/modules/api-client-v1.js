@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-27T19:17:20.724Z
+ * Generated from OpenAPI schema at 2026-09-27T21:39:04.305Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -598,6 +598,20 @@
  * @property {string} original_text
  * @property {Array<OverrideModel>} overrides
  * @property {string=} selected_override_id - The caller's selected override id, or null if this resource currently uses the original.
+ */
+
+/**
+ * @typedef {Object} RefreshOutcomeResponse
+ * @property {boolean} available
+ * @property {boolean} changed
+ * @property {number} entry_count
+ * @property {string=} variant_id
+ * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RefreshRequest
+ * @property {string} xml
  */
 
 /**
@@ -1575,6 +1589,28 @@ export class ApiClientV1 {
    */
   async documentRulesSelectionReset(requestBody) {
     const endpoint = `/document-rules/selection/reset`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Read-only preview of what "Refresh document rules" would change for this document.
+   *
+   * @param {RefreshRequest} requestBody
+   * @returns {Promise<RefreshOutcomeResponse>}
+   */
+  async documentRulesRefreshPreview(requestBody) {
+    const endpoint = `/document-rules/refresh/preview`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Perform the document rules refresh: regenerate and save if anything changed.
+   *
+   * @param {RefreshRequest} requestBody
+   * @returns {Promise<RefreshOutcomeResponse>}
+   */
+  async documentRulesRefreshExecute(requestBody) {
+    const endpoint = `/document-rules/refresh/execute`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

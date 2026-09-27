@@ -91,3 +91,25 @@ class ResetSelectionRequest(BaseModel):
 
 class OkResponse(BaseModel):
     result: str = "ok"
+
+
+class RefreshRequest(BaseModel):
+    """Request to preview or execute a "Refresh document rules" action. `xml` is the target document's stable_id."""
+    xml: str
+
+
+class RefreshOutcomeResponse(BaseModel):
+    """
+    Response to both /refresh/preview and /refresh/execute.
+
+    `available=False` means no rules-refresh provider is registered for
+    this document's extractor - not an error, just nothing to refresh.
+    `changed` is always False from /preview (nothing is ever written
+    there); from /execute it reflects whether anything was actually
+    rewritten.
+    """
+    available: bool
+    changed: bool
+    entry_count: int
+    variant_id: Optional[str] = None
+    message: str
