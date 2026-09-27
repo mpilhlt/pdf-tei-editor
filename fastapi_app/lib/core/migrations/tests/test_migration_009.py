@@ -75,3 +75,20 @@ class TestMigration009(unittest.TestCase):
 
             remaining = conn.execute("SELECT * FROM resource_selection").fetchall()
         self.assertEqual(remaining, [])
+
+    def test_downgrade_drops_both_tables(self):
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration009DocumentRulesTables(self.logger))
+        manager.run_migrations(skip_backup=True)
+
+        with sqlite3.connect(str(self.db_path)) as conn:
+            Migration009DocumentRulesTables(self.logger).downgrade(conn)
+            conn.commit()
+
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+        self.assertNotIn("resource_overrides", tables)
+        self.assertNotIn("resource_selection", tables)
