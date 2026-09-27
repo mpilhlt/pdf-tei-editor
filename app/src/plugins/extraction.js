@@ -397,7 +397,7 @@ class ExtractionPlugin extends Plugin {
       for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
         if (optionKey === 'doi') continue
 
-        const result = createOptionElement(optionKey, optionConfig, selectedExtractorId, currentValues, builtValues)
+        const result = createOptionElement(optionKey, optionConfig, currentValues, builtValues)
         if (result && dynamicOptionsContainer) {
           const { element, chosenValue } = result
           builtValues[optionKey] = chosenValue
@@ -417,12 +417,11 @@ class ExtractionPlugin extends Plugin {
     /**
      * @param {string} optionKey
      * @param {ExtractorOption} optionConfig
-     * @param {string} extractorId
      * @param {Record<string, string>} currentValues
      * @param {Record<string, string>} builtValues
      * @returns {{element: SlSelect|SlInput, chosenValue: string}|null}
      */
-    function createOptionElement(optionKey, optionConfig, extractorId, currentValues = {}, builtValues = {}) {
+    function createOptionElement(optionKey, optionConfig, currentValues = {}, builtValues = {}) {
       if (optionConfig.depends) {
         for (const [condKey, condVal] of Object.entries(optionConfig.depends)) {
           const actual = builtValues[condKey] ?? currentValues[condKey] ?? ''
