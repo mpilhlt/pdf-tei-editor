@@ -11,8 +11,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..lib.core.database import DatabaseManager
-from ..lib.core.dependencies import get_db, require_authenticated_user
+from ..lib.core.dependencies import get_db, get_document_rules_store, require_authenticated_user
 from ..lib.doc_rules.kinds import get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.storage import DocumentRulesStore
@@ -32,10 +31,6 @@ from ..lib.models.models_document_rules import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/document-rules", tags=["document-rules"])
-
-
-def get_document_rules_store(db: DatabaseManager = Depends(get_db)) -> DocumentRulesStore:
-    return DocumentRulesStore(db)
 
 
 def _override_to_model(override: dict) -> OverrideModel:
