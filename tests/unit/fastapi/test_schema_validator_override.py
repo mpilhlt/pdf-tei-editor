@@ -9,7 +9,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi_app.lib.core.schema_validator import get_schema_cache_info, validate
+from fastapi_app.lib.core.schema_validator import (
+    MAX_SCHEMA_OVERRIDE_BYTES,
+    ValidationError,
+    get_schema_cache_info,
+    validate,
+)
 
 SCHEMA_LOCATION = "https://example.com/schema/tei.rng"
 
@@ -109,3 +114,29 @@ class TestSchemaTextOverride(unittest.TestCase):
         )
         after = set(glob.glob(os.path.join(tempfile.gettempdir(), "*")))
         self.assertEqual(before, after, "the override's temporary schema file must be cleaned up")
+
+    def test_oversized_override_is_rejected_without_writing_a_temp_file(self):
+        import glob
+        import os
+        oversized_text = "x" * (MAX_SCHEMA_OVERRIDE_BYTES + 1)
+        before = set(glob.glob(os.path.join(tempfile.gettempdir(), "*")))
+
+        with self.assertRaises(ValidationError):
+            validate(
+                XML_DOC,
+                cache_root=self.cache_root,
+                schema_text_override={SCHEMA_LOCATION: oversized_text},
+            )
+
+        after = set(glob.glob(os.path.join(tempfile.gettempdir(), "*")))
+        self.assertEqual(before, after, "an oversized override must be rejected before any temp file is written")
+
+    def test_override_at_exactly_the_size_limit_is_accepted(self):
+        exactly_at_limit = PERMISSIVE_SCHEMA + " " * (MAX_SCHEMA_OVERRIDE_BYTES - len(PERMISSIVE_SCHEMA.encode("utf-8")))
+        self.assertEqual(len(exactly_at_limit.encode("utf-8")), MAX_SCHEMA_OVERRIDE_BYTES)
+        errors = validate(
+            XML_DOC,
+            cache_root=self.cache_root,
+            schema_text_override={SCHEMA_LOCATION: exactly_at_limit},
+        )
+        self.assertEqual(errors, [])

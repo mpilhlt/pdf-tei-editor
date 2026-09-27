@@ -33,6 +33,14 @@ VALIDATION_TIMEOUT = 30
 # How long a cached schema file is trusted before it is re-fetched
 SCHEMA_CACHE_TTL_SECONDS = 3600
 
+# Max size for a schema_text_override entry. The cached-schema download path
+# has no equivalent limit either, but a download at least costs an attacker
+# a reachable HTTP endpoint and is deduplicated by the TTL cache; an override
+# is a same-request string with neither friction, so it gets an explicit
+# bound (generous relative to any real schema file) to keep repeated
+# submissions from being a cheap way to fill disk.
+MAX_SCHEMA_OVERRIDE_BYTES = 5 * 1024 * 1024
+
 # Known schemas with special handling requirements
 SCHEMA_CONFIG = {
     "https://raw.githubusercontent.com/kermitt2/grobid/refs/heads/master/grobid-home/schemas/rng/Grobid.rng": {
@@ -442,6 +450,12 @@ def validate(
         override_text = (schema_text_override or {}).get(schema_location)
         temp_schema_path: Optional[Path] = None
         if override_text is not None:
+            override_bytes = len(override_text.encode('utf-8'))
+            if override_bytes > MAX_SCHEMA_OVERRIDE_BYTES:
+                raise ValidationError(
+                    f"Schema override for {schema_location} is {override_bytes} bytes, "
+                    f"exceeding the {MAX_SCHEMA_OVERRIDE_BYTES}-byte limit"
+                )
             with tempfile.NamedTemporaryFile(mode='w', suffix='.schema', delete=False, encoding='utf-8') as tmp:
                 tmp.write(override_text)
                 temp_schema_path = Path(tmp.name)
@@ -474,7 +488,16 @@ def validate(
             schema_file_to_validate = schema_cache_file
 
         try:
-            # Parse schema to determine actual type from file content
+            # Parse schema to determine actual type from file content. This
+            # parse runs in-process, not inside validate_with_timeout()'s
+            # subprocess/timeout isolation - a pre-existing gap (schema_location
+            # already comes from the document's own, attacker-influenced
+            # xml-model/schemaRef, not just a fixed admin URL) that this seam
+            # inherits rather than introduces. An override makes repeated
+            # probing of this step cheaper (no network round trip, no TTL
+            # dedup), which MAX_SCHEMA_OVERRIDE_BYTES above only partially
+            # mitigates; moving this sniff behind the subprocess boundary
+            # would close it fully but is out of scope here.
             try:
                 schema_tree = etree.parse(str(schema_file_to_validate))
                 root_namespace = schema_tree.getroot().tag.split('}')[0][1:]
