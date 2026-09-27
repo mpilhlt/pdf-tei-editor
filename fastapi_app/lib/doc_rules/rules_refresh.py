@@ -96,7 +96,12 @@ def resolve_refresh_target(
     if not content_bytes:
         raise RefreshPreconditionError("File content not found.")
 
-    return RefreshTarget(file_meta=file_meta, tei_content=content_bytes.decode("utf-8"))
+    try:
+        tei_content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RefreshPreconditionError("File content is not valid UTF-8.")
+
+    return RefreshTarget(file_meta=file_meta, tei_content=tei_content)
 
 
 def _current_schema_location(tei_content: str) -> Optional[str]:

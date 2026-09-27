@@ -145,6 +145,15 @@ class TestResolveRefreshTarget(unittest.TestCase):
         target = resolve_refresh_target(self.file_repo, self.file_storage, "tei-1", self.user)
         self.assertEqual(target.file_meta, meta)
 
+    @mock.patch("fastapi_app.lib.doc_rules.rules_refresh.check_file_access", return_value=True)
+    def test_raises_precondition_error_on_non_utf8_content(self, _mock_access):
+        meta, _content = make_tei_file(TEI_WITH_PI_AND_DECL)
+        self.file_repo.get_file_by_stable_id.return_value = meta
+        self.file_storage.read_file.return_value = b"\xff\xfe not valid utf-8"
+
+        with self.assertRaises(RefreshPreconditionError):
+            resolve_refresh_target(self.file_repo, self.file_storage, "tei-1", self.user)
+
 
 class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
