@@ -49,6 +49,14 @@ def for_extraction(
     text to actually use: `user`'s selected "interpretation-ref" override
     for that resource, if any, else the shipped text. `user=None` never
     looks up an override (used text is always the shipped default).
+
+    Deliberately does not guard `descriptor.file.read_text()`: a missing,
+    unreadable, or non-UTF-8 shipped file is a packaging/programming bug
+    in the calling plugin, not user data, so it's left to raise
+    (FileNotFoundError/OSError/UnicodeDecodeError) and abort the whole
+    call rather than being caught and silently degraded - the same
+    fail-fast stance the rest of this codebase takes for a plugin's own
+    misconfigured static assets.
     """
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
     results: list[ResolvedFragment] = []

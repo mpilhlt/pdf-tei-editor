@@ -122,3 +122,17 @@ class TestForExtraction(unittest.TestCase):
         self.assertEqual(results[0].text, "Shipped default text.")
         self.assertEqual(results[1].text, "Second shipped text.")
         self.assertEqual(results[1].label, "Second")
+
+    @patch("fastapi_app.lib.doc_rules.extraction_contribution.resolve_forge_permalink")
+    def test_missing_shipped_file_raises_instead_of_being_swallowed(self, mock_resolve):
+        # Deliberate fail-fast: a missing shipped file is a packaging bug in
+        # the calling plugin, not user data - see for_extraction()'s docstring.
+        mock_resolve.return_value = FRAGMENT_URL.replace("main", "c" * 40)
+        missing_fragment = ExtractionFragment(
+            url=FRAGMENT_URL,
+            file=Path(self.temp_dir.name) / "does-not-exist.md",
+            label="Reference extraction instructions",
+        )
+
+        with self.assertRaises(FileNotFoundError):
+            for_extraction("alice", [missing_fragment], self.store)
