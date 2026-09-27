@@ -64,6 +64,7 @@ import './modules/panels/index.js';
  * @import {backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
+ * @import {documentRulesEditorDialogPart} from './templates/document-rules-editor-dialog.types.js'
  * @import {pluginAdminDialogPart} from './templates/plugin-admin-dialog.types.js'
  * @import {pluginAdminConfirmDialogPart} from './templates/plugin-admin-confirm-dialog.types.js'
  * @import {progressWidgetPart} from './plugins/progress.js'
@@ -98,6 +99,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
+ * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
  * @property {UIPart<SlDialog, pluginAdminDialogPart>} [pluginAdminDialog] - Plugin manager dialog (added by plugin-admin plugin)
  * @property {UIPart<SlDialog, pluginAdminConfirmDialogPart>} [pluginAdminConfirmDialog] - Plugin manager confirmation dialog (added by plugin-admin plugin)
  * @property {UIPart<HTMLDivElement, progressWidgetPart>} progressWidget - Progress indicator widget (added by progress plugin)
