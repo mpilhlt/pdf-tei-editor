@@ -197,7 +197,52 @@ class DocumentRulesPlugin extends Plugin {
   /** @param {ResourceDescriptorModel} _resource */
   async _openResourceEditor(_resource) { /* replaced in Task 5 */ }
 
-  async _onRefreshDocumentRules() { /* replaced in Task 4 */ }
+  /**
+   * Preview, confirm, then execute a "Refresh document rules" pass on the
+   * open document, reloading the editor from the server afterwards if
+   * anything actually changed (services.load() always re-fetches the file
+   * regardless of whether state.xml itself changed - see this plan's
+   * "Important context" section).
+   * @returns {Promise<void>}
+   */
+  async _onRefreshDocumentRules() {
+    const state = this.state
+    if (!state.xml) {
+      notify('No document is open.', 'warning', 'exclamation-triangle')
+      return
+    }
+
+    const dialog = this.getDependency('dialog')
+
+    let preview
+    try {
+      preview = await this.#client.apiClient.documentRulesRefreshPreview({ xml: state.xml })
+    } catch (error) {
+      notify(`Could not preview the refresh: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+
+    if (!preview.available) {
+      notify(preview.message, 'warning', 'exclamation-triangle')
+      return
+    }
+
+    const confirmed = await dialog.confirm(preview.message, 'Refresh document rules?')
+    if (!confirmed) return
+
+    let outcome
+    try {
+      outcome = await this.#client.apiClient.documentRulesRefreshExecute({ xml: state.xml })
+    } catch (error) {
+      notify(`Could not refresh document rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+
+    if (outcome.changed) {
+      await this.getDependency('services').load({ xml: state.xml })
+    }
+    notify(outcome.message, outcome.changed ? 'success' : 'primary', 'check-circle')
+  }
 }
 
 export default DocumentRulesPlugin
