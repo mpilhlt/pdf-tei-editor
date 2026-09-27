@@ -334,7 +334,10 @@ class DocumentRulesPlugin extends Plugin {
     this._renderEditorDialog()
   }
 
-  /** Copy the currently shown text into a new override and select it. */
+  /**
+   * Copy the currently shown text into a new override and select it.
+   * @returns {Promise<void>}
+   */
   async _onNewOverride() {
     const text = this._currentShownText()
     let override
@@ -353,7 +356,10 @@ class DocumentRulesPlugin extends Plugin {
     await this._selectOverride(override.id)
   }
 
-  /** Persist the currently selected override's note + shown text. */
+  /**
+   * Persist the currently selected override's note + shown text.
+   * @returns {Promise<void>}
+   */
   async _onSave() {
     if (this._currentSelectedId === null) return
     const note = this._editorDialogUi.noteInput.value
@@ -367,10 +373,18 @@ class DocumentRulesPlugin extends Plugin {
     }
     const index = this._currentOverrides.findIndex(o => o.id === updated.id)
     if (index !== -1) this._currentOverrides[index] = updated
+    // Refresh just the override row, not the full dialog - the note/text
+    // already shown are exactly what was just submitted, but the row's
+    // per-button tooltip (set from override.note at render time) would
+    // otherwise stay stale until some other action forces a re-render.
+    this._renderOverrideRow()
     notify('Override saved.', 'success', 'check-circle')
   }
 
-  /** Delete the currently selected override (owner-only, enforced server-side). */
+  /**
+   * Delete the currently selected override (owner-only, enforced server-side).
+   * @returns {Promise<void>}
+   */
   async _onDelete() {
     if (this._currentSelectedId === null) return
     const confirmed = await this.getDependency('dialog').confirm('Delete this override? This cannot be undone.', 'Delete override')
@@ -387,7 +401,10 @@ class DocumentRulesPlugin extends Plugin {
     this._renderEditorDialog()
   }
 
-  /** Clear the selection for this resource (keeps all overrides). */
+  /**
+   * Clear the selection for this resource (keeps all overrides).
+   * @returns {Promise<void>}
+   */
   async _onReset() {
     if (this._currentSelectedId === null) return
     try {
