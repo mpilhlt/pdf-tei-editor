@@ -46,7 +46,12 @@ class BaseGitForgeAdapter(ABC):
 
     @abstractmethod
     def strip_ref(self, url: str) -> str:
-        """Return `url` (fragment removed) with its branch/tag/SHA ref segment replaced by a fixed placeholder, so two URLs to the same file differing only in ref normalize to the same string."""
+        """
+        Return `url` (fragment removed) with its branch/tag/SHA ref segment
+        replaced by a fixed placeholder, so two URLs to the same file
+        differing only in ref normalize to the same string. Assumes no real
+        branch/tag is itself named the same as the placeholder.
+        """
 
 
 class GitHubAdapter(BaseGitForgeAdapter):
