@@ -63,19 +63,14 @@ def extract_extractor_provenance(tei_content: str) -> Optional[tuple[str, str]]:
     except etree.XMLSyntaxError:
         return None
 
-    app = root.find(".//encodingDesc/appInfo/application[@type='extractor']")
-    if app is None:
-        app = root.find(
-            f".//{{{TEI_NS}}}encodingDesc/{{{TEI_NS}}}appInfo/{{{TEI_NS}}}application[@type='extractor']"
-        )
+    ns = {"tei": TEI_NS}
+    app = root.find(".//tei:encodingDesc/tei:appInfo/tei:application[@type='extractor']", ns)
     if app is None:
         return None
 
     ident = app.get("ident")
 
-    variant_el = app.find("label[@type='variant-id']")
-    if variant_el is None:
-        variant_el = app.find(f"{{{TEI_NS}}}label[@type='variant-id']")
+    variant_el = app.find("tei:label[@type='variant-id']", ns)
     variant_id = variant_el.text if variant_el is not None else None
 
     if not ident or not variant_id:
