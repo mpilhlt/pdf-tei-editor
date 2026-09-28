@@ -7,10 +7,10 @@
     <sl-tab-group name="textTabs">
       <sl-tab slot="nav" panel="edit" name="editTab">Edit</sl-tab>
       <sl-tab slot="nav" panel="preview" name="previewTab">Preview</sl-tab>
-      <sl-tab-panel name="editPanel" panel="edit">
+      <sl-tab-panel name="edit" data-name="editPanel">
         <sl-textarea name="textArea" rows="16" resize="vertical"></sl-textarea>
       </sl-tab-panel>
-      <sl-tab-panel name="previewPanel" panel="preview">
+      <sl-tab-panel name="preview" data-name="previewPanel">
         <div name="previewContent" class="markdown-body"></div>
       </sl-tab-panel>
     </sl-tab-group>

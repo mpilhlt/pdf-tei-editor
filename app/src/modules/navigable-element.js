@@ -8,9 +8,11 @@
  * @returns {{ [x: string]: Element }}
  */
 function findNamedDescendants(node) {
-  // Tags that use `name` for element-specific purposes (e.g. icon identifier),
-  // not as a navigation label. Use `data-name` on these when a label is needed.
-  const skipNameAttrTags = ['sl-icon', 'sl-icon-button']
+  // Tags that use `name` for element-specific purposes (e.g. icon identifier,
+  // or - for sl-tab-panel - the identifier an <sl-tab panel="..."> matches
+  // against to decide which panel it activates), not as a navigation label.
+  // Use `data-name` on these when a label is needed.
+  const skipNameAttrTags = ['sl-icon', 'sl-icon-button', 'sl-tab-panel']
   const results = {};
 
   /**
