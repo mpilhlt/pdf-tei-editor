@@ -176,6 +176,9 @@ def _replace_editorial_decl(tei_content: str, entries: list[AnnotationRuleRef]) 
     editorial_decl = etree.Element(f"{{{TEI_NS}}}editorialDecl")
     for entry in entries:
         interpretation = etree.SubElement(editorial_decl, f"{{{TEI_NS}}}interpretation", type=entry["category"])
+        n = entry.get("n")
+        if n is not None:
+            interpretation.set("n", n)
         p = etree.SubElement(interpretation, f"{{{TEI_NS}}}p")
         for ref_entry in entry["refs"]:
             ref = etree.SubElement(p, f"{{{TEI_NS}}}ref", target=ref_entry["target"], subtype=ref_entry["subtype"])
@@ -233,12 +236,9 @@ def _plan_refresh(tei_content: str, cache: UrlCache) -> _RefreshPlan:
 
     new_entries = provider.build_editorial_decl_entries(variant_id, cache)
     existing_entries = extract_annotation_rule_refs(tei_content)
-    # NOTE: extract_annotation_rule_refs() can return entries carrying an "n"
-    # key (interpretation/@n); no provider currently sets it when building
-    # fresh entries. This comparison only stays symmetric because nothing
-    # currently writes @n. If a future provider starts producing @n, update
-    # both sides together, or every document with @n will look "changed"
-    # and lose its label on refresh.
+    # Both sides now support the optional "n" key (interpretation/@n): providers
+    # can set it when building entries, and _replace_editorial_decl() now writes
+    # it when rebuilding the editorialDecl. This comparison stays symmetric.
     editorial_decl_changed = new_entries != existing_entries
 
     new_schema_url = provider.get_schema_url(variant_id)

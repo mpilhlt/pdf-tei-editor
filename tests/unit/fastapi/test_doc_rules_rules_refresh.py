@@ -240,6 +240,25 @@ class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Updated document rules", saved_content)
         file_repo.update_file.assert_called_once()
 
+    async def test_refresh_writes_the_n_attribute_when_the_provider_sets_it(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(
+            entries=[{"category": "primary", "n": "Citation model guidelines", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/newsha/docs/guidelines.md#seg",
+                 "content_type": "markdown", "subtype": "human"},
+            ]}],
+            schema_url="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng",
+        ))
+        target = self._target(TEI_WITH_PI_AND_DECL)
+        file_repo = mock.MagicMock()
+        file_storage = mock.MagicMock()
+        file_storage.save_file.return_value = ("hash-new", None)
+
+        outcome = await perform_refresh(target, file_repo, file_storage, "reviewer1", cache=mock.MagicMock())
+
+        self.assertTrue(outcome.changed)
+        saved_content = file_storage.save_file.call_args[0][0].decode("utf-8")
+        self.assertIn('n="Citation model guidelines"', saved_content)
+
     async def test_regenerates_only_the_half_that_changed(self):
         # Schema URL differs, entries do not - editorialDecl content itself
         # (the "oldsha" ref) must be untouched.
