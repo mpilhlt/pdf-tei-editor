@@ -7,7 +7,7 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 ## Key Features
 
 - **Dual-pane interface** with synchronized PDF viewer and XML editor
-- **AI-powered extraction** supporting multiple extraction engines (GROBID or LLM-based extraction workflows)
+- **AI-powered extraction and validation** supporting multiple extraction engines (GROBID or LLM-based extraction workflows) as well as LLM-based annotation reviews
 - **Visual annotation mode** — hide raw XML and annotate text with colored badges using a point-and-click interface
 - **Search-in-PDF navigation** — automatically locates and highlights the PDF region corresponding to the cursor position in the XML editor
 - **Version management** with branching, merging, and comparison tools
@@ -16,6 +16,7 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 - **Collection organization** for managing document sets
 - **Revision tracking** with detailed change documentation
 - **Modular architecture** - easily add new features and behavior with frontend and backend plugins
+- **Mature and agent-ready** - extensive developer documentation and test coverage, so humans and agents can contribute new code easily and safely
 
 ## Target Use Cases
 
