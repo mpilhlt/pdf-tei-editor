@@ -633,6 +633,47 @@ Reviewers have elevated privileges but with intentional limitations:
 - **Cannot**: Edit documents with `editability: 'owner'` when not the owner (prevents accidental overwriting)
 - To edit such documents, reviewers must create their own version or change the editability first
 
+## Annotator Text-Only Edit Guard (Frontend)
+
+In addition to the document-level access control described above, a **soft, UI-only** safeguard restricts pure annotators (users with the `annotator` role but not `reviewer`/`admin`) to editing only the content of `<text>` while working in the XML editor. It is not a security boundary - the document remains fully writable via the API, by other roles, and by automated processes. See the [design spec](../superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md) for the full rationale and explicitly out-of-scope items.
+
+### Behavior
+
+- The `teiHeader` toggle switch in the editor toolbar is hidden (not just disabled) for pure annotators.
+- `<teiHeader>` is folded by default on every document load for this role, overriding the stored `teiHeaderVisible` preference.
+- Manual fold/unfold via the CodeMirror fold gutter remains available - the header can still be *viewed*.
+- Typing, pasting, or cutting anywhere outside `<text>`'s children (the header, the `<TEI>` root tag's own attributes, a leading processing instruction, or `<text>`'s own opening/closing tags) is rejected in the editor.
+- Programmatic writes (document load, merge-view operations, API calls) are never intercepted.
+
+### Edit Guard Implementation
+
+`XMLEditor.setEditGuardXpath(xpath, options)` ([xmleditor.js](../../app/src/modules/xmleditor.js)) installs a CodeMirror `EditorState.transactionFilter` that rejects transactions carrying a `Transaction.userEvent` annotation (i.e. real user-driven edits) based on the first element matched by `xpath`:
+
+```javascript
+xmlEditor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true })
+```
+
+- `mode: 'blacklist'` (default) rejects edits that overlap the matched element.
+- `mode: 'whitelist'` rejects edits that are not *fully contained* within the matched element - used for the annotator guard, so everything outside `<text>` (header, root tag, leading PI) is rejected in one step rather than blacklisted item by item.
+- `contentOnly: true` narrows the reference range to the element's children only, via `foldInside()` (the same CodeMirror helper `foldByXpath()` uses), so the element's own tags (e.g. `<text>`'s `xml:lang` attribute) are excluded from the editable range too.
+
+Pass `null` as `xpath` to clear the guard.
+
+### Wiring
+
+`XmlEditorPlugin.onStateUpdate()` ([xmleditor.js](../../app/src/plugins/xmleditor.js)) computes `userIsAnnotatorOnly(state.user)` (from [acl-utils.js](../../app/src/modules/acl-utils.js)) and calls `setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true })` when true, `setEditGuardXpath(null)` otherwise - independent of `state.editorReadOnly`.
+
+`TeiToolsPlugin` ([tei-tools.js](../../app/src/plugins/tei-tools.js)) hides the `teiHeaderToggleWidget` and forces `foldByXpath('//tei:teiHeader')` on load for the same role check, bypassing the stored `teiHeaderVisible` preference.
+
+### Edit Guard Testing
+
+- Unit tests: [xmleditor-edit-guard.test.js](../../tests/unit/js/xmleditor-edit-guard.test.js) covers both modes and `contentOnly`.
+- E2E tests: [annotator-teiheader-safeguard.spec.js](../../tests/e2e/tests/annotator-teiheader-safeguard.spec.js) exercises real keyboard typing against a live annotator-owned version document.
+
+### Out of Scope
+
+No backend enforcement exists for this guard - `fastapi_app/routers/files_save.py` does not diff old/new `<teiHeader>` content. If a hard boundary is ever required, see the ["Deferred / explicitly out of scope"](../superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md#deferred--explicitly-out-of-scope) section of the design spec.
+
 ## Troubleshooting
 
 ### User cannot see any documents
