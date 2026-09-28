@@ -28,7 +28,8 @@
  * @import { SlMenuItem, SlDialog } from '../ui.js'
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo } from '../modules/api-client-v1.js'
+ * @import { StatusText } from '../modules/panels/index.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -73,12 +74,12 @@ class DocumentRulesPlugin extends Plugin {
    */
   _resources = []
 
-  /** @type {HTMLElement} */
+  /** @type {StatusText|null} */
   _overridesWidget = null
 
   /**
    * Last successful POST /document-rules/selections result for `_resources`.
-   * @type {Array<{kind: string, url: string, selected: boolean}>}
+   * @type {Array<SelectionInfo>}
    */
   _selections = []
 
