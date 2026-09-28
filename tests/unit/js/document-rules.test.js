@@ -124,6 +124,53 @@ function flushMicrotasks() {
 
 beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
 
+describe('DocumentRulesPlugin.start', () => {
+  it('registers both menu items in the document-rules category, wires mouseenter/click, and gates initial visibility by role', async () => {
+    const plugin = makePlugin(); // makePlugin()'s default user has roles: ['user'] - refresh item stays hidden
+    let addedItems, addedCategory;
+    plugin.getDependency = (name) => {
+      if (name === 'tools') return { addMenuItems: (items, category) => { addedItems = items; addedCategory = category; } };
+      if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
+      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [] }) } };
+      if (name === 'logger') return { debug: () => {}, warn: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    await plugin.start();
+    await flushMicrotasks(); // let the fire-and-forget _refreshResources() call settle
+
+    assert.strictEqual(addedCategory, 'document-rules');
+    assert.deepStrictEqual(addedItems, [plugin._editMenuItem, plugin._refreshMenuItem]);
+    assert.strictEqual(plugin._refreshMenuItem.style.display, 'none');
+
+    let refreshCalled = false;
+    plugin._refreshResources = () => { refreshCalled = true; return Promise.resolve(); };
+    plugin._editMenuItem.dispatchEvent(new dom.window.Event('mouseenter'));
+    assert.strictEqual(refreshCalled, true, 'expected mouseenter on the parent item to trigger _refreshResources()');
+
+    let onRefreshCalled = false;
+    plugin._onRefreshDocumentRules = () => { onRefreshCalled = true; return Promise.resolve(); };
+    plugin._refreshMenuItem.dispatchEvent(new dom.window.Event('click'));
+    assert.strictEqual(onRefreshCalled, true, 'expected click on the refresh item to trigger _onRefreshDocumentRules()');
+  });
+
+  it('shows the refresh menu item immediately for a reviewer/admin user', async () => {
+    const plugin = makePlugin();
+    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', user: { username: 'u', roles: ['admin'] } }), configurable: true });
+    plugin.getDependency = (name) => {
+      if (name === 'tools') return { addMenuItems: () => {} };
+      if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
+      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [] }) } };
+      if (name === 'logger') return { debug: () => {}, warn: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    await plugin.start();
+
+    assert.strictEqual(plugin._refreshMenuItem.style.display, '');
+  });
+});
+
 describe('DocumentRulesPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
@@ -548,5 +595,44 @@ describe('DocumentRulesPlugin._refreshResources', () => {
     };
     await assert.doesNotReject(() => plugin._refreshResources());
     assert.strictEqual(plugin._resources.length, 1, 'stale _resources must be preserved on a failed fetch');
+  });
+
+  it('fires exactly one trailing refresh when called again while a fetch is in flight', async () => {
+    const plugin = makePlugin();
+    plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    let callCount = 0;
+    /** @type {(value: {resources: any[]}) => void} */
+    let resolveFirst;
+    const staleResources = [{ kind: 'schema', url: 'stale', key: 'stale', label: 'Stale', format: 'xml' }];
+    const freshResources = [{ kind: 'schema', url: 'fresh', key: 'fresh', label: 'Fresh', format: 'xml' }];
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
+      if (name === 'client') return { apiClient: {
+        documentRulesList: () => {
+          callCount++;
+          if (callCount === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+          return Promise.resolve({ resources: freshResources });
+        }
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    const first = plugin._refreshResources();
+    // These join the in-flight fetch (dedup) rather than starting new ones,
+    // but each marks _refreshQueued - only one trailing refresh should fire
+    // regardless of how many calls arrived while the fetch was busy.
+    const second = plugin._refreshResources();
+    const third = plugin._refreshResources();
+    assert.strictEqual(callCount, 1, 'expected the in-flight fetch to be reused, not re-triggered');
+
+    resolveFirst({ resources: staleResources });
+    await Promise.all([first, second, third]);
+    // The trailing refresh is itself fire-and-forget (kicked off from
+    // _refreshResources()'s finally block without an await), so let it settle too.
+    if (plugin._refreshPromise) await plugin._refreshPromise;
+    await flushMicrotasks();
+
+    assert.strictEqual(callCount, 2, 'expected exactly one trailing refresh, not one per queued call');
+    assert.deepStrictEqual(plugin._resources, freshResources);
   });
 });
