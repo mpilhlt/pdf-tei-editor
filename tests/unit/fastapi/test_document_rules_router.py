@@ -167,6 +167,91 @@ class TestQueryAndOverrideLifecycle(DocumentRulesRouterTestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class TestSelectionsEndpoint(DocumentRulesRouterTestCase):
+    def setUp(self):
+        super().setUp()
+        self.resolve_patcher = patch(
+            "fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resolve_original",
+            return_value="original text",
+        )
+        self.resolve_patcher.start()
+        self.addCleanup(self.resolve_patcher.stop)
+        self.url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md"
+
+    def test_reports_false_for_a_resource_with_no_selection(self):
+        response = self.client.post(
+            "/document-rules/selections",
+            json={"resources": [{"kind": "interpretation-ref", "url": self.url}]},
+        )
+        self.assertEqual(response.status_code, 200)
+        selections = response.json()["selections"]
+        self.assertEqual(selections, [{"kind": "interpretation-ref", "url": self.url, "selected": False}])
+
+    def test_reports_true_once_an_override_is_selected(self):
+        create_response = self.client.post(
+            "/document-rules/overrides",
+            json={"kind": "interpretation-ref", "fragment_url": self.url, "note": ""},
+        )
+        override_id = create_response.json()["id"]
+        self.client.put(
+            "/document-rules/selection",
+            json={"kind": "interpretation-ref", "fragment_url": self.url, "override_id": override_id},
+        )
+
+        response = self.client.post(
+            "/document-rules/selections",
+            json={"resources": [{"kind": "interpretation-ref", "url": self.url}]},
+        )
+        selections = response.json()["selections"]
+        self.assertEqual(selections, [{"kind": "interpretation-ref", "url": self.url, "selected": True}])
+
+    def test_reports_false_again_after_reset(self):
+        create_response = self.client.post(
+            "/document-rules/overrides",
+            json={"kind": "interpretation-ref", "fragment_url": self.url, "note": ""},
+        )
+        override_id = create_response.json()["id"]
+        self.client.put(
+            "/document-rules/selection",
+            json={"kind": "interpretation-ref", "fragment_url": self.url, "override_id": override_id},
+        )
+        self.client.post(
+            "/document-rules/selection/reset",
+            json={"resources": [{"kind": "interpretation-ref", "url": self.url}]},
+        )
+
+        response = self.client.post(
+            "/document-rules/selections",
+            json={"resources": [{"kind": "interpretation-ref", "url": self.url}]},
+        )
+        selections = response.json()["selections"]
+        self.assertEqual(selections, [{"kind": "interpretation-ref", "url": self.url, "selected": False}])
+
+    def test_handles_multiple_resources_and_an_empty_list(self):
+        other_url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/schema/rng/tei-bib.rng"
+        response = self.client.post(
+            "/document-rules/selections",
+            json={"resources": [
+                {"kind": "interpretation-ref", "url": self.url},
+                {"kind": "schema", "url": other_url},
+            ]},
+        )
+        selections = response.json()["selections"]
+        self.assertEqual(len(selections), 2)
+        self.assertTrue(all(s["selected"] is False for s in selections))
+
+        empty_response = self.client.post("/document-rules/selections", json={"resources": []})
+        self.assertEqual(empty_response.json()["selections"], [])
+
+    def test_requires_authentication(self):
+        self.app.dependency_overrides.pop(require_authenticated_user, None)
+        response = self.client.post(
+            "/document-rules/selections",
+            json={"resources": [{"kind": "interpretation-ref", "url": self.url}]},
+        )
+        self.assertEqual(response.status_code, 401)
+
+
 class TestRefreshEndpoints(DocumentRulesRouterTestCase):
     def setUp(self):
         super().setUp()

@@ -44,6 +44,9 @@ from ..lib.models.models_document_rules import (
     RefreshRequest,
     ResetSelectionRequest,
     ResourceDescriptorModel,
+    SelectionInfo,
+    SelectionsRequest,
+    SelectionsResponse,
     SetSelectionRequest,
     UpdateOverrideRequest,
 )
@@ -193,6 +196,30 @@ async def reset_selection(
     resources = [(r.kind, normalize_resource_key(r.url)) for r in request.resources]
     store.reset_selection(user["username"], resources)
     return OkResponse()
+
+
+@router.post("/selections", response_model=SelectionsResponse)
+async def get_selections(
+    request: SelectionsRequest,
+    user: dict = Depends(require_authenticated_user),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> SelectionsResponse:
+    """
+    Whether the caller currently has a selection (an override in use) for
+    each listed resource - used to show an "overrides active" indicator
+    without fetching every resource's full original/override text via
+    repeated /query calls.
+    """
+    owner = user["username"]
+    selections = [
+        SelectionInfo(
+            kind=r.kind,
+            url=r.url,
+            selected=store.get_selection(r.kind, normalize_resource_key(r.url), owner) is not None,
+        )
+        for r in request.resources
+    ]
+    return SelectionsResponse(selections=selections)
 
 
 def _outcome_response(outcome) -> RefreshOutcomeResponse:

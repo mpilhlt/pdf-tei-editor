@@ -89,6 +89,22 @@ class ResetSelectionRequest(BaseModel):
     resources: list[ResourceRef]
 
 
+class SelectionInfo(BaseModel):
+    """Whether the caller currently has an override selected for one resource."""
+    kind: str
+    url: str
+    selected: bool
+
+
+class SelectionsRequest(BaseModel):
+    """Request the caller's selection status for each listed resource."""
+    resources: list[ResourceRef]
+
+
+class SelectionsResponse(BaseModel):
+    selections: list[SelectionInfo]
+
+
 class OkResponse(BaseModel):
     result: str = "ok"
 

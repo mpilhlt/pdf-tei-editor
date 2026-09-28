@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-27T21:39:04.305Z
+ * Generated from OpenAPI schema at 2026-09-28T06:53:01.315Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -701,6 +701,23 @@
  * @typedef {Object} SaveFileResponse
  * @property {string} status
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} SelectionInfo
+ * @property {string} kind
+ * @property {string} url
+ * @property {boolean} selected
+ */
+
+/**
+ * @typedef {Object} SelectionsRequest
+ * @property {Array<ResourceRef>} resources
+ */
+
+/**
+ * @typedef {Object} SelectionsResponse
+ * @property {Array<SelectionInfo>} selections
  */
 
 /**
@@ -1589,6 +1606,20 @@ export class ApiClientV1 {
    */
   async documentRulesSelectionReset(requestBody) {
     const endpoint = `/document-rules/selection/reset`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Whether the caller currently has a selection (an override in use) for
+   * each listed resource - used to show an "overrides active" indicator
+   * without fetching every resource's full original/override text via
+   * repeated /query calls.
+   *
+   * @param {SelectionsRequest} requestBody
+   * @returns {Promise<SelectionsResponse>}
+   */
+  async documentRulesSelections(requestBody) {
+    const endpoint = `/document-rules/selections`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
