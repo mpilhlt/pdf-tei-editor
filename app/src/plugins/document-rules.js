@@ -122,8 +122,11 @@ class DocumentRulesPlugin extends Plugin {
     // Reuse the user's own XML-editor theme choice (persisted the same way
     // xmleditor.js reads it) rather than hardcoding 'default' - otherwise a
     // user who switched the main editor to dark mode would see this dialog's
-    // schema view rendered in light mode regardless.
-    const themeId = this.uiStorage.get('editorTheme', 'default')
+    // schema view rendered in light mode regardless. `this.uiStorage` is
+    // namespaced by THIS plugin's own name ('document-rules'), which is not
+    // where xmleditor.js's plugin ('xmleditor') persists the setting - it
+    // must be read from that plugin's own namespace instead.
+    const themeId = this.context.getUIStorage('xmleditor').get('editorTheme', 'default')
 
     this._cmView = new EditorView({
       state: EditorState.create({
