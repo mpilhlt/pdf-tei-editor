@@ -82,6 +82,7 @@ const { default: PluginManager } = await import('../../../app/src/modules/plugin
 const { default: StateManager } = await import('../../../app/src/modules/state-manager.js');
 const { Application } = await import('../../../app/src/modules/application.js');
 const { default: DocumentRulesPlugin } = await import('../../../app/src/plugins/document-rules.js');
+const { createMarkdownRenderer } = await import('../../../app/src/modules/markdown-utils.js');
 
 /** @returns {InstanceType<typeof DocumentRulesPlugin>} */
 function makePlugin() {
@@ -116,6 +117,22 @@ function makeDialogUi() {
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
   return el;
+}
+
+/**
+ * SlTextarea's `input` (its internal `<textarea>`, see scrollPosition() in
+ * @shoelace-style/shoelace's textarea chunk) is a `@query`-backed
+ * getter-only accessor - `Object.assign`/plain assignment throws ("has only
+ * a getter"), so give it a real, writable `<textarea>` stand-in the same
+ * way makeOverridesWidgetStub() shadows `isConnected`. Needed by any test
+ * that exercises _scrollMarkdownBodyToAnchor()'s line-height calculation.
+ * @param {any} textArea
+ * @returns {HTMLTextAreaElement}
+ */
+function stubTextAreaInput(textArea) {
+  const input = document.createElement('textarea');
+  Object.defineProperty(textArea, 'input', { value: input, configurable: true });
+  return input;
 }
 
 function flushMicrotasks() {
@@ -349,6 +366,107 @@ describe('DocumentRulesPlugin format-based body swap', () => {
     plugin._md = { render: (text) => `<h1>${text.replace('# ', '')}</h1>` };
     plugin._renderEditorDialog();
     assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML, '<h1>Heading</h1>');
+  });
+});
+
+describe('DocumentRulesPlugin scroll position on render', () => {
+  it('resets the CodeMirror view to the top of the document for an xml resource', () => {
+    const plugin = makePlugin();
+    const dispatched = [];
+    plugin._cmView = {
+      state: { doc: { length: 5 } },
+      dispatch: (spec) => { dispatched.push(spec); },
+      scrollDOM: { scrollTop: 500 }
+    };
+    plugin._setXmlContent('<grammar/>', true);
+    assert.strictEqual(plugin._cmView.scrollDOM.scrollTop, 0);
+  });
+
+  it('resets the markdown edit textarea and preview to the top when the resource has no heading-anchor fragment', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
+    plugin._currentOriginalText = 'some text';
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+
+    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
+    stubTextAreaInput(textArea);
+    const scrollCalls = [];
+    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
+    plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent.scrollTop = 500;
+
+    plugin._renderEditorDialog();
+
+    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
+    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent.scrollTop, 0);
+  });
+
+  it('does not scroll past the top for a line-range fragment (already sliced server-side, nothing to locate)', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md#L5-L10', key: 'a', label: 'A', format: 'markdown' };
+    plugin._currentOriginalText = 'line1\nline2\nline3\n';
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+
+    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
+    stubTextAreaInput(textArea);
+    const scrollCalls = [];
+    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
+
+    plugin._renderEditorDialog();
+
+    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
+  });
+
+  it('scrolls the edit textarea and preview to the heading matching a "human" ref\'s heading-anchor fragment (e.g. "#data-correction")', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = createMarkdownRenderer();
+    plugin._currentResource = {
+      kind: 'interpretation-ref',
+      url: 'https://example.com/guidelines.md#data-correction',
+      key: 'a', label: 'Data correction', format: 'markdown'
+    };
+    plugin._currentOriginalText = '# Guidelines\n\nIntro.\n\n## Data correction\n\nBody text.\n';
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+
+    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
+    const input = stubTextAreaInput(textArea);
+    input.style.lineHeight = '20px';
+    const scrollCalls = [];
+    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
+
+    plugin._renderEditorDialog();
+
+    // "## Data correction" is on line 5 (1-based) -> (5 - 1) * 20px.
+    assert.deepStrictEqual(scrollCalls, [{ top: 80 }]);
+
+    const previewContent = plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent;
+    assert.ok(previewContent.querySelector('#data-correction'), 'preview must render a heading with the matching id');
+  });
+
+  it('does not scroll to a fragment for a non-markdown resource', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.txt#data-correction', key: 'a', label: 'A', format: 'text' };
+    plugin._currentOriginalText = 'plain text';
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+
+    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
+    stubTextAreaInput(textArea);
+    const scrollCalls = [];
+    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
+
+    plugin._renderEditorDialog();
+
+    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
   });
 });
 

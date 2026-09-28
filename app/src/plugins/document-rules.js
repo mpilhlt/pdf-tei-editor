@@ -36,7 +36,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
-import { createMarkdownRenderer } from '../modules/markdown-utils.js'
+import { createMarkdownRenderer, findHeadingLineForAnchor } from '../modules/markdown-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
@@ -49,6 +49,30 @@ import { createOverrideRefField, createOverrideRefClickHandler, refDecorationThe
 await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
 await registerTemplate('document-rules-refresh-menu-item', 'document-rules-refresh-menu-item.html')
 await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-dialog.html')
+
+// Matches a recognized line-range fragment (GitHub's #L10-L50, GitLab's
+// #L10-50) - mirrors annotation_rules_utils.py's _LINE_RANGE_RE.
+const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
+
+/**
+ * The URL fragment to scroll the markdown edit/preview panels to, or null
+ * if there is none, or it's a recognized line-range fragment instead (e.g.
+ * "#L10-L40"). `fetch_rule_excerpt()` (annotation_rules_utils.py) already
+ * slices `original_text` to a line-range fragment server-side, so there's
+ * nothing left to scroll to for those; a heading-anchor fragment (e.g.
+ * "#data-correction", an interpretation-ref "human" ref - see
+ * docs/development/tei-header-integrations.md), by contrast, leaves the
+ * *whole* document as `original_text` - the client scrolls to the
+ * referenced heading itself.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function headingAnchorFragment(url) {
+  const hashIndex = url.indexOf('#')
+  if (hashIndex === -1) return null
+  const fragment = url.slice(hashIndex + 1)
+  return fragment && !LINE_RANGE_FRAGMENT_RE.test(fragment) ? fragment : null
+}
 
 class DocumentRulesPlugin extends Plugin {
   /** @param {PluginContext} context */
@@ -188,6 +212,10 @@ class DocumentRulesPlugin extends Plugin {
       if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
         const text = this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
         this._editorDialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+        // Re-scroll now that the preview panel is actually visible - see
+        // _scrollMarkdownBodyToAnchor()'s doc comment on why setting scroll
+        // position on a hidden `display: none` panel has no effect.
+        if (this._currentResource) this._scrollMarkdownBodyToAnchor(text)
       }
     })
   }
@@ -474,12 +502,53 @@ class DocumentRulesPlugin extends Plugin {
       dialogUi.textBody.textTabs.editPanel.textArea.value = text
       dialogUi.textBody.textTabs.editPanel.textArea.readonly = readOnly
       dialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+      this._scrollMarkdownBodyToAnchor(text)
     }
 
     dialogUi.newOverrideBtn.disabled = this._documentReadOnly
     dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     dialogUi.resetBtn.style.display = selected ? '' : 'none'
+  }
+
+  /**
+   * Scroll the markdown edit textarea and preview to `_currentResource`'s
+   * heading-anchor fragment (see headingAnchorFragment()), or reset both to
+   * the top when there is none - without this, switching to a new
+   * resource/override kept whatever scroll offset the previous content had
+   * left behind, and a "human" ref's heading anchor (e.g.
+   * "#data-correction") was never honored at all since `original_text` is
+   * always the whole document for a non-line-range fragment (see
+   * fetch_rule_excerpt() in annotation_rules_utils.py).
+   *
+   * Also called from the "preview" `sl-tab-show` handler (with the same
+   * `text`), because scrolling a hidden `display: none` tab panel has no
+   * effect - the preview must already be visible for its scroll position to
+   * stick.
+   * @param {string} text
+   */
+  _scrollMarkdownBodyToAnchor(text) {
+    const dialogUi = this._editorDialogUi
+    const textArea = dialogUi.textBody.textTabs.editPanel.textArea
+    const fragment = this._currentResource.format === 'markdown' ? headingAnchorFragment(this._currentResource.url) : null
+    const line = fragment ? findHeadingLineForAnchor(text, fragment) : null
+
+    // textArea.input (SlTextarea's internal <textarea>, see its
+    // scrollPosition()) is only populated once the element is connected and
+    // has rendered - guard for test doubles/disconnected elements that never
+    // reach that point.
+    if (textArea.input) {
+      const lineHeight = parseFloat(getComputedStyle(textArea.input).lineHeight) || 0
+      textArea.scrollPosition({ top: line === null ? 0 : Math.max(0, (line - 1) * lineHeight) })
+    }
+
+    const previewContent = dialogUi.textBody.textTabs.previewPanel.previewContent
+    const heading = fragment && [...previewContent.querySelectorAll('[id]')].find((el) => el.id === fragment)
+    if (heading) {
+      heading.scrollIntoView?.()
+    } else {
+      previewContent.scrollTop = 0
+    }
   }
 
   /** Rebuild the "Original"/"Override N" button row. */
@@ -626,7 +695,10 @@ class DocumentRulesPlugin extends Plugin {
    * only `editable` leaves Ctrl+Z/Ctrl+Y still active), and clear undo/redo
    * history so a previous resource's/override's content can never resurface
    * via undo in what's now showing a different one. Mirrors
-   * app/src/modules/xmleditor.js's setReadOnly() and clearHistory().
+   * app/src/modules/xmleditor.js's setReadOnly() and clearHistory(). Also
+   * resets the scroll position to the top - without this, switching to a
+   * new resource/override kept whatever scroll offset the previous, longer
+   * or shorter, document had left behind.
    * @param {string} text
    * @param {boolean} readOnly
    */
@@ -639,6 +711,7 @@ class DocumentRulesPlugin extends Plugin {
       ]
     })
     this._cmView.dispatch({ effects: this._cmHistoryCompartment.reconfigure(history()) })
+    this._cmView.scrollDOM.scrollTop = 0
   }
 
   /** @returns {string} */
