@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from fastapi_app.lib.utils.annotation_rules_utils import (
     RuleFetchError,
     _ATX_HEADING_RE,
+    _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
     extract_annotation_rule_refs,
@@ -215,6 +216,58 @@ class TestFetchRuleExcerpt(unittest.TestCase):
         fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache)
 
         cache.get_text.assert_called_once_with("https://pad.gwdg.de/s/abc/download", ignore_ttl=False)
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_rewrites_relative_image_and_link_targets_for_markdown_resource(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = None
+        mock_get.return_value = self._mock_response(
+            'See ![diagram](img/diagram.png) and [the guide](../other.md).'
+        )
+
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        result = fetch_rule_excerpt(url, cache)
+
+        self.assertEqual(
+            result,
+            'See ![diagram](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/diagram.png) '
+            'and [the guide](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md).',
+        )
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_does_not_rewrite_links_for_non_markdown_resource(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = None
+        text = 'See ![diagram](img/diagram.png)'
+        mock_get.return_value = self._mock_response(text)
+
+        result = fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache)
+
+        self.assertEqual(result, text)
+
+
+class TestRewriteRelativeMarkdownUrls(unittest.TestCase):
+    BASE = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/"
+
+    def test_rewrites_relative_image_target(self):
+        result = _rewrite_relative_markdown_urls("![alt](img/foo.png)", self.BASE)
+        self.assertEqual(result, f"![alt]({self.BASE}img/foo.png)")
+
+    def test_leaves_absolute_url_unchanged(self):
+        text = "[link](https://example.com/foo.png)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_leaves_pure_anchor_unchanged(self):
+        text = "[section](#intro)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_leaves_protocol_relative_url_unchanged(self):
+        text = "[link](//example.com/foo.png)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_resolves_parent_relative_path_against_base(self):
+        result = _rewrite_relative_markdown_urls("[link](../other.md)", self.BASE)
+        self.assertEqual(result, "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)")
 
 
 class TestIsLineRangeFragment(unittest.TestCase):

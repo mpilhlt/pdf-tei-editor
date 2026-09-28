@@ -9,6 +9,7 @@ See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 import logging
 import re
 from typing import Literal, NotRequired, Optional, TypedDict
+from urllib.parse import urljoin
 
 import requests
 from lxml import etree
@@ -20,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 # Matches GitHub's #L10-L50 and GitLab's #L10-50 (no second "L")
 _LINE_RANGE_RE = re.compile(r'^L(\d+)(?:-L?(\d+))?$')
+
+# Matches an inline markdown link/image target: `[...](url)` or `![...](url)`,
+# optionally followed by a "title" in quotes. Reference-style links/images
+# (`![alt][ref]`) are not matched - rare enough in the annotation-rules
+# guides this targets that supporting them isn't worth the complexity.
+_MD_INLINE_LINK_RE = re.compile(r'(!?\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))')
+
+_ABSOLUTE_URL_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://')
 
 
 class RuleFetchError(Exception):
@@ -48,6 +57,26 @@ def resolve_forge_permalink(url: str, cache: UrlCache) -> str:
         return url
 
 
+def _rewrite_relative_markdown_urls(text: str, base_dir_url: str) -> str:
+    """
+    Rewrite a markdown document's inline link/image targets that are
+    relative (e.g. "img/foo.png") to absolute URLs resolved against
+    `base_dir_url`, so images and links keep working when the document is
+    rendered outside its original repository - e.g. this app's document-
+    rules resource editor preview, which would otherwise resolve them
+    against its own origin instead of the source repo.
+    """
+    def replace(match: "re.Match[str]") -> str:
+        prefix, target, suffix = match.group(1), match.group(2), match.group(3)
+        if target.startswith("#") or target.startswith("data:") or target.startswith("mailto:"):
+            return match.group(0)
+        if target.startswith("//") or _ABSOLUTE_URL_RE.match(target):
+            return match.group(0)
+        return f"{prefix}{urljoin(base_dir_url, target)}{suffix}"
+
+    return _MD_INLINE_LINK_RE.sub(replace, text)
+
+
 def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) -> str:
     """
     Fetch the raw text a rules-document URL points to, sliced to its
@@ -58,6 +87,11 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     fragment doesn't parse as a recognized line-range. Line numbers are
     1-based and inclusive; out-of-range values are clamped to the available
     lines.
+
+    For a markdown resource (by file extension), relative link/image
+    targets are rewritten to absolute URLs before slicing/caching - see
+    `_rewrite_relative_markdown_urls()` - so the excerpt renders correctly
+    outside its source repository.
 
     `allow_redirects` defaults to True (preserving prior behavior for
     existing callers); pass False when the caller has validated `url`
@@ -84,6 +118,12 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
                 f"Expected raw text but got '{content_type}' from {fetch_url}"
             )
         text = response.text
+        # Deferred import: doc_rules/__init__.py imports extraction_contribution.py,
+        # which imports this module - a module-level import here would be circular.
+        from fastapi_app.lib.doc_rules.resource_key import infer_format
+        if infer_format(base_url) == "markdown":
+            base_dir_url = fetch_url.rsplit("/", 1)[0] + "/"
+            text = _rewrite_relative_markdown_urls(text, base_dir_url)
         cache.set_text(fetch_url, text)
 
     match = _LINE_RANGE_RE.match(fragment) if fragment else None
