@@ -42,6 +42,10 @@ const ALLOWED_ERROR_PATTERNS = [
 // used to look up (and clean up) the schema resource's overrides directly.
 const SCHEMA_URL = 'https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/main/schema/rng/tei-bib.rng';
 
+// Must match the <ref target="..."> in document-rules-fixture.tei.xml's
+// "Data correction" interpretation entry exactly.
+const INTERPRETATION_REF_URL = 'https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#data-correction';
+
 /**
  * Open the Tools dropdown menu, revealing its items for hover/click.
  * @param {import('@playwright/test').Page} page
@@ -199,6 +203,111 @@ test.describe('Document rules registry', () => {
 
       await expect(page.locator('sl-alert[variant="success"]')).toBeVisible({ timeout: 15000 });
     } finally {
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+    }
+  });
+
+  test('shows the headerbar indicator and decorates an overridden ref differently once an override is selected', async ({ page }) => {
+    // Creating an override for the interpretation-ref resource resolves its
+    // original text server-side regardless of whether the caller inspects
+    // it (fastapi_app/routers/document_rules.py's create_override always
+    // calls kind.resolve_original() before storing), so - like the
+    // "refreshes document rules" test above - this test has an inherent
+    // live dependency on GitHub (mpilhlt/fossil) even though it goes
+    // through the API directly rather than the "Data correction" dialog.
+    test.setTimeout(60000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    let overrideId = null;
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await loadFixtureDocument(page, 'document-rules-fixture');
+
+      // No override selected yet: no headerbar indicator. The fixture's one
+      // <ref target> lives inside editorialDecl, which tei-tools.js folds by
+      // default (its own uiStorage 'teiHeaderVisible' preference defaults to
+      // false) - unfold it directly via the xmleditor API (bypassing the
+      // header-visibility toggle switch, so no preference is persisted) to
+      // check the ref's un-overridden decoration state.
+      await expect(page.locator('status-text[name="documentRulesOverridesStatus"]')).toHaveCount(0);
+      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').unfoldByXpath('//tei:teiHeader'));
+      await page.waitForTimeout(300);
+      const refSpan = page.locator('#codemirror-container .cm-content .doc-rules-ref').first();
+      await expect(refSpan).toBeVisible();
+      await expect(refSpan).not.toHaveClass(/doc-rules-ref-overridden/);
+
+      // Re-fold so the headerbar indicator's click (checked below) is a
+      // meaningful test of "reveals editorialDecl", not a no-op.
+      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').foldByXpath('//tei:teiHeader'));
+      await page.waitForTimeout(300);
+
+      // Create and select an override for the interpretation-ref resource
+      // directly via the API rather than through the "Data correction"
+      // dialog: opening that dialog also triggers the same live fetch (see
+      // this test's header comment) with no added coverage, and stacking a
+      // second dialog on top of it risks the pointer-interception issue the
+      // "lists both resources..." test above already worked around by
+      // deleting overrides directly rather than through a confirm dialog.
+      overrideId = await page.evaluate(async (url) => {
+        const client = /** @type {any} */ (window).client;
+        const override = await client.apiClient.documentRulesOverrides({
+          kind: 'interpretation-ref',
+          fragment_url: url,
+          note: '',
+          text: 'Test override text.'
+        });
+        await client.apiClient.documentRulesSelection({
+          kind: 'interpretation-ref',
+          fragment_url: url,
+          override_id: override.id
+        });
+        return override.id;
+      }, INTERPRETATION_REF_URL);
+
+      // Force the frontend to pick up the new selection: hovering
+      // "Edit prompts/schemas" triggers _refreshResources() ->
+      // _refreshOverrideIndicators(), the same trigger the "lists both
+      // resources..." test above already relies on before reading the
+      // submenu - neither of those calls resolves original text, so this
+      // step itself adds no further network dependency.
+      await openToolsMenu(page);
+      const editMenuItem = page.locator('sl-menu-item:has-text("Edit prompts/schemas")');
+      await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+      await editMenuItem.hover();
+      await page.waitForTimeout(500);
+      // Close the Tools dropdown (toggle) without clicking any menu item.
+      await openToolsMenu(page);
+
+      // Headerbar indicator now shows.
+      const indicator = page.locator('status-text[name="documentRulesOverridesStatus"]');
+      await expect(indicator).toBeVisible();
+
+      // teiHeader is still folded: editorialDecl's tag name isn't in the
+      // rendered main editor content yet.
+      await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('editorialDecl');
+
+      // Clicking the indicator unfolds teiHeader and selects editorialDecl.
+      await indicator.click();
+      await page.waitForTimeout(500);
+      await expect(page.locator('#codemirror-container .cm-content')).toContainText('editorialDecl');
+
+      // The ref is now decorated as overridden.
+      const refSpanAfter = page.locator('#codemirror-container .cm-content .doc-rules-ref').first();
+      await expect(refSpanAfter).toHaveClass(/doc-rules-ref-overridden/);
+    } finally {
+      // Clean up the override created above (same rationale as the earlier
+      // test in this file: no TTL/cascade-delete on resource_overrides).
+      // Deleting it also cascades to clear the selection (see
+      // fastapi_app/lib/doc_rules/storage.py's delete_override()), so the
+      // headerbar indicator disappears again for the next run without a
+      // separate reset call.
+      if (overrideId) {
+        await page.evaluate(async (id) => {
+          await /** @type {any} */ (window).client.apiClient.documentRulesDeleteOverrides(id);
+        }, overrideId);
+      }
       stopErrorMonitoring();
       await releaseAllLocks(page);
     }

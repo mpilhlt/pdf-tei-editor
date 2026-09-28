@@ -17,6 +17,28 @@ class StatusText extends HTMLElement {
   connectedCallback() {
     this.render();
     this.updateHostProperties();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Attach the click/dblclick listeners once, unconditionally (mirroring
+   * status-badge.js's own setupEventListeners()) and gate dispatch on the
+   * `clickable`/`dblclickable` attributes inside the handlers instead.
+   * Attaching only from the `clickable`/`dblclickable` property setters (the
+   * previous approach) silently did nothing for a widget whose `clickable`
+   * was set as a creation-time attribute (e.g. via
+   * app/src/modules/panels/index.js's PanelUtils.createText({clickable:
+   * true}), which calls setAttribute() directly, never the property
+   * setter) - such a widget rendered as clickable (cursor, hover style) but
+   * never dispatched 'widget-click'. Guarded against re-attachment because
+   * a headerbar/statusbar widget can be disconnected and reconnected
+   * (add/removeHeaderbarWidget) many times over its lifetime.
+   */
+  setupEventListeners() {
+    if (this._listenersAttached) return;
+    this._listenersAttached = true;
+    this.addEventListener('click', this.handleClick.bind(this));
+    this.addEventListener('dblclick', this.handleDblClick.bind(this));
   }
 
   attributeChangedCallback() {
@@ -143,10 +165,8 @@ class StatusText extends HTMLElement {
   set clickable(value) {
     if (value) {
       this.setAttribute('clickable', '');
-      this.addEventListener('click', this.handleClick.bind(this));
     } else {
       this.removeAttribute('clickable');
-      this.removeEventListener('click', this.handleClick);
     }
   }
 
@@ -157,14 +177,13 @@ class StatusText extends HTMLElement {
   set dblclickable(value) {
     if (value) {
       this.setAttribute('dblclickable', '');
-      this.addEventListener('dblclick', this.handleDblClick.bind(this));
     } else {
       this.removeAttribute('dblclickable');
-      this.removeEventListener('dblclick', this.handleDblClick);
     }
   }
 
   handleClick(event) {
+    if (!this.clickable) return;
     if (this.dblclickable) {
       // Clear any previous timer so only the last click in the sequence is dispatched
       if (this._clickTimer) {
@@ -187,6 +206,7 @@ class StatusText extends HTMLElement {
   }
 
   handleDblClick(event) {
+    if (!this.dblclickable) return;
     event.stopPropagation();
     if (this._clickTimer) {
       clearTimeout(this._clickTimer);
