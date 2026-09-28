@@ -123,7 +123,7 @@ Design rationale: [2026-09-22-editorial-decl-annotation-rules-design.md](../supe
 - `interpretation/@type` — the rule **category**. `"primary"` is the sentinel for the one main guide a human annotator should read for this variant; other categories (e.g. `"data-correction"`, `"footnote-annotation"`) are optional, additional excerpts, typically for machine/LLM validation rather than the drawer UI. An extractor plugin's config decides which categories apply to a given variant (see below).
 - `interpretation/@n` — a short, human-readable label for the category (e.g. `"Data correction"`), from TEI's generic `att.global.attribute.n`. `interpretation`'s content model (`oneOrMore(p|ab)`, per `schema/rng/tei-bib.rng`) does not allow a `desc` child, so `@n` is the label's home; a category can therefore be shown to a user (e.g. a menu of the document's rule categories) without exposing its `@type` slug. Optional — a document written before this addition simply has none; readers fall back to `@type`.
 - Each `interpretation` holds one or two `<ref>` children, distinguished by `@subtype`:
-  - `subtype="human"` — a heading-anchor URL (`#some-heading`) meant for a human to open in the Annotation Guide drawer. `@type` on the ref is its content type, `"markdown"` or `"html"`.
+  - `subtype="human"` — a heading-anchor URL (`#some-heading`) meant for a human to open in the Annotation Guide drawer. `@type` on the ref is its content type, `"markdown"`, `"html"`, or `"xml"` (the latter only for a `"schema-fragment"` category entry — see below; it has no heading-anchor/machine-ref concept since it targets a whole RNG file, not a guide document).
   - `subtype="machine"` — auto-derived from the human ref's heading anchor by scanning the target Markdown document for ATX headings and translating the anchor to a line-range URL fragment (`#L42-L88`). Never hand-authored; regenerating it re-derives it from the human ref, so the two can't drift out of sync. Has no `@type` (line-range content isn't associated with a content type the same way). May be absent if anchor-to-line-range translation failed (e.g. the anchor wasn't found) — treat a missing machine ref as "fall back to fetching the whole document" rather than an error.
   - A `ref` missing `@target`, or with an unrecognized/missing `@subtype`, is dropped by both readers below (not surfaced as a malformed entry).
 - `@target` URLs are branch-relative git-forge blob links, resolved to commit-SHA-pinned permalinks (`resolve_forge_permalink()`) when embedded — so the reference stays valid even if the guide document is later edited on its branch.
@@ -138,9 +138,23 @@ class AnnotationGuide(TypedDict):
     category: str
     type: Literal["markdown", "html"]
     url: str
+    label: str  # interpretation/@n
 ```
 
-At extraction time, `build_editorial_decl_entries(variant_id, cache)` (per-plugin, e.g. `fastapi_app/plugins/grobid/annotation_rules.py`) matches the document's variant against each guide's `variant_ids` (exact match or `"*"` wildcard), resolves the permalink, derives the machine ref, and returns the `AnnotationRuleRef` list that `create_encoding_desc_with_extractor()` writes into `editorialDecl`. A reviewer-facing "Refresh document rules" core action (`fastapi_app/lib/doc_rules/rules_refresh.py`, exposed at `POST /api/v1/document-rules/refresh/{preview,execute}`) re-runs the same resolution on demand, dispatching to whichever extractor plugin produced the document via `get_document_rules_provider_for_document()`/`DocumentRulesProvider` (`fastapi_app/lib/doc_rules/rules_providers.py`) — so an already-extracted document can pick up rules changes without re-extraction, regardless of which extractor produced it; it also appends a `revisionDesc/change` noting the update and regenerates the schema processing instruction.
+At extraction time, `build_editorial_decl_entries(variant_id, cache)` (per-plugin, e.g. `fastapi_app/plugins/grobid/annotation_rules.py`) matches the document's variant against each guide's `variant_ids` (exact match or `"*"` wildcard), resolves the permalink, derives the machine ref, and returns the `AnnotationRuleRef` list that `create_encoding_desc_with_extractor()` writes into `editorialDecl`. A reviewer-facing "Refresh document rules" core action (`fastapi_app/lib/doc_rules/rules_refresh.py`, exposed at `POST /api/v1/document-rules/refresh/{preview,execute}`) re-runs the same resolution on demand, dispatching to whichever extractor plugin produced the document via `get_document_rules_provider_for_document()`/`DocumentRulesProvider` (`fastapi_app/lib/doc_rules/rules_providers.py`) — so an already-extracted document can pick up rules changes without re-extraction, regardless of which extractor produced it; it preserves each entry's `@n` and appends a `revisionDesc/change` noting the update, and regenerates the schema processing instruction while pretty-printing the whole header, matching extraction-time formatting.
+
+GROBID additionally emits one `"schema-fragment"` category entry per training variant that has a dedicated upstream source file in `mpilhlt/fossil` (`get_schema_fragment_url()`/`SCHEMA_FRAGMENT_VARIANTS`/`SCHEMA_FRAGMENT_LABELS` in [`fastapi_app/plugins/grobid/config/__init__.py`](../../fastapi_app/plugins/grobid/config/__init__.py)), appended directly in `build_editorial_decl_entries()` alongside the `AnnotationGuide`-derived entries rather than through the `AnnotationGuide` table itself — deliberately, since `get_annotation_guides()` is returned verbatim as the `annotationGuides` API field consumed by the frontend's Annotation Guide drawer, and a schema-source pointer is not annotation guidance. It has a single `subtype="human"`, `type="xml"` ref (no machine sibling — there's no heading-anchor/line-range concept for a whole RNG file), pointing at the hand-editable upstream source, distinct from the generated/validated-against schema the `<?xml-model?>` PI (below) points at:
+
+```xml
+<interpretation type="schema-fragment" n="Segmentation schema source">
+  <p>
+    <ref target="https://github.com/mpilhlt/fossil/blob/<sha>/schema/grobid.training.segmentation.rng"
+         type="xml" subtype="human"/>
+  </p>
+</interpretation>
+```
+
+See [2026-09-28-grobid-schema-fragment-refs-design.md](../superpowers/specs/2026-09-28-grobid-schema-fragment-refs-design.md) for the full rationale.
 
 ### Reading editorialDecl
 
