@@ -27,9 +27,20 @@ class StatusBadge extends HTMLElement {
     }
   }
 
+  /**
+   * Attach listeners once, unconditionally, guarded against re-attachment -
+   * a headerbar/statusbar widget can be disconnected and reconnected many
+   * times over its lifetime (add/removeHeaderbarWidget), and connectedCallback()
+   * calls this on every reconnect. Without the guard, each reconnect would
+   * add another 'click' listener, so a single real click would dispatch
+   * 'widget-click' multiple times. See status-text.js's own setupEventListeners()
+   * for the identical guard, added after this exact bug was found there.
+   */
   setupEventListeners() {
+    if (this._listenersAttached) return;
+    this._listenersAttached = true;
     this.addEventListener('click', this.handleClick.bind(this));
-    
+
     // Setup popup toggle if popup content exists
     const hasPopupContent = this.querySelector('[slot="popup"]') !== null;
     if (hasPopupContent) {
