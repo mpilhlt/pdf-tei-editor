@@ -6,15 +6,20 @@
  * the document-rules resource editor for it.
  *
  * Mirrors app/src/modules/codemirror/xml-annotation-decorations.js's
- * syntax-tree-walk shape (Element/OpenTag/TagName/Attribute/AttributeName/
- * AttributeValue node names, and the firstChild.firstChild?.nextSibling
- * TagName lookup), narrowed to <ref>'s target attribute specifically rather
- * than a whole-element badge/mark.
+ * syntax-tree-walk shape (Element/OpenTag/SelfClosingTag/TagName/Attribute/
+ * AttributeName/AttributeValue node names, and the
+ * firstChild.firstChild?.nextSibling TagName lookup), narrowed to <ref>'s
+ * target attribute specifically rather than a whole-element badge/mark, and
+ * scoped to only descend into <editorialDecl> (a <ref target="..."> can
+ * legitimately appear elsewhere in a TEI header, e.g. citing the extractor
+ * tool in appInfo/application - those are unrelated to document rules and
+ * must not be decorated/made clickable).
  */
 
 /**
- * @import {EditorState} from '@codemirror/state'
+ * @import {EditorState, Extension} from '@codemirror/state'
  * @import {DecorationSet} from '@codemirror/view'
+ * @import {SyntaxNode} from '@lezer/common'
  */
 
 import { StateField, RangeSetBuilder } from '@codemirror/state'
@@ -24,14 +29,14 @@ import { syntaxTree } from '@codemirror/language'
 /**
  * Read one element's attributes as {name, value, valueFrom, valueTo} spans,
  * with valueFrom/valueTo excluding the surrounding quote characters.
- * @param {import('@lezer/common').SyntaxNode} openTagNode
+ * @param {SyntaxNode} tagNode - an Element's OpenTag or SelfClosingTag child
  * @param {EditorState} state
  * @returns {Array<{name: string, value: string, valueFrom: number, valueTo: number}>}
  */
-function readAttributeSpans(openTagNode, state) {
+function readAttributeSpans(tagNode, state) {
   /** @type {Array<{name: string, value: string, valueFrom: number, valueTo: number}>} */
   const attrs = []
-  let child = openTagNode.firstChild
+  let child = tagNode.firstChild
   while (child) {
     if (child.name === 'Attribute') {
       const nameNode = child.firstChild
@@ -49,9 +54,26 @@ function readAttributeSpans(openTagNode, state) {
 }
 
 /**
- * Walk the whole syntax tree once, building one mark decoration per
- * <ref target="..."> found anywhere in the document, colored by whether its
- * target URL is in `overriddenUrls`.
+ * Read an Element node's tag name, from either its OpenTag or
+ * SelfClosingTag child (both shapes place TagName as the second child,
+ * after the `<` token).
+ * @param {SyntaxNode} elementNode
+ * @param {EditorState} state
+ * @returns {{tagName: string, tagNode: SyntaxNode}|null}
+ */
+function readTagName(elementNode, state) {
+  const tagNode = elementNode.firstChild
+  if (!tagNode || (tagNode.name !== 'OpenTag' && tagNode.name !== 'SelfClosingTag')) return null
+  const tagNameNode = tagNode.firstChild?.nextSibling
+  if (!tagNameNode || tagNameNode.name !== 'TagName') return null
+  return { tagName: state.doc.sliceString(tagNameNode.from, tagNameNode.to), tagNode }
+}
+
+/**
+ * Walk the syntax tree, building one mark decoration per <ref target="...">
+ * found inside <editorialDecl> (elements outside it, e.g. a <ref> in
+ * appInfo/application citing the extractor tool, are intentionally not
+ * decorated), colored by whether its target URL is in `overriddenUrls`.
  * @param {EditorState} state
  * @param {Set<string>} overriddenUrls
  * @returns {DecorationSet}
@@ -61,17 +83,19 @@ export function buildRefDecorations(state, overriddenUrls) {
   const tree = syntaxTree(state)
   /** @type {Array<{from: number, to: number, url: string, overridden: boolean}>} */
   const found = []
+  let editorialDeclDepth = 0
 
   tree.iterate({
     enter(node) {
       if (node.name !== 'Element') return
-      const openTag = node.node.firstChild
-      if (!openTag || openTag.name !== 'OpenTag') return
-      const tagNameNode = openTag.firstChild?.nextSibling
-      if (!tagNameNode || tagNameNode.name !== 'TagName') return
-      const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to)
-      if (tagName !== 'ref') return
-      for (const attr of readAttributeSpans(openTag, state)) {
+      const tag = readTagName(node.node, state)
+      if (!tag) return
+      if (tag.tagName === 'editorialDecl') {
+        editorialDeclDepth++
+        return
+      }
+      if (editorialDeclDepth === 0 || tag.tagName !== 'ref') return
+      for (const attr of readAttributeSpans(tag.tagNode, state)) {
         if (attr.name === 'target' && attr.valueFrom < attr.valueTo) {
           found.push({
             from: attr.valueFrom,
@@ -81,14 +105,19 @@ export function buildRefDecorations(state, overriddenUrls) {
           })
         }
       }
+    },
+    leave(node) {
+      if (node.name !== 'Element') return
+      const tag = readTagName(node.node, state)
+      if (tag?.tagName === 'editorialDecl') editorialDeclDepth--
     }
   })
 
   found.sort((a, b) => a.from - b.from)
-  for (const { from, to, overridden } of found) {
+  for (const { from, to, url, overridden } of found) {
     builder.add(from, to, Decoration.mark({
       class: overridden ? 'doc-rules-ref doc-rules-ref-overridden' : 'doc-rules-ref',
-      attributes: { 'data-doc-rules-url': found.find(f => f.from === from)?.url ?? '' }
+      attributes: { 'data-doc-rules-url': url }
     }))
   }
   return builder.finish()
@@ -116,6 +145,7 @@ export const refDecorationTheme = EditorView.baseTheme({
  * whole extension via a fresh createOverrideRefField() call rather than
  * pushing an effect into a long-lived field.
  * @param {Set<string>} overriddenUrls
+ * @returns {import('@codemirror/state').StateField<DecorationSet>}
  */
 export function createOverrideRefField(overriddenUrls) {
   return StateField.define({
@@ -133,7 +163,7 @@ export function createOverrideRefField(overriddenUrls) {
  * Build a click-handling extension: clicking a decorated <ref target="...">
  * span calls `onRefClick(url)`.
  * @param {(url: string) => void} onRefClick
- * @returns {import('@codemirror/state').Extension}
+ * @returns {Extension}
  */
 export function createOverrideRefClickHandler(onRefClick) {
   return EditorView.domEventHandlers({
