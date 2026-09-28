@@ -706,7 +706,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
  */
 async function getBackendPlugins(category = null) {
   const params = category ? { category } : {};
-  const response = await callApi('/plugins', 'GET', params);
+  const response = await apiClient.plugins(params);
   return response.plugins;
 }
 
@@ -718,10 +718,7 @@ async function getBackendPlugins(category = null) {
  * @returns {Promise<any>} - Plugin execution result
  */
 async function executeBackendPlugin(pluginId, endpoint, params) {
-  const response = await callApi(`/plugins/${pluginId}/execute`, 'POST', {
-    endpoint,
-    params
-  });
+  const response = await apiClient.pluginsExecute(pluginId, { endpoint, params });
   if (response.success) {
     return response.result;
   }

@@ -32,13 +32,9 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 ```bash
 # Full build process
 npm run build
-
-# Generate API client from FastAPI OpenAPI spec
-npm run generate-client
-
-# Check if API client is outdated
-npm run generate-client:check
 ```
+
+The API client (`app/src/modules/api-client-v1.js`) is hand-maintained, not generated — see [docs/code-assistant/api-client.md](api-client.md).
 
 ## Testing Commands
 
@@ -110,5 +106,4 @@ npm run test:unit:js           # JavaScript unit tests
 npm run test:unit:fastapi      # Python unit tests
 npm run test:api               # API integration tests
 npm run test:e2e               # E2E tests with Playwright
-npm run generate-client        # Generate TypeScript API client
 ```

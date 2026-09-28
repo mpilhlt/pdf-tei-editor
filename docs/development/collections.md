@@ -125,8 +125,8 @@ Collections loaded on startup via `client.getCollections()` and stored in state 
 - `copyFiles(pdf, xml, destinationCollection)` - POST /api/v1/files/copy
 - `moveFiles(pdf, xml, destinationCollection)` - POST /api/v1/files/move
 
-**Auto-generated Client**: `app/src/modules/api-client-v1.js`
-- Run `npm run generate-client` after backend changes to regenerate
+**Hand-maintained Client**: `app/src/modules/api-client-v1.js`
+- Update the matching method by hand in the same change as any backend route change
 
 ### Display
 
@@ -185,7 +185,7 @@ for (const collection_name of file.collections) {
 
 ### Collections not loading
 1. Check API endpoint: `GET /api/v1/collections/list` with session header
-2. Verify auto-generated client is up to date: `npm run generate-client`
+2. Verify `apiClient` methods in `app/src/modules/api-client-v1.js` match the router
 3. Check browser console for errors in `filedata.js` reload
 
 ### New collection not appearing
