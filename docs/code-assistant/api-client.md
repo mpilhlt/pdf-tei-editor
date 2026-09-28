@@ -1,15 +1,12 @@
 # API Client Usage Guide
 
-Guide for using the automatically-generated, type-safe FastAPI client.
-
-For comprehensive API client documentation, see the full guide at [fastapi_app/prompts/api-client-usage.md](../../fastapi_app/prompts/api-client-usage.md).
+Guide for using the hand-maintained, typed FastAPI client.
 
 ## Overview
 
-The FastAPI backend provides an automatically-generated JavaScript client with complete JSDoc type annotations for all API endpoints.
+The frontend calls the FastAPI backend through a hand-maintained JavaScript client with JSDoc type annotations for API endpoints. One method per `/api/v1/...` operation, mirroring the router's path, request body, and response model.
 
 **Client File**: `app/src/modules/api-client-v1.js`
-**Generator**: `scripts/build/generate-api-client.js`
 
 ## Quick Start
 
@@ -21,25 +18,15 @@ const files = await apiClient.filesList({ collection: 'corpus1' });
 const status = await apiClient.authStatus();
 ```
 
-## Regenerating the Client
+## Maintaining the Client
 
-```bash
-# Regenerate client from current OpenAPI schema
-npm run generate-client
-
-# Check if client is outdated
-npm run generate-client:check
-```
-
-**Automatic regeneration:**
-- Before production build (`npm run build`)
-- Pre-commit hook when router files change
+There is no generator and no regeneration command. When you add, remove, or change a route in `fastapi_app/routers/*.py`, add or update the matching method in `api-client-v1.js` by hand, in the same change — read the route and its Pydantic models directly, do not guess at the shape. See [Adding New Endpoints](#adding-new-endpoints).
 
 ## Architecture
 
 ### Dependency Injection Pattern
 
-The generated client uses dependency injection for transport:
+The client uses dependency injection for transport:
 
 ```javascript
 export class ApiClientV1 {
@@ -177,6 +164,10 @@ function subscribeToSSE(clientId) {
 - `GET /api/v1/sse/subscribe`
 - `POST /api/v1/sse/test-message`
 
+### Server-Supplied Dynamic URLs
+
+Some backend plugins report progress over SSE and include a `cancelUrl` chosen by that plugin (e.g. `/api/plugins/grobid/cancel/{progress_id}`, `/api/plugins/update-metadata/cancel/{progress_id}`). This is not one fixed OpenAPI operation — the URL varies per plugin and per run — so it cannot be a generated method. The consumer (`progress.js`) calls `callApi(cancelUrl, 'POST')` directly. Do not try to replace this with a named client method; there is no single route to name.
+
 ## Key Type Definitions
 
 ### FileMetadata
@@ -206,14 +197,8 @@ When you add new FastAPI endpoints:
 
 1. **Define router endpoint** in `fastapi_app/routers/*.py`
 2. **Add Pydantic models** for request/response validation
-3. **Regenerate client**: `npm run generate-client`
+3. **Add the matching method** to `api-client-v1.js` by hand, in the same change: JSDoc typedefs for any new request/response models, path/query/body handling matching an existing method's pattern (see [Common Patterns](#common-patterns)), and skip it entirely for upload/SSE endpoints (see [Excluded Endpoints](#excluded-endpoints-manual-implementation-required))
 4. **Add shim in client.js** if needed for backward compatibility
-
-The generator automatically:
-- Creates typed method from OpenAPI operation
-- Generates JSDoc annotations from Pydantic schemas
-- Handles path parameters, query params, request bodies
-- Skips upload/SSE endpoints
 
 ## Common Patterns
 
@@ -253,7 +238,7 @@ await apiClient.filesSave({
 // → Content-Type: application/json
 ```
 
-## Testing Generated Client
+## Testing the Client
 
 Mock the `callApi` function for tests:
 
@@ -345,35 +330,20 @@ await fetch(`${baseUrl}/api/v1/files/list`, {
 
 ### DO ✅
 
-- **Regenerate after router changes**: `npm run generate-client`
+- **Update the client in the same change as the router**: add/edit the matching method by hand when you touch `fastapi_app/routers/*.py`
 - **Use typed parameters**: Let IDE autocomplete guide you
-- **Commit generated client**: Check in with router changes
 - **Handle errors at transport layer**: Let `callApi` manage retries
 - **Add JSDoc to shims**: Type annotations in wrapper functions
 - **Support standard env vars in CLI scripts**: Use API_USER, API_PASSWORD, API_BASE_URL
 
 ### DON'T ❌
 
-- **Don't modify generated client**: Changes will be overwritten
-- **Don't bypass the client**: Use generated methods instead of raw `callApi`
-- **Don't generate for uploads/SSE**: Keep manual implementations
-- **Don't skip pre-commit checks**: Client freshness is critical
+- **Don't bypass the client**: Use `apiClient.<method>()` instead of raw `callApi` for any fixed `/api/v1/...` route — raw `callApi` is only for uploads, SSE, and server-supplied dynamic URLs (see [Excluded Endpoints](#excluded-endpoints-manual-implementation-required))
+- **Don't hand-write uploads/SSE as client methods**: keep those manual implementations
 
 ## Troubleshooting
 
-### Client Generation Fails
-
-1. Ensure FastAPI server is running: `npm run start:dev`
-2. Verify OpenAPI endpoint: `curl http://localhost:8000/openapi.json`
-
 ### Type Errors in IDE
 
-1. Ensure client is up-to-date: `npm run generate-client:check`
-2. Regenerate if outdated: `npm run generate-client`
-3. Restart IDE/TypeScript server
-
-### Pre-commit Hook Blocks Commit
-
-1. Regenerate client: `npm run generate-client`
-2. Stage updated client: `git add app/src/modules/api-client-v1.js`
-3. Retry commit
+1. Check the method's JSDoc against the router's actual path/Pydantic models in `fastapi_app/routers/*.py`
+2. Fix the method by hand and restart the IDE/TypeScript server
