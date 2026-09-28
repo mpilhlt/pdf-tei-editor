@@ -14,6 +14,7 @@
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
+import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
 import ui from '../ui.js'
 
 // Register templates
@@ -101,7 +102,12 @@ class TeiToolsPlugin extends Plugin {
   async onStateUpdate(_changedKeys) {
     const hasDocument = !!this.state.xml
     const inAnnotationMode = this.state.view === 'annotation'
+    const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
     this.#teiHeaderToggleWidget.disabled = !hasDocument || inAnnotationMode
+    // Reduce clutter for pure annotators: the toggle is hidden, not just disabled
+    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Manual
+    // fold/unfold via the gutter remains available regardless.
+    this.#teiHeaderToggleWidget.style.display = isAnnotatorOnly ? 'none' : ''
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
@@ -115,7 +121,11 @@ class TeiToolsPlugin extends Plugin {
     teiHeaderToggleWidget.disabled = !hasTeiHeader
 
     if (hasTeiHeader && this.state.view !== 'annotation') {
-      const preferredVisible = this.uiStorage.get('teiHeaderVisible', false)
+      // Pure annotators always get the header folded on load, regardless of the
+      // stored preference (and without reading/writing it - the toggle is hidden
+      // for this role, so no user-driven change would persist it anyway).
+      const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
+      const preferredVisible = isAnnotatorOnly ? false : this.uiStorage.get('teiHeaderVisible', false)
       try {
         if (preferredVisible) {
           this.#xmlEditorApi.unfoldByXpath('//tei:teiHeader')

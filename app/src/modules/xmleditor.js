@@ -190,6 +190,7 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+  #editGuardCompartment = new Compartment()
 
   #xmlTagSyncCompartment = new Compartment()
   #themeCompartment = new Compartment()
@@ -258,6 +259,7 @@ export class XMLEditor extends EventEmitter {
       this.#tabSizeCompartment.of([]),
       this.#indentationCompartment.of([]),
       this.#readOnlyCompartment.of([]),
+      this.#editGuardCompartment.of([]),
     ];
 
     if (tagData) {
@@ -465,10 +467,46 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
-   * @returns {boolean} 
+   * @returns {boolean}
    */
-  isReadOnly() {  
+  isReadOnly() {
     return this.#editorIsReadOnly
+  }
+
+  /**
+   * Installs a soft, UI-only guard that rejects user-driven edits (transactions carrying a
+   * `userEvent` annotation, e.g. typing, paste, cut) touching the content of the first element
+   * matched by the given XPath. Programmatic transactions (no `userEvent` annotation — document
+   * load, merge/sync operations, etc.) are never intercepted, so the guarded content remains
+   * fully writable outside the CodeMirror UI. Pass `null` to remove the guard.
+   * @param {string | null} xpath - XPath of the element to guard, or null to clear the guard.
+   */
+  setEditGuardXpath(xpath) {
+    if (!xpath) {
+      this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure([]) });
+      return;
+    }
+    const filter = EditorState.transactionFilter.of(tr => {
+      if (!tr.docChanged || tr.annotation(Transaction.userEvent) === undefined) {
+        return tr;
+      }
+      let guardedNode;
+      try {
+        guardedNode = this.getSyntaxNodeByXpath(xpath);
+      } catch {
+        // Nothing to guard (e.g. element absent from this document).
+        return tr;
+      }
+      let touchesGuardedRange = false;
+      tr.changes.iterChangedRanges((fromA, toA) => {
+        const overlaps = fromA === toA
+          ? fromA > guardedNode.from && fromA < guardedNode.to
+          : fromA < guardedNode.to && toA > guardedNode.from;
+        if (overlaps) touchesGuardedRange = true;
+      });
+      return touchesGuardedRange ? [] : tr;
+    });
+    this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure(filter) });
   }
 
   /**

@@ -27,7 +27,7 @@ import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
-import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
+import { isGoldFile, userHasRole, userIsAnnotatorOnly } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { THEMES, getTheme } from '../modules/codemirror/editor-themes.js'
 import { notify } from '../modules/sl-utils.js'
@@ -236,6 +236,8 @@ class XmlEditorPlugin extends Plugin {
   #syncErrorShownToUser = false;
   /** @type {string|null} */
   #lastLoadedStableId = null;
+  /** @type {boolean} */
+  #annotatorEditGuardActive = false;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
@@ -924,6 +926,16 @@ class XmlEditorPlugin extends Plugin {
       this.#xmlEditor.setReadOnly(state.editorReadOnly);
       this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     }
+
+    // Soft, UI-only guard against accidental teiHeader edits by pure annotators
+    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Does not
+    // affect the whole-document read-only state above and never blocks programmatic writes.
+    const shouldGuardTeiHeader = userIsAnnotatorOnly(state.user);
+    if (shouldGuardTeiHeader !== this.#annotatorEditGuardActive) {
+      this.#xmlEditor.setEditGuardXpath(shouldGuardTeiHeader ? '//tei:teiHeader' : null);
+      this.#annotatorEditGuardActive = shouldGuardTeiHeader;
+    }
+
     this.#updateDiffButtons();
 
     // Update visual indicators based on state
