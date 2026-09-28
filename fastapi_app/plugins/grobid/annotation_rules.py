@@ -39,7 +39,7 @@ def build_editorial_decl_entries(variant_id: str, cache: UrlCache) -> list[Annot
         if variant_id not in guide["variant_ids"] and "*" not in guide["variant_ids"]:
             continue
         refs = _build_refs_for_guide(guide, cache)
-        entries.append({"category": guide["category"], "refs": refs})
+        entries.append({"category": guide["category"], "refs": refs, "n": guide["label"]})
     return entries
 
 

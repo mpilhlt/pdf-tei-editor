@@ -23,7 +23,7 @@ class TestBuildEditorialDeclEntriesVariantMatching(unittest.TestCase):
     def test_matches_variant_listed_explicitly(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["grobid.training.segmentation"], "category": "primary",
-             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md"},
+             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url
 
@@ -36,7 +36,7 @@ class TestBuildEditorialDeclEntriesVariantMatching(unittest.TestCase):
     def test_wildcard_matches_any_variant(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["*"], "category": "house-style",
-             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md"},
+             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url
 
@@ -49,7 +49,7 @@ class TestBuildEditorialDeclEntriesVariantMatching(unittest.TestCase):
     def test_returns_empty_list_for_unconfigured_variant(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["grobid.training.segmentation"], "category": "primary",
-             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md"},
+             "type": "markdown", "url": "https://github.com/x/y/blob/main/g.md", "label": "Guide"},
         ]
         entries = build_editorial_decl_entries("grobid.training.header", MagicMock())
         self.assertEqual(entries, [])
@@ -70,7 +70,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
     def test_no_fragment_produces_human_only(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["v1"], "category": "primary", "type": "markdown",
-             "url": "https://github.com/x/y/blob/main/g.md"},
+             "url": "https://github.com/x/y/blob/main/g.md", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
 
@@ -78,7 +78,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
         self.assertEqual(entries, [
             {"category": "primary", "refs": [
                 {"target": "https://github.com/x/y/blob/sha1/g.md", "content_type": "markdown", "subtype": "human"},
-            ]},
+            ], "n": "Guide"},
         ])
 
     @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
@@ -86,7 +86,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
     def test_line_range_fragment_produces_machine_only(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["v1"], "category": "footnote-annotation", "type": "markdown",
-             "url": "https://github.com/x/y/blob/main/g.md#L10-L50"},
+             "url": "https://github.com/x/y/blob/main/g.md#L10-L50", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
 
@@ -94,7 +94,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
         self.assertEqual(entries, [
             {"category": "footnote-annotation", "refs": [
                 {"target": "https://github.com/x/y/blob/sha1/g.md#L10-L50", "content_type": "markdown", "subtype": "machine"},
-            ]},
+            ], "n": "Guide"},
         ])
 
     @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
@@ -102,7 +102,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
     def test_heading_anchor_with_html_type_produces_human_only(self, mock_get_guides, mock_resolve):
         mock_get_guides.return_value = [
             {"variant_ids": ["v1"], "category": "primary", "type": "html",
-             "url": "https://example.com/docs/g.html#section"},
+             "url": "https://example.com/docs/g.html#section", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url
 
@@ -110,7 +110,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
         self.assertEqual(entries, [
             {"category": "primary", "refs": [
                 {"target": "https://example.com/docs/g.html#section", "content_type": "html", "subtype": "human"},
-            ]},
+            ], "n": "Guide"},
         ])
 
     @patch("fastapi_app.plugins.grobid.annotation_rules.translate_anchor_to_line_range")
@@ -121,7 +121,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
     ):
         mock_get_guides.return_value = [
             {"variant_ids": ["v1"], "category": "primary", "type": "markdown",
-             "url": "https://github.com/x/y/blob/main/g.md#segmentation"},
+             "url": "https://github.com/x/y/blob/main/g.md#segmentation", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
         mock_translate.return_value = (10, 40)
@@ -132,7 +132,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
             {"category": "primary", "refs": [
                 {"target": "https://github.com/x/y/blob/sha1/g.md#segmentation", "content_type": "markdown", "subtype": "human"},
                 {"target": "https://github.com/x/y/blob/sha1/g.md#L10-L40", "content_type": "markdown", "subtype": "machine"},
-            ]},
+            ], "n": "Guide"},
         ])
         mock_translate.assert_called_once()
         call_args = mock_translate.call_args[0]
@@ -147,7 +147,7 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
     ):
         mock_get_guides.return_value = [
             {"variant_ids": ["v1"], "category": "primary", "type": "markdown",
-             "url": "https://github.com/x/y/blob/main/g.md#segmentation"},
+             "url": "https://github.com/x/y/blob/main/g.md#segmentation", "label": "Guide"},
         ]
         mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
         mock_translate.return_value = None
@@ -157,8 +157,23 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
         self.assertEqual(entries, [
             {"category": "primary", "refs": [
                 {"target": "https://github.com/x/y/blob/sha1/g.md#segmentation", "content_type": "markdown", "subtype": "human"},
-            ]},
+            ], "n": "Guide"},
         ])
+
+
+class TestBuildEditorialDeclEntriesLabel(unittest.TestCase):
+    @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
+    @patch("fastapi_app.plugins.grobid.annotation_rules.get_annotation_guides")
+    def test_guide_label_becomes_entry_n(self, mock_get_guides, mock_resolve):
+        mock_get_guides.return_value = [
+            {"variant_ids": ["v1"], "category": "primary", "type": "markdown",
+             "url": "https://github.com/x/y/blob/main/g.md", "label": "Citation model guidelines"},
+        ]
+        mock_resolve.side_effect = lambda url, cache: url
+
+        entries = build_editorial_decl_entries("v1", MagicMock())
+
+        self.assertEqual(entries[0]["n"], "Citation model guidelines")
 
 
 if __name__ == "__main__":
