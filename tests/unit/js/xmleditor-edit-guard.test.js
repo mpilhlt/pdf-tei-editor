@@ -44,16 +44,39 @@ const { XMLEditor } = await import('../../../app/src/modules/xmleditor.js');
 // matching the convention already used in tests/unit/fastapi/test_xml_utils.py.
 const TEI_XML = '<tei:TEI xmlns:tei="http://www.tei-c.org/ns/1.0"><tei:teiHeader><tei:fileDesc><tei:titleStmt><tei:title>Title</tei:title></tei:titleStmt></tei:fileDesc></tei:teiHeader><tei:text><tei:body><tei:p>Hello</tei:p></tei:body></tei:text></tei:TEI>';
 
+// Same document, preceded by an xml-model PI, for whitelist-mode tests covering
+// the root tag and the PI (both outside <text>, neither caught by a
+// teiHeader-only blacklist).
+const TEI_XML_WITH_PI = '<?xml-model href="http://example.org/tei.rng" type="application/xml"?>\n' + TEI_XML;
+
 /**
- * Creates a fresh XMLEditor with the TEI fixture document loaded.
+ * Creates a fresh XMLEditor with the given XML string loaded (defaults to the
+ * plain TEI fixture without a PI).
+ * @param {string} [xml]
  * @returns {Promise<XMLEditor>}
  */
-async function createLoadedEditor() {
+async function createLoadedEditor(xml = TEI_XML) {
   const parent = document.getElementById('editor');
   parent.innerHTML = '';
   const editor = new XMLEditor('editor');
-  await editor.loadXml(TEI_XML);
+  await editor.loadXml(xml);
   return editor;
+}
+
+/**
+ * Dispatches a single-character user-event insertion at `pos` and returns
+ * whether the document actually changed.
+ * @param {XMLEditor} editor
+ * @param {number} pos
+ * @returns {boolean}
+ */
+function tryUserInsert(editor, pos) {
+  const before = editor.getView().state.doc.toString();
+  editor.getView().dispatch({
+    changes: { from: pos, to: pos, insert: 'X' },
+    annotations: Transaction.userEvent.of('input.type')
+  });
+  return editor.getView().state.doc.toString() !== before;
 }
 
 describe('XMLEditor.setEditGuardXpath', () => {
@@ -136,5 +159,76 @@ describe('XMLEditor.setEditGuardXpath', () => {
       before.slice(0, pos) + 'X' + before.slice(pos),
       'After clearing the guard, user-event edits inside teiHeader must be applied'
     );
+  });
+});
+
+describe('XMLEditor.setEditGuardXpath (whitelist mode)', () => {
+  it('allows a user-event edit inside the whitelisted element', async () => {
+    const editor = await createLoadedEditor();
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+
+    const textNode = editor.getSyntaxNodeByXpath('//tei:text');
+    const pos = Math.floor((textNode.from + textNode.to) / 2);
+
+    assert.strictEqual(tryUserInsert(editor, pos), true, 'A user-event edit inside <text> must be applied');
+  });
+
+  it('rejects a user-event edit inside teiHeader (outside the whitelist)', async () => {
+    const editor = await createLoadedEditor();
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+
+    const headerNode = editor.getSyntaxNodeByXpath('//tei:teiHeader');
+    const pos = Math.floor((headerNode.from + headerNode.to) / 2);
+
+    assert.strictEqual(tryUserInsert(editor, pos), false, 'A user-event edit inside teiHeader must be rejected in whitelist(text) mode');
+  });
+
+  it('rejects a user-event edit on the TEI root tag (outside the whitelist)', async () => {
+    const editor = await createLoadedEditor();
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('xmlns:tei') + 1; // inside the root tag's attribute list
+
+    assert.strictEqual(tryUserInsert(editor, pos), false, 'A user-event edit on the TEI root tag must be rejected in whitelist(text) mode');
+  });
+
+  it('rejects a user-event edit inside an xml-model PI preceding the root (outside the whitelist)', async () => {
+    const editor = await createLoadedEditor(TEI_XML_WITH_PI);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('xml-model') + 1;
+
+    assert.strictEqual(tryUserInsert(editor, pos), false, 'A user-event edit inside a PI must be rejected in whitelist(text) mode');
+  });
+
+  it('allows a programmatic edit outside the whitelisted element', async () => {
+    const editor = await createLoadedEditor();
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+
+    const headerNode = editor.getSyntaxNodeByXpath('//tei:teiHeader');
+    const pos = Math.floor((headerNode.from + headerNode.to) / 2);
+    const before = editor.getView().state.doc.toString();
+
+    // No userEvent annotation: simulates a programmatic write.
+    editor.getView().dispatch({ changes: { from: pos, to: pos, insert: 'X' } });
+
+    assert.strictEqual(
+      editor.getView().state.doc.toString(),
+      before.slice(0, pos) + 'X' + before.slice(pos),
+      'A programmatic edit outside <text> must not be blocked in whitelist mode'
+    );
+  });
+
+  it('setEditGuardXpath(null) removes a whitelist guard', async () => {
+    const editor = await createLoadedEditor();
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist' });
+    editor.setEditGuardXpath(null);
+
+    const headerNode = editor.getSyntaxNodeByXpath('//tei:teiHeader');
+    const pos = Math.floor((headerNode.from + headerNode.to) / 2);
+
+    assert.strictEqual(tryUserInsert(editor, pos), true, 'After clearing the guard, user-event edits outside <text> must be applied');
   });
 });

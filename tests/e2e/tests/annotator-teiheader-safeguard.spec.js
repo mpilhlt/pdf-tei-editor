@@ -3,9 +3,11 @@
  *
  * A pure annotator (annotator role, no reviewer/admin) gets a UI-only safeguard:
  * the teiHeader toggle switch is hidden, the header is folded by default, and
- * typing inside teiHeader is rejected in the CodeMirror UI - while remaining
- * fully writable programmatically (not tested here; see the spec) and remaining
- * manually unfoldable via the fold gutter.
+ * typing anywhere outside <text> (teiHeader, the TEI root tag, a leading
+ * processing instruction, ...) is rejected in the CodeMirror UI, via a
+ * whitelist(<text>) edit guard - while remaining fully writable programmatically
+ * (not tested here; see the spec) and remaining manually unfoldable via the fold
+ * gutter.
  *
  * @testCovers app/src/plugins/tei-tools.js
  * @testCovers app/src/modules/xmleditor.js
@@ -164,6 +166,44 @@ test.describe('Annotator teiHeader safeguard', () => {
         /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
       );
       expect(docAfterHeaderTyping).toBe(docBefore);
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('Annotator: typing on the TEI root tag is rejected', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+      await loadEditableAnnotatorVersion(page);
+
+      const docBefore = await page.evaluate(() =>
+        /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
+      );
+      expect(docBefore.slice(0, 5)).toBe('<TEI ');
+
+      // Place the cursor inside the root <TEI ...> opening tag (outside <text>,
+      // and not caught by a teiHeader-only blacklist) and type - must be rejected.
+      await page.evaluate(() => {
+        const xmlEditor = /** @type {any} */ (window).app.getDependency('xmleditor');
+        const view = xmlEditor.getView();
+        view.dispatch({ selection: { anchor: 2, head: 2 }, scrollIntoView: true });
+      });
+      await page.locator('#codemirror-container .cm-content').focus();
+      await page.keyboard.type('ZZZ');
+      await page.waitForTimeout(300);
+
+      const docAfterRootTagTyping = await page.evaluate(() =>
+        /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
+      );
+      expect(docAfterRootTagTyping).toBe(docBefore);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

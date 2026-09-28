@@ -474,14 +474,18 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Installs a soft, UI-only guard that rejects user-driven edits (transactions carrying a
-   * `userEvent` annotation, e.g. typing, paste, cut) touching the content of the first element
-   * matched by the given XPath. Programmatic transactions (no `userEvent` annotation — document
-   * load, merge/sync operations, etc.) are never intercepted, so the guarded content remains
-   * fully writable outside the CodeMirror UI. Pass `null` to remove the guard.
-   * @param {string | null} xpath - XPath of the element to guard, or null to clear the guard.
+   * Installs a soft, UI-only guard that restricts user-driven edits (transactions carrying a
+   * `userEvent` annotation, e.g. typing, paste, cut) based on the first element matched by the
+   * given XPath. Programmatic transactions (no `userEvent` annotation — document load,
+   * merge/sync operations, etc.) are never intercepted, so guarded content remains fully
+   * writable outside the CodeMirror UI. Pass `null` to remove the guard.
+   * @param {string | null} xpath - XPath of the reference element, or null to clear the guard.
+   * @param {Object} [options]
+   * @param {'blacklist' | 'whitelist'} [options.mode='blacklist'] - `'blacklist'` rejects edits
+   *   that touch the matched element's content; `'whitelist'` rejects edits that fall anywhere
+   *   outside it (e.g. the document's root tag or a leading processing instruction).
    */
-  setEditGuardXpath(xpath) {
+  setEditGuardXpath(xpath, { mode = 'blacklist' } = {}) {
     if (!xpath) {
       this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure([]) });
       return;
@@ -490,21 +494,34 @@ export class XMLEditor extends EventEmitter {
       if (!tr.docChanged || tr.annotation(Transaction.userEvent) === undefined) {
         return tr;
       }
-      let guardedNode;
+      let referenceNode;
       try {
-        guardedNode = this.getSyntaxNodeByXpath(xpath);
+        referenceNode = this.getSyntaxNodeByXpath(xpath);
       } catch {
-        // Nothing to guard (e.g. element absent from this document).
+        // Nothing to guard against (e.g. element absent from this document).
         return tr;
       }
-      let touchesGuardedRange = false;
+      let rejected = false;
       tr.changes.iterChangedRanges((fromA, toA) => {
-        const overlaps = fromA === toA
-          ? fromA > guardedNode.from && fromA < guardedNode.to
-          : fromA < guardedNode.to && toA > guardedNode.from;
-        if (overlaps) touchesGuardedRange = true;
+        let violates;
+        if (mode === 'whitelist') {
+          // Reject unless the change is fully contained within the reference element -
+          // a change straddling its boundary (e.g. starting inside <text> and extending
+          // past </text>) must not be allowed to touch anything outside it.
+          const fullyInside = fromA === toA
+            ? fromA > referenceNode.from && fromA < referenceNode.to
+            : fromA >= referenceNode.from && toA <= referenceNode.to;
+          violates = !fullyInside;
+        } else {
+          // Reject on any overlap (partial or full) with the reference element.
+          const overlaps = fromA === toA
+            ? fromA > referenceNode.from && fromA < referenceNode.to
+            : fromA < referenceNode.to && toA > referenceNode.from;
+          violates = overlaps;
+        }
+        if (violates) rejected = true;
       });
-      return touchesGuardedRange ? [] : tr;
+      return rejected ? [] : tr;
     });
     this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure(filter) });
   }

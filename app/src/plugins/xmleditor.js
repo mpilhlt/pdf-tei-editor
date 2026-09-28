@@ -927,13 +927,15 @@ class XmlEditorPlugin extends Plugin {
       this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     }
 
-    // Soft, UI-only guard against accidental teiHeader edits by pure annotators
-    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Does not
-    // affect the whole-document read-only state above and never blocks programmatic writes.
-    const shouldGuardTeiHeader = userIsAnnotatorOnly(state.user);
-    if (shouldGuardTeiHeader !== this.#annotatorEditGuardActive) {
-      this.#xmlEditor.setEditGuardXpath(shouldGuardTeiHeader ? '//tei:teiHeader' : null);
-      this.#annotatorEditGuardActive = shouldGuardTeiHeader;
+    // Soft, UI-only guard restricting pure annotators to editing <text> content
+    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md): whitelisting
+    // <text> (rather than blacklisting teiHeader) also covers the TEI root tag and any
+    // leading processing instructions. Does not affect the whole-document read-only state
+    // above and never blocks programmatic writes.
+    const shouldGuardToTextOnly = userIsAnnotatorOnly(state.user);
+    if (shouldGuardToTextOnly !== this.#annotatorEditGuardActive) {
+      this.#xmlEditor.setEditGuardXpath(shouldGuardToTextOnly ? '//tei:text' : null, { mode: 'whitelist' });
+      this.#annotatorEditGuardActive = shouldGuardToTextOnly;
     }
 
     this.#updateDiffButtons();

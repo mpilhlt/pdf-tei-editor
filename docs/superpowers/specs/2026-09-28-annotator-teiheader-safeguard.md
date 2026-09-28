@@ -1,6 +1,6 @@
 # Annotator teiHeader Safeguard — Design
 
-Status: draft for review. Date: 2026-09-28.
+Status: implemented (whitelist mode added 2026-09-28 to close the root-tag/PI gap below). Date: 2026-09-28.
 
 ## Goal
 
@@ -22,14 +22,16 @@ This is explicitly **not** a security boundary: `<teiHeader>` metadata must rema
 
 Both parts below apply only to **pure annotators**: `userHasAnnotatorRole(user) && !userHasReviewerRole(user) && !userIsAdmin(user)`, mirroring the precedence `acl-utils.js` already applies elsewhere (reviewer/admin outrank annotator).
 
-### 1. Soft edit guard on `<teiHeader>`
+### 1. Soft edit guard: whitelist `<text>`
 
-Add a new CM6 extension to `XMLEditor` (`app/src/modules/xmleditor.js`), parallel to the existing `setReadOnly()` pattern:
+Added a CM6 extension to `XMLEditor` (`app/src/modules/xmleditor.js`), parallel to the existing `setReadOnly()` pattern:
 
-- New compartment (e.g. `#editGuardCompartment`) and method `setEditGuardXpath(xpath | null)`.
-- When set, installs an `EditorState.transactionFilter` that, for transactions carrying a user event (typing, paste, cut — i.e. `tr.isUserEvent(...)` truthy; programmatic transactions such as initial document load or merge-view operations are exempt, same exemption style already used in `setReadOnly()`), resolves the current `<teiHeader>` node's `[from, to)` span via the existing xpath/syntax-tree resolution already used by `foldByXpath`, and drops the transaction (returns `[]`) if any changed range falls inside that span.
-- This is a **soft guard**: it only intercepts edits made through the CodeMirror UI by the current user. It does not affect document loading, programmatic replacement, merge/revert operations, or the backend in any way — `<teiHeader>` remains fully writable through those paths.
-- Wiring: in `XmlEditorPlugin` (`app/src/plugins/xmleditor.js`), in the same `onStateUpdate` handler that drives `setReadOnly()`, compute the pure-annotator check and call `xmlEditor.setEditGuardXpath(isPureAnnotator ? '//tei:teiHeader' : null)`. No change to `state.editorReadOnly` or `access-control.js` — this is additive and independent of the existing whole-document read-only logic.
+- New compartment (`#editGuardCompartment`) and method `setEditGuardXpath(xpath | null, { mode = 'blacklist' | 'whitelist' } = {})`.
+- When set, installs an `EditorState.transactionFilter` that, for transactions carrying a user event (typing, paste, cut — i.e. a truthy `Transaction.userEvent` annotation; programmatic transactions such as initial document load or merge-view operations are exempt, same exemption style already used in `setReadOnly()`), resolves the reference element's `[from, to)` span via the existing xpath/syntax-tree resolution already used by `foldByXpath`, and drops the transaction (returns `[]`) if any changed range violates the mode:
+  - `blacklist` — reject on any overlap (partial or full) with the reference element. (Originally the only mode; still available for other reference-blocking uses.)
+  - `whitelist` — reject unless the changed range is *fully contained* within the reference element. Used for the annotator safeguard: **an initial `blacklist('//tei:teiHeader')` design left the TEI root tag's own attributes and any leading processing instruction (e.g. an `xml-model` PI) editable**, since neither falls inside `<teiHeader>`. Switching to `whitelist('//tei:text')` closes that gap in one step — everything outside `<text>` (header, root tag, PI, inter-element whitespace) is rejected, and nothing needed to be blacklisted item-by-item.
+- This is a **soft guard**: it only intercepts edits made through the CodeMirror UI by the current user. It does not affect document loading, programmatic replacement, merge/revert operations, or the backend in any way — content outside `<text>` remains fully writable through those paths.
+- Wiring: in `XmlEditorPlugin` (`app/src/plugins/xmleditor.js`), in the same `onStateUpdate` handler that drives `setReadOnly()`, compute the pure-annotator check and call `xmlEditor.setEditGuardXpath(isPureAnnotator ? '//tei:text' : null, { mode: 'whitelist' })`. No change to `state.editorReadOnly` or `access-control.js` — this is additive and independent of the existing whole-document read-only logic.
 
 ### 2. teiHeader hidden by default, toggle hidden
 
@@ -42,9 +44,11 @@ In `app/src/plugins/tei-tools.js`:
 
 ## Testing
 
-- Unit test for the edit guard: with `setEditGuardXpath('//tei:teiHeader')` active, a simulated user-event transaction targeting a position inside `<teiHeader>` is rejected (document unchanged); the same transaction targeting `<text>` succeeds; a non-user-event transaction (e.g. programmatic `setDocument`) touching `<teiHeader>` succeeds.
+- Unit tests for the edit guard (`tests/unit/js/xmleditor-edit-guard.test.js`), both modes:
+  - `blacklist('//tei:teiHeader')`: a user-event edit inside `<teiHeader>` is rejected; the same edit inside `<text>` is applied; a non-user-event (programmatic) edit inside `<teiHeader>` is applied; `setEditGuardXpath(null)` clears the guard.
+  - `whitelist('//tei:text')`: a user-event edit inside `<text>` is applied; the same edit inside `<teiHeader>`, on the TEI root tag, or inside a leading `xml-model` PI is rejected; a non-user-event edit outside `<text>` is applied; `setEditGuardXpath(null)` clears the guard.
 - Unit/E2E test for tei-tools.js: loading a document as a pure-annotator user shows the header folded and the toggle switch hidden; loading as reviewer/admin is unchanged (switch visible, existing disable/preference logic intact).
-- E2E: as an annotator, manually unfolding `<teiHeader>` via the gutter works, and typing inside the unfolded header is rejected by the editor while typing inside `<text>` succeeds.
+- E2E (`tests/e2e/tests/annotator-teiheader-safeguard.spec.js`): as an annotator, manually unfolding `<teiHeader>` via the gutter works, typing inside it is rejected, typing on the TEI root tag is rejected, and typing inside `<text>` succeeds.
 - Run the full suite (`npm run test:unit`, `npm run test:e2e`) before finishing, per project rules.
 
 ## Migration
