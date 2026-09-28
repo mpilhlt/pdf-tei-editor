@@ -57,10 +57,17 @@ class TestInterpretationRefKindDiscover(unittest.TestCase):
         self.assertEqual(len(descriptors), 1)
         self.assertTrue(descriptors[0].url.endswith("#intro"))
 
+    def test_related_urls_includes_both_human_and_machine_refs(self):
+        descriptors = self.kind.discover(XML_TWO_REFS_HUMAN_AND_MACHINE)
+        self.assertEqual(len(descriptors[0].related_urls), 2)
+        self.assertTrue(any(u.endswith("#intro") for u in descriptors[0].related_urls))
+        self.assertTrue(any(u.endswith("#L1-L10") for u in descriptors[0].related_urls))
+
     def test_falls_back_to_machine_ref_when_no_human_ref(self):
         descriptors = self.kind.discover(XML_MACHINE_ONLY)
         self.assertEqual(len(descriptors), 1)
         self.assertTrue(descriptors[0].url.endswith("#L20-L30"))
+        self.assertEqual(descriptors[0].related_urls, [descriptors[0].url])
 
     def test_kind_and_format(self):
         descriptors = self.kind.discover(XML_ONE_ENTRY_WITH_LABEL)

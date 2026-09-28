@@ -75,7 +75,10 @@ async def list_document_resources(
     resources = list_resources(request.xml_string)
     return ListResourcesResponse(
         resources=[
-            ResourceDescriptorModel(kind=r.kind, url=r.url, key=r.key, label=r.label, format=r.format)
+            ResourceDescriptorModel(
+                kind=r.kind, url=r.url, key=r.key, label=r.label, format=r.format,
+                related_urls=r.related_urls,
+            )
             for r in resources
         ]
     )

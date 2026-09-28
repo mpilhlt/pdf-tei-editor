@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-09-28T06:53:01.315Z
+ * Generated from OpenAPI schema at 2026-09-28T11:26:42.517Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -185,32 +185,6 @@
 /**
  * @typedef {Object} ConfigSetResponse
  * @property {string} result
- */
-
-/**
- * @typedef {Object} ConflictInfo
- * @property {string} file_id
- * @property {string} stable_id
- * @property {string} filename
- * @property {string} doc_id
- * @property {string} local_modified_at
- * @property {string} local_hash
- * @property {string} remote_modified_at
- * @property {string} remote_hash
- * @property {string} conflict_type
- */
-
-/**
- * @typedef {Object} ConflictListResponse
- * @property {Array<ConflictInfo>} conflicts
- * @property {number} total
- */
-
-/**
- * @typedef {Object} ConflictResolution
- * @property {string} file_id
- * @property {string} resolution
- * @property {string=} new_variant - Variant name when using 'keep_both' resolution
  */
 
 /**
@@ -660,6 +634,7 @@
  * @property {string} key
  * @property {string} label
  * @property {string} format
+ * @property {Array<string>=} related_urls - Every URL in the document referring to this same resource (including `url`); e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource but have different target URLs.
  */
 
 /**
@@ -746,36 +721,6 @@
  * @property {string} username
  * @property {string=} fullname
  * @property {Array<string>=} roles
- */
-
-/**
- * @typedef {Object} SyncRequest
- * @property {boolean=} force - Force sync even if quick check indicates no changes needed
- */
-
-/**
- * @typedef {Object} SyncStatusResponse
- * @property {boolean} needs_sync
- * @property {number} local_version
- * @property {number} remote_version
- * @property {number} unsynced_count
- * @property {string=} last_sync_time
- * @property {boolean=} sync_in_progress
- */
-
-/**
- * @typedef {Object} SyncSummary
- * @property {boolean=} skipped
- * @property {number=} uploaded
- * @property {number=} downloaded
- * @property {number=} deleted_local
- * @property {number=} deleted_remote
- * @property {number=} metadata_synced
- * @property {number=} conflicts
- * @property {number=} errors
- * @property {number=} new_version
- * @property {number=} duration_ms
- * @property {string=} message
  */
 
 /**

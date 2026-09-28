@@ -369,12 +369,19 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Rebuild the ref-decoration extension from the current `_selections`,
    * restricted to interpretation-ref resources (the schema PI isn't a <ref>
-   * element, so it's never decorated this way).
+   * element, so it's never decorated this way). Includes each overridden
+   * resource's `related_urls` so both a "human" ref and its auto-derived
+   * "machine" ref (which share one resource but have different URLs) are
+   * decorated as overridden together, not just the representative one.
    */
   _refreshRefDecorations() {
-    const overriddenUrls = new Set(
-      this._selections.filter(s => s.selected && s.kind === 'interpretation-ref').map(s => s.url)
-    )
+    const overriddenUrls = new Set()
+    for (const selection of this._selections) {
+      if (!selection.selected || selection.kind !== 'interpretation-ref') continue
+      overriddenUrls.add(selection.url)
+      const resource = this._resources.find(r => r.kind === 'interpretation-ref' && r.url === selection.url)
+      for (const relatedUrl of resource?.related_urls ?? []) overriddenUrls.add(relatedUrl)
+    }
     this._refDecorationSlot.reconfigure([
       createOverrideRefField(overriddenUrls),
       refDecorationTheme,
@@ -386,10 +393,15 @@ class DocumentRulesPlugin extends Plugin {
    * Open the resource editor for the interpretation-ref resource matching
    * the clicked <ref target="..."> URL, looked up in the existing
    * `_resources` cache (see this plan's "Important context" on staleness).
+   * An entry's "human" and auto-derived "machine" refs are both decorated
+   * as clickable but share one resource, so the lookup also matches against
+   * `related_urls`, not just each resource's own representative `url`.
    * @param {string} url
    */
   _onRefDecorationClick(url) {
-    const resource = this._resources.find(r => r.kind === 'interpretation-ref' && r.url === url)
+    const resource = this._resources.find(
+      r => r.kind === 'interpretation-ref' && (r.url === url || r.related_urls?.includes(url))
+    )
     if (!resource) {
       this.#logger.warn(`document-rules: no resource found for clicked ref url: ${url}`)
       return

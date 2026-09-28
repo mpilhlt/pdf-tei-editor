@@ -17,6 +17,12 @@ class ResourceDescriptorModel(BaseModel):
     key: str
     label: str
     format: ResourceFormat
+    related_urls: list[str] = Field(
+        default_factory=list,
+        description="Every URL in the document referring to this same resource (including `url`); "
+        "e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource "
+        "but have different target URLs.",
+    )
 
 
 class ListResourcesRequest(BaseModel):

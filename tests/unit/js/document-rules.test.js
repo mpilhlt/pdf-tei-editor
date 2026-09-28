@@ -828,6 +828,22 @@ describe('DocumentRulesPlugin._refreshRefDecorations', () => {
     assert.ok(Array.isArray(reconfigured));
     assert.strictEqual(reconfigured.length, 3);
   });
+
+  it('looks up related_urls without throwing when a selected resource has a machine ref', () => {
+    const plugin = makePlugin();
+    let reconfigured;
+    plugin._refDecorationSlot = { reconfigure: (ext) => { reconfigured = ext; } };
+    plugin._resources = [{
+      kind: 'interpretation-ref', url: 'https://example.com/a.md#intro', key: 'a', label: 'A', format: 'markdown',
+      related_urls: ['https://example.com/a.md#intro', 'https://example.com/a.md#L1-L10'],
+    }];
+    plugin._selections = [
+      { kind: 'interpretation-ref', url: 'https://example.com/a.md#intro', selected: true },
+    ];
+    plugin._refreshRefDecorations();
+    assert.ok(Array.isArray(reconfigured));
+    assert.strictEqual(reconfigured.length, 3);
+  });
 });
 
 describe('DocumentRulesPlugin._onRefDecorationClick', () => {
@@ -838,6 +854,19 @@ describe('DocumentRulesPlugin._onRefDecorationClick', () => {
     let opened;
     plugin._openResourceEditor = (r) => { opened = r; };
     plugin._onRefDecorationClick('https://example.com/a.md');
+    assert.deepStrictEqual(opened, resource);
+  });
+
+  it('opens the resource editor when the url matches a related_urls entry, not the primary url', () => {
+    const plugin = makePlugin();
+    const resource = {
+      kind: 'interpretation-ref', url: 'https://example.com/a.md#intro', key: 'a', label: 'A', format: 'markdown',
+      related_urls: ['https://example.com/a.md#intro', 'https://example.com/a.md#L1-L10'],
+    };
+    plugin._resources = [resource];
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._onRefDecorationClick('https://example.com/a.md#L1-L10');
     assert.deepStrictEqual(opened, resource);
   });
 

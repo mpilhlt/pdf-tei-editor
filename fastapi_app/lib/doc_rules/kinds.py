@@ -6,7 +6,7 @@ git_forge_adapters.py's GitForgeAdapterRegistry.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal, Optional
 
 # The one place this literal is defined; resource_key.py and
@@ -25,6 +25,14 @@ class ResourceDescriptor:
     key: str    # normalized resource key (see resource_key.py)
     label: str  # human-readable label for the UI
     format: ResourceFormat
+    # Every URL in the document that refers to this same resource (including
+    # `url` itself) - e.g. interpretation-ref's "human" and auto-derived
+    # "machine" refs both belong to one entry but carry different URLs (see
+    # interpretation_ref_kind.py's representative_ref()). Lets a caller that
+    # only has one of those URLs (e.g. a click on either <ref>) resolve it
+    # back to this resource. Empty for kinds with no such grouping (e.g.
+    # "schema"), where `url` alone is authoritative.
+    related_urls: list[str] = field(default_factory=list)
 
 
 class ResourceKind(ABC):

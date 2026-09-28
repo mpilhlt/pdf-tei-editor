@@ -54,6 +54,7 @@ class InterpretationRefKind(ResourceKind):
                 key=normalize_resource_key(ref["target"]),
                 label=label,
                 format=infer_format(ref["target"]),
+                related_urls=[r["target"] for r in entry["refs"]],
             ))
         return descriptors
 
