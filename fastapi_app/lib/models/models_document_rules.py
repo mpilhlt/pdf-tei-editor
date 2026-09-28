@@ -135,3 +135,20 @@ class RefreshOutcomeResponse(BaseModel):
     entry_count: int
     variant_id: Optional[str] = None
     message: str
+
+
+class ProposeChangeUrlRequest(BaseModel):
+    """Request to build a URL that lets the caller's own forge session propose `text` as this resource's new upstream content."""
+    url: str
+    text: str
+
+
+class ProposeChangeUrlResponse(BaseModel):
+    """
+    `url` is None when the resource's host isn't a recognized git forge - not
+    an error, just nothing to propose a change through. `content_prefilled`
+    is only ever True for a GitHub URL short enough to embed `text` directly;
+    otherwise the frontend must fall back to a clipboard copy.
+    """
+    url: Optional[str] = None
+    content_prefilled: bool = False

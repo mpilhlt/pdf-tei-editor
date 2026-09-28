@@ -57,9 +57,10 @@ const VOID_ELEMENTS = new Set([
 
 /**
  * Tags whose `name` attribute carries element-specific semantics (e.g. icon
- * identifier) rather than a navigation label. Must match the set in ui-system.js.
+ * identifier, or Shoelace's own tab/tab-panel pairing) rather than a
+ * navigation label. Must match `skipNameAttrTags` in navigable-element.js.
  */
-const SKIP_NAME_ATTR_TAGS = new Set(['sl-icon', 'sl-icon-button'])
+const SKIP_NAME_ATTR_TAGS = new Set(['sl-icon', 'sl-icon-button', 'sl-tab-panel'])
 
 /**
  * Convert kebab-case to camelCase.

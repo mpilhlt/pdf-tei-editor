@@ -20,6 +20,7 @@ from ..lib.core.dependencies import (
     require_authenticated_user,
     require_reviewer_or_admin,
 )
+from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
 from ..lib.doc_rules.kinds import get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
@@ -38,6 +39,8 @@ from ..lib.models.models_document_rules import (
     ListResourcesResponse,
     OkResponse,
     OverrideModel,
+    ProposeChangeUrlRequest,
+    ProposeChangeUrlResponse,
     QueryResourceRequest,
     QueryResourceResponse,
     RefreshOutcomeResponse,
@@ -281,3 +284,30 @@ async def refresh_execute(
         raise HTTPException(status_code=422, detail=str(e))
 
     return _outcome_response(outcome)
+
+
+@router.post("/propose-change-url", response_model=ProposeChangeUrlResponse)
+async def propose_change_url(
+    request: ProposeChangeUrlRequest,
+    user: dict = Depends(require_authenticated_user),
+) -> ProposeChangeUrlResponse:
+    """
+    Build a URL that lets the caller's own GitHub/GitLab session propose
+    `text` as the resource's new upstream content - no server-side git write
+    or stored credential involved (see
+    docs/superpowers/specs/2026-09-28-document-rules-propose-upstream-design.md).
+    Returns url=None when the resource's host isn't a recognized git forge.
+    """
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
+        try:
+            target = adapter.build_propose_change_url(request.url, request.text, cache)
+        except Exception as e:
+            logger.error(
+                f"Could not build propose-change URL via {type(adapter).__name__} for {request.url}: {e}",
+                exc_info=True,
+            )
+            raise HTTPException(status_code=502, detail=f"Could not build the upstream link: {e}")
+        if target is not None:
+            return ProposeChangeUrlResponse(url=target.url, content_prefilled=target.content_prefilled)
+    return ProposeChangeUrlResponse(url=None, content_prefilled=False)

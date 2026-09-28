@@ -42,6 +42,10 @@ global.NodeList = dom.window.NodeList;
 global.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 global.CSS = dom.window.CSS;
 
+if (typeof global.navigator === 'undefined') {
+  global.navigator = {};
+}
+
 global.localStorage = (() => {
   const store = {};
   return {
@@ -120,6 +124,7 @@ function makeDialogUi() {
   el.saveBtn = document.createElement('sl-button');
   el.deleteBtn = document.createElement('sl-button');
   el.resetBtn = document.createElement('sl-button');
+  el.proposeUpstreamBtn = document.createElement('sl-button');
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
   return el;
@@ -576,6 +581,118 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.deepStrictEqual(calls, [{ kind: 'interpretation-ref', fragment_url: 'https://example.com/a.md', override_id: null }]);
     assert.strictEqual(plugin._currentSelectedId, null);
     assert.deepStrictEqual(plugin._currentOverrides.length, 1, 'override itself must not be deleted');
+  });
+});
+
+describe('DocumentRulesPlugin._onProposeUpstream', () => {
+  function setup() {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md', key: 'a', label: 'A', format: 'markdown' };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value = 'shown text';
+    return plugin;
+  }
+
+  let clipboardCalls;
+  let openCalls;
+
+  beforeEach(() => {
+    clipboardCalls = [];
+    openCalls = [];
+    global.navigator.clipboard = { writeText: async (text) => { clipboardCalls.push(text); } };
+    dom.window.open = (...args) => { openCalls.push(args); };
+  });
+
+  it('copies the shown text to the clipboard and opens a prefilled tab', async () => {
+    const plugin = setup();
+    let calledWith;
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesProposeChangeUrl: async (body) => { calledWith = body; return { url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onProposeUpstream();
+    assert.deepStrictEqual(calledWith, { url: 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md', text: 'shown text' });
+    assert.deepStrictEqual(clipboardCalls, ['shown text']);
+    assert.deepStrictEqual(openCalls[0], ['https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', '_blank', 'noopener']);
+    assert.match(notifyCalls[0][0], /prefilled/);
+  });
+
+  it('opens an unprefilled tab and notes the clipboard fallback when content_prefilled is false', async () => {
+    const plugin = setup();
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onProposeUpstream();
+    assert.deepStrictEqual(clipboardCalls, ['shown text']);
+    assert.strictEqual(openCalls[0][0], 'https://gitlab.com/group/project/-/edit/main/rules.md');
+    assert.match(notifyCalls[0][0], /clipboard/);
+  });
+
+  it('shows a warning and opens nothing when the resource host is not a recognized forge', async () => {
+    const plugin = setup();
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesProposeChangeUrl: async () => ({ url: null, content_prefilled: false }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onProposeUpstream();
+    assert.strictEqual(openCalls.length, 0);
+    assert.strictEqual(clipboardCalls.length, 0);
+    assert.match(notifyCalls[0][0], /not hosted on a recognized git forge/);
+  });
+
+  it('shows a danger toast and opens nothing when the backend call fails', async () => {
+    const plugin = setup();
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesProposeChangeUrl: async () => { throw new Error('network down'); },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onProposeUpstream();
+    assert.strictEqual(openCalls.length, 0);
+    assert.match(notifyCalls[0][0], /Could not build the upstream link/);
+  });
+
+  it('still opens the tab when the clipboard write is denied', async () => {
+    const plugin = setup();
+    global.navigator.clipboard = { writeText: async () => { throw new Error('denied'); } };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesProposeChangeUrl: async () => ({ url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onProposeUpstream();
+    assert.strictEqual(openCalls.length, 1);
+  });
+});
+
+describe('DocumentRulesPlugin._renderEditorDialog proposeUpstreamBtn visibility', () => {
+  it('is hidden when Original is selected and shown when an override is selected', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
+    plugin._currentOriginalText = 'text';
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
+
+    plugin._currentSelectedId = null;
+    plugin._renderEditorDialog();
+    assert.strictEqual(plugin._editorDialogUi.proposeUpstreamBtn.style.display, 'none');
+
+    plugin._currentSelectedId = 'ov1';
+    plugin._renderEditorDialog();
+    assert.strictEqual(plugin._editorDialogUi.proposeUpstreamBtn.style.display, '');
   });
 });
 

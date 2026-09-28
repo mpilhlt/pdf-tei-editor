@@ -561,6 +561,18 @@
  */
 
 /**
+ * @typedef {Object} ProposeChangeUrlRequest
+ * @property {string} url
+ * @property {string} text
+ */
+
+/**
+ * @typedef {Object} ProposeChangeUrlResponse
+ * @property {string=} url - The forge URL to open, or null if the resource's host isn't a recognized git forge.
+ * @property {boolean} content_prefilled - Whether `url` already embeds the override text.
+ */
+
+/**
  * @typedef {Object} ProviderResponse
  * @property {string} id
  * @property {string} label
@@ -1593,6 +1605,20 @@ export class ApiClientV1 {
    */
   async documentRulesRefreshExecute(requestBody) {
     const endpoint = `/document-rules/refresh/execute`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Build a URL that lets the caller's own GitHub/GitLab session propose
+   * `text` as the resource's new upstream content - no server-side git
+   * write or stored credential involved. `url` is null when the resource's
+   * host isn't a recognized git forge.
+   *
+   * @param {ProposeChangeUrlRequest} requestBody
+   * @returns {Promise<ProposeChangeUrlResponse>}
+   */
+  async documentRulesProposeChangeUrl(requestBody) {
+    const endpoint = `/document-rules/propose-change-url`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

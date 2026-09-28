@@ -325,5 +325,47 @@ class TestRefreshEndpoints(DocumentRulesRouterTestCase):
         self.assertIn("Could not parse document XML for refresh", response.json()["detail"])
 
 
+class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
+    def test_builds_prefilled_url_for_a_github_blob_url(self):
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={"url": "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md", "text": "new content"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["content_prefilled"])
+        self.assertTrue(body["url"].startswith("https://github.com/mpilhlt/pdf-tei-editor/new/main?"))
+        self.assertIn("new+content", body["url"])
+
+    def test_builds_unprefilled_edit_url_for_a_gitlab_blob_url(self):
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={"url": "https://gitlab.com/group/project/-/blob/main/rules.md", "text": "new content"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["content_prefilled"])
+        self.assertEqual(body["url"], "https://gitlab.com/group/project/-/edit/main/rules.md")
+
+    def test_returns_null_url_for_an_unrecognized_host(self):
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={"url": "https://example.com/rules.md", "text": "new content"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIsNone(body["url"])
+        self.assertFalse(body["content_prefilled"])
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_returns_502_when_an_adapter_fails_unexpectedly(self, mock_get):
+        mock_get.side_effect = RuntimeError("network down")
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={"url": f"https://github.com/mpilhlt/pdf-tei-editor/blob/{'a' * 40}/rules.md", "text": "x"},
+        )
+        self.assertEqual(response.status_code, 502)
+
+
 if __name__ == "__main__":
     unittest.main()

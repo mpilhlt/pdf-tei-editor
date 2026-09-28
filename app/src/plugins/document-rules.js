@@ -208,6 +208,7 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
+    this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
     this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', (event) => {
       if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
         const text = this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
@@ -521,6 +522,7 @@ class DocumentRulesPlugin extends Plugin {
     dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     dialogUi.resetBtn.style.display = selected ? '' : 'none'
+    dialogUi.proposeUpstreamBtn.style.display = selected ? '' : 'none'
   }
 
   /**
@@ -697,6 +699,44 @@ class DocumentRulesPlugin extends Plugin {
     this._currentSelectedId = null
     this._renderEditorDialog()
     await this._refreshOverrideIndicators()
+  }
+
+  /**
+   * Build a URL that lets the caller's own GitHub/GitLab session propose the
+   * currently shown override text as the resource's new upstream content,
+   * copy that text to the clipboard as a paste-ready fallback (GitLab, and
+   * GitHub when the text is too long to embed in the URL, can't prefill the
+   * content), and open the forge's page in a new tab. No server-side git
+   * write happens anywhere in this flow - see
+   * docs/superpowers/specs/2026-09-28-document-rules-propose-upstream-design.md.
+   * @returns {Promise<void>}
+   */
+  async _onProposeUpstream() {
+    const text = this._currentShownText()
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesProposeChangeUrl({ url: this._currentResource.url, text })
+    } catch (error) {
+      notify(`Could not build the upstream link: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    if (!response.url) {
+      notify('This resource is not hosted on a recognized git forge; no upstream link is available.', 'warning', 'exclamation-triangle')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard denied/unavailable - non-fatal whether or not the URL
+      // itself already carries the text.
+    }
+    window.open(response.url, '_blank', 'noopener')
+    notify(
+      response.content_prefilled
+        ? 'Opening a prefilled upstream editor in a new tab.'
+        : 'Opening the upstream editor in a new tab — the override text has been copied to your clipboard, paste it in.',
+      'primary', 'info-circle'
+    )
   }
 
   /**

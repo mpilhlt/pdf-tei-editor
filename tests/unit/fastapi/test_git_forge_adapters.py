@@ -6,6 +6,7 @@ Unit tests for the pluggable git-forge adapter registry.
 
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlencode
 
 from fastapi_app.lib.core.git_forge_adapters import (
     BaseGitForgeAdapter,
@@ -31,6 +32,9 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def is_sha_pinned(self, url: str) -> bool:
         return False
 
+    def build_propose_change_url(self, url: str, text: str, cache):
+        return None
+
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -46,6 +50,9 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
     def is_sha_pinned(self, url: str) -> bool:
+        raise AssertionError("should not be called")
+
+    def build_propose_change_url(self, url: str, text: str, cache):
         raise AssertionError("should not be called")
 
 
@@ -74,6 +81,16 @@ class TestGitForgeAdapterRegistry(unittest.TestCase):
         adapter_types = [type(a) for a in GitForgeAdapterRegistry.get_instance()._adapters]
         self.assertIn(GitHubAdapter, adapter_types)
         self.assertIn(GitLabAdapter, adapter_types)
+
+
+class TestGitForgeAdapterRegistryAllAdapters(unittest.TestCase):
+    def test_all_adapters_returns_every_registered_adapter_in_order(self):
+        registry = GitForgeAdapterRegistry()
+        never = _NeverMatchesAdapter()
+        always = _AlwaysMatchesAdapter()
+        registry.register(never)
+        registry.register(always)
+        self.assertEqual(registry.all_adapters(), [never, always])
 
 
 class TestGitHubAdapter(unittest.TestCase):
@@ -237,3 +254,100 @@ class TestGitLabAdapterIsShaPinned(unittest.TestCase):
     def test_sha_ref_is_pinned(self):
         url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guidelines.md"
         self.assertTrue(self.adapter.is_sha_pinned(url))
+
+
+class TestGitHubAdapterBuildProposeChangeUrl(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+        self.cache = MagicMock()
+
+    def test_builds_prefilled_url_from_blob_url_with_branch_ref(self):
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        target = self.adapter.build_propose_change_url(url, "new content", self.cache)
+        expected_query = urlencode({"filename": "docs/guidelines.md", "value": "new content"})
+        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/new/main?{expected_query}")
+        self.assertTrue(target.content_prefilled)
+        self.cache.get_text.assert_not_called()
+
+    def test_builds_prefilled_url_from_raw_url(self):
+        url = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guidelines.md"
+        target = self.adapter.build_propose_change_url(url, "new content", self.cache)
+        expected_query = urlencode({"filename": "docs/guidelines.md", "value": "new content"})
+        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/new/main?{expected_query}")
+        self.assertTrue(target.content_prefilled)
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_resolves_sha_pinned_ref_to_default_branch_via_api(self, mock_get):
+        self.cache.get_text.return_value = None
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"default_branch": "main"}
+        mock_get.return_value = mock_response
+
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        target = self.adapter.build_propose_change_url(url, "text", self.cache)
+
+        mock_get.assert_called_once_with(
+            "https://api.github.com/repos/mpilhlt/fossil",
+            timeout=10,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        self.assertIn("/new/main?", target.url)
+        self.cache.set_text.assert_called_once_with("https://api.github.com/repos/mpilhlt/fossil", "main")
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_uses_cached_default_branch(self, mock_get):
+        self.cache.get_text.return_value = "develop"
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        target = self.adapter.build_propose_change_url(url, "text", self.cache)
+        mock_get.assert_not_called()
+        self.assertIn("/new/develop?", target.url)
+
+    def test_falls_back_to_unprefilled_when_url_too_long(self):
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        huge_text = "x" * 8000
+        target = self.adapter.build_propose_change_url(url, huge_text, self.cache)
+        self.assertFalse(target.content_prefilled)
+        self.assertNotIn("value=", target.url)
+        self.assertIn("filename=", target.url)
+
+    def test_returns_none_for_unrecognized_host(self):
+        target = self.adapter.build_propose_change_url("https://example.com/docs/guidelines.md", "text", self.cache)
+        self.assertIsNone(target)
+
+
+class TestGitLabAdapterBuildProposeChangeUrl(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+        self.cache = MagicMock()
+
+    def test_builds_edit_url_from_blob_url(self):
+        url = "https://gitlab.com/group/project/-/blob/main/docs/guide.md"
+        target = self.adapter.build_propose_change_url(url, "new content", self.cache)
+        self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
+        self.assertFalse(target.content_prefilled)
+
+    def test_builds_edit_url_from_raw_url(self):
+        url = "https://gitlab.com/group/project/-/raw/main/docs/guide.md"
+        target = self.adapter.build_propose_change_url(url, "new content", self.cache)
+        self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
+        self.assertFalse(target.content_prefilled)
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_resolves_sha_pinned_ref_to_default_branch_via_api(self, mock_get):
+        self.cache.get_text.return_value = None
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"default_branch": "main"}
+        mock_get.return_value = mock_response
+
+        url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guide.md"
+        target = self.adapter.build_propose_change_url(url, "text", self.cache)
+
+        mock_get.assert_called_once_with("https://gitlab.com/api/v4/projects/group%2Fproject", timeout=10)
+        self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
+        self.cache.set_text.assert_called_once_with(
+            "https://gitlab.com/api/v4/projects/group%2Fproject", "main"
+        )
+
+    def test_returns_none_for_unrecognized_host(self):
+        target = self.adapter.build_propose_change_url("https://example.com/docs/guide.md", "text", self.cache)
+        self.assertIsNone(target)
