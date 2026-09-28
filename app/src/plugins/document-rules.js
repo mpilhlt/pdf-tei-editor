@@ -412,6 +412,7 @@ class DocumentRulesPlugin extends Plugin {
     const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
     dialogUi.noteInput.style.display = selected ? '' : 'none'
     dialogUi.noteInput.value = selected ? selected.note : ''
+    dialogUi.noteInput.disabled = this._documentReadOnly
 
     const text = selected ? selected.text : this._currentOriginalText
     const readOnly = selected === null || this._documentReadOnly
