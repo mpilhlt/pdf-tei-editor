@@ -122,11 +122,46 @@ function flushMicrotasks() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+/**
+ * Creates a detached element with a writable `isConnected` for use as a
+ * `_overridesWidget` stand-in. jsdom defines `Node.prototype.isConnected` as
+ * a getter-only accessor, so `Object.assign(el, { isConnected })` throws
+ * ("has only a getter") - `Object.defineProperty` shadows it with an
+ * own, writable property instead.
+ * @param {boolean} connected
+ * @param {string} id
+ * @returns {HTMLElement}
+ */
+function makeOverridesWidgetStub(connected, id) {
+  const el = document.createElement('span');
+  Object.defineProperty(el, 'isConnected', { value: connected, writable: true, configurable: true });
+  el.id = id;
+  return el;
+}
+
+/**
+ * Minimal stand-ins for the headerbar widget and CodeMirror ref-decoration
+ * slot fields that _refreshOverrideIndicators()/_refreshRefDecorations()
+ * (added in Tasks 2 and 4 of the editor-integration plan) read/write on
+ * every code path that mutates the override selection or resource list
+ * (_selectOverride/_onDelete/_onReset/#doRefreshResources all call
+ * _refreshOverrideIndicators() after their own work). Attached so existing
+ * tests exercising those methods don't each need a full headerbar-widget
+ * setup - the widget starts disconnected, so it never touches the
+ * `xmleditor` dependency unless a test explicitly connects it.
+ * @param {InstanceType<typeof DocumentRulesPlugin>} plugin
+ */
+function wireOverrideIndicatorStubs(plugin) {
+  plugin._overridesWidget = makeOverridesWidgetStub(false, 'overrides-widget');
+  plugin._refDecorationSlot = { reconfigure: () => {} };
+}
+
 beforeEach(() => { global.localStorage.clear(); notifyCalls.length = 0; });
 
 describe('DocumentRulesPlugin.start', () => {
   it('registers both menu items in the document-rules category, wires mouseenter/click, and gates initial visibility by role', async () => {
     const plugin = makePlugin(); // makePlugin()'s default user has roles: ['user'] - refresh item stays hidden
+    wireOverrideIndicatorStubs(plugin);
     let addedItems, addedCategory;
     plugin.getDependency = (name) => {
       if (name === 'tools') return { addMenuItems: (items, category) => { addedItems = items; addedCategory = category; } };
@@ -156,6 +191,7 @@ describe('DocumentRulesPlugin.start', () => {
 
   it('shows the refresh menu item immediately for a reviewer/admin user', async () => {
     const plugin = makePlugin();
+    wireOverrideIndicatorStubs(plugin);
     Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', user: { username: 'u', roles: ['admin'] } }), configurable: true });
     plugin.getDependency = (name) => {
       if (name === 'tools') return { addMenuItems: () => {} };
@@ -166,6 +202,7 @@ describe('DocumentRulesPlugin.start', () => {
     };
 
     await plugin.start();
+    await flushMicrotasks(); // let the fire-and-forget _refreshResources() call settle
 
     assert.strictEqual(plugin._refreshMenuItem.style.display, '');
   });
@@ -226,6 +263,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     plugin._currentOriginalText = 'original text';
     plugin._currentOverrides = [{ id: 'ov1', note: 'my note', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
     const calls = [];
     plugin.getDependency = (name) => {
       if (name === 'client') return { apiClient: { documentRulesSelection: async (body) => { calls.push(body); } } };
@@ -260,6 +298,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     plugin._currentOriginalText = 'original text';
     plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = 'ov1';
+    wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = () => ({ apiClient: { documentRulesSelection: async () => {} } });
 
     await plugin._selectOverride(null);
@@ -323,6 +362,7 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
     plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value = 'original text';
+    wireOverrideIndicatorStubs(plugin);
     return plugin;
   }
 
@@ -548,6 +588,7 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   it('shows the menu item disabled when the document has no resources', async () => {
     const plugin = makePlugin();
     plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
       if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
       if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [] }) } };
@@ -561,11 +602,15 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   it('shows the menu item enabled with a populated submenu when resources exist', async () => {
     const plugin = makePlugin();
     plugin._editMenuItem = { style: {}, disabled: true, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
       if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
-      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [
-        { kind: 'schema', url: 'u', key: 'u', label: 'Schema (RelaxNG)', format: 'xml' }
-      ] }) } };
+      if (name === 'client') return { apiClient: {
+        documentRulesList: async () => ({ resources: [
+          { kind: 'schema', url: 'u', key: 'u', label: 'Schema (RelaxNG)', format: 'xml' }
+        ] }),
+        documentRulesSelections: async () => ({ selections: [{ kind: 'schema', url: 'u', selected: false }] }),
+      } };
       throw new Error(`unexpected dependency: ${name}`);
     };
     await plugin._refreshResources();
@@ -577,11 +622,15 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   it('keeps stale resources and does not clear the submenu when a later fetch fails', async () => {
     const plugin = makePlugin();
     plugin._editMenuItem = { style: {}, disabled: true, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
       if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
-      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [
-        { kind: 'schema', url: 'u', key: 'u', label: 'Schema (RelaxNG)', format: 'xml' }
-      ] }) } };
+      if (name === 'client') return { apiClient: {
+        documentRulesList: async () => ({ resources: [
+          { kind: 'schema', url: 'u', key: 'u', label: 'Schema (RelaxNG)', format: 'xml' }
+        ] }),
+        documentRulesSelections: async () => ({ selections: [{ kind: 'schema', url: 'u', selected: false }] }),
+      } };
       throw new Error(`unexpected dependency: ${name}`);
     };
     await plugin._refreshResources();
@@ -589,7 +638,10 @@ describe('DocumentRulesPlugin._refreshResources', () => {
 
     plugin.getDependency = (name) => {
       if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
-      if (name === 'client') return { apiClient: { documentRulesList: async () => { throw new Error('network error'); } } };
+      if (name === 'client') return { apiClient: {
+        documentRulesList: async () => { throw new Error('network error'); },
+        documentRulesSelections: async () => ({ selections: [{ kind: 'schema', url: 'u', selected: false }] }),
+      } };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
@@ -600,6 +652,7 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   it('fires exactly one trailing refresh when called again while a fetch is in flight', async () => {
     const plugin = makePlugin();
     plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
     let callCount = 0;
     /** @type {(value: {resources: any[]}) => void} */
     let resolveFirst;
@@ -612,7 +665,10 @@ describe('DocumentRulesPlugin._refreshResources', () => {
           callCount++;
           if (callCount === 1) return new Promise((resolve) => { resolveFirst = resolve; });
           return Promise.resolve({ resources: freshResources });
-        }
+        },
+        documentRulesSelections: async ({ resources }) => ({
+          selections: resources.map(r => ({ kind: r.kind, url: r.url, selected: false }))
+        }),
       } };
       throw new Error(`unexpected dependency: ${name}`);
     };
@@ -634,5 +690,169 @@ describe('DocumentRulesPlugin._refreshResources', () => {
 
     assert.strictEqual(callCount, 2, 'expected exactly one trailing refresh, not one per queued call');
     assert.deepStrictEqual(plugin._resources, freshResources);
+  });
+});
+
+describe('DocumentRulesPlugin._refreshOverrideIndicators', () => {
+  it('shows the headerbar widget when at least one resource is selected', async () => {
+    const plugin = makePlugin();
+    plugin._overridesWidget = makeOverridesWidgetStub(false, 'w1');
+    plugin._refDecorationSlot = { reconfigure: () => {} };
+    plugin._resources = [{ kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' }];
+    let added;
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { addHeaderbarWidget: (w) => { added = w; w.isConnected = true; }, removeHeaderbarWidget: () => {} };
+      if (name === 'client') return { apiClient: { documentRulesSelections: async () => ({ selections: [{ kind: 'interpretation-ref', url: 'u', selected: true }] }) } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refreshOverrideIndicators();
+    assert.strictEqual(added, plugin._overridesWidget);
+  });
+
+  it('hides the headerbar widget when nothing is selected', async () => {
+    const plugin = makePlugin();
+    plugin._overridesWidget = makeOverridesWidgetStub(true, 'w1');
+    plugin._refDecorationSlot = { reconfigure: () => {} };
+    plugin._resources = [{ kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' }];
+    let removedId;
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { addHeaderbarWidget: () => {}, removeHeaderbarWidget: (id) => { removedId = id; } };
+      if (name === 'client') return { apiClient: { documentRulesSelections: async () => ({ selections: [{ kind: 'interpretation-ref', url: 'u', selected: false }] }) } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refreshOverrideIndicators();
+    assert.strictEqual(removedId, 'w1');
+  });
+
+  it('hides the widget and skips the fetch when there are no resources', async () => {
+    const plugin = makePlugin();
+    plugin._overridesWidget = makeOverridesWidgetStub(true, 'w1');
+    plugin._refDecorationSlot = { reconfigure: () => {} };
+    plugin._resources = [];
+    let removedId, fetchCalled = false;
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { addHeaderbarWidget: () => {}, removeHeaderbarWidget: (id) => { removedId = id; } };
+      if (name === 'client') return { apiClient: { documentRulesSelections: async () => { fetchCalled = true; return { selections: [] }; } } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refreshOverrideIndicators();
+    assert.strictEqual(removedId, 'w1');
+    assert.strictEqual(fetchCalled, false);
+  });
+});
+
+describe('DocumentRulesPlugin._onOverridesWidgetClick', () => {
+  it('unfolds the TEI header and reveals editorialDecl', () => {
+    const plugin = makePlugin();
+    const calls = [];
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return {
+        unfoldByXpath: (xp) => calls.push(['unfold', xp]),
+        selectByXpath: (xp) => calls.push(['select', xp]),
+      };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    plugin._onOverridesWidgetClick();
+    assert.deepStrictEqual(calls, [['unfold', '//tei:teiHeader'], ['select', '//tei:editorialDecl']]);
+  });
+
+  it('logs a warning and does not throw when the xmleditor calls fail', () => {
+    const plugin = makePlugin();
+    let warned = false;
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return {
+        unfoldByXpath: () => { throw new Error('no such node'); },
+        selectByXpath: () => {},
+      };
+      if (name === 'logger') return { warn: () => { warned = true; }, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    assert.doesNotThrow(() => plugin._onOverridesWidgetClick());
+    assert.strictEqual(warned, true);
+  });
+});
+
+describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
+  it('makes the dialog read-only and hides content-editing controls even with an override selected', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (t) => t };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
+    plugin._currentOriginalText = 'original';
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+
+    plugin.onEditorReadOnlyChange(true);
+
+    assert.strictEqual(plugin._documentReadOnly, true);
+    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, true);
+    assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, true);
+    assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, 'none');
+  });
+
+  it('does nothing to the dialog when no resource is currently open', () => {
+    const plugin = makePlugin();
+    assert.doesNotThrow(() => plugin.onEditorReadOnlyChange(true));
+    assert.strictEqual(plugin._documentReadOnly, true);
+  });
+
+  it('restores editability when the document becomes writable again, for a selected override', () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (t) => t };
+    plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
+    plugin._currentOriginalText = 'original';
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.onEditorReadOnlyChange(true);
+
+    plugin.onEditorReadOnlyChange(false);
+
+    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, false);
+    assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, false);
+    assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, '');
+  });
+});
+
+describe('DocumentRulesPlugin._refreshRefDecorations', () => {
+  it('reconfigures the decoration slot with the overridden interpretation-ref URLs only', () => {
+    const plugin = makePlugin();
+    let reconfigured;
+    plugin._refDecorationSlot = { reconfigure: (ext) => { reconfigured = ext; } };
+    plugin._selections = [
+      { kind: 'interpretation-ref', url: 'https://example.com/a.md', selected: true },
+      { kind: 'interpretation-ref', url: 'https://example.com/b.md', selected: false },
+      { kind: 'schema', url: 'https://example.com/s.rng', selected: true },
+    ];
+    plugin._refreshRefDecorations();
+    assert.ok(Array.isArray(reconfigured));
+    assert.strictEqual(reconfigured.length, 3);
+  });
+});
+
+describe('DocumentRulesPlugin._onRefDecorationClick', () => {
+  it('opens the resource editor for the matching interpretation-ref resource', () => {
+    const plugin = makePlugin();
+    const resource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
+    plugin._resources = [resource];
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._onRefDecorationClick('https://example.com/a.md');
+    assert.deepStrictEqual(opened, resource);
+  });
+
+  it('logs a warning and does nothing when no matching resource is cached', () => {
+    const plugin = makePlugin();
+    plugin._resources = [];
+    let warned = false;
+    plugin.getDependency = (name) => {
+      if (name === 'logger') return { warn: () => { warned = true; }, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let opened = false;
+    plugin._openResourceEditor = () => { opened = true; };
+    plugin._onRefDecorationClick('https://example.com/unknown.md');
+    assert.strictEqual(opened, false);
+    assert.strictEqual(warned, true);
   });
 });
