@@ -36,6 +36,7 @@ import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { createMarkdownRenderer } from '../modules/markdown-utils.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { xml } from '@codemirror/lang-xml'
@@ -71,6 +72,15 @@ class DocumentRulesPlugin extends Plugin {
    * @type {Array<ResourceDescriptorModel>}
    */
   _resources = []
+
+  /** @type {HTMLElement} */
+  _overridesWidget = null
+
+  /**
+   * Last successful POST /document-rules/selections result for `_resources`.
+   * @type {Array<{kind: string, url: string, selected: boolean}>}
+   */
+  _selections = []
 
   /** @type {Promise<void>|null} */
   _refreshPromise = null
@@ -118,6 +128,15 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi = this.createUi(dialog)
 
     this._md = createMarkdownRenderer()
+
+    this._overridesWidget = PanelUtils.createText({
+      text: 'Overrides active',
+      icon: 'pencil-fill',
+      variant: 'primary',
+      clickable: true,
+      name: 'documentRulesOverridesStatus'
+    })
+    this._overridesWidget.addEventListener('widget-click', () => this._onOverridesWidgetClick())
 
     // Reuse the user's own XML-editor theme choice (persisted the same way
     // xmleditor.js reads it) rather than hardcoding 'default' - otherwise a
@@ -252,6 +271,7 @@ class DocumentRulesPlugin extends Plugin {
     this._editMenuItem.style.display = ''
     this._editMenuItem.disabled = this._resources.length === 0
     this._populateSubmenu()
+    await this._refreshOverrideIndicators()
   }
 
   /** Rebuild the submenu's sl-menu-item children from `_resources`. */
@@ -267,6 +287,63 @@ class DocumentRulesPlugin extends Plugin {
       submenu.appendChild(item)
     }
   }
+
+  /**
+   * Reveal the document's editorialDecl: unfold the TEI header (it may be
+   * folded) and scroll editorialDecl into view - same two calls
+   * app/src/plugins/tei-tools.js's own "show header" toggle makes (that
+   * plugin's toggle logic is private, so this duplicates the calls rather
+   * than depending on it).
+   */
+  _onOverridesWidgetClick() {
+    try {
+      this.#xmlEditor.unfoldByXpath('//tei:teiHeader')
+      this.#xmlEditor.selectByXpath('//tei:editorialDecl')
+    } catch (error) {
+      this.#logger.warn('document-rules: could not reveal editorialDecl: ' + String(error))
+    }
+  }
+
+  /**
+   * Fetch selection status for every currently-known resource and show/hide
+   * the "Overrides active" headerbar widget accordingly. Called whenever
+   * `_resources` changes (after a list refresh) and whenever a selection
+   * changes (override CRUD/selection actions), so the indicator - and the
+   * ref decorations built from the same `_selections` data - stay current.
+   * @returns {Promise<void>}
+   */
+  async _refreshOverrideIndicators() {
+    if (this._resources.length === 0) {
+      this._selections = []
+      if (this._overridesWidget.isConnected) this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
+      this._refreshRefDecorations()
+      return
+    }
+    try {
+      const response = await this.#client.apiClient.documentRulesSelections({
+        resources: this._resources.map(r => ({ kind: r.kind, url: r.url }))
+      })
+      this._selections = response.selections
+    } catch (error) {
+      this.#logger.warn('document-rules: could not fetch selection status: ' + String(error))
+      return
+    }
+    const hasOverrides = this._selections.some(s => s.selected)
+    if (hasOverrides) {
+      if (!this._overridesWidget.isConnected) this.#xmlEditor.addHeaderbarWidget(this._overridesWidget, 'right', 3)
+    } else if (this._overridesWidget.isConnected) {
+      this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
+    }
+    this._refreshRefDecorations()
+  }
+
+  /**
+   * Rebuild the ref-decoration extension from the current `_selections`.
+   * Temporary no-op stub - replaced in Task 4 with the actual CodeMirror
+   * decoration wiring.
+   * @returns {void}
+   */
+  _refreshRefDecorations() { /* replaced in Task 4 */ }
 
   /**
    * Query one resource's original text, overrides, and current selection,
@@ -377,6 +454,7 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._currentSelectedId = overrideId
     this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
   }
 
   /**
@@ -444,6 +522,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentOverrides = this._currentOverrides.filter(o => o.id !== id)
     this._currentSelectedId = null
     this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
   }
 
   /**
@@ -464,6 +543,7 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._currentSelectedId = null
     this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
   }
 
   /**
