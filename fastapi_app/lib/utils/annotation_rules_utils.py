@@ -8,7 +8,7 @@ See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 
 import logging
 import re
-from typing import Literal, Optional, TypedDict
+from typing import Literal, NotRequired, Optional, TypedDict
 
 import requests
 from lxml import etree
@@ -72,8 +72,9 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     base_url, _, fragment = url.partition("#")
     adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
     fetch_url = adapter.to_raw_url(base_url) if adapter else base_url
+    pinned = adapter.is_sha_pinned(base_url) if adapter else False
 
-    text = cache.get_text(fetch_url)
+    text = cache.get_text(fetch_url, ignore_ttl=pinned)
     if text is None:
         response = requests.get(fetch_url, timeout=30, allow_redirects=allow_redirects)
         response.raise_for_status()
@@ -224,9 +225,13 @@ class AnnotationRuleRef(TypedDict):
     One editorialDecl/interpretation entry: a rule category and its one or two refs.
 
     "category" is interpretation/@type (e.g. "primary", "footnote-annotation").
+    "n" is interpretation/@n, a short display label (TEI's att.global.attribute.n);
+    absent (not merely None) when the document has no @n, so equality checks
+    against entries built before this attribute existed are unaffected.
     """
 
     category: str
+    n: NotRequired[Optional[str]]
     refs: list[AnnotationRuleRefTarget]
 
 
@@ -276,5 +281,10 @@ def extract_annotation_rule_refs(xml_string: str) -> list[AnnotationRuleRef]:
 
         if not refs:
             continue
-        results.append({"category": category, "refs": refs})
+
+        entry: AnnotationRuleRef = {"category": category, "refs": refs}
+        n = interpretation.get("n")
+        if n is not None:
+            entry["n"] = n
+        results.append(entry)
     return results

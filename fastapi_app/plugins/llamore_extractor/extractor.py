@@ -5,6 +5,7 @@ LLamore-based reference extraction engine.
 from typing import Dict, Any, Optional
 import logging
 import time
+from pathlib import Path
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor
@@ -21,6 +22,9 @@ from fastapi_app.lib.utils.tei_utils import (
 from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 from fastapi_app.lib.utils.config_utils import get_config
+from fastapi_app.lib.core.dependencies import get_db, get_document_rules_store
+from fastapi_app.lib.doc_rules.extraction_contribution import ExtractionFragment, for_extraction
+from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef
 from .config import (
     get_annotation_guides,
     get_form_options,
@@ -31,6 +35,11 @@ from .config import (
 import datetime
 
 logger = logging.getLogger(__name__)
+
+ADDITIONAL_INSTRUCTIONS_URL = (
+    "https://github.com/mpilhlt/pdf-tei-editor/blob/main/"
+    "fastapi_app/plugins/llamore_extractor/prompts/additional-instructions.md"
+)
 
 from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
 from google import genai  # type: ignore[import-untyped]
@@ -114,7 +123,7 @@ class LLamoreExtractor(BaseExtractor):
         Args:
             pdf_path: Path to the PDF file
             xml_content: Not used by this extractor
-            options: Extraction options (doi, instructions)
+            options: Extraction options (doi, username, ...)
 
         Returns:
             Complete TEI document as XML string
@@ -127,6 +136,9 @@ class LLamoreExtractor(BaseExtractor):
 
         if options is None:
             options = {}
+
+        username = options.get("username")
+        additional_instructions, editorial_decl_entries = self._resolve_additional_instructions(username)
 
         # Create TEI document
         tei_doc = create_tei_document()
@@ -176,6 +188,7 @@ class LLamoreExtractor(BaseExtractor):
                 "https://github.com/mpilhlt/llamore",
                 schema_url,
             ],
+            editorial_decl_entries=editorial_decl_entries,
         )
         tei_header.append(encodingDesc)
 
@@ -192,7 +205,7 @@ class LLamoreExtractor(BaseExtractor):
         tei_doc.append(tei_header)
 
         # Extract references
-        listBibl = self._extract_refs_from_pdf(pdf_path, options)
+        listBibl = self._extract_refs_from_pdf(pdf_path, options, additional_instructions_text=additional_instructions)
 
         # Log the extracted references XML for debugging
         refs_xml = etree.tostring(listBibl, encoding='unicode', method='xml', pretty_print=True)
@@ -212,18 +225,63 @@ class LLamoreExtractor(BaseExtractor):
         # Serialize to XML with formatted header
         return serialize_tei_with_formatted_header(tei_doc, processing_instructions)
 
-    def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any]) -> etree._Element:  # type: ignore[name-defined]
+    def _resolve_additional_instructions(self, username: Optional[str]) -> tuple[str, list[AnnotationRuleRef]]:
+        """
+        Resolve the "additional instructions" fragment via for_extraction():
+        the text to feed the prompter (the user's selected override, if
+        any, else the shipped default) and the one editorialDecl entry
+        documenting it.
+
+        The entry has only a "human" ref, no "machine" ref. With no
+        override selected for this resource, annotation_review/
+        review_logic.py's gather_rule_excerpts() requires a "machine" ref
+        to fetch from and so skips this category - these are
+        extraction-time instructions, not an annotation guide, and were
+        never meant to reach the review LLM's prompt in that case. But if
+        a user *does* select an override for this resource (exactly the
+        feature this mechanism exists to offer), gather_rule_excerpts()'s
+        override short-circuit surfaces it anyway, ahead of the
+        machine-ref requirement - not excluded categorically, only when
+        unoverridden. See gather_rule_excerpts()'s own docstring.
+
+        for_extraction() is called with exactly one descriptor, so
+        `fragments[0]` is safe; if a second descriptor is ever added here,
+        this indexing must be updated to iterate accordingly.
+        """
+        store = get_document_rules_store(get_db())
+        fragments = for_extraction(username, [
+            ExtractionFragment(
+                url=ADDITIONAL_INSTRUCTIONS_URL,
+                file=Path(__file__).parent / "prompts" / "additional-instructions.md",
+                label="Reference extraction instructions",
+            ),
+        ], store)
+        fragment = fragments[0]
+        editorial_decl_entries: list[AnnotationRuleRef] = [{
+            "category": "additional-instructions",
+            "n": fragment.label,
+            "refs": [{
+                "target": fragment.url_pinned,
+                "content_type": "markdown",
+                "subtype": "human",
+            }],
+        }]
+        return fragment.text, editorial_decl_entries
+
+    def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any], additional_instructions_text: str) -> etree._Element:  # type: ignore[name-defined]
         """Extract references from PDF using LLamore."""
         logger.info("Extracting references from %s via LLamore/Gemini", pdf_path)
 
         gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
         model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
 
+        # Named "_text" (not "additional_instructions") so it isn't shadowed
+        # by user_prompt()'s own same-named parameter below, which llamore's
+        # LineByLinePrompter base class defines and this override extends.
         class CustomPrompter(LineByLinePrompter):
             def user_prompt(self, text=None, additional_instructions="") -> str:
-                instructions = options.get("instructions", None)
-                if instructions:
-                    additional_instructions += "In particular, follow these rules:\n\n" + instructions
+                if additional_instructions_text:
+                    additional_instructions += "In particular, follow these rules:\n\n" + additional_instructions_text
                 return super().user_prompt(text, additional_instructions)
 
         extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter(), model=model)

@@ -166,7 +166,7 @@ class TestExtractUsesModelFromOptions(unittest.TestCase):
         mock_parser_cls.return_value = mock_parser
 
         extractor = LLamoreExtractor()
-        extractor._extract_refs_from_pdf("/path/to/file.pdf", {"model": "gemini-2.5-flash"})
+        extractor._extract_refs_from_pdf("/path/to/file.pdf", {"model": "gemini-2.5-flash"}, additional_instructions_text="")
 
         # Verify GeminiExtractor was created with the model from options, not config default
         mock_extractor_cls.assert_called_once()
@@ -194,7 +194,7 @@ class TestExtractUsesModelFromOptions(unittest.TestCase):
         mock_parser_cls.return_value = mock_parser
 
         extractor = LLamoreExtractor()
-        extractor._extract_refs_from_pdf("/path/to/file.pdf", {})
+        extractor._extract_refs_from_pdf("/path/to/file.pdf", {}, additional_instructions_text="")
 
         mock_extractor_cls.assert_called_once()
         call_kwargs = mock_extractor_cls.call_args.kwargs

@@ -1,0 +1,30 @@
+<sl-dialog name="documentRulesEditorDialog" label="Resource" style="--width: 70vw;">
+  <div name="overrideRow" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;"></div>
+
+  <sl-input name="noteInput" label="Note" placeholder="Note describing what this override changes" size="small" style="display: none; margin-bottom: 0.75rem;"></sl-input>
+
+  <div name="textBody" style="display: none;">
+    <sl-tab-group name="textTabs">
+      <sl-tab slot="nav" panel="edit" name="editTab">Edit</sl-tab>
+      <sl-tab slot="nav" panel="preview" name="previewTab">Preview</sl-tab>
+      <sl-tab-panel name="editPanel" panel="edit">
+        <sl-textarea name="textArea" rows="16" resize="vertical"></sl-textarea>
+      </sl-tab-panel>
+      <sl-tab-panel name="previewPanel" panel="preview">
+        <div name="previewContent" class="markdown-body"></div>
+      </sl-tab-panel>
+    </sl-tab-group>
+  </div>
+
+  <div name="xmlBody" style="display: none;">
+    <div name="xmlContainer" style="border: 1px solid var(--sl-color-neutral-300); height: 400px; overflow: auto;"></div>
+  </div>
+
+  <div slot="footer" style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+    <sl-button name="newOverrideBtn" size="small">New override</sl-button>
+    <sl-button name="saveBtn" size="small" variant="primary" style="display: none;">Save</sl-button>
+    <sl-button name="deleteBtn" size="small" variant="danger" style="display: none;">Delete override</sl-button>
+    <sl-button name="resetBtn" size="small" style="display: none;">Reset to original</sl-button>
+    <sl-button name="closeBtn" size="small">Close</sl-button>
+  </div>
+</sl-dialog>

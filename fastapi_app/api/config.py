@@ -1,13 +1,12 @@
 """
 Configuration API endpoints for FastAPI.
 
-Provides configuration management, instructions, and state information.
+Provides configuration management and state information.
 """
 
-from typing import Any, Optional, List
+from typing import Any, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
-import json
 
 from ..lib.core.dependencies import require_authenticated_user
 from ..lib.utils.config_utils import get_config, get_config_metadata, MASKED_SENTINEL
@@ -30,13 +29,6 @@ class ConfigSetRequest(BaseModel):
     allowed_values: Optional[list[Any]] = None
     description: Optional[str] = None
     masked: Optional[bool] = None
-
-
-class InstructionItem(BaseModel):
-    """Model for extraction instructions"""
-    label: str
-    extractor: List[str]
-    text: List[str]
 
 
 _SENSITIVE_KEY_PATTERNS = ('api.key', 'api-key', 'password')
@@ -181,64 +173,6 @@ async def set_config(
     logger.info(f"User {user['username']} set config {request_data.key}")
 
     return ConfigSetResponse(result="OK")
-
-
-@router.get("/instructions", response_model=List[InstructionItem])
-async def get_instructions(user: dict = Depends(require_authenticated_user)) -> List[InstructionItem]:
-    """
-    Get extraction instructions.
-
-    Requires authentication.
-    Returns list of instruction items.
-    """
-    from ..config import get_settings
-    settings = get_settings()
-    instruction_file = settings.db_dir / "prompt.json"
-
-    if instruction_file.exists():
-        with open(instruction_file, 'r', encoding='utf-8') as f:
-            instructions = json.load(f)
-    else:
-        instructions = [{
-            "label": "Default instructions",
-            "extractor": ["llamore-gemini"],
-            "text": []
-        }]
-
-    return instructions
-
-
-class SaveInstructionsResponse(BaseModel):
-    """Response for saving instructions"""
-    result: str
-
-
-@router.post("/instructions", response_model=SaveInstructionsResponse)
-async def save_instructions(
-    instructions: List[InstructionItem],
-    user: dict = Depends(require_authenticated_user)
-) -> SaveInstructionsResponse:
-    """
-    Save extraction instructions.
-
-    Requires authentication.
-    """
-    from ..config import get_settings
-    settings = get_settings()
-    instruction_file = settings.db_dir / "prompt.json"
-
-    # Ensure directory exists
-    instruction_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Convert Pydantic models to dicts for JSON serialization
-    instructions_data = [item.model_dump() for item in instructions]
-
-    with open(instruction_file, 'w', encoding='utf-8') as f:
-        json.dump(instructions_data, f, indent=4)
-
-    logger.info(f"User {user['username']} saved instructions")
-
-    return SaveInstructionsResponse(result="ok")
 
 
 @router.get("/state", response_model=StateResponse)

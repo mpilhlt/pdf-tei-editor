@@ -16,6 +16,9 @@ from urllib.parse import urlparse
 from lxml import etree
 
 from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.doc_rules.interpretation_ref_kind import representative_ref
+from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.llm import LLMProvider
 from fastapi_app.lib.utils.annotation_rules_utils import (
     extract_annotation_rule_refs,
@@ -117,14 +120,40 @@ def extract_text_content(xml_string: str) -> str:
     return match.group(0)
 
 
-def gather_rule_excerpts(xml_string: str, cache: UrlCache) -> list[tuple[str, str]]:
+def gather_rule_excerpts(
+    xml_string: str,
+    cache: UrlCache,
+    store: DocumentRulesStore,
+    owner: str,
+) -> list[tuple[str, str]]:
     """
-    Resolve one rule excerpt per editorialDecl category, using each
-    category's "machine"-subtype ref. A category with no machine ref, or
-    whose excerpt fails to fetch, is skipped (logged), not raised.
+    Resolve one rule excerpt per editorialDecl category. `owner`'s selected
+    override for the category's resource (if any) is used verbatim - no
+    fetch, no SSRF check needed, since override text is already stored and
+    trusted. Otherwise falls back to fetching the category's "machine"-
+    subtype ref (a raw URL taken directly from client-supplied XML, so kept
+    behind the existing SSRF/redirect hardening below), sliced to just the
+    relevant excerpt. A category with no machine ref, or whose excerpt
+    fails to fetch, is skipped (logged), not raised.
+
+    The override lookup is keyed by the category's *representative* ref
+    (its "human" ref when present - see interpretation_ref_kind.py's
+    representative_ref(), matching how the document-rules registry stores
+    and selects overrides for this resource), not the "machine" ref used
+    for the actual fetch: the two refs normalize to different resource
+    keys (their fragments differ), so looking up by the machine ref would
+    silently miss every selected override.
     """
     excerpts: list[tuple[str, str]] = []
     for rule_ref in extract_annotation_rule_refs(xml_string):
+        rep_ref = representative_ref(rule_ref["refs"])
+        if rep_ref is not None:
+            resource_key = normalize_resource_key(rep_ref["target"])
+            override_text = store.get_selected_override_text("interpretation-ref", resource_key, owner)
+            if override_text is not None:
+                excerpts.append((rule_ref["category"], override_text))
+                continue
+
         machine_ref = next((r for r in rule_ref["refs"] if r["subtype"] == "machine"), None)
         if machine_ref is None:
             continue
@@ -161,6 +190,8 @@ async def run_review(
     provider: LLMProvider,
     model_id: str,
     cache: UrlCache,
+    store: DocumentRulesStore,
+    owner: str,
     chunk_index: int = 0,
 ) -> tuple[list[Finding], int]:
     """
@@ -177,7 +208,7 @@ async def run_review(
     chunks = split_into_chunks(text_content)
     if not 0 <= chunk_index < len(chunks):
         raise ValueError(f"chunk_index {chunk_index} out of range (document has {len(chunks)} chunks)")
-    rule_excerpts = await asyncio.to_thread(gather_rule_excerpts, xml_string, cache)
+    rule_excerpts = await asyncio.to_thread(gather_rule_excerpts, xml_string, cache, store, owner)
     if not rule_excerpts:
         raise NoRuleExcerptsError("No rule excerpts could be resolved for this document")
 

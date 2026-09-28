@@ -46,12 +46,6 @@ FORM_OPTIONS = {
         "description": "DOI of the document for metadata enrichment",
         "required": False
     },
-    "instructions": {
-        "type": "string",
-        "label": "Instructions",
-        "description": "Additional instructions for the extraction process",
-        "required": False
-    },
     "variant_id": {
         "type": "string",
         "label": "Variant identifier",

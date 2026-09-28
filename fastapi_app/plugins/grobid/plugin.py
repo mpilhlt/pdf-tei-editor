@@ -9,7 +9,9 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
+from fastapi_app.lib.doc_rules.rules_providers import register_document_rules_provider, unregister_document_rules_provider
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.plugins.grobid.annotation_rules import GrobidRulesProvider
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
 from .config import init_plugin_config
 
@@ -60,20 +62,6 @@ class GrobidPlugin(Plugin):
                     "state_params": ["xml"],
                     "required_roles": ["reviewer"],
                 },
-                {
-                    "name": "refresh_annotation_rules",
-                    "label": "Refresh Annotation Rules",
-                    "description": (
-                        "Re-derive this document's annotation rules reference from the "
-                        "current configuration, re-resolving it to the guidelines' latest "
-                        "commit. Use this when the guidelines document has been updated "
-                        "and you want this document to point at the new version."
-                    ),
-                    "category": "grobid",
-                    "icon": "arrow-repeat",
-                    "state_params": ["xml"],
-                    "required_roles": ["reviewer"],
-                },
             ],
             "dependencies": ["tei-wizard"],
         }
@@ -83,7 +71,6 @@ class GrobidPlugin(Plugin):
         return {
             "download_training": self.download_training,
             "reload_feature_file": self.reload_feature_file,
-            "refresh_annotation_rules": self.refresh_annotation_rules,
         }
 
     @classmethod
@@ -106,6 +93,7 @@ class GrobidPlugin(Plugin):
 
         registry = ExtractorRegistry.get_instance()
         registry.register(GrobidTrainingExtractor)
+        register_document_rules_provider("GROBID", "grobid", GrobidRulesProvider())
 
         # Register event handler for file deletion cache cleanup
         event_bus = get_event_bus()
@@ -131,6 +119,7 @@ class GrobidPlugin(Plugin):
         """Unregister the GROBID extractor and event handlers."""
         registry = ExtractorRegistry.get_instance()
         registry.unregister("grobid")
+        unregister_document_rules_provider("GROBID")
 
         # Unregister event handler
         event_bus = get_event_bus()
@@ -259,42 +248,4 @@ class GrobidPlugin(Plugin):
         return {
             "outputUrl": f"/api/plugins/grobid/reload-feature-file/preview?{query}",
             "executeUrl": f"/api/plugins/grobid/reload-feature-file/execute?{query}",
-        }
-
-    async def refresh_annotation_rules(
-        self, context: PluginContext, params: dict[str, Any]
-    ) -> dict[str, Any]:
-        """
-        Trigger the reviewer-confirmed "refresh annotation rules" flow.
-
-        Follows the same preview-then-execute pattern as reload_feature_file:
-        this only returns URLs for a confirmation page (`outputUrl`) and the
-        actual operation (`executeUrl`); nothing happens until the user
-        reviews the confirmation and clicks Execute. See
-        annotation_rules_refresh.py for the precondition checks and business
-        logic; the two HTTP routes these URLs point to will be added to
-        routes.py separately.
-
-        Args:
-            context: Plugin context (used for the reviewer-role check)
-            params: Must include 'xml' (stable_id of the open TEI file)
-
-        Returns:
-            Dict with 'outputUrl'/'executeUrl' on success, or 'error'.
-        """
-        from urllib.parse import quote
-
-        from fastapi_app.lib.permissions.acl_utils import user_has_role
-
-        if not user_has_role(context.user, ["reviewer", "admin"]):
-            return {"error": "Reviewer role required."}
-
-        stable_id = params.get("xml")
-        if not stable_id:
-            return {"error": "No TEI document open."}
-
-        query = f"xml={quote(stable_id)}"
-        return {
-            "outputUrl": f"/api/plugins/grobid/refresh-annotation-rules/preview?{query}",
-            "executeUrl": f"/api/plugins/grobid/refresh-annotation-rules/execute?{query}",
         }

@@ -52,13 +52,13 @@
   </fileDesc>
   <encodingDesc>
     <editorialDecl>
-      <interpretation type="primary">
+      <interpretation type="primary" n="Document segmentation">
         <p>
           <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#document-segmentation-model" subtype="human" type="markdown"/>
           <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#L42-L88" subtype="machine"/>
         </p>
       </interpretation>
-      <interpretation type="data-correction">
+      <interpretation type="data-correction" n="Data correction">
         <p>
           <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#data-correction" subtype="human" type="markdown"/>
           <ref target="https://github.com/mpilhlt/fossil/blob/a1b2c3d/docs/guidelines.md#L120-L145" subtype="machine"/>

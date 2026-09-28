@@ -44,6 +44,19 @@ class BaseGitForgeAdapter(ABC):
     def resolve_ref_to_sha(self, url: str, cache: UrlCache) -> str:
         """Return `url` with its branch/tag ref replaced by the current commit SHA, fragment preserved."""
 
+    @abstractmethod
+    def strip_ref(self, url: str) -> str:
+        """
+        Return `url` (fragment removed) with its branch/tag/SHA ref segment
+        replaced by a fixed placeholder, so two URLs to the same file
+        differing only in ref normalize to the same string. Assumes no real
+        branch/tag is itself named the same as the placeholder.
+        """
+
+    @abstractmethod
+    def is_sha_pinned(self, url: str) -> bool:
+        """True if `url`'s ref segment is already a 40-character commit SHA (immutable content)."""
+
 
 class GitHubAdapter(BaseGitForgeAdapter):
     """Adapter for github.com blob URLs."""
@@ -86,6 +99,16 @@ class GitHubAdapter(BaseGitForgeAdapter):
         resolved = f"https://github.com/{m['owner']}/{m['repo']}/blob/{sha}/{m['path']}"
         return f"{resolved}#{fragment}" if fragment else resolved
 
+    def strip_ref(self, url: str) -> str:
+        base_url, _, _ = url.partition("#")
+        m = self._parse(base_url)
+        return f"https://github.com/{m['owner']}/{m['repo']}/blob/_/{m['path']}"
+
+    def is_sha_pinned(self, url: str) -> bool:
+        base_url, _, _ = url.partition("#")
+        m = self._parse(base_url)
+        return bool(_SHA_RE.match(m['ref']))
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -122,6 +145,16 @@ class GitLabAdapter(BaseGitForgeAdapter):
             cache.set_text(api_url, sha)
         resolved = f"{origin}/{project_path}/-/blob/{sha}/{file_path}"
         return f"{resolved}#{fragment}" if fragment else resolved
+
+    def strip_ref(self, url: str) -> str:
+        base_url, _, _ = url.partition("#")
+        origin, project_path, _ref, file_path = self._split(base_url)
+        return f"{origin}/{project_path}/-/blob/_/{file_path}"
+
+    def is_sha_pinned(self, url: str) -> bool:
+        base_url, _, _ = url.partition("#")
+        _origin, _project_path, ref, _file_path = self._split(base_url)
+        return bool(_SHA_RE.match(ref))
 
 
 class GitForgeAdapterRegistry:

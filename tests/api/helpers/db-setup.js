@@ -99,23 +99,6 @@ export function resetDbToDefaults(keepSqlite = false) {
 }
 
 /**
- * Verify database files exist in runtime directory.
- *
- * @returns {Object} Status of each expected file
- */
-export function checkDbFiles() {
-  const status = {
-    'config.json': fs.existsSync(path.join(runtimeDbDir, 'config.json')),
-    'users.json': fs.existsSync(path.join(runtimeDbDir, 'users.json')),
-    'prompt.json': fs.existsSync(path.join(runtimeDbDir, 'prompt.json')),
-    'sessions.db': fs.existsSync(path.join(runtimeDbDir, 'sessions.db')),
-    'locks.db': fs.existsSync(path.join(runtimeDbDir, 'locks.db'))
-  };
-
-  return status;
-}
-
-/**
  * Wait for server to be ready after database reset.
  *
  * Polls the server health endpoint until it responds.

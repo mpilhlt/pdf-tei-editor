@@ -186,7 +186,6 @@ class TestProjectStructure:
         assert config_dir.exists(), "config/ directory should exist"
         assert (config_dir / "config.json").exists(), "config.json should exist"
         assert (config_dir / "users.json").exists(), "users.json should exist"
-        assert (config_dir / "prompt.json").exists(), "prompt.json should exist"
 
     def test_default_users_file_structure(self):
         """Verify default user configuration has proper structure."""

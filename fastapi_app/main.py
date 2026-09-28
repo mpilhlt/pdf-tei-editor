@@ -226,6 +226,7 @@ from .routers import (
     files_permissions,
     validation,
     extraction,
+    document_rules,
     llm,
     sse,
     maintenance,
@@ -248,6 +249,7 @@ api_v1.include_router(groups.router)
 api_v1.include_router(roles.router)
 api_v1.include_router(validation.router)
 api_v1.include_router(extraction.router)
+api_v1.include_router(document_rules.router)
 api_v1.include_router(llm.router)  # LLM provider registry
 api_v1.include_router(files_list.router)
 api_v1.include_router(files_upload.router)

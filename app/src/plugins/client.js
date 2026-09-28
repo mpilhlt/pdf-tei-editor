@@ -396,27 +396,6 @@ async function extract(file_id, options) {
   });
 }
 
-/**
- * Returns the current prompt extraction instruction data
- * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
- */
-async function loadInstructions() {
-  return await apiClient.configListInstructions();
-}
-
-/**
- * Saves the prompt extraction instruction data
- * @param {Array<Object>} instructions An array of {active,label,text} objects
- * @returns {Promise<Object>} The result object
- */
-async function saveInstructions(instructions) {
-  if (!Array.isArray(instructions)) {
-    throw new Error("Instructions must be an array");
-  }
-  // Send the instructions to the server
-  return await apiClient.configSaveInstructions({ instructions });
-}
-
 
 /**
  * Deletes all extraction document versions with the given file IDs
@@ -763,8 +742,6 @@ const api = {
   saveXml,
   extract,
   getExtractorList,
-  loadInstructions,
-  saveInstructions,
   deleteFiles,
   createVersionFromUpload,
   uploadFile,

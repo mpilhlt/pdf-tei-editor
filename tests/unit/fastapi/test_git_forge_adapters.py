@@ -25,6 +25,12 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def resolve_ref_to_sha(self, url: str, cache) -> str:
         return "sha:" + url
 
+    def strip_ref(self, url: str) -> str:
+        return "stripped:" + url
+
+    def is_sha_pinned(self, url: str) -> bool:
+        return False
+
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -34,6 +40,12 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
     def resolve_ref_to_sha(self, url: str, cache) -> str:
+        raise AssertionError("should not be called")
+
+    def strip_ref(self, url: str) -> str:
+        raise AssertionError("should not be called")
+
+    def is_sha_pinned(self, url: str) -> bool:
         raise AssertionError("should not be called")
 
 
@@ -168,3 +180,60 @@ class TestGitLabAdapter(unittest.TestCase):
         cache.set_text.assert_called_once_with(
             "https://gitlab.com/api/v4/projects/group%2Fproject/repository/commits/main", "b" * 40
         )
+
+
+class TestGitHubAdapterStripRef(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+
+    def test_sha_and_branch_urls_normalize_to_the_same_key(self):
+        sha_url = "https://github.com/mpilhlt/pdf-tei-editor/blob/abc123def456/rules.md"
+        branch_url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md"
+        self.assertEqual(self.adapter.strip_ref(sha_url), self.adapter.strip_ref(branch_url))
+
+    def test_strip_ref_keeps_owner_repo_and_path(self):
+        url = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/rules.md"
+        stripped = self.adapter.strip_ref(url)
+        self.assertIn("mpilhlt/pdf-tei-editor", stripped)
+        self.assertIn("docs/rules.md", stripped)
+        self.assertNotIn("/main/", stripped)
+
+
+class TestGitLabAdapterStripRef(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+
+    def test_sha_and_branch_urls_normalize_to_the_same_key(self):
+        sha_url = "https://gitlab.com/group/project/-/blob/abc123/rules.md"
+        branch_url = "https://gitlab.com/group/project/-/blob/main/rules.md"
+        self.assertEqual(self.adapter.strip_ref(sha_url), self.adapter.strip_ref(branch_url))
+
+
+class TestGitHubAdapterIsShaPinned(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+
+    def test_branch_ref_is_not_pinned(self):
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        self.assertFalse(self.adapter.is_sha_pinned(url))
+
+    def test_sha_ref_is_pinned(self):
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        self.assertTrue(self.adapter.is_sha_pinned(url))
+
+    def test_fragment_is_ignored(self):
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md#L1-L5"
+        self.assertTrue(self.adapter.is_sha_pinned(url))
+
+
+class TestGitLabAdapterIsShaPinned(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+
+    def test_branch_ref_is_not_pinned(self):
+        url = "https://gitlab.com/group/project/-/blob/main/docs/guidelines.md"
+        self.assertFalse(self.adapter.is_sha_pinned(url))
+
+    def test_sha_ref_is_pinned(self):
+        url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guidelines.md"
+        self.assertTrue(self.adapter.is_sha_pinned(url))

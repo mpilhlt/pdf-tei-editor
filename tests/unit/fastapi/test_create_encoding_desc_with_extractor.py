@@ -96,6 +96,24 @@ class TestEditorialDeclEntries(unittest.TestCase):
         self.assertEqual(ref.get("target"), "https://example.com/g.md#seg")
         self.assertIsNone(ref.get("type"))
 
+    def test_interpretation_carries_n_when_entry_has_one(self):
+        header = self._build(editorial_decl_entries=[
+            {"category": "additional-instructions", "n": "Reference extraction instructions", "refs": [
+                {"target": "https://example.org/guide", "content_type": "markdown", "subtype": "human"},
+            ]},
+        ])
+        interpretation = header.find(".//editorialDecl/interpretation")
+        self.assertEqual(interpretation.get("n"), "Reference extraction instructions")
+
+    def test_interpretation_has_no_n_attribute_when_entry_lacks_one(self):
+        header = self._build(editorial_decl_entries=[
+            {"category": "primary", "refs": [
+                {"target": "https://example.org/guide", "content_type": "markdown", "subtype": "human"},
+            ]},
+        ])
+        interpretation = header.find(".//editorialDecl/interpretation")
+        self.assertIsNone(interpretation.get("n"))
+
 
 if __name__ == "__main__":
     unittest.main()
