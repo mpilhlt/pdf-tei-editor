@@ -40,49 +40,93 @@ Separately, two smaller gaps surfaced while designing the fix:
 
 ## Design
 
-### 1. Schema-fragment source ref: reuse the existing `interpretation-ref` machinery
+### 1. Schema-fragment source ref: reuse the generic layer, not `AnnotationGuide`
 
-No new resource "kind" and no new TEI shape are introduced. A
-schema-fragment reference is modeled as a fourth `AnnotationGuide` category,
-using the same config table, discovery, decoration, permalink-pinning and
-resource-editor machinery that already exists for annotation guidelines
-(`fastapi_app/plugins/grobid/config/annotation_guides.py`,
-`fastapi_app/plugins/grobid/annotation_rules.py`,
-`fastapi_app/lib/doc_rules/interpretation_ref_kind.py`,
-`app/src/modules/document-rules-decorations.js`).
+No new resource "kind" and no new TEI shape are introduced — a
+schema-fragment reference is still just another `editorialDecl/interpretation`
+entry, discovered/decorated/edited by the same, already-generic machinery:
+the `interpretation-ref` `ResourceKind`
+(`fastapi_app/lib/doc_rules/interpretation_ref_kind.py`), the
+`AnnotationRuleRef`/`AnnotationRuleRefTarget` shapes and
+`resolve_forge_permalink()` (all in the plugin-agnostic
+`fastapi_app/lib/utils/annotation_rules_utils.py`), and the frontend
+decoration/resource-editor code
+(`app/src/modules/document-rules-decorations.js`).
 
-Three new entries in `ANNOTATION_GUIDES` — one per variant that actually has
-a top-level source file in `fossil/schema/` (segmentation, references,
-referenceSegmenter; the other GROBID variants have no per-variant fossil
-schema file and get no entry) — each pointing at the *source*, un-flattened
-file:
+**What it deliberately does *not* reuse**: `AnnotationGuide`/
+`ANNOTATION_GUIDES`/`get_annotation_guides()`
+(`fastapi_app/plugins/grobid/config/annotation_guides.py`), or
+`_build_refs_for_guide()`'s anchor/heading-derivation logic. Those exist
+for a different, API-exposed concept — `extractor.py:88` returns
+`get_annotation_guides()` verbatim as the `annotationGuides:
+List[AnnotationGuideInfo]` field consumed by the frontend's actual
+"Annotation Guide" drawer (`app/src/plugins/annotation-guide.js`), which
+picks whichever entry matches the variant and has `type === "markdown"` or
+`"html"`. A schema-fragment source is not annotation guidance for a human
+annotator; routing it through `AnnotationGuide` would surface it in that
+API field/type regardless of whether the drawer currently happens to
+filter it out by content type, and would waste `_build_refs_for_guide()`'s
+anchor-derivation logic, which the "single ref, no human/machine split"
+decision below never exercises anyway.
+
+Instead, a small, purpose-built accessor lives next to the existing
+`get_schema_url()` in `fastapi_app/plugins/grobid/config/__init__.py` —
+a symmetric sibling ("generated, validated-against schema" vs. "editable
+upstream source", for the same variant):
 
 ```python
-{
-    "variant_ids": ["grobid.training.segmentation"],
-    "category": "schema-fragment",
-    "type": "xml",
-    "label": "Segmentation schema source",
-    "url": "https://github.com/mpilhlt/fossil/blob/main/schema/grobid.training.segmentation.rng",
-},
+SCHEMA_SOURCE_BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/schema"
+
+# Variants with a dedicated top-level source file in fossil/schema/ (as
+# opposed to sharing/inheriting validation from another variant's schema).
+SCHEMA_FRAGMENT_VARIANTS: set[str] = {
+    "grobid.training.segmentation",
+    "grobid.training.references",
+    "grobid.training.references.referenceSegmenter",
+}
+
+
+def get_schema_fragment_url(variant_id: str) -> Optional[str]:
+    """URL of the upstream, hand-editable RNG source for a variant's
+    generated/published schema (see get_schema_url()), or None if this
+    variant has no dedicated fossil source file."""
+    if variant_id not in SCHEMA_FRAGMENT_VARIANTS:
+        return None
+    return f"{SCHEMA_SOURCE_BASE_URL}/{variant_id}.rng"
 ```
 
-(and equivalently for `references` and `references.referenceSegmenter`).
+Deriving the filename from `variant_id` (rather than an explicit
+per-variant URL table) is safe here because it mirrors `get_schema_url()`'s
+own existing assumption (`{SCHEMA_BASE_URL}/{variant_id}.rng`) that
+variant id and fossil filename stay in lockstep — no new fragility beyond
+what already exists.
 
-Because these URLs carry no `#fragment`, the existing
-`_build_refs_for_guide()` "no fragment → whole-document ref" branch already
-produces exactly one ref, `subtype="human"`, unchanged — no new ref-shaping
-code. This is a deliberate divergence from the shape sketched in the
-originating request
-(`interpretation[type="schema-fragment"]/p/ref[type="machine"]`): in this
-codebase `@type` on `<ref>` is reserved for content type
+`build_editorial_decl_entries()` (`annotation_rules.py`) appends one extra
+entry directly, alongside the guide-based ones, when
+`get_schema_fragment_url()` returns non-`None`:
+
+```python
+schema_fragment_url = get_schema_fragment_url(variant_id)
+if schema_fragment_url is not None:
+    target = resolve_forge_permalink(schema_fragment_url, cache)
+    entries.append({
+        "category": "schema-fragment",
+        "n": SCHEMA_FRAGMENT_LABELS[variant_id],
+        "refs": [{"target": target, "content_type": "xml", "subtype": "human"}],
+    })
+```
+
+(`SCHEMA_FRAGMENT_LABELS` — see §2 — a small `dict[str, str]` next to
+`SCHEMA_FRAGMENT_VARIANTS`.) `subtype="human"` because this is a
+human-facing "go here to file an upstream fix" link, the same kind of
+audience as an existing `"primary"` guideline ref; there's no line-range/
+anchor concept for a whole RNG file, so no `machine` sibling ref applies.
+This is a deliberate divergence from the shape sketched in the originating
+request (`interpretation[type="schema-fragment"]/p/ref[type="machine"]`):
+in this codebase `@type` on `<ref>` is content type
 (`markdown`/`html`, extended here with `xml`) and `@subtype` is what
 distinguishes human/machine audience (see
 [2026-09-22-annotation-guide-dual-target-refs-design.md](2026-09-22-annotation-guide-dual-target-refs-design.md)).
-A schema-fragment link is a human-facing "go here to file an upstream fix"
-link, the same kind of thing as an existing `"primary"` guideline ref, so it
-gets `subtype="human"`; there is no line-range/anchor concept for a whole
-RNG file, so no `machine` sibling ref is generated.
 
 Resulting TEI shape:
 
@@ -95,31 +139,22 @@ Resulting TEI shape:
 </interpretation>
 ```
 
-The ref is permalink-pinned to a commit SHA automatically
-(`resolve_forge_permalink`, same as every other guide), decorated and
-made clickable automatically (`document-rules-decorations.js`'s existing
+The ref is permalink-pinned to a commit SHA automatically (same
+`resolve_forge_permalink()` call the guides use), decorated and made
+clickable automatically (`document-rules-decorations.js`'s existing
 `editorialDecl`-scoped `<ref target>` walk), and opens in the document-rules
 resource editor as XML automatically (`infer_format()` already maps
-`.rng` → `"xml"`).
+`.rng` → `"xml"`) — all inherited for free from the shared
+`interpretation-ref` layer, with zero changes to `AnnotationGuide`, its
+config table, or the `annotationGuides` API field/type.
 
-Code changes:
-
-- `AnnotationGuide.type` (`annotation_guides.py`): extend
-  `Literal["markdown", "html"]` → `Literal["markdown", "html", "xml"]`.
-- `AnnotationGuide` gains a `label: str` field (see §2).
-- Add the three new `ANNOTATION_GUIDES` entries.
-- Update the module docstring: it currently says non-`"primary"`
-  categories are "optional, machine-only excerpts for LLM validation" —
-  no longer accurate once `"schema-fragment"` (human-oriented) exists.
-
-**Rejected alternative**: deriving the source URL programmatically from
-`variant_id` (the source filename happens to equal `{variant_id}.rng`,
-mirroring `get_schema_url()`'s own pattern), instead of three explicit
-table entries. Rejected to keep a single declarative source of truth
-(`ANNOTATION_GUIDES`) for every guide/reference URL in this plugin, and to
-avoid a fragile assumption that variant id and fossil filename always
-stay in lockstep — the same reasoning that already keeps the three
-`"primary"` guide URLs as explicit entries today.
+**Rejected alternative**: adding these as a fourth `ANNOTATION_GUIDES`
+category (the originally-drafted approach). Rejected once it became clear
+`get_annotation_guides()` is not plugin-internal — it's returned verbatim
+as a typed API field consumed by the unrelated "Annotation Guide" drawer
+feature; conflating the two would mislabel a schema-source pointer as
+annotation guidance in the API and waste `_build_refs_for_guide()`'s
+anchor-derivation logic that this case never needs.
 
 ### 2. `@n` label fix
 
@@ -129,26 +164,39 @@ correctly (`InterpretationRefKind.discover()`:
 `label = entry.get("n") or entry["category"]`); only the write side needs
 fixing, in two places:
 
-**a. Populate it at the source.** `AnnotationGuide` gains a `label: str`
-field; `build_editorial_decl_entries()` in `annotation_rules.py` passes it
-through as `"n"` in the returned `AnnotationRuleRef` entry:
+**a. Populate it at the source, for both entry sources.** `AnnotationGuide`
+gains a `label: str` field; `build_editorial_decl_entries()` passes it
+through as `"n"` for guide-based entries:
 
 ```python
 entries.append({"category": guide["category"], "refs": refs, "n": guide["label"]})
 ```
 
-Labels for all four existing/new categories (existing three currently have
-no label at all, hence today's raw-slug fallback):
+Schema-fragment entries get their label the same way, from the
+`SCHEMA_FRAGMENT_LABELS: dict[str, str]` table introduced alongside
+`SCHEMA_FRAGMENT_VARIANTS` in §1 (keyed by `variant_id`, not by category,
+since each variant's schema-fragment entry needs its own wording):
 
-| category | variant(s) | label |
-|---|---|---|
-| `primary` | segmentation | Document segmentation guidelines |
-| `primary` | referenceSegmenter | Reference segmentation guidelines |
-| `primary` | references | Citation model guidelines |
-| `data-correction` | `*` | Data correction guidelines |
-| `schema-fragment` | segmentation | Segmentation schema source |
-| `schema-fragment` | referenceSegmenter | Reference segmentation schema source |
-| `schema-fragment` | references | Citation model schema source |
+```python
+entries.append({
+    "category": "schema-fragment",
+    "n": SCHEMA_FRAGMENT_LABELS[variant_id],
+    "refs": [{"target": target, "content_type": "xml", "subtype": "human"}],
+})
+```
+
+Labels for all existing/new entries (the three existing guides currently
+have no label at all, hence today's raw-slug fallback):
+
+| source | category | variant(s) | label |
+|---|---|---|---|
+| `ANNOTATION_GUIDES` | `primary` | segmentation | Document segmentation guidelines |
+| `ANNOTATION_GUIDES` | `primary` | referenceSegmenter | Reference segmentation guidelines |
+| `ANNOTATION_GUIDES` | `primary` | references | Citation model guidelines |
+| `ANNOTATION_GUIDES` | `data-correction` | `*` | Data correction guidelines |
+| `SCHEMA_FRAGMENT_LABELS` | `schema-fragment` | segmentation | Segmentation schema source |
+| `SCHEMA_FRAGMENT_LABELS` | `schema-fragment` | referenceSegmenter | Reference segmentation schema source |
+| `SCHEMA_FRAGMENT_LABELS` | `schema-fragment` | references | Citation model schema source |
 
 **b. Stop dropping it on refresh.** `rules_refresh.py`'s
 `_replace_editorial_decl()` currently builds each `<interpretation>` with
@@ -213,10 +261,14 @@ output.
 ## Testing considerations
 
 - `fastapi_app/plugins/grobid/tests/`: extend whatever currently covers
-  `ANNOTATION_GUIDES`/`build_editorial_decl_entries()` with the three new
-  `schema-fragment` entries (asserts the single-human-ref, no-fragment
-  shape, and the `@type="xml"` content type) and assert every existing
-  entry now round-trips a non-empty `@n`.
+  `build_editorial_decl_entries()` with the three new `schema-fragment`
+  entries (asserts the single-human-ref, no-fragment shape, and the
+  `@type="xml"` content type) and assert every existing entry (both
+  `ANNOTATION_GUIDES`-derived and schema-fragment) now round-trips a
+  non-empty `@n`. Also assert `get_schema_fragment_url()` returns `None`
+  for a variant outside `SCHEMA_FRAGMENT_VARIANTS`, and that
+  `get_annotation_guides()`/the `annotationGuides` API field are unchanged
+  by this feature (no `"schema-fragment"` category ever appears there).
 - `rules_refresh.py` tests: a refresh on a document whose editorialDecl
   already carries `@n` must preserve it (regression test for the fix in
   §2b); output after a refresh that changes anything must be pretty-printed
