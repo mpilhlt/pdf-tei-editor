@@ -27,6 +27,19 @@ import { Decoration, EditorView } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 
 /**
+ * Matches a RelaxNG `<?xml-model href="..." ... schematypens="...relaxng...">`
+ * processing instruction, capturing its href. Mirrors (but does not import -
+ * this is JS, that's Python) fastapi_app/lib/core/schema_validator.py's
+ * extract_schema_locations() RelaxNG regex, so the "schema" resource this
+ * decorates the same way document-rules.js's SchemaKind discovers it.
+ * Processing instructions aren't structured into attribute nodes by the XML
+ * language's syntax tree the way element attributes are (see
+ * readAttributeSpans()), so this is matched against the raw document text
+ * instead of walked via the syntax tree like <ref target> is.
+ */
+const XML_MODEL_RELAXNG_RE = /<\?xml-model\s+href="([^"]+)"[^>]*schematypens="http:\/\/relaxng\.org\/ns\/structure\/1\.0"[^>]*\?>/
+
+/**
  * Read one element's attributes as {name, value, valueFrom, valueTo} spans,
  * with valueFrom/valueTo excluding the surrounding quote characters.
  * @param {SyntaxNode} tagNode - an Element's OpenTag or SelfClosingTag child
@@ -74,6 +87,9 @@ function readTagName(elementNode, state) {
  * found inside <editorialDecl> (elements outside it, e.g. a <ref> in
  * appInfo/application citing the extractor tool, are intentionally not
  * decorated), colored by whether its target URL is in `overriddenUrls`.
+ * Also decorates a RelaxNG `<?xml-model href="...">` PI's href, if present
+ * anywhere in the document, the same way (see XML_MODEL_RELAXNG_RE) - it's
+ * the "schema" resource kind's equivalent of an interpretation-ref's <ref>.
  * @param {EditorState} state
  * @param {Set<string>} overriddenUrls
  * @returns {DecorationSet}
@@ -112,6 +128,19 @@ export function buildRefDecorations(state, overriddenUrls) {
       if (tag?.tagName === 'editorialDecl') editorialDeclDepth--
     }
   })
+
+  const docText = state.doc.toString()
+  const xmlModelMatch = XML_MODEL_RELAXNG_RE.exec(docText)
+  if (xmlModelMatch) {
+    const href = xmlModelMatch[1]
+    const hrefStart = xmlModelMatch.index + xmlModelMatch[0].indexOf(`href="${href}"`) + 'href="'.length
+    found.push({
+      from: hrefStart,
+      to: hrefStart + href.length,
+      url: href,
+      overridden: overriddenUrls.has(href)
+    })
+  }
 
   found.sort((a, b) => a.from - b.from)
   for (const { from, to, url, overridden } of found) {

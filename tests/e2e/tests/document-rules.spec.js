@@ -246,10 +246,15 @@ test.describe('Document rules registry', () => {
       // false) - unfold it directly via the xmleditor API (bypassing the
       // header-visibility toggle switch, so no preference is persisted) to
       // check the ref's un-overridden decoration state.
+      // Scoped to the interpretation-ref's own URL text, not .first(): the
+      // schema kind's <?xml-model href="..."> PI (in the fixture's prolog,
+      // before <TEI>) is also decorated with .doc-rules-ref and always
+      // visible regardless of teiHeader's fold state, so it would otherwise
+      // be picked up instead of the ref this test actually exercises.
       await expect(page.locator('status-text[name="documentRulesOverridesStatus"]')).toHaveCount(0);
       await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').unfoldByXpath('//tei:teiHeader'));
       await page.waitForTimeout(300);
-      const refSpan = page.locator('#codemirror-container .cm-content .doc-rules-ref').first();
+      const refSpan = page.locator(`#codemirror-container .cm-content .doc-rules-ref:has-text("${INTERPRETATION_REF_URL}")`);
       await expect(refSpan).toBeVisible();
       await expect(refSpan).not.toHaveClass(/doc-rules-ref-overridden/);
 
@@ -309,7 +314,7 @@ test.describe('Document rules registry', () => {
       await expect(page.locator('#codemirror-container .cm-content')).toContainText('editorialDecl');
 
       // The ref is now decorated as overridden.
-      const refSpanAfter = page.locator('#codemirror-container .cm-content .doc-rules-ref').first();
+      const refSpanAfter = page.locator(`#codemirror-container .cm-content .doc-rules-ref:has-text("${INTERPRETATION_REF_URL}")`);
       await expect(refSpanAfter).toHaveClass(/doc-rules-ref-overridden/);
     } finally {
       // Clean up the override created above (same rationale as the earlier

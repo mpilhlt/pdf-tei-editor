@@ -815,7 +815,7 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
 });
 
 describe('DocumentRulesPlugin._refreshRefDecorations', () => {
-  it('reconfigures the decoration slot with the overridden interpretation-ref URLs only', () => {
+  it('reconfigures the decoration slot including both interpretation-ref and schema selections', () => {
     const plugin = makePlugin();
     let reconfigured;
     plugin._refDecorationSlot = { reconfigure: (ext) => { reconfigured = ext; } };
@@ -867,6 +867,16 @@ describe('DocumentRulesPlugin._onRefDecorationClick', () => {
     let opened;
     plugin._openResourceEditor = (r) => { opened = r; };
     plugin._onRefDecorationClick('https://example.com/a.md#L1-L10');
+    assert.deepStrictEqual(opened, resource);
+  });
+
+  it('opens the resource editor for a matching schema resource (the xml-model href)', () => {
+    const plugin = makePlugin();
+    const resource = { kind: 'schema', url: 'https://example.com/schema.rng', key: 'schema', label: 'Schema (RelaxNG)', format: 'xml' };
+    plugin._resources = [resource];
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._onRefDecorationClick('https://example.com/schema.rng');
     assert.deepStrictEqual(opened, resource);
   });
 

@@ -368,18 +368,20 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Rebuild the ref-decoration extension from the current `_selections`,
-   * restricted to interpretation-ref resources (the schema PI isn't a <ref>
-   * element, so it's never decorated this way). Includes each overridden
-   * resource's `related_urls` so both a "human" ref and its auto-derived
-   * "machine" ref (which share one resource but have different URLs) are
-   * decorated as overridden together, not just the representative one.
+   * covering both interpretation-ref <ref target> elements and the schema
+   * kind's `<?xml-model href="...">` PI (see document-rules-decorations.js's
+   * buildRefDecorations()). Includes each overridden resource's
+   * `related_urls` so both a "human" ref and its auto-derived "machine" ref
+   * (which share one resource but have different URLs) are decorated as
+   * overridden together, not just the representative one; schema resources
+   * have no related_urls, so this is a no-op for them.
    */
   _refreshRefDecorations() {
     const overriddenUrls = new Set()
     for (const selection of this._selections) {
-      if (!selection.selected || selection.kind !== 'interpretation-ref') continue
+      if (!selection.selected || (selection.kind !== 'interpretation-ref' && selection.kind !== 'schema')) continue
       overriddenUrls.add(selection.url)
-      const resource = this._resources.find(r => r.kind === 'interpretation-ref' && r.url === selection.url)
+      const resource = this._resources.find(r => r.kind === selection.kind && r.url === selection.url)
       for (const relatedUrl of resource?.related_urls ?? []) overriddenUrls.add(relatedUrl)
     }
     this._refDecorationSlot.reconfigure([
@@ -390,17 +392,21 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Open the resource editor for the interpretation-ref resource matching
-   * the clicked <ref target="..."> URL, looked up in the existing
+   * Open the resource editor for the interpretation-ref or schema resource
+   * matching the clicked decorated URL (a <ref target="..."> or the schema
+   * kind's `<?xml-model href="...">`), looked up in the existing
    * `_resources` cache (see this plan's "Important context" on staleness).
-   * An entry's "human" and auto-derived "machine" refs are both decorated
-   * as clickable but share one resource, so the lookup also matches against
-   * `related_urls`, not just each resource's own representative `url`.
+   * An interpretation-ref entry's "human" and auto-derived "machine" refs
+   * are both decorated as clickable but share one resource, so the lookup
+   * also matches against `related_urls`, not just each resource's own
+   * representative `url`; schema resources have no related_urls, so this
+   * falls back to an exact `url` match for them.
    * @param {string} url
    */
   _onRefDecorationClick(url) {
     const resource = this._resources.find(
-      r => r.kind === 'interpretation-ref' && (r.url === url || r.related_urls?.includes(url))
+      r => (r.kind === 'interpretation-ref' || r.kind === 'schema') &&
+        (r.url === url || r.related_urls?.includes(url))
     )
     if (!resource) {
       this.#logger.warn(`document-rules: no resource found for clicked ref url: ${url}`)

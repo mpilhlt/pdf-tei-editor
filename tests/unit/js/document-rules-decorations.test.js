@@ -81,6 +81,35 @@ describe('buildRefDecorations', () => {
     decos.between(0, state.doc.length, (from, to) => urls.push(state.doc.sliceString(from, to)));
     assert.deepStrictEqual(urls, ['https://example.com/a.md']);
   });
+
+  it('decorates a RelaxNG xml-model PI\'s href alongside any <ref target> decorations', () => {
+    const doc = `<?xml version="1.0"?>
+<?xml-model href="https://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+${DOC}`;
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set());
+    const urls = [];
+    decos.between(0, state.doc.length, (from, to) => urls.push(state.doc.sliceString(from, to)));
+    assert.deepStrictEqual(urls, ['https://example.com/schema.rng', 'https://example.com/a.md', 'https://example.com/b.md']);
+  });
+
+  it('marks the xml-model href as overridden when its URL is in overriddenUrls', () => {
+    const doc = '<?xml-model href="https://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>\n<TEI xmlns="http://www.tei-c.org/ns/1.0"/>';
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set(['https://example.com/schema.rng']));
+    const classes = [];
+    decos.between(0, state.doc.length, (_f, _t, deco) => classes.push(deco.spec.class));
+    assert.deepStrictEqual(classes, ['doc-rules-ref doc-rules-ref-overridden']);
+  });
+
+  it('ignores an xml-model PI whose schematypens is not RelaxNG', () => {
+    const doc = '<?xml-model href="https://example.com/schema.xsd" type="application/xml" schematypens="http://www.w3.org/2001/XMLSchema"?>\n<TEI xmlns="http://www.tei-c.org/ns/1.0"/>';
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set());
+    let count = 0;
+    decos.between(0, state.doc.length, () => { count++; });
+    assert.strictEqual(count, 0);
+  });
 });
 
 describe('createOverrideRefField', () => {
