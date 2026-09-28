@@ -145,7 +145,7 @@ export const refDecorationTheme = EditorView.baseTheme({
  * whole extension via a fresh createOverrideRefField() call rather than
  * pushing an effect into a long-lived field.
  * @param {Set<string>} overriddenUrls
- * @returns {import('@codemirror/state').StateField<DecorationSet>}
+ * @returns {StateField<DecorationSet>}
  */
 export function createOverrideRefField(overriddenUrls) {
   return StateField.define({
