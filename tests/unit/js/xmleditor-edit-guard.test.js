@@ -44,6 +44,10 @@ const { XMLEditor } = await import('../../../app/src/modules/xmleditor.js');
 // matching the convention already used in tests/unit/fastapi/test_xml_utils.py.
 const TEI_XML = '<tei:TEI xmlns:tei="http://www.tei-c.org/ns/1.0"><tei:teiHeader><tei:fileDesc><tei:titleStmt><tei:title>Title</tei:title></tei:titleStmt></tei:fileDesc></tei:teiHeader><tei:text><tei:body><tei:p>Hello</tei:p></tei:body></tei:text></tei:TEI>';
 
+// Same document, with an attribute on <text> itself, for contentOnly tests that
+// need to target the <text> tag's own opening tag distinctly from its content.
+const TEI_XML_TEXT_WITH_ATTR = '<tei:TEI xmlns:tei="http://www.tei-c.org/ns/1.0"><tei:teiHeader><tei:fileDesc><tei:titleStmt><tei:title>Title</tei:title></tei:titleStmt></tei:fileDesc></tei:teiHeader><tei:text xml:lang="en"><tei:body><tei:p>Hello</tei:p></tei:body></tei:text></tei:TEI>';
+
 // Same document, preceded by an xml-model PI, for whitelist-mode tests covering
 // the root tag and the PI (both outside <text>, neither caught by a
 // teiHeader-only blacklist).
@@ -230,5 +234,57 @@ describe('XMLEditor.setEditGuardXpath (whitelist mode)', () => {
     const pos = Math.floor((headerNode.from + headerNode.to) / 2);
 
     assert.strictEqual(tryUserInsert(editor, pos), true, 'After clearing the guard, user-event edits outside <text> must be applied');
+  });
+});
+
+describe('XMLEditor.setEditGuardXpath (whitelist mode, contentOnly)', () => {
+  it('allows a user-event edit inside the whitelisted element\'s content', async () => {
+    const editor = await createLoadedEditor(TEI_XML_TEXT_WITH_ATTR);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('Hello') + 2; // inside the <p>Hello</p> text content
+
+    assert.strictEqual(tryUserInsert(editor, pos), true, 'A user-event edit inside <text>\'s content must be applied');
+  });
+
+  it('rejects a user-event edit on the <text> tag\'s own attributes', async () => {
+    const editor = await createLoadedEditor(TEI_XML_TEXT_WITH_ATTR);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('xml:lang') + 1; // inside <text xml:lang="en"> itself, not its content
+
+    assert.strictEqual(tryUserInsert(editor, pos), false, 'A user-event edit on <text>\'s own opening tag must be rejected with contentOnly');
+  });
+
+  it('rejects a user-event edit on the <text> tag\'s closing tag', async () => {
+    const editor = await createLoadedEditor(TEI_XML_TEXT_WITH_ATTR);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('</tei:text>') + 3; // inside the closing tag itself
+
+    assert.strictEqual(tryUserInsert(editor, pos), false, 'A user-event edit on <text>\'s own closing tag must be rejected with contentOnly');
+  });
+
+  it('allows typing at the very start of the content, right after the opening tag', async () => {
+    const editor = await createLoadedEditor(TEI_XML_TEXT_WITH_ATTR);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('<tei:body>'); // immediately after <text ...> closes, before its first child
+
+    assert.strictEqual(tryUserInsert(editor, pos), true, 'Typing right at the start of <text>\'s content must be applied');
+  });
+
+  it('allows typing at the very end of the content, right before the closing tag', async () => {
+    const editor = await createLoadedEditor(TEI_XML_TEXT_WITH_ATTR);
+    editor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+
+    const doc = editor.getView().state.doc.toString();
+    const pos = doc.indexOf('</tei:text>'); // immediately before </text>, after its last child
+
+    assert.strictEqual(tryUserInsert(editor, pos), true, 'Typing right at the end of <text>\'s content must be applied');
   });
 });

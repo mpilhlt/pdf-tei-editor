@@ -484,8 +484,12 @@ export class XMLEditor extends EventEmitter {
    * @param {'blacklist' | 'whitelist'} [options.mode='blacklist'] - `'blacklist'` rejects edits
    *   that touch the matched element's content; `'whitelist'` rejects edits that fall anywhere
    *   outside it (e.g. the document's root tag or a leading processing instruction).
+   * @param {boolean} [options.contentOnly=false] - When true, the reference range excludes the
+   *   matched element's own opening/closing tags (via `foldInside`) - e.g. with `whitelist` this
+   *   allows editing a `<text>` element's content while still rejecting edits to `<text>`'s own
+   *   attributes or closing tag.
    */
-  setEditGuardXpath(xpath, { mode = 'blacklist' } = {}) {
+  setEditGuardXpath(xpath, { mode = 'blacklist', contentOnly = false } = {}) {
     if (!xpath) {
       this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure([]) });
       return;
@@ -501,15 +505,21 @@ export class XMLEditor extends EventEmitter {
         // Nothing to guard against (e.g. element absent from this document).
         return tr;
       }
+      if (contentOnly) {
+        const inner = foldInside(referenceNode);
+        if (inner) referenceNode = inner;
+      }
       let rejected = false;
       tr.changes.iterChangedRanges((fromA, toA) => {
         let violates;
         if (mode === 'whitelist') {
           // Reject unless the change is fully contained within the reference element -
           // a change straddling its boundary (e.g. starting inside <text> and extending
-          // past </text>) must not be allowed to touch anything outside it.
+          // past </text>) must not be allowed to touch anything outside it. Boundaries are
+          // inclusive for a pure insertion point, so typing at the very start/end of the
+          // reference range (e.g. right after <text>'s opening tag) is still allowed.
           const fullyInside = fromA === toA
-            ? fromA > referenceNode.from && fromA < referenceNode.to
+            ? fromA >= referenceNode.from && fromA <= referenceNode.to
             : fromA >= referenceNode.from && toA <= referenceNode.to;
           violates = !fullyInside;
         } else {

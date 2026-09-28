@@ -1,6 +1,6 @@
 # Annotator teiHeader Safeguard — Design
 
-Status: implemented (whitelist mode added 2026-09-28 to close the root-tag/PI gap below). Date: 2026-09-28.
+Status: implemented (whitelist mode added 2026-09-28 to close the root-tag/PI gap below; `contentOnly` added same day to also exclude `<text>`'s own tags). Date: 2026-09-28.
 
 ## Goal
 
@@ -26,12 +26,13 @@ Both parts below apply only to **pure annotators**: `userHasAnnotatorRole(user) 
 
 Added a CM6 extension to `XMLEditor` (`app/src/modules/xmleditor.js`), parallel to the existing `setReadOnly()` pattern:
 
-- New compartment (`#editGuardCompartment`) and method `setEditGuardXpath(xpath | null, { mode = 'blacklist' | 'whitelist' } = {})`.
+- New compartment (`#editGuardCompartment`) and method `setEditGuardXpath(xpath | null, { mode = 'blacklist' | 'whitelist', contentOnly = false } = {})`.
 - When set, installs an `EditorState.transactionFilter` that, for transactions carrying a user event (typing, paste, cut — i.e. a truthy `Transaction.userEvent` annotation; programmatic transactions such as initial document load or merge-view operations are exempt, same exemption style already used in `setReadOnly()`), resolves the reference element's `[from, to)` span via the existing xpath/syntax-tree resolution already used by `foldByXpath`, and drops the transaction (returns `[]`) if any changed range violates the mode:
   - `blacklist` — reject on any overlap (partial or full) with the reference element. (Originally the only mode; still available for other reference-blocking uses.)
-  - `whitelist` — reject unless the changed range is *fully contained* within the reference element. Used for the annotator safeguard: **an initial `blacklist('//tei:teiHeader')` design left the TEI root tag's own attributes and any leading processing instruction (e.g. an `xml-model` PI) editable**, since neither falls inside `<teiHeader>`. Switching to `whitelist('//tei:text')` closes that gap in one step — everything outside `<text>` (header, root tag, PI, inter-element whitespace) is rejected, and nothing needed to be blacklisted item-by-item.
-- This is a **soft guard**: it only intercepts edits made through the CodeMirror UI by the current user. It does not affect document loading, programmatic replacement, merge/revert operations, or the backend in any way — content outside `<text>` remains fully writable through those paths.
-- Wiring: in `XmlEditorPlugin` (`app/src/plugins/xmleditor.js`), in the same `onStateUpdate` handler that drives `setReadOnly()`, compute the pure-annotator check and call `xmlEditor.setEditGuardXpath(isPureAnnotator ? '//tei:text' : null, { mode: 'whitelist' })`. No change to `state.editorReadOnly` or `access-control.js` — this is additive and independent of the existing whole-document read-only logic.
+  - `whitelist` — reject unless the changed range is *fully contained* within the reference element (boundary-inclusive for a pure insertion point, so typing right at the start/end of the reference range is still allowed). Used for the annotator safeguard: **an initial `blacklist('//tei:teiHeader')` design left the TEI root tag's own attributes and any leading processing instruction (e.g. an `xml-model` PI) editable**, since neither falls inside `<teiHeader>`. Switching to `whitelist('//tei:text')` closes that gap in one step — everything outside `<text>` (header, root tag, PI, inter-element whitespace) is rejected, and nothing needed to be blacklisted item-by-item.
+  - `contentOnly` — when true, narrows the reference range to the element's content only (via `foldInside`, the same helper `foldByXpath` uses), excluding its own opening/closing tags. Combined with `whitelist`, this means **only `<text>`'s children are editable, not `<text>` itself** — its own attributes (e.g. `xml:lang`) and closing tag are rejected too, not just everything outside it.
+- This is a **soft guard**: it only intercepts edits made through the CodeMirror UI by the current user. It does not affect document loading, programmatic replacement, merge/revert operations, or the backend in any way — content outside `<text>`'s children remains fully writable through those paths.
+- Wiring: in `XmlEditorPlugin` (`app/src/plugins/xmleditor.js`), in the same `onStateUpdate` handler that drives `setReadOnly()`, compute the pure-annotator check and call `xmlEditor.setEditGuardXpath(isPureAnnotator ? '//tei:text' : null, { mode: 'whitelist', contentOnly: true })`. No change to `state.editorReadOnly` or `access-control.js` — this is additive and independent of the existing whole-document read-only logic.
 
 ### 2. teiHeader hidden by default, toggle hidden
 
@@ -44,11 +45,12 @@ In `app/src/plugins/tei-tools.js`:
 
 ## Testing
 
-- Unit tests for the edit guard (`tests/unit/js/xmleditor-edit-guard.test.js`), both modes:
+- Unit tests for the edit guard (`tests/unit/js/xmleditor-edit-guard.test.js`), across modes:
   - `blacklist('//tei:teiHeader')`: a user-event edit inside `<teiHeader>` is rejected; the same edit inside `<text>` is applied; a non-user-event (programmatic) edit inside `<teiHeader>` is applied; `setEditGuardXpath(null)` clears the guard.
   - `whitelist('//tei:text')`: a user-event edit inside `<text>` is applied; the same edit inside `<teiHeader>`, on the TEI root tag, or inside a leading `xml-model` PI is rejected; a non-user-event edit outside `<text>` is applied; `setEditGuardXpath(null)` clears the guard.
+  - `whitelist('//tei:text', { contentOnly: true })`: a user-event edit inside `<text>`'s content is applied; the same edit on `<text>`'s own attributes or its closing tag is rejected; typing right at the very start/end of the content (the boundary) is still applied.
 - Unit/E2E test for tei-tools.js: loading a document as a pure-annotator user shows the header folded and the toggle switch hidden; loading as reviewer/admin is unchanged (switch visible, existing disable/preference logic intact).
-- E2E (`tests/e2e/tests/annotator-teiheader-safeguard.spec.js`): as an annotator, manually unfolding `<teiHeader>` via the gutter works, typing inside it is rejected, typing on the TEI root tag is rejected, and typing inside `<text>` succeeds.
+- E2E (`tests/e2e/tests/annotator-teiheader-safeguard.spec.js`): as an annotator, manually unfolding `<teiHeader>` via the gutter works, typing inside it is rejected, typing on the TEI root tag is rejected, typing on `<text>`'s own `xml:lang` attribute is rejected, and typing inside `<text>`'s content succeeds.
 - Run the full suite (`npm run test:unit`, `npm run test:e2e`) before finishing, per project rules.
 
 ## Migration

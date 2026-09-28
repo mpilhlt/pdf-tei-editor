@@ -3,11 +3,11 @@
  *
  * A pure annotator (annotator role, no reviewer/admin) gets a UI-only safeguard:
  * the teiHeader toggle switch is hidden, the header is folded by default, and
- * typing anywhere outside <text> (teiHeader, the TEI root tag, a leading
- * processing instruction, ...) is rejected in the CodeMirror UI, via a
- * whitelist(<text>) edit guard - while remaining fully writable programmatically
- * (not tested here; see the spec) and remaining manually unfoldable via the fold
- * gutter.
+ * typing anywhere outside <text>'s own children (teiHeader, the TEI root tag, a
+ * leading processing instruction, <text>'s own opening/closing tags, ...) is
+ * rejected in the CodeMirror UI, via a whitelist(<text>, contentOnly) edit guard -
+ * while remaining fully writable programmatically (not tested here; see the spec)
+ * and remaining manually unfoldable via the fold gutter.
  *
  * @testCovers app/src/plugins/tei-tools.js
  * @testCovers app/src/modules/xmleditor.js
@@ -204,6 +204,45 @@ test.describe('Annotator teiHeader safeguard', () => {
         /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
       );
       expect(docAfterRootTagTyping).toBe(docBefore);
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('Annotator: typing on the <text> tag\'s own attributes is rejected', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+      await loadEditableAnnotatorVersion(page);
+
+      const docBefore = await page.evaluate(() =>
+        /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
+      );
+      const attrPos = docBefore.indexOf('xml:lang="en"');
+      expect(attrPos, 'fixture must have xml:lang="en" on <text>').toBeGreaterThan(-1);
+
+      // Place the cursor inside <text>'s own opening tag (its xml:lang attribute,
+      // not its content) and type - must be rejected under contentOnly.
+      await page.evaluate((pos) => {
+        const xmlEditor = /** @type {any} */ (window).app.getDependency('xmleditor');
+        const view = xmlEditor.getView();
+        view.dispatch({ selection: { anchor: pos, head: pos }, scrollIntoView: true });
+      }, attrPos + 1);
+      await page.locator('#codemirror-container .cm-content').focus();
+      await page.keyboard.type('ZZZ');
+      await page.waitForTimeout(300);
+
+      const docAfterAttrTyping = await page.evaluate(() =>
+        /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString()
+      );
+      expect(docAfterAttrTyping).toBe(docBefore);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);
