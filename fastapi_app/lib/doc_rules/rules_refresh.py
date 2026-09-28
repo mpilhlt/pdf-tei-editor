@@ -11,7 +11,6 @@ See docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 ("Refreshing document rules").
 """
 
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -26,7 +25,11 @@ from fastapi_app.lib.permissions.access_control import check_file_access
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef, extract_annotation_rule_refs
-from fastapi_app.lib.utils.tei_utils import create_schema_processing_instruction
+from fastapi_app.lib.utils.tei_utils import (
+    create_schema_processing_instruction,
+    extract_processing_instructions,
+    serialize_tei_with_formatted_header,
+)
 
 TEI_NS = "http://www.tei-c.org/ns/1.0"
 
@@ -112,66 +115,30 @@ def _current_schema_location(tei_content: str) -> Optional[str]:
     return None
 
 
-_XML_MODEL_PI_RE = re.compile(
-    r'<\?xml-model\s+[^>]*schematypens="http://relaxng\.org/ns/structure/1\.0"[^>]*\?>\n?'
-)
-_XML_DECL_RE = re.compile(r"^<\?xml\b[^>]*\?>\n?")
-
-
-def _replace_schema_pi(tei_content: str, schema_url: str) -> str:
+def _replace_editorial_decl(root: etree._Element, entries: list[AnnotationRuleRef]) -> None:
     """
-    Replace (or insert) the document's RelaxNG <?xml-model?> schema PI.
-
-    Text-level remove-then-insert, mirroring what the now-deleted
-    tei_wizard/enhancements/add-rng-schema-definition.js did in the browser
-    DOM (see the design spec's Migration section) - lxml's
-    etree.fromstring()/tostring() round-trip on just the root element does
-    not preserve a document-level PI that precedes the root element (see
-    this plan's header note), so this operates on the raw text instead,
-    consistent with how extract_schema_locations() already reads this PI.
-    Inserted immediately after the XML declaration if present (documents
-    this app saves never have one - see serialize_tei_with_formatted_header()
-    - so in practice this always inserts at the very start of the string).
-
-    Only removes an xml-model PI whose schematypens is RelaxNG, scoped
-    identically to _current_schema_location()'s own detection (v1 scope:
-    RelaxNG only) - a document that also carried some other kind of
-    xml-model PI (e.g. Schematron) would otherwise have it silently deleted
-    here despite this module never having detected or accounted for it.
-    """
-    without_existing = _XML_MODEL_PI_RE.sub("", tei_content)
-    new_pi = create_schema_processing_instruction(schema_url) + "\n"
-    decl_match = _XML_DECL_RE.match(without_existing)
-    if decl_match:
-        insert_at = decl_match.end()
-        return without_existing[:insert_at] + new_pi + without_existing[insert_at:]
-    return new_pi + without_existing
-
-
-def _replace_editorial_decl(tei_content: str, entries: list[AnnotationRuleRef]) -> str:
-    """
-    Replace (or insert) the document's editorialDecl with fresh entries.
+    Replace (or insert) the document's editorialDecl with fresh entries, in
+    place on the already-parsed root.
 
     Inserted as the first child of encodingDesc, before appInfo/schemaRef,
-    matching the order create_encoding_desc_with_extractor() uses. Returns
-    the content unchanged if entries is empty and there was nothing to
-    replace either. Also returns the content unchanged (defensive, expected
+    matching the order create_encoding_desc_with_extractor() uses. Does
+    nothing if entries is empty and there was nothing to replace either, or
+    if the document has no encodingDesc at all (defensive - expected
     unreachable in practice since every TEI document created by this app
-    has an encodingDesc) if the document has no encodingDesc at all.
+    has an encodingDesc).
     """
-    root = etree.fromstring(tei_content.encode("utf-8"))
     ns = {"tei": TEI_NS}
 
     encoding_desc = root.find(".//tei:encodingDesc", ns)
     if encoding_desc is None:
-        return tei_content
+        return
 
     existing = encoding_desc.find("tei:editorialDecl", ns)
     if existing is not None:
         encoding_desc.remove(existing)
 
     if not entries:
-        return etree.tostring(root, encoding="unicode")
+        return
 
     editorial_decl = etree.Element(f"{{{TEI_NS}}}editorialDecl")
     for entry in entries:
@@ -187,12 +154,9 @@ def _replace_editorial_decl(tei_content: str, entries: list[AnnotationRuleRef]) 
                 ref.set("type", content_type)
     encoding_desc.insert(0, editorial_decl)
 
-    return etree.tostring(root, encoding="unicode")
 
-
-def _add_revision_change(tei_content: str, who: Optional[str]) -> str:
-    """Append a <change> entry to revisionDesc noting the rules refresh."""
-    root = etree.fromstring(tei_content.encode("utf-8"))
+def _add_revision_change(root: etree._Element, who: Optional[str]) -> None:
+    """Append a <change> entry to revisionDesc noting the rules refresh, in place on the already-parsed root."""
     ns = {"tei": TEI_NS}
 
     revision_desc = root.find(".//tei:revisionDesc", ns)
@@ -208,8 +172,6 @@ def _add_revision_change(tei_content: str, who: Optional[str]) -> str:
         change.set("who", f"#{who}")
     desc = etree.SubElement(change, f"{{{TEI_NS}}}desc")
     desc.text = "Updated document rules"
-
-    return etree.tostring(root, encoding="unicode")
 
 
 @dataclass
@@ -315,22 +277,26 @@ async def perform_refresh(
         )
 
     try:
-        new_content = target.tei_content
-        if plan.editorial_decl_changed:
-            new_content = _replace_editorial_decl(new_content, plan.new_entries)
-        new_content = _add_revision_change(new_content, who)
-
-        # Both round-trips above silently drop any PI preceding the root
-        # element (confirmed empirically - see this plan's header note), so
-        # restoring the schema PI must happen last, unconditionally whenever
-        # anything was rewritten, using whichever URL should currently be in
-        # effect - not only when schema_changed - or an editorialDecl-only
-        # refresh would silently delete an untouched schema PI.
-        final_schema_url = plan.new_schema_url if plan.new_schema_url is not None else plan.existing_schema_url
-        if final_schema_url is not None:
-            new_content = _replace_schema_pi(new_content, final_schema_url)
+        root = etree.fromstring(target.tei_content.encode("utf-8"))
     except etree.XMLSyntaxError as e:
         raise RuntimeError(f"Could not parse document XML for refresh: {e}") from e
+
+    if plan.editorial_decl_changed:
+        _replace_editorial_decl(root, plan.new_entries)
+    _add_revision_change(root, who)
+
+    final_schema_url = plan.new_schema_url if plan.new_schema_url is not None else plan.existing_schema_url
+    schema_pi = create_schema_processing_instruction(final_schema_url) if final_schema_url is not None else None
+
+    # Keep every existing PI except the RelaxNG one (which schema_pi replaces),
+    # scoped identically to _current_schema_location()'s own RelaxNG-only
+    # detection - any other PI (e.g. a Schematron one) must survive untouched.
+    other_pis = [
+        pi for pi in extract_processing_instructions(target.tei_content)
+        if 'schematypens="http://relaxng.org/ns/structure/1.0"' not in pi
+    ]
+    processing_instructions = other_pis + ([schema_pi] if schema_pi else [])
+    new_content = serialize_tei_with_formatted_header(root, processing_instructions)
 
     new_bytes = new_content.encode("utf-8")
     saved_hash, _ = file_storage.save_file(new_bytes, target.file_meta.file_type, increment_ref=False)

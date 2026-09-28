@@ -61,6 +61,42 @@ TEI_NO_PROVENANCE = """<TEI xmlns="http://www.tei-c.org/ns/1.0">
 </TEI>
 """
 
+# Carries a second, non-RelaxNG xml-model PI (Schematron) alongside the
+# RelaxNG one, to verify a refresh only ever replaces the RelaxNG PI and
+# leaves any other PI untouched.
+TEI_WITH_PI_AND_DECL_AND_SCHEMATRON_PI = """<?xml version="1.0"?>
+<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<?xml-model href="https://example.org/schema/rules.sch" type="application/xml" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <encodingDesc>
+      <editorialDecl>
+        <interpretation type="primary">
+          <p><ref subtype="human" target="https://github.com/mpilhlt/fossil/blob/oldsha/docs/guidelines.md#seg" type="markdown">Guide</ref></p>
+        </interpretation>
+      </editorialDecl>
+      <appInfo>
+        <application version="0.8.0" ident="GROBID" type="extractor">
+          <label type="variant-id">grobid.training.segmentation</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+  <text><body><p>Body content.</p></body></text>
+</TEI>
+"""
+
+# Deliberately minified (no whitespace/newlines inside the header) so that
+# any newlines/indentation in perform_refresh()'s output can only come from
+# genuine pretty-printing, not from whitespace inherited from the input.
+TEI_MINIFIED_LEGACY = (
+    '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><encodingDesc>'
+    '<appInfo><application version="0.8.0" ident="GROBID" type="extractor">'
+    '<label type="variant-id">grobid.training.segmentation</label>'
+    "</application></appInfo></encodingDesc></teiHeader>"
+    "<text><body><p>Body content.</p></body></text></TEI>"
+)
+
 # Mismatched <p>/</div> tags: lenient-parseable (extract_extractor_provenance()
 # uses etree.XMLParser(recover=True), so provider lookup succeeds) but not
 # strictly well-formed, so the plain etree.fromstring() inside
@@ -304,6 +340,39 @@ class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
         saved_content = file_storage.save_file.call_args[0][0].decode("utf-8")
         self.assertIn('href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng"', saved_content)
 
+    async def test_non_relaxng_processing_instruction_survives_a_schema_refresh(self):
+        # A refresh must only ever replace the RelaxNG xml-model PI - any
+        # other xml-model PI (e.g. Schematron) the document already carries
+        # must survive untouched, exactly like the old _replace_schema_pi()
+        # guaranteed via its own scoped regex.
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(
+            entries=[{"category": "primary", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/oldsha/docs/guidelines.md#seg",
+                 "content_type": "markdown", "subtype": "human"},
+            ]}],
+            schema_url="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation-v2.rng",
+        ))
+        target = self._target(TEI_WITH_PI_AND_DECL_AND_SCHEMATRON_PI)
+        file_repo = mock.MagicMock()
+        file_storage = mock.MagicMock()
+        file_storage.save_file.return_value = ("hash-new", None)
+
+        outcome = await perform_refresh(target, file_repo, file_storage, "reviewer1", cache=mock.MagicMock())
+
+        self.assertTrue(outcome.changed)
+        saved_content = file_storage.save_file.call_args[0][0].decode("utf-8")
+        self.assertIn(
+            '<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation-v2.rng" '
+            'type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>',
+            saved_content,
+        )
+        self.assertNotIn("grobid.training.segmentation.rng", saved_content)
+        self.assertIn(
+            '<?xml-model href="https://example.org/schema/rules.sch" type="application/xml" '
+            'schematypens="http://purl.oclc.org/dsdl/schematron"?>',
+            saved_content,
+        )
+
     async def test_generates_editorial_decl_and_schema_pi_on_legacy_document(self):
         register_document_rules_provider("GROBID", "grobid", FakeProvider(
             entries=[{"category": "primary", "refs": [
@@ -323,6 +392,36 @@ class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
         saved_content = file_storage.save_file.call_args[0][0].decode("utf-8")
         self.assertIn("editorialDecl", saved_content)
         self.assertIn('<?xml-model href="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng"', saved_content)
+
+    async def test_refresh_output_header_is_pretty_printed(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(
+            entries=[{"category": "primary", "n": "Citation model guidelines", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/newsha/docs/guidelines.md#seg",
+                 "content_type": "markdown", "subtype": "human"},
+            ]}],
+            schema_url="https://mpilhlt.github.io/fossil/schema/grobid.training.segmentation.rng",
+        ))
+        # TEI_MINIFIED_LEGACY has zero whitespace inside its header, so any
+        # newline/indentation seen below can only come from genuine
+        # pretty-printing, not from whitespace inherited from the fixture.
+        target = self._target(TEI_MINIFIED_LEGACY)
+        file_repo = mock.MagicMock()
+        file_storage = mock.MagicMock()
+        file_storage.save_file.return_value = ("hash-new", None)
+
+        outcome = await perform_refresh(target, file_repo, file_storage, "reviewer1", cache=mock.MagicMock())
+
+        self.assertTrue(outcome.changed)
+        saved_content = file_storage.save_file.call_args[0][0].decode("utf-8")
+        header_only = saved_content.split("<teiHeader>", 1)[1].split("</teiHeader>", 1)[0]
+        # Pretty-printed: each interpretation/ref/etc. lands on its own,
+        # indented line - not all packed onto one line as raw etree.tostring()
+        # without pretty_print produces.
+        self.assertIn("\n", header_only)
+        self.assertIn("\n    <encodingDesc>", saved_content)
+        self.assertIn("\n      <editorialDecl>", saved_content)
+        self.assertIn("\n        <interpretation", saved_content)
+        self.assertIn("\n            <ref ", saved_content)
 
     async def test_raises_runtime_error_on_malformed_xml(self):
         register_document_rules_provider("GROBID", "grobid", FakeProvider(
