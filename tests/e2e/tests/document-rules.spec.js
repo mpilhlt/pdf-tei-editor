@@ -38,6 +38,10 @@ const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED', // will always be thrown when first loading without a saved state
 ];
 
+// Must match the xml-model href in document-rules-fixture.tei.xml exactly -
+// used to look up (and clean up) the schema resource's overrides directly.
+const SCHEMA_URL = 'https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/main/schema/rng/tei-bib.rng';
+
 /**
  * Open the Tools dropdown menu, revealing its items for hover/click.
  * @param {import('@playwright/test').Page} page
@@ -133,7 +137,8 @@ test.describe('Document rules registry', () => {
       // New override: the row selects "Override 1" and the body becomes editable.
       await dialog.locator('sl-button:has-text("New override")').click();
       await page.waitForTimeout(500);
-      await expect(overrideRow.locator('sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+      const override1Btn = overrideRow.locator('sl-button:has-text("Override 1")');
+      await expect(override1Btn).toHaveAttribute('variant', 'primary');
       await expect(xmlContent).toHaveAttribute('contenteditable', 'true');
 
       // Reset to original: reverts the selection and the body's read-only state.
@@ -143,6 +148,24 @@ test.describe('Document rules registry', () => {
       await expect(xmlContent).toHaveAttribute('contenteditable', 'false');
 
       await dialog.locator('sl-button[name="closeBtn"]').click();
+      await page.waitForTimeout(500);
+
+      // Clean up the override created above via a direct API call rather
+      // than more dialog clicks: this app's dialog stacking made a second
+      // sl-dialog (the generic confirm dialog Delete would need) unclickable
+      // while documentRulesEditorDialog was still open (its content
+      // intercepted the pointer event). resource_overrides rows have no
+      // TTL/cascade-delete (see fastapi_app/lib/doc_rules/storage.py), so a
+      // leftover "Override 1" would otherwise survive into the next run/CI
+      // retry against the same DB and make the "New override" assertion
+      // above fail there (a second run would create "Override 2" instead).
+      await page.evaluate(async (schemaUrl) => {
+        const client = /** @type {any} */ (window).client;
+        const query = await client.apiClient.documentRulesQuery({ kind: 'schema', url: schemaUrl });
+        for (const override of query.overrides) {
+          await client.apiClient.documentRulesDeleteOverrides(override.id);
+        }
+      }, SCHEMA_URL);
     } finally {
       stopErrorMonitoring();
       await releaseAllLocks(page);
@@ -150,6 +173,11 @@ test.describe('Document rules registry', () => {
   });
 
   test('refreshes document rules on a legacy-style fixture (appInfo but no editorialDecl) and reports success', async ({ page }) => {
+    // Preview/execute both resolve a live GitHub permalink (see this file's
+    // header comment); the two 15s timeouts below alone approach Playwright's
+    // default 30s per-test ceiling once login/menu/navigation time is added,
+    // so this would fail on ordinary network latency, not just an outage.
+    test.setTimeout(60000);
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
