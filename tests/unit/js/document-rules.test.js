@@ -84,12 +84,18 @@ const { Application } = await import('../../../app/src/modules/application.js');
 const { default: DocumentRulesPlugin } = await import('../../../app/src/plugins/document-rules.js');
 const { createMarkdownRenderer } = await import('../../../app/src/modules/markdown-utils.js');
 
-/** @returns {InstanceType<typeof DocumentRulesPlugin>} */
-function makePlugin() {
+/**
+ * @param {string[]} [roles] - defaults to a plain, non-privileged user;
+ *   pass e.g. ['reviewer'] for tests that exercise #doRefreshResources()'s
+ *   resource-listing plumbing, which now requires the reviewer/admin role
+ *   this whole "Document rules" category is gated behind.
+ * @returns {InstanceType<typeof DocumentRulesPlugin>}
+ */
+function makePlugin(roles = ['user']) {
   const app = new Application(new PluginManager(), new StateManager());
   const ctx = app.getPluginContext();
   const plugin = new DocumentRulesPlugin(ctx);
-  Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', user: { username: 'u', roles: ['user'] } }), configurable: true });
+  Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', user: { username: 'u', roles } }), configurable: true });
   return plugin;
 }
 
@@ -574,24 +580,44 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
 });
 
 describe('DocumentRulesPlugin.onUserChange / role gating', () => {
-  it('hides the refresh menu item for a user without reviewer/admin role', () => {
+  it('hides the refresh menu item for a user without reviewer/admin role, and also hides "Edit prompts/schemas" via the re-triggered resource refresh', async () => {
     const plugin = makePlugin();
     plugin._refreshMenuItem = document.createElement('sl-menu-item');
+    plugin._editMenuItem = { style: {}, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
     plugin.onUserChange({ roles: ['user'] });
+    await flushMicrotasks();
     assert.strictEqual(plugin._refreshMenuItem.style.display, 'none');
+    assert.strictEqual(plugin._editMenuItem.style.display, 'none');
   });
 
-  it('shows the refresh menu item for a reviewer', () => {
+  it('shows the refresh menu item for a reviewer', async () => {
     const plugin = makePlugin();
     plugin._refreshMenuItem = document.createElement('sl-menu-item');
+    plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
+      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [] }) } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
     plugin.onUserChange({ roles: ['reviewer'] });
+    await flushMicrotasks();
     assert.strictEqual(plugin._refreshMenuItem.style.display, '');
   });
 
-  it('shows the refresh menu item for an admin', () => {
+  it('shows the refresh menu item for an admin', async () => {
     const plugin = makePlugin();
     plugin._refreshMenuItem = document.createElement('sl-menu-item');
+    plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { getView: () => ({ state: { doc: { toString: () => '<TEI/>' } } }) };
+      if (name === 'client') return { apiClient: { documentRulesList: async () => ({ resources: [] }) } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
     plugin.onUserChange({ roles: ['admin'] });
+    await flushMicrotasks();
     assert.strictEqual(plugin._refreshMenuItem.style.display, '');
   });
 });
@@ -703,8 +729,21 @@ describe('DocumentRulesPlugin._refreshResources', () => {
     assert.strictEqual(plugin._editMenuItem.style.display, 'none');
   });
 
+  it('hides the menu item entirely for a user without the reviewer/admin role, without even fetching the resource list', async () => {
+    const plugin = makePlugin(['user']);
+    plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    let fetched = false;
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { getView: () => { fetched = true; return { state: { doc: { toString: () => '<TEI/>' } } }; } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refreshResources();
+    assert.strictEqual(plugin._editMenuItem.style.display, 'none');
+    assert.strictEqual(fetched, false, 'expected the role gate to short-circuit before reading the editor content');
+  });
+
   it('shows the menu item disabled when the document has no resources', async () => {
-    const plugin = makePlugin();
+    const plugin = makePlugin(['reviewer']);
     plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
     wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
@@ -718,7 +757,7 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   });
 
   it('shows the menu item enabled with a populated submenu when resources exist', async () => {
-    const plugin = makePlugin();
+    const plugin = makePlugin(['reviewer']);
     plugin._editMenuItem = { style: {}, disabled: true, documentRulesEditSubmenu: document.createElement('sl-menu') };
     wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
@@ -738,7 +777,7 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   });
 
   it('keeps stale resources and does not clear the submenu when a later fetch fails', async () => {
-    const plugin = makePlugin();
+    const plugin = makePlugin(['reviewer']);
     plugin._editMenuItem = { style: {}, disabled: true, documentRulesEditSubmenu: document.createElement('sl-menu') };
     wireOverrideIndicatorStubs(plugin);
     plugin.getDependency = (name) => {
@@ -768,7 +807,7 @@ describe('DocumentRulesPlugin._refreshResources', () => {
   });
 
   it('fires exactly one trailing refresh when called again while a fetch is in flight', async () => {
-    const plugin = makePlugin();
+    const plugin = makePlugin(['reviewer']);
     plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
     wireOverrideIndicatorStubs(plugin);
     let callCount = 0;

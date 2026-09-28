@@ -231,6 +231,10 @@ class DocumentRulesPlugin extends Plugin {
 
     this.getDependency('tools').addMenuItems([this._editMenuItem, this._refreshMenuItem], 'document-rules')
 
+    // _editMenuItem starts hidden regardless of role - #doRefreshResources()
+    // (triggered by the _refreshResources() call below) is the only place
+    // that ever shows it, and only once its own role check passes.
+    this._editMenuItem.style.display = 'none'
     this._refreshMenuItem.style.display = userHasRole(this.state.user, ['reviewer', 'admin']) ? '' : 'none'
     this._refreshResources()
   }
@@ -242,11 +246,18 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Show/hide the reviewer/admin-gated "Refresh document rules" item.
+   * Show/hide the reviewer/admin-gated "Refresh document rules" item, and
+   * re-run resource discovery so "Edit prompts/schemas" picks up the same
+   * role gate applied in #doRefreshResources() (hidden entirely for a user
+   * without the role, whatever the open document's resources are) - both
+   * items are gated the same way so tools.js's category-label auto-hide
+   * (see its module doc-comment) collapses the whole "Document rules"
+   * section for a plain user, not just the refresh item.
    * @param {UserData|null} newUser
    */
   onUserChange(newUser) {
     this._refreshMenuItem.style.display = userHasRole(newUser, ['reviewer', 'admin']) ? '' : 'none'
+    this._refreshResources()
   }
 
   /**
@@ -288,14 +299,15 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Does the actual fetch/rebuild work for _refreshResources(). Hides the
-   * parent item entirely when no document is open; shows it disabled when a
-   * document is open but references no resources; shows it enabled with a
-   * populated submenu otherwise.
+   * parent item entirely when the current user lacks the reviewer/admin
+   * role this whole "Document rules" category requires, or when no document
+   * is open; shows it disabled when a document is open but references no
+   * resources; shows it enabled with a populated submenu otherwise.
    * @returns {Promise<void>}
    */
   async #doRefreshResources() {
     const state = this.state
-    if (!state.xml) {
+    if (!userHasRole(state.user, ['reviewer', 'admin']) || !state.xml) {
       this._resources = []
       this._editMenuItem.style.display = 'none'
       return
