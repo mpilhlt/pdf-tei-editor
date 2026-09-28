@@ -28,8 +28,8 @@ class TestBuildEditorialDeclEntriesVariantMatching(unittest.TestCase):
         mock_resolve.side_effect = lambda url, cache: url
 
         entries = build_editorial_decl_entries("grobid.training.segmentation", MagicMock())
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["category"], "primary")
+        guide_entries = [e for e in entries if e["category"] == "primary"]
+        self.assertEqual(len(guide_entries), 1)
 
     @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
     @patch("fastapi_app.plugins.grobid.annotation_rules.get_annotation_guides")
@@ -159,6 +159,53 @@ class TestBuildRefsForGuideShapeTable(unittest.TestCase):
                 {"target": "https://github.com/x/y/blob/sha1/g.md#segmentation", "content_type": "markdown", "subtype": "human"},
             ], "n": "Guide"},
         ])
+
+
+class TestBuildEditorialDeclEntriesSchemaFragment(unittest.TestCase):
+    @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
+    @patch("fastapi_app.plugins.grobid.annotation_rules.get_annotation_guides")
+    def test_appends_schema_fragment_entry_for_a_fragment_variant(self, mock_get_guides, mock_resolve):
+        mock_get_guides.return_value = []
+        mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
+
+        entries = build_editorial_decl_entries("grobid.training.segmentation", MagicMock())
+
+        self.assertEqual(entries, [
+            {
+                "category": "schema-fragment",
+                "n": "Segmentation schema source",
+                "refs": [{
+                    "target": "https://github.com/mpilhlt/fossil/blob/sha1/schema/grobid.training.segmentation.rng",
+                    "content_type": "xml",
+                    "subtype": "human",
+                }],
+            },
+        ])
+
+    @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
+    @patch("fastapi_app.plugins.grobid.annotation_rules.get_annotation_guides")
+    def test_no_schema_fragment_entry_for_a_variant_without_a_fossil_source_file(self, mock_get_guides, mock_resolve):
+        mock_get_guides.return_value = []
+        mock_resolve.side_effect = lambda url, cache: url
+
+        entries = build_editorial_decl_entries("grobid.training.header", MagicMock())
+
+        self.assertEqual(entries, [])
+
+    @patch("fastapi_app.plugins.grobid.annotation_rules.resolve_forge_permalink")
+    @patch("fastapi_app.plugins.grobid.annotation_rules.get_annotation_guides")
+    def test_schema_fragment_entry_appended_alongside_guide_entries(self, mock_get_guides, mock_resolve):
+        mock_get_guides.return_value = [
+            {"variant_ids": ["grobid.training.segmentation"], "category": "primary", "type": "markdown",
+             "url": "https://github.com/x/y/blob/main/g.md", "label": "Document segmentation guidelines"},
+        ]
+        mock_resolve.side_effect = lambda url, cache: url.replace("main", "sha1")
+
+        entries = build_editorial_decl_entries("grobid.training.segmentation", MagicMock())
+
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["category"], "primary")
+        self.assertEqual(entries[1]["category"], "schema-fragment")
 
 
 class TestBuildEditorialDeclEntriesLabel(unittest.TestCase):

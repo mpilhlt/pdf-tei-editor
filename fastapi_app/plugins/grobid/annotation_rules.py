@@ -20,19 +20,29 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     resolve_forge_permalink,
     translate_anchor_to_line_range,
 )
-from fastapi_app.plugins.grobid.config import AnnotationGuide, get_annotation_guides, get_schema_url
+from fastapi_app.plugins.grobid.config import (
+    AnnotationGuide,
+    SCHEMA_FRAGMENT_LABELS,
+    get_annotation_guides,
+    get_schema_fragment_url,
+    get_schema_url,
+)
 
 
 def build_editorial_decl_entries(variant_id: str, cache: UrlCache) -> list[AnnotationRuleRef]:
     """
-    Resolve this variant's configured annotation guides into editorialDecl entries.
+    Resolve this variant's configured annotation guides, plus its upstream
+    schema-fragment source (if any), into editorialDecl entries.
 
     A guide matches `variant_id` if its `variant_ids` list contains that id
     or the wildcard "*" (applies to every variant). Each matching guide
     produces one or two refs depending on its configured url/type - see
     _build_refs_for_guide(). "primary" is the category sentinel the
-    frontend drawer looks up by default. Returns [] if no guides are
-    configured for this variant.
+    frontend drawer looks up by default. A variant with a dedicated
+    fossil/schema/*.rng source file (see get_schema_fragment_url()) also
+    gets one "schema-fragment" entry, appended last, pointing at that
+    upstream, hand-editable source - distinct from get_schema_url()'s
+    generated/validated-against schema. Returns [] if neither applies.
     """
     entries: list[AnnotationRuleRef] = []
     for guide in get_annotation_guides():
@@ -40,6 +50,16 @@ def build_editorial_decl_entries(variant_id: str, cache: UrlCache) -> list[Annot
             continue
         refs = _build_refs_for_guide(guide, cache)
         entries.append({"category": guide["category"], "refs": refs, "n": guide["label"]})
+
+    schema_fragment_url = get_schema_fragment_url(variant_id)
+    if schema_fragment_url is not None:
+        target = resolve_forge_permalink(schema_fragment_url, cache)
+        entries.append({
+            "category": "schema-fragment",
+            "n": SCHEMA_FRAGMENT_LABELS[variant_id],
+            "refs": [{"target": target, "content_type": "xml", "subtype": "human"}],
+        })
+
     return entries
 
 
