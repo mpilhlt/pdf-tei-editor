@@ -104,6 +104,15 @@ class DocumentRulesPlugin extends Plugin {
   /** @type {string} */
   _currentOriginalText = ''
 
+  /**
+   * Whether the host document (the main XML editor) is currently read-only -
+   * kept in sync via onEditorReadOnlyChange(). Independent of, and combined
+   * with, the dialog's own "read-only unless an override is selected" gating
+   * in _renderEditorDialog().
+   * @type {boolean}
+   */
+  _documentReadOnly = false
+
   /** @type {EditorView} */
   _cmView = null
 
@@ -124,6 +133,7 @@ class DocumentRulesPlugin extends Plugin {
   async install(state) {
     await super.install(state)
     this.#logger.debug('Installing plugin "document-rules"')
+    this._documentReadOnly = !!state.editorReadOnly
 
     const dialog = createSingleFromTemplate('document-rules-editor-dialog', document.body)
     this._editorDialogUi = this.createUi(dialog)
@@ -203,6 +213,18 @@ class DocumentRulesPlugin extends Plugin {
    */
   onUserChange(newUser) {
     this._refreshMenuItem.style.display = userHasRole(newUser, ['reviewer', 'admin']) ? '' : 'none'
+  }
+
+  /**
+   * Keep the resource editor dialog's content-editing controls in sync with
+   * the host document's read-only state - independent of, and in addition
+   * to, the dialog's existing "read-only unless an override is selected"
+   * gating in _renderEditorDialog().
+   * @param {boolean} newValue
+   */
+  onEditorReadOnlyChange(newValue) {
+    this._documentReadOnly = !!newValue
+    if (this._currentResource) this._renderEditorDialog()
   }
 
   /**
@@ -392,7 +414,7 @@ class DocumentRulesPlugin extends Plugin {
     dialogUi.noteInput.value = selected ? selected.note : ''
 
     const text = selected ? selected.text : this._currentOriginalText
-    const readOnly = selected === null
+    const readOnly = selected === null || this._documentReadOnly
 
     if (resource.format === 'xml') {
       dialogUi.textBody.style.display = 'none'
@@ -406,7 +428,8 @@ class DocumentRulesPlugin extends Plugin {
       dialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
     }
 
-    dialogUi.saveBtn.style.display = selected ? '' : 'none'
+    dialogUi.newOverrideBtn.disabled = this._documentReadOnly
+    dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     dialogUi.resetBtn.style.display = selected ? '' : 'none'
   }
