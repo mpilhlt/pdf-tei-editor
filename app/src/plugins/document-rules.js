@@ -43,6 +43,7 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { xml } from '@codemirror/lang-xml'
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
 import { getTheme } from '../modules/codemirror/editor-themes.js'
+import { createOverrideRefField, createOverrideRefClickHandler, refDecorationTheme } from '../modules/document-rules-decorations.js'
 
 // Register templates at module level
 await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
@@ -113,6 +114,9 @@ class DocumentRulesPlugin extends Plugin {
    */
   _documentReadOnly = false
 
+  /** @type {{reconfigure: (ext: any) => void}} */
+  _refDecorationSlot = null
+
   /** @type {EditorView} */
   _cmView = null
 
@@ -172,6 +176,8 @@ class DocumentRulesPlugin extends Plugin {
       }),
       parent: this._editorDialogUi.xmlBody.xmlContainer
     })
+
+    this._refDecorationSlot = this.#xmlEditor.createExtensionSlot([])
 
     this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
     this._editorDialogUi.newOverrideBtn.addEventListener('click', () => this._onNewOverride())
@@ -361,12 +367,35 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Rebuild the ref-decoration extension from the current `_selections`.
-   * Temporary no-op stub - replaced in Task 4 with the actual CodeMirror
-   * decoration wiring.
-   * @returns {void}
+   * Rebuild the ref-decoration extension from the current `_selections`,
+   * restricted to interpretation-ref resources (the schema PI isn't a <ref>
+   * element, so it's never decorated this way).
    */
-  _refreshRefDecorations() { /* replaced in Task 4 */ }
+  _refreshRefDecorations() {
+    const overriddenUrls = new Set(
+      this._selections.filter(s => s.selected && s.kind === 'interpretation-ref').map(s => s.url)
+    )
+    this._refDecorationSlot.reconfigure([
+      createOverrideRefField(overriddenUrls),
+      refDecorationTheme,
+      createOverrideRefClickHandler((url) => this._onRefDecorationClick(url))
+    ])
+  }
+
+  /**
+   * Open the resource editor for the interpretation-ref resource matching
+   * the clicked <ref target="..."> URL, looked up in the existing
+   * `_resources` cache (see this plan's "Important context" on staleness).
+   * @param {string} url
+   */
+  _onRefDecorationClick(url) {
+    const resource = this._resources.find(r => r.kind === 'interpretation-ref' && r.url === url)
+    if (!resource) {
+      this.#logger.warn(`document-rules: no resource found for clicked ref url: ${url}`)
+      return
+    }
+    this._openResourceEditor(resource)
+  }
 
   /**
    * Query one resource's original text, overrides, and current selection,
