@@ -463,8 +463,7 @@ class TestExample(unittest.TestCase):
   });
 
   test('should match tests via transitive dependencies', async () => {
-    // Create runner without ignoring api-client-v1.js for this test
-    const runner = new SmartTestRunner({ ignoreChanges: [] });
+    const runner = new SmartTestRunner();
 
     // Build reverse dependency graph
     const reverseDeps = await runner.buildReverseDependencyGraph();
@@ -495,34 +494,35 @@ class TestExample(unittest.TestCase):
     console.log('Tests selected for api-client-v1.js change:', testsToRun);
   });
 
-  test('should ignore auto-generated files from change detection', async () => {
-    // Default runner has api-client-v1.js in ignore list
+  test('should not ignore the hand-maintained API client by default', async () => {
+    // api-client-v1.js is hand-maintained (not generated), so a default runner
+    // must treat edits to it like any other source change.
     const runner = new SmartTestRunner();
 
-    // Test that api-client-v1.js is ignored
     const changedFiles = runner.getChangedFiles(['app/src/modules/api-client-v1.js', 'app/src/app.js']);
 
-    assert(!changedFiles.includes('app/src/modules/api-client-v1.js'), 'Should ignore api-client-v1.js');
+    assert(changedFiles.includes('app/src/modules/api-client-v1.js'), 'Should not ignore api-client-v1.js by default');
     assert(changedFiles.includes('app/src/app.js'), 'Should include app.js');
 
     console.log('Filtered changed files:', changedFiles);
+  });
 
-    // Test with regex pattern
+  test('should ignore explicitly configured files from change detection', async () => {
     const runnerWithPattern = new SmartTestRunner({
       ignoreChanges: [/.*-generated\.js$/, 'app/src/modules/api-client-v1.js']
     });
 
-    const changedFiles2 = runnerWithPattern.getChangedFiles([
+    const changedFiles = runnerWithPattern.getChangedFiles([
       'app/src/modules/api-client-v1.js',
       'app/src/foo-generated.js',
       'app/src/app.js'
     ]);
 
-    assert(!changedFiles2.includes('app/src/modules/api-client-v1.js'), 'Should ignore api-client-v1.js');
-    assert(!changedFiles2.includes('app/src/foo-generated.js'), 'Should ignore foo-generated.js via pattern');
-    assert(changedFiles2.includes('app/src/app.js'), 'Should include app.js');
+    assert(!changedFiles.includes('app/src/modules/api-client-v1.js'), 'Should ignore api-client-v1.js when explicitly configured');
+    assert(!changedFiles.includes('app/src/foo-generated.js'), 'Should ignore foo-generated.js via pattern');
+    assert(changedFiles.includes('app/src/app.js'), 'Should include app.js');
 
-    console.log('Filtered changed files with pattern:', changedFiles2);
+    console.log('Filtered changed files with pattern:', changedFiles);
   });
 
   test('should output only test file names with --names-only option', async () => {

@@ -7,13 +7,10 @@
     },
     "scripts": {
         "ci": "uv sync && npm install",
-        "prebuild": "npm run generate-client",
         "build": "node scripts/build/build.js",
         "prepare": "husky",
         "test": "npm run test:all:bail",
         "postinstall": "npm run build",
-        "generate-client": "node scripts/build/generate-api-client.js app/src/modules/api-client-v1.js",
-        "generate-client:check": "node scripts/build/check-client-outdated.js",
         "build:ui-types": "node scripts/build/generate-ui-types.js",
         "import": "uv run python bin/import_files.py",
         "export": "uv run python bin/export_files.py",

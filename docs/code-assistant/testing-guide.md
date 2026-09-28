@@ -563,22 +563,18 @@ This pattern:
 
 ### Ignoring Auto-Generated Files
 
-The smart test runner automatically ignores certain files from change detection:
+`app/src/modules/api-client-v1.js` is hand-maintained, not generated (see [docs/code-assistant/api-client.md](api-client.md)), so the smart test runner no longer ignores it by default: a hand-edit to it now triggers the same dependent tests as any other source change.
 
-- `app/src/modules/api-client-v1.js` (auto-generated from OpenAPI schema)
-
-To ignore additional files, configure in the test runner:
+If a future build step introduces a genuinely auto-generated file whose timestamp-only changes should not trigger test runs, configure it explicitly:
 
 ```javascript
 const runner = new SmartTestRunner({
   ignoreChanges: [
-    'app/src/modules/api-client-v1.js',  // Exact file path
-    /.*-generated\.js$/                  // Regex pattern
+    'path/to/generated-file.js',  // Exact file path
+    /.*-generated\.js$/           // Regex pattern
   ]
 });
 ```
-
-This prevents unnecessary test runs when only metadata (like timestamps) changes in auto-generated files.
 
 This enables smart test selection via `npm run test:changed`.
 
@@ -890,7 +886,7 @@ const result = await page.evaluate(async () => {
 });
 ```
 
-- Check `app/src/modules/api-client-v1.js` for all available API methods (auto-generated from OpenAPI schema)
+- Check `app/src/modules/api-client-v1.js` for all available API methods (hand-maintained, mirrors the FastAPI routers)
 - See [../development/testing.md](../development/testing.md#using-the-api-client-in-browser-context) for full documentation
 
 ## Key Principles

@@ -1,9 +1,14 @@
 /**
- * Auto-generated API client for PDF-TEI Editor API v1
+ * Hand-maintained API client for PDF-TEI Editor API v1.
  *
- * Generated from OpenAPI schema at 2026-09-28T11:49:32.334Z
+ * One method per `/api/v1/...` operation, mirroring the FastAPI router's path,
+ * request body, and response model. When you add, remove, or change a route in
+ * `fastapi_app/routers/*.py`, add or update the matching method here in the same
+ * change — read the route and its Pydantic models directly, do not guess.
  *
- * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
+ * Upload (multipart/form-data) and SSE (text/event-stream) endpoints are
+ * intentionally excluded; call `callApi`/`EventSource` directly for those, as
+ * documented in docs/code-assistant/api-client.md.
  */
 
 // Type Definitions
