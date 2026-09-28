@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/main/schema/rng/tei-bib.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Document Rules E2E Fixture (legacy, no editorialDecl)</title>
+      </titleStmt>
+      <publicationStmt>
+        <p>Test fixture for the document rules registry E2E suite's "Refresh document rules" test - has extractor provenance but no editorialDecl, simulating a document extracted before this feature existed.</p>
+      </publicationStmt>
+      <sourceDesc>
+        <p>Test fixture.</p>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application type="extractor" ident="GROBID" version="1.0">
+          <label type="variant-id">grobid.training.segmentation</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Fixture body.</p>
+    </body>
+  </text>
+</TEI>
