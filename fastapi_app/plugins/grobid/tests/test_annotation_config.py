@@ -28,6 +28,38 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 FIXTURE_SCHEMA_CACHE_DIR = Path(__file__).parent / "fixtures" / "schema-cache"
 
 
+class TestGetSchemaFragmentUrl(unittest.TestCase):
+    def setUp(self):
+        import fastapi_app.plugins.grobid.config as grobid_config
+        self.get_schema_fragment_url = grobid_config.get_schema_fragment_url
+        self.SCHEMA_FRAGMENT_VARIANTS = grobid_config.SCHEMA_FRAGMENT_VARIANTS
+        self.SCHEMA_FRAGMENT_LABELS = grobid_config.SCHEMA_FRAGMENT_LABELS
+
+    def test_returns_url_for_each_fragment_variant(self):
+        self.assertEqual(
+            self.get_schema_fragment_url("grobid.training.segmentation"),
+            "https://github.com/mpilhlt/fossil/blob/main/schema/grobid.training.segmentation.rng",
+        )
+        self.assertEqual(
+            self.get_schema_fragment_url("grobid.training.references"),
+            "https://github.com/mpilhlt/fossil/blob/main/schema/grobid.training.references.rng",
+        )
+        self.assertEqual(
+            self.get_schema_fragment_url("grobid.training.references.referenceSegmenter"),
+            "https://github.com/mpilhlt/fossil/blob/main/schema/grobid.training.references.referenceSegmenter.rng",
+        )
+
+    def test_returns_none_for_variant_without_a_fossil_source_file(self):
+        self.assertIsNone(self.get_schema_fragment_url("grobid.training.header"))
+        self.assertIsNone(self.get_schema_fragment_url("grobid.training.table"))
+        self.assertIsNone(self.get_schema_fragment_url("grobid.training.figure"))
+
+    def test_every_fragment_variant_has_a_label(self):
+        for variant_id in self.SCHEMA_FRAGMENT_VARIANTS:
+            self.assertIn(variant_id, self.SCHEMA_FRAGMENT_LABELS)
+            self.assertTrue(self.SCHEMA_FRAGMENT_LABELS[variant_id])
+
+
 class TestGetAnnotationTags(unittest.TestCase):
 
     def setUp(self):

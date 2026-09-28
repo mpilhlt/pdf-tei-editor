@@ -1,6 +1,7 @@
 """GROBID plugin configuration."""
 
 import copy
+from typing import Optional
 
 from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
@@ -77,6 +78,34 @@ SCHEMA_BASE_URL = "https://mpilhlt.github.io/fossil/schema"
 def get_schema_url(variant_id: str) -> str:
     """Get RNG schema URL for a GROBID variant."""
     return f"{SCHEMA_BASE_URL}/{variant_id}.rng"
+
+
+SCHEMA_SOURCE_BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/schema"
+
+# Variants with a dedicated top-level source file in fossil/schema/ (as
+# opposed to sharing/inheriting validation from another variant's schema).
+SCHEMA_FRAGMENT_VARIANTS: set[str] = {
+    "grobid.training.segmentation",
+    "grobid.training.references",
+    "grobid.training.references.referenceSegmenter",
+}
+
+SCHEMA_FRAGMENT_LABELS: dict[str, str] = {
+    "grobid.training.segmentation": "Segmentation schema source",
+    "grobid.training.references.referenceSegmenter": "Reference segmentation schema source",
+    "grobid.training.references": "Citation model schema source",
+}
+
+
+def get_schema_fragment_url(variant_id: str) -> Optional[str]:
+    """
+    URL of the upstream, hand-editable RNG source for a variant's generated/
+    published schema (see get_schema_url()), or None if this variant has no
+    dedicated fossil source file.
+    """
+    if variant_id not in SCHEMA_FRAGMENT_VARIANTS:
+        return None
+    return f"{SCHEMA_SOURCE_BASE_URL}/{variant_id}.rng"
 
 
 def get_grobid_server_timeout() -> int:
