@@ -254,7 +254,7 @@ None. Defaults from `config/prompt.json` become shipped fragment files in the co
 
 ## Deferred
 
-- PR creation from an override to the source repo and the "upstream changed" notice and diff (data stored: `base_url`, `base_hash`).
+- PR creation from an override to the source repo — now designed in [2026-09-28-document-rules-propose-upstream-design.md](2026-09-28-document-rules-propose-upstream-design.md) — and the "upstream changed" notice and diff (data stored: `base_url`, `base_hash`), still deferred.
 - Recording in the document which override was applied at extraction or at validation. Until then a document may cite the original URL although an override was used; the note is the only trace, and only in the DB.
 - XSD schema resources (multi-file, via `xmlschema` includes/imports) — RelaxNG only in v1.
 - Per-run override selection (outside the stored selection).
