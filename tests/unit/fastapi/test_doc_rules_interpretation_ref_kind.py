@@ -39,6 +39,15 @@ XML_MACHINE_ONLY = """<?xml version="1.0"?>
   </editorialDecl></encodingDesc></teiHeader>
 </TEI>"""
 
+XML_SCHEMA_FRAGMENT = """<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader><encodingDesc><editorialDecl>
+    <interpretation type="schema-fragment" n="Segmentation schema source">
+      <p><ref target="https://github.com/mpilhlt/fossil/blob/sha1/schema/grobid.training.segmentation.rng" subtype="human" type="xml"/></p>
+    </interpretation>
+  </editorialDecl></encodingDesc></teiHeader>
+</TEI>"""
+
 
 class TestInterpretationRefKindDiscover(unittest.TestCase):
     def setUp(self):
@@ -76,6 +85,13 @@ class TestInterpretationRefKindDiscover(unittest.TestCase):
 
     def test_no_editorial_decl_returns_empty(self):
         self.assertEqual(self.kind.discover("<TEI xmlns='http://www.tei-c.org/ns/1.0'/>"), [])
+
+    def test_schema_fragment_entry_resolves_to_xml_format_and_configured_label(self):
+        descriptors = self.kind.discover(XML_SCHEMA_FRAGMENT)
+        self.assertEqual(len(descriptors), 1)
+        self.assertEqual(descriptors[0].format, "xml")
+        self.assertEqual(descriptors[0].label, "Segmentation schema source")
+        self.assertTrue(descriptors[0].url.endswith("grobid.training.segmentation.rng"))
 
 
 class TestInterpretationRefKindResolveOriginal(unittest.TestCase):
