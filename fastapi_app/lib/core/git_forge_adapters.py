@@ -149,14 +149,19 @@ class GitHubAdapter(BaseGitForgeAdapter):
 
     def _default_branch(self, owner: str, repo: str, cache: UrlCache) -> str:
         api_url = f"https://api.github.com/repos/{owner}/{repo}"
-        branch = cache.get_text(api_url)
+        # Cached under a key distinct from api_url itself: resolve_ref_to_sha()
+        # caches "{api_url}/commits/{ref}", which would make cache_root/.../{repo}
+        # a directory - colliding with the file get_cache_info() would derive
+        # for api_url here (same path, one segment shorter).
+        cache_key = f"{api_url}/_default_branch"
+        branch = cache.get_text(cache_key)
         if branch is None:
             response = requests.get(
                 api_url, timeout=10, headers={"Accept": "application/vnd.github+json"}
             )
             response.raise_for_status()
             branch = response.json()["default_branch"]
-            cache.set_text(api_url, branch)
+            cache.set_text(cache_key, branch)
         return branch
 
     def build_propose_change_url(self, url: str, text: str, cache: UrlCache) -> "ProposeChangeTarget | None":
@@ -238,12 +243,17 @@ class GitLabAdapter(BaseGitForgeAdapter):
     def _default_branch(self, origin: str, project_path: str, cache: UrlCache) -> str:
         encoded_project = quote(project_path, safe="")
         api_url = f"{origin}/api/v4/projects/{encoded_project}"
-        branch = cache.get_text(api_url)
+        # Cached under a key distinct from api_url itself: resolve_ref_to_sha()
+        # caches "{api_url}/repository/commits/{ref}", which would make
+        # cache_root/.../{encoded_project} a directory - colliding with the
+        # file get_cache_info() would derive for api_url here.
+        cache_key = f"{api_url}/_default_branch"
+        branch = cache.get_text(cache_key)
         if branch is None:
             response = requests.get(api_url, timeout=10)
             response.raise_for_status()
             branch = response.json()["default_branch"]
-            cache.set_text(api_url, branch)
+            cache.set_text(cache_key, branch)
         return branch
 
     def build_propose_change_url(self, url: str, text: str, cache: UrlCache) -> "ProposeChangeTarget | None":

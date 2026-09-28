@@ -4,7 +4,9 @@ Unit tests for the pluggable git-forge adapter registry.
 @testCovers fastapi_app/lib/core/git_forge_adapters.py
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
 
@@ -14,6 +16,7 @@ from fastapi_app.lib.core.git_forge_adapters import (
     GitHubAdapter,
     GitLabAdapter,
 )
+from fastapi_app.lib.core.url_cache import UrlCache
 
 
 class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
@@ -292,7 +295,9 @@ class TestGitHubAdapterBuildProposeChangeUrl(unittest.TestCase):
             headers={"Accept": "application/vnd.github+json"},
         )
         self.assertIn("/new/main?", target.url)
-        self.cache.set_text.assert_called_once_with("https://api.github.com/repos/mpilhlt/fossil", "main")
+        self.cache.set_text.assert_called_once_with(
+            "https://api.github.com/repos/mpilhlt/fossil/_default_branch", "main"
+        )
 
     @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
     def test_uses_cached_default_branch(self, mock_get):
@@ -345,9 +350,67 @@ class TestGitLabAdapterBuildProposeChangeUrl(unittest.TestCase):
         mock_get.assert_called_once_with("https://gitlab.com/api/v4/projects/group%2Fproject", timeout=10)
         self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
         self.cache.set_text.assert_called_once_with(
-            "https://gitlab.com/api/v4/projects/group%2Fproject", "main"
+            "https://gitlab.com/api/v4/projects/group%2Fproject/_default_branch", "main"
         )
 
     def test_returns_none_for_unrecognized_host(self):
         target = self.adapter.build_propose_change_url("https://example.com/docs/guide.md", "text", self.cache)
         self.assertIsNone(target)
+
+
+class TestDefaultBranchCacheKeyDoesNotCollideWithCommitsCache(unittest.TestCase):
+    """
+    Regression test: a prior resolve_ref_to_sha() call caches its result under
+    "{api_url}/commits/{ref}" (GitHub) or "{api_url}/repository/commits/{ref}"
+    (GitLab), which makes cache_root/.../{repo} a directory. _default_branch()
+    must not reuse that same path as its own cache file, or writing it raises
+    IsADirectoryError.
+    """
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_github(self, mock_get):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            adapter = GitHubAdapter()
+
+            commits_response = MagicMock()
+            commits_response.json.return_value = {"sha": "a" * 40}
+            mock_get.return_value = commits_response
+            adapter.resolve_ref_to_sha(
+                "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md", cache
+            )
+
+            branch_response = MagicMock()
+            branch_response.json.return_value = {"default_branch": "main"}
+            mock_get.return_value = branch_response
+            target = adapter.build_propose_change_url(
+                f"https://github.com/mpilhlt/fossil/blob/{'b' * 40}/docs/guidelines.md",
+                "text",
+                cache,
+            )
+
+            self.assertIn("/new/main?", target.url)
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_gitlab(self, mock_get):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            adapter = GitLabAdapter()
+
+            commits_response = MagicMock()
+            commits_response.json.return_value = {"id": "a" * 40}
+            mock_get.return_value = commits_response
+            adapter.resolve_ref_to_sha(
+                "https://gitlab.com/group/project/-/blob/main/docs/guide.md", cache
+            )
+
+            branch_response = MagicMock()
+            branch_response.json.return_value = {"default_branch": "main"}
+            mock_get.return_value = branch_response
+            target = adapter.build_propose_change_url(
+                f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guide.md",
+                "text",
+                cache,
+            )
+
+            self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
