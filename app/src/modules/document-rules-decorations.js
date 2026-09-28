@@ -1,19 +1,29 @@
 /**
- * CodeMirror decorations for <ref target="..."> URLs inside a TEI
- * document's editorialDecl/interpretation entries: colors a ref's target
- * differently when the current user has an override selected for that
- * resource, and reports clicks on a decorated ref so the caller can open
- * the document-rules resource editor for it.
+ * CodeMirror decorations for the document-rules registry's URLs in a TEI
+ * document's header: <ref target="..."> inside editorialDecl/interpretation
+ * (interpretation-ref resources), and the document's schema location
+ * (schema resource) however it's declared - either the <?xml-model href>
+ * PI or, when that's absent, the <schemaRef target> fallback element (see
+ * docs/development/tei-header-integrations.md's "Schema location"
+ * section). Colors a decorated URL differently when the current user has
+ * an override selected for that resource, and reports clicks on one so the
+ * caller can open the document-rules resource editor for it.
  *
- * Mirrors app/src/modules/codemirror/xml-annotation-decorations.js's
- * syntax-tree-walk shape (Element/OpenTag/SelfClosingTag/TagName/Attribute/
+ * The editorialDecl/interpretation walk mirrors
+ * app/src/modules/codemirror/xml-annotation-decorations.js's syntax-tree-
+ * walk shape (Element/OpenTag/SelfClosingTag/TagName/Attribute/
  * AttributeName/AttributeValue node names, and the
  * firstChild.firstChild?.nextSibling TagName lookup), narrowed to <ref>'s
  * target attribute specifically rather than a whole-element badge/mark, and
  * scoped to only descend into <editorialDecl> (a <ref target="..."> can
  * legitimately appear elsewhere in a TEI header, e.g. citing the extractor
  * tool in appInfo/application - those are unrelated to document rules and
- * must not be decorated/made clickable).
+ * must not be decorated/made clickable). The schema location is matched
+ * against the raw document text instead (see XML_MODEL_RELAXNG_RE/
+ * SCHEMA_REF_RE) - a PI isn't part of the syntax tree's Element/Attribute
+ * nodes the way <ref>/<schemaRef> are, so decorating both the same way
+ * keeps the two cases consistent rather than mixing a tree walk with a
+ * regex for one and not the other.
  */
 
 /**
@@ -38,6 +48,17 @@ import { syntaxTree } from '@codemirror/language'
  * instead of walked via the syntax tree like <ref target> is.
  */
 const XML_MODEL_RELAXNG_RE = /<\?xml-model\s+href="([^"]+)"[^>]*schematypens="http:\/\/relaxng\.org\/ns\/structure\/1\.0"[^>]*\?>/
+
+/**
+ * Matches a TEI `<schemaRef target="...">` element's target - the fallback
+ * schema-location source `extract_schema_locations()` (schema_validator.py)
+ * only consults when no xml-model PI is present (an existing PI stays
+ * authoritative if a document somehow has both - see
+ * docs/development/tei-header-integrations.md's "Schema location" section).
+ * Mirrors that function's own regex, including its lack of any
+ * encodingDesc-scoping.
+ */
+const SCHEMA_REF_RE = /<schemaRef\s+[^>]*target="([^"]+)"/
 
 /**
  * Read one element's attributes as {name, value, valueFrom, valueTo} spans,
@@ -87,9 +108,11 @@ function readTagName(elementNode, state) {
  * found inside <editorialDecl> (elements outside it, e.g. a <ref> in
  * appInfo/application citing the extractor tool, are intentionally not
  * decorated), colored by whether its target URL is in `overriddenUrls`.
- * Also decorates a RelaxNG `<?xml-model href="...">` PI's href, if present
- * anywhere in the document, the same way (see XML_MODEL_RELAXNG_RE) - it's
- * the "schema" resource kind's equivalent of an interpretation-ref's <ref>.
+ * Also decorates the document's schema location, the same way, whichever
+ * form declares it: a RelaxNG `<?xml-model href="...">` PI (see
+ * XML_MODEL_RELAXNG_RE) if present, else a `<schemaRef target="...">`
+ * element (see SCHEMA_REF_RE) - it's the "schema" resource kind's
+ * equivalent of an interpretation-ref's <ref>.
  * @param {EditorState} state
  * @param {Set<string>} overriddenUrls
  * @returns {DecorationSet}
@@ -140,6 +163,20 @@ export function buildRefDecorations(state, overriddenUrls) {
       url: href,
       overridden: overriddenUrls.has(href)
     })
+  } else {
+    // Only consulted when there's no xml-model PI, mirroring
+    // extract_schema_locations()'s own precedence.
+    const schemaRefMatch = SCHEMA_REF_RE.exec(docText)
+    if (schemaRefMatch) {
+      const target = schemaRefMatch[1]
+      const targetStart = schemaRefMatch.index + schemaRefMatch[0].indexOf(`target="${target}"`) + 'target="'.length
+      found.push({
+        from: targetStart,
+        to: targetStart + target.length,
+        url: target,
+        overridden: overriddenUrls.has(target)
+      })
+    }
   }
 
   found.sort((a, b) => a.from - b.from)

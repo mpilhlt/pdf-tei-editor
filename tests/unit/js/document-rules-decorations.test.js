@@ -110,6 +110,38 @@ ${DOC}`;
     decos.between(0, state.doc.length, () => { count++; });
     assert.strictEqual(count, 0);
   });
+
+  it('decorates a <schemaRef target> element when there is no xml-model PI', () => {
+    const doc = `<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader><encodingDesc>
+    <schemaRef target="https://example.com/schema.rng" type="RELAXNG"/>
+  </encodingDesc></teiHeader>
+</TEI>`;
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set());
+    const urls = [];
+    decos.between(0, state.doc.length, (from, to) => urls.push(state.doc.sliceString(from, to)));
+    assert.deepStrictEqual(urls, ['https://example.com/schema.rng']);
+  });
+
+  it('marks a <schemaRef target> as overridden when its URL is in overriddenUrls', () => {
+    const doc = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><encodingDesc><schemaRef target="https://example.com/schema.rng" type="RELAXNG"/></encodingDesc></teiHeader></TEI>';
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set(['https://example.com/schema.rng']));
+    const classes = [];
+    decos.between(0, state.doc.length, (_f, _t, deco) => classes.push(deco.spec.class));
+    assert.deepStrictEqual(classes, ['doc-rules-ref doc-rules-ref-overridden']);
+  });
+
+  it('prefers the xml-model PI over a <schemaRef> when both are present', () => {
+    const doc = `<?xml-model href="https://example.com/from-pi.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><encodingDesc><schemaRef target="https://example.com/from-schemaref.rng" type="RELAXNG"/></encodingDesc></teiHeader></TEI>`;
+    const state = makeState(doc);
+    const decos = buildRefDecorations(state, new Set());
+    const urls = [];
+    decos.between(0, state.doc.length, (from, to) => urls.push(state.doc.sliceString(from, to)));
+    assert.deepStrictEqual(urls, ['https://example.com/from-pi.rng']);
+  });
 });
 
 describe('createOverrideRefField', () => {

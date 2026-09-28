@@ -19,6 +19,7 @@ For fileDesc/publicationStmt/sourceDesc metadata semantics beyond what's listed 
 | `fileDesc/publicationStmt`, `fileDesc/sourceDesc` | extractors, metadata-update job, metadata-extraction enhancement, `addLicenseElement()` (licence only) | `extract_tei_metadata()` (biblStruct-first, publicationStmt-fallback) |
 | `encodingDesc/appInfo/application` | extractors, `ensureExtractorVariant()` (copy-on-save) | variant/extractor-provenance readers across backend and frontend (see below) |
 | `encodingDesc/editorialDecl` | extractors (at extraction time), "Refresh document rules" action | `getEditorialDeclGuides()`, `extract_annotation_rule_refs()`, Annotation Guide drawer |
+| Schema location (`<?xml-model?>` PI, or `encodingDesc/schemaRef` fallback) | "Refresh document rules" action (PI only - see below) | `extract_schema_locations()`, `SchemaKind.discover()`, document-rules registry decorations |
 | `revisionDesc/change` | `create_tei_header()` (seed), extractors (replace), "Save Revision" action, "Refresh document rules" action | revision-history UI, edit-history/annotation-history reporting plugins, `extract_tei_metadata()` (last status/label) |
 
 Not used anywhere in this app: `notesStmt`, `profileDesc`, `xenoData`.
@@ -148,6 +149,30 @@ At extraction time, `build_editorial_decl_entries(variant_id, cache)` (per-plugi
 - Consumer example: [annotation-guide.js](../../app/src/plugins/annotation-guide.js)'s `#getDocumentPrimaryGuide()` — finds the `category === 'primary'` entry, picks its `subtype === 'human'` ref, and falls back to the runtime per-variant config (the extractor's `AnnotationGuide` list directly, bypassing editorialDecl) if the document has none — e.g. for documents extracted before this feature existed.
 
 **To hook in a new consumer** (e.g. an annotation validation plugin that checks output against category-specific rules): call the reader above, find your category by `category ===` your rule's name, and use the `machine` ref's line-range target with `fetch_rule_excerpt(url, cache)` (same module) to fetch just the relevant slice of the guide document rather than the whole file — this is precisely what the machine ref exists for.
+
+## Schema location
+
+Declares the RelaxNG schema a document validates against. Two forms, in precedence order — an existing PI stays authoritative if a document somehow has both:
+
+```xml
+<?xml-model href="https://…/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>...</teiHeader>
+```
+
+or, the standard TEI element, inside `encodingDesc` (element order: `editorialDecl`, `schemaRef`, `appInfo`):
+
+```xml
+<encodingDesc>
+  <editorialDecl>...</editorialDecl>
+  <schemaRef target="https://…/schema.rng" type="RELAXNG"/>
+  <appInfo>...</appInfo>
+</encodingDesc>
+```
+
+- Write: this app only ever writes the `<?xml-model?>` PI — `_replace_schema_pi()` in [rules_refresh.py](../../fastapi_app/lib/doc_rules/rules_refresh.py), run by the "Refresh document rules" action (`POST /api/v1/document-rules/refresh/{preview,execute}`), text-level remove-then-insert immediately after the XML declaration (lxml's parse/serialize round-trip doesn't preserve a PI that precedes the root element). `schemaRef` is read-only support for documents produced elsewhere that use the plain TEI element instead of the PI; nothing in this app writes one.
+- Read: `extract_schema_locations()` in [schema_validator.py](../../fastapi_app/lib/core/schema_validator.py) — checks the `<?xml-model?>` PI first (RelaxNG `schematypens` only in this function; XSD is handled separately via `xsi:schemaLocation` in the same function), falling back to `schemaRef/@target` only if no PI is present. Used by schema validation itself and by `rules_refresh.py`'s `_current_schema_location()` (to detect whether "Refresh document rules" needs to change anything).
+- Document-rules registry: `SchemaKind.discover()` in [schema_kind.py](../../fastapi_app/lib/doc_rules/schema_kind.py) reports whichever form the document uses as one "schema" resource (see [2026-09-27-document-rules-registry-design.md](../superpowers/specs/2026-09-27-document-rules-registry-design.md)), editable the same way as an interpretation-ref resource via the "Edit prompts/schemas" submenu. In the XML editor, `buildRefDecorations()` in [document-rules-decorations.js](../../app/src/modules/document-rules-decorations.js) makes it clickable the same way as an editorialDecl `<ref target>`: the PI's `href` if present, else the `schemaRef`'s `target`, mirroring `extract_schema_locations()`'s own precedence.
 
 ## revisionDesc/change
 
