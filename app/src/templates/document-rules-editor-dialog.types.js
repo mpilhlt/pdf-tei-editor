@@ -30,7 +30,7 @@
 
 /**
  * @typedef {object} editPanelPart
- * @property {import('../ui.js').SlTextarea} textArea
+ * @property {HTMLDivElement} mdContainer
  */
 
 /**

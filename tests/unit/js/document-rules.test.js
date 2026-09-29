@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
+import { Text } from '@codemirror/state';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
@@ -115,9 +116,17 @@ function makeDialogUi() {
   const el = document.createElement('div');
   el.overrideRow = document.createElement('div');
   el.noteInput = Object.assign(document.createElement('sl-input'), { value: '' });
-  const editPanel = { textArea: Object.assign(document.createElement('sl-textarea'), { value: '', readonly: false }) };
-  const previewPanel = { previewContent: document.createElement('div') };
-  const textTabs = Object.assign(document.createElement('sl-tab-group'), { editPanel, previewPanel });
+  const editPanel = { updateComplete: Promise.resolve() };
+  const previewPanel = { previewContent: document.createElement('div'), updateComplete: Promise.resolve() };
+  // Real <sl-tab-group>.show(panelName) synchronously sets the matching
+  // panel's `active` property (see SlTabGroup's setActiveTab()) -
+  // _openResourceEditor() calls this directly to force the "Edit" tab
+  // active rather than relying on the tab group's own default-active-tab
+  // logic (a one-shot IntersectionObserver callback - see that method's
+  // doc comment on why that races with a freshly opened dialog).
+  const textTabs = Object.assign(document.createElement('sl-tab-group'), {
+    editPanel, previewPanel, show: () => {},
+  });
   el.textBody = Object.assign(document.createElement('div'), { textTabs });
   el.xmlBody = Object.assign(document.createElement('div'), { xmlContainer: document.createElement('div') });
   el.newOverrideBtn = document.createElement('sl-button');
@@ -127,6 +136,10 @@ function makeDialogUi() {
   el.proposeUpstreamBtn = document.createElement('sl-button');
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
+  // Real <sl-dialog>.show() sets `open` and resolves once shown (see
+  // dialog.component's handleOpenChange()/waitForEvent(this, 'sl-after-show'))
+  // - _openResourceEditor() awaits it before re-scrolling.
+  el.show = async () => { el.open = true; };
   return el;
 }
 
@@ -162,19 +175,72 @@ function makeRefElement(target) {
 }
 
 /**
- * SlTextarea's `input` (its internal `<textarea>`, see scrollPosition() in
- * @shoelace-style/shoelace's textarea chunk) is a `@query`-backed
- * getter-only accessor - `Object.assign`/plain assignment throws ("has only
- * a getter"), so give it a real, writable `<textarea>` stand-in the same
- * way makeOverridesWidgetStub() shadows `isConnected`. Needed by any test
- * that exercises _scrollMarkdownBodyToAnchor()'s line-height calculation.
- * @param {any} textArea
- * @returns {HTMLTextAreaElement}
+ * A minimal but functionally real stand-in for `_cmMdView` (the markdown
+ * CodeMirror instance that replaced a plain `<sl-textarea>` - see
+ * _setMarkdownContent()'s doc comment on why). Unlike a full
+ * `new EditorView(...)` (see e.g. xml-tag-sync.test.js), this needs no live
+ * DOM/layout - jsdom can't measure real pixel geometry anyway, which is
+ * exactly why the production code moved to CodeMirror's own line-aware
+ * `EditorView.scrollIntoView()` effect instead of computing a pixel offset
+ * by hand. `.state.doc` is a REAL `@codemirror/state` `Text`, so
+ * `.line(n)`/`.length`/`.lines`/`.toString()` behave exactly like
+ * production, and `.dispatch()` really applies `changes` to that doc, so
+ * `_currentShownText()`/`_setMarkdownContent()` round-trip correctly.
+ * `dispatched` records every dispatch call for assertions; `onScroll` (if
+ * given) fires with the `ScrollTarget` value of any dispatched
+ * `EditorView.scrollIntoView()` effect (see lastScrollTarget()) - both
+ * `.range`/`.y` are plain data on that effect, not view-dependent, so they
+ * can be asserted on without a live view.
+ * @param {string} [text]
+ * @param {{ onScroll?: (target: any) => void }} [options]
+ * @returns {any}
  */
-function stubTextAreaInput(textArea) {
-  const input = document.createElement('textarea');
-  Object.defineProperty(textArea, 'input', { value: input, configurable: true });
-  return input;
+function makeCmMdViewMock(text = '', { onScroll } = {}) {
+  let doc = Text.of(text.split('\n'));
+  const dispatched = [];
+  const view = {
+    get state() { return { doc }; },
+    dispatch(spec) {
+      dispatched.push(spec);
+      if (spec.changes) {
+        const { from, to, insert } = spec.changes;
+        const full = doc.toString();
+        doc = Text.of((full.slice(0, from) + insert + full.slice(to)).split('\n'));
+      }
+      if (onScroll) {
+        const target = lastScrollTarget([spec]);
+        if (target) onScroll(target);
+      }
+    },
+    scrollDOM: { scrollTop: 0 },
+    dispatched,
+    // Test convenience for simulating a user edit in the "Edit" tab -
+    // production code never calls this itself, only real CM transactions.
+    setText(newText) { doc = Text.of(newText.split('\n')); },
+  };
+  return view;
+}
+
+/**
+ * Finds the `ScrollTarget` value of the last dispatched
+ * `EditorView.scrollIntoView()` effect among `dispatchedSpecs` (each a
+ * `dispatch()` call's argument), distinguishing it from the read-only/
+ * history `Compartment.reconfigure()` effects `_setMarkdownContent()` also
+ * dispatches by its distinctive `{range, y}` shape (see
+ * @codemirror/view's `ScrollTarget` class) - or `null` if none is found.
+ * @param {any[]} dispatchedSpecs
+ * @returns {{range: {from: number, to: number}, y: string}|null}
+ */
+function lastScrollTarget(dispatchedSpecs) {
+  for (let i = dispatchedSpecs.length - 1; i >= 0; i--) {
+    const effects = dispatchedSpecs[i]?.effects;
+    if (!effects) continue;
+    const arr = Array.isArray(effects) ? effects : [effects];
+    for (const effect of arr) {
+      if (effect?.value?.range && typeof effect.value.y !== 'undefined') return effect.value;
+    }
+  }
+  return null;
 }
 
 function flushMicrotasks() {
@@ -317,6 +383,14 @@ describe('DocumentRulesPlugin._selectOverride', () => {
   it('persists the selection and re-renders showing the override text', async () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    // _setMarkdownContent()/_scrollMarkdownBodyToAnchor() (which drive the
+    // real CodeMirror view) aren't under test here - spied out like
+    // _setXmlContent is elsewhere, isolating this test to _renderEditorDialog()'s
+    // own selection/note/button logic. See "DocumentRulesPlugin scroll
+    // position on render" for dedicated coverage of the real scroll math.
+    let setMdArgs;
+    plugin._setMarkdownContent = (...args) => { setMdArgs = args; };
+    plugin._scrollMarkdownBodyToAnchor = () => {};
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'original text';
@@ -333,8 +407,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
 
     assert.deepStrictEqual(calls, [{ kind: 'interpretation-ref', fragment_url: 'https://example.com/a.md', override_id: 'ov1' }]);
     assert.strictEqual(plugin._currentSelectedId, 'ov1');
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value, 'override text');
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, false);
+    assert.deepStrictEqual(setMdArgs, ['override text', false]);
     assert.strictEqual(notifyCalls[0][0], 'Override 1 selected for A.');
   });
 
@@ -353,6 +426,9 @@ describe('DocumentRulesPlugin._selectOverride', () => {
   it('selecting the original makes the text read-only', async () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    let setMdArgs;
+    plugin._setMarkdownContent = (...args) => { setMdArgs = args; };
+    plugin._scrollMarkdownBodyToAnchor = () => {};
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'original text';
@@ -363,8 +439,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
 
     await plugin._selectOverride(null);
 
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value, 'original text');
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, true);
+    assert.deepStrictEqual(setMdArgs, ['original text', true]);
     assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, 'none');
     assert.strictEqual(plugin._editorDialogUi.noteInput.style.display, 'none');
     assert.strictEqual(notifyCalls[0][0], 'Original selected for A.');
@@ -375,6 +450,7 @@ describe('DocumentRulesPlugin format-based body swap', () => {
   it('shows the text body and hides the xml body for a markdown resource', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'text';
@@ -403,6 +479,7 @@ describe('DocumentRulesPlugin format-based body swap', () => {
   it('renders a markdown preview of the current text on the preview tab', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = '# Heading';
     plugin._currentOverrides = [];
@@ -426,69 +503,66 @@ describe('DocumentRulesPlugin scroll position on render', () => {
     assert.strictEqual(plugin._cmView.scrollDOM.scrollTop, 0);
   });
 
-  it('resets the markdown edit textarea and preview to the top when the resource has no heading-anchor fragment', () => {
+  it('resets the markdown edit view and preview to the top when the resource has no heading-anchor fragment', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'some text';
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
-
-    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
-    stubTextAreaInput(textArea);
-    const scrollCalls = [];
-    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
     plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent.scrollTop = 500;
 
     plugin._renderEditorDialog();
 
-    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
+    const target = lastScrollTarget(plugin._cmMdView.dispatched);
+    assert.strictEqual(target.range.from, 0);
     assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent.scrollTop, 0);
   });
 
   it('does not scroll past the top for a line-range fragment (already sliced server-side, nothing to locate)', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md#L5-L10', key: 'a', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'line1\nline2\nline3\n';
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
 
-    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
-    stubTextAreaInput(textArea);
-    const scrollCalls = [];
-    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
-
     plugin._renderEditorDialog();
 
-    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
+    const target = lastScrollTarget(plugin._cmMdView.dispatched);
+    assert.strictEqual(target.range.from, 0);
   });
 
-  it('scrolls the edit textarea and preview to the heading matching a "human" ref\'s heading-anchor fragment (e.g. "#data-correction")', () => {
+  it('scrolls the edit view and preview to the heading matching a "human" ref\'s heading-anchor fragment (e.g. "#data-correction")', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = createMarkdownRenderer();
     plugin._currentResource = {
       kind: 'interpretation-ref',
       url: 'https://example.com/guidelines.md#data-correction',
       key: 'a', label: 'Data correction', format: 'markdown'
     };
-    plugin._currentOriginalText = '# Guidelines\n\nIntro.\n\n## Data correction\n\nBody text.\n';
+    const text = '# Guidelines\n\nIntro.\n\n## Data correction\n\nBody text.\n';
+    plugin._currentOriginalText = text;
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
 
-    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
-    const input = stubTextAreaInput(textArea);
-    input.style.lineHeight = '20px';
-    const scrollCalls = [];
-    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
-
     plugin._renderEditorDialog();
 
-    // "## Data correction" is on line 5 (1-based) -> (5 - 1) * 20px.
-    assert.deepStrictEqual(scrollCalls, [{ top: 80 }]);
+    // "## Data correction" is on line 5 (1-based) - CodeMirror's own
+    // EditorView.scrollIntoView() effect targets that line's start
+    // position directly, not a hand-computed pixel offset (see
+    // _scrollMarkdownBodyToAnchor()'s doc comment on why: a plain
+    // `<sl-textarea>`'s `(line - 1) * lineHeight` math silently broke once
+    // lines wrapped).
+    const target = lastScrollTarget(plugin._cmMdView.dispatched);
+    assert.strictEqual(target.range.from, Text.of(text.split('\n')).line(5).from);
+    assert.strictEqual(target.y, 'start');
 
     const previewContent = plugin._editorDialogUi.textBody.textTabs.previewPanel.previewContent;
     assert.ok(previewContent.querySelector('#data-correction'), 'preview must render a heading with the matching id');
@@ -497,20 +571,109 @@ describe('DocumentRulesPlugin scroll position on render', () => {
   it('does not scroll to a fragment for a non-markdown resource', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.txt#data-correction', key: 'a', label: 'A', format: 'text' };
     plugin._currentOriginalText = 'plain text';
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
 
-    const textArea = plugin._editorDialogUi.textBody.textTabs.editPanel.textArea;
-    stubTextAreaInput(textArea);
-    const scrollCalls = [];
-    textArea.scrollPosition = (pos) => scrollCalls.push(pos);
-
     plugin._renderEditorDialog();
 
-    assert.deepStrictEqual(scrollCalls, [{ top: 0 }]);
+    const target = lastScrollTarget(plugin._cmMdView.dispatched);
+    assert.strictEqual(target.range.from, 0);
+  });
+});
+
+describe('DocumentRulesPlugin._openResourceEditor', () => {
+  it('scrolls to the heading-anchor fragment only after the dialog has actually been shown', async () => {
+    // Regression test: _renderEditorDialog() runs while the dialog is still
+    // hidden (`<sl-dialog>` only becomes visible once show() resolves), and
+    // setting scroll position on a hidden element has no effect in a real
+    // browser - the fix defers the scroll call until after show() resolves.
+    // This is a timing/ordering check, since the jsdom mock below can't
+    // reproduce the browser's "hidden element ignores scrollTop" behavior
+    // directly - see makeDialogUi()'s show() stub.
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = createMarkdownRenderer();
+    const text = '# Guidelines\n\nIntro.\n\n## Data correction\n\nBody text.\n';
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: text }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    const calls = [];
+    plugin._cmMdView = makeCmMdViewMock('', { onScroll: (target) => calls.push(['scroll', target.range.from]) });
+    plugin._editorDialogUi.show = async () => { calls.push(['show']); plugin._editorDialogUi.open = true; };
+    plugin._editorDialogUi.textBody.textTabs.show = (panel) => calls.push(['show-tab', panel]);
+
+    const resource = {
+      kind: 'interpretation-ref', url: 'https://example.com/guidelines.md#data-correction',
+      key: 'a', label: 'Data correction', format: 'markdown',
+    };
+    await plugin._openResourceEditor(resource);
+
+    // "## Data correction" is on line 5 (1-based) - and it must come
+    // strictly after 'show' and 'show-tab', not before. The "edit" tab must
+    // be forced active explicitly rather than trusting the tab group's own
+    // default-active-tab logic, which races with a freshly opened dialog -
+    // see _openResourceEditor()'s doc comment.
+    assert.deepStrictEqual(calls, [['show'], ['show-tab', 'edit'], ['scroll', Text.of(text.split('\n')).line(5).from]]);
+  });
+
+  it('awaits the "edit" panel\'s own pending update before scrolling, not just the dialog\'s show()', async () => {
+    // Regression test for the IntersectionObserver race described in
+    // _openResourceEditor()'s doc comment: forcing the tab active (show())
+    // only *schedules* the panel's `active` attribute reflection - real
+    // @shoelace-style/shoelace panels apply it asynchronously, via their own
+    // Lit update cycle, not synchronously inside show(). If the code scrolled
+    // right after show('edit') without awaiting editPanel.updateComplete,
+    // this test's deliberately-delayed updateComplete would still be
+    // pending when scrollPosition() is called.
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._md = { render: (text) => text };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: 'plain text' }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    let updateResolved = false;
+    plugin._cmMdView = makeCmMdViewMock('', { onScroll: () => { scrolledAfterUpdate = updateResolved; } });
+    plugin._editorDialogUi.textBody.textTabs.editPanel.updateComplete = new Promise((resolve) => {
+      setImmediate(() => { updateResolved = true; resolve(); });
+    });
+    let scrolledAfterUpdate = null;
+
+    const resource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
+    await plugin._openResourceEditor(resource);
+
+    assert.strictEqual(scrolledAfterUpdate, true);
+  });
+
+  it('does not scroll a non-markdown (schema/xml) resource after showing the dialog', async () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: '<grammar/>' }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    const resource = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml' };
+    await plugin._openResourceEditor(resource);
+
+    // _cmMdView is never touched for an xml-format resource - left
+    // unassigned (null) so any wrong access here would throw instead of
+    // silently no-op.
+    assert.strictEqual(plugin._cmMdView, null);
   });
 });
 
@@ -518,12 +681,12 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
   function setup() {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock('original text');
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://example.com/a.md', key: 'a', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'original text';
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
-    plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value = 'original text';
     wireOverrideIndicatorStubs(plugin);
     return plugin;
   }
@@ -550,7 +713,7 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     plugin._currentOverrides = [{ id: 'ov1', note: 'old note', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = 'ov1';
     plugin._editorDialogUi.noteInput.value = 'new note';
-    plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value = 'new text';
+    plugin._cmMdView.setText('new text');
     const updated = { id: 'ov1', note: 'new note', text: 'new text', format: 'markdown', created_at: '', updated_at: '' };
     const calls = [];
     plugin.getDependency = (name) => {
@@ -839,11 +1002,11 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
   function setup() {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock('shown text');
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md', key: 'a', label: 'A', format: 'markdown' };
     plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = 'ov1';
-    plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value = 'shown text';
     return plugin;
   }
 
@@ -951,6 +1114,7 @@ describe('DocumentRulesPlugin._renderEditorDialog proposeUpstreamBtn visibility'
   it('is hidden when Original is selected and shown when an override is selected', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock();
     plugin._md = { render: (text) => text };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'text';
@@ -1320,6 +1484,9 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
   it('makes the dialog read-only and hides content-editing controls even with an override selected', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    let setMdArgs;
+    plugin._setMarkdownContent = (...args) => { setMdArgs = args; };
+    plugin._scrollMarkdownBodyToAnchor = () => {};
     plugin._md = { render: (t) => t };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'original';
@@ -1329,7 +1496,7 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
     plugin.onEditorReadOnlyChange(true);
 
     assert.strictEqual(plugin._documentReadOnly, true);
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, true);
+    assert.deepStrictEqual(setMdArgs, ['override text', true]);
     assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, true);
     assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, 'none');
   });
@@ -1343,6 +1510,9 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
   it('restores editability when the document becomes writable again, for a selected override', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
+    let setMdArgs;
+    plugin._setMarkdownContent = (...args) => { setMdArgs = args; };
+    plugin._scrollMarkdownBodyToAnchor = () => {};
     plugin._md = { render: (t) => t };
     plugin._currentResource = { kind: 'interpretation-ref', url: 'u', key: 'u', label: 'A', format: 'markdown' };
     plugin._currentOriginalText = 'original';
@@ -1352,7 +1522,7 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
 
     plugin.onEditorReadOnlyChange(false);
 
-    assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, false);
+    assert.deepStrictEqual(setMdArgs, ['override text', false]);
     assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, false);
     assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, '');
   });

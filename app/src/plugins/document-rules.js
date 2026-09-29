@@ -40,7 +40,9 @@ import { createMarkdownRenderer, findHeadingLineForAnchor } from '../modules/mar
 import { PanelUtils } from '../modules/panels/index.js'
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
-import { xml } from '@codemirror/lang-xml'
+import { xml, xmlLanguage } from '@codemirror/lang-xml'
+import { markdown } from '@codemirror/lang-markdown'
+import { GFM } from '@lezer/markdown'
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
 import { getTheme } from '../modules/codemirror/editor-themes.js'
 import { createOverrideRefField, createOverrideRefClickHandler, refDecorationTheme } from '../modules/document-rules-decorations.js'
@@ -157,6 +159,22 @@ class DocumentRulesPlugin extends Plugin {
    */
   _cmHistoryCompartment = new Compartment()
 
+  /**
+   * CodeMirror instance for the "Edit" tab of markdown/text resources -
+   * replaces a plain `<sl-textarea>` (see _setMarkdownContent()'s doc
+   * comment on why: a native textarea has no reliable, wrap-aware way to
+   * scroll to a specific source line, which is exactly what
+   * _scrollMarkdownBodyToAnchor() needs for a heading-anchor fragment).
+   * @type {EditorView}
+   */
+  _cmMdView = null
+
+  /** @type {Compartment} */
+  _cmMdReadOnlyCompartment = new Compartment()
+
+  /** Mirrors _cmHistoryCompartment, for _cmMdView. @type {Compartment} */
+  _cmMdHistoryCompartment = new Compartment()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -201,6 +219,36 @@ class DocumentRulesPlugin extends Plugin {
       parent: this._editorDialogUi.xmlBody.xmlContainer
     })
 
+    this._cmMdView = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          // GFM (tables/strikethrough/autolink/task lists) matches what the
+          // preview's markdown-it renderer (createMarkdownRenderer()) already
+          // supports by default; xmlLanguage highlights ```xml fenced code
+          // blocks, since annotation guides often embed TEI/XML examples.
+          markdown({ extensions: GFM, codeLanguages: (info) => info === 'xml' ? xmlLanguage : null }),
+          EditorView.lineWrapping,
+          // CodeMirror only scrolls internally (what EditorView.scrollIntoView()
+          // in _scrollMarkdownBodyToAnchor() needs) once its own `.cm-scroller`
+          // is the actual overflow container - by default (no explicit height),
+          // `.cm-editor` grows to fit its content and the *outer* mdContainer
+          // div does the scrolling instead, in which case scrollIntoView() has
+          // nothing to scroll and silently no-ops. This theme constrains
+          // `.cm-editor`'s height so `.cm-scroller` becomes scrollable,
+          // mirroring the fixed-height/overflow:auto the xmlContainer div gets
+          // via plain CSS (its CM instance never scrolls to a specific
+          // position programmatically, so it never needed this).
+          EditorView.theme({ '&': { height: '400px' }, '.cm-scroller': { overflow: 'auto' } }),
+          this._cmMdHistoryCompartment.of(history()),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          getTheme(themeId).extensions,
+          this._cmMdReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
+        ]
+      }),
+      parent: this._editorDialogUi.textBody.textTabs.editPanel.mdContainer
+    })
+
     this._refDecorationSlot = this.#xmlEditor.createExtensionSlot([])
 
     this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
@@ -209,13 +257,23 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
     this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
-    this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', (event) => {
+    this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', async (event) => {
       if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
-        const text = this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
-        this._editorDialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+        const previewPanel = this._editorDialogUi.textBody.textTabs.previewPanel
+        const text = this._cmMdView.state.doc.toString()
+        previewPanel.previewContent.innerHTML = this._md.render(text)
         // Re-scroll now that the preview panel is actually visible - see
         // _scrollMarkdownBodyToAnchor()'s doc comment on why setting scroll
-        // position on a hidden `display: none` panel has no effect.
+        // position on a hidden `display: none` panel has no effect. This
+        // event fires synchronously from setActiveTab() right after setting
+        // the panel's `active` property, but - like _openResourceEditor()'s
+        // own forced tab-show - that property's reflection to the actual
+        // `active` DOM attribute (which the panel's display:none/block CSS
+        // depends on) lands asynchronously via the panel's own Lit update,
+        // not synchronously inside this handler; without awaiting it here,
+        // scrollIntoView() below fires while the panel is still hidden and
+        // permanently no-ops (nothing re-attempts it afterwards).
+        await previewPanel.updateComplete
         if (this._currentResource) this._scrollMarkdownBodyToAnchor(text)
       }
     })
@@ -474,8 +532,37 @@ class DocumentRulesPlugin extends Plugin {
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
-    this._renderEditorDialog()
-    this._editorDialogUi.show()
+    // scroll: false - the dialog is still hidden (`<sl-dialog>` renders its
+    // content behind a `hidden` attribute until shown, see show() below),
+    // and setting scroll position on a hidden element has no effect (same
+    // reason the "preview" sl-tab-show handler in install() re-scrolls once
+    // its own panel becomes visible). Re-run the scroll explicitly once
+    // show() resolves, i.e. once the dialog is actually visible.
+    this._renderEditorDialog({ scroll: false })
+    await this._editorDialogUi.show()
+    if (resource.format !== 'xml') {
+      // Force the "Edit" tab active before scrolling to it, rather than
+      // trusting whatever tab the shared <sl-tab-group> already considers
+      // active. @shoelace-style/shoelace's tab-group only auto-activates a
+      // default tab via a *one-shot* IntersectionObserver that fires the
+      // first time the tab group becomes visible (see its
+      // connectedCallback()) - since this dialog/tab-group is created once
+      // in install() while the dialog is still hidden, that callback races
+      // with this method's own await above, so on the very first-ever
+      // _openResourceEditor() call neither tab panel is marked "active" yet
+      // by the time we get here (nothing is visible to scroll to at all).
+      // Calling the tab group's own show() bypasses that race entirely and
+      // also gives every freshly opened resource the same predictable
+      // starting tab, instead of leaving whatever tab a *previous*
+      // resource's dialog session was left on. Its "active" attribute
+      // reflection (which the panel's `display: none`/`block` CSS depends
+      // on) lands asynchronously with the panel's own Lit update, hence the
+      // extra await.
+      const tabs = this._editorDialogUi.textBody.textTabs
+      tabs.show('edit')
+      await tabs.editPanel.updateComplete
+      this._scrollMarkdownBodyToAnchor(this._currentShownText())
+    }
   }
 
   /**
@@ -487,11 +574,18 @@ class DocumentRulesPlugin extends Plugin {
     if (this._currentResource.format === 'xml') {
       return this._currentXmlText()
     }
-    return this._editorDialogUi.textBody.textTabs.editPanel.textArea.value
+    return this._cmMdView.state.doc.toString()
   }
 
-  /** Full re-render of the dialog for `_currentResource`/`_currentOverrides`/`_currentSelectedId`. */
-  _renderEditorDialog() {
+  /**
+   * Full re-render of the dialog for `_currentResource`/`_currentOverrides`/`_currentSelectedId`.
+   * @param {{ scroll?: boolean }} [options] - `scroll: false` skips the
+   *   anchor/top scroll positioning normally applied to the markdown/text
+   *   body (see _scrollMarkdownBodyToAnchor()) - used by _openResourceEditor()
+   *   while the dialog is still hidden, since scrolling has no effect until
+   *   the dialog is actually shown.
+   */
+  _renderEditorDialog({ scroll = true } = {}) {
     const resource = this._currentResource
     const dialogUi = this._editorDialogUi
     dialogUi.setAttribute('label', resource.label)
@@ -512,10 +606,9 @@ class DocumentRulesPlugin extends Plugin {
     } else {
       dialogUi.xmlBody.style.display = 'none'
       dialogUi.textBody.style.display = ''
-      dialogUi.textBody.textTabs.editPanel.textArea.value = text
-      dialogUi.textBody.textTabs.editPanel.textArea.readonly = readOnly
+      this._setMarkdownContent(text, readOnly)
       dialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
-      this._scrollMarkdownBodyToAnchor(text)
+      if (scroll) this._scrollMarkdownBodyToAnchor(text)
     }
 
     dialogUi.newOverrideBtn.disabled = this._documentReadOnly
@@ -526,7 +619,7 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Scroll the markdown edit textarea and preview to `_currentResource`'s
+   * Scroll the markdown edit view and preview to `_currentResource`'s
    * heading-anchor fragment (see headingAnchorFragment()), or reset both to
    * the top when there is none - without this, switching to a new
    * resource/override kept whatever scroll offset the previous content had
@@ -535,26 +628,34 @@ class DocumentRulesPlugin extends Plugin {
    * always the whole document for a non-line-range fragment (see
    * fetch_rule_excerpt() in annotation_rules_utils.py).
    *
+   * The edit side dispatches CodeMirror's own `EditorView.scrollIntoView`
+   * state effect rather than computing a pixel offset by hand
+   * (`(line - 1) * lineHeight`, as a plain `<sl-textarea>` needed) - that
+   * naive math assumes one source line = one visual row, which a soft-wrapped
+   * textarea does not guarantee: a document with long, non-hard-wrapped
+   * paragraph lines before the target heading landed the scroll position
+   * thousands of pixels short of the real target. CodeMirror measures each
+   * line's actual rendered (wrapped) height, so this is correct regardless of
+   * wrapping - the whole reason for switching this editor to CodeMirror (see
+   * _setMarkdownContent()'s doc comment).
+   *
    * Also called from the "preview" `sl-tab-show` handler (with the same
    * `text`), because scrolling a hidden `display: none` tab panel has no
    * effect - the preview must already be visible for its scroll position to
-   * stick.
+   * stick; and from _openResourceEditor(), for the same reason but one level
+   * up - the whole `<sl-dialog>` is still hidden while _renderEditorDialog()
+   * first runs there, so that initial call passes `{ scroll: false }` and
+   * this is re-invoked once the dialog's own show() has resolved.
    * @param {string} text
    */
   _scrollMarkdownBodyToAnchor(text) {
     const dialogUi = this._editorDialogUi
-    const textArea = dialogUi.textBody.textTabs.editPanel.textArea
     const fragment = this._currentResource.format === 'markdown' ? headingAnchorFragment(this._currentResource.url) : null
     const line = fragment ? findHeadingLineForAnchor(text, fragment) : null
 
-    // textArea.input (SlTextarea's internal <textarea>, see its
-    // scrollPosition()) is only populated once the element is connected and
-    // has rendered - guard for test doubles/disconnected elements that never
-    // reach that point.
-    if (textArea.input) {
-      const lineHeight = parseFloat(getComputedStyle(textArea.input).lineHeight) || 0
-      textArea.scrollPosition({ top: line === null ? 0 : Math.max(0, (line - 1) * lineHeight) })
-    }
+    const doc = this._cmMdView.state.doc
+    const pos = line === null ? 0 : doc.line(Math.min(Math.max(line, 1), doc.lines)).from
+    this._cmMdView.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start' }) })
 
     const previewContent = dialogUi.textBody.textTabs.previewPanel.previewContent
     const heading = fragment && [...previewContent.querySelectorAll('[id]')].find((el) => el.id === fragment)
@@ -867,6 +968,34 @@ class DocumentRulesPlugin extends Plugin {
   /** @returns {string} */
   _currentXmlText() {
     return this._cmView.state.doc.toString()
+  }
+
+  /**
+   * Replace `_cmMdView`'s full content and toggle read-only/history exactly
+   * like _setXmlContent() does for the XML CodeMirror instance - see that
+   * method's doc comment for why each step is needed. This editor replaced a
+   * plain `<sl-textarea>` because a textarea has no reliable way to scroll to
+   * a specific source line once its content soft-wraps: the previous
+   * approach approximated the target's pixel offset as
+   * `(line - 1) * lineHeight`, which assumes one source line = one visual
+   * row - wrong for any document with long, non-hard-wrapped paragraph
+   * lines, landing the scroll thousands of pixels short of a heading anchor
+   * deep in a real annotation guide. CodeMirror measures each line's actual
+   * rendered height itself (see _scrollMarkdownBodyToAnchor()'s use of
+   * `EditorView.scrollIntoView`), so it doesn't need that approximation.
+   * @param {string} text
+   * @param {boolean} readOnly
+   */
+  _setMarkdownContent(text, readOnly) {
+    this._cmMdView.dispatch({
+      changes: { from: 0, to: this._cmMdView.state.doc.length, insert: text },
+      effects: [
+        this._cmMdReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]),
+        this._cmMdHistoryCompartment.reconfigure([])
+      ]
+    })
+    this._cmMdView.dispatch({ effects: this._cmMdHistoryCompartment.reconfigure(history()) })
+    this._cmMdView.scrollDOM.scrollTop = 0
   }
 
   /**
