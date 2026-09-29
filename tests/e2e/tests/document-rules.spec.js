@@ -1,7 +1,7 @@
 /**
  * Document rules registry E2E tests
  *
- * Covers the "Edit prompts/schemas" submenu (resource discovery, override
+ * Covers the "Edit document rules" submenu (resource discovery, override
  * CRUD on the schema resource) and the reviewer-only "Refresh document
  * rules" action.
  *
@@ -106,17 +106,17 @@ test.describe('Document rules registry', () => {
       await loadFixtureDocument(page, 'document-rules-fixture');
 
       await openToolsMenu(page);
-      // The "Edit prompts/schemas" item starts hidden (display:none) until
+      // The "Edit document rules" item starts hidden (display:none) until
       // its own POST /document-rules/list resolves for the just-loaded
       // document (app/src/plugins/document-rules.js's onXmlChange() ->
       // _refreshResources()), so wait for it to become visible before
       // hovering it rather than relying on a fixed timeout.
-      const editMenuItem = page.locator('sl-menu-item:has-text("Edit prompts/schemas")');
+      const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
       await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
       await editMenuItem.hover();
       await page.waitForTimeout(500);
 
-      const submenu = page.locator('sl-menu-item:has-text("Edit prompts/schemas") sl-menu[slot="submenu"]');
+      const submenu = page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"]');
       await expect(submenu.locator('sl-menu-item')).toHaveCount(2);
       const labels = await submenu.locator('sl-menu-item').allTextContents();
       expect(labels.some((label) => label.includes('Data correction'))).toBe(true);
@@ -294,13 +294,13 @@ test.describe('Document rules registry', () => {
       }, INTERPRETATION_REF_URL);
 
       // Force the frontend to pick up the new selection: hovering
-      // "Edit prompts/schemas" triggers _refreshResources() ->
+      // "Edit document rules" triggers _refreshResources() ->
       // _refreshOverrideIndicators(), the same trigger the "lists both
       // resources..." test above already relies on before reading the
       // submenu - neither of those calls resolves original text, so this
       // step itself adds no further network dependency.
       await openToolsMenu(page);
-      const editMenuItem = page.locator('sl-menu-item:has-text("Edit prompts/schemas")');
+      const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
       await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
       await editMenuItem.hover();
       await page.waitForTimeout(500);

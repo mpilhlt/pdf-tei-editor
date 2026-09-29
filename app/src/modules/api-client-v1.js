@@ -1517,7 +1517,7 @@ export class ApiClientV1 {
   }
 
   /**
-   * List every resource the posted document content references. Used to build the "Edit prompts/schemas" submenu.
+   * List every resource the posted document content references. Used to build the "Edit document rules" submenu.
    *
    * @param {ListResourcesRequest} requestBody
    * @returns {Promise<ListResourcesResponse>}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Unit tests for the document-rules plugin (Edit prompts/schemas submenu,
+ * Unit tests for the document-rules plugin (Edit document rules submenu,
  * resource editor dialog, Refresh document rules action).
  * @testCovers app/src/plugins/document-rules.js
  */
@@ -1131,7 +1131,7 @@ describe('DocumentRulesPlugin._renderEditorDialog proposeUpstreamBtn visibility'
 });
 
 describe('DocumentRulesPlugin.onUserChange / role gating', () => {
-  it('hides the refresh menu item for a user without reviewer/admin role, and also hides "Edit prompts/schemas" via the re-triggered resource refresh', async () => {
+  it('hides the refresh menu item for a user without reviewer/admin role, and also hides "Edit document rules" via the re-triggered resource refresh', async () => {
     const plugin = makePlugin();
     plugin._refreshMenuItem = document.createElement('sl-menu-item');
     plugin._editMenuItem = { style: {}, documentRulesEditSubmenu: document.createElement('sl-menu') };

@@ -79,7 +79,7 @@ async def list_document_resources(
     request: ListResourcesRequest,
     user: dict = Depends(require_reviewer_or_admin),
 ) -> ListResourcesResponse:
-    """List every resource the posted document content references. Used to build the "Edit prompts/schemas" submenu."""
+    """List every resource the posted document content references. Used to build the "Edit document rules" submenu."""
     resources = list_resources(request.xml_string)
     return ListResourcesResponse(
         resources=[

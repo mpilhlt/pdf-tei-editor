@@ -2,7 +2,7 @@
  * Document Rules Plugin
  *
  * Provides two Tools-menu entries under the "document-rules" category:
- * - "Edit prompts/schemas": a dynamically populated submenu, one entry per
+ * - "Edit document rules": a dynamically populated submenu, one entry per
  *   resource (editorialDecl/interpretation entries + the document's schema)
  *   the currently open document references (POST /document-rules/list).
  *   Clicking an entry opens a shared per-resource editor dialog for
@@ -306,7 +306,7 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Show/hide the reviewer/admin-gated "Refresh document rules" item, and
-   * re-run resource discovery so "Edit prompts/schemas" picks up the same
+   * re-run resource discovery so "Edit document rules" picks up the same
    * role gate applied in #doRefreshResources() (hidden entirely for a user
    * without the role, whatever the open document's resources are) - both
    * items are gated the same way so tools.js's category-label auto-hide
