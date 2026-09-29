@@ -145,8 +145,15 @@ test.describe('Document rules registry', () => {
       await expect(override1Btn).toHaveAttribute('variant', 'primary');
       await expect(xmlContent).toHaveAttribute('contenteditable', 'true');
 
-      // Reset to original: reverts the selection and the body's read-only state.
+      // Reset to original: since "Reset to original" now permanently
+      // deletes overrides (not just deselects them), _onReset() confirms
+      // first - accept that confirm dialog before checking the reverted
+      // selection/read-only state.
       await dialog.locator('sl-button[name="resetBtn"]').click();
+      const confirmDialog = page.locator('sl-dialog[name="dialog"]');
+      await expect(confirmDialog).toHaveAttribute('open', '', { timeout: 5000 });
+      await page.waitForTimeout(500);
+      await confirmDialog.locator('sl-button[name="confirmBtn"]').click();
       await page.waitForTimeout(500);
       await expect(originalBtn).toHaveAttribute('variant', 'primary');
       await expect(xmlContent).toHaveAttribute('contenteditable', 'false');
