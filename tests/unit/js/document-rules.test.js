@@ -598,53 +598,71 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
 
   let clipboardCalls;
   let openCalls;
+  let confirmCalls;
+  let confirmReturns;
 
   beforeEach(() => {
     clipboardCalls = [];
     openCalls = [];
+    confirmCalls = [];
+    confirmReturns = true;
     global.navigator.clipboard = { writeText: async (text) => { clipboardCalls.push(text); } };
     dom.window.open = (...args) => { openCalls.push(args); };
   });
 
-  it('copies the shown text to the clipboard and opens a prefilled tab', async () => {
+  /** @param {(name: string) => object} clientDependency */
+  function withDialog(plugin, clientDependency) {
+    plugin.getDependency = (name) => {
+      if (name === 'client') return clientDependency;
+      if (name === 'dialog') return { confirm: async (message, title) => { confirmCalls.push([message, title]); return confirmReturns; } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+  }
+
+  it('confirms, then copies the shown text to the clipboard and opens a prefilled tab', async () => {
     const plugin = setup();
     let calledWith;
-    plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: {
-        documentRulesProposeChangeUrl: async (body) => { calledWith = body; return { url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }; },
-      } };
-      throw new Error(`unexpected dependency: ${name}`);
-    };
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async (body) => { calledWith = body; return { url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }; },
+    } });
     await plugin._onProposeUpstream();
     assert.deepStrictEqual(calledWith, { url: 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md', text: 'shown text' });
+    assert.strictEqual(confirmCalls.length, 1);
+    assert.match(confirmCalls[0][0], /prefilled/);
     assert.deepStrictEqual(clipboardCalls, ['shown text']);
     assert.deepStrictEqual(openCalls[0], ['https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', '_blank', 'noopener']);
-    assert.match(notifyCalls[0][0], /prefilled/);
   });
 
-  it('opens an unprefilled tab and notes the clipboard fallback when content_prefilled is false', async () => {
+  it('confirms with clipboard-fallback wording and opens an unprefilled tab when content_prefilled is false', async () => {
     const plugin = setup();
-    plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: {
-        documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
-      } };
-      throw new Error(`unexpected dependency: ${name}`);
-    };
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
+    } });
     await plugin._onProposeUpstream();
+    assert.match(confirmCalls[0][0], /clipboard/);
     assert.deepStrictEqual(clipboardCalls, ['shown text']);
     assert.strictEqual(openCalls[0][0], 'https://gitlab.com/group/project/-/edit/main/rules.md');
-    assert.match(notifyCalls[0][0], /clipboard/);
+  });
+
+  it('does not copy or open anything when the user cancels the confirmation', async () => {
+    const plugin = setup();
+    confirmReturns = false;
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
+    } });
+    await plugin._onProposeUpstream();
+    assert.strictEqual(confirmCalls.length, 1);
+    assert.strictEqual(clipboardCalls.length, 0);
+    assert.strictEqual(openCalls.length, 0);
   });
 
   it('shows a warning and opens nothing when the resource host is not a recognized forge', async () => {
     const plugin = setup();
-    plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: {
-        documentRulesProposeChangeUrl: async () => ({ url: null, content_prefilled: false }),
-      } };
-      throw new Error(`unexpected dependency: ${name}`);
-    };
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async () => ({ url: null, content_prefilled: false }),
+    } });
     await plugin._onProposeUpstream();
+    assert.strictEqual(confirmCalls.length, 0);
     assert.strictEqual(openCalls.length, 0);
     assert.strictEqual(clipboardCalls.length, 0);
     assert.match(notifyCalls[0][0], /not hosted on a recognized git forge/);
@@ -652,13 +670,11 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
 
   it('shows a danger toast and opens nothing when the backend call fails', async () => {
     const plugin = setup();
-    plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: {
-        documentRulesProposeChangeUrl: async () => { throw new Error('network down'); },
-      } };
-      throw new Error(`unexpected dependency: ${name}`);
-    };
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async () => { throw new Error('network down'); },
+    } });
     await plugin._onProposeUpstream();
+    assert.strictEqual(confirmCalls.length, 0);
     assert.strictEqual(openCalls.length, 0);
     assert.match(notifyCalls[0][0], /Could not build the upstream link/);
   });
@@ -666,12 +682,9 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
   it('still opens the tab when the clipboard write is denied', async () => {
     const plugin = setup();
     global.navigator.clipboard = { writeText: async () => { throw new Error('denied'); } };
-    plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: {
-        documentRulesProposeChangeUrl: async () => ({ url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }),
-      } };
-      throw new Error(`unexpected dependency: ${name}`);
-    };
+    withDialog(plugin, { apiClient: {
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }),
+    } });
     await plugin._onProposeUpstream();
     assert.strictEqual(openCalls.length, 1);
   });

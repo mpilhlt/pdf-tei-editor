@@ -704,10 +704,13 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Build a URL that lets the caller's own GitHub/GitLab session propose the
    * currently shown override text as the resource's new upstream content,
-   * copy that text to the clipboard as a paste-ready fallback (GitLab, and
-   * GitHub when the text is too long to embed in the URL, can't prefill the
-   * content), and open the forge's page in a new tab. No server-side git
-   * write happens anywhere in this flow - see
+   * explain in a confirm dialog what will happen (a toast fired right before
+   * window.open() loses the race against the new tab stealing focus, so the
+   * explanation has to come first, not after), then on confirmation copy the
+   * text to the clipboard as a paste-ready fallback (GitLab, and GitHub when
+   * the text is too long to embed in the URL, can't prefill the content) and
+   * open the forge's page in a new tab. No server-side git write happens
+   * anywhere in this flow - see
    * docs/superpowers/specs/2026-09-28-document-rules-propose-upstream-design.md.
    * @returns {Promise<void>}
    */
@@ -724,24 +727,17 @@ class DocumentRulesPlugin extends Plugin {
       notify('This resource is not hosted on a recognized git forge; no upstream link is available.', 'warning', 'exclamation-triangle')
       return
     }
+    const message = response.content_prefilled
+      ? 'This opens a new tab with the upstream editor, prefilled with your override text.'
+      : 'This copies your override text to the clipboard and opens the upstream editor in a new tab. Paste the copied text into the file once it opens.'
+    const confirmed = await this.getDependency('dialog').confirm(message, 'Propose change upstream')
+    if (!confirmed) return
+
     try {
       await navigator.clipboard.writeText(text)
     } catch {
       // Clipboard denied/unavailable - non-fatal whether or not the URL
       // itself already carries the text.
-    }
-    // Notify BEFORE opening the tab: window.open() focuses the new tab
-    // immediately, so a toast fired afterwards has no time to render before
-    // the user's attention (and often the whole browser window) has already
-    // moved away from this page. The paste-it-in case gets a longer duration
-    // since it's the one the user must still act on after switching back.
-    if (response.content_prefilled) {
-      notify('Opening a prefilled upstream editor in a new tab.', 'primary', 'info-circle')
-    } else {
-      notify(
-        'Opening the upstream editor in a new tab — the override text has been copied to your clipboard, paste it in.',
-        'primary', 'info-circle', 8000
-      )
     }
     window.open(response.url, '_blank', 'noopener')
   }

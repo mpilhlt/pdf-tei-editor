@@ -10,7 +10,7 @@ From the resource editor dialog, let a user with a selected override open a pre-
 
 - No server-side git write (no commit, no branch creation, no PR/MR API call) happens on our backend.
 - No stored GitHub/GitLab credentials, no OAuth flow, no per-user token management.
-- No in-app confirmation dialog — the forge's own PR/MR creation page is the confirmation step.
+- No server-managed confirmation *state* (no "are you sure" persisted anywhere) — the confirm dialog covered below is purely transient, in-page UI.
 - No use of the overrides table's `base_url`/`base_hash` fields (they remain reserved for the still-deferred "upstream changed" notice) — this feature only needs the resource's current `url`, already available to the frontend from `documentRulesList()`.
 
 ## Mechanism
@@ -86,9 +86,10 @@ New footer button in `document-rules-editor-dialog.html`, in the same visibility
 1. Reads the currently shown text via the existing `_currentShownText()` helper (same source Save/New override already use — the live, possibly-unsaved editor/CodeMirror content).
 2. Calls `documentRulesProposeChangeUrl({ url: this._currentResource.url, text })`.
 3. If `url` is `null`: warning toast, "not hosted on a recognized git forge", stop.
-4. Otherwise: best-effort `navigator.clipboard.writeText(text)` (failure ignored — non-fatal whether or not GitHub prefilled the content), then `window.open(url, '_blank', 'noopener')`, then a toast whose wording depends on `content_prefilled` (prefilled: "opening a prefilled upstream editor"; not: "opening the upstream editor — text copied to your clipboard, paste it in").
+4. Otherwise: shows the shared `dialog.confirm(message, 'Propose change upstream')` dialog, wording depending on `content_prefilled` (prefilled: "this opens a new tab with the upstream editor, prefilled with your override text"; not: "this copies your override text to the clipboard and opens the upstream editor in a new tab — paste the copied text into the file once it opens"). If the user cancels, stop (no clipboard write, no tab).
+5. On confirm: best-effort `navigator.clipboard.writeText(text)` (failure ignored — non-fatal whether or not GitHub prefilled the content), then `window.open(url, '_blank', 'noopener')`.
 
-No new dialog, no confirmation step in-app — the forge's own page is the confirmation/review step.
+**Revised from the original "no dialog, open directly" decision** (originally chosen so the forge's own page would be the confirmation step): in practice `window.open()` shifts focus to the new tab immediately, so a toast fired around it — before or after — has no reliable window to be seen, especially the clipboard-paste instruction the user still needs to act on *after* switching back. A blocking confirm dialog shown *before* anything happens fixes this: the instruction is guaranteed to be read before the tab opens, at the cost of one extra click. The dialog explains the outcome rather than asking a yes/no question about intent — the user already expressed intent by clicking the button — so its role is closer to "acknowledge what's about to happen" than "are you sure".
 
 ## Error handling
 
