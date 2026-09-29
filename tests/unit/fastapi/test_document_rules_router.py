@@ -334,7 +334,7 @@ class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body["content_prefilled"])
-        self.assertTrue(body["url"].startswith("https://github.com/mpilhlt/pdf-tei-editor/new/main?"))
+        self.assertTrue(body["url"].startswith("https://github.com/mpilhlt/pdf-tei-editor/edit/main/rules.md?"))
         self.assertIn("new+content", body["url"])
 
     def test_builds_unprefilled_edit_url_for_a_gitlab_blob_url(self):

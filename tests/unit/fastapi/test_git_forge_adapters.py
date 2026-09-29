@@ -267,16 +267,16 @@ class TestGitHubAdapterBuildProposeChangeUrl(unittest.TestCase):
     def test_builds_prefilled_url_from_blob_url_with_branch_ref(self):
         url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
         target = self.adapter.build_propose_change_url(url, "new content", self.cache)
-        expected_query = urlencode({"filename": "docs/guidelines.md", "value": "new content"})
-        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/new/main?{expected_query}")
+        expected_query = urlencode({"value": "new content"})
+        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/edit/main/docs/guidelines.md?{expected_query}")
         self.assertTrue(target.content_prefilled)
         self.cache.get_text.assert_not_called()
 
     def test_builds_prefilled_url_from_raw_url(self):
         url = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guidelines.md"
         target = self.adapter.build_propose_change_url(url, "new content", self.cache)
-        expected_query = urlencode({"filename": "docs/guidelines.md", "value": "new content"})
-        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/new/main?{expected_query}")
+        expected_query = urlencode({"value": "new content"})
+        self.assertEqual(target.url, f"https://github.com/mpilhlt/fossil/edit/main/docs/guidelines.md?{expected_query}")
         self.assertTrue(target.content_prefilled)
 
     @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
@@ -294,7 +294,7 @@ class TestGitHubAdapterBuildProposeChangeUrl(unittest.TestCase):
             timeout=10,
             headers={"Accept": "application/vnd.github+json"},
         )
-        self.assertIn("/new/main?", target.url)
+        self.assertIn("/edit/main/docs/guidelines.md?", target.url)
         self.cache.set_text.assert_called_once_with(
             "https://api.github.com/repos/mpilhlt/fossil/_default_branch", "main"
         )
@@ -305,15 +305,14 @@ class TestGitHubAdapterBuildProposeChangeUrl(unittest.TestCase):
         url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
         target = self.adapter.build_propose_change_url(url, "text", self.cache)
         mock_get.assert_not_called()
-        self.assertIn("/new/develop?", target.url)
+        self.assertIn("/edit/develop/docs/guidelines.md?", target.url)
 
     def test_falls_back_to_unprefilled_when_url_too_long(self):
         url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
         huge_text = "x" * 8000
         target = self.adapter.build_propose_change_url(url, huge_text, self.cache)
         self.assertFalse(target.content_prefilled)
-        self.assertNotIn("value=", target.url)
-        self.assertIn("filename=", target.url)
+        self.assertEqual(target.url, "https://github.com/mpilhlt/fossil/edit/main/docs/guidelines.md")
 
     def test_returns_none_for_unrecognized_host(self):
         target = self.adapter.build_propose_change_url("https://example.com/docs/guidelines.md", "text", self.cache)
@@ -389,7 +388,7 @@ class TestDefaultBranchCacheKeyDoesNotCollideWithCommitsCache(unittest.TestCase)
                 cache,
             )
 
-            self.assertIn("/new/main?", target.url)
+            self.assertIn("/edit/main/docs/guidelines.md?", target.url)
 
     @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
     def test_gitlab(self, mock_get):

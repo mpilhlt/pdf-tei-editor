@@ -173,12 +173,21 @@ class GitHubAdapter(BaseGitForgeAdapter):
         owner, repo, ref, path = m['owner'], m['repo'], m['ref'], m['path']
         branch = ref if not _SHA_RE.match(ref) else self._default_branch(owner, repo, cache)
 
-        prefilled_url = f"https://github.com/{owner}/{repo}/new/{branch}?{urlencode({'filename': path, 'value': text})}"
+        # /edit/, not /new/: this feature always targets a resource that
+        # already exists upstream (an override is layered on top of one).
+        # /new/{branch}?filename={existing path} looks like it would work -
+        # GitHub happily prefills the editor with `value` either way - but
+        # it performs a create-blob operation on commit, which GitHub
+        # rejects with "A file with the same name already exists" for a
+        # path that's already there. /edit/{branch}/{path} is the route
+        # GitHub's own UI uses for editing an existing file and correctly
+        # performs an update instead.
+        edit_url = f"https://github.com/{owner}/{repo}/edit/{branch}/{path}"
+        prefilled_url = f"{edit_url}?{urlencode({'value': text})}"
         if len(prefilled_url) <= _MAX_PROPOSE_URL_LENGTH:
             return ProposeChangeTarget(url=prefilled_url, content_prefilled=True)
 
-        fallback_url = f"https://github.com/{owner}/{repo}/new/{branch}?{urlencode({'filename': path})}"
-        return ProposeChangeTarget(url=fallback_url, content_prefilled=False)
+        return ProposeChangeTarget(url=edit_url, content_prefilled=False)
 
 
 class GitLabAdapter(BaseGitForgeAdapter):
