@@ -28,7 +28,7 @@
  * @import { SlMenuItem, SlDialog } from '../ui.js'
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse } from '../modules/api-client-v1.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
 
@@ -565,6 +565,17 @@ class DocumentRulesPlugin extends Plugin {
     }
   }
 
+  /**
+   * Human-readable label for an override id: "Original" for `null`, or
+   * "Override N" (1-based, matching the order shown in the override row).
+   * @param {string|null} overrideId
+   * @returns {string}
+   */
+  _overrideLabel(overrideId) {
+    if (overrideId === null) return 'Original'
+    return `Override ${this._currentOverrides.findIndex(o => o.id === overrideId) + 1}`
+  }
+
   /** Rebuild the "Original"/"Override N" button row. */
   _renderOverrideRow() {
     const row = this._editorDialogUi.overrideRow
@@ -572,15 +583,15 @@ class DocumentRulesPlugin extends Plugin {
 
     const originalBtn = document.createElement('sl-button')
     originalBtn.setAttribute('size', 'small')
-    originalBtn.textContent = 'Original'
+    originalBtn.textContent = this._overrideLabel(null)
     originalBtn.variant = this._currentSelectedId === null ? 'primary' : 'default'
     originalBtn.addEventListener('click', () => this._selectOverride(null))
     row.appendChild(originalBtn)
 
-    this._currentOverrides.forEach((override, index) => {
+    this._currentOverrides.forEach((override) => {
       const btn = document.createElement('sl-button')
       btn.setAttribute('size', 'small')
-      btn.textContent = `Override ${index + 1}`
+      btn.textContent = this._overrideLabel(override.id)
       btn.variant = this._currentSelectedId === override.id ? 'primary' : 'default'
       if (override.note) btn.title = override.note
       btn.addEventListener('click', () => this._selectOverride(override.id))
@@ -591,7 +602,9 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Select the original (null) or one override for `_currentResource`,
    * persisting the choice immediately - per the spec, clicking a row entry
-   * "uses it immediately", it is not a staged/unsaved choice.
+   * "uses it immediately", it is not a staged/unsaved choice. Notifies which
+   * one is now selected, for which resource, since the row's button state
+   * alone is easy to miss.
    * @param {string|null} overrideId
    * @returns {Promise<void>}
    */
@@ -610,6 +623,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentSelectedId = overrideId
     this._renderEditorDialog()
     await this._refreshOverrideIndicators()
+    notify(`${this._overrideLabel(overrideId)} selected for ${this._currentResource.label}.`, 'primary', 'info-circle')
   }
 
   /**
@@ -681,24 +695,100 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Clear the selection for this resource (keeps all overrides).
+   * Reload this resource from its origin and permanently remove every one
+   * of the caller's overrides for it - unlike selecting "Original" (see
+   * _selectOverride()), which only switches away from an override without
+   * deleting anything. Confirmed up front since deletion can't be undone.
+   *
+   * For an `interpretation-ref` resource, this also re-resolves the
+   * document's own `<ref target>` to what the extractor's current rules
+   * configuration would generate today - not just whatever URL is already
+   * pinned, which (once SHA-pinned) can never reflect a newer upstream
+   * commit on its own (see
+   * docs/superpowers/specs/2026-09-29-document-rules-reset-to-original-design.md).
+   * The document edit happens before override deletion, so a failure
+   * updating the document leaves overrides intact. `schema` resources keep
+   * the simpler delete-and-requery behavior unchanged - their URL is never
+   * permalink-pinned, so there is nothing to refresh.
+   *
+   * Use case: the caller proposed an override's change upstream (see
+   * _onProposeUpstream()) and it was accepted, so both their now-stale
+   * override and the document's stale pinned URL need to be replaced by
+   * this one action.
    * @returns {Promise<void>}
    */
   async _onReset() {
-    if (this._currentSelectedId === null) return
+    const confirmed = await this.getDependency('dialog').confirm(
+      'This will reload the resource from its origin and remove all overrides.',
+      'Reset to original'
+    )
+    if (!confirmed) return
+
+    /** @type {RefreshResourceResponse|null} */
+    let refreshResult = null
+    if (this._currentResource.kind === 'interpretation-ref') {
+      try {
+        refreshResult = await this.#client.apiClient.documentRulesRefreshResource({
+          xml: this.state.xml,
+          url: this._currentResource.url
+        })
+      } catch (error) {
+        notify(`Could not refresh resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+        return
+      }
+      if (refreshResult.status !== 'ok') {
+        const variant = refreshResult.status === 'not_found' ? 'danger' : 'warning'
+        const icon = refreshResult.status === 'not_found' ? 'exclamation-octagon' : 'exclamation-triangle'
+        notify(refreshResult.message, variant, icon)
+        return
+      }
+      if (refreshResult.changed) {
+        await this.#xmlEditor.saveIfDirty()
+        for (const ref of refreshResult.refs) {
+          const candidates = this.#xmlEditor.getDomNodesByXpath(`//tei:editorialDecl//tei:ref[@subtype="${ref.subtype}"]`)
+          const node = candidates.find((n) => this._currentResource.related_urls.includes(n.getAttribute('target')))
+          if (!node) continue
+          node.setAttribute('target', ref.target)
+          await this.#xmlEditor.updateEditorFromNode(node)
+        }
+        await this.#xmlEditor.saveIfDirty()
+
+        if (refreshResult.refs.length > 0) {
+          const humanRef = refreshResult.refs.find((r) => r.subtype === 'human')
+          this._currentResource.url = (humanRef ?? refreshResult.refs[0]).target
+          this._currentResource.related_urls = refreshResult.refs.map((r) => r.target)
+        }
+      }
+    }
+
     try {
-      await this.#client.apiClient.documentRulesSelection({
-        kind: this._currentResource.kind,
-        fragment_url: this._currentResource.url,
-        override_id: null
-      })
+      for (const override of this._currentOverrides) {
+        await this.#client.apiClient.documentRulesDeleteOverrides(override.id)
+      }
     } catch (error) {
-      notify(`Could not reset selection: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      notify(`Could not remove overrides: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
     }
-    this._currentSelectedId = null
+
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesQuery({ kind: this._currentResource.kind, url: this._currentResource.url })
+    } catch (error) {
+      notify(`Could not reload resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides = response.overrides
+    this._currentSelectedId = response.selected_override_id
+    this._currentOriginalText = response.original_text
     this._renderEditorDialog()
     await this._refreshOverrideIndicators()
+
+    const message = refreshResult
+      ? (refreshResult.changed
+          ? 'Reset to original: refreshed from upstream and removed all overrides.'
+          : 'Reset to original: overrides removed (already up to date).')
+      : `Reset to original: "${this._currentResource.label}" and its overrides have been reloaded.`
+    notify(message, 'success', 'check-circle')
   }
 
   /**

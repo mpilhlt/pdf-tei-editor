@@ -608,6 +608,27 @@
  */
 
 /**
+ * @typedef {Object} RefTargetModel
+ * @property {string} target
+ * @property {string=} content_type
+ * @property {'human'|'machine'} subtype
+ */
+
+/**
+ * @typedef {Object} RefreshResourceRequest
+ * @property {string} xml
+ * @property {string} url
+ */
+
+/**
+ * @typedef {Object} RefreshResourceResponse
+ * @property {'ok'|'unavailable'|'not_found'|'orphaned'} status
+ * @property {Array<RefTargetModel>} refs
+ * @property {boolean} changed
+ * @property {string} message
+ */
+
+/**
  * @typedef {Object} ReleaseLockRequest
  * @property {string} file_id
  */
@@ -1620,6 +1641,20 @@ export class ApiClientV1 {
    */
   async documentRulesProposeChangeUrl(requestBody) {
     const endpoint = `/document-rules/propose-change-url`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Compute what one interpretation-ref resource's <ref>s should be now,
+   * without writing anything - the caller applies the returned `refs` to
+   * the open document client-side. See RefreshResourceResponse's `status`
+   * values.
+   *
+   * @param {RefreshResourceRequest} requestBody
+   * @returns {Promise<RefreshResourceResponse>}
+   */
+  async documentRulesRefreshResource(requestBody) {
+    const endpoint = `/document-rules/refresh-resource`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

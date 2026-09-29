@@ -13,18 +13,23 @@ See docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from lxml import etree
 
 from fastapi_app.lib.core.schema_validator import extract_schema_locations
 from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.doc_rules.interpretation_ref_kind import representative_ref
 from fastapi_app.lib.doc_rules.rules_providers import get_document_rules_provider_for_document
 from fastapi_app.lib.models.models import FileMetadata, FileUpdate
 from fastapi_app.lib.permissions.access_control import check_file_access
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
-from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef, extract_annotation_rule_refs
+from fastapi_app.lib.utils.annotation_rules_utils import (
+    AnnotationRuleRef,
+    AnnotationRuleRefTarget,
+    extract_annotation_rule_refs,
+)
 from fastapi_app.lib.utils.tei_utils import (
     create_schema_processing_instruction,
     extract_processing_instructions,
@@ -306,4 +311,60 @@ async def perform_refresh(
     return RefreshOutcome(
         available=True, changed=True, entry_count=len(plan.new_entries),
         variant_id=plan.variant_id, message=_describe_plan(plan, "Updated"),
+    )
+
+
+@dataclass
+class ResourceRefreshOutcome:
+    """Result of planning a single resource's <ref> refresh - see plan_resource_refresh()."""
+
+    status: Literal["ok", "unavailable", "not_found", "orphaned"]
+    refs: list[AnnotationRuleRefTarget]  # populated only when status == "ok"
+    changed: bool                        # populated only when status == "ok"
+    message: str
+
+
+def plan_resource_refresh(tei_content: str, url: str, cache: UrlCache) -> ResourceRefreshOutcome:
+    """
+    Plan refreshing one interpretation-ref resource's <ref>s to what the
+    document's extractor would generate right now, by category-matching
+    against a freshly-built entries list - a SHA-pinned ref can never be
+    re-resolved to a newer commit from the pinned URL alone; only the
+    provider's *configured* source URL (via build_editorial_decl_entries())
+    can. See docs/superpowers/specs/2026-09-29-document-rules-reset-to-original-design.md.
+
+    `url` is the resource's current representative ref target, exactly as
+    exposed by ResourceDescriptor.url / InterpretationRefKind.discover().
+    """
+    lookup = get_document_rules_provider_for_document(tei_content)
+    if lookup is None:
+        return ResourceRefreshOutcome(
+            status="unavailable", refs=[], changed=False,
+            message="No rule-refresh provider for this document's extractor.",
+        )
+    variant_id, provider = lookup
+
+    existing_entries = extract_annotation_rule_refs(tei_content)
+    old_entry = next(
+        (e for e in existing_entries if (rep := representative_ref(e["refs"])) is not None and rep["target"] == url),
+        None,
+    )
+    if old_entry is None:
+        return ResourceRefreshOutcome(
+            status="not_found", refs=[], changed=False,
+            message="This resource was not found in the document's current rules.",
+        )
+
+    new_entries = provider.build_editorial_decl_entries(variant_id, cache)
+    new_entry = next((e for e in new_entries if e["category"] == old_entry["category"]), None)
+    if new_entry is None:
+        return ResourceRefreshOutcome(
+            status="orphaned", refs=[], changed=False,
+            message="This resource's rule configuration no longer exists upstream.",
+        )
+
+    changed = new_entry["refs"] != old_entry["refs"]
+    return ResourceRefreshOutcome(
+        status="ok", refs=new_entry["refs"], changed=changed,
+        message="Resource is already up to date." if not changed else "Resource refreshed from upstream.",
     )

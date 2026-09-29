@@ -27,6 +27,7 @@ from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
     perform_refresh,
+    plan_resource_refresh,
     preview_refresh,
     resolve_refresh_target,
 )
@@ -44,8 +45,11 @@ from ..lib.models.models_document_rules import (
     ProposeChangeUrlResponse,
     QueryResourceRequest,
     QueryResourceResponse,
+    RefTargetModel,
     RefreshOutcomeResponse,
     RefreshRequest,
+    RefreshResourceRequest,
+    RefreshResourceResponse,
     ResetSelectionRequest,
     ResourceDescriptorModel,
     SelectionInfo,
@@ -73,7 +77,7 @@ def _override_to_model(override: dict) -> OverrideModel:
 @router.post("/list", response_model=ListResourcesResponse)
 async def list_document_resources(
     request: ListResourcesRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
 ) -> ListResourcesResponse:
     """List every resource the posted document content references. Used to build the "Edit prompts/schemas" submenu."""
     resources = list_resources(request.xml_string)
@@ -91,7 +95,7 @@ async def list_document_resources(
 @router.post("/query", response_model=QueryResourceResponse)
 async def query_resource(
     request: QueryResourceRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> QueryResourceResponse:
     """Original text, the caller's overrides, and the caller's current selection for one resource."""
@@ -120,7 +124,7 @@ async def query_resource(
 @router.post("/overrides", response_model=OverrideModel)
 async def create_override(
     request: CreateOverrideRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OverrideModel:
     """Create a new override, copying the resource's original text unless `text` is given."""
@@ -152,7 +156,7 @@ async def create_override(
 async def update_override(
     override_id: str,
     request: UpdateOverrideRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OverrideModel:
     """Update an override's note and/or text. Owner only."""
@@ -165,7 +169,7 @@ async def update_override(
 @router.delete("/overrides/{override_id}", response_model=OkResponse)
 async def delete_override(
     override_id: str,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Delete an override. Owner only; also clears any selection pointing at it."""
@@ -178,7 +182,7 @@ async def delete_override(
 @router.put("/selection", response_model=OkResponse)
 async def set_selection(
     request: SetSelectionRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Select an override (or `null` for the original) for one resource."""
@@ -196,7 +200,7 @@ async def set_selection(
 @router.post("/selection/reset", response_model=OkResponse)
 async def reset_selection(
     request: ResetSelectionRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Clear the caller's selection for each listed resource, keeping all overrides."""
@@ -208,7 +212,7 @@ async def reset_selection(
 @router.post("/selections", response_model=SelectionsResponse)
 async def get_selections(
     request: SelectionsRequest,
-    user: dict = Depends(require_authenticated_user),
+    user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> SelectionsResponse:
     """
@@ -321,3 +325,36 @@ async def propose_change_url(
         if target is not None:
             return ProposeChangeUrlResponse(url=target.url, content_prefilled=target.content_prefilled, text=text)
     return ProposeChangeUrlResponse(url=None, content_prefilled=False, text=text)
+
+
+@router.post("/refresh-resource", response_model=RefreshResourceResponse)
+async def refresh_resource(
+    request: RefreshResourceRequest,
+    # Same gate as /refresh/preview and /refresh/execute - this endpoint
+    # exists purely to support the same reviewer/admin-only "Document
+    # rules" editing feature (see the "Server-side gating" note on the
+    # other now-gated routes in this router, above).
+    user: dict = Depends(require_reviewer_or_admin),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> RefreshResourceResponse:
+    """
+    Compute what one interpretation-ref resource's <ref>s should be now,
+    without writing anything - the document edit itself happens client-side
+    (see docs/superpowers/specs/2026-09-29-document-rules-reset-to-original-design.md,
+    "Frontend design").
+    """
+    file_repo = FileRepository(db)
+    try:
+        target = resolve_refresh_target(file_repo, file_storage, request.xml, user)
+    except RefreshPreconditionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    outcome = plan_resource_refresh(target.tei_content, request.url, cache)
+    return RefreshResourceResponse(
+        status=outcome.status,
+        refs=[RefTargetModel(**ref) for ref in outcome.refs],
+        changed=outcome.changed,
+        message=outcome.message,
+    )

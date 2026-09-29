@@ -14,7 +14,9 @@ from fastapi_app.lib.doc_rules.rules_providers import (
 from fastapi_app.lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
     RefreshTarget,
+    ResourceRefreshOutcome,
     perform_refresh,
+    plan_resource_refresh,
     preview_refresh,
     resolve_refresh_target,
 )
@@ -439,6 +441,66 @@ class TestPreviewAndPerformRefresh(unittest.IsolatedAsyncioTestCase):
 
         file_storage.save_file.assert_not_called()
         file_repo.update_file.assert_not_called()
+
+
+OLD_TARGET = "https://github.com/mpilhlt/fossil/blob/oldsha/docs/guidelines.md#seg"
+
+
+class TestPlanResourceRefresh(unittest.TestCase):
+    def tearDown(self):
+        unregister_document_rules_provider("GROBID")
+
+    def test_unavailable_when_no_provider_registered(self):
+        outcome = plan_resource_refresh(TEI_WITH_PI_AND_DECL, OLD_TARGET, cache=mock.MagicMock())
+        self.assertEqual(outcome.status, "unavailable")
+        self.assertEqual(outcome.refs, [])
+        self.assertFalse(outcome.changed)
+
+    def test_not_found_when_url_is_not_a_current_representative_target(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(entries=[]))
+        outcome = plan_resource_refresh(
+            TEI_WITH_PI_AND_DECL,
+            "https://github.com/mpilhlt/fossil/blob/oldsha/docs/UNRELATED.md#x",
+            cache=mock.MagicMock(),
+        )
+        self.assertEqual(outcome.status, "not_found")
+        self.assertEqual(outcome.refs, [])
+
+    def test_orphaned_when_category_missing_from_fresh_entries(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(entries=[
+            {"category": "footnote-annotation", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/newsha/docs/other.md#x",
+                 "content_type": "markdown", "subtype": "human"},
+            ]},
+        ]))
+        outcome = plan_resource_refresh(TEI_WITH_PI_AND_DECL, OLD_TARGET, cache=mock.MagicMock())
+        self.assertEqual(outcome.status, "orphaned")
+        self.assertEqual(outcome.refs, [])
+
+    def test_ok_with_changed_true_when_target_differs(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(entries=[
+            {"category": "primary", "refs": [
+                {"target": "https://github.com/mpilhlt/fossil/blob/newsha/docs/guidelines.md#seg",
+                 "content_type": "markdown", "subtype": "human"},
+            ]},
+        ]))
+        outcome = plan_resource_refresh(TEI_WITH_PI_AND_DECL, OLD_TARGET, cache=mock.MagicMock())
+        self.assertEqual(outcome.status, "ok")
+        self.assertTrue(outcome.changed)
+        self.assertEqual(
+            outcome.refs[0]["target"],
+            "https://github.com/mpilhlt/fossil/blob/newsha/docs/guidelines.md#seg",
+        )
+
+    def test_ok_with_changed_false_when_refs_are_identical(self):
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(entries=[
+            {"category": "primary", "refs": [
+                {"target": OLD_TARGET, "content_type": "markdown", "subtype": "human"},
+            ]},
+        ]))
+        outcome = plan_resource_refresh(TEI_WITH_PI_AND_DECL, OLD_TARGET, cache=mock.MagicMock())
+        self.assertEqual(outcome.status, "ok")
+        self.assertFalse(outcome.changed)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 ("REST API").
 """
 
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from fastapi_app.lib.doc_rules.kinds import ResourceFormat
@@ -134,6 +134,34 @@ class RefreshOutcomeResponse(BaseModel):
     changed: bool
     entry_count: int
     variant_id: Optional[str] = None
+    message: str
+
+
+class RefTargetModel(BaseModel):
+    target: str
+    content_type: Optional[str]
+    subtype: Literal["human", "machine"]
+
+
+class RefreshResourceRequest(BaseModel):
+    """Request to refresh one interpretation-ref resource's <ref>s from upstream. `xml` is the target document's stable_id."""
+    xml: str
+    url: str
+
+
+class RefreshResourceResponse(BaseModel):
+    """
+    Response to POST /document-rules/refresh-resource.
+
+    `status` meanings: "unavailable" (no provider for this document's
+    extractor), "not_found" (`url` isn't the representative target of any
+    current editorialDecl entry), "orphaned" (the entry's category no
+    longer exists in a freshly-built entries list), "ok" (`refs`/`changed`
+    populated). See plan_resource_refresh()'s docstring.
+    """
+    status: Literal["ok", "unavailable", "not_found", "orphaned"]
+    refs: list[RefTargetModel] = Field(default_factory=list)
+    changed: bool = False
     message: str
 
 

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
-from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError
+from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.routers.document_rules import get_db, router
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
@@ -35,7 +35,7 @@ class DocumentRulesRouterTestCase(unittest.TestCase):
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[get_db] = lambda: self.db
-        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice"}
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["reviewer"]}
         self.client = TestClient(self.app)
 
     def tearDown(self):
@@ -132,8 +132,10 @@ class TestQueryAndOverrideLifecycle(DocumentRulesRouterTestCase):
         )
         override_id = create_response.json()["id"]
 
-        # Switch the authenticated user for this one request.
-        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob"}
+        # Switch the authenticated user for this one request. bob needs the
+        # same reviewer role as alice so these requests reach the ownership
+        # check (404) instead of being rejected earlier by the role gate (403).
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["reviewer"]}
 
         update_response = self.client.put(
             f"/document-rules/overrides/{override_id}", json={"note": "hijacked"}
@@ -386,6 +388,97 @@ class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
             json={"url": f"https://github.com/mpilhlt/pdf-tei-editor/blob/{'a' * 40}/rules.md", "text": "x"},
         )
         self.assertEqual(response.status_code, 502)
+
+
+class TestRefreshResourceEndpoint(DocumentRulesRouterTestCase):
+    def setUp(self):
+        super().setUp()
+        self.file_storage = MagicMock()
+        self.app.dependency_overrides[get_file_storage] = lambda: self.file_storage
+
+    def test_requires_reviewer_or_admin_role(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["user"]}
+        response = self.client.post("/document-rules/refresh-resource", json={"xml": "tei-1", "url": "https://x"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_reports_precondition_error_as_bad_request(self):
+        with patch(
+            "fastapi_app.routers.document_rules.resolve_refresh_target",
+            side_effect=RefreshPreconditionError("No TEI document open."),
+        ):
+            response = self.client.post("/document-rules/refresh-resource", json={"xml": "missing", "url": "https://x"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("No TEI document open", response.json()["detail"])
+
+    def test_returns_ok_outcome_with_refs(self):
+        with patch("fastapi_app.routers.document_rules.resolve_refresh_target") as mock_resolve, \
+             patch("fastapi_app.routers.document_rules.plan_resource_refresh") as mock_plan:
+            mock_resolve.return_value = MagicMock(tei_content="<TEI/>")
+            mock_plan.return_value = ResourceRefreshOutcome(
+                status="ok",
+                refs=[{"target": "https://new", "content_type": "markdown", "subtype": "human"}],
+                changed=True,
+                message="Resource refreshed from upstream.",
+            )
+            response = self.client.post("/document-rules/refresh-resource", json={"xml": "tei-1", "url": "https://old"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertTrue(body["changed"])
+        self.assertEqual(body["refs"][0]["target"], "https://new")
+
+    def test_returns_not_found_outcome(self):
+        with patch("fastapi_app.routers.document_rules.resolve_refresh_target") as mock_resolve, \
+             patch("fastapi_app.routers.document_rules.plan_resource_refresh") as mock_plan:
+            mock_resolve.return_value = MagicMock(tei_content="<TEI/>")
+            mock_plan.return_value = ResourceRefreshOutcome(status="not_found", refs=[], changed=False, message="not found")
+            response = self.client.post("/document-rules/refresh-resource", json={"xml": "tei-1", "url": "https://old"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "not_found")
+
+
+class TestNonReviewerCannotUseDocumentRulesRoutes(DocumentRulesRouterTestCase):
+    def setUp(self):
+        super().setUp()
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["user"]}
+
+    def test_list_requires_reviewer_or_admin(self):
+        response = self.client.post("/document-rules/list", json={"xml_string": XML_WITH_INTERPRETATION})
+        self.assertEqual(response.status_code, 403)
+
+    def test_query_requires_reviewer_or_admin(self):
+        response = self.client.post("/document-rules/query", json={"kind": "interpretation-ref", "url": "https://x"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_override_requires_reviewer_or_admin(self):
+        response = self.client.post(
+            "/document-rules/overrides",
+            json={"kind": "interpretation-ref", "fragment_url": "https://x"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_update_override_requires_reviewer_or_admin(self):
+        response = self.client.put("/document-rules/overrides/some-id", json={"note": "x"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_override_requires_reviewer_or_admin(self):
+        response = self.client.delete("/document-rules/overrides/some-id")
+        self.assertEqual(response.status_code, 403)
+
+    def test_set_selection_requires_reviewer_or_admin(self):
+        response = self.client.put(
+            "/document-rules/selection",
+            json={"kind": "interpretation-ref", "fragment_url": "https://x"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_reset_selection_requires_reviewer_or_admin(self):
+        response = self.client.post("/document-rules/selection/reset", json={"resources": []})
+        self.assertEqual(response.status_code, 403)
+
+    def test_get_selections_requires_reviewer_or_admin(self):
+        response = self.client.post("/document-rules/selections", json={"resources": []})
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

@@ -231,10 +231,10 @@ Clicking an entry opens the editor for **only that one resource** — not a dial
 
 Shared controls, per the [visual concept](https://claude.ai/artifact/LUWtPTkDJgtS4vsdpdmUeq) (predates this terminology; read its "Variant" as "Override"):
 
-- an override row ("Original", "Override 1", …); clicking one **uses it immediately** (sets the selection);
+- an override row ("Original", "Override 1", …); clicking one **uses it immediately** (sets the selection) and shows a toast naming what's now selected and for which resource;
 - a note field, editable for an override, hidden for the original;
 - "New override" (copies the text currently shown into a new override and selects it), Save, Delete override;
-- "Reset to original" clears the selection for this one resource only, keeping all its overrides.
+- "Reset to original" (confirmed first: "This will reload the resource from its origin and remove all overrides.") re-fetches the resource's current original text and **permanently deletes every one of the caller's overrides for it** - not just clearing the selection, as an earlier revision of this design did. Selecting "Original" from the row above remains the non-destructive way to switch away from an override without deleting it. Rationale: the use case is an override whose change was proposed upstream (see the propose-upstream-change addendum spec) and accepted there, making the override stale/redundant against the new upstream content.
 
 No new dependencies. Element typedefs in `app/src/ui.js`, templates in `app/src/templates/`, JSDoc per project rules. The document-resource discovery used to build the submenu is a backend call (`POST /list`), not a second, separate frontend parser — consistent with how `/validate` already extracts schema locations server-side. The extraction dialog's former instruction-set select is removed; the user's stored selections apply automatically at extraction.
 

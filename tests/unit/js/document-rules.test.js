@@ -131,6 +131,37 @@ function makeDialogUi() {
 }
 
 /**
+ * A minimal stand-in for the xmleditor dependency's DOM-mutation surface
+ * (`getDomNodesByXpath`/`updateEditorFromNode`/`saveIfDirty`), tracking
+ * calls so tests can assert the exact sequence _onReset() makes for an
+ * interpretation-ref resource. `nodesByXpath` maps an xpath string to the
+ * array of fake DOM elements it should return.
+ * @param {Record<string, Element[]>} nodesByXpath
+ * @returns {{ mock: any, calls: string[] }}
+ */
+function makeXmlEditorMock(nodesByXpath = {}) {
+  const calls = [];
+  const mock = {
+    saveIfDirty: async () => { calls.push('saveIfDirty'); },
+    getDomNodesByXpath: (xpath) => { calls.push(`getDomNodesByXpath:${xpath}`); return nodesByXpath[xpath] ?? []; },
+    updateEditorFromNode: async (node) => { calls.push(`updateEditorFromNode:${node.getAttribute('target')}`); },
+  };
+  return { mock, calls };
+}
+
+/**
+ * A fake live DOM <ref> element with a mutable `target` attribute, for
+ * asserting _onReset()'s setAttribute() + updateEditorFromNode() sequence.
+ * @param {string} target
+ * @returns {Element}
+ */
+function makeRefElement(target) {
+  const el = document.createElementNS('http://www.tei-c.org/ns/1.0', 'ref');
+  el.setAttribute('target', target);
+  return el;
+}
+
+/**
  * SlTextarea's `input` (its internal `<textarea>`, see scrollPosition() in
  * @shoelace-style/shoelace's textarea chunk) is a `@query`-backed
  * getter-only accessor - `Object.assign`/plain assignment throws ("has only
@@ -304,6 +335,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     assert.strictEqual(plugin._currentSelectedId, 'ov1');
     assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.value, 'override text');
     assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, false);
+    assert.strictEqual(notifyCalls[0][0], 'Override 1 selected for A.');
   });
 
   it('is a no-op when the target is already selected', async () => {
@@ -335,6 +367,7 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     assert.strictEqual(plugin._editorDialogUi.textBody.textTabs.editPanel.textArea.readonly, true);
     assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, 'none');
     assert.strictEqual(plugin._editorDialogUi.noteInput.style.display, 'none');
+    assert.strictEqual(notifyCalls[0][0], 'Original selected for A.');
   });
 });
 
@@ -568,19 +601,237 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.strictEqual(plugin._currentSelectedId, 'ov1');
   });
 
-  it('_onReset clears the selection but keeps the overrides', async () => {
+  it('_onReset (schema kind) keeps the simple delete-and-requery behavior, no document edit', async () => {
     const plugin = setup();
-    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    // _renderEditorDialog() routes a 'xml'-format resource through
+    // _setXmlContent(), which drives the real CodeMirror view - not set up
+    // by this describe block's setup() (see the pattern already used by
+    // the 'shows the xml body...' test in the format-based body swap
+    // describe block above).
+    plugin._setXmlContent = () => {}
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/schema.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._currentOverrides = [
+      { id: 'ov1', note: '', text: 'x', format: 'xml', created_at: '', updated_at: '' },
+      { id: 'ov2', note: '', text: 'y', format: 'xml', created_at: '', updated_at: '' },
+    ];
     plugin._currentSelectedId = 'ov1';
-    const calls = [];
+    const deletedIds = [];
+    let queryCalledWith;
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock();
+    const freshResponse = { original_text: 'fresh from origin', overrides: [], selected_override_id: null };
     plugin.getDependency = (name) => {
-      if (name === 'client') return { apiClient: { documentRulesSelection: async (body) => { calls.push(body); } } };
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') return { apiClient: {
+        documentRulesDeleteOverrides: async (id) => { deletedIds.push(id); },
+        documentRulesQuery: async (body) => { queryCalledWith = body; return freshResponse; },
+      } };
       throw new Error(`unexpected dependency: ${name}`);
     };
     await plugin._onReset();
-    assert.deepStrictEqual(calls, [{ kind: 'interpretation-ref', fragment_url: 'https://example.com/a.md', override_id: null }]);
+    assert.deepStrictEqual(deletedIds, ['ov1', 'ov2']);
+    assert.deepStrictEqual(queryCalledWith, { kind: 'schema', url: 'https://example.com/schema.rng' });
+    assert.strictEqual(plugin._currentOriginalText, 'fresh from origin');
+    assert.deepStrictEqual(plugin._currentOverrides, []);
     assert.strictEqual(plugin._currentSelectedId, null);
-    assert.deepStrictEqual(plugin._currentOverrides.length, 1, 'override itself must not be deleted');
+    assert.deepStrictEqual(xmlCalls, []);
+  });
+
+  it('_onReset does nothing when the confirmation is declined', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    let deleteCalled = false;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => false };
+      if (name === 'client') return { apiClient: { documentRulesDeleteOverrides: async () => { deleteCalled = true; } } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+    assert.strictEqual(deleteCalled, false);
+    assert.strictEqual(plugin._currentOverrides.length, 1);
+    assert.strictEqual(plugin._currentSelectedId, 'ov1');
+  });
+
+  it('_onReset (interpretation-ref, changed=true) updates the document ref, then deletes overrides, then re-queries the new url', async () => {
+    const plugin = setup();
+    plugin._currentResource = {
+      kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/oldsha/docs/g.md#seg', key: 'k', label: 'Guide',
+      format: 'markdown', related_urls: ['https://github.com/o/r/blob/oldsha/docs/g.md#seg'],
+    };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const refEl = makeRefElement('https://github.com/o/r/blob/oldsha/docs/g.md#seg');
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [refEl],
+    });
+    const deletedIds = [];
+    let queryCalledWith;
+    let refreshCalledWith;
+    const freshResponse = { original_text: 'fresh new text', overrides: [], selected_override_id: null };
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshResource: async (body) => {
+          refreshCalledWith = body;
+          return {
+            status: 'ok', changed: true,
+            refs: [{ target: 'https://github.com/o/r/blob/newsha/docs/g.md#seg', content_type: 'markdown', subtype: 'human' }],
+            message: 'Resource refreshed from upstream.',
+          };
+        },
+        documentRulesDeleteOverrides: async (id) => { deletedIds.push(id); },
+        documentRulesQuery: async (body) => { queryCalledWith = body; return freshResponse; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+
+    assert.deepStrictEqual(refreshCalledWith, { xml: 'stable123', url: 'https://github.com/o/r/blob/oldsha/docs/g.md#seg' });
+    assert.deepStrictEqual(xmlCalls, [
+      'saveIfDirty',
+      'getDomNodesByXpath://tei:editorialDecl//tei:ref[@subtype="human"]',
+      'updateEditorFromNode:https://github.com/o/r/blob/newsha/docs/g.md#seg',
+      'saveIfDirty',
+    ]);
+    assert.strictEqual(refEl.getAttribute('target'), 'https://github.com/o/r/blob/newsha/docs/g.md#seg');
+    assert.deepStrictEqual(deletedIds, ['ov1']);
+    assert.deepStrictEqual(queryCalledWith, { kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/newsha/docs/g.md#seg' });
+    assert.strictEqual(plugin._currentResource.url, 'https://github.com/o/r/blob/newsha/docs/g.md#seg');
+    assert.deepStrictEqual(plugin._currentResource.related_urls, ['https://github.com/o/r/blob/newsha/docs/g.md#seg']);
+    assert.strictEqual(plugin._currentOriginalText, 'fresh new text');
+    assert.match(notifyCalls[0][0], /refreshed from upstream and removed all overrides/);
+  });
+
+  it('_onReset (interpretation-ref, changed=true, refs=[]) does not throw and leaves the url unchanged', async () => {
+    const plugin = setup();
+    plugin._currentResource = {
+      kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/sha/docs/g.md#seg', key: 'k', label: 'Guide',
+      format: 'markdown', related_urls: ['https://github.com/o/r/blob/sha/docs/g.md#seg'],
+    };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock();
+    const deletedIds = [];
+    let queryCalledWith;
+    const freshResponse = { original_text: 'same text', overrides: [], selected_override_id: null };
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshResource: async () => ({ status: 'ok', changed: true, refs: [], message: 'Resource refreshed from upstream.' }),
+        documentRulesDeleteOverrides: async (id) => { deletedIds.push(id); },
+        documentRulesQuery: async (body) => { queryCalledWith = body; return freshResponse; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    await assert.doesNotReject(plugin._onReset());
+
+    assert.deepStrictEqual(xmlCalls, ['saveIfDirty', 'saveIfDirty']);
+    assert.strictEqual(plugin._currentResource.url, 'https://github.com/o/r/blob/sha/docs/g.md#seg');
+    assert.deepStrictEqual(plugin._currentResource.related_urls, ['https://github.com/o/r/blob/sha/docs/g.md#seg']);
+    assert.deepStrictEqual(deletedIds, ['ov1']);
+    assert.deepStrictEqual(queryCalledWith, { kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/sha/docs/g.md#seg' });
+    assert.strictEqual(plugin._currentOriginalText, 'same text');
+  });
+
+  it('_onReset (interpretation-ref, changed=false) skips the DOM edit but still deletes overrides', async () => {
+    const plugin = setup();
+    plugin._currentResource = {
+      kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/sha/docs/g.md#seg', key: 'k', label: 'Guide',
+      format: 'markdown', related_urls: ['https://github.com/o/r/blob/sha/docs/g.md#seg'],
+    };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock();
+    const deletedIds = [];
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshResource: async () => ({ status: 'ok', changed: false, refs: [], message: 'Resource is already up to date.' }),
+        documentRulesDeleteOverrides: async (id) => { deletedIds.push(id); },
+        documentRulesQuery: async () => ({ original_text: 'same text', overrides: [], selected_override_id: null }),
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+    assert.deepStrictEqual(xmlCalls, []);
+    assert.deepStrictEqual(deletedIds, ['ov1']);
+    assert.match(notifyCalls[0][0], /overrides removed \(already up to date\)/);
+  });
+
+  for (const status of ['unavailable', 'orphaned']) {
+    it(`_onReset (interpretation-ref, status=${status}) warns and does nothing else`, async () => {
+      const plugin = setup();
+      plugin._currentResource = {
+        kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/sha/docs/g.md#seg', key: 'k', label: 'Guide',
+        format: 'markdown', related_urls: ['https://github.com/o/r/blob/sha/docs/g.md#seg'],
+      };
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      let deleteCalled = false;
+      let queryCalled = false;
+      plugin.getDependency = (name) => {
+        if (name === 'dialog') return { confirm: async () => true };
+        if (name === 'client') return { apiClient: {
+          documentRulesRefreshResource: async () => ({ status, changed: false, refs: [], message: `${status} message` }),
+          documentRulesDeleteOverrides: async () => { deleteCalled = true; },
+          documentRulesQuery: async () => { queryCalled = true; },
+        } };
+        throw new Error(`unexpected dependency: ${name}`);
+      };
+      await plugin._onReset();
+      assert.strictEqual(deleteCalled, false);
+      assert.strictEqual(queryCalled, false);
+      assert.strictEqual(plugin._currentOverrides.length, 1);
+      assert.match(notifyCalls[0][0], new RegExp(`${status} message`));
+      assert.strictEqual(notifyCalls[0][1], 'warning');
+    });
+  }
+
+  it('_onReset (interpretation-ref, status=not_found) shows a danger toast', async () => {
+    const plugin = setup();
+    plugin._currentResource = {
+      kind: 'interpretation-ref', url: 'https://github.com/o/r/blob/sha/docs/g.md#seg', key: 'k', label: 'Guide',
+      format: 'markdown', related_urls: ['https://github.com/o/r/blob/sha/docs/g.md#seg'],
+    };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    let deleteCalled = false;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshResource: async () => ({ status: 'not_found', changed: false, refs: [], message: 'gone' }),
+        documentRulesDeleteOverrides: async () => { deleteCalled = true; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+    assert.strictEqual(deleteCalled, false);
+    assert.match(notifyCalls[0][0], /gone/);
+    assert.strictEqual(notifyCalls[0][1], 'danger');
+  });
+
+  it('_onReset stops and notifies if deleting an override fails, without querying', async () => {
+    const plugin = setup();
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/schema.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'xml', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    let queryCalled = false;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'client') return { apiClient: {
+        documentRulesDeleteOverrides: async () => { throw new Error('boom'); },
+        documentRulesQuery: async () => { queryCalled = true; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+    assert.strictEqual(queryCalled, false);
+    assert.match(notifyCalls[0][0], /Could not remove overrides/);
   });
 });
 
