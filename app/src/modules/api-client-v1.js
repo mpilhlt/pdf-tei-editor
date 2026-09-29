@@ -570,6 +570,7 @@
  * @typedef {Object} ProposeChangeUrlResponse
  * @property {string=} url - The forge URL to open, or null if the resource's host isn't a recognized git forge.
  * @property {boolean} content_prefilled - Whether `url` already embeds the override text.
+ * @property {string} text - The request's `text` with same-repo absolute links rewritten back to their upstream-relative form - copy *this* to the clipboard, not the original text.
  */
 
 /**

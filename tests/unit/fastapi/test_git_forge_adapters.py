@@ -38,6 +38,9 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def build_propose_change_url(self, url: str, text: str, cache):
         return None
 
+    def parse_repo_path(self, url: str):
+        return None
+
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -56,6 +59,9 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
     def build_propose_change_url(self, url: str, text: str, cache):
+        raise AssertionError("should not be called")
+
+    def parse_repo_path(self, url: str):
         raise AssertionError("should not be called")
 
 
@@ -355,6 +361,51 @@ class TestGitLabAdapterBuildProposeChangeUrl(unittest.TestCase):
     def test_returns_none_for_unrecognized_host(self):
         target = self.adapter.build_propose_change_url("https://example.com/docs/guide.md", "text", self.cache)
         self.assertIsNone(target)
+
+
+class TestGitHubAdapterParseRepoPath(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+
+    def test_parses_blob_url(self):
+        self.assertEqual(
+            self.adapter.parse_repo_path("https://github.com/mpilhlt/fossil/blob/main/docs/guide.md"),
+            ("mpilhlt/fossil", "docs/guide.md"),
+        )
+
+    def test_parses_raw_url(self):
+        self.assertEqual(
+            self.adapter.parse_repo_path("https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guide.md"),
+            ("mpilhlt/fossil", "docs/guide.md"),
+        )
+
+    def test_same_repo_id_regardless_of_ref(self):
+        blob_id, _ = self.adapter.parse_repo_path("https://github.com/mpilhlt/fossil/blob/main/a.md")
+        raw_id, _ = self.adapter.parse_repo_path(f"https://raw.githubusercontent.com/mpilhlt/fossil/{'a' * 40}/b.md")
+        self.assertEqual(blob_id, raw_id)
+
+    def test_returns_none_for_unrecognized_host(self):
+        self.assertIsNone(self.adapter.parse_repo_path("https://example.com/docs/guide.md"))
+
+
+class TestGitLabAdapterParseRepoPath(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+
+    def test_parses_blob_url(self):
+        self.assertEqual(
+            self.adapter.parse_repo_path("https://gitlab.com/group/project/-/blob/main/docs/guide.md"),
+            ("https://gitlab.com/group/project", "docs/guide.md"),
+        )
+
+    def test_parses_raw_url(self):
+        self.assertEqual(
+            self.adapter.parse_repo_path("https://gitlab.com/group/project/-/raw/main/docs/guide.md"),
+            ("https://gitlab.com/group/project", "docs/guide.md"),
+        )
+
+    def test_returns_none_for_unrecognized_host(self):
+        self.assertIsNone(self.adapter.parse_repo_path("https://example.com/docs/guide.md"))
 
 
 class TestDefaultBranchCacheKeyDoesNotCollideWithCommitsCache(unittest.TestCase):

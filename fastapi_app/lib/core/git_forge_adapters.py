@@ -81,6 +81,18 @@ class BaseGitForgeAdapter(ABC):
         call, mirroring resolve_ref_to_sha().
         """
 
+    @abstractmethod
+    def parse_repo_path(self, url: str) -> "tuple[str, str] | None":
+        """
+        Parse `url` (blob or raw form, any ref) into (repo_id, path), where
+        repo_id identifies the repository independent of ref/branch/commit -
+        two URLs to the same repo at different refs share the same repo_id,
+        so callers can tell "same repo, different path" apart from "a
+        genuinely different, external URL" without caring which ref either
+        one is pinned to. Returns None if `url` isn't a shape this adapter
+        recognizes.
+        """
+
 
 class GitHubAdapter(BaseGitForgeAdapter):
     """Adapter for github.com blob URLs."""
@@ -189,6 +201,14 @@ class GitHubAdapter(BaseGitForgeAdapter):
 
         return ProposeChangeTarget(url=edit_url, content_prefilled=False)
 
+    def parse_repo_path(self, url: str) -> "tuple[str, str] | None":
+        base_url, _, _ = url.partition("#")
+        try:
+            m = self._parse_any(base_url)
+        except ValueError:
+            return None
+        return f"{m['owner']}/{m['repo']}", m['path']
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -274,6 +294,14 @@ class GitLabAdapter(BaseGitForgeAdapter):
         branch = ref if not _SHA_RE.match(ref) else self._default_branch(origin, project_path, cache)
         edit_url = f"{origin}/{project_path}/-/edit/{branch}/{file_path}"
         return ProposeChangeTarget(url=edit_url, content_prefilled=False)
+
+    def parse_repo_path(self, url: str) -> "tuple[str, str] | None":
+        base_url, _, _ = url.partition("#")
+        try:
+            origin, project_path, _ref, file_path = self._split_any(base_url)
+        except ValueError:
+            return None
+        return f"{origin}/{project_path}", file_path
 
 
 class GitForgeAdapterRegistry:

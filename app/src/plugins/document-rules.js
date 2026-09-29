@@ -734,7 +734,12 @@ class DocumentRulesPlugin extends Plugin {
     if (!confirmed) return
 
     try {
-      await navigator.clipboard.writeText(text)
+      // response.text, not the local `text` - the backend rewrites same-repo
+      // absolute links (this app's own internal resolution of the
+      // resource's original relative links) back to their upstream-relative
+      // form first, so the clipboard doesn't paste this app's internal
+      // link representation into the real file.
+      await navigator.clipboard.writeText(response.text)
     } catch {
       // Clipboard denied/unavailable - non-fatal whether or not the URL
       // itself already carries the text.

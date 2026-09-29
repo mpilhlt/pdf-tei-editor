@@ -7,6 +7,7 @@ See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 """
 
 import logging
+import posixpath
 import re
 from typing import Literal, NotRequired, Optional, TypedDict
 from urllib.parse import urljoin
@@ -73,6 +74,60 @@ def _rewrite_relative_markdown_urls(text: str, base_dir_url: str) -> str:
         if target.startswith("//") or _ABSOLUTE_URL_RE.match(target):
             return match.group(0)
         return f"{prefix}{urljoin(base_dir_url, target)}{suffix}"
+
+    return _MD_INLINE_LINK_RE.sub(replace, text)
+
+
+def _repo_path_via_any_adapter(url: str) -> "tuple[str, str] | None":
+    """First (repo_id, path) any registered adapter's parse_repo_path() recognizes `url` as, or None."""
+    for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
+        repo_path = adapter.parse_repo_path(url)
+        if repo_path is not None:
+            return repo_path
+    return None
+
+
+def derelativize_markdown_urls(text: str, base_url: str) -> str:
+    """
+    Inverse of `_rewrite_relative_markdown_urls()`: rewrite `text`'s inline
+    link/image targets that are absolute URLs into the *same repository* as
+    `base_url` (regardless of which ref either one is pinned to) back into
+    paths relative to `base_url`'s directory. A resource's `original_text`
+    has already had its relative links rewritten to this app's own
+    internally-resolved absolute form (possibly SHA-pinned to whatever
+    commit it was last fetched at) so previews render correctly outside the
+    source repo - but that resolved form must not leak into a real upstream
+    file when the user proposes the override's text as the file's new
+    content, or a same-repo relative link like "../other.md" would end up
+    permanently hardcoded to `https://raw.githubusercontent.com/.../{sha}/other.md`
+    in the actual repository.
+
+    Absolute URLs into a *different* repo (or a non-git-forge URL) are left
+    untouched - only same-repo links round-trip through this rewrite.
+    Only applies to markdown resources (by `base_url`'s file extension, via
+    `infer_format()`); returns `text` unchanged for any other format.
+    """
+    # Deferred import: see fetch_rule_excerpt()'s identical comment on why
+    # this can't be a module-level import.
+    from fastapi_app.lib.doc_rules.resource_key import infer_format
+    if infer_format(base_url) != "markdown":
+        return text
+
+    base_repo_path = _repo_path_via_any_adapter(base_url)
+    if base_repo_path is None:
+        return text
+    base_repo, base_path = base_repo_path
+    base_dir = base_path.rsplit("/", 1)[0] if "/" in base_path else ""
+
+    def replace(match: "re.Match[str]") -> str:
+        prefix, target, suffix = match.group(1), match.group(2), match.group(3)
+        if not _ABSOLUTE_URL_RE.match(target):
+            return match.group(0)
+        target_repo_path = _repo_path_via_any_adapter(target)
+        if target_repo_path is None or target_repo_path[0] != base_repo:
+            return match.group(0)
+        relative = posixpath.relpath(target_repo_path[1], base_dir) if base_dir else target_repo_path[1]
+        return f"{prefix}{relative}{suffix}"
 
     return _MD_INLINE_LINK_RE.sub(replace, text)
 

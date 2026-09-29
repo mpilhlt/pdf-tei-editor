@@ -336,6 +336,7 @@ class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
         self.assertTrue(body["content_prefilled"])
         self.assertTrue(body["url"].startswith("https://github.com/mpilhlt/pdf-tei-editor/edit/main/rules.md?"))
         self.assertIn("new+content", body["url"])
+        self.assertEqual(body["text"], "new content")
 
     def test_builds_unprefilled_edit_url_for_a_gitlab_blob_url(self):
         response = self.client.post(
@@ -346,6 +347,26 @@ class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
         body = response.json()
         self.assertFalse(body["content_prefilled"])
         self.assertEqual(body["url"], "https://gitlab.com/group/project/-/edit/main/rules.md")
+        self.assertEqual(body["text"], "new content")
+
+    def test_derelativizes_same_repo_links_before_building_the_url(self):
+        """
+        A same-repo link this app resolved to its own internal absolute form
+        (see fetch_rule_excerpt()) must come back out as the original
+        relative link, both in the response's `text` (for the frontend's
+        clipboard copy) and in the prefilled URL's `value`.
+        """
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={
+                "url": "https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/rules.md",
+                "text": "See ![img](https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/main/docs/img/x.png).",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["text"], "See ![img](img/x.png).")
+        self.assertIn("img%2Fx.png", body["url"])
 
     def test_returns_null_url_for_an_unrecognized_host(self):
         response = self.client.post(

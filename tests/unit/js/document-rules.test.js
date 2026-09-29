@@ -619,28 +619,34 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
     };
   }
 
-  it('confirms, then copies the shown text to the clipboard and opens a prefilled tab', async () => {
+  it('confirms, then copies the backend-rewritten text to the clipboard and opens a prefilled tab', async () => {
     const plugin = setup();
     let calledWith;
     withDialog(plugin, { apiClient: {
-      documentRulesProposeChangeUrl: async (body) => { calledWith = body; return { url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }; },
+      documentRulesProposeChangeUrl: async (body) => {
+        calledWith = body;
+        return { url: 'https://github.com/mpilhlt/pdf-tei-editor/edit/main/rules.md?value=shown+text', content_prefilled: true, text: 'rewritten text' };
+      },
     } });
     await plugin._onProposeUpstream();
     assert.deepStrictEqual(calledWith, { url: 'https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md', text: 'shown text' });
     assert.strictEqual(confirmCalls.length, 1);
     assert.match(confirmCalls[0][0], /prefilled/);
-    assert.deepStrictEqual(clipboardCalls, ['shown text']);
-    assert.deepStrictEqual(openCalls[0], ['https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', '_blank', 'noopener']);
+    // Copies response.text (the backend's derelativized version), not the
+    // locally-read `text` sent in the request - a same-repo absolute link
+    // this app resolved internally must not leak into the clipboard copy.
+    assert.deepStrictEqual(clipboardCalls, ['rewritten text']);
+    assert.deepStrictEqual(openCalls[0], ['https://github.com/mpilhlt/pdf-tei-editor/edit/main/rules.md?value=shown+text', '_blank', 'noopener']);
   });
 
   it('confirms with clipboard-fallback wording and opens an unprefilled tab when content_prefilled is false', async () => {
     const plugin = setup();
     withDialog(plugin, { apiClient: {
-      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false, text: 'rewritten text' }),
     } });
     await plugin._onProposeUpstream();
     assert.match(confirmCalls[0][0], /clipboard/);
-    assert.deepStrictEqual(clipboardCalls, ['shown text']);
+    assert.deepStrictEqual(clipboardCalls, ['rewritten text']);
     assert.strictEqual(openCalls[0][0], 'https://gitlab.com/group/project/-/edit/main/rules.md');
   });
 
@@ -648,7 +654,7 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
     const plugin = setup();
     confirmReturns = false;
     withDialog(plugin, { apiClient: {
-      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false }),
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://gitlab.com/group/project/-/edit/main/rules.md', content_prefilled: false, text: 'rewritten text' }),
     } });
     await plugin._onProposeUpstream();
     assert.strictEqual(confirmCalls.length, 1);
@@ -683,7 +689,7 @@ describe('DocumentRulesPlugin._onProposeUpstream', () => {
     const plugin = setup();
     global.navigator.clipboard = { writeText: async () => { throw new Error('denied'); } };
     withDialog(plugin, { apiClient: {
-      documentRulesProposeChangeUrl: async () => ({ url: 'https://github.com/mpilhlt/pdf-tei-editor/new/main?filename=rules.md&value=shown+text', content_prefilled: true }),
+      documentRulesProposeChangeUrl: async () => ({ url: 'https://github.com/mpilhlt/pdf-tei-editor/edit/main/rules.md?value=shown+text', content_prefilled: true, text: 'rewritten text' }),
     } });
     await plugin._onProposeUpstream();
     assert.strictEqual(openCalls.length, 1);

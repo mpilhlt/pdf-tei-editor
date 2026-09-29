@@ -148,7 +148,12 @@ class ProposeChangeUrlResponse(BaseModel):
     `url` is None when the resource's host isn't a recognized git forge - not
     an error, just nothing to propose a change through. `content_prefilled`
     is only ever True for a GitHub URL short enough to embed `text` directly;
-    otherwise the frontend must fall back to a clipboard copy.
+    otherwise the frontend must fall back to a clipboard copy. `text` is the
+    request's `text` with same-repo absolute links rewritten back to the
+    relative form they'd have upstream (see
+    `annotation_rules_utils.derelativize_markdown_urls()`) - the frontend
+    must copy *this*, not its own original text, to the clipboard.
     """
     url: Optional[str] = None
     content_prefilled: bool = False
+    text: str = ""

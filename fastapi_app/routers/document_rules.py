@@ -33,6 +33,7 @@ from ..lib.doc_rules.rules_refresh import (
 from ..lib.doc_rules.storage import DocumentRulesStore
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
+from ..lib.utils.annotation_rules_utils import derelativize_markdown_urls
 from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
     ListResourcesRequest,
@@ -297,11 +298,20 @@ async def propose_change_url(
     or stored credential involved (see
     docs/superpowers/specs/2026-09-28-document-rules-propose-upstream-design.md).
     Returns url=None when the resource's host isn't a recognized git forge.
+
+    `text` is first passed through derelativize_markdown_urls() to undo this
+    app's own internal absolute-URL rewrite of same-repo relative links (see
+    fetch_rule_excerpt()) - otherwise a resource's original relative links
+    would be replaced by this app's resolved, possibly SHA-pinned absolute
+    form in the actual upstream file. The response's `text` field carries
+    this rewritten text back to the frontend, which must copy it (not its
+    own original text) to the clipboard.
     """
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    text = derelativize_markdown_urls(request.text, request.url)
     for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
         try:
-            target = adapter.build_propose_change_url(request.url, request.text, cache)
+            target = adapter.build_propose_change_url(request.url, text, cache)
         except Exception as e:
             logger.error(
                 f"Could not build propose-change URL via {type(adapter).__name__} for {request.url}: {e}",
@@ -309,5 +319,5 @@ async def propose_change_url(
             )
             raise HTTPException(status_code=502, detail=f"Could not build the upstream link: {e}")
         if target is not None:
-            return ProposeChangeUrlResponse(url=target.url, content_prefilled=target.content_prefilled)
-    return ProposeChangeUrlResponse(url=None, content_prefilled=False)
+            return ProposeChangeUrlResponse(url=target.url, content_prefilled=target.content_prefilled, text=text)
+    return ProposeChangeUrlResponse(url=None, content_prefilled=False, text=text)

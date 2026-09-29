@@ -13,6 +13,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
+    derelativize_markdown_urls,
     extract_annotation_rule_refs,
     fetch_rule_excerpt,
     is_line_range_fragment,
@@ -268,6 +269,55 @@ class TestRewriteRelativeMarkdownUrls(unittest.TestCase):
     def test_resolves_parent_relative_path_against_base(self):
         result = _rewrite_relative_markdown_urls("[link](../other.md)", self.BASE)
         self.assertEqual(result, "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)")
+
+
+class TestDerelativizeMarkdownUrls(unittest.TestCase):
+    """
+    Inverse of TestRewriteRelativeMarkdownUrls above - round-trips its
+    "resolves_parent_relative_path_against_base" case back to the original
+    relative form, since that's exactly what a resource's original_text has
+    already been through once (see fetch_rule_excerpt()) before a user's
+    override text reaches derelativize_markdown_urls() on its way to being
+    proposed as the file's new upstream content.
+    """
+
+    BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guide.md"
+
+    def test_rewrites_same_repo_sibling_link_back_to_relative(self):
+        text = "![alt](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "![alt](img/foo.png)")
+
+    def test_rewrites_same_repo_link_at_different_ref_back_to_relative(self):
+        # The link is pinned to a commit SHA (this app's own resolution at
+        # fetch time) while BASE_URL is on "main" - still the same repo, so
+        # it must still round-trip; the ref is deliberately irrelevant here.
+        text = f"[link](https://raw.githubusercontent.com/mpilhlt/fossil/{'a' * 40}/docs/other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "[link](other.md)")
+
+    def test_resolves_parent_directory_link_back_to_relative(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "[link](../other.md)")
+
+    def test_leaves_different_repo_url_unchanged(self):
+        text = "[link](https://raw.githubusercontent.com/other-org/other-repo/main/docs/x.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_leaves_non_forge_absolute_url_unchanged(self):
+        text = "[link](https://example.com/docs/x.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_leaves_already_relative_link_unchanged(self):
+        text = "[link](./other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_returns_text_unchanged_for_non_markdown_base_url(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        xml_base_url = "https://github.com/mpilhlt/fossil/blob/main/schema/tei.rng"
+        self.assertEqual(derelativize_markdown_urls(text, xml_base_url), text)
+
+    def test_returns_text_unchanged_when_base_url_is_not_a_recognized_forge(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        self.assertEqual(derelativize_markdown_urls(text, "https://pad.gwdg.de/s/abc/notes.md"), text)
 
 
 class TestIsLineRangeFragment(unittest.TestCase):
