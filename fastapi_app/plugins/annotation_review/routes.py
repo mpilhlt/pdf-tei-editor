@@ -16,8 +16,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.core.dependencies import require_authenticated_user
+from fastapi_app.lib.core.dependencies import get_document_rules_store, require_authenticated_user
 from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.llm import LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied, check_model_access
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
@@ -87,6 +88,7 @@ async def plan(
 async def review(
     body: ReviewRequest,
     current_user: dict = Depends(require_authenticated_user),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> ReviewResponse:
     """
     Review one chunk of the given (possibly unsaved) document content against
@@ -107,7 +109,9 @@ async def review(
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 
     try:
-        findings, chunk_count = await run_review(body.xml, provider, body.model_id, cache, body.chunk_index)
+        findings, chunk_count = await run_review(
+            body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except NoRuleExcerptsError as e:

@@ -396,27 +396,6 @@ async function extract(file_id, options) {
   });
 }
 
-/**
- * Returns the current prompt extraction instruction data
- * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
- */
-async function loadInstructions() {
-  return await apiClient.configListInstructions();
-}
-
-/**
- * Saves the prompt extraction instruction data
- * @param {Array<Object>} instructions An array of {active,label,text} objects
- * @returns {Promise<Object>} The result object
- */
-async function saveInstructions(instructions) {
-  if (!Array.isArray(instructions)) {
-    throw new Error("Instructions must be an array");
-  }
-  // Send the instructions to the server
-  return await apiClient.configSaveInstructions({ instructions });
-}
-
 
 /**
  * Deletes all extraction document versions with the given file IDs
@@ -727,7 +706,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
  */
 async function getBackendPlugins(category = null) {
   const params = category ? { category } : {};
-  const response = await callApi('/plugins', 'GET', params);
+  const response = await apiClient.plugins(params);
   return response.plugins;
 }
 
@@ -739,10 +718,7 @@ async function getBackendPlugins(category = null) {
  * @returns {Promise<any>} - Plugin execution result
  */
 async function executeBackendPlugin(pluginId, endpoint, params) {
-  const response = await callApi(`/plugins/${pluginId}/execute`, 'POST', {
-    endpoint,
-    params
-  });
+  const response = await apiClient.pluginsExecute(pluginId, { endpoint, params });
   if (response.success) {
     return response.result;
   }
@@ -763,8 +739,6 @@ const api = {
   saveXml,
   extract,
   getExtractorList,
-  loadInstructions,
-  saveInstructions,
   deleteFiles,
   createVersionFromUpload,
   uploadFile,

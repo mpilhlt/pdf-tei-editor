@@ -22,6 +22,7 @@ import {
   PluginAdminPlugin,
   DialogPlugin,
   DocumentActionsPlugin,
+  DocumentRulesPlugin,
   ExtractionPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
@@ -34,7 +35,6 @@ import {
   LoggerPlugin,
   MoveFilesPlugin,
   PdfViewerPlugin,
-  PromptEditorPlugin,
   ProgressPlugin,
   RbacManagerPlugin,
   ServicesPlugin,
@@ -94,7 +94,7 @@ const plugins = [
   ExtractionPlugin,
   ToolsPlugin,
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
-  PromptEditorPlugin,
+  DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiWizardPlugin,
   TeiValidationPlugin,
   MoveFilesPlugin,

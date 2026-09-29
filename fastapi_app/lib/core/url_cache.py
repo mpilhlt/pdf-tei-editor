@@ -66,10 +66,23 @@ class UrlCache:
         self.cache_root = cache_root
         self.ttl_seconds = ttl_seconds
 
-    def get_text(self, url: str) -> Optional[str]:
-        """Return cached text for `url` if a fresh cache entry exists, else None."""
+    def get_text(self, url: str, ignore_ttl: bool = False) -> Optional[str]:
+        """
+        Return cached text for `url`, or None if there is no cache entry.
+
+        Normally an entry older than `ttl_seconds` is treated as missing
+        (the default, staleness-checked behavior every existing caller
+        keeps). Pass `ignore_ttl=True` for a URL whose content is known to
+        be immutable (a commit-SHA-pinned git-forge URL - see
+        git_forge_adapters.py's `is_sha_pinned()`) to return any existing
+        entry regardless of age, so pinned content stays resolvable
+        offline/in development long after the normal TTL would have
+        expired it.
+        """
         _, cache_file, _ = get_cache_info(url, self.cache_root)
-        if is_cache_stale(cache_file, self.ttl_seconds):
+        if not cache_file.is_file():
+            return None
+        if not ignore_ttl and is_cache_stale(cache_file, self.ttl_seconds):
             return None
         return cache_file.read_text(encoding="utf-8")
 

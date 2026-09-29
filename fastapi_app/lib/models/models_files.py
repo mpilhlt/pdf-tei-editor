@@ -230,3 +230,4 @@ class GarbageCollectResponse(BaseModel):
     storage_freed: int  # Total bytes freed from storage
     orphaned_xml_deleted: int = 0  # Number of orphaned XML files deleted (XML with no PDF)
     grobid_cache_deleted: int = 0  # Number of GROBID training-data cache entries deleted
+    annotation_rules_cache_deleted: int = 0  # Number of annotation-rules fetch cache entries deleted

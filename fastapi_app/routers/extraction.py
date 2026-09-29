@@ -200,6 +200,7 @@ async def extract_metadata(
         extraction_options['doc_id'] = file_metadata.doc_id
         extraction_options['stable_id'] = file_metadata.stable_id
         extraction_options['base_url'] = str(http_request.base_url).rstrip('/')
+        extraction_options['username'] = current_user.get('username') if current_user else None
 
         try:
             tei_xml = await extractor.extract(

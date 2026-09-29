@@ -449,6 +449,9 @@ def create_encoding_desc_with_extractor(
         editorialDecl = etree.SubElement(encodingDesc, "editorialDecl")
         for entry in editorial_decl_entries:
             interpretation = etree.SubElement(editorialDecl, "interpretation", type=entry["category"])
+            n = entry.get("n")
+            if n is not None:
+                interpretation.set("n", n)
             p = etree.SubElement(interpretation, "p")
             for ref_entry in entry["refs"]:
                 ref = etree.SubElement(p, "ref", target=ref_entry["target"], subtype=ref_entry["subtype"])

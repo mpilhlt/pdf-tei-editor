@@ -328,6 +328,30 @@ def garbage_collect_files(
     else:
         logger.info("Schema cache directory does not exist or is empty")
 
+    # Clean up annotation-rules fetch cache (fully reproducible, safe to wipe -
+    # see url_cache.py; entries for a SHA-pinned URL never expire on their own)
+    logger.info("Cleaning up annotation-rules fetch cache...")
+    annotation_rules_cache_dir = settings.annotation_rules_cache_dir
+    annotation_rules_cache_deleted = 0
+
+    if annotation_rules_cache_dir.exists() and annotation_rules_cache_dir.is_dir():
+        try:
+            for item in annotation_rules_cache_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                        annotation_rules_cache_deleted += 1
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        annotation_rules_cache_deleted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete annotation-rules cache item {item.name}: {e}")
+            logger.info(f"Annotation-rules cache cleanup completed: {annotation_rules_cache_deleted} items deleted")
+        except Exception as e:
+            logger.error(f"Failed to clean annotation-rules cache directory: {e}")
+    else:
+        logger.info("Annotation-rules cache directory does not exist or is empty")
+
     # Clean up GROBID training-data cache (fully reproducible, safe to wipe)
     logger.info("Cleaning up GROBID training-data cache...")
     grobid_cache_deleted = 0
@@ -383,5 +407,6 @@ def garbage_collect_files(
         files_deleted=files_deleted,
         storage_freed=storage_freed,
         orphaned_xml_deleted=orphaned_xml_deleted,
-        grobid_cache_deleted=grobid_cache_deleted
+        grobid_cache_deleted=grobid_cache_deleted,
+        annotation_rules_cache_deleted=annotation_rules_cache_deleted
     )

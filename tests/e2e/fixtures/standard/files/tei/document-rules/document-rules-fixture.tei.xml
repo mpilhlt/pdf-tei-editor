@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/main/schema/rng/tei-bib.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Document Rules E2E Fixture</title>
+      </titleStmt>
+      <publicationStmt>
+        <p>Test fixture for the document rules registry E2E suite.</p>
+      </publicationStmt>
+      <sourceDesc>
+        <p>Test fixture.</p>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application type="extractor" ident="GROBID" version="1.0">
+          <label type="variant-id">grobid.training.segmentation</label>
+        </application>
+      </appInfo>
+      <editorialDecl>
+        <interpretation type="data-correction" n="Data correction">
+          <p>
+            <ref target="https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#data-correction" subtype="human" type="markdown"/>
+          </p>
+        </interpretation>
+      </editorialDecl>
+    </encodingDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Fixture body.</p>
+    </body>
+  </text>
+</TEI>

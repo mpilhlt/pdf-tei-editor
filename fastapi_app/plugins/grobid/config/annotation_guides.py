@@ -22,6 +22,7 @@ class AnnotationGuide(TypedDict):
     category: str
     type: Literal["markdown", "html"]
     url: str
+    label: str
 
 
 ANNOTATION_GUIDES: list[AnnotationGuide] = [
@@ -30,23 +31,27 @@ ANNOTATION_GUIDES: list[AnnotationGuide] = [
         "category": "primary",
         "type": "markdown",
         "url": "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#document-segmentation-model",
+        "label": "Document segmentation guidelines",
     },
     {
         "variant_ids": ["grobid.training.references.referenceSegmenter"],
         "category": "primary",
         "type": "markdown",
         "url": "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#reference-segmentation-model",
+        "label": "Reference segmentation guidelines",
     },
     {
         "variant_ids": ["grobid.training.references"],
         "category": "primary",
         "type": "markdown",
         "url": "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#citation-model",
+        "label": "Citation model guidelines",
     },
     {
         "variant_ids": ["*"],
         "category": "data-correction",
         "type": "markdown",
         "url": "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#data-correction",
+        "label": "Data correction guidelines",
     },
 ]

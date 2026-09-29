@@ -52,6 +52,26 @@ class TestMigrations005To007(unittest.TestCase):
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
+    def _reset_history_above(self, version: int) -> None:
+        """
+        Remove migration_history rows above `version`.
+
+        DatabaseManager's setUp runs the *full* METADATA_MIGRATIONS list, which
+        may include migrations registered after this test was written (e.g.
+        migration 009). MigrationManager.rollback_migration() only downgrades
+        and clears history for migrations registered on its own instance, so a
+        scoped manager here (which only knows about 005/006/007) would leave
+        history rows for those later migrations in place. Since
+        MigrationManager._get_current_version() takes a global MAX(version),
+        a stray higher-numbered row would make every later
+        `manager.run_migrations()` call in this test think those migrations
+        are already applied. Clear them explicitly so current_version matches
+        the intended rollback target.
+        """
+        with sqlite3.connect(str(self.db_path)) as conn:
+            conn.execute("DELETE FROM migration_history WHERE version > ?", (version,))
+            conn.commit()
+
     def _rollback_to_version_4(self):
         """Roll back migrations to version 4 (pre-migration-005 state)."""
         manager = MigrationManager(self.db_path, self.logger)
@@ -59,6 +79,7 @@ class TestMigrations005To007(unittest.TestCase):
         manager.register_migration(Migration006AddLastRevisionColumn(self.logger))
         manager.register_migration(Migration007AddCreatedByColumn(self.logger))
         manager.rollback_migration(4)
+        self._reset_history_above(4)
 
     def _rollback_to_version_5(self):
         """Roll back migrations to version 5 (pre-migration-006 state)."""
@@ -66,12 +87,14 @@ class TestMigrations005To007(unittest.TestCase):
         manager.register_migration(Migration006AddLastRevisionColumn(self.logger))
         manager.register_migration(Migration007AddCreatedByColumn(self.logger))
         manager.rollback_migration(5)
+        self._reset_history_above(5)
 
     def _rollback_to_version_6(self):
         """Roll back migrations to version 6 (pre-migration-007 state)."""
         manager = MigrationManager(self.db_path, self.logger)
         manager.register_migration(Migration007AddCreatedByColumn(self.logger))
         manager.rollback_migration(6)
+        self._reset_history_above(6)
 
     def _create_test_tei_file(self, file_id: str, status: str = "draft") -> bytes:
         """Create a test TEI XML file with a specific status."""

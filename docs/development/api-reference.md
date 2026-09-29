@@ -227,25 +227,13 @@ npm run docs:backend:json
 - `sse.py` - Server-sent events
 - `users.py`, `groups.py`, `roles.py` - RBAC management
 
-## 4. Auto-generated API Client
+## 4. Hand-maintained API Client
 
-### Generation
+### Maintenance
 
-The frontend API client is auto-generated from the FastAPI OpenAPI schema:
+The frontend API client mirrors the FastAPI routes by hand; see [docs/code-assistant/api-client.md](../code-assistant/api-client.md) for the maintenance workflow.
 
-**Regenerate client:**
-
-```bash
-npm run generate-client
-```
-
-**Check if outdated:**
-
-```bash
-npm run generate-client:check
-```
-
-**Location:** `app/src/modules/api-client-v1.js` (DO NOT EDIT MANUALLY)
+**Location:** `app/src/modules/api-client-v1.js` — update the matching method here in the same change whenever you add, remove, or change a route in `fastapi_app/routers/*.py`.
 
 ### Usage
 
@@ -371,8 +359,8 @@ node bin/batch-extract.js /path/to/pdfs \
 **When creating new endpoints:**
 
 1. Add endpoint to appropriate router in `fastapi_app/routers/`
-2. Regenerate API client: `npm run generate-client`
-3. Check client was updated correctly
+2. Add the matching method by hand to `app/src/modules/api-client-v1.js`
+3. Check the method's JSDoc matches the route and Pydantic models
 4. Update integration tests
 
 ### For AI Code Assistants

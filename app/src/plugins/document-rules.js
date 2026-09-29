@@ -1,0 +1,1060 @@
+/**
+ * Document Rules Plugin
+ *
+ * Provides two Tools-menu entries under the "document-rules" category:
+ * - "Edit prompts/schemas": a dynamically populated submenu, one entry per
+ *   resource (editorialDecl/interpretation entries + the document's schema)
+ *   the currently open document references (POST /document-rules/list).
+ *   Clicking an entry opens a shared per-resource editor dialog for
+ *   switching between the original and the user's own overrides.
+ * - "Refresh document rules" (reviewer/admin only): regenerates both halves
+ *   of what governs a document - the interpretation-ref entries and the
+ *   schema PI - via a preview-then-confirm-then-execute flow against
+ *   POST /document-rules/refresh/{preview,execute}.
+ *
+ * Mirrors app/src/plugins/inference-settings.js's dynamic-Tools-submenu
+ * pattern closely, including its field-naming convention (single-underscore
+ * public fields/methods, not true #private ones, so this plugin's own unit
+ * tests can reach them directly - see that file's module doc-comment).
+ *
+ * See docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
+ * ("Frontend design").
+ */
+
+/**
+ * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { ApplicationState } from '../state.js'
+ * @import { UserData } from './authentication.js'
+ * @import { SlMenuItem, SlDialog } from '../ui.js'
+ * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
+ * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse } from '../modules/api-client-v1.js'
+ * @import { StatusText } from '../modules/panels/index.js'
+ */
+
+import { Plugin } from '../modules/plugin-base.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { notify } from '../modules/sl-utils.js'
+import { userHasRole } from '../modules/acl-utils.js'
+import { createMarkdownRenderer, findHeadingLineForAnchor } from '../modules/markdown-utils.js'
+import { PanelUtils } from '../modules/panels/index.js'
+import { EditorState, Compartment } from '@codemirror/state'
+import { EditorView, keymap, lineNumbers } from '@codemirror/view'
+import { xml, xmlLanguage } from '@codemirror/lang-xml'
+import { markdown } from '@codemirror/lang-markdown'
+import { GFM } from '@lezer/markdown'
+import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
+import { getTheme } from '../modules/codemirror/editor-themes.js'
+import { createOverrideRefField, createOverrideRefClickHandler, refDecorationTheme } from '../modules/document-rules-decorations.js'
+
+// Register templates at module level
+await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
+await registerTemplate('document-rules-refresh-menu-item', 'document-rules-refresh-menu-item.html')
+await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-dialog.html')
+
+// Matches a recognized line-range fragment (GitHub's #L10-L50, GitLab's
+// #L10-50) - mirrors annotation_rules_utils.py's _LINE_RANGE_RE.
+const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
+
+/**
+ * The URL fragment to scroll the markdown edit/preview panels to, or null
+ * if there is none, or it's a recognized line-range fragment instead (e.g.
+ * "#L10-L40"). `fetch_rule_excerpt()` (annotation_rules_utils.py) already
+ * slices `original_text` to a line-range fragment server-side, so there's
+ * nothing left to scroll to for those; a heading-anchor fragment (e.g.
+ * "#data-correction", an interpretation-ref "human" ref - see
+ * docs/development/tei-header-integrations.md), by contrast, leaves the
+ * *whole* document as `original_text` - the client scrolls to the
+ * referenced heading itself.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function headingAnchorFragment(url) {
+  const hashIndex = url.indexOf('#')
+  if (hashIndex === -1) return null
+  const fragment = url.slice(hashIndex + 1)
+  return fragment && !LINE_RANGE_FRAGMENT_RE.test(fragment) ? fragment : null
+}
+
+class DocumentRulesPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'document-rules', deps: ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger'] })
+  }
+
+  get #client() { return this.getDependency('client') }
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+  get #logger() { return this.getDependency('logger') }
+
+  /** @type {SlMenuItem & documentRulesEditMenuItemPart} */
+  _editMenuItem = null
+
+  /** @type {HTMLElement} */
+  _refreshMenuItem = null
+
+  /** @type {SlDialog & documentRulesEditorDialogPart} */
+  _editorDialogUi = null
+
+  /**
+   * Last successful POST /document-rules/list result for the open document.
+   * @type {Array<ResourceDescriptorModel>}
+   */
+  _resources = []
+
+  /** @type {StatusText|null} */
+  _overridesWidget = null
+
+  /**
+   * Last successful POST /document-rules/selections result for `_resources`.
+   * @type {Array<SelectionInfo>}
+   */
+  _selections = []
+
+  /** @type {Promise<void>|null} */
+  _refreshPromise = null
+
+  /** @type {boolean} */
+  _refreshQueued = false
+
+  /** @type {ReturnType<typeof createMarkdownRenderer>} */
+  _md = null
+
+  /** Resource descriptor the dialog currently shows, or null if closed. @type {ResourceDescriptorModel|null} */
+  _currentResource = null
+
+  /** @type {Array<OverrideModel>} */
+  _currentOverrides = []
+
+  /** Selected override id, or null when "Original" is selected. @type {string|null} */
+  _currentSelectedId = null
+
+  /** @type {string} */
+  _currentOriginalText = ''
+
+  /**
+   * Whether the host document (the main XML editor) is currently read-only -
+   * kept in sync via onEditorReadOnlyChange(). Independent of, and combined
+   * with, the dialog's own "read-only unless an override is selected" gating
+   * in _renderEditorDialog().
+   * @type {boolean}
+   */
+  _documentReadOnly = false
+
+  /** @type {{reconfigure: (ext: any) => void}} */
+  _refDecorationSlot = null
+
+  /** @type {EditorView} */
+  _cmView = null
+
+  /** @type {Compartment} */
+  _cmReadOnlyCompartment = new Compartment()
+
+  /**
+   * Wraps history() so it can be cleared on every _setXmlContent() call -
+   * without this, undo/redo would leak content across different resources/
+   * overrides shown in the same long-lived CM instance (see
+   * app/src/modules/xmleditor.js's loadXml(), which clears history the same
+   * way on every document load).
+   * @type {Compartment}
+   */
+  _cmHistoryCompartment = new Compartment()
+
+  /**
+   * CodeMirror instance for the "Edit" tab of markdown/text resources -
+   * replaces a plain `<sl-textarea>` (see _setMarkdownContent()'s doc
+   * comment on why: a native textarea has no reliable, wrap-aware way to
+   * scroll to a specific source line, which is exactly what
+   * _scrollMarkdownBodyToAnchor() needs for a heading-anchor fragment).
+   * @type {EditorView}
+   */
+  _cmMdView = null
+
+  /** @type {Compartment} */
+  _cmMdReadOnlyCompartment = new Compartment()
+
+  /** Mirrors _cmHistoryCompartment, for _cmMdView. @type {Compartment} */
+  _cmMdHistoryCompartment = new Compartment()
+
+  /** @param {ApplicationState} state */
+  async install(state) {
+    await super.install(state)
+    this.#logger.debug('Installing plugin "document-rules"')
+    this._documentReadOnly = !!state.editorReadOnly
+
+    const dialog = createSingleFromTemplate('document-rules-editor-dialog', document.body)
+    this._editorDialogUi = this.createUi(dialog)
+
+    this._md = createMarkdownRenderer()
+
+    this._overridesWidget = PanelUtils.createText({
+      text: 'Overrides active',
+      icon: 'pencil-fill',
+      variant: 'primary',
+      clickable: true,
+      name: 'documentRulesOverridesStatus'
+    })
+    this._overridesWidget.addEventListener('widget-click', () => this._onOverridesWidgetClick())
+
+    // Reuse the user's own XML-editor theme choice (persisted the same way
+    // xmleditor.js reads it) rather than hardcoding 'default' - otherwise a
+    // user who switched the main editor to dark mode would see this dialog's
+    // schema view rendered in light mode regardless. `this.uiStorage` is
+    // namespaced by THIS plugin's own name ('document-rules'), which is not
+    // where xmleditor.js's plugin ('xmleditor') persists the setting - it
+    // must be read from that plugin's own namespace instead.
+    const themeId = this.context.getUIStorage('xmleditor').get('editorTheme', 'default')
+
+    this._cmView = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          lineNumbers(),
+          this._cmHistoryCompartment.of(history()),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          xml(),
+          getTheme(themeId).extensions,
+          this._cmReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
+        ]
+      }),
+      parent: this._editorDialogUi.xmlBody.xmlContainer
+    })
+
+    this._cmMdView = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          // GFM (tables/strikethrough/autolink/task lists) matches what the
+          // preview's markdown-it renderer (createMarkdownRenderer()) already
+          // supports by default; xmlLanguage highlights ```xml fenced code
+          // blocks, since annotation guides often embed TEI/XML examples.
+          markdown({ extensions: GFM, codeLanguages: (info) => info === 'xml' ? xmlLanguage : null }),
+          EditorView.lineWrapping,
+          // CodeMirror only scrolls internally (what EditorView.scrollIntoView()
+          // in _scrollMarkdownBodyToAnchor() needs) once its own `.cm-scroller`
+          // is the actual overflow container - by default (no explicit height),
+          // `.cm-editor` grows to fit its content and the *outer* mdContainer
+          // div does the scrolling instead, in which case scrollIntoView() has
+          // nothing to scroll and silently no-ops. This theme constrains
+          // `.cm-editor`'s height so `.cm-scroller` becomes scrollable,
+          // mirroring the fixed-height/overflow:auto the xmlContainer div gets
+          // via plain CSS (its CM instance never scrolls to a specific
+          // position programmatically, so it never needed this).
+          EditorView.theme({ '&': { height: '400px' }, '.cm-scroller': { overflow: 'auto' } }),
+          this._cmMdHistoryCompartment.of(history()),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          getTheme(themeId).extensions,
+          this._cmMdReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
+        ]
+      }),
+      parent: this._editorDialogUi.textBody.textTabs.editPanel.mdContainer
+    })
+
+    this._refDecorationSlot = this.#xmlEditor.createExtensionSlot([])
+
+    this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
+    this._editorDialogUi.newOverrideBtn.addEventListener('click', () => this._onNewOverride())
+    this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
+    this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
+    this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
+    this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
+    this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', async (event) => {
+      if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
+        const previewPanel = this._editorDialogUi.textBody.textTabs.previewPanel
+        const text = this._cmMdView.state.doc.toString()
+        previewPanel.previewContent.innerHTML = this._md.render(text)
+        // Re-scroll now that the preview panel is actually visible - see
+        // _scrollMarkdownBodyToAnchor()'s doc comment on why setting scroll
+        // position on a hidden `display: none` panel has no effect. This
+        // event fires synchronously from setActiveTab() right after setting
+        // the panel's `active` property, but - like _openResourceEditor()'s
+        // own forced tab-show - that property's reflection to the actual
+        // `active` DOM attribute (which the panel's display:none/block CSS
+        // depends on) lands asynchronously via the panel's own Lit update,
+        // not synchronously inside this handler; without awaiting it here,
+        // scrollIntoView() below fires while the panel is still hidden and
+        // permanently no-ops (nothing re-attempts it afterwards).
+        await previewPanel.updateComplete
+        if (this._currentResource) this._scrollMarkdownBodyToAnchor(text)
+      }
+    })
+  }
+
+  async start() {
+    this.#logger.debug('Starting plugin "document-rules"')
+
+    this._editMenuItem = this.createUi(createSingleFromTemplate('document-rules-menu-item'))
+    this._refreshMenuItem = createSingleFromTemplate('document-rules-refresh-menu-item')
+
+    this._editMenuItem.addEventListener('mouseenter', () => this._refreshResources())
+    this._refreshMenuItem.addEventListener('click', () => this._onRefreshDocumentRules())
+
+    this.getDependency('tools').addMenuItems([this._editMenuItem, this._refreshMenuItem], 'document-rules')
+
+    // _editMenuItem starts hidden regardless of role - #doRefreshResources()
+    // (triggered by the _refreshResources() call below) is the only place
+    // that ever shows it, and only once its own role check passes.
+    this._editMenuItem.style.display = 'none'
+    this._refreshMenuItem.style.display = userHasRole(this.state.user, ['reviewer', 'admin']) ? '' : 'none'
+    this._refreshResources()
+  }
+
+  /** Rebuild resource discovery when the open document changes. */
+  onXmlChange() {
+    if (this._editorDialogUi.open) this._editorDialogUi.hide()
+    this._refreshResources()
+  }
+
+  /**
+   * Show/hide the reviewer/admin-gated "Refresh document rules" item, and
+   * re-run resource discovery so "Edit prompts/schemas" picks up the same
+   * role gate applied in #doRefreshResources() (hidden entirely for a user
+   * without the role, whatever the open document's resources are) - both
+   * items are gated the same way so tools.js's category-label auto-hide
+   * (see its module doc-comment) collapses the whole "Document rules"
+   * section for a plain user, not just the refresh item.
+   * @param {UserData|null} newUser
+   */
+  onUserChange(newUser) {
+    this._refreshMenuItem.style.display = userHasRole(newUser, ['reviewer', 'admin']) ? '' : 'none'
+    this._refreshResources()
+  }
+
+  /**
+   * Keep the resource editor dialog's content-editing controls in sync with
+   * the host document's read-only state - independent of, and in addition
+   * to, the dialog's existing "read-only unless an override is selected"
+   * gating in _renderEditorDialog().
+   * @param {boolean} newValue
+   */
+  onEditorReadOnlyChange(newValue) {
+    this._documentReadOnly = !!newValue
+    if (this._currentResource) this._renderEditorDialog()
+  }
+
+  /**
+   * Re-fetch the open document's resource list, de-duplicating concurrent
+   * calls the same way inference-settings.js's _refresh() does: a call that
+   * arrives while a fetch is already in flight joins that promise instead of
+   * starting a second one, but marks _refreshQueued so one trailing refresh
+   * fires once the in-flight fetch settles.
+   * @returns {Promise<void>}
+   */
+  async _refreshResources() {
+    if (this._refreshPromise) {
+      this._refreshQueued = true
+      return this._refreshPromise
+    }
+    this._refreshPromise = this.#doRefreshResources()
+    try {
+      await this._refreshPromise
+    } finally {
+      this._refreshPromise = null
+      if (this._refreshQueued) {
+        this._refreshQueued = false
+        this._refreshResources()
+      }
+    }
+  }
+
+  /**
+   * Does the actual fetch/rebuild work for _refreshResources(). Hides the
+   * parent item entirely when the current user lacks the reviewer/admin
+   * role this whole "Document rules" category requires, or when no document
+   * is open; shows it disabled when a document is open but references no
+   * resources; shows it enabled with a populated submenu otherwise.
+   * @returns {Promise<void>}
+   */
+  async #doRefreshResources() {
+    const state = this.state
+    if (!userHasRole(state.user, ['reviewer', 'admin']) || !state.xml) {
+      this._resources = []
+      this._editMenuItem.style.display = 'none'
+      return
+    }
+
+    let xmlString = null
+    try {
+      const view = this.#xmlEditor.getView()
+      xmlString = view ? view.state.doc.toString() : null
+    } catch (error) {
+      this.#logger.warn('document-rules: could not read editor content: ' + String(error))
+    }
+
+    if (!xmlString) {
+      this._resources = []
+      this._editMenuItem.style.display = 'none'
+      return
+    }
+
+    try {
+      const response = await this.#client.apiClient.documentRulesList({ xml_string: xmlString })
+      this._resources = response.resources
+    } catch (error) {
+      // Mirrors inference-settings.js's #doRefresh(): on a failed fetch, keep
+      // whatever _resources this plugin already had (stale data is more
+      // useful than an empty/hidden menu) rather than clearing it.
+      this.#logger.warn('document-rules: could not list document resources: ' + String(error))
+    }
+
+    this._editMenuItem.style.display = ''
+    this._editMenuItem.disabled = this._resources.length === 0
+    this._populateSubmenu()
+    await this._refreshOverrideIndicators()
+  }
+
+  /** Rebuild the submenu's sl-menu-item children from `_resources`. */
+  _populateSubmenu() {
+    const submenu = this._editMenuItem.documentRulesEditSubmenu
+    submenu.innerHTML = ''
+    for (const resource of this._resources) {
+      const item = document.createElement('sl-menu-item')
+      item.textContent = resource.label
+      item.dataset.kind = resource.kind
+      item.dataset.url = resource.url
+      item.addEventListener('click', () => this._openResourceEditor(resource))
+      submenu.appendChild(item)
+    }
+  }
+
+  /**
+   * Reveal the document's editorialDecl: unfold the TEI header (it may be
+   * folded) and scroll editorialDecl into view - same two calls
+   * app/src/plugins/tei-tools.js's own "show header" toggle makes (that
+   * plugin's toggle logic is private, so this duplicates the calls rather
+   * than depending on it).
+   */
+  _onOverridesWidgetClick() {
+    try {
+      this.#xmlEditor.unfoldByXpath('//tei:teiHeader')
+      this.#xmlEditor.selectByXpath('//tei:editorialDecl')
+    } catch (error) {
+      this.#logger.warn('document-rules: could not reveal editorialDecl: ' + String(error))
+    }
+  }
+
+  /**
+   * Fetch selection status for every currently-known resource and show/hide
+   * the "Overrides active" headerbar widget accordingly. Called whenever
+   * `_resources` changes (after a list refresh) and whenever a selection
+   * changes (override CRUD/selection actions), so the indicator - and the
+   * ref decorations built from the same `_selections` data - stay current.
+   * @returns {Promise<void>}
+   */
+  async _refreshOverrideIndicators() {
+    if (this._resources.length === 0) {
+      this._selections = []
+      if (this._overridesWidget.isConnected) this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
+      this._refreshRefDecorations()
+      return
+    }
+    try {
+      const response = await this.#client.apiClient.documentRulesSelections({
+        resources: this._resources.map(r => ({ kind: r.kind, url: r.url }))
+      })
+      this._selections = response.selections
+    } catch (error) {
+      this.#logger.warn('document-rules: could not fetch selection status: ' + String(error))
+      return
+    }
+    const hasOverrides = this._selections.some(s => s.selected)
+    if (hasOverrides) {
+      if (!this._overridesWidget.isConnected) this.#xmlEditor.addHeaderbarWidget(this._overridesWidget, 'right', 3)
+    } else if (this._overridesWidget.isConnected) {
+      this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
+    }
+    this._refreshRefDecorations()
+  }
+
+  /**
+   * Rebuild the ref-decoration extension from the current `_selections`,
+   * covering both interpretation-ref <ref target> elements and the schema
+   * kind's `<?xml-model href="...">` PI (see document-rules-decorations.js's
+   * buildRefDecorations()). Includes each overridden resource's
+   * `related_urls` so both a "human" ref and its auto-derived "machine" ref
+   * (which share one resource but have different URLs) are decorated as
+   * overridden together, not just the representative one; schema resources
+   * have no related_urls, so this is a no-op for them.
+   */
+  _refreshRefDecorations() {
+    const overriddenUrls = new Set()
+    for (const selection of this._selections) {
+      if (!selection.selected || (selection.kind !== 'interpretation-ref' && selection.kind !== 'schema')) continue
+      overriddenUrls.add(selection.url)
+      const resource = this._resources.find(r => r.kind === selection.kind && r.url === selection.url)
+      for (const relatedUrl of resource?.related_urls ?? []) overriddenUrls.add(relatedUrl)
+    }
+    this._refDecorationSlot.reconfigure([
+      createOverrideRefField(overriddenUrls),
+      refDecorationTheme,
+      createOverrideRefClickHandler((url) => this._onRefDecorationClick(url))
+    ])
+  }
+
+  /**
+   * Open the resource editor for the interpretation-ref or schema resource
+   * matching the clicked decorated URL (a <ref target="..."> or the schema
+   * kind's `<?xml-model href="...">`), looked up in the existing
+   * `_resources` cache (see this plan's "Important context" on staleness).
+   * An interpretation-ref entry's "human" and auto-derived "machine" refs
+   * are both decorated as clickable but share one resource, so the lookup
+   * also matches against `related_urls`, not just each resource's own
+   * representative `url`; schema resources have no related_urls, so this
+   * falls back to an exact `url` match for them.
+   * @param {string} url
+   */
+  _onRefDecorationClick(url) {
+    const resource = this._resources.find(
+      r => (r.kind === 'interpretation-ref' || r.kind === 'schema') &&
+        (r.url === url || r.related_urls?.includes(url))
+    )
+    if (!resource) {
+      this.#logger.warn(`document-rules: no resource found for clicked ref url: ${url}`)
+      return
+    }
+    this._openResourceEditor(resource)
+  }
+
+  /**
+   * Query one resource's original text, overrides, and current selection,
+   * then render and show the editor dialog for it.
+   * @param {ResourceDescriptorModel} resource
+   * @returns {Promise<void>}
+   */
+  async _openResourceEditor(resource) {
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesQuery({ kind: resource.kind, url: resource.url })
+    } catch (error) {
+      notify(`Could not load resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentResource = resource
+    this._currentOverrides = response.overrides
+    this._currentSelectedId = response.selected_override_id
+    this._currentOriginalText = response.original_text
+    // scroll: false - the dialog is still hidden (`<sl-dialog>` renders its
+    // content behind a `hidden` attribute until shown, see show() below),
+    // and setting scroll position on a hidden element has no effect (same
+    // reason the "preview" sl-tab-show handler in install() re-scrolls once
+    // its own panel becomes visible). Re-run the scroll explicitly once
+    // show() resolves, i.e. once the dialog is actually visible.
+    this._renderEditorDialog({ scroll: false })
+    await this._editorDialogUi.show()
+    if (resource.format !== 'xml') {
+      // Force the "Edit" tab active before scrolling to it, rather than
+      // trusting whatever tab the shared <sl-tab-group> already considers
+      // active. @shoelace-style/shoelace's tab-group only auto-activates a
+      // default tab via a *one-shot* IntersectionObserver that fires the
+      // first time the tab group becomes visible (see its
+      // connectedCallback()) - since this dialog/tab-group is created once
+      // in install() while the dialog is still hidden, that callback races
+      // with this method's own await above, so on the very first-ever
+      // _openResourceEditor() call neither tab panel is marked "active" yet
+      // by the time we get here (nothing is visible to scroll to at all).
+      // Calling the tab group's own show() bypasses that race entirely and
+      // also gives every freshly opened resource the same predictable
+      // starting tab, instead of leaving whatever tab a *previous*
+      // resource's dialog session was left on. Its "active" attribute
+      // reflection (which the panel's `display: none`/`block` CSS depends
+      // on) lands asynchronously with the panel's own Lit update, hence the
+      // extra await.
+      const tabs = this._editorDialogUi.textBody.textTabs
+      tabs.show('edit')
+      await tabs.editPanel.updateComplete
+      this._scrollMarkdownBodyToAnchor(this._currentShownText())
+    }
+  }
+
+  /**
+   * Read the text currently displayed in whichever body is active (the
+   * source of truth for New override/Save, before it's persisted).
+   * @returns {string}
+   */
+  _currentShownText() {
+    if (this._currentResource.format === 'xml') {
+      return this._currentXmlText()
+    }
+    return this._cmMdView.state.doc.toString()
+  }
+
+  /**
+   * Full re-render of the dialog for `_currentResource`/`_currentOverrides`/`_currentSelectedId`.
+   * @param {{ scroll?: boolean }} [options] - `scroll: false` skips the
+   *   anchor/top scroll positioning normally applied to the markdown/text
+   *   body (see _scrollMarkdownBodyToAnchor()) - used by _openResourceEditor()
+   *   while the dialog is still hidden, since scrolling has no effect until
+   *   the dialog is actually shown.
+   */
+  _renderEditorDialog({ scroll = true } = {}) {
+    const resource = this._currentResource
+    const dialogUi = this._editorDialogUi
+    dialogUi.setAttribute('label', resource.label)
+    this._renderOverrideRow()
+
+    const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+    dialogUi.noteInput.style.display = selected ? '' : 'none'
+    dialogUi.noteInput.value = selected ? selected.note : ''
+    dialogUi.noteInput.disabled = this._documentReadOnly
+
+    const text = selected ? selected.text : this._currentOriginalText
+    const readOnly = selected === null || this._documentReadOnly
+
+    if (resource.format === 'xml') {
+      dialogUi.textBody.style.display = 'none'
+      dialogUi.xmlBody.style.display = ''
+      this._setXmlContent(text, readOnly)
+    } else {
+      dialogUi.xmlBody.style.display = 'none'
+      dialogUi.textBody.style.display = ''
+      this._setMarkdownContent(text, readOnly)
+      dialogUi.textBody.textTabs.previewPanel.previewContent.innerHTML = this._md.render(text)
+      if (scroll) this._scrollMarkdownBodyToAnchor(text)
+    }
+
+    dialogUi.newOverrideBtn.disabled = this._documentReadOnly
+    dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
+    dialogUi.deleteBtn.style.display = selected ? '' : 'none'
+    dialogUi.resetBtn.style.display = selected ? '' : 'none'
+    dialogUi.proposeUpstreamBtn.style.display = selected ? '' : 'none'
+  }
+
+  /**
+   * Scroll the markdown edit view and preview to `_currentResource`'s
+   * heading-anchor fragment (see headingAnchorFragment()), or reset both to
+   * the top when there is none - without this, switching to a new
+   * resource/override kept whatever scroll offset the previous content had
+   * left behind, and a "human" ref's heading anchor (e.g.
+   * "#data-correction") was never honored at all since `original_text` is
+   * always the whole document for a non-line-range fragment (see
+   * fetch_rule_excerpt() in annotation_rules_utils.py).
+   *
+   * The edit side dispatches CodeMirror's own `EditorView.scrollIntoView`
+   * state effect rather than computing a pixel offset by hand
+   * (`(line - 1) * lineHeight`, as a plain `<sl-textarea>` needed) - that
+   * naive math assumes one source line = one visual row, which a soft-wrapped
+   * textarea does not guarantee: a document with long, non-hard-wrapped
+   * paragraph lines before the target heading landed the scroll position
+   * thousands of pixels short of the real target. CodeMirror measures each
+   * line's actual rendered (wrapped) height, so this is correct regardless of
+   * wrapping - the whole reason for switching this editor to CodeMirror (see
+   * _setMarkdownContent()'s doc comment).
+   *
+   * Also called from the "preview" `sl-tab-show` handler (with the same
+   * `text`), because scrolling a hidden `display: none` tab panel has no
+   * effect - the preview must already be visible for its scroll position to
+   * stick; and from _openResourceEditor(), for the same reason but one level
+   * up - the whole `<sl-dialog>` is still hidden while _renderEditorDialog()
+   * first runs there, so that initial call passes `{ scroll: false }` and
+   * this is re-invoked once the dialog's own show() has resolved.
+   * @param {string} text
+   */
+  _scrollMarkdownBodyToAnchor(text) {
+    const dialogUi = this._editorDialogUi
+    const fragment = this._currentResource.format === 'markdown' ? headingAnchorFragment(this._currentResource.url) : null
+    const line = fragment ? findHeadingLineForAnchor(text, fragment) : null
+
+    const doc = this._cmMdView.state.doc
+    const pos = line === null ? 0 : doc.line(Math.min(Math.max(line, 1), doc.lines)).from
+    this._cmMdView.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start' }) })
+
+    const previewContent = dialogUi.textBody.textTabs.previewPanel.previewContent
+    const heading = fragment && [...previewContent.querySelectorAll('[id]')].find((el) => el.id === fragment)
+    if (heading) {
+      heading.scrollIntoView?.()
+    } else {
+      previewContent.scrollTop = 0
+    }
+  }
+
+  /**
+   * Human-readable label for an override id: "Original" for `null`, or
+   * "Override N" (1-based, matching the order shown in the override row).
+   * @param {string|null} overrideId
+   * @returns {string}
+   */
+  _overrideLabel(overrideId) {
+    if (overrideId === null) return 'Original'
+    return `Override ${this._currentOverrides.findIndex(o => o.id === overrideId) + 1}`
+  }
+
+  /** Rebuild the "Original"/"Override N" button row. */
+  _renderOverrideRow() {
+    const row = this._editorDialogUi.overrideRow
+    row.innerHTML = ''
+
+    const originalBtn = document.createElement('sl-button')
+    originalBtn.setAttribute('size', 'small')
+    originalBtn.textContent = this._overrideLabel(null)
+    originalBtn.variant = this._currentSelectedId === null ? 'primary' : 'default'
+    originalBtn.addEventListener('click', () => this._selectOverride(null))
+    row.appendChild(originalBtn)
+
+    this._currentOverrides.forEach((override) => {
+      const btn = document.createElement('sl-button')
+      btn.setAttribute('size', 'small')
+      btn.textContent = this._overrideLabel(override.id)
+      btn.variant = this._currentSelectedId === override.id ? 'primary' : 'default'
+      if (override.note) btn.title = override.note
+      btn.addEventListener('click', () => this._selectOverride(override.id))
+      row.appendChild(btn)
+    })
+  }
+
+  /**
+   * Select the original (null) or one override for `_currentResource`,
+   * persisting the choice immediately - per the spec, clicking a row entry
+   * "uses it immediately", it is not a staged/unsaved choice. Notifies which
+   * one is now selected, for which resource, since the row's button state
+   * alone is easy to miss.
+   * @param {string|null} overrideId
+   * @returns {Promise<void>}
+   */
+  async _selectOverride(overrideId) {
+    if (overrideId === this._currentSelectedId) return
+    try {
+      await this.#client.apiClient.documentRulesSelection({
+        kind: this._currentResource.kind,
+        fragment_url: this._currentResource.url,
+        override_id: overrideId
+      })
+    } catch (error) {
+      notify(`Could not change selection: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentSelectedId = overrideId
+    this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
+    notify(`${this._overrideLabel(overrideId)} selected for ${this._currentResource.label}.`, 'primary', 'info-circle')
+  }
+
+  /**
+   * Copy the currently shown text into a new override and select it.
+   * @returns {Promise<void>}
+   */
+  async _onNewOverride() {
+    const text = this._currentShownText()
+    let override
+    try {
+      override = await this.#client.apiClient.documentRulesOverrides({
+        kind: this._currentResource.kind,
+        fragment_url: this._currentResource.url,
+        note: '',
+        text
+      })
+    } catch (error) {
+      notify(`Could not create override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides.push(override)
+    await this._selectOverride(override.id)
+  }
+
+  /**
+   * Persist the currently selected override's note + shown text.
+   * @returns {Promise<void>}
+   */
+  async _onSave() {
+    if (this._currentSelectedId === null) return
+    const note = this._editorDialogUi.noteInput.value
+    const text = this._currentShownText()
+    let updated
+    try {
+      updated = await this.#client.apiClient.documentRulesUpdateOverrides(this._currentSelectedId, { note, text })
+    } catch (error) {
+      notify(`Could not save override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    const index = this._currentOverrides.findIndex(o => o.id === updated.id)
+    if (index !== -1) this._currentOverrides[index] = updated
+    // Refresh just the override row, not the full dialog - the note/text
+    // already shown are exactly what was just submitted, but the row's
+    // per-button tooltip (set from override.note at render time) would
+    // otherwise stay stale until some other action forces a re-render.
+    this._renderOverrideRow()
+    notify('Override saved.', 'success', 'check-circle')
+  }
+
+  /**
+   * Delete the currently selected override (owner-only, enforced server-side).
+   * @returns {Promise<void>}
+   */
+  async _onDelete() {
+    if (this._currentSelectedId === null) return
+    const confirmed = await this.getDependency('dialog').confirm('Delete this override? This cannot be undone.', 'Delete override')
+    if (!confirmed) return
+    const id = this._currentSelectedId
+    try {
+      await this.#client.apiClient.documentRulesDeleteOverrides(id)
+    } catch (error) {
+      notify(`Could not delete override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides = this._currentOverrides.filter(o => o.id !== id)
+    this._currentSelectedId = null
+    this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
+  }
+
+  /**
+   * Reload this resource from its origin and permanently remove every one
+   * of the caller's overrides for it - unlike selecting "Original" (see
+   * _selectOverride()), which only switches away from an override without
+   * deleting anything. Confirmed up front since deletion can't be undone.
+   *
+   * For an `interpretation-ref` resource, this also re-resolves the
+   * document's own `<ref target>` to what the extractor's current rules
+   * configuration would generate today - not just whatever URL is already
+   * pinned, which (once SHA-pinned) can never reflect a newer upstream
+   * commit on its own (see
+   * docs/superpowers/specs/2026-09-29-document-rules-reset-to-original-design.md).
+   * The document edit happens before override deletion, so a failure
+   * updating the document leaves overrides intact. `schema` resources keep
+   * the simpler delete-and-requery behavior unchanged - their URL is never
+   * permalink-pinned, so there is nothing to refresh.
+   *
+   * Use case: the caller proposed an override's change upstream (see
+   * _onProposeUpstream()) and it was accepted, so both their now-stale
+   * override and the document's stale pinned URL need to be replaced by
+   * this one action.
+   * @returns {Promise<void>}
+   */
+  async _onReset() {
+    const confirmed = await this.getDependency('dialog').confirm(
+      'This will reload the resource from its origin and remove all overrides.',
+      'Reset to original'
+    )
+    if (!confirmed) return
+
+    /** @type {RefreshResourceResponse|null} */
+    let refreshResult = null
+    if (this._currentResource.kind === 'interpretation-ref') {
+      try {
+        refreshResult = await this.#client.apiClient.documentRulesRefreshResource({
+          xml: this.state.xml,
+          url: this._currentResource.url
+        })
+      } catch (error) {
+        notify(`Could not refresh resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+        return
+      }
+      if (refreshResult.status !== 'ok') {
+        const variant = refreshResult.status === 'not_found' ? 'danger' : 'warning'
+        const icon = refreshResult.status === 'not_found' ? 'exclamation-octagon' : 'exclamation-triangle'
+        notify(refreshResult.message, variant, icon)
+        return
+      }
+      if (refreshResult.changed) {
+        await this.#xmlEditor.saveIfDirty()
+        for (const ref of refreshResult.refs) {
+          const candidates = this.#xmlEditor.getDomNodesByXpath(`//tei:editorialDecl//tei:ref[@subtype="${ref.subtype}"]`)
+          const node = candidates.find((n) => this._currentResource.related_urls.includes(n.getAttribute('target')))
+          if (!node) continue
+          node.setAttribute('target', ref.target)
+          await this.#xmlEditor.updateEditorFromNode(node)
+        }
+        await this.#xmlEditor.saveIfDirty()
+
+        if (refreshResult.refs.length > 0) {
+          const humanRef = refreshResult.refs.find((r) => r.subtype === 'human')
+          this._currentResource.url = (humanRef ?? refreshResult.refs[0]).target
+          this._currentResource.related_urls = refreshResult.refs.map((r) => r.target)
+        }
+      }
+    }
+
+    try {
+      for (const override of this._currentOverrides) {
+        await this.#client.apiClient.documentRulesDeleteOverrides(override.id)
+      }
+    } catch (error) {
+      notify(`Could not remove overrides: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesQuery({ kind: this._currentResource.kind, url: this._currentResource.url })
+    } catch (error) {
+      notify(`Could not reload resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides = response.overrides
+    this._currentSelectedId = response.selected_override_id
+    this._currentOriginalText = response.original_text
+    this._renderEditorDialog()
+    await this._refreshOverrideIndicators()
+
+    const message = refreshResult
+      ? (refreshResult.changed
+          ? 'Reset to original: refreshed from upstream and removed all overrides.'
+          : 'Reset to original: overrides removed (already up to date).')
+      : `Reset to original: "${this._currentResource.label}" and its overrides have been reloaded.`
+    notify(message, 'success', 'check-circle')
+  }
+
+  /**
+   * Build a URL that lets the caller's own GitHub/GitLab session propose the
+   * currently shown override text as the resource's new upstream content,
+   * explain in a confirm dialog what will happen (a toast fired right before
+   * window.open() loses the race against the new tab stealing focus, so the
+   * explanation has to come first, not after), then on confirmation copy the
+   * text to the clipboard as a paste-ready fallback (GitLab, and GitHub when
+   * the text is too long to embed in the URL, can't prefill the content) and
+   * open the forge's page in a new tab. No server-side git write happens
+   * anywhere in this flow - see
+   * docs/superpowers/specs/2026-09-28-document-rules-propose-upstream-design.md.
+   * @returns {Promise<void>}
+   */
+  async _onProposeUpstream() {
+    const text = this._currentShownText()
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesProposeChangeUrl({ url: this._currentResource.url, text })
+    } catch (error) {
+      notify(`Could not build the upstream link: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    if (!response.url) {
+      notify('This resource is not hosted on a recognized git forge; no upstream link is available.', 'warning', 'exclamation-triangle')
+      return
+    }
+    const message = response.content_prefilled
+      ? 'This opens a new tab with the upstream editor, prefilled with your override text.'
+      : 'This copies your override text to the clipboard and opens the upstream editor in a new tab. Paste the copied text into the file once it opens.'
+    const confirmed = await this.getDependency('dialog').confirm(message, 'Propose change upstream')
+    if (!confirmed) return
+
+    try {
+      // response.text, not the local `text` - the backend rewrites same-repo
+      // absolute links (this app's own internal resolution of the
+      // resource's original relative links) back to their upstream-relative
+      // form first, so the clipboard doesn't paste this app's internal
+      // link representation into the real file.
+      await navigator.clipboard.writeText(response.text)
+    } catch {
+      // Clipboard denied/unavailable - non-fatal whether or not the URL
+      // itself already carries the text.
+    }
+    window.open(response.url, '_blank', 'noopener')
+  }
+
+  /**
+   * Replace the CodeMirror doc's full content, toggle its read-only
+   * compartment (both the DOM-level EditorView.editable and the
+   * command-level EditorState.readOnly facet - the latter is what actually
+   * makes CodeMirror's own undo/redo refuse to run while read-only; toggling
+   * only `editable` leaves Ctrl+Z/Ctrl+Y still active), and clear undo/redo
+   * history so a previous resource's/override's content can never resurface
+   * via undo in what's now showing a different one. Mirrors
+   * app/src/modules/xmleditor.js's setReadOnly() and clearHistory(). Also
+   * resets the scroll position to the top - without this, switching to a
+   * new resource/override kept whatever scroll offset the previous, longer
+   * or shorter, document had left behind.
+   * @param {string} text
+   * @param {boolean} readOnly
+   */
+  _setXmlContent(text, readOnly) {
+    this._cmView.dispatch({
+      changes: { from: 0, to: this._cmView.state.doc.length, insert: text },
+      effects: [
+        this._cmReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]),
+        this._cmHistoryCompartment.reconfigure([])
+      ]
+    })
+    this._cmView.dispatch({ effects: this._cmHistoryCompartment.reconfigure(history()) })
+    this._cmView.scrollDOM.scrollTop = 0
+  }
+
+  /** @returns {string} */
+  _currentXmlText() {
+    return this._cmView.state.doc.toString()
+  }
+
+  /**
+   * Replace `_cmMdView`'s full content and toggle read-only/history exactly
+   * like _setXmlContent() does for the XML CodeMirror instance - see that
+   * method's doc comment for why each step is needed. This editor replaced a
+   * plain `<sl-textarea>` because a textarea has no reliable way to scroll to
+   * a specific source line once its content soft-wraps: the previous
+   * approach approximated the target's pixel offset as
+   * `(line - 1) * lineHeight`, which assumes one source line = one visual
+   * row - wrong for any document with long, non-hard-wrapped paragraph
+   * lines, landing the scroll thousands of pixels short of a heading anchor
+   * deep in a real annotation guide. CodeMirror measures each line's actual
+   * rendered height itself (see _scrollMarkdownBodyToAnchor()'s use of
+   * `EditorView.scrollIntoView`), so it doesn't need that approximation.
+   * @param {string} text
+   * @param {boolean} readOnly
+   */
+  _setMarkdownContent(text, readOnly) {
+    this._cmMdView.dispatch({
+      changes: { from: 0, to: this._cmMdView.state.doc.length, insert: text },
+      effects: [
+        this._cmMdReadOnlyCompartment.reconfigure([EditorView.editable.of(!readOnly), EditorState.readOnly.of(readOnly)]),
+        this._cmMdHistoryCompartment.reconfigure([])
+      ]
+    })
+    this._cmMdView.dispatch({ effects: this._cmMdHistoryCompartment.reconfigure(history()) })
+    this._cmMdView.scrollDOM.scrollTop = 0
+  }
+
+  /**
+   * Preview, confirm, then execute a "Refresh document rules" pass on the
+   * open document, reloading the editor from the server afterwards if
+   * anything actually changed (services.load() always re-fetches the file
+   * regardless of whether state.xml itself changed - see this plan's
+   * "Important context" section).
+   * @returns {Promise<void>}
+   */
+  async _onRefreshDocumentRules() {
+    const state = this.state
+    if (!state.xml) {
+      notify('No document is open.', 'warning', 'exclamation-triangle')
+      return
+    }
+
+    const dialog = this.getDependency('dialog')
+
+    let preview
+    try {
+      preview = await this.#client.apiClient.documentRulesRefreshPreview({ xml: state.xml })
+    } catch (error) {
+      notify(`Could not preview the refresh: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+
+    if (!preview.available) {
+      notify(preview.message, 'warning', 'exclamation-triangle')
+      return
+    }
+
+    const confirmed = await dialog.confirm(preview.message, 'Refresh document rules?')
+    if (!confirmed) return
+
+    let outcome
+    try {
+      outcome = await this.#client.apiClient.documentRulesRefreshExecute({ xml: state.xml })
+    } catch (error) {
+      notify(`Could not refresh document rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+
+    if (outcome.changed) {
+      try {
+        await this.getDependency('services').load({ xml: state.xml })
+      } catch (error) {
+        // The refresh itself already succeeded server-side; only the
+        // editor reload failed, so still confirm the refresh and report
+        // the reload failure separately rather than losing both messages
+        // to an unhandled rejection (services.load() can rethrow on a
+        // lock/permission error even for a file the caller already holds).
+        notify(outcome.message, 'success', 'check-circle')
+        notify(`Refresh succeeded, but reloading the editor failed: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+        return
+      }
+    }
+    notify(outcome.message, outcome.changed ? 'success' : 'primary', 'check-circle')
+  }
+}
+
+export default DocumentRulesPlugin

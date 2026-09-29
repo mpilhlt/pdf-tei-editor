@@ -10,8 +10,10 @@ from unittest.mock import MagicMock, patch
 from fastapi_app.lib.utils.annotation_rules_utils import (
     RuleFetchError,
     _ATX_HEADING_RE,
+    _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
+    derelativize_markdown_urls,
     extract_annotation_rule_refs,
     fetch_rule_excerpt,
     is_line_range_fragment,
@@ -178,6 +180,144 @@ class TestFetchRuleExcerpt(unittest.TestCase):
             timeout=30,
             allow_redirects=False,
         )
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_sha_pinned_github_url_reads_cache_with_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        url = f"https://github.com/mpilhlt/fossil/blob/{'a' * 40}/docs/guidelines.md"
+        result = fetch_rule_excerpt(url, cache)
+
+        self.assertEqual(result, "cached content")
+        cache.get_text.assert_called_once_with(
+            f"https://raw.githubusercontent.com/mpilhlt/fossil/{'a' * 40}/docs/guidelines.md",
+            ignore_ttl=True,
+        )
+        mock_get.assert_not_called()
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_branch_ref_github_url_reads_cache_without_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        fetch_rule_excerpt(url, cache)
+
+        cache.get_text.assert_called_once_with(
+            "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/guidelines.md",
+            ignore_ttl=False,
+        )
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_unrecognized_host_reads_cache_without_ignore_ttl(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = "cached content"
+
+        fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache)
+
+        cache.get_text.assert_called_once_with("https://pad.gwdg.de/s/abc/download", ignore_ttl=False)
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_rewrites_relative_image_and_link_targets_for_markdown_resource(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = None
+        mock_get.return_value = self._mock_response(
+            'See ![diagram](img/diagram.png) and [the guide](../other.md).'
+        )
+
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+        result = fetch_rule_excerpt(url, cache)
+
+        self.assertEqual(
+            result,
+            'See ![diagram](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/diagram.png) '
+            'and [the guide](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md).',
+        )
+
+    @patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get")
+    def test_does_not_rewrite_links_for_non_markdown_resource(self, mock_get):
+        cache = MagicMock()
+        cache.get_text.return_value = None
+        text = 'See ![diagram](img/diagram.png)'
+        mock_get.return_value = self._mock_response(text)
+
+        result = fetch_rule_excerpt("https://pad.gwdg.de/s/abc/download", cache)
+
+        self.assertEqual(result, text)
+
+
+class TestRewriteRelativeMarkdownUrls(unittest.TestCase):
+    BASE = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/"
+
+    def test_rewrites_relative_image_target(self):
+        result = _rewrite_relative_markdown_urls("![alt](img/foo.png)", self.BASE)
+        self.assertEqual(result, f"![alt]({self.BASE}img/foo.png)")
+
+    def test_leaves_absolute_url_unchanged(self):
+        text = "[link](https://example.com/foo.png)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_leaves_pure_anchor_unchanged(self):
+        text = "[section](#intro)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_leaves_protocol_relative_url_unchanged(self):
+        text = "[link](//example.com/foo.png)"
+        self.assertEqual(_rewrite_relative_markdown_urls(text, self.BASE), text)
+
+    def test_resolves_parent_relative_path_against_base(self):
+        result = _rewrite_relative_markdown_urls("[link](../other.md)", self.BASE)
+        self.assertEqual(result, "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)")
+
+
+class TestDerelativizeMarkdownUrls(unittest.TestCase):
+    """
+    Inverse of TestRewriteRelativeMarkdownUrls above - round-trips its
+    "resolves_parent_relative_path_against_base" case back to the original
+    relative form, since that's exactly what a resource's original_text has
+    already been through once (see fetch_rule_excerpt()) before a user's
+    override text reaches derelativize_markdown_urls() on its way to being
+    proposed as the file's new upstream content.
+    """
+
+    BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guide.md"
+
+    def test_rewrites_same_repo_sibling_link_back_to_relative(self):
+        text = "![alt](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "![alt](img/foo.png)")
+
+    def test_rewrites_same_repo_link_at_different_ref_back_to_relative(self):
+        # The link is pinned to a commit SHA (this app's own resolution at
+        # fetch time) while BASE_URL is on "main" - still the same repo, so
+        # it must still round-trip; the ref is deliberately irrelevant here.
+        text = f"[link](https://raw.githubusercontent.com/mpilhlt/fossil/{'a' * 40}/docs/other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "[link](other.md)")
+
+    def test_resolves_parent_directory_link_back_to_relative(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), "[link](../other.md)")
+
+    def test_leaves_different_repo_url_unchanged(self):
+        text = "[link](https://raw.githubusercontent.com/other-org/other-repo/main/docs/x.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_leaves_non_forge_absolute_url_unchanged(self):
+        text = "[link](https://example.com/docs/x.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_leaves_already_relative_link_unchanged(self):
+        text = "[link](./other.md)"
+        self.assertEqual(derelativize_markdown_urls(text, self.BASE_URL), text)
+
+    def test_returns_text_unchanged_for_non_markdown_base_url(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        xml_base_url = "https://github.com/mpilhlt/fossil/blob/main/schema/tei.rng"
+        self.assertEqual(derelativize_markdown_urls(text, xml_base_url), text)
+
+    def test_returns_text_unchanged_when_base_url_is_not_a_recognized_forge(self):
+        text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
+        self.assertEqual(derelativize_markdown_urls(text, "https://pad.gwdg.de/s/abc/notes.md"), text)
 
 
 class TestIsLineRangeFragment(unittest.TestCase):
@@ -440,3 +580,29 @@ class TestExtractAnnotationRuleRefs(unittest.TestCase):
         refs = extract_annotation_rule_refs(xml)
         self.assertEqual(len(refs), 1)
         self.assertIsNone(refs[0]["refs"][0]["content_type"])
+
+
+class TestExtractAnnotationRuleRefsLabel(unittest.TestCase):
+    def test_includes_n_when_present(self):
+        xml = """<?xml version="1.0"?>
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+          <teiHeader><encodingDesc><editorialDecl>
+            <interpretation type="data-correction" n="Data correction">
+              <p><ref target="https://example.com/rules.md" subtype="human"/></p>
+            </interpretation>
+          </editorialDecl></encodingDesc></teiHeader>
+        </TEI>"""
+        entries = extract_annotation_rule_refs(xml)
+        self.assertEqual(entries[0].get("n"), "Data correction")
+
+    def test_omits_n_key_entirely_when_absent(self):
+        xml = """<?xml version="1.0"?>
+        <TEI xmlns="http://www.tei-c.org/ns/1.0">
+          <teiHeader><encodingDesc><editorialDecl>
+            <interpretation type="primary">
+              <p><ref target="https://example.com/rules.md" subtype="human"/></p>
+            </interpretation>
+          </editorialDecl></encodingDesc></teiHeader>
+        </TEI>"""
+        entries = extract_annotation_rule_refs(xml)
+        self.assertNotIn("n", entries[0])

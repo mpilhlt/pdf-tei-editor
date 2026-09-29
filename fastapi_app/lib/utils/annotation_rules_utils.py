@@ -7,8 +7,10 @@ See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 """
 
 import logging
+import posixpath
 import re
-from typing import Literal, Optional, TypedDict
+from typing import Literal, NotRequired, Optional, TypedDict
+from urllib.parse import urljoin
 
 import requests
 from lxml import etree
@@ -20,6 +22,14 @@ logger = logging.getLogger(__name__)
 
 # Matches GitHub's #L10-L50 and GitLab's #L10-50 (no second "L")
 _LINE_RANGE_RE = re.compile(r'^L(\d+)(?:-L?(\d+))?$')
+
+# Matches an inline markdown link/image target: `[...](url)` or `![...](url)`,
+# optionally followed by a "title" in quotes. Reference-style links/images
+# (`![alt][ref]`) are not matched - rare enough in the annotation-rules
+# guides this targets that supporting them isn't worth the complexity.
+_MD_INLINE_LINK_RE = re.compile(r'(!?\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))')
+
+_ABSOLUTE_URL_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://')
 
 
 class RuleFetchError(Exception):
@@ -48,6 +58,80 @@ def resolve_forge_permalink(url: str, cache: UrlCache) -> str:
         return url
 
 
+def _rewrite_relative_markdown_urls(text: str, base_dir_url: str) -> str:
+    """
+    Rewrite a markdown document's inline link/image targets that are
+    relative (e.g. "img/foo.png") to absolute URLs resolved against
+    `base_dir_url`, so images and links keep working when the document is
+    rendered outside its original repository - e.g. this app's document-
+    rules resource editor preview, which would otherwise resolve them
+    against its own origin instead of the source repo.
+    """
+    def replace(match: "re.Match[str]") -> str:
+        prefix, target, suffix = match.group(1), match.group(2), match.group(3)
+        if target.startswith("#") or target.startswith("data:") or target.startswith("mailto:"):
+            return match.group(0)
+        if target.startswith("//") or _ABSOLUTE_URL_RE.match(target):
+            return match.group(0)
+        return f"{prefix}{urljoin(base_dir_url, target)}{suffix}"
+
+    return _MD_INLINE_LINK_RE.sub(replace, text)
+
+
+def _repo_path_via_any_adapter(url: str) -> "tuple[str, str] | None":
+    """First (repo_id, path) any registered adapter's parse_repo_path() recognizes `url` as, or None."""
+    for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
+        repo_path = adapter.parse_repo_path(url)
+        if repo_path is not None:
+            return repo_path
+    return None
+
+
+def derelativize_markdown_urls(text: str, base_url: str) -> str:
+    """
+    Inverse of `_rewrite_relative_markdown_urls()`: rewrite `text`'s inline
+    link/image targets that are absolute URLs into the *same repository* as
+    `base_url` (regardless of which ref either one is pinned to) back into
+    paths relative to `base_url`'s directory. A resource's `original_text`
+    has already had its relative links rewritten to this app's own
+    internally-resolved absolute form (possibly SHA-pinned to whatever
+    commit it was last fetched at) so previews render correctly outside the
+    source repo - but that resolved form must not leak into a real upstream
+    file when the user proposes the override's text as the file's new
+    content, or a same-repo relative link like "../other.md" would end up
+    permanently hardcoded to `https://raw.githubusercontent.com/.../{sha}/other.md`
+    in the actual repository.
+
+    Absolute URLs into a *different* repo (or a non-git-forge URL) are left
+    untouched - only same-repo links round-trip through this rewrite.
+    Only applies to markdown resources (by `base_url`'s file extension, via
+    `infer_format()`); returns `text` unchanged for any other format.
+    """
+    # Deferred import: see fetch_rule_excerpt()'s identical comment on why
+    # this can't be a module-level import.
+    from fastapi_app.lib.doc_rules.resource_key import infer_format
+    if infer_format(base_url) != "markdown":
+        return text
+
+    base_repo_path = _repo_path_via_any_adapter(base_url)
+    if base_repo_path is None:
+        return text
+    base_repo, base_path = base_repo_path
+    base_dir = base_path.rsplit("/", 1)[0] if "/" in base_path else ""
+
+    def replace(match: "re.Match[str]") -> str:
+        prefix, target, suffix = match.group(1), match.group(2), match.group(3)
+        if not _ABSOLUTE_URL_RE.match(target):
+            return match.group(0)
+        target_repo_path = _repo_path_via_any_adapter(target)
+        if target_repo_path is None or target_repo_path[0] != base_repo:
+            return match.group(0)
+        relative = posixpath.relpath(target_repo_path[1], base_dir) if base_dir else target_repo_path[1]
+        return f"{prefix}{relative}{suffix}"
+
+    return _MD_INLINE_LINK_RE.sub(replace, text)
+
+
 def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) -> str:
     """
     Fetch the raw text a rules-document URL points to, sliced to its
@@ -58,6 +142,11 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     fragment doesn't parse as a recognized line-range. Line numbers are
     1-based and inclusive; out-of-range values are clamped to the available
     lines.
+
+    For a markdown resource (by file extension), relative link/image
+    targets are rewritten to absolute URLs before slicing/caching - see
+    `_rewrite_relative_markdown_urls()` - so the excerpt renders correctly
+    outside its source repository.
 
     `allow_redirects` defaults to True (preserving prior behavior for
     existing callers); pass False when the caller has validated `url`
@@ -72,8 +161,9 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     base_url, _, fragment = url.partition("#")
     adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
     fetch_url = adapter.to_raw_url(base_url) if adapter else base_url
+    pinned = adapter.is_sha_pinned(base_url) if adapter else False
 
-    text = cache.get_text(fetch_url)
+    text = cache.get_text(fetch_url, ignore_ttl=pinned)
     if text is None:
         response = requests.get(fetch_url, timeout=30, allow_redirects=allow_redirects)
         response.raise_for_status()
@@ -83,6 +173,12 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
                 f"Expected raw text but got '{content_type}' from {fetch_url}"
             )
         text = response.text
+        # Deferred import: doc_rules/__init__.py imports extraction_contribution.py,
+        # which imports this module - a module-level import here would be circular.
+        from fastapi_app.lib.doc_rules.resource_key import infer_format
+        if infer_format(base_url) == "markdown":
+            base_dir_url = fetch_url.rsplit("/", 1)[0] + "/"
+            text = _rewrite_relative_markdown_urls(text, base_dir_url)
         cache.set_text(fetch_url, text)
 
     match = _LINE_RANGE_RE.match(fragment) if fragment else None
@@ -224,9 +320,13 @@ class AnnotationRuleRef(TypedDict):
     One editorialDecl/interpretation entry: a rule category and its one or two refs.
 
     "category" is interpretation/@type (e.g. "primary", "footnote-annotation").
+    "n" is interpretation/@n, a short display label (TEI's att.global.attribute.n);
+    absent (not merely None) when the document has no @n, so equality checks
+    against entries built before this attribute existed are unaffected.
     """
 
     category: str
+    n: NotRequired[Optional[str]]
     refs: list[AnnotationRuleRefTarget]
 
 
@@ -276,5 +376,10 @@ def extract_annotation_rule_refs(xml_string: str) -> list[AnnotationRuleRef]:
 
         if not refs:
             continue
-        results.append({"category": category, "refs": refs})
+
+        entry: AnnotationRuleRef = {"category": category, "refs": refs}
+        n = interpretation.get("n")
+        if n is not None:
+            entry["n"] = n
+        results.append(entry)
     return results

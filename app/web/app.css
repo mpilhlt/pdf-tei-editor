@@ -62,6 +62,23 @@ tool-bar.dropdown-open {
   z-index: var(--sl-z-index-dropdown) !important;
 }
 
+/* The generic info/error/success/confirm/prompt dialog (dialog.js) is only
+   ever shown to ask about an action the user is currently taking inside
+   some other already-open sl-dialog (e.g. document-rules' resource editor
+   asking to confirm "Delete override"). All sl-dialogs share the same
+   --sl-z-index-dialog by default, so whichever was appended to the DOM
+   later (plugin install order, not open order) painted on top and made
+   this one unreachable. Give it a locally boosted z-index so it always
+   wins regardless of DOM order. */
+sl-dialog[name="dialog"] {
+  /* Not calc(var(--sl-z-index-dialog) + 1): a custom property referencing
+     itself within its own declaration is a cyclic reference and resolves
+     to the guaranteed-invalid value per the CSS spec, not the inherited
+     value - unlike referencing a *different* variable (see the tool-bar
+     rule above). Picked to sit below --sl-z-index-toast (950). */
+  --sl-z-index-dialog: 900;
+}
+
 div[name = "xmlEditor"] tool-bar sl-button {
   max-height: 19px;
 }

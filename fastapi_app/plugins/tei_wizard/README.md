@@ -119,10 +119,6 @@ Two lists are configurable in `config.json`:
 | `tei.pretty-print.no-indent-inside` | `["bibl", "p", "ab"]` | Explicit override: children of these elements are never indented even though the dynamic check would indent them (e.g. `bibl` contains `author`/`title` which are not inline but should not be indented). |
 | `tei.pretty-print.inline-elements` | `["lb", "pb", "hi", "ref", ...]` | Elements treated as always-inline: no leading indent is inserted before them, and their own children are not indented. |
 
-### Add RNG Schema Definition (`add-rng-schema-definition.js`)
-
-Replaces any existing schema declarations with an `<?xml-model ?>` processing instruction pointing to the appropriate RNG schema. Reads the schema URL from the document's `teiHeader` (`ref` element with a `.rng` target), falling back to the `schema.base-url` config value combined with the active variant.
-
 ### Fix Common Extraction Issues (`fix-common-extraction-issues.js`)
 
 Corrects structural problems that commonly appear in PDF-to-TEI extraction output:

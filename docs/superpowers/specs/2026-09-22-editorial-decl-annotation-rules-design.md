@@ -3,6 +3,13 @@
 Date: 2026-09-22
 Status: approved (pending spec review)
 
+> **Addendum (2026-09-27):** [2026-09-27-document-rules-registry-design.md](2026-09-27-document-rules-registry-design.md)
+> adds an optional `@n` attribute to `interpretation` (a short human-readable
+> label, since `desc` is not a legal child per `interpretation`'s content
+> model) and builds a document-centered editing UI on top of the shape
+> defined here. See that spec for the addition; the shape below is
+> otherwise unchanged.
+
 ## Problem
 
 TEI documents produced by this app carry no machine-readable pointer to the

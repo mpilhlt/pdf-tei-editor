@@ -162,6 +162,17 @@ export function userHasAnnotatorRole(user) {
 }
 
 /**
+ * Checks if a user has the annotator role but neither reviewer nor admin privileges
+ * (a "pure" annotator). Used to gate UI-only safeguards that should not apply to
+ * users who also hold a higher role.
+ * @param {UserData|null} user - User object
+ * @returns {boolean}
+ */
+export function userIsAnnotatorOnly(user) {
+  return userHasAnnotatorRole(user) && !userHasReviewerRole(user) && !userIsAdmin(user)
+}
+
+/**
  * Checks if a file hash represents a gold file
  * @param {string} hash - The file hash identifier
  * @returns {boolean}

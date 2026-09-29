@@ -14,6 +14,7 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.utils.auth import AuthManager
 from fastapi_app.lib.utils.server_utils import get_session_id_from_request
@@ -120,6 +121,11 @@ def reset_db_manager() -> None:
 def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository:
     """Get FileRepository instance with database"""
     return FileRepository(db)
+
+
+def get_document_rules_store(db: DatabaseManager = Depends(get_db)) -> DocumentRulesStore:
+    """Get DocumentRulesStore instance with database"""
+    return DocumentRulesStore(db)
 
 
 def get_file_storage() -> FileStorage:
@@ -251,6 +257,39 @@ def require_admin_user(
         raise HTTPException(
             status_code=403,
             detail="Admin access required"
+        )
+    return user
+
+
+def require_reviewer_or_admin(
+    user: Dict = Depends(require_authenticated_user)
+) -> Dict:
+    """
+    Require authenticated user with reviewer or admin role.
+    Use for reviewer-or-admin-gated endpoints.
+
+    Note: fastapi_app/routers/collections.py has its own, older
+    require_reviewer_or_admin, composed on a different base dependency
+    (get_current_user, which can return None) rather than
+    require_authenticated_user (which already raises 401). That one predates
+    this shared version and is left as-is rather than risking a behavioral
+    change to its existing, unrelated endpoints; new reviewer-or-admin-gated
+    routers should use this one instead of adding another local copy.
+
+    Args:
+        user: Authenticated user from require_authenticated_user
+
+    Returns:
+        User dict if reviewer or admin
+
+    Raises:
+        HTTPException: 403 if user doesn't have reviewer or admin role
+    """
+    user_roles = user.get('roles', [])
+    if 'reviewer' not in user_roles and 'admin' not in user_roles and '*' not in user_roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Reviewer role required"
         )
     return user
 

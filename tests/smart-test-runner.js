@@ -44,7 +44,7 @@ class SmartTestRunner {
       baseDirs: options.baseDirs || ['app/src', 'fastapi_app'],
       excludeRegExp: options.excludeRegExp || [/node_modules/, /\.husky/],
       fileExtensions: options.fileExtensions || ['js'],
-      ignoreChanges: options.ignoreChanges || ['app/src/modules/api-client-v1.js']
+      ignoreChanges: options.ignoreChanges || []
     };
     /** @type {Map<string, Set<string>> | null} */
     this.reverseDepsCache = null;

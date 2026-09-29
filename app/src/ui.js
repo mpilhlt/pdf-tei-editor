@@ -37,6 +37,9 @@ import SlTree from '@shoelace-style/shoelace/dist/components/tree/tree.js';
 import SlTreeItem from '@shoelace-style/shoelace/dist/components/tree-item/tree-item.js';
 import SlSplitPanel from '@shoelace-style/shoelace/dist/components/split-panel/split-panel.js';
 import SlBadge from '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import SlTabGroup from '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js'
+import SlTab from '@shoelace-style/shoelace/dist/components/tab/tab.js'
+import SlTabPanel from '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js'
 
 // Import panels components early so web components are defined
 import './modules/panels/index.js';
@@ -46,7 +49,6 @@ import './modules/panels/index.js';
  *
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
- * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {saveDocumentDialogPart} from './templates/save-document-dialog.types.js'
  * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
@@ -62,6 +64,7 @@ import './modules/panels/index.js';
  * @import {backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  * @import {userProfileDialog} from './plugins/user-account.js'
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
+ * @import {documentRulesEditorDialogPart} from './templates/document-rules-editor-dialog.types.js'
  * @import {pluginAdminDialogPart} from './templates/plugin-admin-dialog.types.js'
  * @import {pluginAdminConfirmDialogPart} from './templates/plugin-admin-confirm-dialog.types.js'
  * @import {progressWidgetPart} from './plugins/progress.js'
@@ -89,7 +92,6 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
- * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
@@ -97,6 +99,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
+ * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
  * @property {UIPart<SlDialog, pluginAdminDialogPart>} [pluginAdminDialog] - Plugin manager dialog (added by plugin-admin plugin)
  * @property {UIPart<SlDialog, pluginAdminConfirmDialogPart>} [pluginAdminConfirmDialog] - Plugin manager confirmation dialog (added by plugin-admin plugin)
  * @property {UIPart<HTMLDivElement, progressWidgetPart>} progressWidget - Progress indicator widget (added by progress plugin)
@@ -123,7 +126,8 @@ export {
   updateUi, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer,
-  SlTree, SlTreeItem, SlIconButton, SlProgressBar, SlSplitPanel, SlBadge
+  SlTree, SlTreeItem, SlIconButton, SlProgressBar, SlSplitPanel, SlBadge,
+  SlTabGroup, SlTab, SlTabPanel
 }
 export default ui;
 

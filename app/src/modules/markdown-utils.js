@@ -272,6 +272,31 @@ export function generateTOC(markdown) {
 }
 
 /**
+ * Finds the 1-based line number of the first ATX-style Markdown heading
+ * ("# Title", "## Title", ...) whose anchor id matches `anchor`, using the
+ * same slug algorithm createMarkdownRenderer()'s heading_open rule uses to
+ * `id`-tag rendered headings (lowercase, strip characters that aren't word
+ * characters/spaces/hyphens, collapse whitespace to hyphens) - so a URL
+ * fragment like "#data-correction" (e.g. an interpretation-ref "human" ref
+ * pointing at a heading anchor - see docs/development/tei-header-
+ * integrations.md) resolves to the same heading here as it does in the
+ * rendered preview.
+ * @param {string} markdown
+ * @param {string} anchor
+ * @returns {number|null} 1-based line number, or null if no heading matches
+ */
+export function findHeadingLineForAnchor(markdown, anchor) {
+  const lines = markdown.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const match = /^(#{1,6})\s+(.+)$/.exec(lines[i])
+    if (!match) continue
+    const slug = match[2].trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+    if (slug === anchor) return i + 1
+  }
+  return null
+}
+
+/**
  * Renders markdown to HTML with standard processing
  * @param {MarkdownIt} md - Markdown renderer instance
  * @param {string} markdown - Markdown content to render

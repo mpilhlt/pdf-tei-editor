@@ -41,6 +41,18 @@ Your user role determines what operations you can perform:
 
 Depending on how your system is configured, additional document-level permissions may apply.
 
+## Editor Safeguards for Annotators
+
+When you have the **Annotator** role (and not Reviewer or Admin), the editor applies a few extra safeguards while you work on an editable (version) document, to help you avoid accidentally changing document metadata instead of the text:
+
+- The document's **header** (containing bibliographic metadata, revision history, and similar information) is **collapsed by default**, and the "Header" toggle switch is hidden from the toolbar. You don't need this information to annotate the text.
+- If you manually expand the header (using the fold/expand arrow in the editor's left margin), you can **view** it, but **you cannot type in it**. The same applies to the document's outermost tag and to the text element's own attributes - only the actual text content can be edited.
+- Editing the text content itself works exactly as before.
+
+This is a **convenience safeguard, not a security restriction** - it only prevents accidental typos while you work in the editor. If a document's metadata needs to be corrected, ask a reviewer or administrator; the header remains fully accessible to them, and to automated processes such as metadata updates.
+
+Reviewers and administrators are not affected by this safeguard and can always edit the full document, including the header.
+
 ## Access Control Modes
 
 Your administrator configures one of three access control modes:

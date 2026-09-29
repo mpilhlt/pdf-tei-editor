@@ -37,10 +37,6 @@ describe('TEI Wizard Enhancements Endpoint', async () => {
 
     // Should contain the default enhancements
     assert.ok(
-      body.includes('Add RNG Schema Definition'),
-      'Should include Add RNG Schema Definition enhancement'
-    );
-    assert.ok(
       body.includes('Pretty Print XML'),
       'Should include Pretty Print XML enhancement'
     );

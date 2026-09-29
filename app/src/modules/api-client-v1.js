@@ -1,9 +1,14 @@
 /**
- * Auto-generated API client for PDF-TEI Editor API v1
+ * Hand-maintained API client for PDF-TEI Editor API v1.
  *
- * Generated from OpenAPI schema at 2026-09-26T16:23:57.358Z
+ * One method per `/api/v1/...` operation, mirroring the FastAPI router's path,
+ * request body, and response model. When you add, remove, or change a route in
+ * `fastapi_app/routers/*.py`, add or update the matching method here in the same
+ * change — read the route and its Pydantic models directly, do not guess.
  *
- * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
+ * Upload (multipart/form-data) and SSE (text/event-stream) endpoints are
+ * intentionally excluded; call `callApi`/`EventSource` directly for those, as
+ * documented in docs/code-assistant/api-client.md.
  */
 
 // Type Definitions
@@ -188,32 +193,6 @@
  */
 
 /**
- * @typedef {Object} ConflictInfo
- * @property {string} file_id
- * @property {string} stable_id
- * @property {string} filename
- * @property {string} doc_id
- * @property {string} local_modified_at
- * @property {string} local_hash
- * @property {string} remote_modified_at
- * @property {string} remote_hash
- * @property {string} conflict_type
- */
-
-/**
- * @typedef {Object} ConflictListResponse
- * @property {Array<ConflictInfo>} conflicts
- * @property {number} total
- */
-
-/**
- * @typedef {Object} ConflictResolution
- * @property {string} file_id
- * @property {string} resolution
- * @property {string=} new_variant - Variant name when using 'keep_both' resolution
- */
-
-/**
  * @typedef {Object} CopyFilesRequest
  * @property {string} pdf_id
  * @property {string} destination_collection
@@ -230,6 +209,14 @@
  * @property {string} name - Group display name
  * @property {string=} description - Group description
  * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} CreateOverrideRequest
+ * @property {string} kind
+ * @property {string} fragment_url
+ * @property {string=} note
+ * @property {string=} text
  */
 
 /**
@@ -394,6 +381,7 @@
  * @property {number} storage_freed
  * @property {number=} orphaned_xml_deleted
  * @property {number=} grobid_cache_deleted
+ * @property {number=} annotation_rules_cache_deleted
  */
 
 /**
@@ -425,10 +413,13 @@
  */
 
 /**
- * @typedef {Object} InstructionItem
- * @property {string} label
- * @property {Array<string>} extractor
- * @property {Array<string>} text
+ * @typedef {Object} ListResourcesRequest
+ * @property {string} xml_string
+ */
+
+/**
+ * @typedef {Object} ListResourcesResponse
+ * @property {Array<ResourceDescriptorModel>} resources
  */
 
 /**
@@ -484,6 +475,21 @@
 /**
  * @typedef {Object} MoveFilesResponse
  * @property {string} new_pdf_id
+ */
+
+/**
+ * @typedef {Object} OkResponse
+ * @property {string=} result
+ */
+
+/**
+ * @typedef {Object} OverrideModel
+ * @property {string} id
+ * @property {string} note
+ * @property {string} text
+ * @property {string} format
+ * @property {string} created_at
+ * @property {string} updated_at
  */
 
 /**
@@ -555,10 +561,71 @@
  */
 
 /**
+ * @typedef {Object} ProposeChangeUrlRequest
+ * @property {string} url
+ * @property {string} text
+ */
+
+/**
+ * @typedef {Object} ProposeChangeUrlResponse
+ * @property {string=} url - The forge URL to open, or null if the resource's host isn't a recognized git forge.
+ * @property {boolean} content_prefilled - Whether `url` already embeds the override text.
+ * @property {string} text - The request's `text` with same-repo absolute links rewritten back to their upstream-relative form - copy *this* to the clipboard, not the original text.
+ */
+
+/**
  * @typedef {Object} ProviderResponse
  * @property {string} id
  * @property {string} label
  * @property {Array<ModelResponse>} models
+ */
+
+/**
+ * @typedef {Object} QueryResourceRequest
+ * @property {string} kind
+ * @property {string} url
+ */
+
+/**
+ * @typedef {Object} QueryResourceResponse
+ * @property {string} original_text
+ * @property {Array<OverrideModel>} overrides
+ * @property {string=} selected_override_id - The caller's selected override id, or null if this resource currently uses the original.
+ */
+
+/**
+ * @typedef {Object} RefreshOutcomeResponse
+ * @property {boolean} available
+ * @property {boolean} changed
+ * @property {number} entry_count
+ * @property {string=} variant_id
+ * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RefreshRequest
+ * @property {string} xml
+ */
+
+/**
+ * @typedef {Object} RefTargetModel
+ * @property {string} target
+ * @property {string=} content_type
+ * @property {'human'|'machine'} subtype
+ */
+
+/**
+ * @typedef {Object} RefreshResourceRequest
+ * @property {string} xml
+ * @property {string} url
+ */
+
+/**
+ * @typedef {Object} RefreshResourceResponse
+ * @property {'ok'|'unavailable'|'not_found'|'orphaned'} status
+ * @property {Array<RefTargetModel>} refs
+ * @property {boolean} changed
+ * @property {string} message
  */
 
 /**
@@ -593,6 +660,27 @@
  * @property {boolean} success
  * @property {Array<FieldResult>} results
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} ResetSelectionRequest
+ * @property {Array<ResourceRef>} resources
+ */
+
+/**
+ * @typedef {Object} ResourceDescriptorModel
+ * @property {string} kind
+ * @property {string} url
+ * @property {string} key
+ * @property {string} label
+ * @property {string} format
+ * @property {Array<string>=} related_urls - Every URL in the document referring to this same resource (including `url`); e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource but have different target URLs.
+ */
+
+/**
+ * @typedef {Object} ResourceRef
+ * @property {string} kind
+ * @property {string} url
  */
 
 /**
@@ -631,8 +719,20 @@
  */
 
 /**
- * @typedef {Object} SaveInstructionsResponse
- * @property {string} result
+ * @typedef {Object} SelectionInfo
+ * @property {string} kind
+ * @property {string} url
+ * @property {boolean} selected
+ */
+
+/**
+ * @typedef {Object} SelectionsRequest
+ * @property {Array<ResourceRef>} resources
+ */
+
+/**
+ * @typedef {Object} SelectionsResponse
+ * @property {Array<SelectionInfo>} selections
  */
 
 /**
@@ -641,6 +741,13 @@
  * @property {string} visibility
  * @property {string} editability
  * @property {string} owner
+ */
+
+/**
+ * @typedef {Object} SetSelectionRequest
+ * @property {string} kind
+ * @property {string} fragment_url
+ * @property {string=} override_id
  */
 
 /**
@@ -654,36 +761,6 @@
  * @property {string} username
  * @property {string=} fullname
  * @property {Array<string>=} roles
- */
-
-/**
- * @typedef {Object} SyncRequest
- * @property {boolean=} force - Force sync even if quick check indicates no changes needed
- */
-
-/**
- * @typedef {Object} SyncStatusResponse
- * @property {boolean} needs_sync
- * @property {number} local_version
- * @property {number} remote_version
- * @property {number} unsynced_count
- * @property {string=} last_sync_time
- * @property {boolean=} sync_in_progress
- */
-
-/**
- * @typedef {Object} SyncSummary
- * @property {boolean=} skipped
- * @property {number=} uploaded
- * @property {number=} downloaded
- * @property {number=} deleted_local
- * @property {number=} deleted_remote
- * @property {number=} metadata_synced
- * @property {number=} conflicts
- * @property {number=} errors
- * @property {number=} new_version
- * @property {number=} duration_ms
- * @property {string=} message
  */
 
 /**
@@ -705,6 +782,12 @@
  * @property {string=} name - Group display name
  * @property {string=} description - Group description
  * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} UpdateOverrideRequest
+ * @property {string=} note
+ * @property {string=} text
  */
 
 /**
@@ -917,30 +1000,6 @@ export class ApiClientV1 {
    */
   async configSet(requestBody) {
     const endpoint = `/config/set`
-    return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Get extraction instructions.
-   * Requires authentication.
-   * Returns list of instruction items.
-   *
-   * @returns {Promise<Array<InstructionItem>>}
-   */
-  async configListInstructions() {
-    const endpoint = `/config/instructions`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Save extraction instructions.
-   * Requires authentication.
-   *
-   * @param {Array<InstructionItem>} requestBody
-   * @returns {Promise<SaveInstructionsResponse>}
-   */
-  async configSaveInstructions(requestBody) {
-    const endpoint = `/config/instructions`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
@@ -1392,6 +1451,8 @@ export class ApiClientV1 {
    * Supports both XSD (xsi:schemaLocation) and RelaxNG (xml-model) schemas.
    * Automatically downloads and caches schemas on first use.
    * Uses subprocess isolation for timeout protection on complex schemas.
+   * If the caller has selected a schema override via the document rules
+   * registry, validates against that instead of the shared cached schema.
    * Returns:
    * List of validation errors. Empty list if validation passed.
    *
@@ -1452,6 +1513,148 @@ export class ApiClientV1 {
    */
   async extract(requestBody) {
     const endpoint = `/extract`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List every resource the posted document content references. Used to build the "Edit prompts/schemas" submenu.
+   *
+   * @param {ListResourcesRequest} requestBody
+   * @returns {Promise<ListResourcesResponse>}
+   */
+  async documentRulesList(requestBody) {
+    const endpoint = `/document-rules/list`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Original text, the caller's overrides, and the caller's current selection for one resource.
+   *
+   * @param {QueryResourceRequest} requestBody
+   * @returns {Promise<QueryResourceResponse>}
+   */
+  async documentRulesQuery(requestBody) {
+    const endpoint = `/document-rules/query`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Create a new override, copying the resource's original text unless `text` is given.
+   *
+   * @param {CreateOverrideRequest} requestBody
+   * @returns {Promise<OverrideModel>}
+   */
+  async documentRulesOverrides(requestBody) {
+    const endpoint = `/document-rules/overrides`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Update an override's note and/or text. Owner only.
+   *
+   * @param {string} override_id
+   * @param {UpdateOverrideRequest} requestBody
+   * @returns {Promise<OverrideModel>}
+   */
+  async documentRulesUpdateOverrides(override_id, requestBody) {
+    const endpoint = `/document-rules/overrides/${override_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete an override. Owner only; also clears any selection pointing at it.
+   *
+   * @param {string} override_id
+   * @returns {Promise<OkResponse>}
+   */
+  async documentRulesDeleteOverrides(override_id) {
+    const endpoint = `/document-rules/overrides/${override_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Select an override (or `null` for the original) for one resource.
+   *
+   * @param {SetSelectionRequest} requestBody
+   * @returns {Promise<OkResponse>}
+   */
+  async documentRulesSelection(requestBody) {
+    const endpoint = `/document-rules/selection`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Clear the caller's selection for each listed resource, keeping all overrides.
+   *
+   * @param {ResetSelectionRequest} requestBody
+   * @returns {Promise<OkResponse>}
+   */
+  async documentRulesSelectionReset(requestBody) {
+    const endpoint = `/document-rules/selection/reset`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Whether the caller currently has a selection (an override in use) for
+   * each listed resource - used to show an "overrides active" indicator
+   * without fetching every resource's full original/override text via
+   * repeated /query calls.
+   *
+   * @param {SelectionsRequest} requestBody
+   * @returns {Promise<SelectionsResponse>}
+   */
+  async documentRulesSelections(requestBody) {
+    const endpoint = `/document-rules/selections`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Read-only preview of what "Refresh document rules" would change for this document.
+   *
+   * @param {RefreshRequest} requestBody
+   * @returns {Promise<RefreshOutcomeResponse>}
+   */
+  async documentRulesRefreshPreview(requestBody) {
+    const endpoint = `/document-rules/refresh/preview`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Perform the document rules refresh: regenerate and save if anything changed.
+   *
+   * @param {RefreshRequest} requestBody
+   * @returns {Promise<RefreshOutcomeResponse>}
+   */
+  async documentRulesRefreshExecute(requestBody) {
+    const endpoint = `/document-rules/refresh/execute`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Build a URL that lets the caller's own GitHub/GitLab session propose
+   * `text` as the resource's new upstream content - no server-side git
+   * write or stored credential involved. `url` is null when the resource's
+   * host isn't a recognized git forge.
+   *
+   * @param {ProposeChangeUrlRequest} requestBody
+   * @returns {Promise<ProposeChangeUrlResponse>}
+   */
+  async documentRulesProposeChangeUrl(requestBody) {
+    const endpoint = `/document-rules/propose-change-url`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Compute what one interpretation-ref resource's <ref>s should be now,
+   * without writing anything - the caller applies the returned `refs` to
+   * the open document client-side. See RefreshResourceResponse's `status`
+   * values.
+   *
+   * @param {RefreshResourceRequest} requestBody
+   * @returns {Promise<RefreshResourceResponse>}
+   */
+  async documentRulesRefreshResource(requestBody) {
+    const endpoint = `/document-rules/refresh-resource`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

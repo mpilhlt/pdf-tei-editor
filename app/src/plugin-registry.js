@@ -16,6 +16,7 @@ export { default as ConfigEditorPlugin } from './plugins/config-editor.js';
 export { default as ConfigPlugin } from './plugins/config.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
 export { default as DocumentActionsPlugin } from './plugins/document-actions.js';
+export { default as DocumentRulesPlugin } from './plugins/document-rules.js';
 export { default as ExtractionPlugin } from './plugins/extraction.js';
 export { default as FileSelectionDrawerPlugin } from './plugins/file-selection-drawer.js';
 export { default as FileSelectionPlugin } from './plugins/file-selection.js';
@@ -30,7 +31,6 @@ export { default as MoveFilesPlugin } from './plugins/move-files.js';
 export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
 export { default as PluginAdminPlugin } from './plugins/plugin-admin.js';
 export { default as ProgressPlugin } from './plugins/progress.js';
-export { default as PromptEditorPlugin } from './plugins/prompt-editor.js';
 export { default as RbacManagerPlugin } from './plugins/rbac-manager.js';
 export { default as ServicesPlugin } from './plugins/services.js';
 export { default as SsePlugin } from './plugins/sse.js';
@@ -57,6 +57,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   config: import('./plugins/config.js').default,
  *   dialog: import('./plugins/dialog.js').default,
  *   "document-actions": import('./plugins/document-actions.js').default,
+ *   "document-rules": import('./plugins/document-rules.js').default,
  *   extraction: import('./plugins/extraction.js').default,
  *   "file-selection-drawer": import('./plugins/file-selection-drawer.js').default,
  *   "file-selection": import('./plugins/file-selection.js').default,
@@ -71,7 +72,6 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   pdfviewer: import('./plugins/pdfviewer.js').default,
  *   "plugin-admin": import('./plugins/plugin-admin.js').default,
  *   progress: import('./plugins/progress.js').default,
- *   "prompt-editor": import('./plugins/prompt-editor.js').default,
  *   "rbac-manager": import('./plugins/rbac-manager.js').default,
  *   services: import('./plugins/services.js').default,
  *   sse: import('./plugins/sse.js').default,
