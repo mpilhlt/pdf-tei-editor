@@ -2,6 +2,41 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.66.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.65.0...v0.66.0) (2026-09-29)
+
+
+### Bug Fixes
+
+* **doc-rules:** accept the reset confirm dialog in the schema-override e2e test ([d185489](https://github.com/mpilhlt/pdf-tei-editor/commit/d185489cc625499873750aa143984548815941a1))
+* **doc-rules:** avoid default-branch cache key colliding with commits cache ([21cf6c8](https://github.com/mpilhlt/pdf-tei-editor/commit/21cf6c8e499c0e5170a52f9867057517a468672c))
+* **doc-rules:** de-relativize same-repo links before proposing upstream ([8951be3](https://github.com/mpilhlt/pdf-tei-editor/commit/8951be35706986a41ee99c496ec8f4e237d20f88))
+* **doc-rules:** fix preview-pane scroll containment and notification timing ([f5f534c](https://github.com/mpilhlt/pdf-tei-editor/commit/f5f534cebd80018b51a5f27e6bc6a56cd6d0df0a))
+* **doc-rules:** honor heading-anchor/scroll position in resource editor ([fd7e0cc](https://github.com/mpilhlt/pdf-tei-editor/commit/fd7e0cc4d7b1c9638be2f402abf70e6f3851e61a))
+* **doc-rules:** replace toast with a confirm dialog before proposing upstream ([c8e6737](https://github.com/mpilhlt/pdf-tei-editor/commit/c8e6737ed5c85e8f12ad34c3dcb1c1cb9ab7afb3))
+* **doc-rules:** use GitHub's /edit/ route, not /new/, to propose a change ([e20b327](https://github.com/mpilhlt/pdf-tei-editor/commit/e20b327d840d3687de0baef6b82bc5e27abce4be))
+* **document-rules:** fix resource editor dialog's blank Edit/Preview tabs ([62f2f61](https://github.com/mpilhlt/pdf-tei-editor/commit/62f2f61ad327e68bc9da4d84d674851bf3c0b4c3))
+* **document-rules:** hide the whole "Document rules" tools category from plain users ([b00dc22](https://github.com/mpilhlt/pdf-tei-editor/commit/b00dc22009d6853f3dd61af0b17c3c50cd9aaaaa))
+* **document-rules:** preserve interpretation/[@n](https://github.com/n) on rules refresh ([e173dbc](https://github.com/mpilhlt/pdf-tei-editor/commit/e173dbc2668d95f1bc69b5cee245f59389068593))
+* **document-rules:** reset scroll position and honor heading-anchor fragments ([5a3dd9f](https://github.com/mpilhlt/pdf-tei-editor/commit/5a3dd9fb0eac29d3f9d58f30376d490fbea24ae8))
+* **document-rules:** resolve machine refs to their entry's resource ([4ea8447](https://github.com/mpilhlt/pdf-tei-editor/commit/4ea84477dd0be0764b7737574123abf3f4e45656))
+* **document-rules:** rewrite relative image/link URLs in fetched markdown ([3d9e148](https://github.com/mpilhlt/pdf-tei-editor/commit/3d9e148f9dbbb81961bf40116b267f2266ef41d1))
+* **editor:** exclude <text>'s own tags from the annotator edit guard ([5de27ba](https://github.com/mpilhlt/pdf-tei-editor/commit/5de27ba84770af7ea6d1325d9b64bb83a63fae7c))
+* **editor:** whitelist <text> instead of blacklisting teiHeader for annotator guard ([89e369f](https://github.com/mpilhlt/pdf-tei-editor/commit/89e369f74e53d44f261d3ec6693ee7106eff6e6c))
+* **ui:** make the generic confirm/info dialog always render above other dialogs ([5d24d17](https://github.com/mpilhlt/pdf-tei-editor/commit/5d24d17cdf1dc1dd2ec4c7cdf47d800c6f33fc56))
+
+
+### Features
+
+* **doc-rules:** "Reset to original" deletes overrides and refreshes refs from upstream ([d39c709](https://github.com/mpilhlt/pdf-tei-editor/commit/d39c7093da876af498947409e286ba46783e4594))
+* **doc-rules:** add "Propose change upstream" button for overrides ([af687fa](https://github.com/mpilhlt/pdf-tei-editor/commit/af687faf92d6fec0f61fadeabbb37250ce29fe7b))
+* **document-rules:** decorate and make clickable the schema xml-model href ([25cfeed](https://github.com/mpilhlt/pdf-tei-editor/commit/25cfeedac3facb4263e0b02db468ba1a57f3b27d))
+* **document-rules:** decorate the schemaRef fallback schema location too ([68a4b2b](https://github.com/mpilhlt/pdf-tei-editor/commit/68a4b2b24994d9cea0cff8817d9b0ab319d4c722))
+* **editor:** UI-only teiHeader safeguard for pure annotators ([4b06e93](https://github.com/mpilhlt/pdf-tei-editor/commit/4b06e93368404e7a672c094821974c202d3f6228))
+* **gc:** clean up the annotation-rules fetch cache on admin GC ([40f0684](https://github.com/mpilhlt/pdf-tei-editor/commit/40f0684368d609b501d3a0ac9ab2d2d503592e35))
+* **grobid:** add get_schema_fragment_url() accessor ([113406c](https://github.com/mpilhlt/pdf-tei-editor/commit/113406c6e19f5d161facb06b7e3ab47b6234dcf7))
+* **grobid:** embed a ref to the upstream schema-fragment source ([6b3a8c8](https://github.com/mpilhlt/pdf-tei-editor/commit/6b3a8c8eac607e230e8965e8f80effaaf5afd660))
+* **grobid:** give every annotation guide entry a display label ([9a53e2d](https://github.com/mpilhlt/pdf-tei-editor/commit/9a53e2d930456f410ca55ca2ae98c2e1609cf9c7))
+
 # [0.65.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.64.1...v0.65.0) (2026-09-26)
 
 
