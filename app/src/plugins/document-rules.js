@@ -730,13 +730,20 @@ class DocumentRulesPlugin extends Plugin {
       // Clipboard denied/unavailable - non-fatal whether or not the URL
       // itself already carries the text.
     }
+    // Notify BEFORE opening the tab: window.open() focuses the new tab
+    // immediately, so a toast fired afterwards has no time to render before
+    // the user's attention (and often the whole browser window) has already
+    // moved away from this page. The paste-it-in case gets a longer duration
+    // since it's the one the user must still act on after switching back.
+    if (response.content_prefilled) {
+      notify('Opening a prefilled upstream editor in a new tab.', 'primary', 'info-circle')
+    } else {
+      notify(
+        'Opening the upstream editor in a new tab — the override text has been copied to your clipboard, paste it in.',
+        'primary', 'info-circle', 8000
+      )
+    }
     window.open(response.url, '_blank', 'noopener')
-    notify(
-      response.content_prefilled
-        ? 'Opening a prefilled upstream editor in a new tab.'
-        : 'Opening the upstream editor in a new tab — the override text has been copied to your clipboard, paste it in.',
-      'primary', 'info-circle'
-    )
   }
 
   /**
