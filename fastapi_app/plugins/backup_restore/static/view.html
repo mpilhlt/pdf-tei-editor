@@ -81,7 +81,7 @@
 <body>
     <h2>Backup &amp; Restore</h2>
 
-    <div class="section">
+    <div class="section" id="backupSection">
         <h3>Download Backup</h3>
         <div class="description">
             Download the complete application data directory as a ZIP file.
@@ -93,7 +93,7 @@
         <div id="downloadStatus" class="status"></div>
     </div>
 
-    <div class="section">
+    <div class="section" id="restoreSection">
         <h3>Restore from Backup</h3>
         <div class="description">
             Upload a previously downloaded backup ZIP file to restore the application data.
@@ -111,6 +111,12 @@
         // Extract session_id from the URL (injected by the frontend when loading outputUrl)
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session_id');
+
+        // Injected by the server according to the user's roles
+        const canBackup = __CAN_BACKUP__;
+        const canRestore = __CAN_RESTORE__;
+        document.getElementById('backupSection').hidden = !canBackup;
+        document.getElementById('restoreSection').hidden = !canRestore;
 
         function setStatus(elementId, message, type) {
             const el = document.getElementById(elementId);

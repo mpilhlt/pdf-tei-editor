@@ -32,7 +32,7 @@ function walk(dir) {
 
 const EXPECTED_BIN = [
   'start-dev', 'start-prod', 'manage.py', 'manage-remote.js', 'import_files.py',
-  'export_files.py', 'batch-extract.js', 'cli_storage_gc.py', 'cleanup-orphaned-xml.py'
+  'export_files.py', 'backup-download.js', 'batch-extract.js', 'cli_storage_gc.py', 'cleanup-orphaned-xml.py'
 ];
 const EXPECTED_BIN_MIGRATIONS = [
   'run-migration.py', 'migrate-tei-fileref-to-xml-id.py', 'migrate-tei-flavor-rename.py',

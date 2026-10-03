@@ -339,7 +339,9 @@ def is_available(cls) -> bool:
 - `required_roles: ["*"]` - Everyone (including anonymous)
 - `required_roles: []` - Everyone (including anonymous)
 
-Wildcard `*` in user roles grants access to all plugins.
+Wildcard `*` in user roles grants access to all plugins. `required_roles` is any-of, so list every role that should see the plugin (e.g. `["admin", "backup", "restore"]`).
+
+A plugin that needs its own roles adds them to `data/db/roles.json` in `initialize()` with an idempotent function (see `ensure_roles()` in `fastapi_app/plugins/backup_restore/plugin.py`), since the `config/roles.json` defaults are only copied on first start.
 
 ## Frontend Integration
 
