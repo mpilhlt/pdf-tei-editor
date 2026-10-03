@@ -11,12 +11,14 @@ import logging
 import os
 import shutil
 import signal
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
@@ -24,6 +26,7 @@ from fastapi_app.lib.core.dependencies import (
     get_sse_service,
 )
 from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions, send_notification
+from fastapi_app.plugins.backup_restore.archive import create_backup_zip
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +42,35 @@ def _get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
-def _authenticate_admin(session_id, x_session_id, session_manager, auth_manager):
-    """Authenticate request and verify admin role.
+BACKUP_ROLE = "backup"
+RESTORE_ROLE = "restore"
+
+# Roles granting access to each operation; `admin` and `*` imply both plugin roles
+_ROLE_ALLOWED = {
+    "view": {BACKUP_ROLE, RESTORE_ROLE},
+    BACKUP_ROLE: {BACKUP_ROLE},
+    RESTORE_ROLE: {RESTORE_ROLE},
+}
+
+# Serializes backup creation so overlapping requests do not double the I/O load
+_backup_lock = asyncio.Lock()
+
+
+def _user_has_role(user: dict, role: str) -> bool:
+    """Whether the user may exercise the given plugin role (`backup` or `restore`)."""
+    user_roles = user.get("roles", [])
+    return "*" in user_roles or "admin" in user_roles or role in user_roles
+
+
+def _authenticate(operation, session_id, x_session_id, session_manager, auth_manager):
+    """Authenticate the request and verify the role required for the operation.
+
+    Args:
+        operation: One of "view", "backup", "restore"
+        session_id: Session ID from the query string
+        x_session_id: Session ID from the X-Session-ID header
+        session_manager: Session manager
+        auth_manager: Auth manager
 
     Returns:
         Tuple of (session_id_value, user)
@@ -59,9 +89,8 @@ def _authenticate_admin(session_id, x_session_id, session_manager, auth_manager)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    user_roles = user.get("roles", [])
-    if "admin" not in user_roles and "*" not in user_roles:
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if not any(_user_has_role(user, role) for role in _ROLE_ALLOWED[operation]):
+        raise HTTPException(status_code=403, detail=f"The '{operation}' role is required")
 
     return session_id_value, user
 
@@ -114,12 +143,15 @@ async def backup_restore_view(
     session_manager=Depends(get_session_manager),
     auth_manager=Depends(get_auth_manager),
 ):
-    """Display the backup & restore UI."""
-    _authenticate_admin(session_id, x_session_id, session_manager, auth_manager)
+    """Display the backup & restore UI, showing only the sections the user may use."""
+    _, user = _authenticate("view", session_id, x_session_id, session_manager, auth_manager)
 
     from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 
     html = load_plugin_html(__file__, "view.html")
+    can_backup = "true" if _user_has_role(user, BACKUP_ROLE) else "false"
+    can_restore = "true" if _user_has_role(user, RESTORE_ROLE) else "false"
+    html = html.replace("__CAN_BACKUP__", can_backup).replace("__CAN_RESTORE__", can_restore)
     return HTMLResponse(content=html)
 
 
@@ -130,10 +162,13 @@ async def download_backup(
     session_manager=Depends(get_session_manager),
     auth_manager=Depends(get_auth_manager),
 ):
-    """Download the data directory as a ZIP file."""
-    session_id_value, _ = _authenticate_admin(
-        session_id, x_session_id, session_manager, auth_manager
-    )
+    """Download the `db/` and `files/` directories as a ZIP file.
+
+    The ZIP is built on disk, SQLite databases are snapshotted consistently, and
+    the response carries `X-Content-SHA256` for client-side verification. Only
+    one backup is created at a time; a concurrent request gets 409.
+    """
+    _, user = _authenticate(BACKUP_ROLE, session_id, x_session_id, session_manager, auth_manager)
 
     from fastapi_app.config import get_settings
 
@@ -143,35 +178,30 @@ async def download_backup(
     if not data_root.exists():
         raise HTTPException(status_code=404, detail="Data directory not found")
 
+    if _backup_lock.locked():
+        raise HTTPException(status_code=409, detail="Another backup is already in progress")
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"backup_{timestamp}.zip"
+    username = user.get("username", "unknown")
 
-    logger.info(f"Creating backup ZIP of {data_root} for admin user")
+    async with _backup_lock:
+        logger.info(f"Creating backup ZIP of {data_root} for user '{username}'")
+        started = time.monotonic()
+        zip_path, sha256 = await asyncio.to_thread(create_backup_zip, data_root, settings.tmp_dir)
 
-    # Only include db/ and files/ subdirectories
-    backup_dirs = [data_root / "db", data_root / "files"]
+    size = zip_path.stat().st_size
+    logger.info(
+        f"Backup ZIP created: {filename} ({size} bytes, {time.monotonic() - started:.1f}s) "
+        f"for user '{username}'"
+    )
 
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for backup_dir in backup_dirs:
-            if not backup_dir.exists():
-                continue
-            for file_path in sorted(backup_dir.rglob("*")):
-                if file_path.is_file():
-                    rel_path = file_path.relative_to(data_root)
-                    zf.write(file_path, str(rel_path))
-
-    buffer.seek(0)
-    size = buffer.getbuffer().nbytes
-    logger.info(f"Backup ZIP created: {filename} ({size} bytes)")
-
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
+    return FileResponse(
+        zip_path,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(size),
-        },
+        filename=filename,
+        headers={"X-Content-SHA256": sha256},
+        background=BackgroundTask(lambda: zip_path.unlink(missing_ok=True)),
     )
 
 
@@ -189,9 +219,10 @@ async def restore_backup(
     Validates the ZIP contents, extracts to data_restore/, and optionally
     triggers a server restart if running under a supervisor.
     """
-    session_id_value, _ = _authenticate_admin(
-        session_id, x_session_id, session_manager, auth_manager
+    session_id_value, user = _authenticate(
+        RESTORE_ROLE, session_id, x_session_id, session_manager, auth_manager
     )
+    logger.info(f"Restore requested by user '{user.get('username', 'unknown')}'")
 
     # Read uploaded file
     content = await file.read()
