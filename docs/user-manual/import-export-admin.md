@@ -221,6 +221,8 @@ cp data/db/metadata.db backup/metadata.db
 
 ### Backup & Restore plugin
 
+Full guide for administrators and for the cron setup: [Backup & Restore plugin README](../../fastapi_app/plugins/backup_restore/README.md).
+
 The Backup & Restore plugin (Administration menu) downloads the `db/` and `files/` directories as a ZIP file and restores from such a ZIP. SQLite databases are snapshotted consistently, so a backup can be taken while the server is running. Restore replaces all data and restarts the server (if running under a supervisor).
 
 Access is controlled by two roles that can be assigned independently of `admin`:
