@@ -1,7 +1,7 @@
 # Backup & Restore: Dedicated Roles and Cron Download Script — Design Spec
 
 Date: 2026-10-03
-Status: Draft for review
+Status: Approved for planning
 
 ## Goals
 
@@ -39,13 +39,13 @@ Replace `_authenticate_admin()` with `_authenticate(required_role, ...)`:
 | `GET /download` | `backup`, `admin`, `*` |
 | `POST /restore` | `restore`, `admin`, `*` |
 
-Decision needed: whether `admin` (without `*`) should still imply both roles. Recommendation: **yes**, because existing instances have users with `["admin"]` only, and removing access on upgrade is a regression. The new roles then extend access to non-admins rather than redefining it. If admin should not imply them, a migration must add `*` or the new roles to existing admins.
+`admin` (without `*`) still implies both roles, because existing instances have users with `["admin"]` only, and removing access on upgrade is a regression. The new roles then extend access to non-admins rather than redefining it. If admin should not imply them, a migration must add `*` or the new roles to existing admins.
 
 Plugin metadata: `required_roles: ["backup", "restore"]`. `plugin_registry` already treats this as any-of, and `*` passes. The view (`view.html`) shows the download section only with `backup` and the restore section only with `restore` (or `admin`/`*`). The view needs the current user's roles; either pass them as template parameters from `/view` or fetch from the existing auth/status endpoint.
 
 ### Existing instances
 
-`data/db/roles.json` is not overwritten on upgrade. Add an idempotent step that appends missing `backup`/`restore` entries to `data/db/roles.json`. Options: a script in `bin/migrations/` (the repository convention for live-instance changes), or an `ensure_roles()` call in the plugin's `initialize()`. Recommendation: the plugin hook, because it needs no operator action and keeps the roles tied to the plugin. The `plugin.py` must then declare that it adds the roles, and the roles must not be removed if the plugin is deactivated.
+`data/db/roles.json` is not overwritten on upgrade. Add an idempotent step that appends missing `backup`/`restore` entries to `data/db/roles.json`. The plugin calls an idempotent `ensure_roles()` in its `initialize()`; no operator action is needed. The `plugin.py` must then declare that it adds the roles, and the roles must not be removed if the plugin is deactivated.
 
 ### Security notes (to document in the admin guide)
 
@@ -179,8 +179,8 @@ E2E: backup-only user sees only the download section and gets 403 from `/restore
 - `bin/README.md` script table.
 - `docs/code-assistant/backend-plugins.md`: plugin-defined roles via `ensure_roles()`.
 
-## Open decisions
+## Decisions
 
-1. Does `admin` without `*` imply `backup`/`restore`? (Recommended: yes.)
-2. Roles added by plugin hook (recommended) or by a `bin/migrations/` script?
-3. Is a Node script acceptable for cron hosts, or should a stdlib-only Python variant be provided instead (no Node on bare hosts)? Recommendation: Node, since the image already ships it, and hosts can use `docker exec`.
+1. `admin` without `*` implies both `backup` and `restore`.
+2. The roles are added by the plugin (`ensure_roles()` on start), not by a `bin/migrations/` script.
+3. The cron script is Node (`bin/backup-download.js`).
