@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.67.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.66.0...v0.67.0) (2026-10-03)
+
+
+### Features
+
+* **backup-restore:** add backup and restore roles; implement cron-friendly backup download script ([#508](https://github.com/mpilhlt/pdf-tei-editor/issues/508)) ([4442933](https://github.com/mpilhlt/pdf-tei-editor/commit/4442933ffc3af199c839937dafb8a882f919b86b))
+
 # [0.66.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.65.0...v0.66.0) (2026-09-29)
 
 
