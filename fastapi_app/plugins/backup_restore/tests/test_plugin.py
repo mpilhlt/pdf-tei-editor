@@ -3,12 +3,15 @@ Unit tests for Backup & Restore plugin.
 
 @testCovers fastapi_app/plugins/backup_restore/plugin.py
 @testCovers fastapi_app/plugins/backup_restore/routes.py
+@testCovers fastapi_app/plugins/backup_restore/archive.py
 @testCovers fastapi_app/lib/data_restore.py
 """
 
+import hashlib
 import io
 import json
 import shutil
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -26,7 +29,7 @@ class TestBackupRestorePlugin(unittest.TestCase):
         meta = plugin.metadata
         self.assertEqual(meta["id"], "backup-restore")
         self.assertEqual(meta["category"], "admin")
-        self.assertEqual(meta["required_roles"], ["admin"])
+        self.assertEqual(meta["required_roles"], ["admin", "backup", "restore"])
 
     def test_manage_endpoint_returns_output_url(self):
         from fastapi_app.plugins.backup_restore.plugin import BackupRestorePlugin
@@ -186,6 +189,215 @@ class TestRestoreZipValidation(unittest.TestCase):
                 missing.append(req)
 
         self.assertIn("db/users.json", missing)
+
+
+class TestEnsureRoles(unittest.TestCase):
+    """Test that the plugin adds its roles to roles.json idempotently."""
+
+    def setUp(self):
+        self.db_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.db_dir)
+
+    def test_adds_missing_roles_once_and_keeps_custom_roles(self):
+        from fastapi_app.plugins.backup_restore.plugin import ensure_roles
+
+        roles_file = self.db_dir / "roles.json"
+        roles_file.write_text(json.dumps([{"id": "admin", "roleName": "Admin"}, {"id": "custom"}]))
+
+        self.assertEqual(ensure_roles(self.db_dir), ["backup", "restore"])
+        self.assertEqual(ensure_roles(self.db_dir), [])
+
+        ids = [r["id"] for r in json.loads(roles_file.read_text())]
+        self.assertEqual(ids, ["admin", "custom", "backup", "restore"])
+
+    def test_missing_roles_file_is_ignored(self):
+        from fastapi_app.plugins.backup_restore.plugin import ensure_roles
+
+        self.assertEqual(ensure_roles(self.db_dir), [])
+
+    def test_default_roles_file_contains_plugin_roles(self):
+        from fastapi_app.plugins.backup_restore.plugin import PLUGIN_ROLES
+
+        config = json.loads((Path(__file__).resolve().parents[4] / "config" / "roles.json").read_text())
+        ids = {r["id"] for r in config}
+        self.assertTrue({r["id"] for r in PLUGIN_ROLES} <= ids)
+
+
+class TestAuthorization(unittest.TestCase):
+    """Test the role matrix of the plugin routes."""
+
+    def _authenticate(self, operation, roles):
+        from fastapi import HTTPException
+        from fastapi_app.plugins.backup_restore.routes import _authenticate
+
+        session_manager = MagicMock()
+        session_manager.is_session_valid.return_value = True
+        auth_manager = MagicMock()
+        auth_manager.get_user_by_session_id.return_value = {"username": "u", "roles": roles}
+        try:
+            _authenticate(operation, "sid", None, session_manager, auth_manager)
+            return True
+        except HTTPException as e:
+            self.assertEqual(e.status_code, 403)
+            return False
+
+    def test_matrix(self):
+        expected = {
+            # roles: (view, backup, restore)
+            ("backup",): (True, True, False),
+            ("restore",): (True, False, True),
+            ("backup", "restore"): (True, True, True),
+            ("admin",): (True, True, True),
+            ("*",): (True, True, True),
+            ("user", "reviewer"): (False, False, False),
+            (): (False, False, False),
+        }
+        for roles, allowed in expected.items():
+            got = tuple(self._authenticate(op, list(roles)) for op in ("view", "backup", "restore"))
+            self.assertEqual(got, allowed, f"roles={roles}")
+
+    def test_missing_session_is_401(self):
+        from fastapi import HTTPException
+        from fastapi_app.plugins.backup_restore.routes import _authenticate
+
+        with self.assertRaises(HTTPException) as ctx:
+            _authenticate("backup", None, None, MagicMock(), MagicMock())
+        self.assertEqual(ctx.exception.status_code, 401)
+
+
+class TestBackupArchive(unittest.TestCase):
+    """Test backup ZIP creation."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.data = self.root / "data"
+        (self.data / "db").mkdir(parents=True)
+        (self.data / "files" / "ab").mkdir(parents=True)
+        (self.data / "tmp").mkdir()
+        (self.data / "db" / "users.json").write_text("[]")
+        (self.data / "db" / "config.json").write_text("{}")
+        (self.data / "files" / "ab" / "doc.xml").write_text("<TEI/>")
+        (self.data / "tmp" / "ignored.txt").write_text("x")
+
+        # SQLite in WAL mode with an uncheckpointed write, connection kept open
+        self.conn = sqlite3.connect(self.data / "db" / "metadata.db")
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA wal_autocheckpoint=0")
+        self.conn.execute("CREATE TABLE t (v TEXT)")
+        self.conn.execute("INSERT INTO t VALUES ('in-wal')")
+        self.conn.commit()
+
+    def tearDown(self):
+        self.conn.close()
+        shutil.rmtree(self.root)
+
+    def test_zip_content_checksum_and_consistent_database(self):
+        from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+
+        zip_path, sha = create_backup_zip(self.data, self.data / "tmp")
+        self.assertEqual(sha, hashlib.sha256(zip_path.read_bytes()).hexdigest())
+
+        with zipfile.ZipFile(zip_path) as zf:
+            names = set(zf.namelist())
+            self.assertEqual(
+                names,
+                {"db/users.json", "db/config.json", "db/metadata.db", "files/ab/doc.xml"},
+            )
+            out = self.root / "restored.db"
+            out.write_bytes(zf.read("db/metadata.db"))
+
+        restored = sqlite3.connect(out)
+        try:
+            self.assertEqual(restored.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            self.assertEqual(restored.execute("SELECT v FROM t").fetchone()[0], "in-wal")
+        finally:
+            restored.close()
+        # no snapshot leftovers in the tmp dir besides the ZIP itself
+        self.assertEqual([p.name for p in (self.data / "tmp").iterdir() if p.name != "ignored.txt"], [zip_path.name])
+
+
+class TestDownloadRoute(unittest.TestCase):
+    """Test the download endpoint end to end with dependency overrides."""
+
+    def setUp(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
+        from fastapi_app.plugins.backup_restore.routes import router
+
+        self.root = Path(tempfile.mkdtemp())
+        self.data = self.root / "data"
+        (self.data / "db").mkdir(parents=True)
+        (self.data / "db" / "users.json").write_text("[]")
+        (self.data / "db" / "config.json").write_text("{}")
+
+        self.roles = ["backup"]
+        session_manager = MagicMock()
+        session_manager.is_session_valid.return_value = True
+        auth_manager = MagicMock()
+        auth_manager.get_user_by_session_id.side_effect = lambda *a: {"username": "u", "roles": self.roles}
+
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_session_manager] = lambda: session_manager
+        app.dependency_overrides[get_auth_manager] = lambda: auth_manager
+        self.client = TestClient(app)
+
+        settings = MagicMock(
+            data_root=self.data, tmp_dir=self.data / "tmp", session_timeout=3600,
+            project_root_dir=Path(__file__).resolve().parents[4],
+        )
+        patcher = patch("fastapi_app.config.get_settings", return_value=settings)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def test_download_with_backup_role(self):
+        r = self.client.get("/api/plugins/backup-restore/download", headers={"X-Session-ID": "s"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers["x-content-sha256"], hashlib.sha256(r.content).hexdigest())
+        self.assertEqual(int(r.headers["content-length"]), len(r.content))
+        self.assertEqual(list((self.data / "tmp").glob("backup_*")), [])
+
+    def test_download_denied_for_restore_only(self):
+        self.roles = ["restore"]
+        r = self.client.get("/api/plugins/backup-restore/download", headers={"X-Session-ID": "s"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_restore_denied_for_backup_only(self):
+        r = self.client.post(
+            "/api/plugins/backup-restore/restore",
+            headers={"X-Session-ID": "s"},
+            files={"file": ("b.zip", b"x")},
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_concurrent_download_returns_409(self):
+        import asyncio
+        from fastapi_app.plugins.backup_restore import routes
+
+        async def hold():
+            await routes._backup_lock.acquire()
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(hold())
+        try:
+            r = self.client.get("/api/plugins/backup-restore/download", headers={"X-Session-ID": "s"})
+            self.assertEqual(r.status_code, 409)
+        finally:
+            routes._backup_lock.release()
+            loop.close()
+
+    def test_view_shows_sections_by_role(self):
+        self.roles = ["restore"]
+        r = self.client.get("/api/plugins/backup-restore/view", headers={"X-Session-ID": "s"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("const canBackup = false;", r.text)
+        self.assertIn("const canRestore = true;", r.text)
 
 
 class TestSupervisorDetection(unittest.TestCase):

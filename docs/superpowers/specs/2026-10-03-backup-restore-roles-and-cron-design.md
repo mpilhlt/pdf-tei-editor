@@ -57,12 +57,12 @@ Plugin metadata: `required_roles: ["backup", "restore"]`. `plugin_registry` alre
 
 These make scripted downloads reliable and are needed once non-admins and cron can trigger backups:
 
-1. **Streaming, no in-memory ZIP.** Write the ZIP to a temporary file in the data directory's parent (not inside `data/`), then serve it with `FileResponse` and delete it via a background task. Memory use stays flat for large `files/` trees.
+1. **Streaming, no in-memory ZIP.** Write the ZIP to a temporary file in `data/tmp` (outside the archived `db/` and `files/`), then serve it with `FileResponse` and delete it via a background task. Memory use stays flat for large `files/` trees.
 2. **Consistent SQLite snapshot.** Create the snapshot of `db/metadata.db` (and any other `*.db`) with `sqlite3.Connection.backup()` into a temporary file and add that to the ZIP under the original name. Skip `*-wal` and `*-shm` files. See `docs/code-assistant/database-connections.md` for the connection handling.
 3. **Integrity header.** Compute SHA-256 of the finished temp file and return it as `X-Content-SHA256`, along with `Content-Length`. The script verifies both.
 4. **Single backup at a time.** A module-level lock; a second concurrent request gets `409 Conflict` with a clear message. A cron run overlapping a manual run then fails visibly instead of doubling I/O.
 5. **Audit log.** Log user, role used, size and duration for every download and restore at INFO level.
-6. **Authentication.** Use `require_authenticated_user` per the session-IP-binding spec once that migration reaches this plugin, rather than the hand-rolled session check. The script uses the `X-Session-ID` header, not the query parameter.
+6. **Authentication.** The plugin keeps its own session check (`_authenticate`) for now; moving to `require_authenticated_user` belongs to the session-IP-binding migration. The script uses the `X-Session-ID` header, not the query parameter.
 
 ## Part 2: `bin/backup-download.js`
 
@@ -88,7 +88,7 @@ node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor [options]
 | `--keep-days <n>` | `30` | Delete backups older than n days (but never below `--keep-last`) |
 | `--keep-weekly <n>` / `--keep-monthly <n>` | `0` | Optional grandfather-father-son thinning: additionally keep the newest backup of each of the last n ISO weeks / calendar months |
 | `--min-size <bytes>` | `1024` | Reject (and delete) a download smaller than this |
-| `--retries <n>` | `3` | Retries with exponential backoff (5 s, 15 s, 45 s) on network errors and 5xx; no retry on 401/403 |
+| `--retries <n>` | `3` | Retries with exponential backoff (5 s, 15 s, 45 s) on network errors, 5xx and 409; no retry on 401/403 |
 | `--timeout <sec>` | `3600` | Overall timeout for the download |
 | `--ping-url <url>` | none | GET on success, `<url>/fail` on failure (healthchecks.io style dead-man monitoring) |
 | `--dry-run` | off | Log what would be downloaded and deleted, change nothing |

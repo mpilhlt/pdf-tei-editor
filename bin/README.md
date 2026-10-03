@@ -8,6 +8,7 @@ Scripts that ship in the production Docker image. Nothing here may depend on `sc
 | `manage.py` | Deprecated user/group/collection/config CLI (used by `docker/entrypoint.sh`) |
 | `manage-remote.js` | Admin CLI for local and remote instances |
 | `import_files.py` / `export_files.py` | Import and export files |
+| `backup-download.js` | Download a timestamped backup and prune old ones (for cron), see import-export-admin docs |
 | `batch-extract.js` | Batch extraction via the API |
 | `cli_storage_gc.py` | Storage garbage collection |
 | `cleanup-orphaned-xml.py` | Remove XML files without a PDF |

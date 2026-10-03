@@ -18,5 +18,15 @@
         "id": "reviewer",
         "roleName": "Reviewer",
         "description": "Reviewing of anotated documents, gold file management"
+    },
+    {
+        "id": "backup",
+        "roleName": "Backup",
+        "description": "Download backups of the application data (read access to all data)"
+    },
+    {
+        "id": "restore",
+        "roleName": "Restore",
+        "description": "Restore the application data from a backup (replaces all data, equivalent to admin)"
     }
 ]
