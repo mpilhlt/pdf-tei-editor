@@ -312,6 +312,67 @@ class TestExtractTagDefinitions(unittest.TestCase):
         char_variant = next(v for v in note["variants"] if v["attrs"] == {"unit": "char"})
         self.assertIsNone(char_variant["description"])
 
+    def test_extract_child_cardinality_distinguishes_required_optional_repeatable(self):
+        """
+        A child element's cardinality must reflect how it's reachable:
+        - a bare, unwrapped <ref>/<element> is required and not repeatable.
+        - inside <optional> (directly or via a <choice> branch), not required.
+        - inside <oneOrMore>, required AND repeatable.
+        - inside <zeroOrMore>, not required and repeatable.
+        """
+        fixture = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" ns="http://example.org/ns">
+  <define name="root">
+    <element name="root">
+      <ref name="always"/>
+      <optional><ref name="sometimes"/></optional>
+      <oneOrMore><ref name="several"/></oneOrMore>
+      <zeroOrMore><ref name="any"/></zeroOrMore>
+      <choice>
+        <ref name="choiceA"/>
+        <ref name="choiceB"/>
+      </choice>
+    </element>
+  </define>
+  <define name="always"><element name="always"><text/></element></define>
+  <define name="sometimes"><element name="sometimes"><text/></element></define>
+  <define name="several"><element name="several"><text/></element></define>
+  <define name="any"><element name="any"><text/></element></define>
+  <define name="choiceA"><element name="choiceA"><text/></element></define>
+  <define name="choiceB"><element name="choiceB"><text/></element></define>
+</grammar>"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rng', delete=False) as f:
+            f.write(fixture)
+            path = f.name
+        try:
+            parser = RelaxNGParser()
+            parser.parse_file(path)
+            root_element = parser._find_element_definition('root')
+            cardinality = parser._extract_child_cardinality(root_element)
+        finally:
+            Path(path).unlink()
+
+        self.assertEqual(cardinality['always'], {'required': True, 'repeatable': False})
+        self.assertEqual(cardinality['sometimes'], {'required': False, 'repeatable': False})
+        self.assertEqual(cardinality['several'], {'required': True, 'repeatable': True})
+        self.assertEqual(cardinality['any'], {'required': False, 'repeatable': True})
+        # Inside a <choice>, neither branch is individually required.
+        self.assertEqual(cardinality['choiceA'], {'required': False, 'repeatable': False})
+        self.assertEqual(cardinality['choiceB'], {'required': False, 'repeatable': False})
+
+    def test_extract_tag_definitions_includes_child_cardinality(self):
+        parser = RelaxNGParser()
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rng', delete=False) as f:
+            f.write(FIXTURE_RNG)
+            path = f.name
+        try:
+            parser.parse_file(path)
+            defs = parser.extract_tag_definitions('root')
+        finally:
+            Path(path).unlink()
+        self.assertIn('childCardinality', defs['root'])
+        self.assertIsInstance(defs['root']['childCardinality'], dict)
+
 
 class TestExtractTagDefinitionsRealSchema(unittest.TestCase):
     """

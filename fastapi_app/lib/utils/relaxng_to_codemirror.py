@@ -44,6 +44,12 @@ class TagAttribute(TypedDict):
     required: bool
 
 
+class ChildCardinality(TypedDict):
+    """Per-child-element cardinality, keyed by child tag name in `TagDefinition.childCardinality`."""
+    required: bool
+    repeatable: bool
+
+
 class TagDefinition(TypedDict):
     """Per-tag data returned by `extract_tag_definitions()`."""
     description: Optional[str]
@@ -51,6 +57,7 @@ class TagDefinition(TypedDict):
     attributes: List[TagAttribute]
     variants: List[TagVariant]
     bareAllowed: bool
+    childCardinality: Dict[str, 'ChildCardinality']
 
 
 class RelaxNGParser:
@@ -288,7 +295,7 @@ class RelaxNGParser:
         result = list(children)
         if self.sort_alphabetically:
             result.sort()
-                
+
             # Show created macros
             if self.macro_refs:
                 print(f"\nCreated macros:")
@@ -297,9 +304,95 @@ class RelaxNGParser:
                     print(f"    {macro_ref}: {count} uses - {pattern}")
             elif self.composite_patterns:
                 print(f"\nNo macros created (all patterns below threshold)")
-        
+
         return result
-    
+
+    def _is_child_required(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if `<element name=child_name>` (directly, or via `<ref>`) is a
+        mandatory, unconditional descendant of `container` — reachable
+        without passing through `<optional>`, `<choice>`, `<zeroOrMore>`, or
+        an interleave sibling that could equally be absent. Mirrors
+        `_is_attribute_required`'s traversal shape (group/interleave only;
+        `<choice>`/`<optional>`/`<zeroOrMore>` are deliberately not
+        descended into, since presence through any of those is conditional).
+        """
+        if visited is None:
+            visited = set()
+        for element in container.findall(f'./{RNG_NS}element'):
+            if element.get('name') == child_name:
+                return True
+        for ref in container.findall(f'./{RNG_NS}ref'):
+            ref_name = ref.get('name')
+            if ref_name == child_name:
+                return True
+            if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                visited.add(ref_name)
+                try:
+                    if self._is_child_required(self.defined_patterns[ref_name], child_name, visited):
+                        return True
+                finally:
+                    visited.discard(ref_name)
+        for group in container.findall(f'./{RNG_NS}group'):
+            if self._is_child_required(group, child_name, visited):
+                return True
+        for oneOrMore in container.findall(f'./{RNG_NS}oneOrMore'):
+            if self._is_child_required(oneOrMore, child_name, visited):
+                return True
+        for interleave in container.findall(f'./{RNG_NS}interleave'):
+            if self._is_child_required(interleave, child_name, visited):
+                return True
+        return False
+
+    def _is_child_repeatable(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if `<element name=child_name>` is reachable through an
+        `<oneOrMore>` or `<zeroOrMore>` anywhere on the path from
+        `container` — i.e. the document may legally contain more than one.
+        Unlike `_is_child_required`, this descends into every container
+        type `_extract_child_elements` does (group/choice/optional/
+        zeroOrMore/oneOrMore/interleave/ref), since repeatability doesn't
+        care whether the *whole* branch is conditional.
+        """
+        if visited is None:
+            visited = set()
+        for repeat_tag in (f'{RNG_NS}oneOrMore', f'{RNG_NS}zeroOrMore'):
+            for repeater in container.findall(f'./{repeat_tag}'):
+                if child_name in self._extract_child_elements(repeater, set(visited)):
+                    return True
+        for inner_tag in (f'{RNG_NS}choice', f'{RNG_NS}group', f'{RNG_NS}optional',
+                          f'{RNG_NS}zeroOrMore', f'{RNG_NS}oneOrMore', f'{RNG_NS}interleave'):
+            for inner in container.findall(f'./{inner_tag}'):
+                if self._is_child_repeatable(inner, child_name, visited):
+                    return True
+        for ref in container.findall(f'./{RNG_NS}ref'):
+            ref_name = ref.get('name')
+            if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                visited.add(ref_name)
+                try:
+                    if self._is_child_repeatable(self.defined_patterns[ref_name], child_name, visited):
+                        return True
+                finally:
+                    visited.discard(ref_name)
+        return False
+
+    def _extract_child_cardinality(self, element: ET.Element) -> Dict[str, 'ChildCardinality']:
+        """
+        For every child tag name `_extract_child_elements(element)` reports,
+        compute `{'required': bool, 'repeatable': bool}` relative to
+        `element` itself (not the whole schema) — used by the teiHeader
+        editor to decide which fields must be filled and which get an
+        "add another" control.
+        """
+        children = self._extract_child_elements(element)
+        return {
+            name: {
+                'required': self._is_child_required(element, name),
+                'repeatable': self._is_child_repeatable(element, name),
+            }
+            for name in children
+        }
+
     def _extract_documentation(self, element: ET.Element) -> Optional[str]:
         """Extract documentation from RelaxNG schema element."""
         docs = []
@@ -593,6 +686,7 @@ class RelaxNGParser:
             'attributes': [{'name': str, 'values': list[str] | None, 'required': bool}],
             'variants': [{'attrs': dict[str, str], 'description': str | None}],
             'bareAllowed': bool,
+            'childCardinality': {child_tag_name: {'required': bool, 'repeatable': bool}},
         }}`. A `root_tag` not found as an `<element>` anywhere in the
         schema yields an empty dict. An attribute's `required` is `True`
         iff it is reachable from the element without passing through an
@@ -623,6 +717,7 @@ class RelaxNGParser:
                 'attributes': attributes,
                 'variants': variants,
                 'bareAllowed': bare_allowed,
+                'childCardinality': self._extract_child_cardinality(element),
             }
         return result
 
