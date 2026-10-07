@@ -794,10 +794,17 @@ Near the existing `AutocompleteDataRequest`/`AutocompleteDataResponse` typedefs 
  */
 
 /**
+ * @typedef {Object} TeiHeaderAttribute
+ * @property {string} name
+ * @property {Array<string>=} values
+ * @property {boolean} required
+ */
+
+/**
  * @typedef {Object} TeiHeaderTagDefinition
  * @property {string=} description
  * @property {Array<string>} children
- * @property {Array<Object<string, any>>} attributes
+ * @property {Array<TeiHeaderAttribute>} attributes
  * @property {Object<string, ChildCardinality>} childCardinality
  */
 
