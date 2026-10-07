@@ -1299,6 +1299,33 @@ describe('readFieldValues / applyFieldValues', () => {
     const titleEl = titleStmt.getElementsByTagName('title')[0];
     assert.strictEqual(titleEl.textContent, 'New title');
   });
+
+  it('does not collide two sibling non-leaf sections that share a leaf tag name (analytic/title vs monogr/title)', () => {
+    // biblStruct/analytic/title and biblStruct/monogr/title are two
+    // different fields that happen to share a tag name one level down -
+    // a naive flat tag-name-keyed values dict would merge them into one.
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><sourceDesc><biblStruct><analytic><title>Article Title</title></analytic><monogr><title>Journal Title</title></monogr></biblStruct></sourceDesc></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const biblStruct = dom.window.document.getElementsByTagName('biblStruct')[0];
+    const titleLeaf = { tag: 'title', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] };
+    const tree = [
+      { tag: 'analytic', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] },
+      { tag: 'monogr', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] }
+    ];
+
+    const values = readFieldValues(tree, biblStruct);
+    assert.strictEqual(values.analytic.title[0].text, 'Article Title');
+    assert.strictEqual(values.monogr.title[0].text, 'Journal Title');
+
+    // Round-trip: apply swapped values and confirm each section keeps its own.
+    applyFieldValues(tree, biblStruct, {
+      analytic: { title: [{ text: 'New Article Title', attrs: {} }] },
+      monogr: { title: [{ text: 'New Journal Title', attrs: {} }] }
+    }, NS);
+    const analyticTitle = biblStruct.getElementsByTagName('analytic')[0].getElementsByTagName('title')[0];
+    const monogrTitle = biblStruct.getElementsByTagName('monogr')[0].getElementsByTagName('title')[0];
+    assert.strictEqual(analyticTitle.textContent, 'New Article Title');
+    assert.strictEqual(monogrTitle.textContent, 'New Journal Title');
+  });
 });
 ```
 
@@ -1329,17 +1356,37 @@ Append:
  * @property {Object<string, string>} attrs
  */
 
+**Critical: values must be nested by scope, not flattened by bare tag name.**
+A naive flat `{ [tagName]: FieldValue[] }` dict, merged across the whole
+subtree via `Object.assign`, collides whenever the SAME tag name appears
+under two different parents — which TEI does routinely (e.g.
+`biblStruct/analytic/title` and `biblStruct/monogr/title` are two unrelated
+fields that happen to share the tag name `title`). A flat merge would make
+both read/write the same dict entry, silently showing one section's value
+in the other and overwriting one with the other's text on save. The shape
+below is instead a tree matching `FieldNode`'s own nesting: at each level,
+a leaf tag maps to its `FieldValue[]`, and a non-leaf tag maps to a nested
+object of the same shape for ITS OWN children - so `analytic` and `monogr`
+each get their own independent `title` entry, scoped under their own key.
+
+```js
+/** @typedef {Object<string, Array<FieldValue>|NestedFieldValues>} NestedFieldValues */
+
 /**
- * Read current values for every leaf in `tree` out of `scopeNode` (e.g. the
- * live titleStmt/publicationStmt/sourceDesc DOM element, from
- * xmlEditorApi.getXmlTree()). A repeatable leaf gets one entry per existing
- * element instance; a non-repeatable leaf gets at most one.
+ * Read current values for every direct child in `tree` out of `scopeNode`
+ * (e.g. the live titleStmt/publicationStmt/sourceDesc DOM element, from
+ * xmlEditorApi.getXmlTree()). A leaf child maps to an array of its existing
+ * element instances (one entry per instance - a repeatable leaf may have
+ * several, a non-repeatable one at most one); a non-leaf child maps to the
+ * same shape recursively for ITS OWN children, scoped to its own matched
+ * DOM element - NOT merged into the parent's own flat set of keys, so two
+ * sibling sections sharing a leaf tag name never collide.
  * @param {Array<import('./tei-header-form.js').FieldNode>} tree
  * @param {Element} scopeNode
- * @returns {Object<string, Array<FieldValue>>}
+ * @returns {NestedFieldValues}
  */
 export function readFieldValues(tree, scopeNode) {
-  /** @type {Object<string, Array<FieldValue>>} */
+  /** @type {NestedFieldValues} */
   const values = {}
   for (const node of tree) {
     if (node.isLeaf) {
@@ -1350,19 +1397,23 @@ export function readFieldValues(tree, scopeNode) {
       }))
     } else {
       const child = [...scopeNode.children].find((el) => el.localName === node.tag)
-      if (child) Object.assign(values, readFieldValues(node.children, child))
+      values[node.tag] = child ? readFieldValues(node.children, child) : {}
     }
   }
   return values
 }
 
 /**
- * Mutate `scopeNode` so it matches `values`, creating ancestor/leaf
- * elements that don't exist yet only for leaves present (non-empty) in
- * `values` - a section the user never touched gets no new elements.
+ * Mutate `scopeNode` so it matches `values` (same nested shape
+ * `readFieldValues()` returns), creating ancestor/leaf elements that don't
+ * exist yet only for leaves present (non-empty) in `values` - a section the
+ * user never touched gets no new elements. Each non-leaf child recurses
+ * with ONLY its own nested slice of `values` (`values[node.tag]`), never
+ * the parent's whole object - this is what keeps same-named leaves under
+ * different parents independent (see this module's note on nesting above).
  * @param {Array<import('./tei-header-form.js').FieldNode>} tree
  * @param {Element} scopeNode
- * @param {Object<string, Array<FieldValue>>} values
+ * @param {NestedFieldValues} values
  * @param {string} namespaceUri
  */
 export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
@@ -1370,7 +1421,7 @@ export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
   for (const node of tree) {
     if (node.isLeaf) {
       const existing = [...scopeNode.children].filter((el) => el.localName === node.tag)
-      const wanted = (values[node.tag] ?? []).filter((v) => v.text.trim() !== '')
+      const wanted = /** @type {Array<FieldValue>} */ (values[node.tag] ?? []).filter((v) => v.text.trim() !== '')
       existing.forEach((el) => scopeNode.removeChild(el))
       for (const value of wanted) {
         const el = doc.createElementNS(namespaceUri, node.tag)
@@ -1379,27 +1430,34 @@ export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
         scopeNode.appendChild(el)
       }
     } else {
-      const hasAnyValue = leavesHaveValues(node.children, values)
+      const nestedValues = /** @type {NestedFieldValues} */ (values[node.tag] ?? {})
+      const hasAnyValue = leavesHaveValues(node.children, nestedValues)
       let child = [...scopeNode.children].find((el) => el.localName === node.tag)
       if (!child && hasAnyValue) {
         child = doc.createElementNS(namespaceUri, node.tag)
         scopeNode.appendChild(child)
       }
-      if (child) applyFieldValues(node.children, child, values, namespaceUri)
+      if (child) applyFieldValues(node.children, child, nestedValues, namespaceUri)
     }
   }
 }
 
 /**
+ * True if any leaf anywhere under `tree` has a non-empty value in `values`
+ * (same nested shape as `readFieldValues()`/`applyFieldValues()`) - used to
+ * decide whether an optional section's DOM element needs to be created at
+ * all. Exported so the plugin's save handler can reuse it instead of
+ * re-deriving an equivalent (and easy to get subtly wrong, per this
+ * module's nesting note above) check itself.
  * @param {Array<import('./tei-header-form.js').FieldNode>} tree
- * @param {Object<string, Array<FieldValue>>} values
+ * @param {NestedFieldValues} values
  * @returns {boolean}
  */
-function leavesHaveValues(tree, values) {
+export function leavesHaveValues(tree, values) {
   return tree.some((node) =>
     node.isLeaf
-      ? (values[node.tag] ?? []).some((v) => v.text.trim() !== '')
-      : leavesHaveValues(node.children, values)
+      ? /** @type {Array<FieldValue>} */ (values[node.tag] ?? []).some((v) => v.text.trim() !== '')
+      : leavesHaveValues(node.children, /** @type {NestedFieldValues} */ (values[node.tag] ?? {}))
   )
 }
 ```
@@ -1425,7 +1483,7 @@ Replace the placeholder in `app/src/plugins/tei-header-editor.js`:
 (add to the existing `@import` block at the top), and:
 
 ```js
-import { buildFieldTree, readFieldValues, applyFieldValues } from '../modules/tei-header-form.js'
+import { buildFieldTree, readFieldValues, applyFieldValues, leavesHaveValues } from '../modules/tei-header-form.js'
 
 // ... inside the class:
 
@@ -1470,19 +1528,28 @@ sibling sections share a tag name at different depths):
 
 ```js
   /**
+   * `valueForNode` is `node`'s OWN value: an array of `FieldValue` if
+   * `node.isLeaf`, otherwise a nested dict of its own children's values
+   * (same shape `readFieldValues()`/`applyFieldValues()` use) - never the
+   * same object re-passed unchanged to every recursive call, which would
+   * collide same-named leaves under different parents (e.g. `analytic`'s
+   * `title` vs `monogr`'s `title` - see tei-header-form.js's nesting note).
    * @param {FieldNode} node
-   * @param {Object<string, Array<FieldValue>>} values
+   * @param {Array<FieldValue>|Object<string, any>|undefined} valueForNode
    * @returns {HTMLElement}
    */
-  #renderSection(node, values) {
+  #renderSection(node, valueForNode) {
     if (node.isLeaf) {
-      node.el = this.#renderLeafGroup(node, values[node.tag] ?? [])
+      node.el = this.#renderLeafGroup(node, /** @type {Array<FieldValue>} */ (valueForNode) ?? [])
       return node.el
     }
+    const childrenValues = /** @type {Object<string, any>} */ (valueForNode) ?? {}
     const details = document.createElement('sl-details')
     details.summary = node.tag
     if (node.description) details.title = node.description
-    for (const child of node.children) details.appendChild(this.#renderSection(child, values))
+    for (const child of node.children) {
+      details.appendChild(this.#renderSection(child, childrenValues[child.tag]))
+    }
     node.el = details
     return details
   }
@@ -1559,11 +1626,17 @@ Reading values back out of that rendered markup (the inverse of
 
 ```js
   /**
+   * Inverse of `readFieldValues()`, but reading from `node.el` (the
+   * rendered markup) instead of the document DOM. Returns a dict of
+   * `node`'s OWN children's values, keyed by tag - a non-leaf child's
+   * entry is the same shape recursively for ITS children, never flattened
+   * into this level's keys (same nesting rule as `readFieldValues()`/
+   * `applyFieldValues()` - see tei-header-form.js's note on why).
    * @param {FieldNode} node
-   * @returns {Object<string, Array<FieldValue>>}
+   * @returns {Object<string, any>}
    */
   #collectValuesFromForm(node) {
-    /** @type {Object<string, Array<FieldValue>>} */
+    /** @type {Object<string, any>} */
     const values = {}
     for (const child of node.children) {
       if (child.isLeaf) {
@@ -1575,7 +1648,7 @@ Reading values back out of that rendered markup (the inverse of
           return { text: input?.value ?? '', attrs }
         })
       } else {
-        Object.assign(values, this.#collectValuesFromForm(child))
+        values[child.tag] = this.#collectValuesFromForm(child)
       }
     }
     return values
@@ -1625,7 +1698,7 @@ anything:
     for (const rootNode of this.#fieldTree) {
       const values = this.#collectValuesFromForm(rootNode)
       let scopeNode = [...fileDesc.children].find((el) => el.localName === rootNode.tag)
-      const hasAnyValue = Object.values(values).some((entries) => entries.some((v) => v.text.trim() !== ''))
+      const hasAnyValue = leavesHaveValues(rootNode.children, values)
       if (!scopeNode) {
         if (!hasAnyValue) continue
         scopeNode = xmlTree.createElementNS(namespaceUri, rootNode.tag)
