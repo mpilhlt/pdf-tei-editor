@@ -19,6 +19,7 @@ const MAX_DEPTH = 6
  * @property {boolean} repeatable
  * @property {Array<TeiHeaderAttribute>} attributes
  * @property {Array<FieldNode>} children
+ * @property {HTMLElement=} el - set by TeiHeaderEditorPlugin#renderSection() at render time; absent until then
  */
 
 /**
@@ -67,4 +68,101 @@ function buildNode(structure, tag, required, repeatable, ancestors, depth) {
     attributes: def?.attributes ?? [],
     children: childNodes
   }
+}
+
+/**
+ * @typedef {Object} FieldValue
+ * @property {string} text
+ * @property {Object<string, string>} attrs
+ */
+
+/** @typedef {Object<string, Array<FieldValue>|NestedFieldValues>} NestedFieldValues */
+
+/**
+ * Read current values for every direct child in `tree` out of `scopeNode`
+ * (e.g. the live titleStmt/publicationStmt/sourceDesc DOM element, from
+ * xmlEditorApi.getXmlTree()). A leaf child maps to an array of its existing
+ * element instances (one entry per instance - a repeatable leaf may have
+ * several, a non-repeatable one at most one); a non-leaf child maps to the
+ * same shape recursively for ITS OWN children, scoped to its own matched
+ * DOM element - NOT merged into the parent's own flat set of keys, so two
+ * sibling sections sharing a leaf tag name never collide.
+ * @param {Array<FieldNode>} tree
+ * @param {Element} scopeNode
+ * @returns {NestedFieldValues}
+ */
+export function readFieldValues(tree, scopeNode) {
+  /** @type {NestedFieldValues} */
+  const values = {}
+  for (const node of tree) {
+    if (node.isLeaf) {
+      const matches = [...scopeNode.children].filter((el) => el.localName === node.tag)
+      values[node.tag] = matches.map((el) => ({
+        text: el.textContent ?? '',
+        attrs: Object.fromEntries([...el.attributes].map((a) => [a.name, a.value]))
+      }))
+    } else {
+      const child = [...scopeNode.children].find((el) => el.localName === node.tag)
+      values[node.tag] = child ? readFieldValues(node.children, child) : {}
+    }
+  }
+  return values
+}
+
+/**
+ * Mutate `scopeNode` so it matches `values` (same nested shape
+ * `readFieldValues()` returns), creating ancestor/leaf elements that don't
+ * exist yet only for leaves present (non-empty) in `values` - a section the
+ * user never touched gets no new elements. Each non-leaf child recurses
+ * with ONLY its own nested slice of `values` (`values[node.tag]`), never
+ * the parent's whole object - this is what keeps same-named leaves under
+ * different parents independent (see this module's note on nesting above).
+ * @param {Array<FieldNode>} tree
+ * @param {Element} scopeNode
+ * @param {NestedFieldValues} values
+ * @param {string} namespaceUri
+ */
+export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
+  const doc = scopeNode.ownerDocument
+  for (const node of tree) {
+    if (node.isLeaf) {
+      const existing = [...scopeNode.children].filter((el) => el.localName === node.tag)
+      const wanted = /** @type {Array<FieldValue>} */ (values[node.tag] ?? []).filter((v) => v.text.trim() !== '')
+      existing.forEach((el) => scopeNode.removeChild(el))
+      for (const value of wanted) {
+        const el = doc.createElementNS(namespaceUri, node.tag)
+        el.textContent = value.text
+        for (const [name, val] of Object.entries(value.attrs ?? {})) el.setAttribute(name, val)
+        scopeNode.appendChild(el)
+      }
+    } else {
+      const nestedValues = /** @type {NestedFieldValues} */ (values[node.tag] ?? {})
+      const hasAnyValue = leavesHaveValues(node.children, nestedValues)
+      let child = [...scopeNode.children].find((el) => el.localName === node.tag)
+      if (!child && hasAnyValue) {
+        child = doc.createElementNS(namespaceUri, node.tag)
+        scopeNode.appendChild(child)
+      }
+      if (child) applyFieldValues(node.children, child, nestedValues, namespaceUri)
+    }
+  }
+}
+
+/**
+ * True if any leaf anywhere under `tree` has a non-empty value in `values`
+ * (same nested shape as `readFieldValues()`/`applyFieldValues()`) - used to
+ * decide whether an optional section's DOM element needs to be created at
+ * all. Exported so the plugin's save handler can reuse it instead of
+ * re-deriving an equivalent (and easy to get subtly wrong, per this
+ * module's nesting note above) check itself.
+ * @param {Array<FieldNode>} tree
+ * @param {NestedFieldValues} values
+ * @returns {boolean}
+ */
+export function leavesHaveValues(tree, values) {
+  return tree.some((node) =>
+    node.isLeaf
+      ? /** @type {Array<FieldValue>} */ (values[node.tag] ?? []).some((v) => v.text.trim() !== '')
+      : leavesHaveValues(node.children, /** @type {NestedFieldValues} */ (values[node.tag] ?? {}))
+  )
 }

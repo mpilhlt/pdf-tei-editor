@@ -6,7 +6,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { buildFieldTree } from '../../../app/src/modules/tei-header-form.js';
+import { JSDOM } from 'jsdom';
+import { buildFieldTree, readFieldValues, applyFieldValues } from '../../../app/src/modules/tei-header-form.js';
 
 /** @type {import('../../../app/src/modules/api-client-v1.js').TeiHeaderStructureResponse} */
 const FIXTURE_STRUCTURE = {
@@ -79,5 +80,53 @@ describe('buildFieldTree', () => {
       depth += 1;
     }
     assert.strictEqual(depth, 6);
+  });
+});
+
+describe('readFieldValues / applyFieldValues', () => {
+  const NS = 'http://www.tei-c.org/ns/1.0';
+
+  it('reads an existing leaf value by tag path', () => {
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt><title>Existing title</title></titleStmt></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
+    const tree = [{ tag: 'title', isLeaf: true, required: true, repeatable: false, attributes: [], children: [] }];
+    const values = readFieldValues(tree, titleStmt);
+    assert.strictEqual(values.title[0].text, 'Existing title');
+  });
+
+  it('creates missing elements on write, and skips untouched optional sections', () => {
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt/></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
+    const tree = [{ tag: 'title', isLeaf: true, required: true, repeatable: false, attributes: [], children: [] }];
+    applyFieldValues(tree, titleStmt, { title: [{ text: 'New title', attrs: {} }] }, NS);
+    const titleEl = titleStmt.getElementsByTagName('title')[0];
+    assert.strictEqual(titleEl.textContent, 'New title');
+  });
+
+  it('does not collide two sibling non-leaf sections that share a leaf tag name (analytic/title vs monogr/title)', () => {
+    // biblStruct/analytic/title and biblStruct/monogr/title are two
+    // different fields that happen to share a tag name one level down -
+    // a naive flat tag-name-keyed values dict would merge them into one.
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><sourceDesc><biblStruct><analytic><title>Article Title</title></analytic><monogr><title>Journal Title</title></monogr></biblStruct></sourceDesc></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const biblStruct = dom.window.document.getElementsByTagName('biblStruct')[0];
+    const titleLeaf = { tag: 'title', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] };
+    const tree = [
+      { tag: 'analytic', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] },
+      { tag: 'monogr', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] }
+    ];
+
+    const values = readFieldValues(tree, biblStruct);
+    assert.strictEqual(values.analytic.title[0].text, 'Article Title');
+    assert.strictEqual(values.monogr.title[0].text, 'Journal Title');
+
+    // Round-trip: apply swapped values and confirm each section keeps its own.
+    applyFieldValues(tree, biblStruct, {
+      analytic: { title: [{ text: 'New Article Title', attrs: {} }] },
+      monogr: { title: [{ text: 'New Journal Title', attrs: {} }] }
+    }, NS);
+    const analyticTitle = biblStruct.getElementsByTagName('analytic')[0].getElementsByTagName('title')[0];
+    const monogrTitle = biblStruct.getElementsByTagName('monogr')[0].getElementsByTagName('title')[0];
+    assert.strictEqual(analyticTitle.textContent, 'New Article Title');
+    assert.strictEqual(monogrTitle.textContent, 'New Journal Title');
   });
 });
