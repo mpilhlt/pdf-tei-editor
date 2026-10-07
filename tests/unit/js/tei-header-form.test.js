@@ -59,4 +59,25 @@ describe('buildFieldTree', () => {
     }
     assert.ok(depth <= 6, `depth was ${depth}, expected <= 6`);
   });
+
+  it('actually caps at depth 6 for a long acyclic chain (not just <= 6)', () => {
+    /** @type {any} */
+    const chainStructure = { roots: ['t0'], tags: {} };
+    for (let i = 0; i < 10; i++) {
+      chainStructure.tags[`t${i}`] = {
+        description: null,
+        children: i < 9 ? [`t${i + 1}`] : [],
+        attributes: [],
+        childCardinality: i < 9 ? { [`t${i + 1}`]: { required: false, repeatable: false } } : {}
+      };
+    }
+    const tree = buildFieldTree(chainStructure);
+    let depth = 0;
+    let node = tree[0];
+    while (node.children && node.children[0]) {
+      node = node.children[0];
+      depth += 1;
+    }
+    assert.strictEqual(depth, 6);
+  });
 });
