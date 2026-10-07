@@ -149,6 +149,6 @@ jobs:
           # Try an immediate merge first (works while devel has no required
           # checks); fall back to auto-merge if devel later gains a required
           # check; otherwise leave the PR open for a manual merge.
-          gh pr merge "$BRANCH" --merge \
-          || gh pr merge "$BRANCH" --auto --merge \
+          gh pr merge "$BRANCH" --merge --delete-branch \
+          || gh pr merge "$BRANCH" --auto --merge --delete-branch \
           || echo "Back-merge PR left open for manual merge."
