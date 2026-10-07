@@ -342,6 +342,35 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
         self.assertEqual(data["tags"]["title"]["children"], [])
         self.assertEqual(data["tags"]["title"]["attributes"], [])
 
+    def test_non_relaxng_document_schema_falls_back_to_core_instead_of_500(self):
+        # resolve_document_schema_cache_file falls back to
+        # schema_locations[0] (any type) when no RelaxNG-typed location
+        # exists, only checking the URL starts with "http" - never that
+        # the content is actually RelaxNG. So the schema can download
+        # fine (no 400/404/503) and still not be parseable RelaxNG (e.g.
+        # malformed XML, or a DTD, which isn't valid XML at all).
+        # RelaxNGParser.parse_file() raises ValueError in that case - the
+        # endpoint must catch it and fall back to the core schema, not
+        # bubble up as an unhandled 500.
+        not_relaxng = "this is not valid XML at all <<<"
+        schema_location = "https://example.com/schema/not-relaxng.dtd"
+        cache_dir, cache_file, _ = get_schema_cache_info(schema_location, self.cache_root)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(not_relaxng, encoding="utf-8")
+
+        xml = (
+            '<?xml version="1.0"?>'
+            f'<?xml-model href="{schema_location}" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+            '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title/></titleStmt></fileDesc></teiHeader></TEI>'
+        )
+        response = self.client.post("/validate/teiheader-structure", json={"xml_string": xml})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(set(data["roots"]), {"titleStmt", "publicationStmt", "sourceDesc"})
+        self.assertIn("title", data["tags"])
+        # Falls back to the core schema's own (non-empty) title definition.
+        self.assertTrue(data["tags"]["title"]["children"])
+
 
 if __name__ == "__main__":
     unittest.main()

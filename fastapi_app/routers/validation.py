@@ -10,7 +10,7 @@ For FastAPI migration - Phase 5.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pathlib import Path
-from typing import Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Dict, List, Optional, Set
 import json
 import logging
 
@@ -23,18 +23,19 @@ from ..lib.models.models_validation import (
     AutocompleteDataRequest,
     AutocompleteDataResponse,
     TeiHeaderStructureRequest,
-    TeiHeaderStructureResponse
+    TeiHeaderStructureResponse,
+    TeiHeaderTagDefinitionModel,
+    TeiHeaderAttributeModel,
+    ChildCardinalityModel
 )
 from ..lib.core.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
 from ..lib.doc_rules.schema_override import build_schema_text_override
 from ..lib.doc_rules.storage import DocumentRulesStore
 from ..lib.utils.autocomplete_generator import generate_autocomplete_map
+from ..lib.utils.relaxng_to_codemirror import RelaxNGParser, TagDefinition
 
 # For internet connectivity check
 from ..lib.utils.server_utils import has_internet
-
-if TYPE_CHECKING:
-    from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])
@@ -49,24 +50,23 @@ def _get_core_schema_path(settings) -> Path:
     return settings.project_root_dir / "schema" / "rng" / "tei-bib.rng"
 
 
-_core_schema_parser: Optional["RelaxNGParser"] = None
+_core_schema_parser: Optional[RelaxNGParser] = None
 
 
-def _get_core_schema_parser(settings) -> "RelaxNGParser":
+def _get_core_schema_parser(settings) -> RelaxNGParser:
     """Lazily parse the bundled core TEI schema once per process."""
     global _core_schema_parser
     if _core_schema_parser is None:
-        from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
         parser = RelaxNGParser()
         parser.parse_file(str(_get_core_schema_path(settings)))
         _core_schema_parser = parser
     return _core_schema_parser
 
 
-_core_defs_cache: Optional[Dict[str, Dict]] = None
+_core_defs_cache: Optional[Dict[str, TagDefinition]] = None
 
 
-def _get_core_defs(settings) -> Dict[str, Dict]:
+def _get_core_defs(settings) -> Dict[str, TagDefinition]:
     """
     Lazily BFS-merge the core schema's titleStmt/publicationStmt/sourceDesc
     defs once per process and cache the result: the core schema and these
@@ -83,7 +83,7 @@ def _get_core_defs(settings) -> Dict[str, Dict]:
     return _core_defs_cache
 
 
-def _collect_merged_defs(parser: "RelaxNGParser", roots: List[str], exclude: Set[str], max_depth: int = 6) -> Dict[str, Dict]:
+def _collect_merged_defs(parser: RelaxNGParser, roots: List[str], exclude: Set[str], max_depth: int = 6) -> Dict[str, TagDefinition]:
     """
     BFS over RelaxNGParser.extract_tag_definitions(): each call only
     resolves ITS OWN root tag's children one hop deep by name, without
@@ -103,7 +103,7 @@ def _collect_merged_defs(parser: "RelaxNGParser", roots: List[str], exclude: Set
     before it's merged in, so an excluded tag never surfaces anywhere in
     the result, not just as its own entry.
     """
-    merged: Dict[str, Dict] = {}
+    merged: Dict[str, TagDefinition] = {}
     frontier = list(roots)
     depth = 0
     while frontier and depth < max_depth:
@@ -336,11 +336,9 @@ def generate_teiheader_structure(
     reliably encode it. titleStmt/respStmt is always excluded - it's this
     app's own user registry, not bibliographic data.
     """
-    from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
-
     core_defs = _get_core_defs(settings)
 
-    doc_defs: Dict[str, Dict] = {}
+    doc_defs: Dict[str, TagDefinition] = {}
     try:
         schema_cache_file = resolve_document_schema_cache_file(
             request.xml_string, settings.schema_cache_dir, invalidate_cache=False
@@ -348,25 +346,42 @@ def generate_teiheader_structure(
         doc_parser = RelaxNGParser()
         doc_parser.parse_file(str(schema_cache_file))
         doc_defs = _collect_merged_defs(doc_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
-    except HTTPException:
-        # No/unreachable document schema - fall back to the core schema
-        # alone (see this function's docstring); not a client error.
-        pass
+    except (HTTPException, ValueError) as e:
+        # No/unreachable document schema (HTTPException from
+        # resolve_document_schema_cache_file), or its content isn't valid
+        # RelaxNG - e.g. the document only declares a DTD/Schematron/other
+        # non-RelaxNG schema location (resolve_document_schema_cache_file
+        # falls back to schema_locations[0] when no RelaxNG-typed location
+        # exists, only checking the URL starts with "http", never that the
+        # content is actually RelaxNG), or the downloaded content is
+        # malformed XML - RelaxNGParser.parse_file() raises ValueError for
+        # either (wrapping ET.ParseError). Either way, fall back to the
+        # core schema alone (see this function's docstring); not a client
+        # error, but worth a server-side signal so a reproducible
+        # degradation is distinguishable in logs from "no schema declared
+        # at all".
+        logger.debug(f"Falling back to core-only teiheader structure (document schema unusable): {e}")
 
-    merged: Dict[str, Dict] = {}
+    merged: Dict[str, TeiHeaderTagDefinitionModel] = {}
     for tag_name, core_def in core_defs.items():
         doc_def = doc_defs.get(tag_name)
-        merged[tag_name] = {
-            "description": (doc_def or {}).get("description") or core_def.get("description"),
-            # doc_def is checked for presence (not truthiness) below: a
-            # document schema that legitimately defines an EMPTY
-            # children/attributes list for a tag must keep that empty
-            # list, not silently fall back to the core schema's value.
-            "children": doc_def.get("children", []) if doc_def is not None else core_def.get("children", []),
-            "attributes": doc_def.get("attributes", []) if doc_def is not None else core_def.get("attributes", []),
+        # doc_def is checked for presence (not truthiness) below: a
+        # document schema that legitimately defines an EMPTY
+        # children/attributes list for a tag must keep that empty list,
+        # not silently fall back to the core schema's value.
+        description = (doc_def.get("description") if doc_def is not None else None) or core_def.get("description")
+        children = doc_def.get("children", []) if doc_def is not None else core_def.get("children", [])
+        attributes = doc_def.get("attributes", []) if doc_def is not None else core_def.get("attributes", [])
+        merged[tag_name] = TeiHeaderTagDefinitionModel(
+            description=description,
+            children=children,
+            attributes=[TeiHeaderAttributeModel(**attr) for attr in attributes],
             # Cardinality always from the core schema (product decision).
-            "childCardinality": core_def.get("childCardinality", {}),
-        }
+            childCardinality={
+                name: ChildCardinalityModel(**cardinality)
+                for name, cardinality in core_def.get("childCardinality", {}).items()
+            },
+        )
     # Tags present only in the document schema (not reachable from the core
     # schema's own titleStmt/publicationStmt/sourceDesc closure) are not
     # included - the core schema is authoritative for which tags exist in

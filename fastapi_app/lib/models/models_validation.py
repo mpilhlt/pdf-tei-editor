@@ -75,11 +75,18 @@ class ChildCardinalityModel(BaseModel):
     repeatable: bool
 
 
+class TeiHeaderAttributeModel(BaseModel):
+    """One attribute of a schema-derived tag."""
+    name: str
+    values: Optional[List[str]] = None
+    required: bool
+
+
 class TeiHeaderTagDefinitionModel(BaseModel):
     """One tag's schema-derived data, merged from the document's own schema and the bundled core TEI schema."""
     description: Optional[str] = None
     children: List[str] = Field(default_factory=list)
-    attributes: List[Dict[str, Any]] = Field(default_factory=list)
+    attributes: List[TeiHeaderAttributeModel] = Field(default_factory=list)
     childCardinality: Dict[str, ChildCardinalityModel] = Field(default_factory=dict)
 
 
