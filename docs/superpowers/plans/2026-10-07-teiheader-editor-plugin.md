@@ -223,15 +223,18 @@ Expected: `FAIL` — `AttributeError: 'RelaxNGParser' object has no attribute '_
 
 - [ ] **Step 3: Implement `_extract_child_cardinality()`**
 
-In `fastapi_app/lib/utils/relaxng_to_codemirror.py`, add after `_extract_child_elements()` (after line ~301):
+In `fastapi_app/lib/utils/relaxng_to_codemirror.py`, add the new `ChildCardinality` TypedDict at **module level**, alongside the existing `TagVariant`/`TagAttribute`/`TagDefinition` classes (not inside `RelaxNGParser`):
 
 ```python
 class ChildCardinality(TypedDict):
     """Per-child-element cardinality, keyed by child tag name in `TagDefinition.childCardinality`."""
     required: bool
     repeatable: bool
+```
 
+Then add the following three **methods inside the `RelaxNGParser` class**, after `_extract_child_elements()` (after line ~301 — note the 4-space method indentation below, unlike the module-level `ChildCardinality` above):
 
+```python
     def _is_child_required(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
         """
         True if `<element name=child_name>` (directly, or via `<ref>`) is a
