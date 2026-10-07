@@ -34,6 +34,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])
 
 
+def resolve_document_schema_cache_file(xml_string: str, cache_root: Path, invalidate_cache: bool) -> Path:
+    """
+    Resolve "the schema that governs this document" to its locally cached
+    RelaxNG file path, downloading it first if needed. Shared by
+    /autocomplete-data and /teiheader-structure - both need exactly this
+    resolution (schema location from the XML, RelaxNG preferred, cache
+    lookup, download-if-missing/invalidated).
+
+    Raises HTTPException(400) if no schema location is found, or the
+    location doesn't start with "http"; HTTPException(503) if invalidation
+    was requested without internet; HTTPException(404) if the schema
+    download 404s.
+    """
+    if invalidate_cache and not has_internet():
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot invalidate cache without internet connection. Schema re-download requires network access."
+        )
+
+    schema_locations = extract_schema_locations(xml_string)
+    if not schema_locations:
+        logger.debug('No schema location found in XML, cannot resolve document schema.')
+        raise HTTPException(status_code=400, detail="No schema location found in XML document")
+
+    schema_info = next((sl for sl in schema_locations if sl.get('type') == 'relaxng'), schema_locations[0])
+    schema_location = schema_info['schemaLocation']
+    if not schema_location.startswith("http"):
+        raise HTTPException(status_code=400, detail=f"Schema location must start with 'http': {schema_location}")
+
+    schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, cache_root)
+
+    if not schema_cache_file.is_file() or invalidate_cache:
+        from ..lib.core.schema_validator import download_schema_file
+        try:
+            download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
+        except Exception as e:
+            if "404" in str(e) or "Not Found" in str(e):
+                raise HTTPException(status_code=404, detail=f"Schema not found: {schema_location}")
+            raise
+    else:
+        logger.debug(f"Using cached schema at {schema_cache_file}")
+
+    return schema_cache_file
+
+
 @router.post("", response_model=ValidateResponse)
 def validate_xml(
     request: ValidateRequest,
@@ -113,69 +158,17 @@ def generate_autocomplete_data(
         JSON autocomplete data suitable for CodeMirror XML mode.
     """
     try:
-        # Check internet connectivity if cache invalidation is requested
-        if request.invalidate_cache:
-            if not has_internet():
-                raise HTTPException(
-                    status_code=503,
-                    detail="Cannot invalidate cache without internet connection. Schema re-download requires network access."
-                )
-
-        # Get the schema locations from the XML
-        schema_locations = extract_schema_locations(request.xml_string)
-        if not schema_locations:
-            logger.debug('No schema location found in XML, cannot generate autocomplete data.')
-            raise HTTPException(
-                status_code=400,
-                detail="No schema location found in XML document"
-            )
-
-        # For autocomplete, prioritize RelaxNG schemas, fall back to first available
-        schema_info = None
-        for sl in schema_locations:
-            if sl.get('type') == 'relaxng':
-                schema_info = sl
-                break
-        if not schema_info:
-            schema_info = schema_locations[0]
-
-        namespace = schema_info['namespace']
-        schema_location = schema_info['schemaLocation']
-        schema_type = schema_info.get('type', 'unknown')
-
-        if not schema_location.startswith("http"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Schema location must start with 'http': {schema_location}"
-            )
-
-        logger.debug(
-            f"Generating autocomplete data for namespace {namespace} "
-            f"with {schema_type} schema at {schema_location}"
+        schema_cache_file = resolve_document_schema_cache_file(
+            request.xml_string, settings.schema_cache_dir, request.invalidate_cache
         )
-
-        # Get cache information
-        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location, settings.schema_cache_dir)
+        schema_cache_dir = schema_cache_file.parent
         autocomplete_cache_file = schema_cache_dir / 'codemirror-autocomplete.json'
 
-        # Check if autocomplete data is already cached
         if autocomplete_cache_file.is_file() and not request.invalidate_cache:
             logger.debug(f"Using cached autocomplete data at {autocomplete_cache_file}")
             with open(autocomplete_cache_file, 'r', encoding='utf-8') as f:
                 autocomplete_data = json.load(f)
                 return AutocompleteDataResponse(data=autocomplete_data)
-
-        # Download schema if it doesn't exist, or if a re-download was explicitly requested
-        if not schema_cache_file.is_file() or request.invalidate_cache:
-            from ..lib.core.schema_validator import download_schema_file
-            try:
-                download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
-            except Exception as e:
-                if "404" in str(e) or "Not Found" in str(e):
-                    raise HTTPException(status_code=404, detail=f"Schema not found: {schema_location}")
-                raise
-        else:
-            logger.debug(f"Using cached schema at {schema_cache_file}")
 
         # Parse schema to determine type
         from lxml import etree

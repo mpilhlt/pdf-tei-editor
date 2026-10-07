@@ -14,10 +14,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from fastapi_app.routers.validation import router
+from fastapi_app.routers.validation import router, resolve_document_schema_cache_file
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import require_authenticated_user
 from fastapi_app.lib.core.schema_validator import get_schema_cache_info
@@ -201,6 +201,20 @@ class TestValidateXmlWithSchemaOverride(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["errors"], [])
+
+
+class TestResolveDocumentSchemaCacheFile(unittest.TestCase):
+    """Test the shared schema-resolution helper used by /autocomplete-data
+    and the upcoming /teiheader-structure endpoint."""
+
+    def test_raises_on_missing_schema_location(self):
+        with self.assertRaises(HTTPException) as ctx:
+            resolve_document_schema_cache_file(
+                '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader/></TEI>',
+                cache_root=Path(tempfile.mkdtemp()),
+                invalidate_cache=False,
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
 
 
 if __name__ == "__main__":
