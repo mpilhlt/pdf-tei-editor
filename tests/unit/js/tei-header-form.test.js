@@ -7,7 +7,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { buildFieldTree, readFieldValues, applyFieldValues } from '../../../app/src/modules/tei-header-form.js';
+import { buildFieldTree, readFieldValues, applyFieldValues, getMainInput } from '../../../app/src/modules/tei-header-form.js';
 
 /** @type {import('../../../app/src/modules/api-client-v1.js').TeiHeaderStructureResponse} */
 const FIXTURE_STRUCTURE = {
@@ -128,5 +128,51 @@ describe('readFieldValues / applyFieldValues', () => {
     const monogrTitle = biblStruct.getElementsByTagName('monogr')[0].getElementsByTagName('title')[0];
     assert.strictEqual(analyticTitle.textContent, 'New Article Title');
     assert.strictEqual(monogrTitle.textContent, 'New Journal Title');
+  });
+
+  it('removes an existing non-leaf element whose values were all cleared', () => {
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><sourceDesc><biblStruct><monogr><imprint><date>2020</date></imprint></monogr></biblStruct></sourceDesc></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const monogr = dom.window.document.getElementsByTagName('monogr')[0];
+    const dateLeaf = { tag: 'date', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] };
+    const tree = [
+      { tag: 'imprint', isLeaf: false, required: false, repeatable: false, attributes: [], children: [dateLeaf] }
+    ];
+
+    assert.strictEqual(monogr.getElementsByTagName('imprint').length, 1);
+
+    // Clearing imprint's only leaf value should remove the now-empty
+    // <imprint/> element itself, not leave a dangling husk behind.
+    applyFieldValues(tree, monogr, { imprint: { date: [{ text: '', attrs: {} }] } }, NS);
+
+    assert.strictEqual(monogr.getElementsByTagName('imprint').length, 0);
+  });
+});
+
+describe('getMainInput', () => {
+  it('picks a row\'s main value input, not a per-attribute input that happens to be an sl-input too', () => {
+    // Mirrors TeiHeaderEditorPlugin#renderLeafRow()'s output: the main
+    // value input is appended first, then one sl-input/sl-select per
+    // attribute (e.g. title's `type` attribute renders as a plain
+    // sl-input with dataset.attr set). A required leaf with an empty
+    // value but a filled-in attribute must still resolve its main input
+    // as empty - this is the regression the Critical review finding was
+    // about (querySelectorAll over the whole group previously matched
+    // both and could be fooled by a non-empty attribute input).
+    const dom = new JSDOM('<!doctype html><div id="row"></div>');
+    const document = dom.window.document;
+    const row = document.getElementById('row');
+
+    const mainInput = document.createElement('sl-input');
+    mainInput.value = '';
+    row.appendChild(mainInput);
+
+    const attrInput = document.createElement('sl-input');
+    attrInput.dataset.attr = 'type';
+    attrInput.value = 'main';
+    row.appendChild(attrInput);
+
+    const resolved = getMainInput(row);
+    assert.strictEqual(resolved, mainInput);
+    assert.strictEqual(resolved.value, '');
   });
 });

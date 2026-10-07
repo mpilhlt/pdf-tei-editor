@@ -139,7 +139,13 @@ export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
       const nestedValues = /** @type {NestedFieldValues} */ (values[node.tag] ?? {})
       const hasAnyValue = leavesHaveValues(node.children, nestedValues)
       let child = [...scopeNode.children].find((el) => el.localName === node.tag)
-      if (!child && hasAnyValue) {
+      if (child && !hasAnyValue) {
+        // All values under this section were cleared - remove the now-empty
+        // element rather than leaving a dangling `<imprint/>`-style husk,
+        // mirroring how the leaf branch above already drops cleared leaves.
+        scopeNode.removeChild(child)
+        child = undefined
+      } else if (!child && hasAnyValue) {
         child = doc.createElementNS(namespaceUri, node.tag)
         scopeNode.appendChild(child)
       }
@@ -165,4 +171,22 @@ export function leavesHaveValues(tree, values) {
       ? /** @type {Array<FieldValue>} */ (values[node.tag] ?? []).some((v) => v.text.trim() !== '')
       : leavesHaveValues(node.children, /** @type {NestedFieldValues} */ (values[node.tag] ?? {}))
   )
+}
+
+/**
+ * The main value input of a rendered leaf row - the first `sl-input`/
+ * `sl-textarea` element in the row, as produced by
+ * TeiHeaderEditorPlugin#renderLeafRow() (the value input is always appended
+ * before any per-attribute inputs). A row also holds one `sl-input`/
+ * `sl-select` PER attribute (e.g. `title`'s `type` attribute renders as a
+ * plain `sl-input` with `dataset.attr` set) - those must never be mistaken
+ * for the row's own value, since an attribute can be filled in while the
+ * leaf's actual text content is empty. Exported so both the plugin's
+ * value-collection and required-field-validation code paths resolve "the"
+ * input for a row identically and can't drift apart.
+ * @param {Element} row
+ * @returns {Element|null}
+ */
+export function getMainInput(row) {
+  return row.querySelector('sl-input, sl-textarea')
 }

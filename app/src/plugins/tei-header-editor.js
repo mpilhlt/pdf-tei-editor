@@ -23,7 +23,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
-import { buildFieldTree, readFieldValues, applyFieldValues, leavesHaveValues } from '../modules/tei-header-form.js'
+import { buildFieldTree, readFieldValues, applyFieldValues, leavesHaveValues, getMainInput } from '../modules/tei-header-form.js'
 import { notify } from '../modules/sl-utils.js'
 
 await registerTemplate('tei-header-editor-dialog', 'tei-header-editor-dialog.html')
@@ -83,6 +83,7 @@ class TeiHeaderEditorPlugin extends Plugin {
       structure = await this.#client.apiClient.validateTeiheaderStructure({ xml_string: this.state.xml ?? '' })
     } catch (error) {
       this.getDependency('logger').warn(`tei-header-editor: could not load schema structure: ${String(error)}`)
+      notify('Could not load header metadata editor. Please try again.', 'danger', 'exclamation-octagon')
       return
     }
     this.#fieldTree = buildFieldTree(structure)
@@ -170,7 +171,12 @@ class TeiHeaderEditorPlugin extends Plugin {
     row.style.gap = '0.5rem'
     row.style.marginBottom = '0.25rem'
 
-    const input = document.createElement(entry.text.includes('\n') ? 'sl-textarea' : 'sl-input')
+    // `bibl` holds free-flowing prose (unlike short-value leaves such as
+    // `title`/`date`), so it always gets a multi-line editor - sniffing the
+    // CURRENT text for a newline (as done for every other tag) would leave
+    // a brand-new, still-empty `bibl` stuck as a single-line `sl-input`.
+    const isProseTag = node.tag === 'bibl'
+    const input = document.createElement(isProseTag || entry.text.includes('\n') ? 'sl-textarea' : 'sl-input')
     input.dataset.tag = node.tag
     input.size = 'small'
     input.value = entry.text
@@ -221,7 +227,7 @@ class TeiHeaderEditorPlugin extends Plugin {
       if (child.isLeaf) {
         const rows = [...child.el.children].filter((el) => el.tagName === 'DIV')
         values[child.tag] = rows.map((row) => {
-          const input = row.querySelector('sl-input, sl-textarea')
+          const input = getMainInput(row)
           const attrs = {}
           for (const attrEl of row.querySelectorAll('[data-attr]')) attrs[attrEl.dataset.attr] = attrEl.value
           return { text: input?.value ?? '', attrs }
@@ -246,8 +252,13 @@ class TeiHeaderEditorPlugin extends Plugin {
     for (const child of node.children) {
       if (child.isLeaf) {
         if (!child.required) continue
-        const inputs = [...child.el.querySelectorAll('sl-input, sl-textarea')]
-        if (!inputs.some((el) => el.value.trim() !== '')) offenders.push(inputs[0])
+        // Only each row's MAIN value input counts - child.el also contains
+        // one sl-input/sl-select PER ATTRIBUTE (e.g. title's `type`), and a
+        // filled-in attribute on an otherwise-empty required leaf must not
+        // be mistaken for the leaf itself being filled in.
+        const rows = [...child.el.children].filter((el) => el.tagName === 'DIV')
+        const mainInputs = rows.map((row) => getMainInput(row)).filter((el) => el !== null)
+        if (!mainInputs.some((el) => el.value.trim() !== '')) offenders.push(mainInputs[0] ?? child.el)
       } else {
         offenders.push(...this.#findEmptyRequiredInputs(child))
       }
@@ -269,6 +280,14 @@ class TeiHeaderEditorPlugin extends Plugin {
     const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0]
     if (!fileDesc) return // fileDesc itself is always expected to exist already; not created by this dialog
     const namespaceUri = fileDesc.namespaceURI
+    // fileDesc's content model is strictly ordered (titleStmt, ...,
+    // publicationStmt, ..., sourceDesc+), so a newly-created root section
+    // can't just be appended at the end - it must land before whichever
+    // later-in-order root sibling (per this.#fieldTree's own order, which
+    // mirrors the backend's _TEIHEADER_ROOTS) already exists, or the
+    // document becomes schema-invalid (e.g. sourceDesc existing already,
+    // publicationStmt newly added, must still precede it).
+    const rootTagOrder = this.#fieldTree.map((root) => root.tag)
     for (const rootNode of this.#fieldTree) {
       const values = this.#collectValuesFromForm(rootNode)
       let scopeNode = [...fileDesc.children].find((el) => el.localName === rootNode.tag)
@@ -276,7 +295,9 @@ class TeiHeaderEditorPlugin extends Plugin {
       if (!scopeNode) {
         if (!hasAnyValue) continue
         scopeNode = xmlTree.createElementNS(namespaceUri, rootNode.tag)
-        fileDesc.appendChild(scopeNode)
+        const laterRootTags = rootTagOrder.slice(rootTagOrder.indexOf(rootNode.tag) + 1)
+        const insertBeforeEl = [...fileDesc.children].find((el) => laterRootTags.includes(el.localName))
+        fileDesc.insertBefore(scopeNode, insertBeforeEl ?? null)
       }
       applyFieldValues(rootNode.children, scopeNode, values, namespaceUri)
     }
