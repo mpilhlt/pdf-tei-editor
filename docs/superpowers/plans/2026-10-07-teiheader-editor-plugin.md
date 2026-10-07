@@ -552,6 +552,13 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
         self.assertTrue(data["tags"]["title"]["description"])
         self.assertNotIn("respStmt", data["tags"]["titleStmt"]["children"])
         self.assertTrue(data["tags"]["titleStmt"]["childCardinality"]["title"]["required"])
+        # Two hops from sourceDesc (sourceDesc -> biblStruct -> analytic) -
+        # must still appear as its own entry with its own children, not be
+        # flattened into a leaf (see _collect_merged_defs()'s doc comment).
+        self.assertIn("biblStruct", data["tags"]["sourceDesc"]["children"])
+        self.assertIn("analytic", data["tags"]["biblStruct"]["children"])
+        self.assertIn("analytic", data["tags"])
+        self.assertTrue(data["tags"]["analytic"]["children"])
 ```
 
 (Adjust the `TestClient`/app-fixture setup to match whatever pattern this test file's existing tests already use — check the file's existing imports/`setUp()` before writing this, per `docs/code-assistant/testing-guide.md`'s dependency-override pattern for authenticated routes if this endpoint ends up requiring auth, matching `/autocomplete-data`'s own `Depends(require_authenticated_user)`.)
@@ -616,6 +623,49 @@ def _get_core_schema_parser():
     return _core_schema_parser
 ```
 
+**Important, found by running this against the real schema rather than just
+reasoning about it:** `extract_tag_definitions(root_tag)` only resolves
+names one hop away from `root_tag` itself. Calling it with
+`root_tag='sourceDesc'` discovers `biblStruct` as a child name (and gives
+`biblStruct` its own correct `description`/`children` in the result), but
+does **not** also add `biblStruct`'s own children (`analytic`, `monogr`)
+as top-level keys in the same result — those are two hops from `sourceDesc`,
+and nothing re-expands a newly-discovered tag's own `children` list into a
+further `extract_tag_definitions()` call. Calling it separately per root
+once, as a naive implementation would, silently flattens `biblStruct`'s
+nested author/title/imprint fields into undocumented leaves client-side.
+The fix is a small BFS over repeated calls, expanding the frontier through
+each result's own `children` lists:
+
+```python
+def _collect_merged_defs(parser, roots: List[str], exclude: Set[str], max_depth: int = 6) -> Dict[str, Dict]:
+    """
+    BFS over RelaxNGParser.extract_tag_definitions(): each call only
+    resolves ITS OWN root tag's children one hop deep by name, without
+    recursively expanding those child names into their own entries (see
+    this function's call site for how this was discovered). Keeps calling
+    extract_tag_definitions() on every newly-discovered tag name - each
+    such call correctly resolves that tag's own real <element> via
+    _find_element_definition(), so its `children` are accurate for ITS
+    level - until no new tag names appear or `max_depth` hops is reached.
+    """
+    merged: Dict[str, Dict] = {}
+    frontier = list(roots)
+    depth = 0
+    while frontier and depth < max_depth:
+        next_frontier: List[str] = []
+        for tag_name in frontier:
+            if tag_name in merged or tag_name in exclude:
+                continue
+            for name, data in parser.extract_tag_definitions(tag_name, exclude=exclude).items():
+                if name not in merged:
+                    merged[name] = data
+                    next_frontier.extend(data.get('children', []))
+        frontier = next_frontier
+        depth += 1
+    return merged
+```
+
 And the route itself, below `generate_autocomplete_data()`:
 
 ```python
@@ -644,9 +694,7 @@ def generate_teiheader_structure(
     from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
 
     core_parser = _get_core_schema_parser()
-    core_defs: Dict[str, Dict] = {}
-    for root_tag in _TEIHEADER_ROOTS:
-        core_defs.update(core_parser.extract_tag_definitions(root_tag, exclude=_TEIHEADER_EXCLUDE))
+    core_defs = _collect_merged_defs(core_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
 
     doc_defs: Dict[str, Dict] = {}
     try:
@@ -655,8 +703,7 @@ def generate_teiheader_structure(
         )
         doc_parser = RelaxNGParser()
         doc_parser.parse_file(str(schema_cache_file))
-        for root_tag in _TEIHEADER_ROOTS:
-            doc_defs.update(doc_parser.extract_tag_definitions(root_tag, exclude=_TEIHEADER_EXCLUDE))
+        doc_defs = _collect_merged_defs(doc_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
     except HTTPException:
         # No/unreachable document schema - fall back to the core schema
         # alone (see this function's docstring); not a client error.
