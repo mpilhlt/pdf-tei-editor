@@ -39,19 +39,48 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])
 
-_CORE_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schema" / "rng" / "tei-bib.rng"
+
+def _get_core_schema_path(settings) -> Path:
+    """
+    Path to the bundled core TEI schema (schema/rng/tei-bib.rng), resolved
+    via Settings.project_root_dir rather than a Path(__file__) parent chain
+    (see fastapi_app/CLAUDE.md's "Use Settings for path resolution" rule).
+    """
+    return settings.project_root_dir / "schema" / "rng" / "tei-bib.rng"
+
+
 _core_schema_parser: Optional["RelaxNGParser"] = None
 
 
-def _get_core_schema_parser() -> "RelaxNGParser":
+def _get_core_schema_parser(settings) -> "RelaxNGParser":
     """Lazily parse the bundled core TEI schema once per process."""
     global _core_schema_parser
     if _core_schema_parser is None:
         from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
         parser = RelaxNGParser()
-        parser.parse_file(str(_CORE_SCHEMA_PATH))
+        parser.parse_file(str(_get_core_schema_path(settings)))
         _core_schema_parser = parser
     return _core_schema_parser
+
+
+_core_defs_cache: Optional[Dict[str, Dict]] = None
+
+
+def _get_core_defs(settings) -> Dict[str, Dict]:
+    """
+    Lazily BFS-merge the core schema's titleStmt/publicationStmt/sourceDesc
+    defs once per process and cache the result: the core schema and these
+    roots never change for the process lifetime, so there's no reason to
+    pay _collect_merged_defs's cost (163 tags x extract_tag_definitions
+    calls) on every request - this is on top of _find_element_definition's
+    own O(1) fix in relaxng_to_codemirror.py, not instead of it.
+    """
+    global _core_defs_cache
+    if _core_defs_cache is None:
+        _core_defs_cache = _collect_merged_defs(
+            _get_core_schema_parser(settings), _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE
+        )
+    return _core_defs_cache
 
 
 def _collect_merged_defs(parser: "RelaxNGParser", roots: List[str], exclude: Set[str], max_depth: int = 6) -> Dict[str, Dict]:
@@ -309,8 +338,7 @@ def generate_teiheader_structure(
     """
     from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
 
-    core_parser = _get_core_schema_parser()
-    core_defs = _collect_merged_defs(core_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
+    core_defs = _get_core_defs(settings)
 
     doc_defs: Dict[str, Dict] = {}
     try:
@@ -330,8 +358,12 @@ def generate_teiheader_structure(
         doc_def = doc_defs.get(tag_name)
         merged[tag_name] = {
             "description": (doc_def or {}).get("description") or core_def.get("description"),
-            "children": (doc_def or {}).get("children") or core_def.get("children", []),
-            "attributes": (doc_def or {}).get("attributes") or core_def.get("attributes", []),
+            # doc_def is checked for presence (not truthiness) below: a
+            # document schema that legitimately defines an EMPTY
+            # children/attributes list for a tag must keep that empty
+            # list, not silently fall back to the core schema's value.
+            "children": doc_def.get("children", []) if doc_def is not None else core_def.get("children", []),
+            "attributes": doc_def.get("attributes", []) if doc_def is not None else core_def.get("attributes", []),
             # Cardinality always from the core schema (product decision).
             "childCardinality": core_def.get("childCardinality", {}),
         }

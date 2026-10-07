@@ -266,6 +266,11 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
 
         self.mock_settings = MagicMock()
         self.mock_settings.schema_cache_dir = self.cache_root
+        # The endpoint resolves the bundled core schema via
+        # settings.project_root_dir (not a Path(__file__) parent chain -
+        # see fastapi_app/CLAUDE.md), so this mock must point at the real
+        # repo root for schema/rng/tei-bib.rng to actually be found.
+        self.mock_settings.project_root_dir = Path(__file__).resolve().parents[3]
 
         self.app.dependency_overrides[get_settings] = lambda: self.mock_settings
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser"}
@@ -296,6 +301,46 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
         self.assertIn("analytic", data["tags"]["biblStruct"]["children"])
         self.assertIn("analytic", data["tags"])
         self.assertTrue(data["tags"]["analytic"]["children"])
+
+    def test_document_schemas_empty_children_and_attributes_are_not_replaced_by_core(self):
+        # The core schema's own "title" has a long, non-empty children list
+        # and a non-empty attributes list (verified directly against
+        # schema/rng/tei-bib.rng). This document schema defines "title" as
+        # completely empty (no children, no attributes) - the merge must
+        # keep that empty-but-present value from the document schema, not
+        # silently fall back to core's non-empty one (a falsy-vs-present
+        # bug: `doc_def.get("children") or core_def.get("children")` would
+        # incorrectly replace an empty `[]` with core's list).
+        doc_schema = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="">
+  <start>
+    <element name="TEI" ns="http://www.tei-c.org/ns/1.0">
+      <element name="teiHeader">
+        <element name="fileDesc">
+          <element name="titleStmt">
+            <element name="title"><empty/></element>
+          </element>
+        </element>
+      </element>
+    </element>
+  </start>
+</grammar>
+"""
+        schema_location = "https://example.com/schema/empty-title.rng"
+        cache_dir, cache_file, _ = get_schema_cache_info(schema_location, self.cache_root)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(doc_schema, encoding="utf-8")
+
+        xml = (
+            '<?xml version="1.0"?>'
+            f'<?xml-model href="{schema_location}" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+            '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title/></titleStmt></fileDesc></teiHeader></TEI>'
+        )
+        response = self.client.post("/validate/teiheader-structure", json={"xml_string": xml})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["tags"]["title"]["children"], [])
+        self.assertEqual(data["tags"]["title"]["attributes"], [])
 
 
 if __name__ == "__main__":

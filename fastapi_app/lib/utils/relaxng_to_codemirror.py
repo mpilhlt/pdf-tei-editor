@@ -158,6 +158,12 @@ class RelaxNGParser:
         self.root: Optional[ET.Element] = None
         self.defined_patterns = {}
         self.element_definitions = {}
+        # name -> <element> node, built once in _process_elements() so
+        # _find_element_definition() is O(1) instead of re-scanning the
+        # whole tree on every call (extract_tag_definitions()'s BFS callers
+        # call it once per discovered tag, so an O(schema size) lookup
+        # there is an O(tags x schema size) blowup for a large schema).
+        self._element_by_name: Dict[str, ET.Element] = {}
         self.attribute_definitions = defaultdict(dict)
         self.processing_stack = set()  # Track currently processing patterns to avoid cycles
         
@@ -236,6 +242,11 @@ class RelaxNGParser:
             name = element.get('name')
             if name:
                 self._process_element_definition(name, element)
+                # Keep the LAST occurrence for a given name, exactly
+                # matching _find_element_definition()'s own (pre-index)
+                # traversal, which never breaks and so returns the last
+                # match in document order.
+                self._element_by_name[name] = element
     
     def _process_element_definition(self, name: str, element: ET.Element) -> None:
         """Process a single element definition."""
@@ -307,53 +318,72 @@ class RelaxNGParser:
 
         return result
 
-    def _is_child_required(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
+    def _get_required_children(self, container: ET.Element, visited: Optional[Set[str]] = None) -> Set[str]:
         """
-        True if `<element name=child_name>` (directly, or via `<ref>`) is a
-        mandatory, unconditional descendant of `container` — reachable
-        without passing through `<optional>`, `<choice>`, `<zeroOrMore>`, or
-        an interleave sibling that could equally be absent. Mirrors
-        `_is_attribute_required`'s traversal shape (group/interleave only;
-        `<choice>`/`<optional>`/`<zeroOrMore>` are deliberately not
-        descended into, since presence through any of those is conditional).
+        Set of every child tag name that is a mandatory, unconditional
+        descendant of `container` — reachable without passing through
+        `<optional>`, `<choice>`, `<zeroOrMore>`, or an interleave sibling
+        that could equally be absent. Same traversal `_is_child_required`
+        performs for one `child_name` at a time, but computed ONCE for
+        ALL names in a single pass — `_extract_child_cardinality()` calls
+        this once per element instead of calling `_is_child_required` once
+        per child (each of which re-walked the same, potentially large,
+        cross-referenced pattern graph from scratch); see this method's
+        call site for the measured impact. Mirrors `_is_attribute_required`'s
+        traversal shape (group/interleave only; `<choice>`/`<optional>`/
+        `<zeroOrMore>` are deliberately not descended into, since presence
+        through any of those is conditional).
         """
         if visited is None:
             visited = set()
+        result: Set[str] = set()
         for element in container.findall(f'./{RNG_NS}element'):
-            if element.get('name') == child_name:
-                return True
+            name = element.get('name')
+            if name:
+                result.add(name)
         for ref in container.findall(f'./{RNG_NS}ref'):
             ref_name = ref.get('name')
             if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
                 visited.add(ref_name)
                 try:
-                    if self._is_child_required(self.defined_patterns[ref_name], child_name, visited):
-                        return True
+                    result.update(self._get_required_children(self.defined_patterns[ref_name], visited))
                 finally:
                     visited.discard(ref_name)
         for group in container.findall(f'./{RNG_NS}group'):
-            if self._is_child_required(group, child_name, visited):
-                return True
+            result.update(self._get_required_children(group, visited))
         for oneOrMore in container.findall(f'./{RNG_NS}oneOrMore'):
-            if self._is_child_required(oneOrMore, child_name, visited):
-                return True
+            result.update(self._get_required_children(oneOrMore, visited))
         for interleave in container.findall(f'./{RNG_NS}interleave'):
-            if self._is_child_required(interleave, child_name, visited):
-                return True
-        return False
+            result.update(self._get_required_children(interleave, visited))
+        return result
 
-    def _is_child_repeatable(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
+    def _is_child_required(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
         """
-        True if `<element name=child_name>` is reachable through an
-        `<oneOrMore>` or `<zeroOrMore>` anywhere on the path from
-        `container` — i.e. the document may legally contain more than one.
-        Unlike `_is_child_required`, this descends into every container
-        type `_extract_child_elements` does (group/choice/optional/
-        zeroOrMore/oneOrMore/interleave/ref), since repeatability doesn't
-        care whether the *whole* branch is conditional.
+        True if `<element name=child_name>` (directly, or via `<ref>`) is a
+        mandatory, unconditional descendant of `container`. See
+        `_get_required_children` for the traversal this delegates to;
+        kept as its own method for callers that only need one name.
+        """
+        return child_name in self._get_required_children(container, visited)
+
+    def _get_repeatable_children(self, container: ET.Element, visited: Optional[Set[str]] = None) -> Set[str]:
+        """
+        Set of every child tag name reachable through an `<oneOrMore>` or
+        `<zeroOrMore>` anywhere on the path from `container` — i.e. the
+        document may legally contain more than one. Same traversal
+        `_is_child_repeatable` performs for one `child_name` at a time,
+        but computed ONCE for ALL names in a single pass (see
+        `_get_required_children`'s docstring for why this matters - this
+        is the more expensive of the two traversals, since it also calls
+        `_extract_child_elements` on every repeater it finds). Unlike
+        `_get_required_children`, this descends into every container type
+        `_extract_child_elements` does (group/choice/optional/zeroOrMore/
+        oneOrMore/interleave/ref), since repeatability doesn't care
+        whether the *whole* branch is conditional.
         """
         if visited is None:
             visited = set()
+        result: Set[str] = set()
         for repeat_tag in (f'{RNG_NS}oneOrMore', f'{RNG_NS}zeroOrMore'):
             for repeater in container.findall(f'./{repeat_tag}'):
                 # Pass a copy: `_extract_child_elements` mutates its own
@@ -362,23 +392,30 @@ class RelaxNGParser:
                 # short-circuited by) this method's own `visited`, which
                 # tracks refs already followed on *this* method's call
                 # stack below.
-                if child_name in self._extract_child_elements(repeater, set(visited)):
-                    return True
+                result.update(self._extract_child_elements(repeater, set(visited)))
         for inner_tag in (f'{RNG_NS}choice', f'{RNG_NS}group', f'{RNG_NS}optional',
                           f'{RNG_NS}zeroOrMore', f'{RNG_NS}oneOrMore', f'{RNG_NS}interleave'):
             for inner in container.findall(f'./{inner_tag}'):
-                if self._is_child_repeatable(inner, child_name, visited):
-                    return True
+                result.update(self._get_repeatable_children(inner, visited))
         for ref in container.findall(f'./{RNG_NS}ref'):
             ref_name = ref.get('name')
             if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
                 visited.add(ref_name)
                 try:
-                    if self._is_child_repeatable(self.defined_patterns[ref_name], child_name, visited):
-                        return True
+                    result.update(self._get_repeatable_children(self.defined_patterns[ref_name], visited))
                 finally:
                     visited.discard(ref_name)
-        return False
+        return result
+
+    def _is_child_repeatable(self, container: ET.Element, child_name: str, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if `<element name=child_name>` is reachable through an
+        `<oneOrMore>` or `<zeroOrMore>` anywhere on the path from
+        `container`. See `_get_repeatable_children` for the traversal
+        this delegates to; kept as its own method for callers that only
+        need one name.
+        """
+        return child_name in self._get_repeatable_children(container, visited)
 
     def _extract_child_cardinality(self, element: ET.Element) -> Dict[str, ChildCardinality]:
         """
@@ -387,12 +424,22 @@ class RelaxNGParser:
         `element` itself (not the whole schema) — used by the teiHeader
         editor to decide which fields must be filled and which get an
         "add another" control.
+
+        Calls `_get_required_children`/`_get_repeatable_children` ONCE
+        each (not once per child) — see those methods' docstrings. This
+        was the dominant cost of `extract_tag_definitions()` (measured via
+        cProfile at ~1.2s of ~2s for a single call on the bundled core TEI
+        schema, before this fix) for any element with many children, since
+        the per-child-name traversal re-walked the same pattern graph from
+        scratch for every child.
         """
         children = self._extract_child_elements(element)
+        required = self._get_required_children(element)
+        repeatable = self._get_repeatable_children(element)
         return {
             name: {
-                'required': self._is_child_required(element, name),
-                'repeatable': self._is_child_repeatable(element, name),
+                'required': name in required,
+                'repeatable': name in repeatable,
             }
             for name in children
         }
@@ -506,14 +553,12 @@ class RelaxNGParser:
         `_process_elements()`'s own overwrite-on-reprocess behavior, which
         is why the existing autocomplete map already resolves to the
         richer definition for such names today.
+
+        O(1) via `self._element_by_name`, built once by `_process_elements()`
+        (called from `parse_file()` before anything can call this method),
+        instead of re-scanning the whole tree on every call.
         """
-        if self.root is None:
-            return None
-        match = None
-        for element in self.root.findall(f'.//{RNG_NS}element'):
-            if element.get('name') == tag_name:
-                match = element
-        return match
+        return self._element_by_name.get(tag_name)
 
     def _is_attribute_required(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> bool:
         """
