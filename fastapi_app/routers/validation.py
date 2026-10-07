@@ -10,6 +10,7 @@ For FastAPI migration - Phase 5.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pathlib import Path
+from typing import Dict, List, Optional, Set, TYPE_CHECKING
 import json
 import logging
 
@@ -20,7 +21,9 @@ from ..lib.models.models_validation import (
     ValidateResponse,
     ValidationErrorModel,
     AutocompleteDataRequest,
-    AutocompleteDataResponse
+    AutocompleteDataResponse,
+    TeiHeaderStructureRequest,
+    TeiHeaderStructureResponse
 )
 from ..lib.core.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
 from ..lib.doc_rules.schema_override import build_schema_text_override
@@ -30,8 +33,67 @@ from ..lib.utils.autocomplete_generator import generate_autocomplete_map
 # For internet connectivity check
 from ..lib.utils.server_utils import has_internet
 
+if TYPE_CHECKING:
+    from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])
+
+_CORE_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schema" / "rng" / "tei-bib.rng"
+_core_schema_parser: Optional["RelaxNGParser"] = None
+
+
+def _get_core_schema_parser() -> "RelaxNGParser":
+    """Lazily parse the bundled core TEI schema once per process."""
+    global _core_schema_parser
+    if _core_schema_parser is None:
+        from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
+        parser = RelaxNGParser()
+        parser.parse_file(str(_CORE_SCHEMA_PATH))
+        _core_schema_parser = parser
+    return _core_schema_parser
+
+
+def _collect_merged_defs(parser: "RelaxNGParser", roots: List[str], exclude: Set[str], max_depth: int = 6) -> Dict[str, Dict]:
+    """
+    BFS over RelaxNGParser.extract_tag_definitions(): each call only
+    resolves ITS OWN root tag's children one hop deep by name, without
+    recursively expanding those child names into their own entries (see
+    this function's call site for how this was discovered). Keeps calling
+    extract_tag_definitions() on every newly-discovered tag name - each
+    such call correctly resolves that tag's own real <element> via
+    _find_element_definition(), so its `children` are accurate for ITS
+    level - until no new tag names appear or `max_depth` hops is reached.
+
+    `exclude` only keeps extract_tag_definitions() from handing back its
+    OWN top-level entry for an excluded name (e.g. respStmt) - it does NOT
+    strip that name out of other tags' `children`/`childCardinality`
+    (verified empirically: titleStmt's own `children` still lists
+    "respStmt" even when excluded). So this also scrubs `exclude` from
+    every collected tag's `children` list and `childCardinality` dict
+    before it's merged in, so an excluded tag never surfaces anywhere in
+    the result, not just as its own entry.
+    """
+    merged: Dict[str, Dict] = {}
+    frontier = list(roots)
+    depth = 0
+    while frontier and depth < max_depth:
+        next_frontier: List[str] = []
+        for tag_name in frontier:
+            if tag_name in merged or tag_name in exclude:
+                continue
+            for name, data in parser.extract_tag_definitions(tag_name, exclude=exclude).items():
+                if name not in merged:
+                    children = [c for c in data.get('children', []) if c not in exclude]
+                    child_cardinality = {
+                        k: v for k, v in data.get('childCardinality', {}).items() if k not in exclude
+                    }
+                    data = {**data, 'children': children, 'childCardinality': child_cardinality}
+                    merged[name] = data
+                    next_frontier.extend(children)
+        frontier = next_frontier
+        depth += 1
+    return merged
 
 
 def resolve_document_schema_cache_file(xml_string: str, cache_root: Path, invalidate_cache: bool) -> Path:
@@ -221,3 +283,61 @@ def generate_autocomplete_data(
             status_code=500,
             detail=f"Failed to generate autocomplete data: {str(e)}"
         )
+
+
+_TEIHEADER_ROOTS = ["titleStmt", "publicationStmt", "sourceDesc"]
+_TEIHEADER_EXCLUDE = {"respStmt"}
+
+
+@router.post("/teiheader-structure", response_model=TeiHeaderStructureResponse)
+def generate_teiheader_structure(
+    request: TeiHeaderStructureRequest,
+    settings=Depends(get_settings),
+    user: dict = Depends(require_authenticated_user)
+) -> TeiHeaderStructureResponse:
+    """
+    Schema-derived field structure for the teiHeader editor's
+    titleStmt/publicationStmt/sourceDesc sections, merging the open
+    document's own resolved schema with the bundled core TEI schema
+    (schema/rng/tei-bib.rng): a tag's description/children/attributes come
+    from the document schema where present, else the core schema; a tag
+    reachable only in the core schema is included anyway; cardinality
+    (required/repeatable) always comes from the core schema, since
+    permissive document schemas (e.g. GROBID's training schemas) don't
+    reliably encode it. titleStmt/respStmt is always excluded - it's this
+    app's own user registry, not bibliographic data.
+    """
+    from ..lib.utils.relaxng_to_codemirror import RelaxNGParser
+
+    core_parser = _get_core_schema_parser()
+    core_defs = _collect_merged_defs(core_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
+
+    doc_defs: Dict[str, Dict] = {}
+    try:
+        schema_cache_file = resolve_document_schema_cache_file(
+            request.xml_string, settings.schema_cache_dir, invalidate_cache=False
+        )
+        doc_parser = RelaxNGParser()
+        doc_parser.parse_file(str(schema_cache_file))
+        doc_defs = _collect_merged_defs(doc_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
+    except HTTPException:
+        # No/unreachable document schema - fall back to the core schema
+        # alone (see this function's docstring); not a client error.
+        pass
+
+    merged: Dict[str, Dict] = {}
+    for tag_name, core_def in core_defs.items():
+        doc_def = doc_defs.get(tag_name)
+        merged[tag_name] = {
+            "description": (doc_def or {}).get("description") or core_def.get("description"),
+            "children": (doc_def or {}).get("children") or core_def.get("children", []),
+            "attributes": (doc_def or {}).get("attributes") or core_def.get("attributes", []),
+            # Cardinality always from the core schema (product decision).
+            "childCardinality": core_def.get("childCardinality", {}),
+        }
+    # Tags present only in the document schema (not reachable from the core
+    # schema's own titleStmt/publicationStmt/sourceDesc closure) are not
+    # included - the core schema is authoritative for which tags exist in
+    # this editor's scope.
+
+    return TeiHeaderStructureResponse(roots=_TEIHEADER_ROOTS, tags=merged)

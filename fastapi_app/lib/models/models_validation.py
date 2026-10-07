@@ -60,6 +60,35 @@ class AutocompleteDataRequest(BaseModel):
     )
 
 
+class TeiHeaderStructureRequest(BaseModel):
+    """Request for the schema-derived teiHeader field structure."""
+    xml_string: str = Field(
+        ...,
+        description="XML document to resolve the governing schema from",
+        min_length=1
+    )
+
+
+class ChildCardinalityModel(BaseModel):
+    """Whether a child tag is mandatory and/or may occur more than once, relative to its parent."""
+    required: bool
+    repeatable: bool
+
+
+class TeiHeaderTagDefinitionModel(BaseModel):
+    """One tag's schema-derived data, merged from the document's own schema and the bundled core TEI schema."""
+    description: Optional[str] = None
+    children: List[str] = Field(default_factory=list)
+    attributes: List[Dict[str, Any]] = Field(default_factory=list)
+    childCardinality: Dict[str, ChildCardinalityModel] = Field(default_factory=dict)
+
+
+class TeiHeaderStructureResponse(BaseModel):
+    """Schema-derived structure for the teiHeader editor's titleStmt/publicationStmt/sourceDesc sections."""
+    roots: List[str]
+    tags: Dict[str, TeiHeaderTagDefinitionModel]
+
+
 class AutocompleteDataResponse(BaseModel):
     """
     Response containing CodeMirror autocomplete data.
