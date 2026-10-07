@@ -57,7 +57,7 @@ class TagDefinition(TypedDict):
     attributes: List[TagAttribute]
     variants: List[TagVariant]
     bareAllowed: bool
-    childCardinality: Dict[str, 'ChildCardinality']
+    childCardinality: Dict[str, ChildCardinality]
 
 
 class RelaxNGParser:
@@ -324,8 +324,6 @@ class RelaxNGParser:
                 return True
         for ref in container.findall(f'./{RNG_NS}ref'):
             ref_name = ref.get('name')
-            if ref_name == child_name:
-                return True
             if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
                 visited.add(ref_name)
                 try:
@@ -358,6 +356,12 @@ class RelaxNGParser:
             visited = set()
         for repeat_tag in (f'{RNG_NS}oneOrMore', f'{RNG_NS}zeroOrMore'):
             for repeater in container.findall(f'./{repeat_tag}'):
+                # Pass a copy: `_extract_child_elements` mutates its own
+                # `visited` for ref-cycle detection within that isolated
+                # lookup, and must not leak additions into (or be
+                # short-circuited by) this method's own `visited`, which
+                # tracks refs already followed on *this* method's call
+                # stack below.
                 if child_name in self._extract_child_elements(repeater, set(visited)):
                     return True
         for inner_tag in (f'{RNG_NS}choice', f'{RNG_NS}group', f'{RNG_NS}optional',
@@ -376,7 +380,7 @@ class RelaxNGParser:
                     visited.discard(ref_name)
         return False
 
-    def _extract_child_cardinality(self, element: ET.Element) -> Dict[str, 'ChildCardinality']:
+    def _extract_child_cardinality(self, element: ET.Element) -> Dict[str, ChildCardinality]:
         """
         For every child tag name `_extract_child_elements(element)` reports,
         compute `{'required': bool, 'repeatable': bool}` relative to

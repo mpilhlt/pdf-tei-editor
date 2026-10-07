@@ -332,6 +332,9 @@ class TestExtractTagDefinitions(unittest.TestCase):
         <ref name="choiceA"/>
         <ref name="choiceB"/>
       </choice>
+      <optional>
+        <oneOrMore><ref name="maybeMany"/></oneOrMore>
+      </optional>
     </element>
   </define>
   <define name="always"><element name="always"><text/></element></define>
@@ -340,6 +343,7 @@ class TestExtractTagDefinitions(unittest.TestCase):
   <define name="any"><element name="any"><text/></element></define>
   <define name="choiceA"><element name="choiceA"><text/></element></define>
   <define name="choiceB"><element name="choiceB"><text/></element></define>
+  <define name="maybeMany"><element name="maybeMany"><text/></element></define>
 </grammar>"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.rng', delete=False) as f:
             f.write(fixture)
@@ -359,6 +363,46 @@ class TestExtractTagDefinitions(unittest.TestCase):
         # Inside a <choice>, neither branch is individually required.
         self.assertEqual(cardinality['choiceA'], {'required': False, 'repeatable': False})
         self.assertEqual(cardinality['choiceB'], {'required': False, 'repeatable': False})
+        # Nested <oneOrMore> inside <optional>: the whole branch is
+        # conditional (not required), but once present, repeatable.
+        self.assertEqual(cardinality['maybeMany'], {'required': False, 'repeatable': True})
+
+    def test_is_child_required_does_not_match_ref_name_against_unrelated_element_name(self):
+        """
+        Regression: `_is_child_required` must not treat `<ref name=X>`
+        as proof that `<element name=X>` is present just because the
+        *pattern* name happens to equal the child name being searched
+        for. A `<ref name="date">` that unconditionally resolves to a
+        pattern defining `<element name="dateStamp">` (name mismatch)
+        must NOT satisfy `child_name='date'` - only an actual, reachable
+        `<element name="date">` should. Here the real `<element
+        name="date">` is defined separately and only reachable through
+        `<optional>`, so the correct answer is `required=False`.
+        """
+        fixture = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" ns="http://example.org/ns">
+  <define name="root">
+    <element name="root">
+      <ref name="date"/>
+      <optional><ref name="realDate"/></optional>
+    </element>
+  </define>
+  <define name="date"><element name="dateStamp"><text/></element></define>
+  <define name="realDate"><element name="date"><text/></element></define>
+</grammar>"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rng', delete=False) as f:
+            f.write(fixture)
+            path = f.name
+        try:
+            parser = RelaxNGParser()
+            parser.parse_file(path)
+            root_element = parser._find_element_definition('root')
+            cardinality = parser._extract_child_cardinality(root_element)
+        finally:
+            Path(path).unlink()
+
+        self.assertEqual(cardinality['date'], {'required': False, 'repeatable': False})
+        self.assertEqual(cardinality['dateStamp'], {'required': True, 'repeatable': False})
 
     def test_extract_tag_definitions_includes_child_cardinality(self):
         parser = RelaxNGParser()
