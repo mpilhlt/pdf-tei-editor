@@ -1,13 +1,14 @@
 /**
  * TEI Header Editor Plugin
  *
- * Adds a toolbar button to the XML editor that opens a schema-driven
- * dialog for editing fileDesc/titleStmt, fileDesc/publicationStmt, and
- * fileDesc/sourceDesc. Hidden for pure annotators (acl-utils.js's
+ * Adds a toolbar button to the XML editor that opens a dialog for editing
+ * a fixed, hand-picked list of teiHeader metadata fields (see FIELD_DEFS
+ * in tei-header-form.js). Hidden for pure annotators (acl-utils.js's
  * userIsAnnotatorOnly()), matching the existing teiHeader-visibility
  * safeguard in tei-tools.js.
  *
- * See docs/superpowers/specs/2026-10-07-teiheader-editor-plugin-design.md.
+ * See docs/superpowers/specs/2026-10-07-teiheader-editor-plugin-design.md,
+ * "Revision 2" section.
  */
 
 /**
@@ -16,26 +17,24 @@
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { SlDialog } from '../ui.js'
  * @import { teiHeaderEditorDialogPart } from '../templates/tei-header-editor-dialog.types.js'
- * @import { FieldNode, FieldValue } from '../modules/tei-header-form.js'
+ * @import { FieldDef, FieldValue } from '../modules/tei-header-form.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
-import { buildFieldTree, readFieldValues, applyFieldValues, leavesHaveValues, getMainInput } from '../modules/tei-header-form.js'
-import { notify } from '../modules/sl-utils.js'
+import { FIELD_DEFS, readFieldValues, applyFieldValues } from '../modules/tei-header-form.js'
 
 await registerTemplate('tei-header-editor-dialog', 'tei-header-editor-dialog.html')
 
 class TeiHeaderEditorPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'tei-header-editor', deps: ['xmleditor', 'client', 'logger'] })
+    super(context, { name: 'tei-header-editor', deps: ['xmleditor', 'logger'] })
   }
 
   get #xmlEditorApi() { return this.getDependency('xmleditor') }
-  get #client() { return this.getDependency('client') }
 
   /** @type {StatusButton} */
   #headerEditorBtn
@@ -43,8 +42,8 @@ class TeiHeaderEditorPlugin extends Plugin {
   /** @type {SlDialog & teiHeaderEditorDialogPart} */
   #dialogUi
 
-  /** @type {Array<FieldNode>} */
-  #fieldTree = []
+  /** @type {Object<string, Array<FieldValue>>} */
+  #openedValues = {}
 
   /** @param {ApplicationState} state */
   async install(state) {
@@ -78,129 +77,69 @@ class TeiHeaderEditorPlugin extends Plugin {
   async #onOpen() {
     const xmlTree = this.#xmlEditorApi.getXmlTree()
     if (!xmlTree) return
-    let structure
-    try {
-      structure = await this.#client.apiClient.validateTeiheaderStructure({ xml_string: this.state.xml ?? '' })
-    } catch (error) {
-      this.getDependency('logger').warn(`tei-header-editor: could not load schema structure: ${String(error)}`)
-      notify('Could not load header metadata editor. Please try again.', 'danger', 'exclamation-octagon')
-      return
-    }
-    this.#fieldTree = buildFieldTree(structure)
-    this.#renderSections(xmlTree)
+    const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0] ?? null
+    this.#openedValues = readFieldValues(fileDesc)
+    this.#renderFields(this.#openedValues)
     await this.#dialogUi.show()
   }
 
   /**
-   * Populates {@link TeiHeaderEditorPlugin#dialogUi}'s sections container with
-   * one rendered section per root field (titleStmt, publicationStmt,
-   * sourceDesc), reading each root's current values out of the live
-   * `fileDesc` element.
-   * @param {Document} xmlTree
+   * @param {Object<string, Array<FieldValue>>} values
    */
-  #renderSections(xmlTree) {
+  #renderFields(values) {
     const container = this.#dialogUi.sectionsContainer
     container.innerHTML = ''
-    const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0]
-    for (const rootNode of this.#fieldTree) {
-      const scopeNode = fileDesc ? [...fileDesc.children].find((el) => el.localName === rootNode.tag) : undefined
-      const values = scopeNode ? readFieldValues(rootNode.children, scopeNode) : {}
-      container.appendChild(this.#renderSection(rootNode, values))
+    for (const def of FIELD_DEFS) {
+      container.appendChild(this.#renderField(def, values[def.key] ?? []))
     }
   }
 
   /**
-   * Recursively renders `node`: a group of input rows for a leaf tag, or a
-   * collapsible `sl-details` section containing the rendered children for a
-   * non-leaf tag. `valueForNode` is `node`'s OWN value: an array of
-   * `FieldValue` if `node.isLeaf`, otherwise a nested dict of its own
-   * children's values (same shape `readFieldValues()`/`applyFieldValues()`
-   * use) - never the same object re-passed unchanged to every recursive
-   * call, which would collide same-named leaves under different parents
-   * (e.g. `analytic`'s `title` vs `monogr`'s `title` - see
-   * tei-header-form.js's nesting note).
-   * @param {FieldNode} node
-   * @param {Array<FieldValue>|Object<string, any>|undefined} valueForNode
-   * @returns {HTMLElement}
-   */
-  #renderSection(node, valueForNode) {
-    if (node.isLeaf) {
-      node.el = this.#renderLeafGroup(node, /** @type {Array<FieldValue>} */ (valueForNode) ?? [])
-      return node.el
-    }
-    const childrenValues = /** @type {Object<string, any>} */ (valueForNode) ?? {}
-    const details = document.createElement('sl-details')
-    details.summary = node.tag
-    if (node.description) details.title = node.description
-    for (const child of node.children) {
-      details.appendChild(this.#renderSection(child, childrenValues[child.tag]))
-    }
-    node.el = details
-    return details
-  }
-
-  /**
-   * One repeatable group of input rows for a leaf tag.
-   * @param {FieldNode} node
+   * @param {FieldDef} def
    * @param {Array<FieldValue>} entries
    * @returns {HTMLElement}
    */
-  #renderLeafGroup(node, entries) {
-    const group = document.createElement('div')
-    group.dataset.tag = node.tag
-    const rows = entries.length > 0 ? entries : [{ text: '', attrs: {} }]
-    for (const entry of rows) group.appendChild(this.#renderLeafRow(node, entry))
-    if (node.repeatable) {
+  #renderField(def, entries) {
+    const wrapper = document.createElement('div')
+    wrapper.dataset.field = def.key
+    wrapper.style.marginBottom = '0.75rem'
+    const rowsContainer = document.createElement('div')
+    const rows = entries.length > 0 ? entries : [{ text: '' }]
+    for (const entry of rows) rowsContainer.appendChild(this.#renderFieldRow(def, entry))
+    wrapper.appendChild(rowsContainer)
+    if (def.repeatable) {
       const addBtn = document.createElement('sl-button')
-      addBtn.textContent = `Add ${node.tag}`
+      addBtn.textContent = `Add ${def.label}`
       addBtn.size = 'small'
-      addBtn.addEventListener('click', () => group.insertBefore(this.#renderLeafRow(node, { text: '', attrs: {} }), addBtn))
-      group.appendChild(addBtn)
+      addBtn.addEventListener('click', () => rowsContainer.appendChild(this.#renderFieldRow(def, { text: '' })))
+      wrapper.appendChild(addBtn)
     }
-    return group
+    return wrapper
   }
 
   /**
-   * @param {FieldNode} node
+   * @param {FieldDef} def
    * @param {FieldValue} entry
    * @returns {HTMLElement}
    */
-  #renderLeafRow(node, entry) {
+  #renderFieldRow(def, entry) {
     const row = document.createElement('div')
     row.style.display = 'flex'
     row.style.gap = '0.5rem'
     row.style.marginBottom = '0.25rem'
+    row.style.alignItems = 'flex-start'
 
-    // `bibl` holds free-flowing prose (unlike short-value leaves such as
-    // `title`/`date`), so it always gets a multi-line editor - sniffing the
-    // CURRENT text for a newline (as done for every other tag) would leave
-    // a brand-new, still-empty `bibl` stuck as a single-line `sl-input`.
-    const isProseTag = node.tag === 'bibl'
-    const input = document.createElement(isProseTag || entry.text.includes('\n') ? 'sl-textarea' : 'sl-input')
-    input.dataset.tag = node.tag
+    const isProse = def.key === 'bibl'
+    const input = document.createElement(isProse ? 'sl-textarea' : 'sl-input')
+    input.dataset.field = def.key
     input.size = 'small'
+    input.setAttribute('label', def.label)
+    input.setAttribute('help-text', def.description)
     input.value = entry.text
-    if (node.required) input.required = true
-    if (node.description) input.setAttribute('help-text', node.description)
+    input.style.flex = '1'
     row.appendChild(input)
 
-    for (const attr of node.attributes) {
-      const attrInput = document.createElement(attr.values ? 'sl-select' : 'sl-input')
-      attrInput.size = 'small'
-      attrInput.dataset.attr = attr.name
-      if (attr.values) {
-        for (const v of attr.values) {
-          const opt = document.createElement('sl-option')
-          opt.value = v
-          opt.textContent = v
-          attrInput.appendChild(opt)
-        }
-      }
-      attrInput.value = entry.attrs[attr.name] ?? ''
-      row.appendChild(attrInput)
-    }
-
-    if (node.repeatable) {
+    if (def.repeatable) {
       const removeBtn = document.createElement('sl-button')
       removeBtn.textContent = '✕'
       removeBtn.size = 'small'
@@ -211,96 +150,27 @@ class TeiHeaderEditorPlugin extends Plugin {
   }
 
   /**
-   * Inverse of `readFieldValues()`, but reading from `node.el` (the
-   * rendered markup) instead of the document DOM. Returns a dict of
-   * `node`'s OWN children's values, keyed by tag - a non-leaf child's
-   * entry is the same shape recursively for ITS children, never flattened
-   * into this level's keys (same nesting rule as `readFieldValues()`/
-   * `applyFieldValues()` - see tei-header-form.js's note on why).
-   * @param {FieldNode} node
-   * @returns {Object<string, any>}
+   * @returns {Object<string, Array<FieldValue>>}
    */
-  #collectValuesFromForm(node) {
-    /** @type {Object<string, any>} */
+  #collectValuesFromForm() {
+    const container = this.#dialogUi.sectionsContainer
+    /** @type {Object<string, Array<FieldValue>>} */
     const values = {}
-    for (const child of node.children) {
-      if (child.isLeaf) {
-        const rows = [...child.el.children].filter((el) => el.tagName === 'DIV')
-        values[child.tag] = rows.map((row) => {
-          const input = getMainInput(row)
-          const attrs = {}
-          for (const attrEl of row.querySelectorAll('[data-attr]')) attrs[attrEl.dataset.attr] = attrEl.value
-          return { text: input?.value ?? '', attrs }
-        })
-      } else {
-        values[child.tag] = this.#collectValuesFromForm(child)
-      }
+    for (const def of FIELD_DEFS) {
+      const wrapper = [...container.children].find((el) => el.dataset.field === def.key)
+      const inputs = [...wrapper.querySelectorAll('sl-input, sl-textarea')]
+      values[def.key] = inputs.map((input) => ({ text: input.value ?? '' }))
     }
     return values
   }
 
-  /**
-   * Required leaves (per the core schema's cardinality) with no non-empty
-   * value anywhere in the rendered form. Returns the offending inputs so
-   * the caller can focus/flag them, rather than just a boolean.
-   * @param {FieldNode} node
-   * @returns {Array<HTMLElement>}
-   */
-  #findEmptyRequiredInputs(node) {
-    /** @type {Array<HTMLElement>} */
-    const offenders = []
-    for (const child of node.children) {
-      if (child.isLeaf) {
-        if (!child.required) continue
-        // Only each row's MAIN value input counts - child.el also contains
-        // one sl-input/sl-select PER ATTRIBUTE (e.g. title's `type`), and a
-        // filled-in attribute on an otherwise-empty required leaf must not
-        // be mistaken for the leaf itself being filled in.
-        const rows = [...child.el.children].filter((el) => el.tagName === 'DIV')
-        const mainInputs = rows.map((row) => getMainInput(row)).filter((el) => el !== null)
-        if (!mainInputs.some((el) => el.value.trim() !== '')) offenders.push(mainInputs[0] ?? child.el)
-      } else {
-        offenders.push(...this.#findEmptyRequiredInputs(child))
-      }
-    }
-    return offenders
-  }
-
   async #onSave() {
-    const offenders = this.#fieldTree.flatMap((root) => this.#findEmptyRequiredInputs(root))
-    if (offenders.length > 0) {
-      offenders[0].invalid = true
-      offenders[0].focus()
-      notify('Fill in all required fields before saving.', 'warning', 'exclamation-triangle')
-      return
-    }
-
     const xmlTree = this.#xmlEditorApi.getXmlTree()
     if (!xmlTree) return
     const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0]
     if (!fileDesc) return // fileDesc itself is always expected to exist already; not created by this dialog
-    const namespaceUri = fileDesc.namespaceURI
-    // fileDesc's content model is strictly ordered (titleStmt, ...,
-    // publicationStmt, ..., sourceDesc+), so a newly-created root section
-    // can't just be appended at the end - it must land before whichever
-    // later-in-order root sibling (per this.#fieldTree's own order, which
-    // mirrors the backend's _TEIHEADER_ROOTS) already exists, or the
-    // document becomes schema-invalid (e.g. sourceDesc existing already,
-    // publicationStmt newly added, must still precede it).
-    const rootTagOrder = this.#fieldTree.map((root) => root.tag)
-    for (const rootNode of this.#fieldTree) {
-      const values = this.#collectValuesFromForm(rootNode)
-      let scopeNode = [...fileDesc.children].find((el) => el.localName === rootNode.tag)
-      const hasAnyValue = leavesHaveValues(rootNode.children, values)
-      if (!scopeNode) {
-        if (!hasAnyValue) continue
-        scopeNode = xmlTree.createElementNS(namespaceUri, rootNode.tag)
-        const laterRootTags = rootTagOrder.slice(rootTagOrder.indexOf(rootNode.tag) + 1)
-        const insertBeforeEl = [...fileDesc.children].find((el) => laterRootTags.includes(el.localName))
-        fileDesc.insertBefore(scopeNode, insertBeforeEl ?? null)
-      }
-      applyFieldValues(rootNode.children, scopeNode, values, namespaceUri)
-    }
+    const currentValues = this.#collectValuesFromForm()
+    applyFieldValues(fileDesc, this.#openedValues, currentValues, fileDesc.namespaceURI)
     await this.#xmlEditorApi.updateEditorFromNode(fileDesc)
     await this.#xmlEditorApi.saveIfDirty()
     this.#dialogUi.hide()
