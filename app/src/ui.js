@@ -15,6 +15,7 @@ import { createNavigableElement, createHtmlElements, registerTemplate, createFro
 
 import { Spinner } from './modules/spinner.js'
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
+import SlDetails from '@shoelace-style/shoelace/dist/components/details/details.js'
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
 import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
@@ -65,6 +66,7 @@ import './modules/panels/index.js';
  * @import {userProfileDialog} from './plugins/user-account.js'
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
  * @import {documentRulesEditorDialogPart} from './templates/document-rules-editor-dialog.types.js'
+ * @import {teiHeaderEditorDialogPart} from './templates/tei-header-editor-dialog.types.js'
  * @import {pluginAdminDialogPart} from './templates/plugin-admin-dialog.types.js'
  * @import {pluginAdminConfirmDialogPart} from './templates/plugin-admin-confirm-dialog.types.js'
  * @import {progressWidgetPart} from './plugins/progress.js'
@@ -100,6 +102,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
  * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
+ * @property {UIPart<SlDialog, teiHeaderEditorDialogPart>} [teiHeaderEditorDialog] - TEI header editor dialog (added by tei-header-editor plugin)
  * @property {UIPart<SlDialog, pluginAdminDialogPart>} [pluginAdminDialog] - Plugin manager dialog (added by plugin-admin plugin)
  * @property {UIPart<SlDialog, pluginAdminConfirmDialogPart>} [pluginAdminConfirmDialog] - Plugin manager confirmation dialog (added by plugin-admin plugin)
  * @property {UIPart<HTMLDivElement, progressWidgetPart>} progressWidget - Progress indicator widget (added by progress plugin)
