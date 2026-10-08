@@ -274,3 +274,85 @@ None. No stored data or API-breaking changes; the new endpoint is additive.
   time regardless.
 - A write endpoint for teiHeader content — all writes go through existing
   DOM-mutation + `saveIfDirty()`, no new backend mutation surface.
+
+## Revision 2 (2026-10-08): replacing the generic schema-driven renderer
+
+v1 as specified above was fully implemented and passed exhaustive per-task
+review (11 tasks, each independently spec- and quality-reviewed, several
+real bugs found and fixed along the way). A final holistic review — testing
+the whole feature end to end against the real bundled core TEI schema,
+rather than per-task synthetic fixtures — found that the generic approach
+itself has a fundamental problem: `applyFieldValues()` rebuilt every leaf
+from scratch on every save (remove-all-existing, recreate-from-the-form's-
+values, re-append in schema order), rather than diffing against what the
+dialog opened with and touching only what the user actually changed. On a
+realistic document this:
+
+- Flattened real nested markup into plain concatenated text for any element
+  the generic tree forced to "leaf" status by its depth cap or dedup-once
+  rule (e.g. `biblStruct/analytic`, `biblStruct/monogr`) — `<analytic>
+  <title>…</title><author>…</author></analytic>` became
+  `<analytic>ArticleAB10.1/x</analytic>`, even when the user never touched
+  that section.
+- Deleted leaf elements that were empty of text but carried a meaningful
+  attribute (e.g. `<licence target="...">`).
+- Reordered mixed content (every leaf removed and re-appended at the end,
+  in schema order), which could also produce schema-invalid element order.
+- Forced the user, in the common case of no document-specific schema, to
+  fill in `sourceDesc/biblStruct/monogr` as plain text just to save
+  anything at all (the only cardinality-required field in that case) —
+  which then triggered the flattening bug above on save.
+- Left `titleStmt/title` itself uneditable as plain text in that same
+  common case, since the schema allows ~60 inline child elements inside
+  `<title>`, making it non-leaf under the generic renderer's binary
+  leaf/non-leaf split.
+
+User decision on reviewing these findings: **drop the fully generic,
+schema-derived field tree. This feature is a quick way to edit the fields
+editors actually fill in, not a general-purpose editor for arbitrary TEI
+nesting.** Replace it with a small, hand-curated, flat list of fields, each
+bound to one fixed, hand-picked XPath — no schema traversal, no depth cap,
+no leaf/non-leaf ambiguity to get wrong:
+
+| Field | Path | Repeatable |
+|---|---|---|
+| Title | `fileDesc/titleStmt/title` | no |
+| Publisher | `fileDesc/publicationStmt/publisher` | no |
+| Publication date | `fileDesc/publicationStmt/date` | no |
+| DOI | `fileDesc/publicationStmt/idno[@type="DOI"]` | no |
+| Author(s) | `fileDesc/sourceDesc/biblStruct/analytic/author/persName` | yes |
+| Article/chapter title | `fileDesc/sourceDesc/biblStruct/analytic/title` | no |
+| Journal/book title | `fileDesc/sourceDesc/biblStruct/monogr/title` | no |
+| Source citation | `fileDesc/sourceDesc/bibl` | no |
+
+Each field is always rendered as a plain `sl-input`/`sl-textarea` (never a
+nested section) — "Title" and "Author(s)" are deliberately forced to plain
+text even though the full schema would technically allow structured markup
+inside them, since that's exactly the ambiguity that caused the bugs above.
+Help text may still come from `/validate/teiheader-structure`'s description
+for a field whose exact tag happens to be present in that response, looked
+up by tag name on a best-effort basis (absent for anything beyond the
+endpoint's own depth cap, e.g. `analytic`/`monogr`'s own children) — but the
+endpoint no longer decides *which* fields exist; that's the fixed list
+above. A short hardcoded fallback description is used for any field the
+endpoint doesn't cover.
+
+**Save semantics (the actual fix):** on open, snapshot each field's current
+value by reading it directly at its fixed path. On save, for each field
+independently: if its value is unchanged from the snapshot, touch nothing
+at all — the original element (if any) survives untouched, in its original
+position, with its original surrounding content. If changed and non-empty,
+create the element (and any missing ancestor path segments) if absent, else
+update the existing element's text in place (never remove-and-recreate). If
+changed to empty and an element existed before, remove only that one
+element. Each field's path is independent, so there is no shared "rebuild
+the whole parent" step and no reordering of anything the user didn't touch.
+
+**What stays as-is:** the backend endpoint (`/validate/teiheader-structure`),
+its cardinality extraction, and the BFS-merge machinery remain in place —
+they're independently correct, tested, and fast (after the earlier
+performance fix) — just no longer load-bearing for *which* fields this
+dialog shows. Toolbar button, role gating, and the Save/Cancel dialog chrome
+are unchanged. The generic `buildFieldTree()`/recursive-render/depth-cap
+machinery in `tei-header-form.js` and `tei-header-editor.js` is removed in
+favor of the fixed field list and the diff-based read/write helpers above.
