@@ -55,13 +55,26 @@
  *    design spec's sketch, which assumed a plain-text leaf. This also
  *    means the fixture's existing `<publisher>Nomos Verlag</publisher>`
  *    (plain text, no child elements) is not editable as such through this
- *    dialog at all - the spec's own documented v1 limitation ("any element
- *    whose content model mixes text and element children... falls back to
- *    a single read/write sl-textarea of its raw inner XML") describes
- *    exactly this case but does not appear to be implemented; confirming
- *    that gap is left to a follow-up. This test instead drills one level
- *    into `publisher` and edits `orgName` (a true leaf at this MAX_DEPTH),
- *    which exercises the identical save/reload mechanics.
+ *    dialog - the spec's own documented v1 limitation ("any element whose
+ *    content model mixes text and element children... falls back to a
+ *    single read/write sl-textarea of its raw inner XML") describes
+ *    exactly this case but does not appear to be implemented; that gap
+ *    (full mixed-content editing) is left to a follow-up. This test
+ *    instead drills one level into `publisher` and edits `orgName` (a
+ *    true leaf at this MAX_DEPTH), which exercises the identical
+ *    save/reload mechanics. Separately from the "not editable" gap, a
+ *    follow-up review confirmed this was actively DESTRUCTIVE until fixed
+ *    in a later commit on this branch: readFieldValues()'s non-leaf
+ *    branch only reads matching child elements, never a node's own direct
+ *    text, so `hasAnyValue` was always false for a plain-text `publisher`
+ *    like this fixture's - and TeiHeaderEditorPlugin#onSave() calls this
+ *    for every root on every save, so simply editing an unrelated field
+ *    (e.g. titleStmt/title) and clicking Save silently deleted
+ *    `<publisher>Nomos Verlag</publisher>` even though the user never
+ *    touched that field. applyFieldValues() now leaves such an element
+ *    untouched instead of deleting it (see its own docstring) - the
+ *    "not editable" limitation itself is unchanged, but it no longer
+ *    destroys the data it can't edit.
  *
  * @testCovers app/src/plugins/tei-header-editor.js
  * @testCovers app/src/modules/tei-header-form.js

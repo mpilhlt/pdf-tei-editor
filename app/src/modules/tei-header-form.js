@@ -184,7 +184,22 @@ export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
       const nestedValues = /** @type {NestedFieldValues} */ (values[node.tag] ?? {})
       const hasAnyValue = leavesHaveValues(node.children, nestedValues)
       let child = [...scopeNode.children].find((el) => el.localName === node.tag)
-      if (child && !hasAnyValue) {
+      // A non-leaf tag can, in a real document, hold plain text instead of
+      // any of its schema-defined structural children (e.g.
+      // `<publisher>Nomos Verlag</publisher>` with no `<orgName>`).
+      // readFieldValues() never captures that text (it only looks for
+      // matching child ELEMENTS - see its docstring), so `hasAnyValue` is
+      // always false for such an element regardless of its real content.
+      // Removing it on that basis would silently delete real data the
+      // user never touched, on every save that reaches this section (see
+      // tests/e2e/tests/tei-header-editor.spec.js's header comment,
+      // finding #4). Full mixed-content editing (reading/writing that raw
+      // text) stays a documented follow-up; this only stops the
+      // destructive side effect by leaving such an element untouched.
+      const hasUncapturedText = !!child && [...child.childNodes].some(
+        (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+      )
+      if (child && !hasAnyValue && !hasUncapturedText) {
         // All values under this section were cleared - remove the now-empty
         // element rather than leaving a dangling `<imprint/>`-style husk,
         // mirroring how the leaf branch above already drops cleared leaves.

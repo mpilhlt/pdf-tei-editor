@@ -9,6 +9,12 @@ import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
 import { buildFieldTree, readFieldValues, applyFieldValues, getMainInput, MAX_DEPTH } from '../../../app/src/modules/tei-header-form.js';
 
+// applyFieldValues() references the bare global `Node` (e.g. Node.TEXT_NODE),
+// same as app/src/modules/xml-utils.js and friends - not available in plain
+// Node.js, so tests exercising that path need it set globally first (same
+// pattern as tests/unit/js/xmleditor-edit-guard.test.js).
+global.Node = new JSDOM('<!DOCTYPE html>').window.Node;
+
 /** @type {import('../../../app/src/modules/api-client-v1.js').TeiHeaderStructureResponse} */
 const FIXTURE_STRUCTURE = {
   roots: ['titleStmt'],
@@ -143,6 +149,40 @@ describe('readFieldValues / applyFieldValues', () => {
     const titleEl = titleStmt.getElementsByTagName('title')[0];
     assert.strictEqual(titleEl.hasAttribute('xml:id'), false, 'empty xml:id must not be written');
     assert.strictEqual(titleEl.getAttribute('type'), 'main', 'non-empty attributes must still be written');
+  });
+
+  it('does not delete a non-leaf element holding plain text on an untouched round-trip (regression: silent data loss)', () => {
+    // publisher is non-leaf (TEI allows structured markup like orgName
+    // inside it), but this document's publisher holds plain text instead
+    // - a real, common case (e.g. <publisher>Nomos Verlag</publisher>).
+    // readFieldValues() only looks for matching child ELEMENTS, so it
+    // returns {} for publisher regardless of its real text content;
+    // applyFieldValues() must not mistake that for "the user cleared this
+    // section" and delete the element - confirmed (before this fix) to
+    // silently delete <publisher> on ANY save that reaches publicationStmt,
+    // even one that only touched an unrelated field like date.
+    const dom = new JSDOM(
+      `<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><publicationStmt><publisher>Nomos Verlag</publisher><date type="publication">2020</date></publicationStmt></fileDesc></teiHeader></TEI>`,
+      { contentType: 'text/xml' }
+    );
+    const publicationStmt = dom.window.document.getElementsByTagName('publicationStmt')[0];
+    const tree = [
+      {
+        tag: 'publisher', isLeaf: false, required: false, repeatable: false, attributes: [],
+        children: [{ tag: 'orgName', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }]
+      },
+      { tag: 'date', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }
+    ];
+
+    // Simulates "user opened the dialog, touched nothing relevant, clicked
+    // Save" - the unmodified read values are applied straight back.
+    const values = readFieldValues(tree, publicationStmt);
+    applyFieldValues(tree, publicationStmt, values, NS);
+
+    const publisherEl = publicationStmt.getElementsByTagName('publisher')[0];
+    assert.ok(publisherEl, 'publisher element must still exist');
+    assert.strictEqual(publisherEl.textContent, 'Nomos Verlag', 'publisher text content must be unchanged');
+    assert.strictEqual(publicationStmt.getElementsByTagName('date')[0].textContent, '2020');
   });
 
   it('does not collide two sibling non-leaf sections that share a leaf tag name (analytic/title vs monogr/title)', () => {
