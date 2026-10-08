@@ -7,291 +7,159 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { buildFieldTree, readFieldValues, applyFieldValues, getMainInput, MAX_DEPTH } from '../../../app/src/modules/tei-header-form.js';
+import { FIELD_DEFS, readFieldValues, applyFieldValues } from '../../../app/src/modules/tei-header-form.js';
 
-// applyFieldValues() references the bare global `Node` (e.g. Node.TEXT_NODE),
-// same as app/src/modules/xml-utils.js and friends - not available in plain
-// Node.js, so tests exercising that path need it set globally first (same
-// pattern as tests/unit/js/xmleditor-edit-guard.test.js).
-global.Node = new JSDOM('<!DOCTYPE html>').window.Node;
+const NS = 'http://www.tei-c.org/ns/1.0';
 
-/** @type {import('../../../app/src/modules/api-client-v1.js').TeiHeaderStructureResponse} */
-const FIXTURE_STRUCTURE = {
-  roots: ['titleStmt'],
-  tags: {
-    titleStmt: {
-      description: 'title statement',
-      children: ['title'],
-      attributes: [],
-      childCardinality: { title: { required: true, repeatable: false } }
-    },
-    title: {
-      description: 'the title of a work',
-      children: [],
-      attributes: [{ name: 'level', values: ['a', 'm', 'j'], required: false }],
-      childCardinality: {}
-    }
-  }
-};
+/**
+ * @param {string} fileDescInnerXml
+ * @returns {Element} the parsed <fileDesc> element
+ */
+function parseFileDesc(fileDescInnerXml) {
+  const dom = new JSDOM(
+    `<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc>${fileDescInnerXml}</fileDesc></teiHeader></TEI>`,
+    { contentType: 'text/xml' }
+  );
+  return dom.window.document.getElementsByTagName('fileDesc')[0];
+}
 
-describe('buildFieldTree', () => {
-  it('builds a nested tree with leaf fields and required/repeatable flags', () => {
-    const tree = buildFieldTree(FIXTURE_STRUCTURE);
-    assert.strictEqual(tree.length, 1);
-    const [titleStmt] = tree;
-    assert.strictEqual(titleStmt.tag, 'titleStmt');
-    assert.strictEqual(titleStmt.children.length, 1);
-    const [title] = titleStmt.children;
-    assert.strictEqual(title.tag, 'title');
-    assert.strictEqual(title.isLeaf, true);
-    assert.strictEqual(title.required, true);
-    assert.strictEqual(title.repeatable, false);
-    assert.strictEqual(title.attributes[0].name, 'level');
+const FULL_FIXTURE = `
+  <titleStmt><title>Existing Title</title></titleStmt>
+  <publicationStmt>
+    <publisher>Nomos Verlag</publisher>
+    <date type="publication">2020</date>
+    <idno type="DOI">10.1/existing</idno>
+  </publicationStmt>
+  <sourceDesc>
+    <bibl>Existing citation text.</bibl>
+    <biblStruct>
+      <analytic>
+        <title>Article Title</title>
+        <author><persName>First Author</persName></author>
+        <author><persName>Second Author</persName></author>
+      </analytic>
+      <monogr>
+        <title>Journal Title</title>
+      </monogr>
+    </biblStruct>
+  </sourceDesc>
+`;
+
+describe('readFieldValues', () => {
+  it('reads every field at its fixed path from a fully-populated fileDesc', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const values = readFieldValues(fileDesc);
+    assert.strictEqual(values.title[0].text, 'Existing Title');
+    assert.strictEqual(values.publisher[0].text, 'Nomos Verlag');
+    assert.strictEqual(values.pubDate[0].text, '2020');
+    assert.strictEqual(values.doi[0].text, '10.1/existing');
+    assert.strictEqual(values.bibl[0].text, 'Existing citation text.');
+    assert.strictEqual(values.analyticTitle[0].text, 'Article Title');
+    assert.strictEqual(values.monogrTitle[0].text, 'Journal Title');
+    assert.deepStrictEqual(values.author.map((v) => v.text), ['First Author', 'Second Author']);
   });
 
-  it('caps recursion depth at MAX_DEPTH levels to guard against schema cycles', () => {
-    /** @type {any} */
-    const cyclicStructure = {
-      roots: ['a'],
-      tags: {
-        a: { description: null, children: ['a'], attributes: [], childCardinality: { a: { required: false, repeatable: true } } }
-      }
-    };
-    const tree = buildFieldTree(cyclicStructure);
-    let depth = 0;
-    let node = tree[0];
-    while (node.children && node.children[0]) {
-      node = node.children[0];
-      depth += 1;
-    }
-    assert.ok(depth <= MAX_DEPTH, `depth was ${depth}, expected <= ${MAX_DEPTH}`);
+  it('returns empty arrays for every field when fileDesc is empty or null', () => {
+    const fileDesc = parseFileDesc('');
+    const values = readFieldValues(fileDesc);
+    for (const def of FIELD_DEFS) assert.deepStrictEqual(values[def.key], []);
+    const valuesFromNull = readFieldValues(null);
+    for (const def of FIELD_DEFS) assert.deepStrictEqual(valuesFromNull[def.key], []);
   });
 
-  it('actually caps at MAX_DEPTH for a long acyclic chain (not just <= MAX_DEPTH)', () => {
-    /** @type {any} */
-    const chainStructure = { roots: ['t0'], tags: {} };
-    const chainLength = MAX_DEPTH + 4; // comfortably longer than MAX_DEPTH, to prove truncation actually happens
-    for (let i = 0; i < chainLength; i++) {
-      chainStructure.tags[`t${i}`] = {
-        description: null,
-        children: i < chainLength - 1 ? [`t${i + 1}`] : [],
-        attributes: [],
-        childCardinality: i < chainLength - 1 ? { [`t${i + 1}`]: { required: false, repeatable: false } } : {}
-      };
-    }
-    const tree = buildFieldTree(chainStructure);
-    let depth = 0;
-    let node = tree[0];
-    while (node.children && node.children[0]) {
-      node = node.children[0];
-      depth += 1;
-    }
-    assert.strictEqual(depth, MAX_DEPTH);
-  });
-
-  it('expands a tag reachable from multiple parents only once, as a leaf on later occurrences', () => {
-    // `shared` is a child of both `a` and `b` - without global-expand-once
-    // tracking, each occurrence would independently re-expand `shared`'s
-    // own subtree, which is combinatorial for a real schema's richly
-    // cross-referenced vocabulary (see buildNode()'s docstring).
-    /** @type {any} */
-    const structure = {
-      roots: ['a', 'b'],
-      tags: {
-        a: { description: null, children: ['shared'], attributes: [], childCardinality: { shared: { required: false, repeatable: false } } },
-        b: { description: null, children: ['shared'], attributes: [], childCardinality: { shared: { required: false, repeatable: false } } },
-        shared: { description: null, children: ['leaf'], attributes: [], childCardinality: { leaf: { required: false, repeatable: false } } },
-        leaf: { description: null, children: [], attributes: [], childCardinality: {} }
-      }
-    };
-    const [a, b] = buildFieldTree(structure);
-    const sharedUnderA = a.children.find((n) => n.tag === 'shared');
-    const sharedUnderB = b.children.find((n) => n.tag === 'shared');
-    assert.strictEqual(sharedUnderA.isLeaf, false, 'first occurrence should expand normally');
-    assert.strictEqual(sharedUnderA.children.length, 1);
-    assert.strictEqual(sharedUnderB.isLeaf, true, 'second occurrence should be forced to a leaf');
-    assert.strictEqual(sharedUnderB.children.length, 0);
-  });
-
-  it('documents that MAX_DEPTH currently makes biblStruct/analytic and biblStruct/monogr unreachable for their own children (known limitation, see MAX_DEPTH\'s docstring)', () => {
-    // Shaped like the real bundled core schema: sourceDesc (root, depth 0)
-    // -> biblStruct (depth 1) -> analytic/monogr (depth 2) -> title
-    // (depth 3, never reached). At the current MAX_DEPTH=2,
-    // `atMaxDepth = depth >= MAX_DEPTH` fires AT depth 2, forcing
-    // analytic/monogr to isLeaf=true before their own title/author
-    // children are ever expanded - the real-schema consequence of
-    // MAX_DEPTH's trade-off (see that constant's docstring). This means
-    // Task 9's analytic/monogr title-disambiguation feature (see the
-    // "does not collide two sibling non-leaf sections..." test below) is
-    // NOT reachable through buildFieldTree() against the real schema
-    // today, even though that test's hand-constructed FieldNode tree
-    // (bypassing buildFieldTree()/MAX_DEPTH entirely) proves the
-    // disambiguation LOGIC itself is correct. If MAX_DEPTH is ever
-    // changed, re-check this test and reconsider that trade-off rather
-    // than just updating the asserted depth.
-    /** @type {any} */
-    const structure = {
-      roots: ['sourceDesc'],
-      tags: {
-        sourceDesc: { description: null, children: ['biblStruct'], attributes: [], childCardinality: { biblStruct: { required: false, repeatable: false } } },
-        biblStruct: { description: null, children: ['analytic', 'monogr'], attributes: [], childCardinality: { analytic: { required: false, repeatable: false }, monogr: { required: false, repeatable: false } } },
-        analytic: { description: null, children: ['title'], attributes: [], childCardinality: { title: { required: false, repeatable: false } } },
-        monogr: { description: null, children: ['title'], attributes: [], childCardinality: { title: { required: false, repeatable: false } } },
-        title: { description: null, children: [], attributes: [], childCardinality: {} }
-      }
-    };
-    const [sourceDesc] = buildFieldTree(structure);
-    const biblStruct = sourceDesc.children.find((n) => n.tag === 'biblStruct');
-    const analytic = biblStruct.children.find((n) => n.tag === 'analytic');
-    const monogr = biblStruct.children.find((n) => n.tag === 'monogr');
-    assert.strictEqual(analytic.isLeaf, true, 'analytic should currently be forced to a leaf at MAX_DEPTH');
-    assert.strictEqual(analytic.children.length, 0);
-    assert.strictEqual(monogr.isLeaf, true, 'monogr should currently be forced to a leaf at MAX_DEPTH');
-    assert.strictEqual(monogr.children.length, 0);
+  it('matches idno[@type="DOI"] specifically, not an idno with a different type', () => {
+    const fileDesc = parseFileDesc('<publicationStmt><idno type="ISSN">1234-5678</idno></publicationStmt>');
+    const values = readFieldValues(fileDesc);
+    assert.deepStrictEqual(values.doi, []);
   });
 });
 
-describe('readFieldValues / applyFieldValues', () => {
-  const NS = 'http://www.tei-c.org/ns/1.0';
-
-  it('reads an existing leaf value by tag path', () => {
-    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt><title>Existing title</title></titleStmt></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
-    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
-    const tree = [{ tag: 'title', isLeaf: true, required: true, repeatable: false, attributes: [], children: [] }];
-    const values = readFieldValues(tree, titleStmt);
-    assert.strictEqual(values.title[0].text, 'Existing title');
+describe('applyFieldValues', () => {
+  it('REGRESSION: leaves every field byte-identical when nothing changed, including nested biblStruct markup', () => {
+    // This is the exact failure mode the fixed-field-list rewrite exists to
+    // prevent: the old generic tree flattened biblStruct/analytic's real
+    // <title>/<author><persName> markup into plain concatenated text on
+    // every save, even when the user touched nothing. Round-tripping
+    // unmodified values must leave the whole subtree untouched.
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const before = fileDesc.cloneNode(true);
+    const opened = readFieldValues(fileDesc);
+    applyFieldValues(fileDesc, opened, opened, NS);
+    assert.strictEqual(fileDesc.outerHTML, before.outerHTML, 'fileDesc must be byte-identical when no field changed');
   });
 
-  it('creates missing elements on write, and skips untouched optional sections', () => {
-    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt/></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
-    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
-    const tree = [{ tag: 'title', isLeaf: true, required: true, repeatable: false, attributes: [], children: [] }];
-    applyFieldValues(tree, titleStmt, { title: [{ text: 'New title', attrs: {} }] }, NS);
-    const titleEl = titleStmt.getElementsByTagName('title')[0];
-    assert.strictEqual(titleEl.textContent, 'New title');
+  it('updates an existing leaf in place without touching its siblings or position', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.publisher = [{ text: 'New Publisher' }];
+    applyFieldValues(fileDesc, opened, current, NS);
+    const pubStmt = fileDesc.getElementsByTagName('publicationStmt')[0];
+    assert.strictEqual(pubStmt.getElementsByTagName('publisher')[0].textContent, 'New Publisher');
+    // Siblings and their order survive untouched.
+    assert.strictEqual(pubStmt.children[1].localName, 'date');
+    assert.strictEqual(pubStmt.children[1].textContent, '2020');
+    assert.strictEqual(pubStmt.children[2].localName, 'idno');
   });
 
-  it('skips empty attribute values instead of writing them as attr="" (e.g. xml:id must never be empty)', () => {
-    // A leaf's rendered row has one input per schema attribute regardless
-    // of whether the user filled it in - writing every one of them
-    // unconditionally produces invalid XML for NCName-typed attributes
-    // like xml:id (the empty string is not a valid NCName) and pollutes
-    // the output with meaningless empty attributes for any other one.
-    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt/></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
-    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
-    const tree = [{ tag: 'title', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }];
-    applyFieldValues(tree, titleStmt, {
-      title: [{ text: 'New title', attrs: { 'xml:id': '', type: 'main' } }]
-    }, NS);
-    const titleEl = titleStmt.getElementsByTagName('title')[0];
-    assert.strictEqual(titleEl.hasAttribute('xml:id'), false, 'empty xml:id must not be written');
-    assert.strictEqual(titleEl.getAttribute('type'), 'main', 'non-empty attributes must still be written');
+  it('creates a missing field (and its missing ancestors) only when a new, non-empty value is given', () => {
+    const fileDesc = parseFileDesc('<titleStmt><title>T</title></titleStmt>');
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.monogrTitle = [{ text: 'New Journal' }];
+    applyFieldValues(fileDesc, opened, current, NS);
+    const sourceDesc = fileDesc.getElementsByTagName('sourceDesc')[0];
+    assert.ok(sourceDesc, 'sourceDesc must be created');
+    const biblStruct = sourceDesc.getElementsByTagName('biblStruct')[0];
+    assert.ok(biblStruct, 'biblStruct must be created');
+    const monogr = biblStruct.getElementsByTagName('monogr')[0];
+    assert.strictEqual(monogr.getElementsByTagName('title')[0].textContent, 'New Journal');
+    // Unrelated fields (title) survive untouched.
+    assert.strictEqual(fileDesc.getElementsByTagName('titleStmt')[0].getElementsByTagName('title')[0].textContent, 'T');
   });
 
-  it('does not delete a non-leaf element holding plain text on an untouched round-trip (regression: silent data loss)', () => {
-    // publisher is non-leaf (TEI allows structured markup like orgName
-    // inside it), but this document's publisher holds plain text instead
-    // - a real, common case (e.g. <publisher>Nomos Verlag</publisher>).
-    // readFieldValues() only looks for matching child ELEMENTS, so it
-    // returns {} for publisher regardless of its real text content;
-    // applyFieldValues() must not mistake that for "the user cleared this
-    // section" and delete the element - confirmed (before this fix) to
-    // silently delete <publisher> on ANY save that reaches publicationStmt,
-    // even one that only touched an unrelated field like date.
-    const dom = new JSDOM(
-      `<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><publicationStmt><publisher>Nomos Verlag</publisher><date type="publication">2020</date></publicationStmt></fileDesc></teiHeader></TEI>`,
-      { contentType: 'text/xml' }
-    );
-    const publicationStmt = dom.window.document.getElementsByTagName('publicationStmt')[0];
-    const tree = [
-      {
-        tag: 'publisher', isLeaf: false, required: false, repeatable: false, attributes: [],
-        children: [{ tag: 'orgName', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }]
-      },
-      { tag: 'date', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }
-    ];
-
-    // Simulates "user opened the dialog, touched nothing relevant, clicked
-    // Save" - the unmodified read values are applied straight back.
-    const values = readFieldValues(tree, publicationStmt);
-    applyFieldValues(tree, publicationStmt, values, NS);
-
-    const publisherEl = publicationStmt.getElementsByTagName('publisher')[0];
-    assert.ok(publisherEl, 'publisher element must still exist');
-    assert.strictEqual(publisherEl.textContent, 'Nomos Verlag', 'publisher text content must be unchanged');
-    assert.strictEqual(publicationStmt.getElementsByTagName('date')[0].textContent, '2020');
+  it('creates a missing root section (publicationStmt) before an already-existing later root (sourceDesc), per TEI ordering', () => {
+    const fileDesc = parseFileDesc('<titleStmt><title>T</title></titleStmt><sourceDesc><bibl>B</bibl></sourceDesc>');
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.publisher = [{ text: 'New Publisher' }];
+    applyFieldValues(fileDesc, opened, current, NS);
+    const tags = [...fileDesc.children].map((el) => el.localName);
+    assert.deepStrictEqual(tags, ['titleStmt', 'publicationStmt', 'sourceDesc']);
   });
 
-  it('does not collide two sibling non-leaf sections that share a leaf tag name (analytic/title vs monogr/title)', () => {
-    // biblStruct/analytic/title and biblStruct/monogr/title are two
-    // different fields that happen to share a tag name one level down -
-    // a naive flat tag-name-keyed values dict would merge them into one.
-    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><sourceDesc><biblStruct><analytic><title>Article Title</title></analytic><monogr><title>Journal Title</title></monogr></biblStruct></sourceDesc></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
-    const biblStruct = dom.window.document.getElementsByTagName('biblStruct')[0];
-    const titleLeaf = { tag: 'title', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] };
-    const tree = [
-      { tag: 'analytic', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] },
-      { tag: 'monogr', isLeaf: false, required: false, repeatable: false, attributes: [], children: [titleLeaf] }
-    ];
-
-    const values = readFieldValues(tree, biblStruct);
-    assert.strictEqual(values.analytic.title[0].text, 'Article Title');
-    assert.strictEqual(values.monogr.title[0].text, 'Journal Title');
-
-    // Round-trip: apply swapped values and confirm each section keeps its own.
-    applyFieldValues(tree, biblStruct, {
-      analytic: { title: [{ text: 'New Article Title', attrs: {} }] },
-      monogr: { title: [{ text: 'New Journal Title', attrs: {} }] }
-    }, NS);
-    const analyticTitle = biblStruct.getElementsByTagName('analytic')[0].getElementsByTagName('title')[0];
-    const monogrTitle = biblStruct.getElementsByTagName('monogr')[0].getElementsByTagName('title')[0];
-    assert.strictEqual(analyticTitle.textContent, 'New Article Title');
-    assert.strictEqual(monogrTitle.textContent, 'New Journal Title');
+  it('removes a field whose value was cleared, and only that element', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.doi = [{ text: '' }];
+    applyFieldValues(fileDesc, opened, current, NS);
+    const pubStmt = fileDesc.getElementsByTagName('publicationStmt')[0];
+    assert.strictEqual(pubStmt.getElementsByTagName('idno').length, 0);
+    assert.strictEqual(pubStmt.getElementsByTagName('publisher')[0].textContent, 'Nomos Verlag');
+    assert.strictEqual(pubStmt.getElementsByTagName('date')[0].textContent, '2020');
   });
 
-  it('removes an existing non-leaf element whose values were all cleared', () => {
-    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><sourceDesc><biblStruct><monogr><imprint><date>2020</date></imprint></monogr></biblStruct></sourceDesc></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
-    const monogr = dom.window.document.getElementsByTagName('monogr')[0];
-    const dateLeaf = { tag: 'date', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] };
-    const tree = [
-      { tag: 'imprint', isLeaf: false, required: false, repeatable: false, attributes: [], children: [dateLeaf] }
-    ];
-
-    assert.strictEqual(monogr.getElementsByTagName('imprint').length, 1);
-
-    // Clearing imprint's only leaf value should remove the now-empty
-    // <imprint/> element itself, not leave a dangling husk behind.
-    applyFieldValues(tree, monogr, { imprint: { date: [{ text: '', attrs: {} }] } }, NS);
-
-    assert.strictEqual(monogr.getElementsByTagName('imprint').length, 0);
+  it('handles adding a second author to a document that currently has only one', () => {
+    const fileDesc = parseFileDesc('<sourceDesc><biblStruct><analytic><author><persName>Only Author</persName></author></analytic></biblStruct></sourceDesc>');
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.author = [{ text: 'Only Author' }, { text: 'New Second Author' }];
+    applyFieldValues(fileDesc, opened, current, NS);
+    const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
+    assert.strictEqual(authors.length, 2);
+    assert.strictEqual(authors[0].getElementsByTagName('persName')[0].textContent, 'Only Author');
+    assert.strictEqual(authors[1].getElementsByTagName('persName')[0].textContent, 'New Second Author');
   });
-});
 
-describe('getMainInput', () => {
-  it('picks a row\'s main value input, not a per-attribute input that happens to be an sl-input too', () => {
-    // Mirrors TeiHeaderEditorPlugin#renderLeafRow()'s output: the main
-    // value input is appended first, then one sl-input/sl-select per
-    // attribute (e.g. title's `type` attribute renders as a plain
-    // sl-input with dataset.attr set). A required leaf with an empty
-    // value but a filled-in attribute must still resolve its main input
-    // as empty - this is the regression the Critical review finding was
-    // about (querySelectorAll over the whole group previously matched
-    // both and could be fooled by a non-empty attribute input).
-    const dom = new JSDOM('<!doctype html><div id="row"></div>');
-    const document = dom.window.document;
-    const row = document.getElementById('row');
-
-    const mainInput = document.createElement('sl-input');
-    mainInput.value = '';
-    row.appendChild(mainInput);
-
-    const attrInput = document.createElement('sl-input');
-    attrInput.dataset.attr = 'type';
-    attrInput.value = 'main';
-    row.appendChild(attrInput);
-
-    const resolved = getMainInput(row);
-    assert.strictEqual(resolved, mainInput);
-    assert.strictEqual(resolved.value, '');
+  it('handles removing one of two existing authors', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.author = [{ text: 'First Author' }]; // second author row removed in the UI
+    applyFieldValues(fileDesc, opened, current, NS);
+    const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
+    assert.strictEqual(authors.length, 1);
+    assert.strictEqual(authors[0].getElementsByTagName('persName')[0].textContent, 'First Author');
   });
 });
