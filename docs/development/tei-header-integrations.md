@@ -15,8 +15,8 @@ For fileDesc/publicationStmt/sourceDesc metadata semantics beyond what's listed 
 | Element | Written by | Read by |
 | --- | --- | --- |
 | `fileDesc/@xml:id` | `update_fileref_in_xml()` | `extract_tei_metadata()`, `extract_fileref()` |
-| `fileDesc/titleStmt` | extractors (`create_tei_header()`), metadata-extraction enhancement, `saveRevision()` (respStmt only) | `extract_tei_metadata()` (title/author fallback), revision-history UI (respStmt) |
-| `fileDesc/publicationStmt`, `fileDesc/sourceDesc` | extractors, metadata-update job, metadata-extraction enhancement, `addLicenseElement()` (licence only) | `extract_tei_metadata()` (biblStruct-first, publicationStmt-fallback) |
+| `fileDesc/titleStmt` | extractors (`create_tei_header()`), metadata-extraction enhancement, `saveRevision()` (respStmt only), `TeiHeaderEditorPlugin` (title only) | `extract_tei_metadata()` (title/author fallback), revision-history UI (respStmt), `TeiHeaderEditorPlugin` (title only) |
+| `fileDesc/publicationStmt`, `fileDesc/sourceDesc` | extractors, metadata-update job, metadata-extraction enhancement, `addLicenseElement()` (licence only), `TeiHeaderEditorPlugin` | `extract_tei_metadata()` (biblStruct-first, publicationStmt-fallback), `TeiHeaderEditorPlugin` |
 | `encodingDesc/appInfo/application` | extractors, `ensureExtractorVariant()` (copy-on-save) | variant/extractor-provenance readers across backend and frontend (see below) |
 | `encodingDesc/editorialDecl` | extractors (at extraction time), "Refresh document rules" action | `getEditorialDeclGuides()`, `extract_annotation_rule_refs()`, Annotation Guide drawer |
 | Schema location (`<?xml-model?>` PI, or `encodingDesc/schemaRef` fallback) | "Refresh document rules" action (PI only - see below) | `extract_schema_locations()`, `SchemaKind.discover()`, document-rules registry decorations |
@@ -34,6 +34,8 @@ The primary identifier for a document. Encoded/decoded for NCName-safety (leadin
 ## fileDesc/titleStmt
 
 `titleStmt/title[@level="a"]` and (legacy) `titleStmt/author` are seeded by extractors via `create_tei_header()`, and filled in when missing by the metadata-extraction enhancement ([enrich-tei-header.js](../../fastapi_app/plugins/metadata_extraction/enhancements/enrich-tei-header.js)). Author is considered redundant here once a `sourceDesc/biblStruct/analytic/author` exists — `update_biblstruct_in_tei()` removes `titleStmt/author` once it builds a `biblStruct`. `extract_tei_metadata()` reads title from `sourceDesc/biblStruct/analytic/title[@level="a"]` first, `titleStmt/title` as fallback only; it does not read `titleStmt/author` at all.
+
+`TeiHeaderEditorPlugin` ([tei-header-editor.js](../../app/src/plugins/tei-header-editor.js)) adds a toolbar-triggered dialog that also reads/writes `titleStmt/title`, via a schema-derived form; it is hidden for pure-annotator-role users. It deliberately does not touch `titleStmt/respStmt` — that's covered below.
 
 `titleStmt/respStmt` is a separate concern: it's the **user registry** for this document, not bibliographic metadata. Every human user who has saved a revision gets one entry:
 
@@ -57,6 +59,7 @@ Writers:
 - `update_biblstruct_in_tei()` (backend bulk job) — rebuilds `sourceDesc/biblStruct` wholesale from a DOI lookup or LLM extraction result, sets `biblStruct/@status="last-updated:<timestamp>"`.
 - `enrich-tei-header.js` — same, client-side, fills only missing/empty fields.
 - `addLicenseElement()` in [oa-utils.js](../../app/src/modules/oa-utils.js) — separate Unpaywall-driven writer that appends `publicationStmt/licence` based on the document's DOI. Not currently called from any plugin/UI code — check for a live caller before assuming it runs automatically.
+- `TeiHeaderEditorPlugin` ([tei-header-editor.js](../../app/src/plugins/tei-header-editor.js)) — UI-driven writer/reader, via a schema-derived dialog form covering `publicationStmt/*` and `sourceDesc/*` (including structured `biblStruct` fields). Does not touch `encodingDesc` or `revisionDesc`, which are covered by the writers/rows elsewhere in this doc. Known limitation: a schema-non-leaf element holding plain text in a given document instance isn't editable as such through this dialog (left untouched, not deleted); very deeply nested schema structures are capped at a shallow depth.
 
 ## encodingDesc/appInfo/application — extractor provenance
 
