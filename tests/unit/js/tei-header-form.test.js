@@ -112,6 +112,43 @@ describe('buildFieldTree', () => {
     assert.strictEqual(sharedUnderB.isLeaf, true, 'second occurrence should be forced to a leaf');
     assert.strictEqual(sharedUnderB.children.length, 0);
   });
+
+  it('documents that MAX_DEPTH currently makes biblStruct/analytic and biblStruct/monogr unreachable for their own children (known limitation, see MAX_DEPTH\'s docstring)', () => {
+    // Shaped like the real bundled core schema: sourceDesc (root, depth 0)
+    // -> biblStruct (depth 1) -> analytic/monogr (depth 2) -> title
+    // (depth 3, never reached). At the current MAX_DEPTH=2,
+    // `atMaxDepth = depth >= MAX_DEPTH` fires AT depth 2, forcing
+    // analytic/monogr to isLeaf=true before their own title/author
+    // children are ever expanded - the real-schema consequence of
+    // MAX_DEPTH's trade-off (see that constant's docstring). This means
+    // Task 9's analytic/monogr title-disambiguation feature (see the
+    // "does not collide two sibling non-leaf sections..." test below) is
+    // NOT reachable through buildFieldTree() against the real schema
+    // today, even though that test's hand-constructed FieldNode tree
+    // (bypassing buildFieldTree()/MAX_DEPTH entirely) proves the
+    // disambiguation LOGIC itself is correct. If MAX_DEPTH is ever
+    // changed, re-check this test and reconsider that trade-off rather
+    // than just updating the asserted depth.
+    /** @type {any} */
+    const structure = {
+      roots: ['sourceDesc'],
+      tags: {
+        sourceDesc: { description: null, children: ['biblStruct'], attributes: [], childCardinality: { biblStruct: { required: false, repeatable: false } } },
+        biblStruct: { description: null, children: ['analytic', 'monogr'], attributes: [], childCardinality: { analytic: { required: false, repeatable: false }, monogr: { required: false, repeatable: false } } },
+        analytic: { description: null, children: ['title'], attributes: [], childCardinality: { title: { required: false, repeatable: false } } },
+        monogr: { description: null, children: ['title'], attributes: [], childCardinality: { title: { required: false, repeatable: false } } },
+        title: { description: null, children: [], attributes: [], childCardinality: {} }
+      }
+    };
+    const [sourceDesc] = buildFieldTree(structure);
+    const biblStruct = sourceDesc.children.find((n) => n.tag === 'biblStruct');
+    const analytic = biblStruct.children.find((n) => n.tag === 'analytic');
+    const monogr = biblStruct.children.find((n) => n.tag === 'monogr');
+    assert.strictEqual(analytic.isLeaf, true, 'analytic should currently be forced to a leaf at MAX_DEPTH');
+    assert.strictEqual(analytic.children.length, 0);
+    assert.strictEqual(monogr.isLeaf, true, 'monogr should currently be forced to a leaf at MAX_DEPTH');
+    assert.strictEqual(monogr.children.length, 0);
+  });
 });
 
 describe('readFieldValues / applyFieldValues', () => {

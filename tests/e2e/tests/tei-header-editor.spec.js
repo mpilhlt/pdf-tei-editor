@@ -6,75 +6,29 @@
  * pure-annotator role gate (the toolbar button is hidden entirely for
  * annotator-only users - see acl-utils.js's userIsAnnotatorOnly()).
  *
- * Writing this test uncovered four real, previously-untested bugs in the
- * "fully implemented" feature (none of this was caught by unit tests,
- * since none of them exercised the real bundled core TEI schema end to
- * end):
+ * Writing this test against the real bundled core TEI schema (no
+ * document schema declared, the common case) surfaced several real bugs
+ * - a missing SlDetails registration, a backend perf anti-pattern, an
+ * unbounded field-tree expansion, invalid XML from empty attributes, and
+ * (in a later commit) silent data loss for plain-text non-leaf elements -
+ * see the `770207bb`/`fc51c63d` commit messages for the full
+ * investigation and fixes; this header only tracks what's still open.
  *
- * 1. `app/src/ui.js` never imported `SlDetails`
- *    (`@shoelace-style/shoelace/dist/components/details/details.js`), so
- *    every `<sl-details>` TeiHeaderEditorPlugin creates was an inert,
- *    unregistered custom element: no shadow DOM, no rendered summary
- *    header text, no collapse/expand behavior at all. Fixed by adding the
- *    import (same pattern as every other Shoelace component there).
- * 2. `fastapi_app/lib/utils/relaxng_to_codemirror.py`'s
- *    `extract_tag_definitions()` re-walked the schema's cross-referenced
- *    pattern graph from scratch per ATTRIBUTE per element
- *    (`_is_attribute_required()`/`_find_attribute_elements()`) instead of
- *    once per element - the same anti-pattern a prior perf pass already
- *    fixed for child elements - without per-tag memoization across a BFS's
- *    repeated visits to shared vocabulary elements. A cold call to
- *    POST /validate/teiheader-structure measured ~33s before these fixes
- *    (plus a `_tag_definition_cache`), ~1.6s after.
- * 3. `app/src/modules/tei-header-form.js`'s `buildNode()` used a
- *    per-branch ancestor set for cycle detection, which only catches a tag
- *    reappearing in its own descendant chain - not the same shared tag
- *    (e.g. `p`, `date`, `idno`) being reachable as a child of many
- *    different parents, which is the common case in a real TEI schema.
- *    Every such occurrence re-expanded its own full subtree independently,
- *    which is combinatorial and never terminated in testing against the
- *    bundled core schema (233k+ DOM elements, browser tab crashes under
- *    long waits). Fixed by expanding each tag's subtree at most once
- *    globally (see that function's docstring) - but even with that fix,
- *    the schema's default MAX_DEPTH of 6 (per the design spec) still
- *    produces an impractically large tree (~1000+ fields, 50k+ DOM
- *    elements) for a document with no declared schema (falls back to the
- *    full bundled core schema - see validation.py's
- *    `resolve_document_schema_cache_file()`), which is this fixture
- *    document's situation and plausibly a common real-world one. MAX_DEPTH
- *    was reduced to 2 here as a pragmatic stopgap to keep the dialog
- *    responsive; a proper fix (e.g. lazy/on-demand expansion, or curating
- *    which tags are worth exposing) is a separate, larger follow-up this
- *    test does not attempt.
- * 4. `publisher` (like most of publicationStmt's children - date, idno,
- *    pubPlace, availability, distributor, authority, address - per the
- *    bundled core schema) is NOT a schema leaf: TEI's `<publisher>` may
- *    contain structured markup (e.g. `orgName`), so the renderer's binary
- *    leaf/non-leaf decision (`children.length === 0`) renders it as its
- *    own collapsible `sl-details`, not a plain `sl-input` - unlike the
- *    design spec's sketch, which assumed a plain-text leaf. This also
- *    means the fixture's existing `<publisher>Nomos Verlag</publisher>`
- *    (plain text, no child elements) is not editable as such through this
- *    dialog - the spec's own documented v1 limitation ("any element whose
- *    content model mixes text and element children... falls back to a
- *    single read/write sl-textarea of its raw inner XML") describes
- *    exactly this case but does not appear to be implemented; that gap
- *    (full mixed-content editing) is left to a follow-up. This test
- *    instead drills one level into `publisher` and edits `orgName` (a
- *    true leaf at this MAX_DEPTH), which exercises the identical
- *    save/reload mechanics. Separately from the "not editable" gap, a
- *    follow-up review confirmed this was actively DESTRUCTIVE until fixed
- *    in a later commit on this branch: readFieldValues()'s non-leaf
- *    branch only reads matching child elements, never a node's own direct
- *    text, so `hasAnyValue` was always false for a plain-text `publisher`
- *    like this fixture's - and TeiHeaderEditorPlugin#onSave() calls this
- *    for every root on every save, so simply editing an unrelated field
- *    (e.g. titleStmt/title) and clicking Save silently deleted
- *    `<publisher>Nomos Verlag</publisher>` even though the user never
- *    touched that field. applyFieldValues() now leaves such an element
- *    untouched instead of deleting it (see its own docstring) - the
- *    "not editable" limitation itself is unchanged, but it no longer
- *    destroys the data it can't edit.
+ * `publisher` (like most of publicationStmt's children) is schema
+ * non-leaf, so the fixture's existing plain-text
+ * `<publisher>Nomos Verlag</publisher>` isn't editable as such through
+ * this dialog - the design spec's own documented v1 limitation (mixed
+ * text/element content falls back to a raw-XML textarea) doesn't appear
+ * to be implemented. This test drills one level into `publisher` and
+ * edits `orgName` instead, which exercises the same save/reload
+ * mechanics. That gap (full mixed-content editing) is a follow-up; the
+ * data-loss consequence of it is fixed (see `fc51c63d`).
+ *
+ * `tei-header-form.js`'s `MAX_DEPTH` is reduced from the design spec's 6
+ * to 2 (see that constant's docstring) - the real schema's cross-
+ * referenced vocabulary makes depth 6 impractically large even with the
+ * global-expand-once fix. A proper fix (lazy expansion, or curating
+ * exposed tags) is a separate follow-up.
  *
  * @testCovers app/src/plugins/tei-header-editor.js
  * @testCovers app/src/modules/tei-header-form.js

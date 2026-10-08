@@ -211,6 +211,12 @@ class RelaxNGParser:
     def parse_file(self, file_path: str) -> Dict[str, Dict]:
         """Parse a RelaxNG file and return autocomplete map."""
         try:
+            # Defensive: _tag_definition_cache is keyed by tag name only,
+            # which is only valid for the schema just parsed - reset it
+            # here so a second parse_file() call on the same instance
+            # (not done by any current caller, but not guaranteed by the
+            # type either) can never serve stale cross-schema data.
+            self._tag_definition_cache = {}
             tree = ET.parse(file_path)
             root = tree.getroot()
             self.root = root  # Retained for extract_tag_definitions()
