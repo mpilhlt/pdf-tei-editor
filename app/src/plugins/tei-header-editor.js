@@ -47,20 +47,28 @@ class TeiHeaderEditorPlugin extends Plugin {
 
   /** @param {ApplicationState} state */
   async install(state) {
-    await super.install(state)
-    this.getDependency('logger').debug('Installing plugin "tei-header-editor"')
+    console.error('DEBUG tei-header-editor: install() called')
+    try {
+      await super.install(state)
+      this.getDependency('logger').debug('Installing plugin "tei-header-editor"')
 
-    this.#headerEditorBtn = PanelUtils.createButton({
-      icon: 'card-heading',
-      tooltip: 'Edit header metadata',
-      name: 'headerEditorBtn'
-    })
-    this.#xmlEditorApi.addToolbarWidget(this.#headerEditorBtn, 1)
+      this.#headerEditorBtn = PanelUtils.createButton({
+        icon: 'card-heading',
+        tooltip: 'Edit header metadata',
+        name: 'headerEditorBtn'
+      })
+      this.#xmlEditorApi.addToolbarWidget(this.#headerEditorBtn, 1)
 
-    this.#dialogUi = this.createUi(createSingleFromTemplate('tei-header-editor-dialog', document.body))
+      this.#dialogUi = this.createUi(createSingleFromTemplate('tei-header-editor-dialog', document.body))
+      console.error('DEBUG tei-header-editor: install() succeeded, button =', this.#headerEditorBtn)
+    } catch (error) {
+      console.error('DEBUG tei-header-editor: install() THREW', error)
+      throw error
+    }
   }
 
   async start() {
+    console.error('DEBUG tei-header-editor: start() called')
     this.getDependency('logger').debug('Starting plugin "tei-header-editor"')
     this.#headerEditorBtn.addEventListener('widget-click', () => this.#onOpen())
     this.#dialogUi.cancelBtn.addEventListener('click', () => this.#dialogUi.hide())
