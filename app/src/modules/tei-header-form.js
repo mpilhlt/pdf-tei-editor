@@ -8,7 +8,16 @@
  * @import { TeiHeaderStructureResponse, TeiHeaderTagDefinition, TeiHeaderAttribute } from './api-client-v1.js'
  */
 
-const MAX_DEPTH = 6
+// The design spec calls for 6, but the bundled core TEI schema's real
+// cross-referenced vocabulary makes that impractically large in practice
+// even with buildNode()'s global-expand-once fix below (~1000 fields /
+// ~50k DOM elements at depth 2 already; depth 3 alone was ~190k elements
+// and failed to render reliably in E2E testing). Reduced to 2 as a
+// pragmatic stopgap pending a proper fix (e.g. lazy/on-demand expansion,
+// or curating which tags are worth exposing) - see
+// tests/e2e/tests/tei-header-editor.spec.js's header comment for the full
+// investigation this was found during.
+export const MAX_DEPTH = 2
 
 /**
  * @typedef {Object} FieldNode
@@ -28,34 +37,61 @@ const MAX_DEPTH = 6
  * @returns {Array<FieldNode>}
  */
 export function buildFieldTree(structure) {
-  return structure.roots.map((root) => buildNode(structure, root, true, false, new Set(), 0))
+  // Shared across every root and never removed on backtrack (unlike a
+  // per-branch ancestor-chain set) - see buildNode()'s docstring for why.
+  const visited = new Set()
+  return structure.roots.map((root) => buildNode(structure, root, true, false, visited, 0))
 }
 
 /**
+ * `visited` guards against two distinct blow-ups: a genuine schema cycle
+ * (a tag reachable from its own descendant chain, which would recurse
+ * forever without a depth cap) AND - the actually dominant real-world
+ * case for a TEI-sized schema - the SAME shared tag (e.g. `p`, `date`,
+ * `idno`, `name`, any `att.global`-style attribute-bearing element) being
+ * reachable as a child of MANY different parents. A per-branch ancestor
+ * set (the old approach: copied and cycle-scoped per recursion path) only
+ * catches the first case; every occurrence of a widely-shared tag still
+ * gets its full subtree independently re-expanded down to MAX_DEPTH on
+ * every single path that reaches it, which is combinatorial in a
+ * real schema (empirically: the bundled core TEI schema's
+ * titleStmt/publicationStmt/sourceDesc closure never finished building a
+ * field tree within a 30s+ test timeout before this fix). `visited` is
+ * instead a single Set mutated in place and shared across the WHOLE
+ * `buildFieldTree()` call (every root, every branch): a tag's full
+ * subtree is expanded at most ONCE, the first time it's encountered in
+ * traversal order: every later reference to the same tag anywhere else
+ * in the tree - a true cycle or a distant, unrelated reuse - becomes a
+ * leaf immediately. This also doubles as a sane UX bound: a metadata form
+ * re-rendering the same shared element's entire nested subtree over and
+ * over under every parent that can contain it would be unusable anyway.
  * @param {TeiHeaderStructureResponse} structure
  * @param {string} tag
  * @param {boolean} required
  * @param {boolean} repeatable
- * @param {Set<string>} ancestors - guards against a schema cycle (tag appearing in its own descendant chain)
+ * @param {Set<string>} visited
  * @param {number} depth
  * @returns {FieldNode}
  */
-function buildNode(structure, tag, required, repeatable, ancestors, depth) {
+function buildNode(structure, tag, required, repeatable, visited, depth) {
   /** @type {TeiHeaderTagDefinition|undefined} */
   const def = structure.tags[tag]
   const children = def?.children ?? []
   const atMaxDepth = depth >= MAX_DEPTH
-  const isCycle = ancestors.has(tag)
-  const isLeaf = children.length === 0 || atMaxDepth || isCycle
+  const alreadyExpanded = visited.has(tag)
+  const isLeaf = children.length === 0 || atMaxDepth || alreadyExpanded
 
   /** @type {Array<FieldNode>} */
   let childNodes = []
   if (!isLeaf) {
-    const nextAncestors = new Set(ancestors)
-    nextAncestors.add(tag)
+    // Marked BEFORE recursing into children: a true self-cycle (tag
+    // reachable from its own descendant chain) then immediately sees
+    // itself as already-visited and stops, exactly like the old
+    // per-branch ancestor check did.
+    visited.add(tag)
     childNodes = children.map((childTag) => {
       const cardinality = def?.childCardinality?.[childTag] ?? { required: false, repeatable: false }
-      return buildNode(structure, childTag, cardinality.required, cardinality.repeatable, nextAncestors, depth + 1)
+      return buildNode(structure, childTag, cardinality.required, cardinality.repeatable, visited, depth + 1)
     })
   }
 
@@ -132,7 +168,16 @@ export function applyFieldValues(tree, scopeNode, values, namespaceUri) {
       for (const value of wanted) {
         const el = doc.createElementNS(namespaceUri, node.tag)
         el.textContent = value.text
-        for (const [name, val] of Object.entries(value.attrs ?? {})) el.setAttribute(name, val)
+        // Empty attribute inputs are skipped, not written as `attr=""` -
+        // many of a leaf's rendered attribute inputs are optional (e.g.
+        // TEI's global attributes: xml:id, xml:lang, rend, ...) and almost
+        // always left blank; writing them anyway produces invalid XML for
+        // NCName-typed attributes like xml:id (the empty string is not a
+        // valid NCName) and pollutes the output with meaningless empty
+        // attributes for every other one.
+        for (const [name, val] of Object.entries(value.attrs ?? {})) {
+          if (val.trim() !== '') el.setAttribute(name, val)
+        }
         scopeNode.appendChild(el)
       }
     } else {

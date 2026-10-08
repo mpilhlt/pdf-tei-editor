@@ -164,6 +164,22 @@ class RelaxNGParser:
         # call it once per discovered tag, so an O(schema size) lookup
         # there is an O(tags x schema size) blowup for a large schema).
         self._element_by_name: Dict[str, ET.Element] = {}
+        # tag_name -> its already-computed TagDefinition, populated by
+        # extract_tag_definitions()'s inner loop. A single call resolves
+        # root_tag's FULL definition plus one for EVERY child name in its
+        # content model (so a caller doing its own BFS, like
+        # validation.py's _collect_merged_defs(), gets children's data
+        # "for free" without a separate call per child) - but with a
+        # shared vocabulary element (e.g. `p`, `date`, `idno`) appearing as
+        # a child of many different root tags, each of THOSE calls would,
+        # without this cache, redo that same shared element's full
+        # attribute/cardinality/variant computation from scratch every
+        # time (measured via cProfile: ~1550 such computations for only
+        # 163 distinct tags in the bundled core TEI schema's
+        # titleStmt/publicationStmt/sourceDesc closure - about 9x
+        # redundant work). Reset per `parse_file()` call since it's keyed
+        # by tag name only, which is only valid for one parsed schema.
+        self._tag_definition_cache: Dict[str, TagDefinition] = {}
         self.attribute_definitions = defaultdict(dict)
         self.processing_stack = set()  # Track currently processing patterns to avoid cycles
         
@@ -560,38 +576,61 @@ class RelaxNGParser:
         """
         return self._element_by_name.get(tag_name)
 
-    def _is_attribute_required(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> bool:
+    def _get_required_attributes(self, container: ET.Element, visited: Optional[Set[str]] = None) -> Set[str]:
         """
-        True if `<attribute name=attr_name>` is a mandatory descendant of
-        `container` — i.e. reachable without passing through an
+        Set of every attribute name that is a mandatory, unconditional
+        descendant of `container` — reachable without passing through an
         `<optional>` or `<choice>`, either of which would make its
-        presence conditional. Resolves `<ref>` (with cycle detection,
-        mirroring `_extract_attributes`) so a required attribute declared
-        in a referenced `<define>` is detected too; refs found inside
+        presence conditional. Same traversal `_is_attribute_required`
+        used to perform for one `attr_name` at a time, but computed ONCE
+        for ALL names in a single pass — mirrors `_get_required_children`'s
+        fix for the identical anti-pattern on child elements (see that
+        method's docstring): `extract_tag_definitions()`/`_extract_variants()`
+        call this once per element instead of calling `_is_attribute_required`
+        once per attribute (each of which re-walked the same,
+        potentially large, cross-referenced pattern graph - e.g. TEI's
+        shared `att.global` attribute classes - from scratch for every
+        attribute). Measured via cProfile at ~80s for a single
+        `extract_tag_definitions()` BFS over the bundled core TEI schema's
+        163 titleStmt/publicationStmt/sourceDesc tags before this fix (32M
+        `Element.findall()` calls), dominated by this redundant re-walking.
+        Resolves `<ref>` (with cycle detection, mirroring
+        `_extract_attributes`) so a required attribute declared in a
+        referenced `<define>` is detected too; refs found inside
         `<optional>`/`<choice>` are correctly not visited here since this
         method is never called on those containers.
         """
         if visited is None:
             visited = set()
+        result: Set[str] = set()
         for attr in container.findall(f'./{RNG_NS}attribute'):
-            if attr.get('name') == attr_name:
-                return True
+            name = attr.get('name')
+            if name:
+                result.add(name)
         for group in container.findall(f'./{RNG_NS}group'):
-            if self._is_attribute_required(group, attr_name, visited):
-                return True
+            result.update(self._get_required_attributes(group, visited))
         for interleave in container.findall(f'./{RNG_NS}interleave'):
-            if self._is_attribute_required(interleave, attr_name, visited):
-                return True
+            result.update(self._get_required_attributes(interleave, visited))
         for ref in container.findall(f'./{RNG_NS}ref'):
             ref_name = ref.get('name')
             if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
                 visited.add(ref_name)
                 try:
-                    if self._is_attribute_required(self.defined_patterns[ref_name], attr_name, visited):
-                        return True
+                    result.update(self._get_required_attributes(self.defined_patterns[ref_name], visited))
                 finally:
                     visited.discard(ref_name)
-        return False
+        return result
+
+    def _is_attribute_required(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if `<attribute name=attr_name>` is a mandatory descendant of
+        `container`. See `_get_required_attributes` for the traversal this
+        delegates to; kept as its own method for callers that only need
+        one name (prefer `_get_required_attributes` when checking more
+        than one name against the same container, to avoid re-walking the
+        pattern graph once per name).
+        """
+        return attr_name in self._get_required_attributes(container, visited)
 
     def _extract_value_documentation(self, attr_element: ET.Element) -> Dict[str, str]:
         """Map enumerated `<value>` text to its own documentation. RelaxNG's
@@ -638,30 +677,48 @@ class RelaxNGParser:
             presets.append({'attrs': attrs, 'description': self._extract_documentation(group)})
         return presets
 
-    def _find_attribute_elements(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> List[ET.Element]:
-        """Find all `<attribute name=attr_name>` nodes reachable from
-        `container`, resolving `<ref>` (with cycle detection) the same way
-        `_extract_attributes` does, so per-value documentation lookup sees
-        attributes declared in a referenced `<define>` too."""
+    def _find_all_attribute_elements(self, container: ET.Element, visited: Optional[Set[str]] = None) -> Dict[str, List[ET.Element]]:
+        """
+        Every `<attribute>` node reachable from `container`, grouped by
+        name, resolving `<ref>` (with cycle detection) the same way
+        `_extract_attributes` does. Computed ONCE for ALL names in a
+        single pass - mirrors `_get_required_attributes`'s fix for the
+        identical anti-pattern: `_extract_variants()` used to call
+        `_find_attribute_elements()` once per attribute name on the
+        element (each re-walking the same pattern graph from scratch for
+        per-value documentation lookup); see `_get_required_attributes`'s
+        docstring for the measured impact of this shape of bug.
+        """
         if visited is None:
             visited = set()
-        found = []
+        found: Dict[str, List[ET.Element]] = {}
         for attr in container.findall(f'./{RNG_NS}attribute'):
-            if attr.get('name') == attr_name:
-                found.append(attr)
+            name = attr.get('name')
+            if name:
+                found.setdefault(name, []).append(attr)
         for c in (container.findall(f'./{RNG_NS}choice') + container.findall(f'./{RNG_NS}group') +
                   container.findall(f'./{RNG_NS}optional') + container.findall(f'./{RNG_NS}zeroOrMore') +
                   container.findall(f'./{RNG_NS}oneOrMore') + container.findall(f'./{RNG_NS}interleave')):
-            found.extend(self._find_attribute_elements(c, attr_name, visited))
+            for name, elements in self._find_all_attribute_elements(c, visited).items():
+                found.setdefault(name, []).extend(elements)
         for ref in container.findall(f'./{RNG_NS}ref'):
             ref_name = ref.get('name')
             if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
                 visited.add(ref_name)
                 try:
-                    found.extend(self._find_attribute_elements(self.defined_patterns[ref_name], attr_name, visited))
+                    for name, elements in self._find_all_attribute_elements(self.defined_patterns[ref_name], visited).items():
+                        found.setdefault(name, []).extend(elements)
                 finally:
                     visited.discard(ref_name)
         return found
+
+    def _find_attribute_elements(self, container: ET.Element, attr_name: str, visited: Optional[Set[str]] = None) -> List[ET.Element]:
+        """Find all `<attribute name=attr_name>` nodes reachable from
+        `container`. See `_find_all_attribute_elements` for the traversal
+        this delegates to; kept as its own method for callers that only
+        need one name (prefer `_find_all_attribute_elements` when looking
+        up more than one name against the same container)."""
+        return self._find_all_attribute_elements(container, visited).get(attr_name, [])
 
     def _extract_variants(self, element: ET.Element) -> "tuple[List[TagVariant], bool]":
         """
@@ -689,6 +746,11 @@ class RelaxNGParser:
         optional = element.find(f'./{RNG_NS}optional')
         optional_choice = optional.find(f'./{RNG_NS}choice') if optional is not None else None
 
+        # Computed once for every attribute name on `element` (see
+        # `_get_required_attributes`'s docstring) rather than once per name
+        # via the two `_is_attribute_required` call sites below.
+        required_attrs = self._get_required_attributes(element)
+
         for choice, bare_allowed in ((direct_choice, False), (optional_choice, True)):
             if choice is None:
                 continue
@@ -696,22 +758,27 @@ class RelaxNGParser:
             if presets is not None:
                 preset_attr_names = {name for preset in presets for name in preset['attrs']}
                 other_required = any(
-                    self._is_attribute_required(element, name)
+                    name in required_attrs
                     for name in self._extract_attributes(element)
                     if name not in preset_attr_names
                 )
                 return presets, bare_allowed and not other_required
 
+        # Computed once for every attribute name (see
+        # `_find_all_attribute_elements`'s docstring) rather than once per
+        # name via `_find_attribute_elements`.
+        all_attribute_elements = self._find_all_attribute_elements(element)
+
         variants = []
         required_attr_found = False
         for attr_name, attr_data in self._extract_attributes(element).items():
             values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
-            if self._is_attribute_required(element, attr_name):
+            if attr_name in required_attrs:
                 required_attr_found = True
             if not values:
                 continue
             value_docs = {}
-            for attr_el in self._find_attribute_elements(element, attr_name):
+            for attr_el in all_attribute_elements.get(attr_name, []):
                 value_docs.update(self._extract_value_documentation(attr_el))
             for v in values:
                 variants.append({'attrs': {attr_name: v}, 'description': value_docs.get(v)})
@@ -751,16 +818,29 @@ class RelaxNGParser:
 
         result: Dict[str, TagDefinition] = {}
         for tag_name in tag_names:
+            # `exclude` only decides which tag names appear as a top-level
+            # key in THIS call's result (via `tag_names` above) - it never
+            # affects a tag's own computed attributes/variants/cardinality/
+            # children (see `_tag_definition_cache`'s docstring in
+            # `__init__`), so a cache keyed on `tag_name` alone is valid
+            # across calls with different `root_tag`/`exclude`.
+            cached = self._tag_definition_cache.get(tag_name)
+            if cached is not None:
+                result[tag_name] = cached
+                continue
             element = self._find_element_definition(tag_name)
             if element is None:
                 continue
             attributes: List[TagAttribute] = []
+            # Computed once for every attribute on `element` - see
+            # `_get_required_attributes`'s docstring for why this matters.
+            required_attrs = self._get_required_attributes(element)
             for attr_name, attr_data in self._extract_attributes(element).items():
                 values = attr_data.get('values') if isinstance(attr_data, dict) else attr_data
-                required = self._is_attribute_required(element, attr_name)
+                required = attr_name in required_attrs
                 attributes.append({'name': attr_name, 'values': values, 'required': required})
             variants, bare_allowed = self._extract_variants(element)
-            result[tag_name] = {
+            tag_definition: TagDefinition = {
                 'description': self._extract_documentation(element),
                 'children': self._extract_child_elements(element),
                 'attributes': attributes,
@@ -768,6 +848,8 @@ class RelaxNGParser:
                 'bareAllowed': bare_allowed,
                 'childCardinality': self._extract_child_cardinality(element),
             }
+            self._tag_definition_cache[tag_name] = tag_definition
+            result[tag_name] = tag_definition
         return result
 
     def _build_autocomplete_map(self) -> Dict[str, Dict]:

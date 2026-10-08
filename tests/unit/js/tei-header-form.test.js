@@ -7,7 +7,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { buildFieldTree, readFieldValues, applyFieldValues, getMainInput } from '../../../app/src/modules/tei-header-form.js';
+import { buildFieldTree, readFieldValues, applyFieldValues, getMainInput, MAX_DEPTH } from '../../../app/src/modules/tei-header-form.js';
 
 /** @type {import('../../../app/src/modules/api-client-v1.js').TeiHeaderStructureResponse} */
 const FIXTURE_STRUCTURE = {
@@ -43,7 +43,7 @@ describe('buildFieldTree', () => {
     assert.strictEqual(title.attributes[0].name, 'level');
   });
 
-  it('caps recursion depth at 6 levels to guard against schema cycles', () => {
+  it('caps recursion depth at MAX_DEPTH levels to guard against schema cycles', () => {
     /** @type {any} */
     const cyclicStructure = {
       roots: ['a'],
@@ -58,18 +58,19 @@ describe('buildFieldTree', () => {
       node = node.children[0];
       depth += 1;
     }
-    assert.ok(depth <= 6, `depth was ${depth}, expected <= 6`);
+    assert.ok(depth <= MAX_DEPTH, `depth was ${depth}, expected <= ${MAX_DEPTH}`);
   });
 
-  it('actually caps at depth 6 for a long acyclic chain (not just <= 6)', () => {
+  it('actually caps at MAX_DEPTH for a long acyclic chain (not just <= MAX_DEPTH)', () => {
     /** @type {any} */
     const chainStructure = { roots: ['t0'], tags: {} };
-    for (let i = 0; i < 10; i++) {
+    const chainLength = MAX_DEPTH + 4; // comfortably longer than MAX_DEPTH, to prove truncation actually happens
+    for (let i = 0; i < chainLength; i++) {
       chainStructure.tags[`t${i}`] = {
         description: null,
-        children: i < 9 ? [`t${i + 1}`] : [],
+        children: i < chainLength - 1 ? [`t${i + 1}`] : [],
         attributes: [],
-        childCardinality: i < 9 ? { [`t${i + 1}`]: { required: false, repeatable: false } } : {}
+        childCardinality: i < chainLength - 1 ? { [`t${i + 1}`]: { required: false, repeatable: false } } : {}
       };
     }
     const tree = buildFieldTree(chainStructure);
@@ -79,7 +80,31 @@ describe('buildFieldTree', () => {
       node = node.children[0];
       depth += 1;
     }
-    assert.strictEqual(depth, 6);
+    assert.strictEqual(depth, MAX_DEPTH);
+  });
+
+  it('expands a tag reachable from multiple parents only once, as a leaf on later occurrences', () => {
+    // `shared` is a child of both `a` and `b` - without global-expand-once
+    // tracking, each occurrence would independently re-expand `shared`'s
+    // own subtree, which is combinatorial for a real schema's richly
+    // cross-referenced vocabulary (see buildNode()'s docstring).
+    /** @type {any} */
+    const structure = {
+      roots: ['a', 'b'],
+      tags: {
+        a: { description: null, children: ['shared'], attributes: [], childCardinality: { shared: { required: false, repeatable: false } } },
+        b: { description: null, children: ['shared'], attributes: [], childCardinality: { shared: { required: false, repeatable: false } } },
+        shared: { description: null, children: ['leaf'], attributes: [], childCardinality: { leaf: { required: false, repeatable: false } } },
+        leaf: { description: null, children: [], attributes: [], childCardinality: {} }
+      }
+    };
+    const [a, b] = buildFieldTree(structure);
+    const sharedUnderA = a.children.find((n) => n.tag === 'shared');
+    const sharedUnderB = b.children.find((n) => n.tag === 'shared');
+    assert.strictEqual(sharedUnderA.isLeaf, false, 'first occurrence should expand normally');
+    assert.strictEqual(sharedUnderA.children.length, 1);
+    assert.strictEqual(sharedUnderB.isLeaf, true, 'second occurrence should be forced to a leaf');
+    assert.strictEqual(sharedUnderB.children.length, 0);
   });
 });
 
@@ -101,6 +126,23 @@ describe('readFieldValues / applyFieldValues', () => {
     applyFieldValues(tree, titleStmt, { title: [{ text: 'New title', attrs: {} }] }, NS);
     const titleEl = titleStmt.getElementsByTagName('title')[0];
     assert.strictEqual(titleEl.textContent, 'New title');
+  });
+
+  it('skips empty attribute values instead of writing them as attr="" (e.g. xml:id must never be empty)', () => {
+    // A leaf's rendered row has one input per schema attribute regardless
+    // of whether the user filled it in - writing every one of them
+    // unconditionally produces invalid XML for NCName-typed attributes
+    // like xml:id (the empty string is not a valid NCName) and pollutes
+    // the output with meaningless empty attributes for any other one.
+    const dom = new JSDOM(`<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt/></fileDesc></teiHeader></TEI>`, { contentType: 'text/xml' });
+    const titleStmt = dom.window.document.getElementsByTagName('titleStmt')[0];
+    const tree = [{ tag: 'title', isLeaf: true, required: false, repeatable: false, attributes: [], children: [] }];
+    applyFieldValues(tree, titleStmt, {
+      title: [{ text: 'New title', attrs: { 'xml:id': '', type: 'main' } }]
+    }, NS);
+    const titleEl = titleStmt.getElementsByTagName('title')[0];
+    assert.strictEqual(titleEl.hasAttribute('xml:id'), false, 'empty xml:id must not be written');
+    assert.strictEqual(titleEl.getAttribute('type'), 'main', 'non-empty attributes must still be written');
   });
 
   it('does not collide two sibling non-leaf sections that share a leaf tag name (analytic/title vs monogr/title)', () => {

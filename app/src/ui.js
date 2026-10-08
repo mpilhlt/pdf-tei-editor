@@ -15,6 +15,7 @@ import { createNavigableElement, createHtmlElements, registerTemplate, createFro
 
 import { Spinner } from './modules/spinner.js'
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
+import SlDetails from '@shoelace-style/shoelace/dist/components/details/details.js'
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
 import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
