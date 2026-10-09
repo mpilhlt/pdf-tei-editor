@@ -195,14 +195,18 @@ const textWidget = PanelUtils.createText({
 
 ### Status Bar Button Widget 
 
-A button optimized for use in a status bar
+A button optimized for use in a status bar. Its `tooltip` option is rendered
+as a real `sl-tooltip` (not the native `title` attribute) - do not also wrap
+a `<status-button>` in an external `<sl-tooltip>`, which would nest two
+tooltip popups over the same hover target.
 
 ```javascript
 const buttonWidget = PanelUtils.createButton({
   text: 'Save',
   icon: 'floppy',
   action: 'save',
-  variant: 'primary'
+  variant: 'primary',
+  tooltip: 'Save the current document'
 });
 ```
 
@@ -238,6 +242,33 @@ const badgeWidget = PanelUtils.createBadge({
   icon: 'exclamation-triangle',
   tooltip: 'Errors'
 });
+```
+
+### Toggle Button Widget
+
+An icon-only on/off button (`<status-toggle-button>`, class `StatusToggleButton` in
+`widgets/status-toggle-button.js`). Clicking toggles its `checked` attribute and fires
+a `widget-change` event with `detail: { checked, value, widget }`. Its tooltip (the
+`tooltip` attribute) is rendered as the button's only accessible label via `sl-tooltip`.
+
+Two appearances via the `appearance` attribute:
+
+- `"toolbar"` (default) — bordered "filled pill": neutral chrome when off, accent
+  fill when checked, a hatch overlay when disabled so disabled-on and disabled-off
+  stay visually distinct. Use standalone for a prominent toggle.
+- `"flat"` — borderless, sized to match plain `<status-button>` siblings (ghost
+  when off, accent fill when checked). Use when the toggle sits among plain
+  flat toolbar/status-bar buttons and should match their footprint.
+
+```html
+<status-toggle-button appearance="flat" icon="text-wrap" tooltip="Line wrapping" checked></status-toggle-button>
+
+<!-- loosely grouped pair (small gap, no fused border) — both members use the
+     flat appearance so their chrome matches the rest of the toolbar -->
+<span class="status-toggle-group">
+  <status-toggle-button appearance="flat" icon="chevron-bar-contract" tooltip="Show/fold header"></status-toggle-button>
+  <status-button icon="card-heading" tooltip="Edit header metadata" action="edit-header"></status-button>
+</span>
 ```
 
 ## Responsive Overflow

@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/light.css" />
   
   <style>
+    /* Copy of the .status-toggle-group rule from app/web/app.css (the demo does not load app.css) */
+    .status-toggle-group { display: inline-flex; gap: 4px; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       margin: 0;
@@ -580,6 +583,16 @@
                 <sl-icon name="play"></sl-icon>
                 Run
               </sl-button>
+              <!-- Icon-only toggle buttons: off, on, disabled-off, disabled-on, and a fused group -->
+              <status-toggle-button icon="text-wrap" tooltip="Line wrapping" data-priority="4"></status-toggle-button>
+              <status-toggle-button icon="text-wrap" tooltip="Line wrapping (on)" checked data-priority="4"></status-toggle-button>
+              <status-toggle-button icon="text-wrap" tooltip="Disabled, off" disabled data-priority="4"></status-toggle-button>
+              <status-toggle-button icon="text-wrap" tooltip="Disabled, on" checked disabled data-priority="4"></status-toggle-button>
+              <span class="status-toggle-group" data-priority="3">
+                <status-toggle-button icon="type-bold" tooltip="Bold" checked></status-toggle-button>
+                <status-toggle-button icon="type-italic" tooltip="Italic"></status-toggle-button>
+                <status-toggle-button icon="type-underline" tooltip="Underline"></status-toggle-button>
+              </span>
             </tool-bar>
             <div class="mock-editor">Pure HTML Example</div>
           </div>
@@ -677,6 +690,7 @@
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu/menu.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu-item/menu-item.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/icon/icon.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/tooltip/tooltip.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/popup/popup.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/switch/switch.js';
   </script>
@@ -711,6 +725,7 @@
           customElements.whenDefined('menu-bar'),
           customElements.whenDefined('status-text'),
           customElements.whenDefined('status-button'),
+          customElements.whenDefined('status-toggle-button'),
           customElements.whenDefined('status-progress'),
           customElements.whenDefined('status-badge'),
           customElements.whenDefined('status-dropdown'),

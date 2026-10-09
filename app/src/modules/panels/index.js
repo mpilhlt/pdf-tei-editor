@@ -38,6 +38,7 @@ import { ToolBar } from './tool-bar.js';
 import { MenuBar } from './menu-bar.js';
 import { StatusText } from './widgets/status-text.js';
 import { StatusButton } from './widgets/status-button.js';
+import { StatusToggleButton } from './widgets/status-toggle-button.js';
 import { StatusProgress } from './widgets/status-progress.js';
 import { StatusBadge } from './widgets/status-badge.js';
 import { StatusDropdown } from './widgets/status-dropdown.js';
@@ -110,6 +111,20 @@ const PanelUtils = {
    */
   createButton(options = {}) {
     return createWidget('status-button', options);
+  },
+
+  /**
+   * Create an icon-only toggle button widget (filled-pill style)
+   * @param {Object} options - Widget options
+   * @param {string} [options.icon] - Shoelace icon name
+   * @param {string} [options.tooltip] - Tooltip text (rendered with sl-tooltip)
+   * @param {boolean} [options.checked] - Whether the toggle is initially on
+   * @param {boolean} [options.disabled] - Whether the toggle is disabled
+   * @param {string} [options.name] - Optional name for UI element lookup
+   * @returns {StatusToggleButton}
+   */
+  createToggleButton(options = {}) {
+    return createWidget('status-toggle-button', options);
   },
 
   /**
@@ -242,6 +257,7 @@ export {
   MenuBar,
   StatusText,
   StatusButton,
+  StatusToggleButton,
   StatusProgress,
   StatusBadge,
   StatusDropdown,
@@ -262,6 +278,7 @@ export default {
   MenuBar,
   StatusText,
   StatusButton,
+  StatusToggleButton,
   StatusProgress,
   StatusBadge,
   StatusDropdown,

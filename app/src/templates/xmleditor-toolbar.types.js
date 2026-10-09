@@ -7,9 +7,14 @@
  * @property {HTMLElement} nextDiffBtn
  * @property {HTMLElement} rejectAllBtn
  * @property {HTMLElement} acceptAllBtn
- * @property {HTMLElement} ignoreWhitespaceSwitch
- * @property {HTMLElement} lineWrappingSwitch
- * @property {HTMLElement} teiHeaderToggleWidget
+ * @property {HTMLElement} strictDiffToggle
+ * @property {HTMLElement} wrapToggle
+ * @property {HTMLSpanElement & headerGroupPart} headerGroup
+ */
+
+/**
+ * @typedef {object} headerGroupPart
+ * @property {HTMLElement} headerFoldToggle
  */
 
 export {}

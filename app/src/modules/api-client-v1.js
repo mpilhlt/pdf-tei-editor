@@ -94,6 +94,38 @@
  */
 
 /**
+ * @typedef {Object} TeiHeaderStructureRequest
+ * @property {string} xml_string - XML document to resolve the governing schema from
+ */
+
+/**
+ * @typedef {Object} ChildCardinality
+ * @property {boolean} required
+ * @property {boolean} repeatable
+ */
+
+/**
+ * @typedef {Object} TeiHeaderAttribute
+ * @property {string} name
+ * @property {Array<string>=} values
+ * @property {boolean} required
+ */
+
+/**
+ * @typedef {Object} TeiHeaderTagDefinition
+ * @property {string=} description
+ * @property {Array<string>} children
+ * @property {Array<TeiHeaderAttribute>} attributes
+ * @property {Object<string, ChildCardinality>} childCardinality
+ */
+
+/**
+ * @typedef {Object} TeiHeaderStructureResponse
+ * @property {Array<string>} roots
+ * @property {Object<string, TeiHeaderTagDefinition>} tags
+ */
+
+/**
  * @typedef {Object} Body_import_files_api_v1_import_post
  * @property {string} file - Zip archive containing files to import
  */
@@ -1477,6 +1509,18 @@ export class ApiClientV1 {
    */
   async validateAutocompleteData(requestBody) {
     const endpoint = `/validate/autocomplete-data`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Schema-derived field structure for the teiHeader editor's
+   * titleStmt/publicationStmt/sourceDesc sections.
+   *
+   * @param {TeiHeaderStructureRequest} requestBody
+   * @returns {Promise<TeiHeaderStructureResponse>}
+   */
+  async validateTeiheaderStructure(requestBody) {
+    const endpoint = `/validate/teiheader-structure`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

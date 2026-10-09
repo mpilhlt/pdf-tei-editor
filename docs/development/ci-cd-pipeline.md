@@ -68,6 +68,9 @@ The project uses GitHub Actions for continuous integration and deployment. The p
    `package.json` / `CHANGELOG.md` release commit. It attempts an immediate merge,
    falling back to auto-merge and then to leaving the PR open. Depends only on the
    `release` job, so a Docker build failure never blocks branch reconciliation.
+   On either merge path, `--delete-branch` removes the `chore/back-merge-vX.Y.Z`
+   branch from `origin` once merged; a PR left open for manual merge keeps its
+   branch until that merge happens.
 
 **Requirements:**
 

@@ -62,6 +62,14 @@ tool-bar.dropdown-open {
   z-index: var(--sl-z-index-dropdown) !important;
 }
 
+/* Loose grouping of header-related widgets (see status-toggle-button.js):
+   just a small gap, no fused border — both members use the flat appearance
+   to stay visually consistent with the rest of the toolbar. */
+.status-toggle-group {
+  display: inline-flex;
+  gap: 4px;
+}
+
 /* The generic info/error/success/confirm/prompt dialog (dialog.js) is only
    ever shown to ask about an action the user is currently taking inside
    some other already-open sl-dialog (e.g. document-rules' resource editor
@@ -85,6 +93,18 @@ div[name = "xmlEditor"] tool-bar sl-button {
 
 div[name = "xmlEditor"] tool-bar sl-button::part(label) {
   line-height: 19px;
+}
+
+/* The XML editor toolbar (#xml-toolbar) renders a hair taller (~22.4px)
+   than the PDF viewer toolbar (#pdf-toolbar, ~19px): its two sl-button
+   elements (theme picker, XSL viewer) aren't fully squashed to 18px by
+   the max-height override above, unlike every other widget in either
+   toolbar (status-button/status-toggle-button, both a flat 18px). Rather
+   than chase that sl-button sizing quirk, give the PDF viewer toolbar the
+   same floor so the two toolbars line up; it's a no-op for #xml-toolbar,
+   whose content already exceeds it. */
+#pdf-toolbar, #xml-toolbar {
+  min-height: 23px;
 }
 
 
