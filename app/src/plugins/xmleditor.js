@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
- * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
+ * @import { StatusToggleButton } from '../modules/panels/widgets/status-toggle-button.js'
  * @import { StatusDropdown } from '../modules/panels/widgets/status-dropdown.js'
  * @import { UIPart, SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
@@ -69,15 +69,21 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  */
 
 /**
+ * Fused header button group in the XML editor toolbar
+ * @typedef {HTMLElement & object} headerGroupPart
+ * @property {StatusToggleButton} headerFoldToggle - TEI header visibility toggle (managed by tei-tools plugin)
+ */
+
+/**
  * XML editor toolbar navigation properties
  * @typedef {object} xmlEditorToolbarPart
  * @property {StatusButton} prevDiffBtn - Previous diff button
  * @property {StatusButton} nextDiffBtn - Next diff button
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
- * @property {StatusSwitch} ignoreWhitespaceSwitch - Ignore whitespace toggle switch (merge view diff)
- * @property {StatusSwitch} lineWrappingSwitch - Line wrapping toggle switch
- * @property {StatusSwitch} teiHeaderToggleWidget - TEI header visibility toggle (managed by tei-tools plugin)
+ * @property {StatusToggleButton} strictDiffToggle - Strict diff toggle (whitespace and linebreaks significant in merge view diff)
+ * @property {StatusToggleButton} wrapToggle - Line wrapping toggle
+ * @property {headerGroupPart} headerGroup - Container for the fused header toggle/edit buttons
  * @property {StatusButton} validateBtn - Validate XML button
  * @property {StatusButton} undoBtn - Undo button
  * @property {StatusButton} redoBtn - Redo button
@@ -181,10 +187,10 @@ class XmlEditorPlugin extends Plugin {
   #themeMenu = null;
 
   // Statusbar widget references
-  /** @type {StatusSwitch} */
-  #lineWrappingSwitch;
-  /** @type {StatusSwitch} */
-  #ignoreWhitespaceSwitch;
+  /** @type {StatusToggleButton} */
+  #wrapToggle;
+  /** @type {StatusToggleButton} */
+  #strictDiffToggle;
 
   // Status widgets
   /** @type {StatusText} */
@@ -431,8 +437,8 @@ class XmlEditorPlugin extends Plugin {
     }
     this.#indentationStatusWidget = this.#statusbar.indentationStatusWidget;
     this.#cursorPositionWidget = this.#statusbar.cursorPositionWidget;
-    this.#lineWrappingSwitch = this.#toolbar.lineWrappingSwitch;
-    this.#ignoreWhitespaceSwitch = this.#toolbar.ignoreWhitespaceSwitch;
+    this.#wrapToggle = this.#toolbar.wrapToggle;
+    this.#strictDiffToggle = this.#toolbar.strictDiffToggle;
 
     // Store toolbar widget references
     this.#prevDiffBtn = this.#toolbar.prevDiffBtn;
@@ -447,12 +453,12 @@ class XmlEditorPlugin extends Plugin {
 
     // Initialize line wrapping switch from stored preference
     const lineWrappingEnabled = this.#getLineWrappingPreference();
-    this.#lineWrappingSwitch.checked = lineWrappingEnabled;
+    this.#wrapToggle.checked = lineWrappingEnabled;
 
-    // Initialize ignore-whitespace switch from stored preference
-    const ignoreWhitespaceEnabled = this.#getIgnoreWhitespacePreference();
-    this.#ignoreWhitespaceSwitch.checked = ignoreWhitespaceEnabled;
-    this.#xmlEditor.setIgnoreWhitespaceInDiff(ignoreWhitespaceEnabled);
+    // Initialize strict-diff toggle from stored preference
+    const strictDiff = this.#getStrictDiffPreference();
+    this.#strictDiffToggle.checked = strictDiff;
+    this.#xmlEditor.setIgnoreWhitespaceInDiff(!strictDiff);
 
     // Attach event listeners to toolbar buttons
     this.#prevDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToPreviousDiff());
@@ -604,7 +610,7 @@ class XmlEditorPlugin extends Plugin {
     });
 
     // Add change handler for line wrapping toggle
-    this.#lineWrappingSwitch.addEventListener('widget-change', (e) => {
+    this.#wrapToggle.addEventListener('widget-change', (e) => {
       const enabled = e.detail.checked;
       this.#setLineWrappingPreference(enabled);
       this.#xmlEditor.setLineWrapping(enabled);
@@ -618,12 +624,12 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // Add change handler for ignore-whitespace-in-diff toggle
-    this.#ignoreWhitespaceSwitch.addEventListener('widget-change', (e) => {
-      const enabled = e.detail.checked;
-      this.#setIgnoreWhitespacePreference(enabled);
-      this.#xmlEditor.setIgnoreWhitespaceInDiff(enabled);
-      this.#logger.debug(`Ignore whitespace in diff ${enabled ? 'enabled' : 'disabled'}`);
+    // Add change handler for strict-diff toggle
+    this.#strictDiffToggle.addEventListener('widget-change', (e) => {
+      const strict = e.detail.checked;
+      this.#setStrictDiffPreference(strict);
+      this.#xmlEditor.setIgnoreWhitespaceInDiff(!strict);
+      this.#logger.debug(`Strict diff ${strict ? 'enabled' : 'disabled'}`);
     });
 
     // Capture Ctrl/Cmd+S to trigger XML download instead of browser save
@@ -800,7 +806,7 @@ class XmlEditorPlugin extends Plugin {
       }
       // Ignore-whitespace is a diff display preference, not an edit action, so it
       // stays enabled in read-only diff mode and only depends on merge view state
-      this.#ignoreWhitespaceSwitch.disabled = !this.#mergeViewActive;
+      this.#strictDiffToggle.disabled = !this.#mergeViewActive;
     };
     this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
       this.#mergeViewActive = true;
@@ -886,7 +892,7 @@ class XmlEditorPlugin extends Plugin {
 
     // Keep line wrapping switch always visible but disable when no document
     // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
-    this.#lineWrappingSwitch.disabled = !state.xml;
+    this.#wrapToggle.disabled = !state.xml;
 
     // Hide other statusbar widgets when no document
     ;[this.#cursorPositionWidget, this.#indentationStatusWidget]
@@ -1131,15 +1137,15 @@ class XmlEditorPlugin extends Plugin {
   /**
    * @returns {boolean}
    */
-  #getIgnoreWhitespacePreference() {
-    return this.uiStorage.get('ignoreWhitespaceInDiff', true);
+  #getStrictDiffPreference() {
+    return this.uiStorage.get('strictDiff', false);
   }
 
   /**
    * @param {boolean} enabled
    */
-  #setIgnoreWhitespacePreference(enabled) {
-    this.uiStorage.set('ignoreWhitespaceInDiff', enabled);
+  #setStrictDiffPreference(enabled) {
+    this.uiStorage.set('strictDiff', enabled);
   }
 
   /**
