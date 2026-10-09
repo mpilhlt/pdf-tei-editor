@@ -1,6 +1,9 @@
 /**
  * Button widget for the status bar
- * Clickable button with icon and/or text
+ * Clickable button with icon and/or text. The `tooltip` attribute is rendered
+ * as a real `sl-tooltip` (not the native `title` attribute) - callers must not
+ * also wrap a `<status-button>` in an external `<sl-tooltip>`, which would
+ * nest two tooltip popups over the same hover target.
  */
 
 class StatusButton extends HTMLElement {
@@ -49,6 +52,7 @@ class StatusButton extends HTMLElement {
     const tooltip = this.getAttribute('tooltip') || '';
     const disabled = this.hasAttribute('disabled');
     const variant = this.getAttribute('variant') || 'default';
+    const escapedTooltip = tooltip.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -154,21 +158,18 @@ class StatusButton extends HTMLElement {
           display: none;
         }
       </style>
-      
-      <button tabindex="-1" ${disabled ? 'disabled' : ''}>
-        ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
-        ${text ? `<span class="text">${text}</span>` : ''}
-      </button>
+
+      <sl-tooltip content="${escapedTooltip}" ${tooltip ? '' : 'disabled'}>
+        <button tabindex="-1" ${disabled ? 'disabled' : ''}>
+          ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+          ${text ? `<span class="text">${text}</span>` : ''}
+        </button>
+      </sl-tooltip>
     `;
   }
 
   updateHostProperties() {
-    const tooltip = this.getAttribute('tooltip') || '';
     const disabled = this.hasAttribute('disabled');
-
-    if (tooltip) {
-      this.title = tooltip;
-    }
 
     // Make the host element focusable
     try {

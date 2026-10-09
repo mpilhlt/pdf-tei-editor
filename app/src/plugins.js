@@ -40,6 +40,7 @@ import {
   ServicesPlugin,
   SsePlugin,
   StartPlugin,
+  TeiHeaderEditorPlugin,
   TeiToolsPlugin,
   TeiValidationPlugin,
   TeiWizardPlugin,
@@ -87,6 +88,7 @@ const plugins = [
   XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
   XslViewerPlugin,
   TeiToolsPlugin,
+  TeiHeaderEditorPlugin,  // Edit header metadata (fileDesc) from the XML editor toolbar
   FileSelectionPlugin,
   FileSelectionDrawerPlugin,
   DocumentActionsPlugin,

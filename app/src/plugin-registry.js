@@ -35,6 +35,7 @@ export { default as RbacManagerPlugin } from './plugins/rbac-manager.js';
 export { default as ServicesPlugin } from './plugins/services.js';
 export { default as SsePlugin } from './plugins/sse.js';
 export { default as StartPlugin } from './plugins/start.js';
+export { default as TeiHeaderEditorPlugin } from './plugins/tei-header-editor.js';
 export { default as TeiToolsPlugin } from './plugins/tei-tools.js';
 export { default as TeiValidationPlugin } from './plugins/tei-validation.js';
 export { default as TeiWizardPlugin } from './plugins/tei-wizard.js';
@@ -76,6 +77,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   services: import('./plugins/services.js').default,
  *   sse: import('./plugins/sse.js').default,
  *   start: import('./plugins/start.js').default,
+ *   "tei-header-editor": import('./plugins/tei-header-editor.js').default,
  *   "tei-tools": import('./plugins/tei-tools.js').default,
  *   "tei-validation": import('./plugins/tei-validation.js').default,
  *   "tei-wizard": import('./plugins/tei-wizard.js').default,

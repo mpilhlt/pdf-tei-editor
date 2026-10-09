@@ -59,3 +59,6 @@ tests/pdf-match/sources/*.pdf
 
 # Personal Claude Code preferences
 .claude/settings.local.json
+
+# Superpowers brainstorming visual-companion mockups
+.superpowers/

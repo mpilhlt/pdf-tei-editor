@@ -7,7 +7,7 @@
  * @import { SlDrawer } from '../ui.js'
  * @import { teiRevisionHistoryDrawerPart } from '../templates/tei-revision-history-drawer.types.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
- * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
+ * @import { StatusToggleButton } from '../modules/panels/widgets/status-toggle-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
@@ -15,6 +15,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import { foldEffect, unfoldEffect } from '@codemirror/language'
 import ui from '../ui.js'
 
 // Register templates
@@ -52,8 +53,8 @@ class TeiToolsPlugin extends Plugin {
   /** @type {StatusButton} */
   #revisionHistoryBtn;
 
-  /** @type {StatusSwitch} */
-  #teiHeaderToggleWidget;
+  /** @type {StatusToggleButton} */
+  #headerFoldToggle;
 
   /** @param {ApplicationState} _state */
   async install(_state) {
@@ -62,7 +63,7 @@ class TeiToolsPlugin extends Plugin {
 
     const xmlEditorApi = this.getDependency('xmleditor')
 
-    this.#teiHeaderToggleWidget = /** @type {StatusSwitch} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+    this.#headerFoldToggle = /** @type {StatusToggleButton} */ (ui.xmlEditor.toolbar.headerGroup.headerFoldToggle)
 
     this.#revisionHistoryBtn = PanelUtils.createButton({
       icon: 'clock-history',
@@ -79,15 +80,28 @@ class TeiToolsPlugin extends Plugin {
       this.#updateTeiHeaderToggle()
       this.#updateRevisionHistoryButton()
     })
+
+    // The teiHeader's fold state can change without going through the toggle
+    // at all - CodeMirror's gutter gives the user a native fold/unfold click
+    // target on *any* element, teiHeader included, which dispatches the same
+    // fold/unfold effects foldByXpath/unfoldByXpath do. Re-derive the toggle's
+    // checked state (and persisted preference) from the editor's actual fold
+    // state whenever such an effect fires, instead of only updating it from
+    // the toggle's own click handler.
+    xmlEditorApi.addUpdateListener((update) => {
+      const foldChanged = update.transactions.some(
+        (tr) => tr.effects.some((effect) => effect.is(foldEffect) || effect.is(unfoldEffect))
+      )
+      if (foldChanged) this.#syncHeaderFoldToggleFromEditor()
+    })
   }
 
   /** @param {ApplicationState} _state */
   async start(_state) {
     this.getDependency('logger').debug(`Starting plugin "tei-tools"`)
 
-    this.#teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
-      const isChecked = event.target.checked
-      this.#toggleTeiHeaderVisibility(isChecked)
+    this.#headerFoldToggle.addEventListener('widget-change', (event) => {
+      this.#toggleTeiHeaderVisibility(/** @type {CustomEvent} */ (event).detail.checked)
     })
 
     this.#revisionHistoryBtn.addEventListener('widget-click', () => {
@@ -103,11 +117,11 @@ class TeiToolsPlugin extends Plugin {
     const hasDocument = !!this.state.xml
     const inAnnotationMode = this.state.view === 'annotation'
     const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
-    this.#teiHeaderToggleWidget.disabled = !hasDocument || inAnnotationMode
+    this.#headerFoldToggle.disabled = !hasDocument || inAnnotationMode
     // Reduce clutter for pure annotators: the toggle is hidden, not just disabled
     // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Manual
     // fold/unfold via the gutter remains available regardless.
-    this.#teiHeaderToggleWidget.style.display = isAnnotatorOnly ? 'none' : ''
+    this.#headerFoldToggle.style.display = isAnnotatorOnly ? 'none' : ''
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
@@ -115,10 +129,10 @@ class TeiToolsPlugin extends Plugin {
   }
 
   #updateTeiHeaderToggle() {
-    const teiHeaderToggleWidget = this.#teiHeaderToggleWidget
+    const headerFoldToggle = this.#headerFoldToggle
     const hasTeiHeader = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
 
-    teiHeaderToggleWidget.disabled = !hasTeiHeader
+    headerFoldToggle.disabled = !hasTeiHeader
 
     if (hasTeiHeader && this.state.view !== 'annotation') {
       // Pure annotators always get the header folded on load, regardless of the
@@ -132,10 +146,30 @@ class TeiToolsPlugin extends Plugin {
         } else {
           this.#xmlEditorApi.foldByXpath('//tei:teiHeader')
         }
-        teiHeaderToggleWidget.checked = preferredVisible
+        headerFoldToggle.checked = preferredVisible
       } catch (error) {
         this.getDependency('logger').debug(`Error setting teiHeader visibility: ${String(error)}`)
       }
+    }
+  }
+
+  /**
+   * Re-syncs `#headerFoldToggle` (and the persisted `teiHeaderVisible`
+   * preference) from the editor's actual, current teiHeader fold state.
+   * Called from the fold/unfold-effect update listener registered in
+   * `install()`, so a gutter-driven fold/unfold is reflected just like one
+   * made through the toggle itself.
+   */
+  #syncHeaderFoldToggleFromEditor() {
+    if (!this.#xmlEditorApi.isReady()) return
+    if (!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')) return
+    const visible = !this.#xmlEditorApi.isFoldedByXpath('//tei:teiHeader')
+    if (this.#headerFoldToggle.checked === visible) return
+    this.#headerFoldToggle.checked = visible
+    // Pure annotators never persist this preference (see #updateTeiHeaderToggle) -
+    // the toggle is hidden for them, but the gutter fold marker still works.
+    if (!userIsAnnotatorOnly(this.state.user)) {
+      this.uiStorage.set('teiHeaderVisible', visible)
     }
   }
 

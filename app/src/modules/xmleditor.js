@@ -47,7 +47,7 @@ import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } f
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
+import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
 import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
@@ -1277,6 +1277,36 @@ export class XMLEditor extends EventEmitter {
     if (effects.length > 0) {
       this.#view.dispatch({ effects });
     }
+  }
+
+  /**
+   * Whether the content inside the first DOM node matching the given XPath is
+   * currently folded - regardless of how it got that way (foldByXpath/
+   * unfoldByXpath, or the user directly clicking the gutter's fold marker,
+   * which dispatches the same fold/unfold effects CodeMirror-internally and
+   * therefore isn't otherwise distinguishable from a programmatic fold).
+   * @param {string} xpath
+   * @returns {boolean}
+   */
+  isFoldedByXpath(xpath) {
+    const domNodes = this.getDomNodesByXpath(xpath);
+    if (domNodes.length === 0) {
+      return false;
+    }
+    const syntaxNode = this.getSyntaxNodeFromDomNode(domNodes[0]);
+    if (!syntaxNode) {
+      return false;
+    }
+    const foldRange = foldInside(syntaxNode);
+    if (!foldRange) {
+      return false;
+    }
+    let folded = false;
+    foldedRanges(this.#view.state).between(foldRange.from, foldRange.to, () => {
+      folded = true;
+      return false;
+    });
+    return folded;
   }
 
   /**

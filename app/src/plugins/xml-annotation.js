@@ -135,12 +135,12 @@ class XmlAnnotationPlugin extends Plugin {
       await this.#xmlEditor.setReadOnly?.(true)
     }
     // Always collapse the TEI header in annotation mode; restore on exit
-    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.headerGroup.headerFoldToggle)
     this.#wasHeaderVisible = headerToggle.checked ?? false
     await this.#xmlEditor.foldByXpath?.('//tei:teiHeader')
     headerToggle.checked = false
     ui.xmlEditor.headerbar.hidden = true
-    ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
+    ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.disabled = true
     // Restore the first visible line after CM has re-rendered in the new mode.
     // Two rAFs ensure CM's own layout update fires before we read lineBlockAt.
     if (cmView && scrollContainer != null) {
@@ -165,11 +165,11 @@ class XmlAnnotationPlugin extends Plugin {
       await this.#xmlEditor.setReadOnly?.(false)
     }
     ui.xmlEditor.headerbar.hidden = false
-    ui.xmlEditor.toolbar.lineWrappingSwitch.disabled = false
-    ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = false
+    ui.xmlEditor.toolbar.wrapToggle.disabled = false
+    ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.disabled = false
     // Restore TEI header to its pre-annotation state (explicit in both branches so toggle
     // always reflects the previously user-selected state, not annotation-mode defaults).
-    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+    const headerToggle = /** @type {any} */ (ui.xmlEditor.toolbar.headerGroup.headerFoldToggle)
     if (this.#wasHeaderVisible) {
       await this.#xmlEditor.unfoldByXpath?.('//tei:teiHeader')
       headerToggle.checked = true
@@ -436,7 +436,7 @@ class XmlAnnotationPlugin extends Plugin {
     // Re-assert teiHeaderToggle disabled state each time state updates while annotation mode is active,
     // because other plugins' onStateUpdate handlers may re-enable these controls.
     if (this.#annotationMode) {
-      ui.xmlEditor.toolbar.teiHeaderToggleWidget.disabled = true
+      ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.disabled = true
     }
   }
 
