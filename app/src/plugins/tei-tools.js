@@ -7,7 +7,7 @@
  * @import { SlDrawer } from '../ui.js'
  * @import { teiRevisionHistoryDrawerPart } from '../templates/tei-revision-history-drawer.types.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
- * @import { StatusSwitch } from '../modules/panels/widgets/status-switch.js'
+ * @import { StatusToggleButton } from '../modules/panels/widgets/status-toggle-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
@@ -52,8 +52,8 @@ class TeiToolsPlugin extends Plugin {
   /** @type {StatusButton} */
   #revisionHistoryBtn;
 
-  /** @type {StatusSwitch} */
-  #teiHeaderToggleWidget;
+  /** @type {StatusToggleButton} */
+  #headerFoldToggle;
 
   /** @param {ApplicationState} _state */
   async install(_state) {
@@ -62,7 +62,7 @@ class TeiToolsPlugin extends Plugin {
 
     const xmlEditorApi = this.getDependency('xmleditor')
 
-    this.#teiHeaderToggleWidget = /** @type {StatusSwitch} */ (ui.xmlEditor.toolbar.teiHeaderToggleWidget)
+    this.#headerFoldToggle = /** @type {StatusToggleButton} */ (ui.xmlEditor.toolbar.headerGroup.headerFoldToggle)
 
     this.#revisionHistoryBtn = PanelUtils.createButton({
       icon: 'clock-history',
@@ -85,9 +85,8 @@ class TeiToolsPlugin extends Plugin {
   async start(_state) {
     this.getDependency('logger').debug(`Starting plugin "tei-tools"`)
 
-    this.#teiHeaderToggleWidget.addEventListener('sl-change', (event) => {
-      const isChecked = event.target.checked
-      this.#toggleTeiHeaderVisibility(isChecked)
+    this.#headerFoldToggle.addEventListener('widget-change', (event) => {
+      this.#toggleTeiHeaderVisibility(/** @type {CustomEvent} */ (event).detail.checked)
     })
 
     this.#revisionHistoryBtn.addEventListener('widget-click', () => {
@@ -103,11 +102,11 @@ class TeiToolsPlugin extends Plugin {
     const hasDocument = !!this.state.xml
     const inAnnotationMode = this.state.view === 'annotation'
     const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
-    this.#teiHeaderToggleWidget.disabled = !hasDocument || inAnnotationMode
+    this.#headerFoldToggle.disabled = !hasDocument || inAnnotationMode
     // Reduce clutter for pure annotators: the toggle is hidden, not just disabled
     // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Manual
     // fold/unfold via the gutter remains available regardless.
-    this.#teiHeaderToggleWidget.style.display = isAnnotatorOnly ? 'none' : ''
+    this.#headerFoldToggle.style.display = isAnnotatorOnly ? 'none' : ''
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
@@ -115,10 +114,10 @@ class TeiToolsPlugin extends Plugin {
   }
 
   #updateTeiHeaderToggle() {
-    const teiHeaderToggleWidget = this.#teiHeaderToggleWidget
+    const headerFoldToggle = this.#headerFoldToggle
     const hasTeiHeader = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')
 
-    teiHeaderToggleWidget.disabled = !hasTeiHeader
+    headerFoldToggle.disabled = !hasTeiHeader
 
     if (hasTeiHeader && this.state.view !== 'annotation') {
       // Pure annotators always get the header folded on load, regardless of the
@@ -132,7 +131,7 @@ class TeiToolsPlugin extends Plugin {
         } else {
           this.#xmlEditorApi.foldByXpath('//tei:teiHeader')
         }
-        teiHeaderToggleWidget.checked = preferredVisible
+        headerFoldToggle.checked = preferredVisible
       } catch (error) {
         this.getDependency('logger').debug(`Error setting teiHeader visibility: ${String(error)}`)
       }

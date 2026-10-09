@@ -86,7 +86,7 @@ test.describe('Annotator teiHeader safeguard', () => {
       const toggleState = await page.evaluate(() => {
         /** @type {any} */
         const ui = /** @type {any} */ (window).ui;
-        const widget = ui.xmlEditor.toolbar.teiHeaderToggleWidget;
+        const widget = ui.xmlEditor.toolbar.headerGroup.headerFoldToggle;
         return { display: getComputedStyle(widget).display };
       });
       debugLog('teiHeader toggle state for annotator:', toggleState);
@@ -115,7 +115,7 @@ test.describe('Annotator teiHeader safeguard', () => {
       const toggleState = await page.evaluate(() => {
         /** @type {any} */
         const ui = /** @type {any} */ (window).ui;
-        const widget = ui.xmlEditor.toolbar.teiHeaderToggleWidget;
+        const widget = ui.xmlEditor.toolbar.headerGroup.headerFoldToggle;
         return { display: getComputedStyle(widget).display };
       });
       debugLog('teiHeader toggle state for reviewer:', toggleState);

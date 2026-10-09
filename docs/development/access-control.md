@@ -663,7 +663,7 @@ Pass `null` as `xpath` to clear the guard.
 
 `XmlEditorPlugin.onStateUpdate()` ([xmleditor.js](../../app/src/plugins/xmleditor.js)) computes `userIsAnnotatorOnly(state.user)` (from [acl-utils.js](../../app/src/modules/acl-utils.js)) and calls `setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true })` when true, `setEditGuardXpath(null)` otherwise - independent of `state.editorReadOnly`.
 
-`TeiToolsPlugin` ([tei-tools.js](../../app/src/plugins/tei-tools.js)) hides the `teiHeaderToggleWidget` and forces `foldByXpath('//tei:teiHeader')` on load for the same role check, bypassing the stored `teiHeaderVisible` preference.
+`TeiToolsPlugin` ([tei-tools.js](../../app/src/plugins/tei-tools.js)) hides the `headerFoldToggle` and forces `foldByXpath('//tei:teiHeader')` on load for the same role check, bypassing the stored `teiHeaderVisible` preference.
 
 ### Edit Guard Testing
 

@@ -24,6 +24,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import ui from '../ui.js'
 import { FIELD_DEFS, readFieldValues, applyFieldValues } from '../modules/tei-header-form.js'
 
 await registerTemplate('tei-header-editor-dialog', 'tei-header-editor-dialog.html')
@@ -47,28 +48,20 @@ class TeiHeaderEditorPlugin extends Plugin {
 
   /** @param {ApplicationState} state */
   async install(state) {
-    console.error('DEBUG tei-header-editor: install() called')
-    try {
-      await super.install(state)
-      this.getDependency('logger').debug('Installing plugin "tei-header-editor"')
+    await super.install(state)
+    this.getDependency('logger').debug('Installing plugin "tei-header-editor"')
 
-      this.#headerEditorBtn = PanelUtils.createButton({
-        icon: 'card-heading',
-        tooltip: 'Edit header metadata',
-        name: 'headerEditorBtn'
-      })
-      this.#xmlEditorApi.addToolbarWidget(this.#headerEditorBtn, 1)
+    this.#headerEditorBtn = PanelUtils.createButton({
+      icon: 'card-heading',
+      tooltip: 'Edit header metadata',
+      name: 'headerEditorBtn'
+    })
+    ui.xmlEditor.toolbar.headerGroup.append(this.#headerEditorBtn)
 
-      this.#dialogUi = this.createUi(createSingleFromTemplate('tei-header-editor-dialog', document.body))
-      console.error('DEBUG tei-header-editor: install() succeeded, button =', this.#headerEditorBtn)
-    } catch (error) {
-      console.error('DEBUG tei-header-editor: install() THREW', error)
-      throw error
-    }
+    this.#dialogUi = this.createUi(createSingleFromTemplate('tei-header-editor-dialog', document.body))
   }
 
   async start() {
-    console.error('DEBUG tei-header-editor: start() called')
     this.getDependency('logger').debug('Starting plugin "tei-header-editor"')
     this.#headerEditorBtn.addEventListener('widget-click', () => this.#onOpen())
     this.#dialogUi.cancelBtn.addEventListener('click', () => this.#dialogUi.hide())

@@ -74,6 +74,19 @@ tool-bar.dropdown-open {
   --status-toggle-radius: 0;
 }
 
+.status-toggle-group > status-button {
+  border: 1px solid var(--sl-color-neutral-300);
+  background-color: var(--sl-color-neutral-0);
+  min-height: 24px;
+  min-width: 28px;
+  justify-content: center;
+  font-size: var(--sl-font-size-small);
+}
+
+.status-toggle-group > status-button:hover {
+  background-color: var(--sl-color-neutral-100);
+}
+
 .status-toggle-group > :first-child:not(:last-child) {
   --status-toggle-radius: 3px 0 0 3px;
 }
