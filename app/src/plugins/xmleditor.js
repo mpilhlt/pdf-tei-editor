@@ -585,7 +585,14 @@ class XmlEditorPlugin extends Plugin {
       testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
       this.#xmlEditor.whenReady().then(async () => {
-        this.#xmlEditor.setLineWrapping(this.#getLineWrappingPreference());
+        // Re-derive both the actual CodeMirror wrapping state and the toggle's
+        // checked state from the same preference read, every time a document
+        // loads - not just once at install() - so a preference change made in
+        // another tab (uiStorage is backed by localStorage) is picked up
+        // instead of leaving the toggle showing a stale state.
+        const lineWrappingPreference = this.#getLineWrappingPreference();
+        this.#xmlEditor.setLineWrapping(lineWrappingPreference);
+        this.#wrapToggle.checked = lineWrappingPreference;
 
         // Offer to restore a local draft if one exists for this stable id and differs from
         // the freshly loaded server content. Drafts arise when a previous session ended while

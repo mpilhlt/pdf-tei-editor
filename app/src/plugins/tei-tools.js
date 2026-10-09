@@ -15,6 +15,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import { foldEffect, unfoldEffect } from '@codemirror/language'
 import ui from '../ui.js'
 
 // Register templates
@@ -79,6 +80,20 @@ class TeiToolsPlugin extends Plugin {
       this.#updateTeiHeaderToggle()
       this.#updateRevisionHistoryButton()
     })
+
+    // The teiHeader's fold state can change without going through the toggle
+    // at all - CodeMirror's gutter gives the user a native fold/unfold click
+    // target on *any* element, teiHeader included, which dispatches the same
+    // fold/unfold effects foldByXpath/unfoldByXpath do. Re-derive the toggle's
+    // checked state (and persisted preference) from the editor's actual fold
+    // state whenever such an effect fires, instead of only updating it from
+    // the toggle's own click handler.
+    xmlEditorApi.addUpdateListener((update) => {
+      const foldChanged = update.transactions.some(
+        (tr) => tr.effects.some((effect) => effect.is(foldEffect) || effect.is(unfoldEffect))
+      )
+      if (foldChanged) this.#syncHeaderFoldToggleFromEditor()
+    })
   }
 
   /** @param {ApplicationState} _state */
@@ -135,6 +150,26 @@ class TeiToolsPlugin extends Plugin {
       } catch (error) {
         this.getDependency('logger').debug(`Error setting teiHeader visibility: ${String(error)}`)
       }
+    }
+  }
+
+  /**
+   * Re-syncs `#headerFoldToggle` (and the persisted `teiHeaderVisible`
+   * preference) from the editor's actual, current teiHeader fold state.
+   * Called from the fold/unfold-effect update listener registered in
+   * `install()`, so a gutter-driven fold/unfold is reflected just like one
+   * made through the toggle itself.
+   */
+  #syncHeaderFoldToggleFromEditor() {
+    if (!this.#xmlEditorApi.isReady()) return
+    if (!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader')) return
+    const visible = !this.#xmlEditorApi.isFoldedByXpath('//tei:teiHeader')
+    if (this.#headerFoldToggle.checked === visible) return
+    this.#headerFoldToggle.checked = visible
+    // Pure annotators never persist this preference (see #updateTeiHeaderToggle) -
+    // the toggle is hidden for them, but the gutter fold marker still works.
+    if (!userIsAnnotatorOnly(this.state.user)) {
+      this.uiStorage.set('teiHeaderVisible', visible)
     }
   }
 
