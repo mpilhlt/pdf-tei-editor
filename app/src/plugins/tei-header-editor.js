@@ -24,6 +24,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import ui from '../ui.js'
 import { FIELD_DEFS, readFieldValues, applyFieldValues } from '../modules/tei-header-form.js'
 
@@ -71,7 +72,7 @@ class TeiHeaderEditorPlugin extends Plugin {
   async onStateUpdate(_changedKeys) {
     const hasDocument = !!this.state.xml
     const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
-    this.#headerEditorBtn.disabled = !hasDocument
+    this.#headerEditorBtn.disabled = !hasDocument || this.state.editorReadOnly
     this.#headerEditorBtn.style.display = isAnnotatorOnly ? 'none' : ''
   }
 
@@ -80,27 +81,34 @@ class TeiHeaderEditorPlugin extends Plugin {
     if (!xmlTree) return
     const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0] ?? null
     this.#openedValues = readFieldValues(fileDesc)
-    this.#renderFields(this.#openedValues)
+    const readOnly = this.state.editorReadOnly
+    this.#renderFields(this.#openedValues, readOnly)
+    this.#dialogUi.saveBtn.disabled = readOnly
     await this.#dialogUi.show()
   }
 
   /**
    * @param {Object<string, Array<FieldValue>>} values
+   * @param {boolean} readOnly - When true, every field is rendered non-editable
+   *   and "Add"/"remove" controls are omitted entirely, mirroring the main
+   *   XML editor's read-only state (see `onStateUpdate`) so the dialog can
+   *   never be used to alter a document the editor itself won't let you edit.
    */
-  #renderFields(values) {
+  #renderFields(values, readOnly) {
     const container = this.#dialogUi.sectionsContainer
     container.innerHTML = ''
     for (const def of FIELD_DEFS) {
-      container.appendChild(this.#renderField(def, values[def.key] ?? []))
+      container.appendChild(this.#renderField(def, values[def.key] ?? [], readOnly))
     }
   }
 
   /**
    * @param {FieldDef} def
    * @param {Array<FieldValue>} entries
+   * @param {boolean} readOnly
    * @returns {HTMLElement}
    */
-  #renderField(def, entries) {
+  #renderField(def, entries, readOnly) {
     const wrapper = document.createElement('div')
     wrapper.dataset.field = def.key
     wrapper.style.marginBottom = '0.75rem'
@@ -113,13 +121,13 @@ class TeiHeaderEditorPlugin extends Plugin {
 
     const rowsContainer = document.createElement('div')
     const rows = entries.length > 0 ? entries : [{ text: '' }]
-    for (const entry of rows) rowsContainer.appendChild(this.#renderFieldRow(def, entry))
+    for (const entry of rows) rowsContainer.appendChild(this.#renderFieldRow(def, entry, readOnly))
     wrapper.appendChild(rowsContainer)
-    if (def.repeatable) {
+    if (def.repeatable && !readOnly) {
       const addBtn = document.createElement('sl-button')
       addBtn.textContent = `Add ${def.label}`
       addBtn.size = 'small'
-      addBtn.addEventListener('click', () => rowsContainer.appendChild(this.#renderFieldRow(def, { text: '' })))
+      addBtn.addEventListener('click', () => rowsContainer.appendChild(this.#renderFieldRow(def, { text: '' }, readOnly)))
       wrapper.appendChild(addBtn)
     }
     return wrapper
@@ -128,9 +136,10 @@ class TeiHeaderEditorPlugin extends Plugin {
   /**
    * @param {FieldDef} def
    * @param {FieldValue} entry
+   * @param {boolean} readOnly
    * @returns {HTMLElement}
    */
-  #renderFieldRow(def, entry) {
+  #renderFieldRow(def, entry, readOnly) {
     const row = document.createElement('div')
     row.style.display = 'flex'
     row.style.gap = '0.5rem'
@@ -149,11 +158,12 @@ class TeiHeaderEditorPlugin extends Plugin {
       input.sourceElement = entry.element
       input.setAttribute('help-text', `${def.description} Contains structured markup - edit the XML directly to change this.`)
     } else {
+      input.disabled = readOnly
       input.setAttribute('help-text', def.description)
     }
     row.appendChild(input)
 
-    if (def.repeatable) {
+    if (def.repeatable && !readOnly) {
       const removeBtn = document.createElement('sl-button')
       removeBtn.textContent = '✕'
       removeBtn.size = 'small'
@@ -182,12 +192,14 @@ class TeiHeaderEditorPlugin extends Plugin {
   }
 
   async #onSave() {
+    if (this.state.editorReadOnly) return // defense in depth; the dialog's inputs and Save button are already disabled in this state
     const xmlTree = this.#xmlEditorApi.getXmlTree()
     if (!xmlTree) return
     const fileDesc = xmlTree.getElementsByTagName('fileDesc')[0]
     if (!fileDesc) return // fileDesc itself is always expected to exist already; not created by this dialog
     const currentValues = this.#collectValuesFromForm()
     applyFieldValues(fileDesc, this.#openedValues, currentValues, fileDesc.namespaceURI)
+    prettyPrintXmlDom(xmlTree, 'teiHeader')
     await this.#xmlEditorApi.updateEditorFromNode(fileDesc)
     await this.#xmlEditorApi.saveIfDirty()
     this.#dialogUi.hide()
