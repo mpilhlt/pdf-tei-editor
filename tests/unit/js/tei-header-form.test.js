@@ -24,7 +24,11 @@ function parseFileDesc(fileDescInnerXml) {
 }
 
 const FULL_FIXTURE = `
-  <titleStmt><title>Existing Title</title></titleStmt>
+  <titleStmt>
+    <title>Existing Title</title>
+    <author><persName>Doc Author One</persName></author>
+    <author><persName>Doc Author Two</persName></author>
+  </titleStmt>
   <publicationStmt>
     <publisher>Nomos Verlag</publisher>
     <date type="publication">2020</date>
@@ -57,6 +61,13 @@ describe('readFieldValues', () => {
     assert.strictEqual(values.analyticTitle[0].text, 'Article Title');
     assert.strictEqual(values.monogrTitle[0].text, 'Journal Title');
     assert.deepStrictEqual(values.author.map((v) => v.text), ['First Author', 'Second Author']);
+    assert.deepStrictEqual(values.docAuthor.map((v) => v.text), ['Doc Author One', 'Doc Author Two']);
+  });
+
+  it('does not confuse titleStmt/author (docAuthor) with titleStmt/respStmt (excluded, not a field)', () => {
+    const fileDesc = parseFileDesc('<titleStmt><title>T</title><respStmt><persName>Annotator</persName><resp>Annotator</resp></respStmt></titleStmt>');
+    const values = readFieldValues(fileDesc);
+    assert.deepStrictEqual(values.docAuthor, []);
   });
 
   it('returns empty arrays for every field when fileDesc is empty or null', () => {
@@ -204,6 +215,21 @@ describe('applyFieldValues', () => {
     // The structured author's markup must survive byte-identical.
     assert.strictEqual(authors[0].outerHTML, before.getElementsByTagName('analytic')[0].getElementsByTagName('author')[0].outerHTML);
     assert.strictEqual(authors[1].getElementsByTagName('persName')[0].textContent, 'Edited Plain Author');
+  });
+
+  it('docAuthor (titleStmt/author) and author (sourceDesc/.../author) are independent - editing one leaves the other untouched', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.docAuthor = [{ text: 'Doc Author One' }]; // second docAuthor row removed in the UI
+    applyFieldValues(fileDesc, opened, current, NS);
+    const titleStmt = fileDesc.getElementsByTagName('titleStmt')[0];
+    assert.strictEqual(titleStmt.getElementsByTagName('author').length, 1);
+    // sourceDesc's author list is untouched
+    const sourceAuthors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
+    assert.strictEqual(sourceAuthors.length, 2);
+    assert.strictEqual(sourceAuthors[0].getElementsByTagName('persName')[0].textContent, 'First Author');
+    assert.strictEqual(sourceAuthors[1].getElementsByTagName('persName')[0].textContent, 'Second Author');
   });
 
   it('removes a readonly author (whole repeat unit) when its row is deleted, leaving the other author untouched', () => {

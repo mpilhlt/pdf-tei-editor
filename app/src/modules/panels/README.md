@@ -195,14 +195,18 @@ const textWidget = PanelUtils.createText({
 
 ### Status Bar Button Widget 
 
-A button optimized for use in a status bar
+A button optimized for use in a status bar. Its `tooltip` option is rendered
+as a real `sl-tooltip` (not the native `title` attribute) - do not also wrap
+a `<status-button>` in an external `<sl-tooltip>`, which would nest two
+tooltip popups over the same hover target.
 
 ```javascript
 const buttonWidget = PanelUtils.createButton({
   text: 'Save',
   icon: 'floppy',
   action: 'save',
-  variant: 'primary'
+  variant: 'primary',
+  tooltip: 'Save the current document'
 });
 ```
 

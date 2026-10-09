@@ -21,6 +21,7 @@
 /** @type {Array<FieldDef>} */
 export const FIELD_DEFS = [
   { key: 'title', label: 'Title', path: ['titleStmt', 'title'], repeatable: false, description: 'The main title of the work.' },
+  { key: 'docAuthor', label: 'Document author(s)', path: ['titleStmt', 'author', 'persName'], repeatable: true, description: 'Full name of an author of this document.' },
   { key: 'publisher', label: 'Publisher', path: ['publicationStmt', 'publisher'], repeatable: false, description: 'The organization responsible for publishing this work.' },
   { key: 'pubDate', label: 'Publication date', path: ['publicationStmt', 'date'], repeatable: false, description: 'The date this work was published.' },
   { key: 'doi', label: 'DOI', path: ['publicationStmt', 'idno'], attrs: { type: 'DOI' }, repeatable: false, description: 'The Digital Object Identifier for this work.' },
