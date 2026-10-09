@@ -59,7 +59,7 @@ class StatusButton extends HTMLElement {
           padding: 2px 6px;
           cursor: pointer;
           user-select: none;
-          border-radius: 3px;
+          border-radius: var(--status-toggle-radius, 3px);
           transition: background-color 0.1s ease;
           outline: none;
           border: none;

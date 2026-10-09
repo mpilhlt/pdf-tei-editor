@@ -62,6 +62,34 @@ tool-bar.dropdown-open {
   z-index: var(--sl-z-index-dropdown) !important;
 }
 
+/* Segmented group of status-toggle-button widgets (see status-toggle-button.js).
+   The radius reaches the buttons' shadow DOM via the inherited custom property. */
+.status-toggle-group {
+  display: inline-flex;
+  gap: 0;
+}
+
+.status-toggle-group > status-toggle-button,
+.status-toggle-group > status-button {
+  --status-toggle-radius: 0;
+}
+
+.status-toggle-group > :first-child:not(:last-child) {
+  --status-toggle-radius: 3px 0 0 3px;
+}
+
+.status-toggle-group > :last-child:not(:first-child) {
+  --status-toggle-radius: 0 3px 3px 0;
+}
+
+.status-toggle-group > :only-child {
+  --status-toggle-radius: 3px;
+}
+
+.status-toggle-group > * + * {
+  margin-left: -1px;
+}
+
 /* The generic info/error/success/confirm/prompt dialog (dialog.js) is only
    ever shown to ask about an action the user is currently taking inside
    some other already-open sl-dialog (e.g. document-rules' resource editor
