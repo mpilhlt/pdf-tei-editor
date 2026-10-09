@@ -144,6 +144,25 @@ Instead:
   `tei-header-editor.js`'s `userIsAnnotatorOnly`/document-presence
   logic) — grouping is purely visual, not a merge of behavior.
 
+**Revision (2026-10-09, post-implementation)**: after seeing the fused
+pair next to the rest of the toolbar's existing flat (borderless) icon
+buttons, the bordered look read as inconsistent rather than as an
+intentional grouping. Decision changed to prioritize toolbar-wide visual
+consistency over the fused/segmented look:
+
+- `StatusToggleButton` gained an `appearance` attribute: `"toolbar"`
+  (default, the original bordered "filled pill" described above) and a
+  new `"flat"` variant — borderless, sized to match plain
+  `<status-button>` siblings (ghost when off, solid accent fill when
+  checked).
+- `strictDiffToggle`, `wrapToggle`, and `headerFoldToggle` all use
+  `appearance="flat"`.
+- `status-toggle-group` no longer fuses its children (no shared border,
+  no border-radius flattening, no negative margin) — it's now just an
+  `inline-flex` wrapper with a small gap, kept only so `headerFoldToggle`
+  and `headerEditorBtn` stay visually adjacent as a loose pairing. The
+  grouping is now purely proximity, not a fused control.
+
 ## Out of scope
 
 - No changes to icon-only buttons that aren't switches today.

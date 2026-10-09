@@ -62,45 +62,12 @@ tool-bar.dropdown-open {
   z-index: var(--sl-z-index-dropdown) !important;
 }
 
-/* Segmented group of status-toggle-button widgets (see status-toggle-button.js).
-   The radius reaches the buttons' shadow DOM via the inherited custom property. */
+/* Loose grouping of header-related widgets (see status-toggle-button.js):
+   just a small gap, no fused border — both members use the flat appearance
+   to stay visually consistent with the rest of the toolbar. */
 .status-toggle-group {
   display: inline-flex;
-  gap: 0;
-}
-
-.status-toggle-group > status-toggle-button,
-.status-toggle-group > status-button {
-  --status-toggle-radius: 0;
-}
-
-.status-toggle-group > status-button {
-  border: 1px solid var(--sl-color-neutral-300);
-  background-color: var(--sl-color-neutral-0);
-  min-height: 24px;
-  min-width: 28px;
-  justify-content: center;
-  font-size: var(--sl-font-size-small);
-}
-
-.status-toggle-group > status-button:hover {
-  background-color: var(--sl-color-neutral-100);
-}
-
-.status-toggle-group > :first-child:not(:last-child) {
-  --status-toggle-radius: 3px 0 0 3px;
-}
-
-.status-toggle-group > :last-child:not(:first-child) {
-  --status-toggle-radius: 0 3px 3px 0;
-}
-
-.status-toggle-group > :only-child {
-  --status-toggle-radius: 3px;
-}
-
-.status-toggle-group > * + * {
-  margin-left: -1px;
+  gap: 4px;
 }
 
 /* The generic info/error/success/confirm/prompt dialog (dialog.js) is only

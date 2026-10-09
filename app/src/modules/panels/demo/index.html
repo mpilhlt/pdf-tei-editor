@@ -9,14 +9,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/light.css" />
   
   <style>
-    /* Copy of the .status-toggle-group rules from app/web/app.css (the demo does not load app.css) */
-    .status-toggle-group { display: inline-flex; gap: 0; }
-    .status-toggle-group > status-toggle-button,
-    .status-toggle-group > status-button { --status-toggle-radius: 0; }
-    .status-toggle-group > :first-child:not(:last-child) { --status-toggle-radius: 3px 0 0 3px; }
-    .status-toggle-group > :last-child:not(:first-child) { --status-toggle-radius: 0 3px 3px 0; }
-    .status-toggle-group > :only-child { --status-toggle-radius: 3px; }
-    .status-toggle-group > * + * { margin-left: -1px; }
+    /* Copy of the .status-toggle-group rule from app/web/app.css (the demo does not load app.css) */
+    .status-toggle-group { display: inline-flex; gap: 4px; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

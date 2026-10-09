@@ -1,27 +1,34 @@
 /**
- * Icon-only toggle button widget (filled-pill style) for toolbars and status bars.
+ * Icon-only toggle button widget for toolbars and status bars.
  *
  * Extends {@link StatusButton}. Clicking (or Enter/Space) toggles the `checked`
  * attribute and dispatches a bubbling `widget-change` event with
  * `detail: { checked, value, widget }`. The tooltip is rendered with `sl-tooltip`
  * instead of the native `title` attribute.
  *
- * Visual states: off = neutral chrome, `checked` = primary fill, `disabled` = faded
- * with a diagonal hatch overlay that keeps disabled-on and disabled-off distinct.
+ * Two appearances, selected via the `appearance` attribute:
+ * - `"toolbar"` (default) — bordered "filled pill": off = neutral chrome,
+ *   `checked` = primary fill, `disabled` = faded with a diagonal hatch overlay
+ *   that keeps disabled-on and disabled-off distinct. Use this for a standalone
+ *   prominent toggle.
+ * - `"flat"` — compact, borderless, sized to match plain `<status-button>`
+ *   siblings: off = transparent/ghost (matches StatusButton's default chrome),
+ *   `checked` = primary fill. Use this when the toggle sits among plain flat
+ *   status-bar/toolbar buttons and should match their footprint.
  *
- * Group styling: when placed inside an element with class `status-toggle-group`,
- * adjacent buttons are fused into one segmented control. Because `:host-context()`
- * is not supported in Firefox/Safari, the group rules live in light DOM CSS
- * (`app/web/app.css`) and reach the shadow DOM through the inherited custom property
- * `--status-toggle-radius` (border radius of the host).
+ * Group styling: an element with class `status-toggle-group` lays out its
+ * children (typically a `status-toggle-button` next to a `status-button`) with
+ * a small gap, for widgets that belong together but don't need a fused/
+ * bordered look — both members should use the flat appearance so their
+ * chrome stays consistent with the rest of the toolbar.
  */
 
 import { StatusButton } from './status-button.js';
 
 class StatusToggleButton extends StatusButton {
-  /** @returns {string[]} Observed attributes of {@link StatusButton} plus `checked` */
+  /** @returns {string[]} Observed attributes of {@link StatusButton} plus `checked` and `appearance` */
   static get observedAttributes() {
-    return [...super.observedAttributes, 'checked'];
+    return [...super.observedAttributes, 'checked', 'appearance'];
   }
 
   /**
@@ -62,7 +69,7 @@ class StatusToggleButton extends StatusButton {
           cursor: pointer;
           user-select: none;
           border: 1px solid var(--sl-color-neutral-300);
-          border-radius: var(--status-toggle-radius, 3px);
+          border-radius: 3px;
           background-color: var(--sl-color-neutral-0);
           color: var(--sl-color-neutral-600);
           font-size: var(--sl-font-size-small);
@@ -111,6 +118,47 @@ class StatusToggleButton extends StatusButton {
           border-color: var(--sl-color-primary-600);
         }
 
+        /* Flat appearance: borderless, sized like plain status-button siblings.
+           On/off is still unambiguous (transparent vs. solid fill), but disabled
+           falls back to plain opacity (like status-button) rather than the hatch
+           overlay, since a hatch pattern floating over a transparent background
+           reads as a stray visual artifact rather than a disabled control. */
+        :host([appearance="flat"]) {
+          padding: 2px 6px;
+          border: none;
+          border-radius: 3px;
+          background-color: transparent;
+          color: var(--sl-color-neutral-600);
+          font-size: var(--sl-font-size-x-small);
+          min-height: 18px;
+          min-width: 0;
+        }
+
+        :host([appearance="flat"]:hover) {
+          background-color: var(--sl-color-neutral-100);
+        }
+
+        :host([appearance="flat"][checked]) {
+          background-color: var(--sl-color-primary-600);
+          color: var(--sl-color-neutral-0);
+        }
+
+        :host([appearance="flat"][checked]:hover) {
+          background-color: var(--sl-color-primary-700);
+        }
+
+        :host([appearance="flat"][disabled]) {
+          cursor: not-allowed;
+          opacity: 0.5;
+          filter: none;
+          background-image: none;
+          pointer-events: none;
+        }
+
+        :host([appearance="flat"][checked][disabled]) {
+          background-color: var(--sl-color-primary-600);
+        }
+
         button {
           border: none;
           background: none;
@@ -128,6 +176,10 @@ class StatusToggleButton extends StatusButton {
           display: inline-flex;
           align-items: center;
           font-size: 14px;
+        }
+
+        :host([appearance="flat"]) .icon {
+          font-size: 12px;
         }
       </style>
 
