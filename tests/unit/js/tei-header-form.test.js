@@ -72,6 +72,24 @@ describe('readFieldValues', () => {
     const values = readFieldValues(fileDesc);
     assert.deepStrictEqual(values.doi, []);
   });
+
+  it('reads an author with nested forename/surname markup as a readonly entry, whitespace collapsed', () => {
+    const fileDesc = parseFileDesc(`
+      <sourceDesc><biblStruct><analytic>
+        <author><persName>
+          <forename>Gianna</forename>
+          <surname>Iacino</surname>
+        </persName></author>
+        <author><persName>Plain Author</persName></author>
+      </analytic></biblStruct></sourceDesc>
+    `);
+    const values = readFieldValues(fileDesc);
+    assert.strictEqual(values.author[0].text, 'Gianna Iacino');
+    assert.strictEqual(values.author[0].readonly, true);
+    assert.ok(values.author[0].element);
+    assert.strictEqual(values.author[1].text, 'Plain Author');
+    assert.strictEqual(values.author[1].readonly, undefined);
+  });
 });
 
 describe('applyFieldValues', () => {
@@ -161,5 +179,39 @@ describe('applyFieldValues', () => {
     const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
     assert.strictEqual(authors.length, 1);
     assert.strictEqual(authors[0].getElementsByTagName('persName')[0].textContent, 'First Author');
+  });
+
+  it('never rewrites a readonly author (nested forename/surname), even when another author in the same list changes', () => {
+    const fileDesc = parseFileDesc(`
+      <sourceDesc><biblStruct><analytic>
+        <author><persName><forename>Gianna</forename><surname>Iacino</surname></persName></author>
+        <author><persName>Plain Author</persName></author>
+      </analytic></biblStruct></sourceDesc>
+    `);
+    const before = fileDesc.cloneNode(true);
+    const opened = readFieldValues(fileDesc);
+    const current = readFieldValues(fileDesc);
+    current.author[1] = { text: 'Edited Plain Author' };
+    applyFieldValues(fileDesc, opened, current, NS);
+    const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
+    assert.strictEqual(authors.length, 2);
+    // The structured author's markup must survive byte-identical.
+    assert.strictEqual(authors[0].outerHTML, before.getElementsByTagName('analytic')[0].getElementsByTagName('author')[0].outerHTML);
+    assert.strictEqual(authors[1].getElementsByTagName('persName')[0].textContent, 'Edited Plain Author');
+  });
+
+  it('removes a readonly author (whole repeat unit) when its row is deleted, leaving the other author untouched', () => {
+    const fileDesc = parseFileDesc(`
+      <sourceDesc><biblStruct><analytic>
+        <author><persName><forename>Gianna</forename><surname>Iacino</surname></persName></author>
+        <author><persName>Plain Author</persName></author>
+      </analytic></biblStruct></sourceDesc>
+    `);
+    const opened = readFieldValues(fileDesc);
+    const current = { ...opened, author: [opened.author[1]] }; // readonly row removed in the UI
+    applyFieldValues(fileDesc, opened, current, NS);
+    const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
+    assert.strictEqual(authors.length, 1);
+    assert.strictEqual(authors[0].getElementsByTagName('persName')[0].textContent, 'Plain Author');
   });
 });

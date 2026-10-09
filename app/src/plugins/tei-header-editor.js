@@ -104,6 +104,13 @@ class TeiHeaderEditorPlugin extends Plugin {
     const wrapper = document.createElement('div')
     wrapper.dataset.field = def.key
     wrapper.style.marginBottom = '0.75rem'
+
+    const label = document.createElement('div')
+    label.textContent = def.label
+    label.style.font = 'var(--sl-font-weight-semibold) var(--sl-font-size-small) var(--sl-font-sans)'
+    label.style.marginBottom = '0.25rem'
+    wrapper.appendChild(label)
+
     const rowsContainer = document.createElement('div')
     const rows = entries.length > 0 ? entries : [{ text: '' }]
     for (const entry of rows) rowsContainer.appendChild(this.#renderFieldRow(def, entry))
@@ -134,10 +141,16 @@ class TeiHeaderEditorPlugin extends Plugin {
     const input = document.createElement(isProse ? 'sl-textarea' : 'sl-input')
     input.dataset.field = def.key
     input.size = 'small'
-    input.setAttribute('label', def.label)
-    input.setAttribute('help-text', def.description)
     input.value = entry.text
     input.style.flex = '1'
+    if (entry.readonly) {
+      input.disabled = true
+      input.dataset.readonly = 'true'
+      input.sourceElement = entry.element
+      input.setAttribute('help-text', `${def.description} Contains structured markup - edit the XML directly to change this.`)
+    } else {
+      input.setAttribute('help-text', def.description)
+    }
     row.appendChild(input)
 
     if (def.repeatable) {
@@ -160,7 +173,10 @@ class TeiHeaderEditorPlugin extends Plugin {
     for (const def of FIELD_DEFS) {
       const wrapper = [...container.children].find((el) => el.dataset.field === def.key)
       const inputs = [...wrapper.querySelectorAll('sl-input, sl-textarea')]
-      values[def.key] = inputs.map((input) => ({ text: input.value ?? '' }))
+      values[def.key] = inputs.map((input) => {
+        if (input.dataset.readonly === 'true') return { text: input.value ?? '', readonly: true, element: input.sourceElement }
+        return { text: input.value ?? '' }
+      })
     }
     return values
   }

@@ -34,8 +34,31 @@ const ROOT_ORDER = ['titleStmt', 'publicationStmt', 'sourceDesc']
 
 /**
  * @typedef {Object} FieldValue
- * @property {string} text
+ * @property {string} text - For an editable entry, the raw text to write back
+ *   as the leaf element's sole text content. For a `readonly` entry, a
+ *   display-only rendering of its existing nested markup (whitespace
+ *   collapsed to single spaces) - never written back.
+ * @property {boolean} [readonly] - True when the source leaf element had
+ *   child elements (structured markup, e.g. `<persName><forename/><surname/></persName>`)
+ *   when the dialog opened. Flattening such an element's text content back
+ *   onto it would silently destroy that markup, so these entries must be
+ *   rendered non-editable and must never have their text content rewritten.
+ * @property {Element} [element] - For a `readonly` entry, its original
+ *   source leaf element - used only to recognize, at save time, whether the
+ *   user removed that entry's row (then its whole repeat unit is deleted);
+ *   never used to write a new text content onto it.
  */
+
+/**
+ * Collapse all whitespace (including the newlines/indentation between
+ * child elements of a pretty-printed document) to single spaces, for
+ * displaying a structured element's text content as one flat string.
+ * @param {string} text
+ * @returns {string}
+ */
+function collapseWhitespace(text) {
+  return text.replace(/\s+/g, ' ').trim()
+}
 
 /**
  * Every element reachable from `root` by following `def.path`'s tag names
@@ -70,7 +93,10 @@ function findElementsAtPath(root, def) {
  * Read every field in `FIELD_DEFS` directly out of `fileDesc`, by walking
  * each field's own fixed path. A repeatable field gets one entry per
  * matching element found; a non-repeatable field gets at most its first
- * match (there is normally only one, since each path is specific).
+ * match (there is normally only one, since each path is specific). A
+ * matched element that has child elements of its own (structured markup)
+ * is read as a `readonly` entry (see {@link FieldValue}) instead of a
+ * plain editable one.
  * @param {Element|null} fileDesc
  * @returns {Object<string, Array<FieldValue>>} keyed by `FieldDef.key`
  */
@@ -79,7 +105,10 @@ export function readFieldValues(fileDesc) {
   const values = {}
   for (const def of FIELD_DEFS) {
     const elements = fileDesc ? findElementsAtPath(fileDesc, def) : []
-    values[def.key] = (def.repeatable ? elements : elements.slice(0, 1)).map((el) => ({ text: el.textContent ?? '' }))
+    values[def.key] = (def.repeatable ? elements : elements.slice(0, 1)).map((el) => {
+      if (el.children.length > 0) return { text: collapseWhitespace(el.textContent ?? ''), readonly: true, element: el }
+      return { text: el.textContent ?? '' }
+    })
   }
   return values
 }
@@ -151,23 +180,31 @@ function createElementAtPath(fileDesc, def, namespaceUri) {
 }
 
 /**
- * Apply one field's change: update existing elements in place (positional
- * matching between the existing elements and the new values - there is no
- * drag-reorder in the UI, so "row N" identity is positional), remove any
- * surplus existing elements, and create fresh elements for any extra new
- * values. Existing elements that are simply being updated are NEVER
- * removed and recreated - this is what keeps an edited field's DOM
- * position (and its siblings' position) stable.
+ * Apply one field's change. Existing elements are split into `readonly`
+ * (structured markup, e.g. `persName` with `forename`/`surname` children)
+ * and plain editable ones, handled separately:
+ *
+ * - Readonly entries are NEVER updated - their text content is never
+ *   rewritten, since it's a flattened display string, not the real markup.
+ *   One is removed only if the user's corresponding row (identified by the
+ *   original `element` reference carried on its {@link FieldValue}) is gone
+ *   from `newValues` - i.e. the user deleted it.
+ * - Editable entries keep the original positional diff: update existing
+ *   elements in place (there is no drag-reorder in the UI, so "row N"
+ *   identity is positional), remove any surplus, and create fresh elements
+ *   for any extra new values. An existing element that's simply being
+ *   updated is NEVER removed and recreated - this is what keeps an edited
+ *   field's DOM position (and its siblings' position) stable.
  *
  * `findElementsAtPath()` (and therefore `existing` below) always resolves
  * to the field's LEAF elements (e.g. `persName`, not `author`). For a
- * repeatable field that matters when removing a surplus entry: the leaf
- * is wrapped in its own repeat-unit ancestor (`author`), and removing
- * only the leaf would leave a dangling, empty `<author/>` behind rather
- * than actually deleting the repeated entry. So a removal climbs up to
- * the repeat unit's root (via `repeatUnitLength()`) before removing -
- * for a non-repeatable field that root IS the leaf, so this is a no-op
- * climb and behaves exactly as before.
+ * repeatable field that matters when removing an entry: the leaf is
+ * wrapped in its own repeat-unit ancestor (`author`), and removing only the
+ * leaf would leave a dangling, empty `<author/>` behind rather than
+ * actually deleting the repeated entry. So a removal climbs up to the
+ * repeat unit's root (via `repeatUnitLength()`) before removing - for a
+ * non-repeatable field that root IS the leaf, so this is a no-op climb and
+ * behaves exactly as before.
  * @param {Element} fileDesc
  * @param {FieldDef} def
  * @param {Array<FieldValue>} newValues
@@ -175,19 +212,30 @@ function createElementAtPath(fileDesc, def, namespaceUri) {
  */
 function applyOneField(fileDesc, def, newValues, namespaceUri) {
   const existing = findElementsAtPath(fileDesc, def)
-  const wanted = newValues.filter((v) => v.text.trim() !== '')
-
-  const updateCount = Math.min(existing.length, wanted.length)
-  for (let i = 0; i < updateCount; i++) existing[i].textContent = wanted[i].text
-
+  const existingReadonly = existing.filter((el) => el.children.length > 0)
+  const existingEditable = existing.filter((el) => el.children.length === 0)
   const climbLevels = repeatUnitLength(def) - 1
-  for (let i = wanted.length; i < existing.length; i++) {
-    let el = existing[i]
+
+  const keptElements = new Set(newValues.filter((v) => v.readonly).map((v) => v.element))
+  for (const el of existingReadonly) {
+    if (keptElements.has(el)) continue
+    let node = el
+    for (let level = 0; level < climbLevels; level++) node = node.parentElement
+    node.remove()
+  }
+
+  const wanted = newValues.filter((v) => !v.readonly && v.text.trim() !== '')
+
+  const updateCount = Math.min(existingEditable.length, wanted.length)
+  for (let i = 0; i < updateCount; i++) existingEditable[i].textContent = wanted[i].text
+
+  for (let i = wanted.length; i < existingEditable.length; i++) {
+    let el = existingEditable[i]
     for (let level = 0; level < climbLevels; level++) el = el.parentElement
     el.remove()
   }
 
-  for (let i = existing.length; i < wanted.length; i++) {
+  for (let i = existingEditable.length; i < wanted.length; i++) {
     const el = createElementAtPath(fileDesc, def, namespaceUri)
     el.textContent = wanted[i].text
   }
