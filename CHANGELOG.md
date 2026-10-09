@@ -2,6 +2,14 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.68.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.67.0...v0.68.0) (2026-10-09)
+
+
+### Features
+
+* Add TEI header editor plugin and compact toolbar toggle buttons ([#514](https://github.com/mpilhlt/pdf-tei-editor/issues/514)) ([1cec302](https://github.com/mpilhlt/pdf-tei-editor/commit/1cec302e2ffe527b7b2e1d1fddee2585ffab2309))
+* **revision-feed:** add per-user Atom revision feed plugin ([45ae182](https://github.com/mpilhlt/pdf-tei-editor/commit/45ae182f891bdb932b229ae3d5aaa9483274a2cd))
+
 # [0.67.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.66.0...v0.67.0) (2026-10-03)
 
 
