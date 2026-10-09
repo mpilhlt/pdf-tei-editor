@@ -107,7 +107,7 @@ export function readFieldValues(fileDesc) {
     const elements = fileDesc ? findElementsAtPath(fileDesc, def) : []
     values[def.key] = (def.repeatable ? elements : elements.slice(0, 1)).map((el) => {
       if (el.children.length > 0) return { text: collapseWhitespace(el.textContent ?? ''), readonly: true, element: el }
-      return { text: el.textContent ?? '' }
+      return { text: (el.textContent ?? '').trim() }
     })
   }
   return values

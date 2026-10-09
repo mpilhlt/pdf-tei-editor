@@ -73,6 +73,12 @@ describe('readFieldValues', () => {
     assert.deepStrictEqual(values.doi, []);
   });
 
+  it('trims leading/trailing whitespace from a plain editable field (e.g. pretty-printed indentation)', () => {
+    const fileDesc = parseFileDesc('<publicationStmt><publisher>\n      Nomos Verlag\n    </publisher></publicationStmt>');
+    const values = readFieldValues(fileDesc);
+    assert.strictEqual(values.publisher[0].text, 'Nomos Verlag');
+  });
+
   it('reads an author with nested forename/surname markup as a readonly entry, whitespace collapsed', () => {
     const fileDesc = parseFileDesc(`
       <sourceDesc><biblStruct><analytic>
