@@ -138,6 +138,17 @@ test.describe('Document rules registry', () => {
       await expect(xmlContent).toHaveAttribute('contenteditable', 'false');
       await expect(originalBtn).toHaveAttribute('variant', 'primary');
 
+      // Search/replace: Mod-f opens CodeMirror's search panel in the schema
+      // body, and Escape closes the panel without closing the dialog.
+      await xmlContent.click();
+      await page.keyboard.press('ControlOrMeta+f');
+      const searchPanel = dialog.locator('[name="xmlContainer"] .cm-search');
+      await expect(searchPanel).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(searchPanel).toHaveCount(0);
+      await page.waitForTimeout(500);
+      await expect(dialog).toHaveAttribute('open', '');
+
       // New override: the row selects "Override 1" and the body becomes editable.
       await dialog.locator('sl-button:has-text("New override")').click();
       await page.waitForTimeout(500);
