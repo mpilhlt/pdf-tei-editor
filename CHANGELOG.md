@@ -2,6 +2,20 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.69.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.68.0...v0.69.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **grobid:** download uncached variant schema for annotation chips ([#520](https://github.com/mpilhlt/pdf-tei-editor/issues/520)) ([6337105](https://github.com/mpilhlt/pdf-tei-editor/commit/63371051a77384f440d99d55319e2431e7e4c96c))
+
+
+### Features
+
+* Add archived flag to projects ([#521](https://github.com/mpilhlt/pdf-tei-editor/issues/521)) ([9aab3c0](https://github.com/mpilhlt/pdf-tei-editor/commit/9aab3c0bc223080364dae6185d4403474bccd79b))
+* add search/replace to the document rules editor dialog ([#522](https://github.com/mpilhlt/pdf-tei-editor/issues/522)) ([f6b78f8](https://github.com/mpilhlt/pdf-tei-editor/commit/f6b78f8f8e0730186b5588b957ca66996562ba9a))
+* **log-viewer:** add wildcard text filter, jump to bottom and save ([#523](https://github.com/mpilhlt/pdf-tei-editor/issues/523)) ([ed2347f](https://github.com/mpilhlt/pdf-tei-editor/commit/ed2347f4d358e3a14a1f37749873af2ddc367e45))
+
 # [0.68.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.67.0...v0.68.0) (2026-10-09)
 
 
