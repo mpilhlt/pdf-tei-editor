@@ -25,6 +25,7 @@
  * @property {string} description - Project description
  * @property {string[]} collections - Collection IDs in this project
  * @property {string[]} members - Member usernames
+ * @property {boolean} [archived] - Archived projects and their collections are hidden from file selection UIs
  */
 
 /**

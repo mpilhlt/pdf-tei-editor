@@ -152,6 +152,12 @@ const entitySchemas = {
         placeholder: 'Describe the project purpose'
       },
       {
+        name: 'archived',
+        type: 'checkbox',
+        label: 'Archived',
+        helpText: 'Hide this project and its collections from the Collections dropdown and the file drawer'
+      },
+      {
         name: 'members',
         type: 'multiselect',
         label: 'Members',

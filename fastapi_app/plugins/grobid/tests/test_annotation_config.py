@@ -232,6 +232,65 @@ class TestGetAnnotationTags(unittest.TestCase):
             )
 
 
+class TestGetAnnotationTagsDownloadsMissingSchema(unittest.TestCase):
+    """A variant whose schema isn't cached yet (no document of it has been
+    validated) must still get chips: the schema is downloaded on demand."""
+
+    SEGMENTATION = "grobid.training.segmentation"
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        import fastapi_app.plugins.grobid.config as grobid_config
+        self.grobid_config = grobid_config
+
+        grobid_config._ANNOTATION_TAGS_CACHE.clear()
+        grobid_config._SCHEMA_DOWNLOAD_FAILURES.clear()
+        self.addCleanup(grobid_config._ANNOTATION_TAGS_CACHE.clear)
+        self.addCleanup(grobid_config._SCHEMA_DOWNLOAD_FAILURES.clear)
+
+        self.cache_root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.cache_root, ignore_errors=True)
+        settings_patch = mock.patch.object(
+            grobid_config,
+            "get_settings",
+            return_value=types.SimpleNamespace(schema_cache_dir=self.cache_root),
+        )
+        settings_patch.start()
+        self.addCleanup(settings_patch.stop)
+
+    def _fake_download(self, schema_location, schema_cache_dir, schema_cache_file):
+        fixture = FIXTURE_SCHEMA_CACHE_DIR / "mpilhlt.github.io" / "fossil" / "schema" / Path(schema_location).name
+        schema_cache_dir.mkdir(parents=True, exist_ok=True)
+        schema_cache_file.write_bytes(fixture.read_bytes())
+
+    def test_downloads_uncached_schema_and_generates_tags(self):
+        with mock.patch.object(self.grobid_config, "download_schema_file", side_effect=self._fake_download) as download:
+            tags = self.grobid_config.get_annotation_tags()
+        downloaded = {call.args[0] for call in download.call_args_list}
+        self.assertIn(self.grobid_config.get_schema_url(self.SEGMENTATION), downloaded)
+        self.assertIn("body", {t["tag"] for t in tags[self.SEGMENTATION]})
+
+    def test_does_not_download_already_cached_schema(self):
+        with mock.patch.object(self.grobid_config, "download_schema_file", side_effect=self._fake_download):
+            self.grobid_config.get_annotation_tags()
+        with mock.patch.object(self.grobid_config, "download_schema_file") as download:
+            self.grobid_config.get_annotation_tags()
+        download.assert_not_called()
+
+    def test_failed_download_yields_empty_list_and_is_not_retried_immediately(self):
+        from fastapi_app.lib.core.schema_validator import ValidationError
+        failing = mock.patch.object(self.grobid_config, "download_schema_file", side_effect=ValidationError("offline"))
+        with failing as download, self.assertLogs("fastapi_app.plugins.grobid.config", level="WARNING"):
+            tags = self.grobid_config.get_annotation_tags()
+        self.assertEqual(tags[self.SEGMENTATION], [])
+        first_call_count = download.call_count
+        with failing as download:
+            self.grobid_config.get_annotation_tags()
+        download.assert_not_called()
+        self.assertGreater(first_call_count, 0)
+
+
 class TestAnnotationGuidesCategory(unittest.TestCase):
     """Test that every configured guide has a category, variant_ids, and a fossil-hosted URL."""
 

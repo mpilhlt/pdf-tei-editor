@@ -24,6 +24,7 @@
             display: flex;
             gap: 12px;
             align-items: center;
+            flex-wrap: wrap;
             flex-shrink: 0;
             z-index: 1;
         }
@@ -40,6 +41,7 @@
             line-height: 1.4;
         }
         .log-entry:hover { background: #2a2a2a; }
+        .log-entry.filtered-out { display: none; }
         .level-DEBUG { color: #888; }
         .level-INFO { color: #d4d4d4; }
         .level-WARNING { color: #e5a84b; }
@@ -59,6 +61,7 @@
             cursor: pointer;
             border-radius: 3px;
             font-size: 12px;
+            white-space: nowrap;
         }
         button:hover { background: #4c4c4c; }
         label {
@@ -66,6 +69,7 @@
             align-items: center;
             gap: 4px;
             font-size: 12px;
+            white-space: nowrap;
         }
         #status {
             margin-left: auto;
@@ -75,6 +79,17 @@
         #count {
             font-size: 11px;
             color: #888;
+        }
+        #searchFilter {
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border: 1px solid #555;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+            flex: 0 1 220px;
+            min-width: 120px;
         }
     </style>
 </head>
@@ -89,8 +104,11 @@
                 <option value="ERROR">ERROR</option>
             </select>
         </label>
+        <input type="search" id="searchFilter" placeholder="Filter (* = wildcard)" title="Case-insensitive; * matches any characters">
         <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
         <label><input type="checkbox" id="pauseBtn"> Pause</label>
+        <button id="bottomBtn" title="Jump to the newest entry">Jump to bottom</button>
+        <button id="saveBtn" title="Save the shown entries as a text file">Save</button>
         <span id="status">Connecting...</span>
         <span id="count">0 entries</span>
     </div>
@@ -104,12 +122,79 @@
         const levelFilter = document.getElementById('levelFilter');
         const autoScrollCb = document.getElementById('autoScroll');
         const pauseCb = document.getElementById('pauseBtn');
+        const searchInput = document.getElementById('searchFilter');
 
-        let entryCount = 0;
         let paused = false;
         let pendingEntries = [];
         let currentSessionId = null;
+        /** @type {RegExp|null} */
+        let searchRegex = null;
         const MAX_ENTRIES = 5000;
+
+        /**
+         * Compile a filter string into a case-insensitive regex in which "*" matches any run of characters.
+         * @param {string} pattern
+         * @returns {RegExp|null} null if the pattern is empty
+         */
+        function compileFilter(pattern) {
+            const trimmed = pattern.trim();
+            if (!trimmed) return null;
+            const source = trimmed
+                .split('*')
+                .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+                .join('.*');
+            return new RegExp(source, 'i');
+        }
+
+        /**
+         * @param {HTMLElement} div
+         * @returns {boolean}
+         */
+        function matchesFilter(div) {
+            return !searchRegex || searchRegex.test(div.dataset.text || '');
+        }
+
+        function updateCount() {
+            const total = container.children.length;
+            if (!searchRegex) {
+                countEl.textContent = total + ' entries';
+                return;
+            }
+            const shown = container.querySelectorAll('.log-entry:not(.filtered-out)').length;
+            countEl.textContent = shown + ' of ' + total + ' entries';
+        }
+
+        function scrollToBottom() {
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function applyFilter() {
+            searchRegex = compileFilter(searchInput.value);
+            for (const div of container.children) {
+                div.classList.toggle('filtered-out', !matchesFilter(div));
+            }
+            updateCount();
+            if (autoScrollCb.checked) scrollToBottom();
+        }
+
+        /**
+         * Download the currently shown entries as a plain-text file.
+         */
+        function saveLog() {
+            const lines = [];
+            for (const div of container.children) {
+                if (!div.classList.contains('filtered-out')) lines.push(div.dataset.text || '');
+            }
+            const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'log-' + stamp + '.txt';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
 
         function escapeHtml(text) {
             const d = document.createElement('div');
@@ -124,6 +209,9 @@
 
             const div = document.createElement('div');
             div.className = 'log-entry level-' + data.level;
+            div.dataset.text = (data.timestamp || '') + ' [' + (data.level || '').padEnd(8) + '] '
+                + (data.logger || '') + ' - ' + (data.message || '');
+            if (!matchesFilter(div)) div.classList.add('filtered-out');
             div.innerHTML =
                 '<span class="timestamp">' + escapeHtml(data.timestamp) + '</span> '
                 + '<span class="level-badge level-' + data.level + '">[' + (data.level || '').padEnd(8) + ']</span> '
@@ -131,15 +219,14 @@
                 + escapeHtml(data.message);
             container.appendChild(div);
 
-            entryCount++;
-            countEl.textContent = entryCount + ' entries';
-
             while (container.children.length > MAX_ENTRIES) {
                 container.removeChild(container.firstChild);
             }
 
+            updateCount();
+
             if (autoScrollCb.checked) {
-                div.scrollIntoView({ block: 'end' });
+                scrollToBottom();
             }
         }
 
@@ -262,8 +349,16 @@
 
         document.getElementById('clearBtn').addEventListener('click', () => {
             container.innerHTML = '';
-            entryCount = 0;
-            countEl.textContent = '0 entries';
+            updateCount();
+        });
+
+        document.getElementById('bottomBtn').addEventListener('click', scrollToBottom);
+        document.getElementById('saveBtn').addEventListener('click', saveLog);
+
+        let filterTimer = null;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(filterTimer);
+            filterTimer = setTimeout(applyFilter, 150);
         });
 
         pauseCb.addEventListener('change', (e) => {
