@@ -14,6 +14,7 @@ import { registerTemplate, createFromTemplate, createHtmlElements } from '../mod
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
+import { getActiveProjects, getArchivedCollectionIds } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('file-selection', 'file-selection.html');
@@ -131,7 +132,7 @@ class FileSelectionPlugin extends Plugin {
       await this.#populateCollectionSelectbox(state);
     }
 
-    if (changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter'].includes(k)) && state.fileData) {
+    if (changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter', 'projects'].includes(k)) && state.fileData) {
       // Schedule outside the state propagation window: #populateSelectboxes has many async
       // steps that can take seconds for large file lists, and holding #isUpdatingState=true
       // that long blocks user interactions from dispatching their own state changes.
@@ -242,7 +243,8 @@ class FileSelectionPlugin extends Plugin {
     allOption.size = "small";
     this.#collection.appendChild(allOption);
 
-    const projects = state.projects || [];
+    const projects = getActiveProjects(state.projects || []);
+    const archivedCollectionIds = getArchivedCollectionIds(state.projects || []);
     const assignedCollectionIds = new Set(
       projects.flatMap(p => p.collections || [])
     );
@@ -270,7 +272,9 @@ class FileSelectionPlugin extends Plugin {
     }
 
     // Render orphan collections (not in any project) at the end
-    const orphans = (state.collections || []).filter(c => !assignedCollectionIds.has(c.id));
+    const orphans = (state.collections || []).filter(
+      c => !assignedCollectionIds.has(c.id) && !archivedCollectionIds.has(c.id)
+    );
     if (orphans.length > 0 && projects.length > 0) {
       const otherHeader = new SlOption();
       otherHeader.value = '__other__';
@@ -366,6 +370,16 @@ class FileSelectionPlugin extends Plugin {
         filteredFileData = fileData.filter(file =>
           file.collections && file.collections.includes(collectionFilter)
         ).map(file => { file.collections = [collectionFilter]; return file; });
+      } else {
+        // Hide collections that belong only to archived projects
+        const archivedCollectionIds = getArchivedCollectionIds(state.projects || []);
+        if (archivedCollectionIds.size > 0) {
+          filteredFileData = fileData.filter(file => {
+            if (!file.collections || file.collections.length === 0) return true;
+            file.collections = file.collections.filter(c => !archivedCollectionIds.has(c));
+            return file.collections.length > 0;
+          });
+        }
       }
 
       const variant = state.variant;

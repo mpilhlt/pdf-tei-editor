@@ -33,7 +33,7 @@ import {
 } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import Plugin from '../modules/plugin-base.js'
-import { canDeleteCollection, isCollectionOwner } from '../modules/collection-utils.js'
+import { canDeleteCollection, isCollectionOwner, getActiveProjects, getArchivedCollectionIds } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
@@ -189,7 +189,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     const state = this.state;
     if (!state) return;
 
-    if (['xml', 'pdf', 'variant', 'fileData', 'collections'].some(k => changedKeys.includes(k)) && state.fileData) {
+    if (['xml', 'pdf', 'variant', 'fileData', 'collections', 'projects'].some(k => changedKeys.includes(k)) && state.fileData) {
       await this.#populateVariantSelect(state);
 
       const drawer = this.#drawerUi;
@@ -566,12 +566,13 @@ class FileSelectionDrawerPlugin extends Plugin {
       return false;
     };
 
-    const projects = state.projects || [];
+    const projects = getActiveProjects(state.projects || []);
+    const archivedCollectionIds = getArchivedCollectionIds(state.projects || []);
     const collectionsWithFiles = new Set(Object.keys(groupedFiles));
-    const allVisibleCollections = new Set([
-      ...collectionsWithFiles,
-      ...(state.collections || []).map(c => c.id)
-    ]);
+    const allVisibleCollections = new Set(
+      [...collectionsWithFiles, ...(state.collections || []).map(c => c.id)]
+        .filter(colId => !archivedCollectionIds.has(colId))
+    );
     const renderedCollections = new Set();
 
     const selectAllContainer = this.#drawerUi.selectAllContainer;

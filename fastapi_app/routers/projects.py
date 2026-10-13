@@ -40,6 +40,7 @@ class Project(BaseModel):
     description: Optional[str] = Field(default="", description="Project description")
     members: list[str] = Field(default_factory=list, description="List of member usernames")
     collections: list[str] = Field(default_factory=list, description="List of collection IDs")
+    archived: bool = Field(default=False, description="Archived projects and their collections are hidden from file selection UIs")
 
 
 class CreateProjectRequest(BaseModel):
@@ -48,6 +49,7 @@ class CreateProjectRequest(BaseModel):
     description: Optional[str] = ""
     members: Optional[list[str]] = None
     collections: Optional[list[str]] = None
+    archived: bool = False
 
 
 class UpdateProjectRequest(BaseModel):
@@ -55,6 +57,7 @@ class UpdateProjectRequest(BaseModel):
     description: Optional[str] = None
     members: Optional[list[str]] = None
     collections: Optional[list[str]] = None
+    archived: Optional[bool] = None
 
 
 class ProjectConfigItem(BaseModel):
@@ -101,6 +104,7 @@ def _project_to_model(p: dict) -> Project:
         description=p.get('description', ''),
         members=p.get('members', []),
         collections=p.get('collections', []),
+        archived=bool(p.get('archived', False)),
     )
 
 
@@ -138,7 +142,8 @@ def create_project_endpoint(body: CreateProjectRequest, current_user: dict = Dep
         raise HTTPException(status_code=400, detail=f"Project '{body.id}' already exists")
     new_project = create_project(
         project_id=body.id, name=body.name, description=body.description or "",
-        members=body.members or [], collections=body.collections or []
+        members=body.members or [], collections=body.collections or [],
+        archived=body.archived
     )
     all_projects.append(new_project)
     save_entity_data(settings.db_dir, 'projects', all_projects)
@@ -162,6 +167,8 @@ def update_project_endpoint(project_id: str, body: UpdateProjectRequest,
         project['members'] = body.members
     if body.collections is not None:
         project['collections'] = body.collections
+    if body.archived is not None:
+        project['archived'] = body.archived
     save_entity_data(settings.db_dir, 'projects', all_projects)
     logger.info(f"Project '{project_id}' updated by '{current_user.get('username')}'")
     return _project_to_model(project)
