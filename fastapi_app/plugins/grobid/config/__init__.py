@@ -1,13 +1,21 @@
 """GROBID plugin configuration."""
 
 import copy
+import logging
+import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi_app.lib.plugins.plugin_tools import PluginConfigSpec, get_plugin_config
 from fastapi_app.lib.utils.config_utils import get_config
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.core.schema_validator import get_schema_cache_info, register_schema_redirect
+from fastapi_app.lib.core.schema_validator import (
+    ValidationError,
+    download_schema_file,
+    get_schema_cache_info,
+    register_schema_redirect,
+)
 from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES, AnnotationGuide
 from fastapi_app.plugins.grobid.config.annotation_tags_generator import (
     AnnotationTag,
@@ -19,6 +27,8 @@ from fastapi_app.plugins.grobid.config.content_locations import VARIANT_CONTENT_
 from fastapi_app.plugins.grobid.config.form_options import FORM_OPTIONS, FormOptions
 from fastapi_app.plugins.grobid.config.navigation import NAVIGATION_XPATH, NavigationXPath
 from fastapi_app.plugins.grobid.config.variants import PROCESSING_FLAVORS, SUPPORTED_VARIANTS
+
+logger = logging.getLogger(__name__)
 
 PLUGIN_CONFIG_SPECS: list[PluginConfigSpec] = [
     {
@@ -258,20 +268,53 @@ def get_annotation_guides() -> list[AnnotationGuide]:
 
 _ANNOTATION_TAGS_CACHE: dict[str, tuple[float | None, list[AnnotationTag]]] = {}
 
+# Seconds to wait before retrying a failed schema download for chip generation,
+# so an unreachable schema host doesn't add a network timeout to every
+# extractor-list request.
+SCHEMA_DOWNLOAD_RETRY_SECONDS = 300
+
+_SCHEMA_DOWNLOAD_FAILURES: dict[str, float] = {}
+
+
+def _ensure_schema_cached(variant_id: str) -> Path:
+    """
+    Return the cache file of a variant's schema, downloading it first if it
+    isn't cached yet. Validation only caches the schemas that documents
+    declare via <?xml-model?>, and many documents (e.g. imported GROBID
+    training files) carry no such declaration, so without this a variant's
+    chips would stay empty until some document of that variant happened to
+    be validated. A failed download is logged and not retried for
+    SCHEMA_DOWNLOAD_RETRY_SECONDS; the (missing) cache path is returned.
+    """
+    schema_url = get_schema_url(variant_id)
+    cache_dir, cache_file, _ = get_schema_cache_info(schema_url, get_settings().schema_cache_dir)
+    if cache_file.is_file():
+        return cache_file
+    failed_at = _SCHEMA_DOWNLOAD_FAILURES.get(variant_id)
+    if failed_at is not None and time.monotonic() - failed_at < SCHEMA_DOWNLOAD_RETRY_SECONDS:
+        return cache_file
+    try:
+        download_schema_file(schema_url, cache_dir, cache_file)
+        _SCHEMA_DOWNLOAD_FAILURES.pop(variant_id, None)
+    except (ValidationError, OSError) as e:
+        cache_file.unlink(missing_ok=True)
+        _SCHEMA_DOWNLOAD_FAILURES[variant_id] = time.monotonic()
+        logger.warning(f"Cannot generate annotation tags for {variant_id}: {e}")
+    return cache_file
+
 
 def get_annotation_tags() -> AnnotationTagsMap:
     """
     Return annotation tag definitions keyed by variant_id, generated from
     each variant's cached RelaxNG schema (see annotation_tags_generator.py).
-    A variant's chip list is regenerated only when its cached schema
-    file's mtime changes since the last build; a variant whose schema
-    hasn't been downloaded/cached yet gets an empty list rather than an
-    error — a schema declaration is required to get any chips at all.
+    A schema that isn't cached yet is downloaded first (see
+    _ensure_schema_cached()). A variant's chip list is regenerated only when
+    its cached schema file's mtime changes since the last build; a variant
+    whose schema can't be obtained gets an empty list rather than an error.
     """
     result: AnnotationTagsMap = {}
-    cache_root = get_settings().schema_cache_dir
     for variant_id in ANNOTATION_TAG_SCOPE:
-        _, schema_cache_file, _ = get_schema_cache_info(get_schema_url(variant_id), cache_root)
+        schema_cache_file = _ensure_schema_cached(variant_id)
         mtime = schema_cache_file.stat().st_mtime if schema_cache_file.is_file() else None
         cached = _ANNOTATION_TAGS_CACHE.get(variant_id)
         if cached is not None and cached[0] == mtime:
