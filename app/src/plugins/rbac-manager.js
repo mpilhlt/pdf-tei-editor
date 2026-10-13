@@ -481,6 +481,11 @@ class RbacManagerPlugin extends Plugin {
 
       this.#renderEntityList()
       this.#showEntityForm()
+
+      // Project changes (e.g. the archived flag) affect the file selection UIs
+      if (this.#currentEntityType === 'project') {
+        await this.getDependency('filedata').reload({ refresh: true })
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       this.getDependency('logger').error(`Failed to save entity: ${errorMessage}`)

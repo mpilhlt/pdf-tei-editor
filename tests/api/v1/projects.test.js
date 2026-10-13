@@ -62,6 +62,23 @@ describe('Projects API', () => {
     assert.equal(updated.name, 'Updated Project Name');
   });
 
+  test('New project is not archived by default', async () => {
+    const project = await authenticatedApiCall(adminSessionId, `/projects/${testProjectId}`, 'GET', null, BASE_URL);
+    assert.equal(project.archived, false);
+  });
+
+  test('Admin can archive and unarchive a project', async () => {
+    const archived = await authenticatedApiCall(
+      adminSessionId, `/projects/${testProjectId}`, 'PUT', { archived: true }, BASE_URL
+    );
+    assert.equal(archived.archived, true);
+    assert.equal(archived.name, 'Updated Project Name');
+    const unarchived = await authenticatedApiCall(
+      adminSessionId, `/projects/${testProjectId}`, 'PUT', { archived: false }, BASE_URL
+    );
+    assert.equal(unarchived.archived, false);
+  });
+
   test('Regular user does not see project they are not a member of (404)', async () => {
     let threw = false;
     try {

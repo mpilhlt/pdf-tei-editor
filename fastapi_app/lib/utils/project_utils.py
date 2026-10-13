@@ -24,6 +24,7 @@ def create_project(
     description: str = "",
     members: Optional[list[str]] = None,
     collections: Optional[list[str]] = None,
+    archived: bool = False,
 ) -> dict[str, Any]:
     """Return a new project dict (not yet persisted)."""
     return {
@@ -32,6 +33,7 @@ def create_project(
         "description": description,
         "members": members or [],
         "collections": collections or [],
+        "archived": archived,
         "config": {},
     }
 

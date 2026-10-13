@@ -31,6 +31,12 @@ class TestProjectUtils(unittest.TestCase):
         self.assertEqual(p['members'], ['alice'])
         self.assertEqual(p['collections'], ['col1'])
         self.assertEqual(p['config'], {})
+        self.assertFalse(p['archived'])
+
+    def test_create_archived_project(self):
+        from fastapi_app.lib.utils.project_utils import create_project
+        p = create_project('proj1', 'Project One', archived=True)
+        self.assertTrue(p['archived'])
 
     def test_find_project(self):
         from fastapi_app.lib.utils.project_utils import find_project, create_project

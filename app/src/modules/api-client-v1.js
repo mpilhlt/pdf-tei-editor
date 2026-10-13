@@ -241,6 +241,7 @@
  * @property {string} name - Group display name
  * @property {string=} description - Group description
  * @property {Array<string>=} collections - List of collection IDs
+ * @property {boolean=} archived - Archived projects and their collections are hidden from file selection UIs
  */
 
 /**
@@ -258,6 +259,7 @@
  * @property {string=} description
  * @property {Array<string>=} members
  * @property {Array<string>=} collections
+ * @property {boolean=} archived
  */
 
 /**
@@ -835,6 +837,7 @@
  * @property {string=} description
  * @property {Array<string>=} members
  * @property {Array<string>=} collections
+ * @property {boolean=} archived
  */
 
 /**
