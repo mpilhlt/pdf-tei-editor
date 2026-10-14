@@ -370,6 +370,17 @@ describe('runReview', () => {
     assert.strictEqual(notifyCalls.at(-1)[1], 'success');
   });
 
+  it('reports discarded findings instead of "no issues" when nothing usable came back', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async () => ({ findings: [], discarded: 2 }),
+    });
+    await ext.runReview();
+    assert.strictEqual(notifyCalls.at(-1)[1], 'warning');
+    assert.match(notifyCalls.at(-1)[0], /proposed 2 fix/);
+  });
+
   it('hides the progress widget and shows nothing when review() fails', async () => {
     const { ext, progressCalls, lintCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,

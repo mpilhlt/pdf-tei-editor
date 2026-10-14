@@ -276,6 +276,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     let cancelled = false;
     let done = 0;
     let total = 0;
+    let discarded = 0;
     progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true; } });
     try {
       const findings = await this.review(resolved ?? undefined, {
@@ -286,6 +287,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
           progress.setLabel(progressId, `${heading} (part 1 of ${chunksTotal})`);
         },
         isCancelled: () => cancelled || documentChanged(),
+        onDiscarded: (count) => { discarded += count; },
         onProgress: (chunksDone, chunksTotal, foundSoFar) => {
           done = chunksDone;
           total = chunksTotal;
@@ -301,6 +303,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
       if (cancelled) {
         this.getDependency('sl-utils').notify(
           `Review cancelled after ${done} of ${total} parts; ${count} suggestion(s) so far.`,
+          'warning',
+          'exclamation-triangle'
+        );
+        return;
+      }
+      if (!count && discarded) {
+        this.getDependency('sl-utils').notify(
+          `No usable suggestions: the model proposed ${discarded} fix(es), but their quoted text does not match the document.`,
           'warning',
           'exclamation-triangle'
         );
@@ -354,8 +364,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
    * from the given override, or from the shared default (Part F), unless one
    * isn't configured.
    * @param {{providerId: string, modelId: string}} [override]
-   * @param {{xpath?: string|null, isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
-   *   xpath limits the review to that node (the navigation mode's `xpath` state); onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
+   * @param {{xpath?: string|null, isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void, onDiscarded?: (count: number) => void}} [hooks]
+   *   xpath limits the review to that node (the navigation mode's `xpath` state); onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far; onDiscarded runs for each chunk in which the backend discarded findings whose quoted text does not occur exactly once in the document.
    * @returns {Promise<Finding[]|null>}
    *   The findings (possibly partial if cancelled); null when the review could not be started or a chunk failed (user already notified).
    */
@@ -416,6 +426,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
         );
         total = response.chunk_count ?? total;
         for (const finding of response.findings) findings.push({ ...finding, id: findings.length });
+        if (response.discarded) hooks.onDiscarded?.(response.discarded);
       } catch (err) {
         this.getDependency('sl-utils').notify(
           `Annotation review failed${total > 1 ? ` in part ${index + 1} of ${total}` : ''}: ${err.message}`,

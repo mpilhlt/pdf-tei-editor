@@ -28,9 +28,11 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 from .chunking import split_into_chunks
 from .prompts import (
     Finding,
+    UnusableResponseError,
+    build_retry_note,
     build_system_prompt,
     build_user_prompt,
-    parse_and_validate_findings,
+    validate_findings,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,14 +221,19 @@ async def run_review(
     owner: str,
     chunk_index: int = 0,
     scope: str | None = None,
-) -> tuple[list[Finding], int]:
+) -> tuple[list[Finding], int, int]:
     """
     Review one chunk of the document's <text>: gather rule excerpts, build the
-    prompt, call the LLM, and return (validated findings, total chunk count).
-    Findings are validated against the whole <text>, so "old" must be unique
-    in the document, not just in the chunk. With a scope, only that node is
-    reviewed and findings are validated against the whole document (see
-    review_source()).
+    prompt, call the LLM, and return (validated findings, total chunk count,
+    number of findings discarded because their "old" does not occur exactly
+    once). Findings are validated against the whole <text>, so "old" must be
+    unique in the document, not just in the chunk. With a scope, only that
+    node is reviewed and findings are validated against the whole document
+    (see review_source()).
+
+    If the model proposed findings but every one of them was discarded, the
+    call is repeated once with the discarded snippets quoted back to it;
+    smaller models often paraphrase "old" instead of copying it verbatim.
 
     Raises:
         ValueError: see review_source(), or chunk_index is out of range.
@@ -245,4 +252,12 @@ async def run_review(
         rule_excerpts, chunks[chunk_index], (chunk_index + 1, len(chunks)), scoped=scope is not None
     )
     raw_response = await provider.chat_completion(model_id, system_prompt, user_prompt)
-    return parse_and_validate_findings(raw_response, validation_text), len(chunks)
+    findings, unmatched = validate_findings(raw_response, validation_text)
+    if not findings and unmatched:
+        logger.info(f"annotation-review: all {len(unmatched)} finding(s) discarded, retrying once with feedback")
+        retry_response = await provider.chat_completion(model_id, system_prompt, user_prompt + build_retry_note(unmatched))
+        try:
+            findings, unmatched = validate_findings(retry_response, validation_text)
+        except UnusableResponseError:
+            logger.warning("annotation-review: retry returned no usable JSON list, keeping the first attempt's result")
+    return findings, len(chunks), len(unmatched)
