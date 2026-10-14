@@ -73,6 +73,8 @@ The center of the statusbar contains node navigation controls. These are only sh
 
 Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
 
+The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
+
 ### Focus Mode
 
 The magnifier button (**Focus**) next to the navigation controls turns on a distraction-free focus mode for working on one node at a time:
@@ -82,7 +84,7 @@ The magnifier button (**Focus**) next to the navigation controls turns on a dist
 - Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
 - Moving the cursor into another node (for example by clicking) moves the focus to that node.
 
-Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown.
+Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Whether focus mode is on is remembered in your browser, so it is still active after reloading the page.
 
 ---
 

@@ -218,6 +218,10 @@ class XmlEditorPlugin extends Plugin {
   #nodeCounterWidget;
   /** @type {StatusToggleButton} */
   #focusToggle;
+  /** Whether the user has focus mode switched on (persisted in the UI storage) */
+  #focusPreferred = false;
+  /** Whether the navigation widgets (and thus focus mode) are currently available */
+  #navigationVisible = false;
 
   // State for node navigation
   /** @type {string|null} */
@@ -708,6 +712,8 @@ class XmlEditorPlugin extends Plugin {
       name: 'focusToggle'
     });
     this.#statusbar.add(this.#focusToggle, 'center', 0);
+    this.#focusPreferred = this.uiStorage.get('focusMode', false);
+    this.#focusToggle.checked = this.#focusPreferred;
 
     // Update UI to register navigation widgets
     updateUi();
@@ -1561,24 +1567,36 @@ class XmlEditorPlugin extends Plugin {
     this.#nextNodeBtn.style.display = display;
     this.#nodeCounterWidget.style.display = display;
     this.#focusToggle.style.display = display;
-    if (!visible && this.#xmlEditor.isFocusMode()) {
-      this.#setFocusMode(false);
+    if (visible !== this.#navigationVisible) {
+      this.#navigationVisible = visible;
+      this.#applyFocusMode();
     }
   }
 
   /**
-   * Turns focus mode on or off and keeps the statusbar toggle in sync. Enabling it also turns on line wrapping.
+   * Turns focus mode on or off as a user choice: keeps the statusbar toggle in sync and persists the
+   * choice. Enabling it also turns on line wrapping.
    * @param {boolean} enabled
    */
   #setFocusMode(enabled) {
+    this.#focusPreferred = enabled;
+    this.uiStorage.set('focusMode', enabled);
     this.#focusToggle.checked = enabled;
     if (enabled && !this.#wrapToggle.checked) {
       // wrapped lines keep the focused node readable; applied transiently, the stored preference is untouched
       this.#wrapToggle.checked = true;
       this.#xmlEditor.setLineWrapping(true);
     }
-    this.#xmlEditor.setFocusMode(enabled);
+    this.#applyFocusMode();
     this.#logger.debug(`Focus mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Applies the stored focus mode choice to the editor. Focus mode only takes effect while the
+   * navigation widgets are shown; the choice itself is kept for when they are shown again.
+   */
+  #applyFocusMode() {
+    this.#xmlEditor.setFocusMode(this.#focusPreferred && this.#navigationVisible);
   }
 
   /**

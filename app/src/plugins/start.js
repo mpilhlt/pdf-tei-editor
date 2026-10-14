@@ -109,6 +109,12 @@ class StartPlugin extends Plugin {
       const xml = this.state.xml || null
       const diff = this.state.diff
 
+      // the xpath of the node to select, from the URL hash or the restored state. Loading the XML
+      // resets the xpath state, so it has to be captured before. Discard non-absolute values
+      // (e.g. bare numbers stored by a stale/buggy session)
+      const rawXpath = this.state.xpath || UrlHash.get("xpath") || ''
+      const initialXpath = rawXpath.startsWith('/') ? rawXpath : ''
+
       if (pdf !== null || xml !== null) {
         // load the documents (PDF-XML pairs or XML-only files)
         try {
@@ -145,13 +151,9 @@ class StartPlugin extends Plugin {
           this.#validation.configure({ mode: seconds > 3 ? "off" : "auto" })
         })
 
-        // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
-        // Discard non-absolute values (e.g. bare numbers stored by a stale/buggy session)
-        const rawXpath = UrlHash.get("xpath") || ''
-        const xpath = rawXpath.startsWith('/') ? rawXpath : ''
-
+        // setting the xpath state triggers the selection of the node in the xml editor
         // update the UI
-        await this.dispatchStateChange({ xpath })
+        await this.dispatchStateChange({ xpath: initialXpath })
 
         // synchronize in the background
         this.context.invokePluginEndpoint(ep.sync.syncFiles, this.state).then(async (summary) => {

@@ -19,7 +19,8 @@
   "state.showInUrl": [
     "pdf",
     "xml",
-    "diff"
+    "diff",
+    "xpath"
   ],
   "state.showInUrl.description": "State keys reflected in the browser URL for sharing and bookmarking",
   "state.allowSetFromUrl": [

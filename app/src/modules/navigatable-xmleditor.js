@@ -160,6 +160,7 @@ export class NavXmlEditor extends XMLEditor {
    * @param {boolean} enabled
    */
   setFocusMode(enabled) {
+    if (enabled === this.#focusMode) return;
     this.#focusMode = enabled;
     if (!enabled) {
       this.clearFocus();
