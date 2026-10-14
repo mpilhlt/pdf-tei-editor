@@ -67,11 +67,14 @@ def build_user_prompt(
     rule_excerpts: list[tuple[str, str]],
     text_content: str,
     chunk_position: tuple[int, int] | None = None,
+    scoped: bool = False,
 ) -> str:
     """
     Combine every (category, excerpt) pair with the document text into a
     single prompt. chunk_position is (1-based index, total) when text_content
-    is only one fragment of a longer document.
+    is only one fragment of a longer document. scoped is True when
+    text_content is (part of) a single element the user selected rather than
+    the document's <text>.
     """
     sections = []
     for category, excerpt in rule_excerpts:
@@ -79,16 +82,17 @@ def build_user_prompt(
     rules_block = "\n\n".join(sections)
     return (
         f"{rules_block}\n\n"
-        f"{_document_heading(chunk_position)}\n\n{text_content}"
+        f"{_document_heading(chunk_position, scoped)}\n\n{text_content}"
     )
 
 
-def _document_heading(chunk_position: tuple[int, int] | None) -> str:
+def _document_heading(chunk_position: tuple[int, int] | None, scoped: bool = False) -> str:
+    subject = "a single element of a longer document" if scoped else "a longer document"
     if chunk_position is None or chunk_position[1] == 1:
-        return "## Document text"
+        return f"## Document text ({subject}; review only this element)" if scoped else "## Document text"
     index, total = chunk_position
     return (
-        f"## Document text (fragment {index} of {total} of a longer document; "
+        f"## Document text (fragment {index} of {total} of {subject}; "
         f"review only this fragment, and its tags may be unbalanced at the edges)"
     )
 

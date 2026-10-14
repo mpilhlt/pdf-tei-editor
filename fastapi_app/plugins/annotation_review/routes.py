@@ -50,6 +50,8 @@ class ReviewRequest(BaseModel):
     provider_id: str
     model_id: str
     chunk_index: int = 0
+    # Raw XML of a single element of `xml` to review instead of the whole <text> (node navigation)
+    scope: str | None = None
 
 
 class FindingResponse(BaseModel):
@@ -66,6 +68,7 @@ class ReviewResponse(BaseModel):
 
 class PlanRequest(BaseModel):
     xml: str
+    scope: str | None = None
 
 
 class PlanResponse(BaseModel):
@@ -79,7 +82,7 @@ async def plan(
 ) -> PlanResponse:
     """Report how many chunks /review will need for the given document (no LLM call)."""
     try:
-        return PlanResponse(chunk_count=count_chunks(body.xml))
+        return PlanResponse(chunk_count=count_chunks(body.xml, body.scope))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -110,7 +113,7 @@ async def review(
 
     try:
         findings, chunk_count = await run_review(
-            body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index
+            body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index, body.scope
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e

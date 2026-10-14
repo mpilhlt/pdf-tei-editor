@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EditorState } from '@codemirror/state';
-import { focusModeExtension, setFocusRangeEffect } from '../../../app/src/modules/codemirror/focus-mode.js';
+import { focusModeExtension, setFocusRangeEffect, focusActionsFacet } from '../../../app/src/modules/codemirror/focus-mode.js';
 import { EditorView } from '@codemirror/view';
 
 const DOC = '<a><b>one</b><b>two</b><b>three</b></a>';
@@ -68,5 +68,21 @@ describe('focus mode extension', () => {
     assert.strictEqual(dimmed[1][0], from + '<b>two</b>'.length + 2);
     next = next.update({ effects: setFocusRangeEffect.of(null) }).state;
     assert.deepStrictEqual(decorations(next), []);
+  });
+
+  it('adds a focus actions widget at the end of the last focused line only when actions are registered', () => {
+    const doc = MULTILINE;
+    const from = doc.indexOf('<b>two</b>');
+    const to = from + '<b>two</b>'.length;
+    const action = { label: 'Act', run: () => {} };
+    const base = EditorState.create({ doc, extensions: [focusModeExtension, focusActionsFacet.of([action])] });
+    const state = base.update({ effects: setFocusRangeEffect.of({ from, to }) }).state;
+    const widgets = [];
+    for (const source of state.facet(EditorView.decorations)) {
+      if (typeof source === 'function') continue;
+      source.between(0, state.doc.length, (f, t, value) => { if (value.spec.widget) widgets.push([f, value.spec.widget.actions]); });
+    }
+    assert.deepStrictEqual(widgets, [[state.doc.lineAt(to).to, [action]]]);
+    assert.ok(!decorations(base).length, 'no widget without a focus range');
   });
 });
