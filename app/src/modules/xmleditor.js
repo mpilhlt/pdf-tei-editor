@@ -62,9 +62,10 @@ import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
 import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
-import { focusModeExtension, focusRangeField, setFocusRangeEffect } from './codemirror/focus-mode.js';
+import { focusModeExtension, focusRangeField, setFocusRangeEffect, focusActionsFacet } from './codemirror/focus-mode.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
+ * @import {FocusAction} from './codemirror/focus-mode.js'
  */
 
 /**
@@ -184,6 +185,9 @@ export class XMLEditor extends EventEmitter {
   #mergeViewCompartment = new Compartment()
   #autocompleteCompartment = new Compartment()
   #linterCompartment = new Compartment()
+  #focusActionsCompartment = new Compartment()
+  /** @type {Map<string, FocusAction>} */
+  #focusActions = new Map()
   #updateListenerCompartment = new Compartment()
   #selectionChangeCompartment = new Compartment()
   #lineWrappingCompartment = new Compartment()
@@ -262,6 +266,7 @@ export class XMLEditor extends EventEmitter {
       this.#readOnlyCompartment.of([]),
       this.#editGuardCompartment.of([]),
       focusModeExtension,
+      this.#focusActionsCompartment.of([]),
     ];
 
     if (tagData) {
@@ -1247,6 +1252,24 @@ export class XMLEditor extends EventEmitter {
   scrollSelectionToCenter() {
     const { from, to } = this.#view.state.field(focusRangeField, false) ?? this.#view.state.selection.main;
     this.#view.dispatch({ effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' }) });
+  }
+
+  /**
+   * Adds, replaces or (with `null`) removes a button shown in the bottom right corner of the
+   * focused node while focus mode is on.
+   * @param {string} id - Identifies the action, e.g. the name of the plugin providing it
+   * @param {FocusAction|null} action
+   */
+  setFocusAction(id, action) {
+    if (action) {
+      if (this.#focusActions.get(id) === action) return;
+      this.#focusActions.set(id, action);
+    } else if (!this.#focusActions.delete(id)) {
+      return;
+    }
+    this.#view.dispatch({
+      effects: this.#focusActionsCompartment.reconfigure(focusActionsFacet.of([...this.#focusActions.values()]))
+    });
   }
 
   /**

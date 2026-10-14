@@ -101,6 +101,12 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     this._pruneDelayMs = 300;
     /** @type {ReturnType<typeof setTimeout>|undefined} */
     this._pruneTimer = undefined;
+    /** Button shown on the focused node in the XML editor's focus mode. */
+    this._focusAction = {
+      label: 'LLM Review',
+      title: 'Review the annotations of this node',
+      run: () => { this.runReview(); },
+    };
   }
 
   /**
@@ -224,7 +230,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Enable the menu item only if a document is open and has reviewable rules.
+   * Enable the menu item, and the "LLM Review" button on the node focused in
+   * focus mode, only if a document is open and has reviewable rules.
    * No-op before start() has created the item.
    * @returns {void}
    */
@@ -233,6 +240,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     const tree = this.getDependency('xmleditor').getXmlTree();
     this._menuItem.disabled = !tree || !this.hasReviewableRules(tree);
     this._menuItem.title = this._menuItem.disabled ? 'Requires an open document whose editorialDecl has machine-readable annotation rules (a ref with subtype="machine").' : '';
+    this.getDependency('xmleditor').setFocusAction(SOURCE, this._menuItem.disabled ? null : this._focusAction);
   }
 
   /**

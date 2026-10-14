@@ -35,7 +35,7 @@ const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, fi
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {};
+  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
     progress: {
@@ -54,6 +54,7 @@ function buildExtension(opts = {}) {
       showMergeView: async (text) => { if (opts.showMergeViewImpl) return opts.showMergeViewImpl(text); mergeViews.push(text); },
       on: (event, fn) => { handlers[event] = fn; },
       getXmlTree: () => (opts.xmlDoc === undefined ? {} : opts.xmlDoc),
+      setFocusAction: (id, action) => { focusActions[id] = action; },
       getEditorContent: () => opts.editorContent ?? '<TEI/>',
     },
     'sl-utils': {
@@ -80,7 +81,7 @@ function buildExtension(opts = {}) {
     }
     return impl(endpoint, ...rest);
   };
-  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers };
+  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
 }
 
 describe('hasReviewableRules', () => {
@@ -324,6 +325,22 @@ describe('menu item', () => {
     await ext.start();
     handlers.editorReady();
     assert.strictEqual(menuAdds[0].items[0].disabled, true);
+  });
+
+  it('offers an "LLM Review" focus-mode button only while the review is available', async () => {
+    let guides = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+    const { ext, handlers, focusActions } = buildExtension({ getEditorialDeclGuides: () => guides });
+    await ext.start();
+    handlers.editorReady();
+    const action = focusActions['annotation-review'];
+    assert.strictEqual(action.label, 'LLM Review');
+    let ran = 0;
+    ext.runReview = async () => { ran++; };
+    action.run();
+    assert.strictEqual(ran, 1);
+    guides = [];
+    handlers.editorReady();
+    assert.strictEqual(focusActions['annotation-review'], null);
   });
 });
 

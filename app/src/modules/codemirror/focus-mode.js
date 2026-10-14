@@ -6,12 +6,14 @@
  * Exports:
  *   setFocusRangeEffect — StateEffect that sets (`{from, to}`) or clears (`null`) the focused range
  *   focusRangeField — the StateField holding the focused range (`FocusRange|null`)
+ *   focusActionsFacet — Facet of {@link FocusAction}s shown as buttons in the bottom right corner of
+ *                       the focused range
  *   focusModeExtension — StateField that dims everything outside the focused range and adds spacing
  *                        around it, plus its theme
  */
 
-import { StateField, StateEffect } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { StateField, StateEffect, Facet } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 
 /**
  * @import { DecorationSet } from '@codemirror/view'
@@ -23,8 +25,66 @@ import { Decoration, EditorView } from '@codemirror/view';
  * @property {number} to - End offset of the focused range
  */
 
+/**
+ * @typedef {object} FocusAction
+ * @property {string} label - Button text
+ * @property {string} [title] - Button tooltip
+ * @property {(view: EditorView) => void} run - Called when the button is clicked
+ */
+
 /** @type {StateEffect<FocusRange|null>} */
 export const setFocusRangeEffect = StateEffect.define();
+
+/**
+ * Actions shown as buttons in the spacing below the focused range.
+ * @type {Facet<FocusAction[], FocusAction[]>}
+ */
+export const focusActionsFacet = Facet.define({
+  combine: values => values.flat()
+});
+
+/**
+ * Renders the focus actions as buttons styled like the lint panel's diagnostic actions,
+ * positioned in the bottom right corner of the last focused line.
+ */
+class FocusActionsWidget extends WidgetType {
+  /** @param {FocusAction[]} actions */
+  constructor(actions) {
+    super();
+    this.actions = actions;
+  }
+
+  /** @param {FocusActionsWidget} other */
+  eq(other) {
+    return other.actions.length === this.actions.length
+      && other.actions.every((action, i) => action === this.actions[i]);
+  }
+
+  /** @param {EditorView} view */
+  toDOM(view) {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-focus-actions';
+    for (const action of this.actions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cm-focus-action';
+      button.textContent = action.label;
+      if (action.title) button.title = action.title;
+      // keep the cursor where it is
+      button.addEventListener('mousedown', evt => evt.preventDefault());
+      button.addEventListener('click', evt => {
+        evt.preventDefault();
+        action.run(view);
+      });
+      wrapper.appendChild(button);
+    }
+    return wrapper;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
 
 const dimmedMark = Decoration.mark({ class: 'cm-focus-dimmed' });
 const dimmedLine = Decoration.line({ class: 'cm-focus-dimmed' });
@@ -52,6 +112,10 @@ function buildDecorations(range, state) {
   if (range.to < last.to) decorations.push(dimmedMark.range(range.to, last.to));
   decorations.push(firstLine.range(first.from));
   decorations.push(lastLine.range(last.from));
+  const actions = state.facet(focusActionsFacet);
+  if (actions.length) {
+    decorations.push(Decoration.widget({ widget: new FocusActionsWidget(actions), side: 1 }).range(last.to));
+  }
   return Decoration.set(decorations, true);
 }
 
@@ -74,14 +138,26 @@ export const focusRangeField = StateField.define({
     }
     return range;
   },
-  provide: field => EditorView.decorations.compute([field, 'doc'], state =>
+  provide: field => EditorView.decorations.compute([field, 'doc', focusActionsFacet], state =>
     buildDecorations(state.field(field), state))
 });
 
 const focusModeTheme = EditorView.baseTheme({
   '.cm-focus-dimmed': { opacity: '0.3' },
   '.cm-focus-first': { paddingTop: '1.5em' },
-  '.cm-focus-last': { paddingBottom: '1.5em' }
+  '.cm-focus-last': { paddingBottom: '1.5em', position: 'relative' },
+  '.cm-focus-actions': { position: 'absolute', right: '4px', bottom: '2px', display: 'flex', gap: '4px' },
+  '.cm-focus-action': {
+    font: 'inherit',
+    fontSize: '85%',
+    lineHeight: '1.3',
+    border: 'none',
+    padding: '1px 6px',
+    backgroundColor: '#444',
+    color: 'white',
+    borderRadius: '3px',
+    cursor: 'pointer'
+  }
 });
 
 export const focusModeExtension = [focusRangeField, focusModeTheme];

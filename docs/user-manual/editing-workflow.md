@@ -75,7 +75,7 @@ Each time you navigate, the node is scrolled to the vertical center of the edito
 
 Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 
-While node navigation is on, **Tools → Review Annotations** reviews only the current node instead of the whole document.
+While node navigation is on, **Tools → Review Annotations** reviews only the current node instead of the whole document. In focus mode, the same review can be started with the **LLM Review** button in the bottom right corner of the focused node.
 
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
