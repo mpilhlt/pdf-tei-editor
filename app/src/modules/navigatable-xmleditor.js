@@ -34,6 +34,26 @@ export class NavXmlEditor extends XMLEditor {
   selectedXpath = null;
 
   /**
+   * Turns node navigation off: removes the visual focus on the current node and forgets the node
+   * and the navigation path. Moving the cursor no longer selects nodes until a new path is set.
+   * Focus mode itself stays switched on.
+   */
+  clearSelectedNode() {
+    this.clearFocus()
+    this.selectedNode = null
+    this.selectedXpath = null
+    this.parentPath = null
+    this.currentIndex = 1
+  }
+
+  /**
+   * Whether focus mode is active, in which the navigated-to node is centered and
+   * all other content is dimmed instead of selecting the node
+   * @type {boolean}
+   */
+  #focusMode = false;
+
+  /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
    * @param {Object?} tagData - Autocompletion data
@@ -131,6 +151,54 @@ export class NavXmlEditor extends XMLEditor {
     this.currentIndex = nodeIndex;
     this.selectedNode = selectedNode;
     this.selectedXpath = `${this.parentPath}[${nodeIndex}]`;
+
+    // moving the cursor into another node moves the focus along, without scrolling
+    if (this.#focusMode) {
+      this.#tryFocus(() => this.focusDomNode(selectedNode, { scroll: false }));
+    }
+  }
+
+  /**
+   * Whether focus mode is active
+   * @returns {boolean}
+   */
+  isFocusMode() {
+    return this.#focusMode;
+  }
+
+  /**
+   * Turns focus mode on or off. When turned on, the currently navigated-to node is
+   * focused right away; subsequent navigation centers the target node and dims
+   * all other content instead of selecting the node.
+   * @param {boolean} enabled
+   */
+  setFocusMode(enabled) {
+    if (enabled === this.#focusMode) return;
+    this.#focusMode = enabled;
+    if (!enabled) {
+      this.clearFocus();
+      return;
+    }
+    if (this.selectedXpath) {
+      const xpath = this.selectedXpath;
+      this.#tryFocus(() => this.focusByXpath(xpath));
+    } else if (this.parentPath) {
+      const xpath = `${this.parentPath}[${this.currentIndex}]`;
+      this.#tryFocus(() => this.focusByXpath(xpath));
+    }
+  }
+
+  /**
+   * Runs a focus operation, logging instead of throwing if the node cannot be resolved
+   * (e.g. while the editor is out of sync with the XML tree)
+   * @param {() => void} fn
+   */
+  #tryFocus(fn) {
+    try {
+      fn();
+    } catch (error) {
+      console.warn(`Could not focus node: ${String(error)}`);
+    }
   }
 
   /**
@@ -162,7 +230,11 @@ export class NavXmlEditor extends XMLEditor {
     const newXpath = `${this.parentPath}[${this.currentIndex}]`
 
     try {
-      this.selectByXpath(newXpath);
+      if (this.#focusMode) {
+        this.focusByXpath(newXpath);
+      } else {
+        this.selectByXpath(newXpath);
+      }
     } catch (error) {
       // this sometimes fails for unknown reasons
       console.warn(String(error))

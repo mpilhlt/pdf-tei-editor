@@ -13,7 +13,7 @@ Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, 
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).
 
 **Statusbar** (bottom strip)
-Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls. Right side: indentation style and cursor position.
+Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: indentation style and cursor position.
 
 ---
 
@@ -71,7 +71,33 @@ The center of the statusbar contains node navigation controls. These are only sh
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
-The current node is highlighted and scrolled into view each time you navigate. Your XPath selection is remembered per-variant across sessions.
+Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
+
+Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
+
+The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
+
+### Focus Mode
+
+The magnifier button (**Focus**) next to the navigation controls, available while node navigation is on, turns on a distraction-free focus mode for working on one node at a time:
+
+- Navigating centers the node vertically, as above, but instead of highlighting it, everything outside the node is dimmed. In the Visual annotation mode, the tag labels outside the node are dimmed as well.
+- The focused node gets extra space above and below it.
+- Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
+- Moving the cursor into another node (for example by clicking) moves the focus to that node.
+
+Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Focus mode is on by default; whether you turned it on or off is remembered in your browser, so the choice is kept after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
+
+---
+
+## Leaving Focus and Merge Mode with Esc
+
+Pressing **Esc** ends the current special editing mode:
+
+1. If focus mode is on, Esc turns it off.
+2. Otherwise, if a merge view is active, Esc closes it and returns to normal editing (the same as clearing the diff selection).
+
+Esc is ignored while a dialog, drawer or dropdown is open, and when it is used to close the editor's search panel or autocomplete popup.
 
 ---
 

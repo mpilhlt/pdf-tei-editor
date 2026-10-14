@@ -11,7 +11,7 @@ import { JSDOM } from 'jsdom'
 const dom = new JSDOM('<!DOCTYPE html>')
 globalThis.document = dom.window.document
 
-const { renderTitleTemplate, linkifyUrls } = await import('../../../app/src/modules/browser-utils.js')
+const { renderTitleTemplate, linkifyUrls, UrlHash } = await import('../../../app/src/modules/browser-utils.js')
 
 describe('renderTitleTemplate', () => {
   it('substitutes all present slots', () => {
@@ -90,5 +90,27 @@ describe('linkifyUrls', () => {
   it('leaves text without URLs unchanged aside from escaping', () => {
     const result = linkifyUrls('No links here.')
     assert.strictEqual(result, 'No links here.')
+  })
+})
+
+describe('UrlHash.serialize', () => {
+  it('keeps xpath expressions readable', () => {
+    const params = new URLSearchParams({ xml: 'abc123', xpath: '//tei:listBibl/tei:bibl[3]' })
+    assert.strictEqual(UrlHash.serialize(params), '#xml=abc123&xpath=//tei:listBibl/tei:bibl[3]')
+  })
+
+  it('still encodes characters that would break the parameter syntax', () => {
+    const params = new URLSearchParams({ a: 'x&y=z#1 2%+"' })
+    assert.strictEqual(UrlHash.serialize(params), '#a=x%26y%3Dz%231%202%25%2B%22')
+  })
+
+  it('round-trips through URLSearchParams', () => {
+    const value = `//tei:bibl[@type='a,b']/tei:title[2]`
+    const hash = UrlHash.serialize(new URLSearchParams({ xpath: value }))
+    assert.strictEqual(new URLSearchParams(hash.slice(1)).get('xpath'), value)
+  })
+
+  it('returns a bare # for no parameters', () => {
+    assert.strictEqual(UrlHash.serialize(new URLSearchParams()), '#')
   })
 })
