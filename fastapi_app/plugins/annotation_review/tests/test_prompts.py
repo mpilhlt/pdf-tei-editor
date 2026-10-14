@@ -169,6 +169,39 @@ class TestValidateFindingsUnmatched(unittest.TestCase):
         self.assertEqual([f["old"] for f in kept], ["<title>X</title>"])
         self.assertEqual(unmatched, ["<persName>J. Doe</persName>", "<title> X </title>"])
 
+    def test_scoped_findings_are_matched_in_the_scope_and_widened_until_unique_in_the_document(self):
+        scope = "<bibl><author>A. B</author>, <title>T</title> (<date>2020</date>), <ptr>http://x.de/202 0</ptr></bibl>"
+        document = (
+            "<listBibl>" + scope
+            + "<bibl><author>A. B</author>, <title>T</title> (<date>2020</date>), <ptr>http://x.de/2020</ptr></bibl>"
+            + "</listBibl>"
+        )
+        raw = json.dumps([
+            {"old": "<author>A. B</author>", "new": "<author>A.</author> <author>B</author>", "rationale": "shared"},
+            {"old": "<title>T</title> (<date>2020</date>), <ptr>http://x.de/202", "new": "<title level=\"m\">T</title>", "rationale": "shared"},
+            {"old": "<ptr>http://x.de/2020</ptr>", "new": "x", "rationale": "only outside the scope"},
+            {"old": "<ptr>http://x.de/202 0</ptr>", "new": "<ptr>http://x.de/2020</ptr>", "rationale": "unique"},
+        ])
+        kept, unmatched = validate_findings(raw, document, scope)
+        self.assertEqual(unmatched, ["<ptr>http://x.de/2020</ptr>"])
+        self.assertEqual(len(kept), 3)
+        for finding in kept:
+            self.assertEqual(document.count(finding["old"]), 1)
+            self.assertIn(finding["old"], scope)
+        # Widening to the left cannot help (both occurrences follow "<bibl>"), so it widens to the right
+        self.assertEqual(kept[0]["old"], "<author>A. B</author>, <title>T</title> (<date>2020</date>), <ptr>http://x.de/202 ")
+        self.assertEqual(kept[0]["new"], "<author>A.</author> <author>B</author>, <title>T</title> (<date>2020</date>), <ptr>http://x.de/202 ")
+        self.assertEqual(kept[1]["old"], "<title>T</title> (<date>2020</date>), <ptr>http://x.de/202 ")
+        self.assertEqual(kept[1]["new"], "<title level=\"m\">T</title> ")
+        self.assertEqual(kept[2]["old"], "<ptr>http://x.de/202 0</ptr>")
+
+    def test_scoped_finding_is_dropped_when_the_scope_itself_is_not_unique(self):
+        scope = "<bibl>X</bibl>"
+        raw = json.dumps([{"old": "X", "new": "Y", "rationale": "r"}])
+        kept, unmatched = validate_findings(raw, scope + scope, scope)
+        self.assertEqual(kept, [])
+        self.assertEqual(unmatched, ["X"])
+
     def test_retry_note_quotes_every_unmatched_snippet(self):
         note = build_retry_note(['<title a="1">X</title>', "two"])
         self.assertIn(json.dumps('<title a="1">X</title>'), note)

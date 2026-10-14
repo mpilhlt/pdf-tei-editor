@@ -307,7 +307,7 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         scope = "<title>A Paper</title>"
         provider = _StubProvider(
             '[{"old": "<title>A Paper</title>", "new": "<title level=\\"a\\">A Paper</title>", "rationale": "r"},'
-            ' {"old": "<persName>J. Doe</persName>", "new": "x", "rationale": "outside the node, still unique"},'
+            ' {"old": "<persName>J. Doe</persName>", "new": "x", "rationale": "unique, but outside the node"},'
             ' {"old": "interpretation", "new": "x", "rationale": "ambiguous"}]'
         )
         findings, chunk_count, _discarded = await run_review(
@@ -318,7 +318,8 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         self.assertIn(scope, prompt)
         self.assertNotIn("J. Doe", prompt)
         self.assertIn("single element", prompt)
-        self.assertEqual([f["old"] for f in findings], ["<title>A Paper</title>", "<persName>J. Doe</persName>"])
+        self.assertEqual([f["old"] for f in findings], ["<title>A Paper</title>"])
+        self.assertEqual(_discarded, 2)
 
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
     @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
