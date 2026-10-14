@@ -644,6 +644,10 @@ export class XmlAnnotationPopup {
 
       if (hasVariants) {
         const dropdown = document.createElement('sl-dropdown');
+        // hoist: fixed positioning escapes the overlay's overflow-y:auto clip.
+        // Without it, sl-dropdown's auto-size treats the overlay as the clipping
+        // boundary and shrinks the menu to ~one item.
+        dropdown.hoist = true;
         const caret = document.createElement('span');
         caret.textContent = '▾';
         caret.slot = 'trigger';
