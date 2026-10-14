@@ -538,7 +538,7 @@ describe('node-scoped review', () => {
     assert.match(notifyCalls[0][0], /selected node/);
   });
 
-  it('runReview() reviews only the node when the xpath state is set', async () => {
+  it('runReview() reviews only the node, without confirmation, when the xpath state is set', async () => {
     const { ext, confirmCalls } = buildExtension({
       getEditorialDeclGuides: () => rules,
       defaultModel: { providerId: 'p', modelId: 'm' },
@@ -549,7 +549,7 @@ describe('node-scoped review', () => {
     ext.review = async (override, hooks) => { reviewArgs.push(hooks.xpath); return []; };
     await ext.runReview();
     assert.deepStrictEqual(reviewArgs, ['//tei:bibl[1]']);
-    assert.match(confirmCalls[0].message, /selected node/);
+    assert.strictEqual(confirmCalls.length, 0);
   });
 
   it('runReview() reviews the whole document when the xpath state is unset', async () => {

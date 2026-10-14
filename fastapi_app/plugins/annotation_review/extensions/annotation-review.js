@@ -244,7 +244,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Ask for confirmation naming the provider/model, then review the document
+   * Ask for confirmation naming the provider/model (not when only the node
+   * selected in node navigation is reviewed), then review the document
    * chunk by chunk behind a minimizable, cancellable progress widget. Findings
    * are displayed as each chunk completes; cancelling keeps those found so
    * far. review() notifies on its own failure paths (including "no default
@@ -255,12 +256,13 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   async runReview(override) {
     const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
     const xpath = this.state?.xpath || null;
-    const target = xpath ? 'the selected node' : 'the current document';
     let label = '';
     if (resolved) {
       label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
+    }
+    if (resolved && !xpath) {
       const confirmed = await this.getDependency('dialog').confirm(
-        `Review the annotations in ${target}${xpath ? ` (<code>${escapeHtml(xpath)}</code>)` : ''} using ${escapeHtml(label)}?`,
+        `Review the annotations in the current document using ${escapeHtml(label)}?`,
         'Review Annotations'
       );
       if (!confirmed) return;
