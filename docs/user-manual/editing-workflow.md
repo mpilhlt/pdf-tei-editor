@@ -13,7 +13,7 @@ Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, 
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).
 
 **Statusbar** (bottom strip)
-Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls. Right side: indentation style and cursor position.
+Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: indentation style and cursor position.
 
 ---
 
@@ -71,7 +71,29 @@ The center of the statusbar contains node navigation controls. These are only sh
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
-The current node is highlighted and scrolled into view each time you navigate. Your XPath selection is remembered per-variant across sessions.
+Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
+
+### Focus Mode
+
+The magnifier button (**Focus**) next to the navigation controls turns on a distraction-free focus mode for working on one node at a time:
+
+- Navigating centers the node vertically, as above, but instead of highlighting it, everything outside the node is dimmed. In the Visual annotation mode, the tag labels outside the node are dimmed as well.
+- The focused node gets extra space above and below it.
+- Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
+- Moving the cursor into another node (for example by clicking) moves the focus to that node.
+
+Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown.
+
+---
+
+## Leaving Focus and Merge Mode with Esc
+
+Pressing **Esc** ends the current special editing mode:
+
+1. If focus mode is on, Esc turns it off.
+2. Otherwise, if a merge view is active, Esc closes it and returns to normal editing (the same as clearing the diff selection).
+
+Esc is ignored while a dialog, drawer or dropdown is open, and when it is used to close the editor's search panel or autocomplete popup.
 
 ---
 
