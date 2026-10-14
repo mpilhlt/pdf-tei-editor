@@ -105,6 +105,8 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
  * @property {StatusButton} nextNodeBtn - Next node navigation button
  * @property {StatusText} nodeCounterWidget - Node counter display (index/size)
+ * @property {StatusButton} clearNodeBtn - Clears the current node (removes focus on it and the `xpath` state)
+ * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -215,6 +217,16 @@ class XmlEditorPlugin extends Plugin {
   #nextNodeBtn;
   /** @type {StatusText} */
   #nodeCounterWidget;
+  /** @type {StatusButton} */
+  #clearNodeBtn;
+  /** @type {StatusToggleButton} */
+  #focusToggle;
+  /** Whether the user has focus mode switched on (persisted in the UI storage) */
+  #focusPreferred = false;
+  /** Whether the navigation widgets are currently shown */
+  #navigationVisible = false;
+  /** Whether node navigation is on, i.e. an xpath is selected. Focus mode only works then */
+  #navigationActive = false;
 
   // State for node navigation
   /** @type {string|null} */
@@ -698,6 +710,25 @@ class XmlEditorPlugin extends Plugin {
     this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
     this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
 
+    this.#focusToggle = PanelUtils.createToggleButton({
+      icon: 'search',
+      tooltip: 'Focus on the navigated-to node (Esc to exit)',
+      appearance: 'flat',
+      name: 'focusToggle',
+      disabled: true
+    });
+    this.#statusbar.add(this.#focusToggle, 'center', 0);
+    this.#focusPreferred = this.uiStorage.get('focusMode', true);
+    this.#focusToggle.checked = this.#focusPreferred;
+
+    this.#clearNodeBtn = PanelUtils.createButton({
+      icon: 'x-lg',
+      tooltip: 'Turn off node navigation',
+      name: 'clearNodeBtn',
+      disabled: true
+    });
+    this.#statusbar.add(this.#clearNodeBtn, 'center', 0);
+
     // Update UI to register navigation widgets
     updateUi();
 
@@ -721,6 +752,25 @@ class XmlEditorPlugin extends Plugin {
     // Counter click handler (allow direct index input)
     this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
 
+    // Clear button: turns node navigation off. Removes the focus on the current node and the xpath
+    // state (and thus the URL parameter) and forgets the stored xpath selection of the variant, so that
+    // navigation only resumes when a new xpath is selected in the dropdown.
+    this.#clearNodeBtn.addEventListener('widget-click', async () => {
+      if (this.#currentVariant) {
+        this.#setXpathPreference(this.#currentVariant, '');
+      }
+      this.#xmlEditor.clearSelectedNode();
+      await this.dispatchStateChange({ xpath: null });
+    });
+
+    // Focus mode toggle
+    this.#focusToggle.addEventListener('widget-change', (e) => {
+      this.#setFocusMode(/** @type {CustomEvent} */ (e).detail.checked);
+    });
+
+    // Esc leaves focus mode or, if focus mode is off, the visual diff mode
+    document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt));
+
     // Context menu — self-contained, mounts to the editor panel
     this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
     this.#contextMenu.mount(this.#xmlEditorEl);
@@ -741,6 +791,18 @@ class XmlEditorPlugin extends Plugin {
         tagBoundaryItem.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary';
       }
     });
+  }
+
+  /**
+   * Runs when application startup is complete. Late layout changes during startup (e.g. line
+   * wrapping, folding the header, switching to the visual mode) shift the node that was selected
+   * from the restored xpath, so center it once more after they have settled.
+   */
+  async ready() {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    if (this.state?.xpath && this.#xmlEditor.isReady()) {
+      this.#xmlEditor.scrollSelectionToCenter();
+    }
   }
 
   /**
@@ -895,7 +957,14 @@ class XmlEditorPlugin extends Plugin {
       }
 
       this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index));
+    } else if (!state.xpath) {
+      // no node selected: navigation is off until an xpath is selected in the dropdown
+      this.#xpathDropdown.selected = '';
+      this.#nodeCounterWidget.text = '(0/0)';
+      this.#prevNodeBtn.disabled = this.#nextNodeBtn.disabled = true;
     }
+
+    this.#updateNavigationActive(state);
 
     // Keep line wrapping switch always visible but disable when no document
     // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
@@ -1541,6 +1610,69 @@ class XmlEditorPlugin extends Plugin {
     this.#xpathDropdown.style.display = display;
     this.#nextNodeBtn.style.display = display;
     this.#nodeCounterWidget.style.display = display;
+    this.#clearNodeBtn.style.display = display;
+    this.#focusToggle.style.display = display;
+    this.#navigationVisible = visible;
+  }
+
+  /**
+   * Switches node navigation on or off: it is on while an xpath is selected. The buttons that only
+   * make sense with an active navigation are disabled otherwise. Focus mode is switched off while the
+   * navigation is off, but its stored choice is kept and applies again when navigation resumes.
+   * @param {ApplicationState} state
+   */
+  #updateNavigationActive(state) {
+    const active = this.#navigationVisible && Boolean(state.xpath);
+    this.#focusToggle.disabled = !active;
+    this.#clearNodeBtn.disabled = !active;
+    if (active !== this.#navigationActive) {
+      this.#navigationActive = active;
+      this.#applyFocusMode();
+    }
+  }
+
+  /**
+   * Turns focus mode on or off as a user choice: keeps the statusbar toggle in sync and persists the
+   * choice. Enabling it also turns on line wrapping.
+   * @param {boolean} enabled
+   */
+  #setFocusMode(enabled) {
+    this.#focusPreferred = enabled;
+    this.uiStorage.set('focusMode', enabled);
+    this.#focusToggle.checked = enabled;
+    if (enabled && !this.#wrapToggle.checked) {
+      // wrapped lines keep the focused node readable; applied transiently, the stored preference is untouched
+      this.#wrapToggle.checked = true;
+      this.#xmlEditor.setLineWrapping(true);
+    }
+    this.#applyFocusMode();
+    this.#logger.debug(`Focus mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Applies the stored focus mode choice to the editor. Focus mode only takes effect while node
+   * navigation is on; the choice itself is kept for when it is on again.
+   */
+  #applyFocusMode() {
+    this.#xmlEditor.setFocusMode(this.#focusPreferred && this.#navigationActive);
+  }
+
+  /**
+   * Handles the Escape key: leaves focus mode if it is active, otherwise ends the visual
+   * diff mode. Ignored if the key was already handled (e.g. by CodeMirror closing the
+   * search panel or the autocomplete popup) or pressed inside a dialog, drawer or dropdown.
+   * @param {KeyboardEvent} evt
+   */
+  async #onEscapeKey(evt) {
+    if (evt.key !== 'Escape' || evt.defaultPrevented) return;
+    const inOverlay = evt.composedPath().some(el =>
+      el instanceof HTMLElement && ['SL-DIALOG', 'SL-DRAWER', 'SL-DROPDOWN'].includes(el.tagName));
+    if (inOverlay) return;
+    if (this.#xmlEditor.isFocusMode()) {
+      this.#setFocusMode(false);
+    } else if (this.#mergeViewActive) {
+      await this.getDependency('services').removeMergeView();
+    }
   }
 
   /**
