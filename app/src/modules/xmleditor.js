@@ -62,6 +62,7 @@ import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
 import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
+import { focusModeExtension, setFocusRangeEffect } from './codemirror/focus-mode.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
  */
@@ -260,6 +261,7 @@ export class XMLEditor extends EventEmitter {
       this.#indentationCompartment.of([]),
       this.#readOnlyCompartment.of([]),
       this.#editGuardCompartment.of([]),
+      focusModeExtension,
     ];
 
     if (tagData) {
@@ -1196,6 +1198,53 @@ export class XMLEditor extends EventEmitter {
       selection: EditorSelection.range(from, to),
       scrollIntoView: true
     });
+  }
+
+  /**
+   * Puts the given DOM node into visual focus: everything outside of it is dimmed, the cursor
+   * is placed after its opening tag, and the node is scrolled to the vertical center.
+   * @param {Node} domNode - The DOM node to focus
+   * @param {object} [options]
+   * @param {boolean} [options.scroll=true] - Whether to move the cursor and scroll the node into the center
+   * @throws {Error} If the DOM node has no attached syntax node
+   */
+  focusDomNode(domNode, { scroll = true } = {}) {
+    const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+    const { from, to } = syntaxNode;
+    const focusEffect = setFocusRangeEffect.of({ from, to });
+    if (!scroll) {
+      this.#view.dispatch({ effects: focusEffect });
+      return;
+    }
+    const cursor = syntaxNode.getChild('OpenTag')?.to ?? from;
+    this.#view.dispatch({
+      selection: EditorSelection.cursor(cursor),
+      // anchor at the end so that the start of the node stays visible if it is taller than the viewport
+      effects: [focusEffect, EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' })]
+    });
+  }
+
+  /**
+   * Puts the DOM node matching the given XPath expression into visual focus.
+   * See {@link XMLEditor#focusDomNode}.
+   * @param {string} xpath - The XPath expression of the node to focus
+   * @param {object} [options]
+   * @param {boolean} [options.scroll=true] - Whether to move the cursor and scroll the node into the center
+   * @throws {Error} If no node matches the XPath expression
+   */
+  focusByXpath(xpath, options) {
+    const node = this.getDomNodeByXpath(xpath);
+    if (!node) {
+      throw new Error(`No XML node found for XPath: ${xpath}`);
+    }
+    this.focusDomNode(node, options);
+  }
+
+  /**
+   * Removes the visual focus, undimming the whole document.
+   */
+  clearFocus() {
+    this.#view.dispatch({ effects: setFocusRangeEffect.of(null) });
   }
 
   /**

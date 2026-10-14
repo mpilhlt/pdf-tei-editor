@@ -105,6 +105,7 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
  * @property {StatusButton} nextNodeBtn - Next node navigation button
  * @property {StatusText} nodeCounterWidget - Node counter display (index/size)
+ * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
@@ -215,6 +216,8 @@ class XmlEditorPlugin extends Plugin {
   #nextNodeBtn;
   /** @type {StatusText} */
   #nodeCounterWidget;
+  /** @type {StatusToggleButton} */
+  #focusToggle;
 
   // State for node navigation
   /** @type {string|null} */
@@ -698,6 +701,14 @@ class XmlEditorPlugin extends Plugin {
     this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
     this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
 
+    this.#focusToggle = PanelUtils.createToggleButton({
+      icon: 'search',
+      tooltip: 'Focus on the navigated-to node (Esc to exit)',
+      appearance: 'flat',
+      name: 'focusToggle'
+    });
+    this.#statusbar.add(this.#focusToggle, 'center', 0);
+
     // Update UI to register navigation widgets
     updateUi();
 
@@ -720,6 +731,14 @@ class XmlEditorPlugin extends Plugin {
 
     // Counter click handler (allow direct index input)
     this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
+
+    // Focus mode toggle
+    this.#focusToggle.addEventListener('widget-change', (e) => {
+      this.#setFocusMode(/** @type {CustomEvent} */ (e).detail.checked);
+    });
+
+    // Esc leaves focus mode or, if focus mode is off, the visual diff mode
+    document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt));
 
     // Context menu — self-contained, mounts to the editor panel
     this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
@@ -1541,6 +1560,38 @@ class XmlEditorPlugin extends Plugin {
     this.#xpathDropdown.style.display = display;
     this.#nextNodeBtn.style.display = display;
     this.#nodeCounterWidget.style.display = display;
+    this.#focusToggle.style.display = display;
+    if (!visible && this.#xmlEditor.isFocusMode()) {
+      this.#setFocusMode(false);
+    }
+  }
+
+  /**
+   * Turns focus mode on or off and keeps the statusbar toggle in sync
+   * @param {boolean} enabled
+   */
+  #setFocusMode(enabled) {
+    this.#focusToggle.checked = enabled;
+    this.#xmlEditor.setFocusMode(enabled);
+    this.#logger.debug(`Focus mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Handles the Escape key: leaves focus mode if it is active, otherwise ends the visual
+   * diff mode. Ignored if the key was already handled (e.g. by CodeMirror closing the
+   * search panel or the autocomplete popup) or pressed inside a dialog, drawer or dropdown.
+   * @param {KeyboardEvent} evt
+   */
+  async #onEscapeKey(evt) {
+    if (evt.key !== 'Escape' || evt.defaultPrevented) return;
+    const inOverlay = evt.composedPath().some(el =>
+      el instanceof HTMLElement && ['SL-DIALOG', 'SL-DRAWER', 'SL-DROPDOWN'].includes(el.tagName));
+    if (inOverlay) return;
+    if (this.#xmlEditor.isFocusMode()) {
+      this.#setFocusMode(false);
+    } else if (this.#mergeViewActive) {
+      await this.getDependency('services').removeMergeView();
+    }
   }
 
   /**
