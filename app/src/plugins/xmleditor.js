@@ -223,8 +223,10 @@ class XmlEditorPlugin extends Plugin {
   #focusToggle;
   /** Whether the user has focus mode switched on (persisted in the UI storage) */
   #focusPreferred = false;
-  /** Whether the navigation widgets (and thus focus mode) are currently available */
+  /** Whether the navigation widgets are currently shown */
   #navigationVisible = false;
+  /** Whether node navigation is on, i.e. an xpath is selected. Focus mode only works then */
+  #navigationActive = false;
 
   // State for node navigation
   /** @type {string|null} */
@@ -708,23 +710,24 @@ class XmlEditorPlugin extends Plugin {
     this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
     this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
 
-    this.#clearNodeBtn = PanelUtils.createButton({
-      icon: 'x-lg',
-      tooltip: 'Clear the current node',
-      name: 'clearNodeBtn',
-      disabled: true
-    });
-    this.#statusbar.add(this.#clearNodeBtn, 'center', 0);
-
     this.#focusToggle = PanelUtils.createToggleButton({
       icon: 'search',
       tooltip: 'Focus on the navigated-to node (Esc to exit)',
       appearance: 'flat',
-      name: 'focusToggle'
+      name: 'focusToggle',
+      disabled: true
     });
     this.#statusbar.add(this.#focusToggle, 'center', 0);
     this.#focusPreferred = this.uiStorage.get('focusMode', false);
     this.#focusToggle.checked = this.#focusPreferred;
+
+    this.#clearNodeBtn = PanelUtils.createButton({
+      icon: 'x-lg',
+      tooltip: 'Turn off node navigation',
+      name: 'clearNodeBtn',
+      disabled: true
+    });
+    this.#statusbar.add(this.#clearNodeBtn, 'center', 0);
 
     // Update UI to register navigation widgets
     updateUi();
@@ -749,8 +752,13 @@ class XmlEditorPlugin extends Plugin {
     // Counter click handler (allow direct index input)
     this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
 
-    // Clear button: removes the focus on the current node and the xpath state (and thus the URL parameter)
+    // Clear button: turns node navigation off. Removes the focus on the current node and the xpath
+    // state (and thus the URL parameter) and forgets the stored xpath selection of the variant, so that
+    // navigation only resumes when a new xpath is selected in the dropdown.
     this.#clearNodeBtn.addEventListener('widget-click', async () => {
+      if (this.#currentVariant) {
+        this.#setXpathPreference(this.#currentVariant, '');
+      }
       this.#xmlEditor.clearSelectedNode();
       await this.dispatchStateChange({ xpath: null });
     });
@@ -949,9 +957,14 @@ class XmlEditorPlugin extends Plugin {
       }
 
       this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index));
+    } else if (!state.xpath) {
+      // no node selected: navigation is off until an xpath is selected in the dropdown
+      this.#xpathDropdown.selected = '';
+      this.#nodeCounterWidget.text = '(0/0)';
+      this.#prevNodeBtn.disabled = this.#nextNodeBtn.disabled = true;
     }
 
-    this.#clearNodeBtn.disabled = !state.xpath;
+    this.#updateNavigationActive(state);
 
     // Keep line wrapping switch always visible but disable when no document
     // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
@@ -1599,8 +1612,21 @@ class XmlEditorPlugin extends Plugin {
     this.#nodeCounterWidget.style.display = display;
     this.#clearNodeBtn.style.display = display;
     this.#focusToggle.style.display = display;
-    if (visible !== this.#navigationVisible) {
-      this.#navigationVisible = visible;
+    this.#navigationVisible = visible;
+  }
+
+  /**
+   * Switches node navigation on or off: it is on while an xpath is selected. The buttons that only
+   * make sense with an active navigation are disabled otherwise. Focus mode is switched off while the
+   * navigation is off, but its stored choice is kept and applies again when navigation resumes.
+   * @param {ApplicationState} state
+   */
+  #updateNavigationActive(state) {
+    const active = this.#navigationVisible && Boolean(state.xpath);
+    this.#focusToggle.disabled = !active;
+    this.#clearNodeBtn.disabled = !active;
+    if (active !== this.#navigationActive) {
+      this.#navigationActive = active;
       this.#applyFocusMode();
     }
   }
@@ -1624,11 +1650,11 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Applies the stored focus mode choice to the editor. Focus mode only takes effect while the
-   * navigation widgets are shown; the choice itself is kept for when they are shown again.
+   * Applies the stored focus mode choice to the editor. Focus mode only takes effect while node
+   * navigation is on; the choice itself is kept for when it is on again.
    */
   #applyFocusMode() {
-    this.#xmlEditor.setFocusMode(this.#focusPreferred && this.#navigationVisible);
+    this.#xmlEditor.setFocusMode(this.#focusPreferred && this.#navigationActive);
   }
 
   /**
@@ -1675,15 +1701,13 @@ class XmlEditorPlugin extends Plugin {
     if (isNaN(delta)) {
       throw new TypeError('Second argument must be a number');
     }
-    // after the current node was cleared, navigation starts again from the selected xpath type
-    const currentXpath = state?.xpath || (this.#xpathDropdown.selected ? `${this.#xpathDropdown.selected}[0]` : '');
-    if (!currentXpath) {
+    if (!state?.xpath) {
       return;
     }
-    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(currentXpath);
+    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath);
     const normativeXpath = pathBeforePredicates + nonIndexPredicates;
     const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath);
-    if (size < 2 && state?.xpath) {
+    if (size < 2) {
       return;
     }
     if (index === null) index = 1;

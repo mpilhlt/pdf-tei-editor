@@ -73,20 +73,20 @@ The center of the statusbar contains node navigation controls. These are only sh
 
 Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
 
-The **×** button before the focus toggle clears the current node: the node loses its highlight or focus and is removed from the URL. The next click on **‹** / **›** starts again from the first (or last) node.
+Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
 ### Focus Mode
 
-The magnifier button (**Focus**) next to the navigation controls turns on a distraction-free focus mode for working on one node at a time:
+The magnifier button (**Focus**) next to the navigation controls, available while node navigation is on, turns on a distraction-free focus mode for working on one node at a time:
 
 - Navigating centers the node vertically, as above, but instead of highlighting it, everything outside the node is dimmed. In the Visual annotation mode, the tag labels outside the node are dimmed as well.
 - The focused node gets extra space above and below it.
 - Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
 - Moving the cursor into another node (for example by clicking) moves the focus to that node.
 
-Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Whether focus mode is on is remembered in your browser, so it is still active after reloading the page.
+Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Whether focus mode is on is remembered in your browser, so it is still active after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
 
 ---
 
