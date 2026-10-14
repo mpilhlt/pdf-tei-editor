@@ -1567,11 +1567,16 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Turns focus mode on or off and keeps the statusbar toggle in sync
+   * Turns focus mode on or off and keeps the statusbar toggle in sync. Enabling it also turns on line wrapping.
    * @param {boolean} enabled
    */
   #setFocusMode(enabled) {
     this.#focusToggle.checked = enabled;
+    if (enabled && !this.#wrapToggle.checked) {
+      // wrapped lines keep the focused node readable; applied transiently, the stored preference is untouched
+      this.#wrapToggle.checked = true;
+      this.#xmlEditor.setLineWrapping(true);
+    }
     this.#xmlEditor.setFocusMode(enabled);
     this.#logger.debug(`Focus mode ${enabled ? 'enabled' : 'disabled'}`);
   }

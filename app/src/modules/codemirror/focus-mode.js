@@ -5,7 +5,8 @@
  *
  * Exports:
  *   setFocusRangeEffect — StateEffect that sets (`{from, to}`) or clears (`null`) the focused range
- *   focusModeExtension — StateField that dims everything outside the focused range, plus its theme
+ *   focusModeExtension — StateField that dims everything outside the focused range and adds spacing
+ *                        around it, plus its theme
  */
 
 import { StateField, StateEffect } from '@codemirror/state';
@@ -25,18 +26,32 @@ import { Decoration, EditorView } from '@codemirror/view';
 export const setFocusRangeEffect = StateEffect.define();
 
 const dimmedMark = Decoration.mark({ class: 'cm-focus-dimmed' });
+const dimmedLine = Decoration.line({ class: 'cm-focus-dimmed' });
+const firstLine = Decoration.line({ class: 'cm-focus-first' });
+const lastLine = Decoration.line({ class: 'cm-focus-last' });
 
 /**
+ * Dims all lines outside the focused range with line decorations (these also cover widgets such
+ * as annotation badges, which mark decorations do not reliably reach), dims the text before and
+ * after the range on the lines it starts and ends on with mark decorations, and flags the first
+ * and last line of the range so that they can be given extra spacing.
+ * @param {import('@codemirror/state').EditorState} state
  * @param {FocusRange|null} range
- * @param {number} docLength
  * @returns {DecorationSet}
  */
-function buildDecorations(range, docLength) {
+function buildDecorations(range, state) {
   if (!range) return Decoration.none;
+  const { doc } = state;
+  const first = doc.lineAt(range.from);
+  const last = doc.lineAt(Math.min(range.to, doc.length));
   const decorations = [];
-  if (range.from > 0) decorations.push(dimmedMark.range(0, range.from));
-  if (range.to < docLength) decorations.push(dimmedMark.range(range.to, docLength));
-  return Decoration.set(decorations);
+  for (let n = 1; n < first.number; n++) decorations.push(dimmedLine.range(doc.line(n).from));
+  for (let n = last.number + 1; n <= doc.lines; n++) decorations.push(dimmedLine.range(doc.line(n).from));
+  if (range.from > first.from) decorations.push(dimmedMark.range(first.from, range.from));
+  if (range.to < last.to) decorations.push(dimmedMark.range(range.to, last.to));
+  decorations.push(firstLine.range(first.from));
+  decorations.push(lastLine.range(last.from));
+  return Decoration.set(decorations, true);
 }
 
 /**
@@ -59,11 +74,13 @@ const focusRangeField = StateField.define({
     return range;
   },
   provide: field => EditorView.decorations.compute([field, 'doc'], state =>
-    buildDecorations(state.field(field), state.doc.length))
+    buildDecorations(state.field(field), state))
 });
 
 const focusModeTheme = EditorView.baseTheme({
-  '.cm-focus-dimmed': { opacity: '0.3' }
+  '.cm-focus-dimmed': { opacity: '0.3' },
+  '.cm-focus-first': { paddingTop: '1.5em' },
+  '.cm-focus-last': { paddingBottom: '1.5em' }
 });
 
 export const focusModeExtension = [focusRangeField, focusModeTheme];

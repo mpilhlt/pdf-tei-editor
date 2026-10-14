@@ -20,6 +20,7 @@ import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop }
 import { relocatePartialAnnotationTags } from '../modules/codemirror/xml-annotation-ops.js'
 import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
+import { EditorSelection } from '@codemirror/state'
 
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
@@ -442,7 +443,7 @@ class XmlAnnotationPlugin extends Plugin {
 
   /**
    * Navigates the editor to the element matched by xpath: places the cursor right after the open
-   * tag (= after the badge widget), scrolls it into view, and adds an `ann-navigated` border
+   * tag (= after the badge widget), scrolls it to the vertical center, and adds an `ann-navigated` border
    * decoration around the element content so the current element is visually distinct.
    *
    * Uses getDomNodesByXpath (ORDERED_NODE_ITERATOR_TYPE) rather than getSyntaxNodeByXpath
@@ -465,10 +466,18 @@ class XmlAnnotationPlugin extends Plugin {
       // contentTo:   right before the close tag's '<' (= end of visible content)
       const contentFrom = openTag  ? openTag.to            : syntaxNode.from
       const contentTo   = (closeTag && closeTag !== openTag) ? closeTag.from : syntaxNode.to
+      if (this.#xmlEditor.isFocusMode()) {
+        // focus mode dims everything else instead of highlighting the element
+        this.#xmlEditor.getView?.()?.dispatch({ effects: navigateEffect.of(null) })
+        this.#xmlEditor.focusDomNode(domNode)
+        return
+      }
       this.#xmlEditor.getView?.()?.dispatch({
-        effects: navigateEffect.of({ from: contentFrom, to: contentTo }),
-        selection: { anchor: contentFrom },
-        scrollIntoView: true
+        effects: [
+          navigateEffect.of({ from: contentFrom, to: contentTo }),
+          EditorView.scrollIntoView(EditorSelection.range(syntaxNode.to, syntaxNode.from), { y: 'center' })
+        ],
+        selection: { anchor: contentFrom }
       })
     } catch (e) {
       this.#logger.debug('[xml-annotation] xpath scroll failed: ' + String(e))

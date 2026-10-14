@@ -1188,7 +1188,7 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Selects the DOM node that matches the given XPath expression in the editor.
+   * Selects the DOM node that matches the given XPath expression in the editor and scrolls it to the vertical center.
    * @param {string} xpath - The XPath expression to select.
    * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
@@ -1196,7 +1196,7 @@ export class XMLEditor extends EventEmitter {
     const { from, to } = this.getSyntaxNodeByXpath(xpath);
     this.#view.dispatch({
       selection: EditorSelection.range(from, to),
-      scrollIntoView: true
+      effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' })
     });
   }
 
