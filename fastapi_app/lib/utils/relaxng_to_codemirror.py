@@ -510,15 +510,8 @@ class RelaxNGParser:
                          element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}interleave'):
             container_attrs = self._extract_attributes(container, visited)
-            # Merge attributes, preserving documentation
             for attr_name, attr_data in container_attrs.items():
-                if attr_name not in attributes:
-                    attributes[attr_name] = attr_data
-                elif isinstance(attributes[attr_name], dict) and isinstance(attr_data, dict):
-                    # Merge both dict structures
-                    merged = attributes[attr_name].copy()
-                    merged.update(attr_data)
-                    attributes[attr_name] = merged
+                attributes[attr_name] = self._merge_attribute_data(attributes.get(attr_name), attr_data, attr_name in attributes)
         
         # Look for attribute references (with cycle detection)
         for ref in element.findall('./{http://relaxng.org/ns/structure/1.0}ref'):
@@ -527,20 +520,44 @@ class RelaxNGParser:
                 visited.add(ref_name)
                 try:
                     ref_attrs = self._extract_attributes(self.defined_patterns[ref_name], visited)
-                    # Merge referenced attributes, preserving documentation
                     for attr_name, attr_data in ref_attrs.items():
-                        if attr_name not in attributes:
-                            attributes[attr_name] = attr_data
-                        elif isinstance(attributes[attr_name], dict) and isinstance(attr_data, dict):
-                            # Merge both dict structures
-                            merged = attributes[attr_name].copy()
-                            merged.update(attr_data)
-                            attributes[attr_name] = merged
+                        attributes[attr_name] = self._merge_attribute_data(attributes.get(attr_name), attr_data, attr_name in attributes)
                 finally:
                     visited.discard(ref_name)
         
         return attributes
     
+    @staticmethod
+    def _merge_attribute_data(existing: Union[List[str], Dict, None], incoming: Union[List[str], Dict, None], has_existing: bool) -> Union[List[str], Dict, None]:
+        """
+        Merge two occurrences of the same attribute found in different
+        branches of an element's content model (e.g. the `<group>`s of a
+        `<choice>` that each pin `level` to one value). Value lists are
+        unioned, so every branch's values are offered, not just the first
+        branch's. The first documentation found is kept. If only one side
+        enumerates values, those values are kept.
+        """
+        if not has_existing:
+            return incoming
+
+        def split(data: Union[List[str], Dict, None]) -> "tuple[Optional[List[str]], Optional[str]]":
+            if isinstance(data, dict):
+                return data.get('values'), data.get('doc')
+            return data, None
+
+        existing_values, existing_doc = split(existing)
+        incoming_values, incoming_doc = split(incoming)
+        if existing_values and incoming_values:
+            values: Optional[List[str]] = sorted(set(existing_values) | set(incoming_values))
+        else:
+            values = existing_values or incoming_values
+        doc = existing_doc or incoming_doc
+        if doc and values:
+            return {'values': values, 'doc': doc}
+        if doc:
+            return {'doc': doc}
+        return values
+
     def _extract_attribute_values(self, attr_element: ET.Element) -> Union[List[str], None]:
         """Extract possible values for an attribute."""
         values = set()
