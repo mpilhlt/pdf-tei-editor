@@ -190,10 +190,48 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
     return validate_findings(raw_response, source_text)[0]
 
 
-def validate_findings(raw_response: str, source_text: str) -> tuple[list[Finding], list[str]]:
+def _anchor_in_scope(old: str, new: str, scope: str, document: str) -> tuple[str, str] | None:
+    """
+    Widen a finding whose "old" occurs exactly once in scope by the scope's own
+    surrounding characters until it occurs exactly once in document, so the
+    client can locate it. The scope may repeat text found elsewhere in the
+    document (the same reference cited twice), which the model cannot see.
+    Returns the widened (old, new), or None if even the whole scope is not
+    unique in the document.
+    """
+    start = scope.index(old)
+    end = start + len(old)
+
+    def widen(grow_left: bool, grow_right: bool) -> tuple[int, int] | None:
+        left, right = start, end
+        while document.count(scope[left:right]) != 1:
+            if (not grow_left or left == 0) and (not grow_right or right == len(scope)):
+                return None
+            left = max(0, left - 1) if grow_left else left
+            right = min(len(scope), right + 1) if grow_right else right
+        return left, right
+
+    # Prefer the shortest widening: towards the text that differs from the other occurrences
+    candidates = [span for span in (widen(False, True), widen(True, False), widen(True, True)) if span is not None]
+    if not candidates:
+        return None
+    left, right = min(candidates, key=lambda span: span[1] - span[0])
+    return scope[left:right], scope[left:start] + new + scope[end:right]
+
+
+def validate_findings(
+    raw_response: str, source_text: str, scope: str | None = None
+) -> tuple[list[Finding], list[str]]:
     """
     Like parse_and_validate_findings(), but also returns the "old" snippets of
     the findings dropped because they do not occur exactly once in source_text.
+
+    With a scope (the single element that was reviewed, part of source_text),
+    "old" must instead occur exactly once in the scope, and a finding whose
+    "old" is not unique in source_text is widened with context from the scope
+    (see _anchor_in_scope()). Without this, text the scope shares with
+    another element would be discarded, and text that occurs only outside
+    the scope would be applied there.
 
     Raises:
         UnusableResponseError: see parse_and_validate_findings().
@@ -218,14 +256,23 @@ def validate_findings(raw_response: str, source_text: str) -> tuple[list[Finding
         if not isinstance(rationale, str):
             logger.warning(f"annotation-review: dropping finding with non-string 'rationale': {item!r}")
             continue
-        occurrences = source_text.count(old)
+        occurrences = (scope if scope is not None else source_text).count(old)
         if occurrences != 1:
             logger.warning(
                 f"annotation-review: dropping finding, 'old' occurs {occurrences} times "
-                f"(expected exactly 1): {old!r}"
+                f"in the {'reviewed element' if scope is not None else 'document'} (expected exactly 1): {old!r}"
             )
             unmatched.append(old)
             continue
+        if scope is not None and source_text.count(old) != 1:
+            anchored = _anchor_in_scope(old, new, scope, source_text)
+            if anchored is None:
+                logger.warning(
+                    f"annotation-review: dropping finding, the reviewed element is not unique in the document: {old!r}"
+                )
+                unmatched.append(old)
+                continue
+            old, new = anchored
         kept.append({
             "id": len(kept),
             "old": old,
