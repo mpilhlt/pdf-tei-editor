@@ -10,6 +10,7 @@ this mirrors: same model-listing filter, same GEMINI_API_KEY convention).
 """
 
 import logging
+import re
 
 from google import genai
 from google.genai import errors as genai_errors, types
@@ -25,6 +26,35 @@ logger = logging.getLogger(__name__)
 # a plain text chat model, so they're recognized by name suffix instead
 # (verified against the live API's actual model names).
 _NON_CHAT_NAME_MARKERS = ("-image", "-tts", "-transcribe", "-computer-use")
+
+_MAJOR_VERSION_RE = re.compile(r"^gemini-(\d+)")
+
+
+def _is_gemini_3_or_later(model_id: str) -> bool:
+    """
+    True for Gemini 3+ models, including the unversioned "-latest" aliases
+    (e.g. "gemini-flash-lite-latest"), which resolve to the current generation.
+    """
+    if model_id.endswith("-latest"):
+        return True
+    match = _MAJOR_VERSION_RE.match(model_id)
+    return match is not None and int(match.group(1)) >= 3
+
+
+def _generation_config(model_id: str, system_prompt: str, temperature: float) -> types.GenerateContentConfig:
+    """
+    Gemini 3+ is tuned for its default sampling settings: Google advises
+    removing temperature/top_p/top_k from requests, so the caller's
+    temperature is only sent to older models. Gemini 3 Flash-Lite defaults
+    to the "minimal" thinking level, at which it often answers a review task
+    with an empty result; it is raised to "medium".
+    """
+    if not _is_gemini_3_or_later(model_id):
+        return types.GenerateContentConfig(system_instruction=system_prompt, temperature=temperature)
+    thinking_config = (
+        types.ThinkingConfig(thinking_level=types.ThinkingLevel.MEDIUM) if "flash-lite" in model_id else None
+    )
+    return types.GenerateContentConfig(system_instruction=system_prompt, thinking_config=thinking_config)
 
 
 class GoogleLLMProvider(LLMProvider):
@@ -75,11 +105,11 @@ class GoogleLLMProvider(LLMProvider):
             response = await self._client.aio.models.generate_content(
                 model=model_id,
                 contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=temperature,
-                ),
+                config=_generation_config(model_id, system_prompt, temperature),
             )
         except genai_errors.APIError as e:
             raise LLMProviderError(f"{e.code} {e.message}") from e
+        if not response.text:
+            finish_reason = response.candidates[0].finish_reason if response.candidates else None
+            logger.warning(f"Gemini model '{model_id}' returned no text (finish reason: {finish_reason})")
         return response.text or ""

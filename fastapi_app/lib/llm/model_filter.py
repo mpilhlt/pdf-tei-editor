@@ -24,7 +24,7 @@ EXCLUDE_CONFIG_KEY = "llm.model-filter.exclude"
 INCLUDE_ENV_VAR = "LLM_MODEL_FILTER_INCLUDE"
 EXCLUDE_ENV_VAR = "LLM_MODEL_FILTER_EXCLUDE"
 
-_PATTERN_SYNTAX = (
+PATTERN_SYNTAX = (
     'Comma-separated, double-quoted regular expressions matched (substring search) against '
     'each model\'s "<Provider>/<Model>" label (as shown in the frontend default-model picker). '
 )
@@ -47,13 +47,13 @@ def _ensure_registered() -> None:
             INCLUDE_CONFIG_KEY,
             INCLUDE_ENV_VAR,
             default="",
-            description=_PATTERN_SYNTAX + "If non-empty, only models matching at least one pattern are listed or usable; empty means no include filtering.",
+            description=PATTERN_SYNTAX + "If non-empty, only models matching at least one pattern are listed or usable; empty means no include filtering.",
         )
         get_plugin_config(
             EXCLUDE_CONFIG_KEY,
             EXCLUDE_ENV_VAR,
             default="",
-            description=_PATTERN_SYNTAX + "Models matching at least one pattern are neither listed nor usable, even if they match an include pattern; empty means nothing is excluded.",
+            description=PATTERN_SYNTAX + "Models matching at least one pattern are neither listed nor usable, even if they match an include pattern; empty means nothing is excluded.",
         )
         _registered = True
 
@@ -64,7 +64,7 @@ def reset_registration() -> None:
     _registered = False
 
 
-def _parse_patterns(raw: str) -> list[re.Pattern[str]]:
+def parse_patterns(raw: str) -> list[re.Pattern[str]]:
     """
     Extract each double-quoted regex from a comma-separated, quoted list. A
     non-empty value without any double quotes is taken as one single pattern,
@@ -79,13 +79,13 @@ def _parse_patterns(raw: str) -> list[re.Pattern[str]]:
 def get_include_patterns() -> list[re.Pattern[str]]:
     """The currently configured include patterns (empty means no include filtering)."""
     _ensure_registered()
-    return _parse_patterns(get_config().get(INCLUDE_CONFIG_KEY, ""))
+    return parse_patterns(get_config().get(INCLUDE_CONFIG_KEY, ""))
 
 
 def get_exclude_patterns() -> list[re.Pattern[str]]:
     """The currently configured exclude patterns (empty means nothing is excluded)."""
     _ensure_registered()
-    return _parse_patterns(get_config().get(EXCLUDE_CONFIG_KEY, ""))
+    return parse_patterns(get_config().get(EXCLUDE_CONFIG_KEY, ""))
 
 
 def has_model_filter() -> bool:

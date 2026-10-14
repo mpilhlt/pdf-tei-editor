@@ -28,9 +28,11 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 from .chunking import split_into_chunks
 from .prompts import (
     Finding,
+    UnusableResponseError,
+    build_retry_note,
     build_system_prompt,
     build_user_prompt,
-    parse_and_validate_findings,
+    validate_findings,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,14 +177,39 @@ def gather_rule_excerpts(
     return excerpts
 
 
-def count_chunks(xml_string: str) -> int:
+def review_source(xml_string: str, scope: str | None = None) -> tuple[str, str]:
     """
-    Number of chunks the document's <text> is reviewed in.
+    Return (text to review, text findings are validated against). Without a
+    scope, both are the document's raw <text>. With a scope (the raw XML of a
+    single node, e.g. the one selected in the editor's node navigation), only
+    the scope is reviewed, and findings are validated against the whole
+    document, since the node may lie outside <text> and the client locates
+    findings in the whole document.
 
     Raises:
-        ValueError: document is malformed or has no <text> element.
+        ValueError: document is malformed, has no <text> element (unscoped),
+            or the scope is empty or not part of the document.
     """
-    return len(split_into_chunks(extract_text_content(xml_string)))
+    if scope is None:
+        text_content = extract_text_content(xml_string)
+        return text_content, text_content
+    if not scope.strip() or scope not in xml_string:
+        raise ValueError("The node to review is not part of the document")
+    try:
+        etree.fromstring(xml_string.encode("utf-8"))
+    except etree.XMLSyntaxError as e:
+        raise ValueError(f"Document is not well-formed XML: {e}") from e
+    return scope, xml_string
+
+
+def count_chunks(xml_string: str, scope: str | None = None) -> int:
+    """
+    Number of chunks the document's <text> (or the given scope) is reviewed in.
+
+    Raises:
+        ValueError: see review_source().
+    """
+    return len(split_into_chunks(review_source(xml_string, scope)[0]))
 
 
 async def run_review(
@@ -193,19 +220,27 @@ async def run_review(
     store: DocumentRulesStore,
     owner: str,
     chunk_index: int = 0,
-) -> tuple[list[Finding], int]:
+    scope: str | None = None,
+) -> tuple[list[Finding], int, int]:
     """
     Review one chunk of the document's <text>: gather rule excerpts, build the
-    prompt, call the LLM, and return (validated findings, total chunk count).
-    Findings are validated against the whole <text>, so "old" must be unique
-    in the document, not just in the chunk.
+    prompt, call the LLM, and return (validated findings, total chunk count,
+    number of findings discarded because their "old" does not occur exactly
+    once). Findings are validated against the whole <text>, so "old" must be
+    unique in the document, not just in the chunk. With a scope, only that
+    node is reviewed and findings are validated against the whole document
+    (see review_source()).
+
+    If the model proposed findings but every one of them was discarded, the
+    call is repeated once with the discarded snippets quoted back to it;
+    smaller models often paraphrase "old" instead of copying it verbatim.
 
     Raises:
-        ValueError: document is malformed, has no <text> element, or chunk_index is out of range.
+        ValueError: see review_source(), or chunk_index is out of range.
         NoRuleExcerptsError: no rule excerpt could be resolved for any category.
     """
-    text_content = extract_text_content(xml_string)
-    chunks = split_into_chunks(text_content)
+    review_text, validation_text = review_source(xml_string, scope)
+    chunks = split_into_chunks(review_text)
     if not 0 <= chunk_index < len(chunks):
         raise ValueError(f"chunk_index {chunk_index} out of range (document has {len(chunks)} chunks)")
     rule_excerpts = await asyncio.to_thread(gather_rule_excerpts, xml_string, cache, store, owner)
@@ -213,6 +248,16 @@ async def run_review(
         raise NoRuleExcerptsError("No rule excerpts could be resolved for this document")
 
     system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(rule_excerpts, chunks[chunk_index], (chunk_index + 1, len(chunks)))
+    user_prompt = build_user_prompt(
+        rule_excerpts, chunks[chunk_index], (chunk_index + 1, len(chunks)), scoped=scope is not None
+    )
     raw_response = await provider.chat_completion(model_id, system_prompt, user_prompt)
-    return parse_and_validate_findings(raw_response, text_content), len(chunks)
+    findings, unmatched = validate_findings(raw_response, validation_text)
+    if not findings and unmatched:
+        logger.info(f"annotation-review: all {len(unmatched)} finding(s) discarded, retrying once with feedback")
+        retry_response = await provider.chat_completion(model_id, system_prompt, user_prompt + build_retry_note(unmatched))
+        try:
+            findings, unmatched = validate_findings(retry_response, validation_text)
+        except UnusableResponseError:
+            logger.warning("annotation-review: retry returned no usable JSON list, keeping the first attempt's result")
+    return findings, len(chunks), len(unmatched)

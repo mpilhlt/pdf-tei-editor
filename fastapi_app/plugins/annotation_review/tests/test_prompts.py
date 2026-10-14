@@ -4,13 +4,16 @@ Unit tests for prompt building and response validation.
 @testCovers fastapi_app/plugins/annotation_review/prompts.py
 """
 
+import json
 import unittest
 
 from fastapi_app.plugins.annotation_review.prompts import (
     UnusableResponseError,
+    build_retry_note,
     build_system_prompt,
     build_user_prompt,
     parse_and_validate_findings,
+    validate_findings,
 )
 
 
@@ -150,6 +153,26 @@ class TestParseAndValidateFindings(unittest.TestCase):
         findings = parse_and_validate_findings(raw, self.SOURCE)
         self.assertEqual([f["id"] for f in findings], [0, 1])
         self.assertEqual(findings[1]["old"], "<title>A Paper</title>")
+
+
+class TestValidateFindingsUnmatched(unittest.TestCase):
+    SOURCE = "<p><persName>J. Doe</persName> and <persName>J. Doe</persName> met <title>X</title></p>"
+
+    def test_returns_the_old_snippets_that_do_not_occur_exactly_once(self):
+        raw = json.dumps([
+            {"old": "<title>X</title>", "new": "y", "rationale": "r"},
+            {"old": "<persName>J. Doe</persName>", "new": "y", "rationale": "ambiguous"},
+            {"old": "<title> X </title>", "new": "y", "rationale": "reformatted"},
+            {"old": 1, "new": "y", "rationale": "wrong type, not counted"},
+        ])
+        kept, unmatched = validate_findings(raw, self.SOURCE)
+        self.assertEqual([f["old"] for f in kept], ["<title>X</title>"])
+        self.assertEqual(unmatched, ["<persName>J. Doe</persName>", "<title> X </title>"])
+
+    def test_retry_note_quotes_every_unmatched_snippet(self):
+        note = build_retry_note(['<title a="1">X</title>', "two"])
+        self.assertIn(json.dumps('<title a="1">X</title>'), note)
+        self.assertIn('"two"', note)
 
 
 if __name__ == "__main__":

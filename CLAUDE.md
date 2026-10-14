@@ -59,7 +59,7 @@ Read [docs/code-assistant/architecture-frontend.md](docs/code-assistant/architec
 - Plugins: `app/src/plugins.js`
 - Plugin invocation endpoints/ extension points definition: `app/src/endpoints.js`
 - Application state object definition: `app/src/state.js`
-- `app/src/modules/api-client-v1.js` is **auto-generated** from the FastAPI OpenAPI schema. The client provides typed methods for all `/api/v1/` endpoints
+- `app/src/modules/api-client-v1.js` is **hand-maintained**: it provides typed methods for all `/api/v1/` endpoints, mirroring the FastAPI routers. When you add, remove or change a route or its Pydantic models, update the matching method and typedefs in the same change
 
 ### API Verification
 

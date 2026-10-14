@@ -128,6 +128,38 @@ class TestGoogleLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["contents"], "usr")
         self.assertEqual(call_kwargs["config"].system_instruction, "sys")
         self.assertEqual(call_kwargs["config"].temperature, 0.4)
+        self.assertIsNone(call_kwargs["config"].thinking_config)
+
+    async def _config_for(self, mock_client_cls, model_id: str):
+        mock_response = MagicMock()
+        mock_response.text = "[]"
+        mock_client = MagicMock()
+        mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value = mock_client
+        provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
+        await provider.chat_completion(model_id=model_id, system_prompt="sys", user_prompt="usr", temperature=0.4)
+        return mock_client.aio.models.generate_content.call_args.kwargs["config"]
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    async def test_gemini_3_flash_lite_gets_default_temperature_and_medium_thinking(self, mock_client_cls):
+        from google.genai import types
+
+        for model_id in ("gemini-flash-lite-latest", "gemini-3.1-flash-lite"):
+            config = await self._config_for(mock_client_cls, model_id)
+            self.assertIsNone(config.temperature, model_id)
+            self.assertEqual(config.thinking_config.thinking_level, types.ThinkingLevel.MEDIUM, model_id)
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    async def test_other_gemini_3_models_keep_their_default_thinking_level(self, mock_client_cls):
+        config = await self._config_for(mock_client_cls, "gemini-3.5-flash")
+        self.assertIsNone(config.temperature)
+        self.assertIsNone(config.thinking_config)
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    async def test_gemini_2_flash_lite_keeps_temperature_and_no_thinking_config(self, mock_client_cls):
+        config = await self._config_for(mock_client_cls, "gemini-2.5-flash-lite")
+        self.assertEqual(config.temperature, 0.4)
+        self.assertIsNone(config.thinking_config)
 
     @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
     async def test_sdk_api_errors_become_llm_provider_errors(self, mock_client_cls):

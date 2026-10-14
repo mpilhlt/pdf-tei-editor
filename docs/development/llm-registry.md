@@ -84,19 +84,23 @@ The admin-chosen default is stored under `llm.default-model.provider` / `llm.def
 1. the model passes the include/exclude filter (applies to everyone, admins included), and
 2. the user is an admin, or the model is free, or it is the configured default model.
 
+A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Use this for models on a provider's free tier, e.g. `"^Google Gemini/Gemini Flash"`.
+
+`GET /api/v1/llm/providers` lists only the models the current user may use, so non-admins never see models they cannot pick.
+
 Consuming routes must call it before invoking a provider; see `fastapi_app/plugins/annotation_review/routes.py`.
 
 ## HTTP API
 
 | Endpoint | Access | Description |
 | --- | --- | --- |
-| `GET /api/v1/llm/providers` | authenticated | Available providers with their (filtered) models; a provider whose `list_models()` fails is skipped |
+| `GET /api/v1/llm/providers` | authenticated | Available providers with the (filtered) models the current user may use; a provider whose `list_models()` fails is skipped |
 | `GET /api/v1/llm/default-model` | authenticated | Configured default `{provider_id, model_id}` or `null` |
 | `PUT /api/v1/llm/default-model` | admin | Set the default; model must exist and pass the filter |
 
 ## Frontend
 
-`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Models that are not free are disabled for non-admins, except the default. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
+`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models and the default (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
 
 ## Design documents
 

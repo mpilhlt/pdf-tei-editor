@@ -67,11 +67,14 @@ def build_user_prompt(
     rule_excerpts: list[tuple[str, str]],
     text_content: str,
     chunk_position: tuple[int, int] | None = None,
+    scoped: bool = False,
 ) -> str:
     """
     Combine every (category, excerpt) pair with the document text into a
     single prompt. chunk_position is (1-based index, total) when text_content
-    is only one fragment of a longer document.
+    is only one fragment of a longer document. scoped is True when
+    text_content is (part of) a single element the user selected rather than
+    the document's <text>.
     """
     sections = []
     for category, excerpt in rule_excerpts:
@@ -79,16 +82,17 @@ def build_user_prompt(
     rules_block = "\n\n".join(sections)
     return (
         f"{rules_block}\n\n"
-        f"{_document_heading(chunk_position)}\n\n{text_content}"
+        f"{_document_heading(chunk_position, scoped)}\n\n{text_content}"
     )
 
 
-def _document_heading(chunk_position: tuple[int, int] | None) -> str:
+def _document_heading(chunk_position: tuple[int, int] | None, scoped: bool = False) -> str:
+    subject = "a single element of a longer document" if scoped else "a longer document"
     if chunk_position is None or chunk_position[1] == 1:
-        return "## Document text"
+        return f"## Document text ({subject}; review only this element)" if scoped else "## Document text"
     index, total = chunk_position
     return (
-        f"## Document text (fragment {index} of {total} of a longer document; "
+        f"## Document text (fragment {index} of {total} of {subject}; "
         f"review only this fragment, and its tags may be unbalanced at the edges)"
     )
 
@@ -155,6 +159,20 @@ def _extract_json_list(raw_response: str) -> list[object]:
     )
 
 
+def build_retry_note(unmatched: list[str]) -> str:
+    """
+    Appended to the user prompt when every finding of a first attempt was
+    discarded because its "old" did not occur exactly once in the document.
+    """
+    quoted = "\n".join(f"- {json.dumps(old, ensure_ascii=False)}" for old in unmatched)
+    return (
+        "\n\n## Note on a previous attempt\n\n"
+        "A previous review of this text proposed fixes whose \"old\" snippets do not occur exactly once in the document, so all of them were discarded:\n\n"
+        f"{quoted}\n\n"
+        "Review the text again. Copy every \"old\" character for character from the document text above, including attribute quotes, entities and whitespace, and include just enough context to make it unique."
+    )
+
+
 def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Finding]:
     """
     Parse the LLM's JSON array response and keep only findings whose "old"
@@ -169,9 +187,21 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
         UnusableResponseError: if the response contains no JSON list at all.
             That is not "no findings" but a failed review.
     """
+    return validate_findings(raw_response, source_text)[0]
+
+
+def validate_findings(raw_response: str, source_text: str) -> tuple[list[Finding], list[str]]:
+    """
+    Like parse_and_validate_findings(), but also returns the "old" snippets of
+    the findings dropped because they do not occur exactly once in source_text.
+
+    Raises:
+        UnusableResponseError: see parse_and_validate_findings().
+    """
     parsed = _extract_json_list(raw_response)
 
     kept: list[Finding] = []
+    unmatched: list[str] = []
     for item in parsed:
         if not isinstance(item, dict) or not all(k in item for k in _REQUIRED_KEYS):
             logger.warning(f"annotation-review: dropping finding missing required keys: {item!r}")
@@ -194,6 +224,7 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
                 f"annotation-review: dropping finding, 'old' occurs {occurrences} times "
                 f"(expected exactly 1): {old!r}"
             )
+            unmatched.append(old)
             continue
         kept.append({
             "id": len(kept),
@@ -202,4 +233,4 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
             "rationale": rationale,
         })
     logger.info(f"annotation-review: kept {len(kept)} of {len(parsed)} findings")
-    return kept
+    return kept, unmatched

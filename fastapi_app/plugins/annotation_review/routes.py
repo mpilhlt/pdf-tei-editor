@@ -50,6 +50,8 @@ class ReviewRequest(BaseModel):
     provider_id: str
     model_id: str
     chunk_index: int = 0
+    # Raw XML of a single element of `xml` to review instead of the whole <text> (node navigation)
+    scope: str | None = None
 
 
 class FindingResponse(BaseModel):
@@ -62,10 +64,13 @@ class FindingResponse(BaseModel):
 class ReviewResponse(BaseModel):
     findings: list[FindingResponse]
     chunk_count: int
+    # Findings the model proposed whose "old" did not occur exactly once in the document
+    discarded: int = 0
 
 
 class PlanRequest(BaseModel):
     xml: str
+    scope: str | None = None
 
 
 class PlanResponse(BaseModel):
@@ -79,7 +84,7 @@ async def plan(
 ) -> PlanResponse:
     """Report how many chunks /review will need for the given document (no LLM call)."""
     try:
-        return PlanResponse(chunk_count=count_chunks(body.xml))
+        return PlanResponse(chunk_count=count_chunks(body.xml, body.scope))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -109,8 +114,8 @@ async def review(
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 
     try:
-        findings, chunk_count = await run_review(
-            body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index
+        findings, chunk_count, discarded = await run_review(
+            body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index, body.scope
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -125,4 +130,6 @@ async def review(
         logger.warning(f"annotation-review: provider '{body.provider_id}' request failed: {e}")
         raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e
 
-    return ReviewResponse(findings=[FindingResponse(**f) for f in findings], chunk_count=chunk_count)
+    return ReviewResponse(
+        findings=[FindingResponse(**f) for f in findings], chunk_count=chunk_count, discarded=discarded
+    )

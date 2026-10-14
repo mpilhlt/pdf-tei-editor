@@ -35,7 +35,7 @@ const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, fi
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {};
+  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
     progress: {
@@ -54,6 +54,7 @@ function buildExtension(opts = {}) {
       showMergeView: async (text) => { if (opts.showMergeViewImpl) return opts.showMergeViewImpl(text); mergeViews.push(text); },
       on: (event, fn) => { handlers[event] = fn; },
       getXmlTree: () => (opts.xmlDoc === undefined ? {} : opts.xmlDoc),
+      setFocusAction: (id, action) => { focusActions[id] = action; },
       getEditorContent: () => opts.editorContent ?? '<TEI/>',
     },
     'sl-utils': {
@@ -80,7 +81,7 @@ function buildExtension(opts = {}) {
     }
     return impl(endpoint, ...rest);
   };
-  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers };
+  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
 }
 
 describe('hasReviewableRules', () => {
@@ -325,6 +326,22 @@ describe('menu item', () => {
     handlers.editorReady();
     assert.strictEqual(menuAdds[0].items[0].disabled, true);
   });
+
+  it('offers an "LLM Review" focus-mode button only while the review is available', async () => {
+    let guides = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+    const { ext, handlers, focusActions } = buildExtension({ getEditorialDeclGuides: () => guides });
+    await ext.start();
+    handlers.editorReady();
+    const action = focusActions['annotation-review'];
+    assert.strictEqual(action.label, 'LLM Review');
+    let ran = 0;
+    ext.runReview = async () => { ran++; };
+    action.run();
+    assert.strictEqual(ran, 1);
+    guides = [];
+    handlers.editorReady();
+    assert.strictEqual(focusActions['annotation-review'], null);
+  });
 });
 
 describe('runReview', () => {
@@ -351,6 +368,17 @@ describe('runReview', () => {
     });
     await ext.runReview();
     assert.strictEqual(notifyCalls.at(-1)[1], 'success');
+  });
+
+  it('reports discarded findings instead of "no issues" when nothing usable came back', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      callPluginApiImpl: async () => ({ findings: [], discarded: 2 }),
+    });
+    await ext.runReview();
+    assert.strictEqual(notifyCalls.at(-1)[1], 'warning');
+    assert.match(notifyCalls.at(-1)[0], /proposed 2 fix/);
   });
 
   it('hides the progress widget and shows nothing when review() fails', async () => {
@@ -483,6 +511,69 @@ describe('runReview confirmation', () => {
     await ext.runReview({ providerId: 'other', modelId: 'big' });
     assert.ok(confirmCalls[0].message.includes('other label/big label'));
     assert.strictEqual(calls[0].provider_id, 'other');
+  });
+});
+
+describe('node-scoped review', () => {
+  const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+  const docText = '<TEI><text><bibl>One</bibl><bibl>Two</bibl></text></TEI>';
+
+  it('review() sends the navigated-to node as scope with the editor text', async () => {
+    const calls = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText,
+      planImpl: () => ({ chunk_count: 1 }),
+      callPluginApiImpl: async (endpoint, method, params) => { calls.push(params); return { findings: [] }; },
+    });
+    const from = docText.indexOf('<bibl>Two');
+    ext._deps.xmleditor.getSyntaxNodeByXpath = (xpath) => {
+      assert.strictEqual(xpath, '//tei:bibl[2]');
+      return { from, to: from + '<bibl>Two</bibl>'.length };
+    };
+    const result = await ext.review(undefined, { xpath: '//tei:bibl[2]' });
+    assert.deepStrictEqual(result, []);
+    assert.deepStrictEqual(calls[0], { xml: docText, scope: '<bibl>Two</bibl>', provider_id: 'p', model_id: 'm', chunk_index: 0 });
+  });
+
+  it('review() notifies and returns null when the node cannot be resolved', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText,
+    });
+    ext._deps.xmleditor.getSyntaxNodeByXpath = () => { throw new Error('No XML node found'); };
+    assert.strictEqual(await ext.review(undefined, { xpath: '//tei:bibl[9]' }), null);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /selected node/);
+  });
+
+  it('runReview() reviews only the node, without confirmation, when the xpath state is set', async () => {
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      state: { xml: 'a', xpath: '//tei:bibl[1]' },
+    });
+    /** @type {any[]} */
+    const reviewArgs = [];
+    ext.review = async (override, hooks) => { reviewArgs.push(hooks.xpath); return []; };
+    await ext.runReview();
+    assert.deepStrictEqual(reviewArgs, ['//tei:bibl[1]']);
+    assert.strictEqual(confirmCalls.length, 0);
+  });
+
+  it('runReview() reviews the whole document when the xpath state is unset', async () => {
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      state: { xml: 'a', xpath: null },
+    });
+    const reviewArgs = [];
+    ext.review = async (override, hooks) => { reviewArgs.push(hooks.xpath); return []; };
+    await ext.runReview();
+    assert.deepStrictEqual(reviewArgs, [null]);
+    assert.match(confirmCalls[0].message, /current document/);
   });
 });
 

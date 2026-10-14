@@ -93,11 +93,19 @@ class TestReviewRoute(unittest.TestCase):
         self.assertEqual(len(body["findings"]), 1)
         self.assertEqual(body["findings"][0]["old"], "<persName>J. Doe</persName>")
         self.assertEqual(body["chunk_count"], 1)
+        self.assertEqual(body["discarded"], 0)
 
     def test_plan_returns_the_chunk_count_without_calling_the_provider(self):
         response = self.client.post("/api/plugins/annotation-review/plan", json={"xml": TEI_DOC})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"chunk_count": 1})
+
+    def test_plan_counts_only_the_scope_and_rejects_a_foreign_one(self):
+        scoped = self.client.post("/api/plugins/annotation-review/plan", json={"xml": TEI_DOC, "scope": "<teiHeader>"})
+        self.assertEqual(scoped.status_code, 200)
+        self.assertEqual(scoped.json(), {"chunk_count": 1})
+        foreign = self.client.post("/api/plugins/annotation-review/plan", json={"xml": TEI_DOC, "scope": "<bibl>x</bibl>"})
+        self.assertEqual(foreign.status_code, 422)
 
     def test_plan_rejects_malformed_xml(self):
         response = self.client.post("/api/plugins/annotation-review/plan", json={"xml": "<broken"})

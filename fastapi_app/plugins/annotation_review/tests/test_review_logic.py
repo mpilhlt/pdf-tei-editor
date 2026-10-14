@@ -13,6 +13,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
     _is_safe_fetch_url,
+    count_chunks,
     extract_text_content,
     gather_rule_excerpts,
     run_review,
@@ -89,10 +90,10 @@ NO_TEXT_DOC = """<?xml version="1.0"?>
 
 
 class _StubProvider(LLMProvider):
-    def __init__(self, response: str):
+    def __init__(self, response: str, *later_responses: str):
         self.id = "stub"
         self.label = "Stub"
-        self._response = response
+        self._responses = [response, *later_responses]
         self.calls: list[dict[str, str]] = []
 
     def list_models(self) -> list[LLMModel]:
@@ -100,7 +101,7 @@ class _StubProvider(LLMProvider):
 
     async def chat_completion(self, model_id, system_prompt, user_prompt, temperature=0.2) -> str:
         self.calls.append({"model_id": model_id, "system_prompt": system_prompt, "user_prompt": user_prompt})
-        return self._response
+        return self._responses[min(len(self.calls), len(self._responses)) - 1]
 
 
 class TestExtractTextContent(unittest.TestCase):
@@ -265,7 +266,7 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
             '[{"old": "<persName>J. Doe</persName>", '
             '"new": "<persName ref=\\"#p1\\">J. Doe</persName>", "rationale": "add ref"}]'
         )
-        findings, chunk_count = await run_review(
+        findings, chunk_count, _discarded = await run_review(
             TEI_DOC, provider, "stub-model", cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
         )
         self.assertEqual(chunk_count, 1)
@@ -285,7 +286,7 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         old = "<title>Title 399</title>"
         provider = _StubProvider(f'[{{"old": "{old}", "new": "<title level=\\"a\\">Title 399</title>", "rationale": "r"}}]')
 
-        first, count = await run_review(
+        first, count, _discarded = await run_review(
             doc, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", chunk_index=0
         )
         self.assertGreater(count, 2)
@@ -298,6 +299,78 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("Title 399", provider.calls[1]["user_prompt"])
         self.assertNotIn("Title 000", provider.calls[1]["user_prompt"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_reviews_only_the_scope_and_validates_against_the_whole_document(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        scope = "<title>A Paper</title>"
+        provider = _StubProvider(
+            '[{"old": "<title>A Paper</title>", "new": "<title level=\\"a\\">A Paper</title>", "rationale": "r"},'
+            ' {"old": "<persName>J. Doe</persName>", "new": "x", "rationale": "outside the node, still unique"},'
+            ' {"old": "interpretation", "new": "x", "rationale": "ambiguous"}]'
+        )
+        findings, chunk_count, _discarded = await run_review(
+            TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", scope=scope
+        )
+        self.assertEqual(chunk_count, 1)
+        prompt = provider.calls[0]["user_prompt"]
+        self.assertIn(scope, prompt)
+        self.assertNotIn("J. Doe", prompt)
+        self.assertIn("single element", prompt)
+        self.assertEqual([f["old"] for f in findings], ["<title>A Paper</title>", "<persName>J. Doe</persName>"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_retries_once_with_feedback_when_every_finding_was_discarded(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        paraphrased = '[{"old": "<persName> J. Doe </persName>", "new": "x", "rationale": "r"}]'
+        verbatim = '[{"old": "<persName>J. Doe</persName>", "new": "x", "rationale": "r"}]'
+        provider = _StubProvider(paraphrased, verbatim)
+        findings, _count, discarded = await run_review(
+            TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
+        self.assertEqual(len(provider.calls), 2)
+        self.assertIn("<persName> J. Doe </persName>", provider.calls[1]["user_prompt"])
+        self.assertIn("previous attempt", provider.calls[1]["user_prompt"])
+        self.assertEqual([f["old"] for f in findings], ["<persName>J. Doe</persName>"])
+        self.assertEqual(discarded, 0)
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_reports_discarded_count_when_the_retry_fails_too(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        provider = _StubProvider('[{"old": "nope", "new": "x", "rationale": "r"}]', "not json")
+        findings, _count, discarded = await run_review(
+            TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
+        self.assertEqual(len(provider.calls), 2)
+        self.assertEqual(findings, [])
+        self.assertEqual(discarded, 1)
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_does_not_retry_an_empty_review(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        provider = _StubProvider("[]")
+        findings, _count, discarded = await run_review(
+            TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice"
+        )
+        self.assertEqual((findings, discarded, len(provider.calls)), ([], 0, 1))
+
+    def test_scope_may_lie_outside_text_element(self):
+        self.assertEqual(count_chunks(NO_TEXT_DOC, "<teiHeader/>"), 1)
+        with self.assertRaises(ValueError):
+            count_chunks(NO_TEXT_DOC)
+
+    async def test_raises_when_scope_is_not_part_of_the_document(self):
+        provider = _StubProvider("[]")
+        with self.assertRaises(ValueError):
+            await run_review(
+                TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice",
+                scope="<title>Other</title>",
+            )
+        self.assertEqual(provider.calls, [])
 
     async def test_raises_when_chunk_index_is_out_of_range(self):
         provider = _StubProvider("[]")
