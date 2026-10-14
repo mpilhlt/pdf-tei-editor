@@ -718,7 +718,7 @@ class XmlEditorPlugin extends Plugin {
       disabled: true
     });
     this.#statusbar.add(this.#focusToggle, 'center', 0);
-    this.#focusPreferred = this.uiStorage.get('focusMode', false);
+    this.#focusPreferred = this.uiStorage.get('focusMode', true);
     this.#focusToggle.checked = this.#focusPreferred;
 
     this.#clearNodeBtn = PanelUtils.createButton({

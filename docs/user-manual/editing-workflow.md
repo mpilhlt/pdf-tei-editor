@@ -86,7 +86,7 @@ The magnifier button (**Focus**) next to the navigation controls, available whil
 - Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
 - Moving the cursor into another node (for example by clicking) moves the focus to that node.
 
-Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Whether focus mode is on is remembered in your browser, so it is still active after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
+Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Focus mode is on by default; whether you turned it on or off is remembered in your browser, so the choice is kept after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
 
 ---
 
