@@ -146,10 +146,24 @@ class XmlAnnotationPlugin extends Plugin {
     // Two rAFs ensure CM's own layout update fires before we read lineBlockAt.
     if (cmView && scrollContainer != null) {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollCharacterToTop(cmView, scrollContainer, savedPos)
-        })
+        requestAnimationFrame(() => this.#restoreScrollPosition(cmView, scrollContainer, savedPos))
       })
+    }
+  }
+
+  /**
+   * Restores the scroll position after the layout changed on switching the mode: keeps the node
+   * selected by the navigation centered if there is one, else scrolls the previously first visible
+   * character back to the top.
+   * @param {EditorView} cmView
+   * @param {Element} scrollContainer
+   * @param {number} savedPos
+   */
+  #restoreScrollPosition(cmView, scrollContainer, savedPos) {
+    if (this.state?.xpath) {
+      this.#xmlEditor.scrollSelectionToCenter()
+    } else {
+      scrollCharacterToTop(cmView, scrollContainer, savedPos)
     }
   }
 
@@ -187,9 +201,7 @@ class XmlAnnotationPlugin extends Plugin {
     // Two rAFs ensure CM's own layout update fires before we read lineBlockAt.
     if (cmView && scrollContainer != null) {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollCharacterToTop(cmView, scrollContainer, savedPos)
-        })
+        requestAnimationFrame(() => this.#restoreScrollPosition(cmView, scrollContainer, savedPos))
       })
     }
   }

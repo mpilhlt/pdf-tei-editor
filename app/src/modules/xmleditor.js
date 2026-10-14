@@ -62,7 +62,7 @@ import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
 import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
-import { focusModeExtension, setFocusRangeEffect } from './codemirror/focus-mode.js';
+import { focusModeExtension, focusRangeField, setFocusRangeEffect } from './codemirror/focus-mode.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
  */
@@ -1238,6 +1238,15 @@ export class XMLEditor extends EventEmitter {
       throw new Error(`No XML node found for XPath: ${xpath}`);
     }
     this.focusDomNode(node, options);
+  }
+
+  /**
+   * Scrolls the focused node, or else the current selection, to the vertical center without
+   * changing the selection. Used to correct the scroll position after layout changes.
+   */
+  scrollSelectionToCenter() {
+    const { from, to } = this.#view.state.field(focusRangeField, false) ?? this.#view.state.selection.main;
+    this.#view.dispatch({ effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' }) });
   }
 
   /**

@@ -73,6 +73,8 @@ The center of the statusbar contains node navigation controls. These are only sh
 
 Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
 
+The **×** button before the focus toggle clears the current node: the node loses its highlight or focus and is removed from the URL. The next click on **‹** / **›** starts again from the first (or last) node.
+
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
 ### Focus Mode

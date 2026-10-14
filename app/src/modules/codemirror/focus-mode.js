@@ -5,6 +5,7 @@
  *
  * Exports:
  *   setFocusRangeEffect — StateEffect that sets (`{from, to}`) or clears (`null`) the focused range
+ *   focusRangeField — the StateField holding the focused range (`FocusRange|null`)
  *   focusModeExtension — StateField that dims everything outside the focused range and adds spacing
  *                        around it, plus its theme
  */
@@ -60,7 +61,7 @@ function buildDecorations(range, state) {
  * before or after the range stays outside of it.
  * @type {StateField<FocusRange|null>}
  */
-const focusRangeField = StateField.define({
+export const focusRangeField = StateField.define({
   create: () => null,
   update(range, tr) {
     for (const effect of tr.effects) {

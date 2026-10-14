@@ -105,6 +105,7 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
  * @property {StatusButton} nextNodeBtn - Next node navigation button
  * @property {StatusText} nodeCounterWidget - Node counter display (index/size)
+ * @property {StatusButton} clearNodeBtn - Clears the current node (removes focus on it and the `xpath` state)
  * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
@@ -216,6 +217,8 @@ class XmlEditorPlugin extends Plugin {
   #nextNodeBtn;
   /** @type {StatusText} */
   #nodeCounterWidget;
+  /** @type {StatusButton} */
+  #clearNodeBtn;
   /** @type {StatusToggleButton} */
   #focusToggle;
   /** Whether the user has focus mode switched on (persisted in the UI storage) */
@@ -705,6 +708,14 @@ class XmlEditorPlugin extends Plugin {
     this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
     this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
 
+    this.#clearNodeBtn = PanelUtils.createButton({
+      icon: 'x-lg',
+      tooltip: 'Clear the current node',
+      name: 'clearNodeBtn',
+      disabled: true
+    });
+    this.#statusbar.add(this.#clearNodeBtn, 'center', 0);
+
     this.#focusToggle = PanelUtils.createToggleButton({
       icon: 'search',
       tooltip: 'Focus on the navigated-to node (Esc to exit)',
@@ -738,6 +749,12 @@ class XmlEditorPlugin extends Plugin {
     // Counter click handler (allow direct index input)
     this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
 
+    // Clear button: removes the focus on the current node and the xpath state (and thus the URL parameter)
+    this.#clearNodeBtn.addEventListener('widget-click', async () => {
+      this.#xmlEditor.clearSelectedNode();
+      await this.dispatchStateChange({ xpath: null });
+    });
+
     // Focus mode toggle
     this.#focusToggle.addEventListener('widget-change', (e) => {
       this.#setFocusMode(/** @type {CustomEvent} */ (e).detail.checked);
@@ -766,6 +783,18 @@ class XmlEditorPlugin extends Plugin {
         tagBoundaryItem.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary';
       }
     });
+  }
+
+  /**
+   * Runs when application startup is complete. Late layout changes during startup (e.g. line
+   * wrapping, folding the header, switching to the visual mode) shift the node that was selected
+   * from the restored xpath, so center it once more after they have settled.
+   */
+  async ready() {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    if (this.state?.xpath && this.#xmlEditor.isReady()) {
+      this.#xmlEditor.scrollSelectionToCenter();
+    }
   }
 
   /**
@@ -921,6 +950,8 @@ class XmlEditorPlugin extends Plugin {
 
       this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index));
     }
+
+    this.#clearNodeBtn.disabled = !state.xpath;
 
     // Keep line wrapping switch always visible but disable when no document
     // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
@@ -1566,6 +1597,7 @@ class XmlEditorPlugin extends Plugin {
     this.#xpathDropdown.style.display = display;
     this.#nextNodeBtn.style.display = display;
     this.#nodeCounterWidget.style.display = display;
+    this.#clearNodeBtn.style.display = display;
     this.#focusToggle.style.display = display;
     if (visible !== this.#navigationVisible) {
       this.#navigationVisible = visible;
@@ -1643,13 +1675,15 @@ class XmlEditorPlugin extends Plugin {
     if (isNaN(delta)) {
       throw new TypeError('Second argument must be a number');
     }
-    if (!state?.xpath) {
+    // after the current node was cleared, navigation starts again from the selected xpath type
+    const currentXpath = state?.xpath || (this.#xpathDropdown.selected ? `${this.#xpathDropdown.selected}[0]` : '');
+    if (!currentXpath) {
       return;
     }
-    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath);
+    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(currentXpath);
     const normativeXpath = pathBeforePredicates + nonIndexPredicates;
     const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath);
-    if (size < 2) {
+    if (size < 2 && state?.xpath) {
       return;
     }
     if (index === null) index = 1;

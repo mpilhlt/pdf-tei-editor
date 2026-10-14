@@ -34,6 +34,16 @@ export class NavXmlEditor extends XMLEditor {
   selectedXpath = null;
 
   /**
+   * Clears the current node: removes the visual focus on it and forgets it as the selected node.
+   * Focus mode itself stays switched on.
+   */
+  clearSelectedNode() {
+    this.clearFocus()
+    this.selectedNode = null
+    this.selectedXpath = null
+  }
+
+  /**
    * Whether focus mode is active, in which the navigated-to node is centered and
    * all other content is dimmed instead of selecting the node
    * @type {boolean}
