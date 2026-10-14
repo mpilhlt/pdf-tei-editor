@@ -217,6 +217,14 @@ class TestExtractTagDefinitions(unittest.TestCase):
         legislation_variant = next(v for v in title["variants"] if v["attrs"] == {"level": "m", "type": "legislation"})
         self.assertEqual(legislation_variant["description"], "Title of a statute")
 
+    def test_attribute_values_unioned_across_choice_groups(self):
+        # Regression: each <group> of title's <choice> pins `level` to one
+        # value. The properties popup's dropdown must offer the values of
+        # every group, not only the first group's.
+        result = self.parser.extract_tag_definitions("root", set())
+        level_attr = next(a for a in result["title"]["attributes"] if a["name"] == "level")
+        self.assertEqual(level_attr["values"], ["a", "m"])
+
     def test_children_derived_from_content_model(self):
         result = self.parser.extract_tag_definitions("root", set())
         self.assertEqual(sorted(result["bibl"]["children"]), ["author", "title"])
