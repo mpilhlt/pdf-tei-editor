@@ -2,6 +2,15 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.71.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.71.0...v0.71.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **annotation-review:** match scoped findings in the reviewed node ([53c6264](https://github.com/mpilhlt/pdf-tei-editor/commit/53c62646d496e17ad81fc702520ca11613eaa9ba))
+* **annotation:** offer all schema values for attributes split across choice groups ([#538](https://github.com/mpilhlt/pdf-tei-editor/issues/538)) ([ba30883](https://github.com/mpilhlt/pdf-tei-editor/commit/ba308831bfc74004c1e519536220bf9f6ebf5a98))
+* **annotation:** show all variants in chip palette dropdown ([98487b4](https://github.com/mpilhlt/pdf-tei-editor/commit/98487b4a2de26f4bc1519a495dcebbfe5f0765a9))
+
 # [0.71.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.70.0...v0.71.0) (2026-10-14)
 
 
