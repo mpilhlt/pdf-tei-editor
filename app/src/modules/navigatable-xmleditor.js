@@ -1,4 +1,5 @@
 import { XMLEditor } from "./xmleditor.js";
+import { focusRangeField } from './codemirror/focus-mode.js';
 import { parseXPath } from './utils.js'
 
 export {XMLEditor}
@@ -66,6 +67,28 @@ export class NavXmlEditor extends XMLEditor {
       // @ts-ignore
       this.#onSelectionChange.bind(this)
     )
+    // keep the focus on the node after edits that replace its boundaries (e.g. accepting a merge chunk)
+    this.on("editorXmlWellFormed", () => this.#realignFocus())
+    this.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, () => this.#realignFocus())
+  }
+
+  /**
+   * In focus mode, re-aligns the focused range with the selected node after the document was
+   * re-synchronized. Edits that replace the node's boundaries, such as accepting a chunk in the
+   * merge view (which replaces whole lines), otherwise shrink or remove the mapped focus range.
+   */
+  #realignFocus() {
+    if (!this.#focusMode) return;
+    const xpath = this.selectedXpath ?? (this.parentPath ? `${this.parentPath}[${this.currentIndex}]` : null);
+    if (!xpath) return;
+    try {
+      const { from, to } = this.getSyntaxNodeByXpath(xpath);
+      const range = this.getView().state.field(focusRangeField, false);
+      if (range && range.from === from && range.to === to) return;
+      this.focusByXpath(xpath, { scroll: false });
+    } catch (error) {
+      console.warn(`Could not realign focus: ${String(error)}`);
+    }
   }
 
   /**
