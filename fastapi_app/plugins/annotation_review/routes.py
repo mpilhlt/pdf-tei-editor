@@ -64,6 +64,8 @@ class FindingResponse(BaseModel):
 class ReviewResponse(BaseModel):
     findings: list[FindingResponse]
     chunk_count: int
+    # Findings the model proposed whose "old" did not occur exactly once in the document
+    discarded: int = 0
 
 
 class PlanRequest(BaseModel):
@@ -112,7 +114,7 @@ async def review(
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 
     try:
-        findings, chunk_count = await run_review(
+        findings, chunk_count, discarded = await run_review(
             body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index, body.scope
         )
     except ValueError as e:
@@ -128,4 +130,6 @@ async def review(
         logger.warning(f"annotation-review: provider '{body.provider_id}' request failed: {e}")
         raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e
 
-    return ReviewResponse(findings=[FindingResponse(**f) for f in findings], chunk_count=chunk_count)
+    return ReviewResponse(
+        findings=[FindingResponse(**f) for f in findings], chunk_count=chunk_count, discarded=discarded
+    )

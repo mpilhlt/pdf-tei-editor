@@ -159,6 +159,20 @@ def _extract_json_list(raw_response: str) -> list[object]:
     )
 
 
+def build_retry_note(unmatched: list[str]) -> str:
+    """
+    Appended to the user prompt when every finding of a first attempt was
+    discarded because its "old" did not occur exactly once in the document.
+    """
+    quoted = "\n".join(f"- {json.dumps(old, ensure_ascii=False)}" for old in unmatched)
+    return (
+        "\n\n## Note on a previous attempt\n\n"
+        "A previous review of this text proposed fixes whose \"old\" snippets do not occur exactly once in the document, so all of them were discarded:\n\n"
+        f"{quoted}\n\n"
+        "Review the text again. Copy every \"old\" character for character from the document text above, including attribute quotes, entities and whitespace, and include just enough context to make it unique."
+    )
+
+
 def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Finding]:
     """
     Parse the LLM's JSON array response and keep only findings whose "old"
@@ -173,9 +187,21 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
         UnusableResponseError: if the response contains no JSON list at all.
             That is not "no findings" but a failed review.
     """
+    return validate_findings(raw_response, source_text)[0]
+
+
+def validate_findings(raw_response: str, source_text: str) -> tuple[list[Finding], list[str]]:
+    """
+    Like parse_and_validate_findings(), but also returns the "old" snippets of
+    the findings dropped because they do not occur exactly once in source_text.
+
+    Raises:
+        UnusableResponseError: see parse_and_validate_findings().
+    """
     parsed = _extract_json_list(raw_response)
 
     kept: list[Finding] = []
+    unmatched: list[str] = []
     for item in parsed:
         if not isinstance(item, dict) or not all(k in item for k in _REQUIRED_KEYS):
             logger.warning(f"annotation-review: dropping finding missing required keys: {item!r}")
@@ -198,6 +224,7 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
                 f"annotation-review: dropping finding, 'old' occurs {occurrences} times "
                 f"(expected exactly 1): {old!r}"
             )
+            unmatched.append(old)
             continue
         kept.append({
             "id": len(kept),
@@ -206,4 +233,4 @@ def parse_and_validate_findings(raw_response: str, source_text: str) -> list[Fin
             "rationale": rationale,
         })
     logger.info(f"annotation-review: kept {len(kept)} of {len(parsed)} findings")
-    return kept
+    return kept, unmatched
