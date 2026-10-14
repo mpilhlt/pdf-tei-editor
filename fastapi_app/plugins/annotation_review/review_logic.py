@@ -228,8 +228,8 @@ async def run_review(
     number of findings discarded because their "old" does not occur exactly
     once). Findings are validated against the whole <text>, so "old" must be
     unique in the document, not just in the chunk. With a scope, only that
-    node is reviewed and findings are validated against the whole document
-    (see review_source()).
+    node is reviewed, "old" must be unique in that node, and findings are
+    anchored in the whole document (see review_source() and validate_findings()).
 
     If the model proposed findings but every one of them was discarded, the
     call is repeated once with the discarded snippets quoted back to it;
@@ -252,12 +252,12 @@ async def run_review(
         rule_excerpts, chunks[chunk_index], (chunk_index + 1, len(chunks)), scoped=scope is not None
     )
     raw_response = await provider.chat_completion(model_id, system_prompt, user_prompt)
-    findings, unmatched = validate_findings(raw_response, validation_text)
+    findings, unmatched = validate_findings(raw_response, validation_text, scope)
     if not findings and unmatched:
         logger.info(f"annotation-review: all {len(unmatched)} finding(s) discarded, retrying once with feedback")
         retry_response = await provider.chat_completion(model_id, system_prompt, user_prompt + build_retry_note(unmatched))
         try:
-            findings, unmatched = validate_findings(retry_response, validation_text)
+            findings, unmatched = validate_findings(retry_response, validation_text, scope)
         except UnusableResponseError:
             logger.warning("annotation-review: retry returned no usable JSON list, keeping the first attempt's result")
     return findings, len(chunks), len(unmatched)

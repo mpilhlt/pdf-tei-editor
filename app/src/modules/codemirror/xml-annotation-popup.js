@@ -146,6 +146,9 @@ function ensureActionButtonStyle() {
     .ann-popup-action-btn--merge::part(base):hover { background-color: rgba(137,220,235,.28); }
     .ann-popup-action-btn--remove::part(base) { background-color: rgba(243,139,168,.16); color: #f38ba8; }
     .ann-popup-action-btn--remove::part(base):hover { background-color: rgba(243,139,168,.28); }
+    /* Attribute value options: keep the value clear of the listbox's
+       scrollbar, which otherwise overlaps the right edge of short values. */
+    .ann-popup-attr-option::part(base) { padding-inline-end: 32px; }
   `;
   document.head.appendChild(style);
   actionButtonStyleInjected = true;
@@ -513,6 +516,7 @@ export class XmlAnnotationPopup {
         sel.toggleAttribute('disabled', this.#readOnly);
         for (const v of attr.values) {
           const opt = document.createElement('sl-option');
+          opt.classList.add('ann-popup-attr-option');
           opt.setAttribute('value', v);
           opt.textContent = v;
           sel.appendChild(opt);
@@ -644,6 +648,10 @@ export class XmlAnnotationPopup {
 
       if (hasVariants) {
         const dropdown = document.createElement('sl-dropdown');
+        // hoist: fixed positioning escapes the overlay's overflow-y:auto clip.
+        // Without it, sl-dropdown's auto-size treats the overlay as the clipping
+        // boundary and shrinks the menu to ~one item.
+        dropdown.hoist = true;
         const caret = document.createElement('span');
         caret.textContent = '▾';
         caret.slot = 'trigger';
