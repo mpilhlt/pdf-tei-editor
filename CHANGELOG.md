@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.70.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.69.0...v0.70.0) (2026-10-14)
+
+
+### Features
+
+* add focus mode and on/off navigation to XML editor node navigation ([#527](https://github.com/mpilhlt/pdf-tei-editor/issues/527)) ([e4aa1fe](https://github.com/mpilhlt/pdf-tei-editor/commit/e4aa1fe18a1a6be5726a78615c5b7bd72ebf94c0))
+
 # [0.69.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.68.0...v0.69.0) (2026-10-13)
 
 
