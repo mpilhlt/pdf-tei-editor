@@ -2,6 +2,20 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.71.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.70.0...v0.71.0) (2026-10-14)
+
+
+### Bug Fixes
+
+* **annotation-review:** make Gemini Flash-Lite reviews reliable ([75a408a](https://github.com/mpilhlt/pdf-tei-editor/commit/75a408aee6043f95958446b0217a6b6c4584334f))
+* keep focus mode on the node after accepting or rejecting a merge ([27ba754](https://github.com/mpilhlt/pdf-tei-editor/commit/27ba754ab5f94501c7b7858e00d0e432b180faee))
+* **llm:** hide models non-admins cannot use, make free-tier models configurable ([#531](https://github.com/mpilhlt/pdf-tei-editor/issues/531)) ([7ee72d3](https://github.com/mpilhlt/pdf-tei-editor/commit/7ee72d36342020c439d37eeae29f9708d4922836))
+
+
+### Features
+
+* node-scoped annotation review and "LLM Review" button in focus mode ([#530](https://github.com/mpilhlt/pdf-tei-editor/issues/530)) ([201c58b](https://github.com/mpilhlt/pdf-tei-editor/commit/201c58b1c873868768c1bc133c24d0ec29517481))
+
 # [0.70.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.69.0...v0.70.0) (2026-10-14)
 
 
