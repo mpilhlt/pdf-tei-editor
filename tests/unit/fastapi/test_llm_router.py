@@ -35,10 +35,11 @@ class TestListProvidersRoute(unittest.TestCase):
     """Test GET /llm/providers."""
 
     def setUp(self):
-        # independent of the real llm.model-filter config; the filter itself is tested separately
-        patcher = mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # independent of the real llm.model-filter config and the access rules; both are tested separately
+        for target in ("fastapi_app.routers.llm.is_model_allowed", "fastapi_app.routers.llm.user_may_use_model"):
+            patcher = mock.patch(target, return_value=True)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser"}
@@ -124,6 +125,10 @@ class TestListProvidersRouteModelFilter(unittest.TestCase):
     """Test that GET /llm/providers applies the admin-configured model filter."""
 
     def setUp(self):
+        # independent of the access rules; those are tested in TestListProvidersRouteAccess
+        patcher = mock.patch("fastapi_app.routers.llm.user_may_use_model", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.app = FastAPI()
         self.app.include_router(router)
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "testuser"}
@@ -165,6 +170,67 @@ class TestListProvidersRouteModelFilter(unittest.TestCase):
         body = response.json()
         self.assertEqual(body[0]["id"], "kisski")
         self.assertEqual(body[0]["models"], [])
+
+
+class TestListProvidersRouteAccess(unittest.TestCase):
+    """Test that GET /llm/providers hides models the current user may not use."""
+
+    def setUp(self):
+        patchers = [
+            mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True),
+            mock.patch("fastapi_app.lib.llm.model_access.is_default_model", return_value=False),
+            mock.patch("fastapi_app.lib.llm.model_access.get_plugin_config"),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.free_models = ""
+        config = mock.Mock()
+        config.get.side_effect = lambda key, default=None: self.free_models if key == "llm.free-models" else default
+        patcher = mock.patch("fastapi_app.lib.llm.model_access.get_config", return_value=config)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.app = FastAPI()
+        self.app.include_router(router)
+        self.user = {"username": "u", "roles": ["user"]}
+        self.app.dependency_overrides[require_authenticated_user] = lambda: self.user
+        self.client = TestClient(self.app)
+        LLMProviderRegistry.reset_instance()
+        for provider_id, label, models in (
+            ("kisski", "KISSKI", [("gemma-3", "Gemma 3", True)]),
+            ("google", "Google Gemini", [("flash", "Gemini Flash Latest", False), ("pro", "Gemini Pro", False)]),
+        ):
+            LLMProviderRegistry.get_instance().register(
+                _StubProvider(
+                    id=provider_id,
+                    label=label,
+                    models=[LLMModel(id=i, label=lbl, capabilities=frozenset({"chat"}), status=None, free=free) for i, lbl, free in models],
+                )
+            )
+
+    def tearDown(self):
+        LLMProviderRegistry.reset_instance()
+        self.app.dependency_overrides.clear()
+
+    def _models(self) -> dict[str, list[str]]:
+        return {p["id"]: [m["id"] for m in p["models"]] for p in self.client.get("/llm/providers").json()}
+
+    def test_non_admins_only_see_free_models(self):
+        self.assertEqual(self._models(), {"kisski": ["gemma-3"], "google": []})
+
+    def test_admins_see_all_models(self):
+        self.user["roles"] = ["admin"]
+        self.assertEqual(self._models(), {"kisski": ["gemma-3"], "google": ["flash", "pro"]})
+
+    def test_free_models_config_makes_matching_models_free(self):
+        self.free_models = '"^Google Gemini/.*Flash"'
+        self.assertEqual(self._models(), {"kisski": ["gemma-3"], "google": ["flash"]})
+        body = self.client.get("/llm/providers").json()
+        self.assertTrue(body[1]["models"][0]["free"])
+
+    def test_non_free_default_model_is_listed_for_non_admins(self):
+        with mock.patch("fastapi_app.lib.llm.model_access.is_default_model", side_effect=lambda p, m: (p, m) == ("google", "pro")):
+            self.assertEqual(self._models(), {"kisski": ["gemma-3"], "google": ["pro"]})
 
 
 class TestDefaultModelRoutes(unittest.TestCase):

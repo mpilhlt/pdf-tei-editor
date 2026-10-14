@@ -792,21 +792,18 @@ describe('InferenceSettingsPlugin default vs session model', () => {
     assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'llama-3' });
   });
 
-  it('non-admins get non-free models disabled, free ones enabled', () => {
+  it('every listed model is selectable: the server already hides models the user may not use', () => {
     const { plugin } = setup();
-    assert.strictEqual(itemFor(plugin, 'opus').disabled, true);
-    assert.strictEqual(!!itemFor(plugin, 'gemma-3').disabled, false);
+    for (const id of ['gemma-3', 'llama-3', 'opus', 'haiku']) {
+      assert.strictEqual(!!itemFor(plugin, id).disabled, false);
+    }
   });
 
-  it('a non-free model that is the configured default stays selectable for non-admins', () => {
-    const { plugin } = setup({ configured: { providerId: 'anthropic', modelId: 'opus' } });
-    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
-    assert.strictEqual(itemFor(plugin, 'haiku').disabled, true);
-  });
-
-  it('admins can select non-free models', () => {
-    const { plugin } = setup({ admin: true });
-    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
+  it('providers without (visible) models get no section label', () => {
+    const { plugin } = setup();
+    plugin._populateSubmenu([...providers, { id: 'google', label: 'Google Gemini', models: [] }]);
+    const labels = [...plugin._submenu.querySelectorAll('small')].map(el => el.textContent);
+    assert.deepStrictEqual(labels, ['KISSKI', 'Anthropic']);
   });
 
   it('a non-admin selection is session-only: no server call, toast says so', async () => {
@@ -840,13 +837,16 @@ describe('InferenceSettingsPlugin default vs session model', () => {
     assert.deepStrictEqual(plugin.getDefaultModel(), { providerId: 'kisski', modelId: 'llama-3' });
   });
 
-  it('_refresh rebuilds the submenu when the admin status changed', async () => {
+  it('_refresh rebuilds the submenu from the models the server lists for the user', async () => {
     const { plugin } = setup();
+    let listed = [providers[0], { ...providers[1], models: [] }];
+    plugin.getDependency = () => ({ apiClient: { llmProviders: async () => listed, llmListDefaultModel: async () => null } });
     await plugin._refresh();
-    assert.strictEqual(itemFor(plugin, 'opus').disabled, true);
+    assert.strictEqual(itemFor(plugin, 'opus'), undefined);
+    listed = providers;
     plugin._isAdmin = () => true;
     await plugin._refresh();
-    assert.strictEqual(!!itemFor(plugin, 'opus').disabled, false);
+    assert.ok(itemFor(plugin, 'opus'));
   });
 });
 
