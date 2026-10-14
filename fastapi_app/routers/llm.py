@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
 from ..lib.llm import LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
+from ..lib.llm.model_access import is_free_model, user_may_use_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -52,6 +53,9 @@ def list_providers(
     admin-configured `llm.model-filter.include`/`.exclude` filters (see
     fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
     returned with a flag - the picker should simply never offer them.
+    Models the current user may not use (non-free models for non-admins,
+    except the default - see fastapi_app/lib/llm/model_access.py) are
+    omitted the same way.
     """
     result: list[ProviderResponse] = []
     for provider in LLMProviderRegistry.get_instance().list_providers(available_only=True):
@@ -60,27 +64,23 @@ def list_providers(
         except Exception as e:
             logger.warning(f"Skipping LLM provider '{provider.id}' - list_models() failed: {e}")
             continue
-        result.append(
-            ProviderResponse(
-                id=provider.id,
-                label=provider.label,
-                models=[
-                    ModelResponse(
-                        id=model["id"],
-                        label=model["label"],
-                        capabilities=sorted(model["capabilities"]),
-                        free=model.get("free", False),
-                        status=(
-                            ModelStatusResponse(**model["status"])
-                            if model["status"] is not None
-                            else None
-                        ),
-                    )
-                    for model in models
-                    if is_model_allowed(f"{provider.label}/{model['label']}")
-                ],
+        visible_models = [
+            ModelResponse(
+                id=model["id"],
+                label=model["label"],
+                capabilities=sorted(model["capabilities"]),
+                free=is_free_model(provider, model),
+                status=(
+                    ModelStatusResponse(**model["status"])
+                    if model["status"] is not None
+                    else None
+                ),
             )
-        )
+            for model in models
+            if is_model_allowed(f"{provider.label}/{model['label']}")
+            and user_may_use_model(provider, model, current_user)
+        ]
+        result.append(ProviderResponse(id=provider.id, label=provider.label, models=visible_models))
     return result
 
 

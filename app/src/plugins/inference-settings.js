@@ -8,10 +8,10 @@
  * Two levels: the installation-wide default, which only admins can set (it
  * is stored in the server config, GET/PUT /api/v1/llm/default-model), and a
  * per-session choice any user can make - e.g. when the default is busy -
- * kept in sessionStorage and taking precedence over the default. Models that
- * are not free (`model.free`) are disabled in the menu for non-admins,
- * except the configured default itself. Adds a Tools menu entry
- * (new "inference" category) listing every available provider's models,
+ * kept in sessionStorage and taking precedence over the default. The server
+ * only lists the models the current user may use (for non-admins: free
+ * models and the configured default), so every listed model is selectable.
+ * Adds a Tools menu entry (new "inference" category) listing every available provider's models,
  * fetched from GET /api/v1/llm/providers, with a warning icon when a
  * model's live status isn't "available". The entry's own label reads
  * "Default Model" until a selection is made, then "<provider>/<model>";
@@ -286,6 +286,7 @@ export class InferenceSettingsPlugin extends Plugin {
     this._submenu.innerHTML = '';
     const current = this.getDefaultModel();
     for (const provider of providers) {
+      if (provider.models.length === 0) continue;
       const label = document.createElement('small');
       label.textContent = provider.label;
       this._submenu.appendChild(label);
@@ -315,12 +316,6 @@ export class InferenceSettingsPlugin extends Plugin {
     item.dataset.providerId = provider.id;
     item.dataset.modelId = model.id;
     item.checked = !!current && current.providerId === provider.id && current.modelId === model.id;
-
-    const isConfiguredDefault = this._configuredDefault?.providerId === provider.id && this._configuredDefault?.modelId === model.id;
-    if (!model.free && !isConfiguredDefault && !this._isAdmin()) {
-      /** @type {HTMLElement & {disabled: boolean}} */ (item).disabled = true;
-      item.title = 'This model is not free; only administrators can select it.';
-    }
 
     if (model.status && model.status.availability !== 'available') {
       const tooltip = /** @type {HTMLElement & {content: string, slot: string}} */ (document.createElement('sl-tooltip'));
