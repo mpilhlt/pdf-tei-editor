@@ -13,7 +13,8 @@
     "state.showInUrl": [
         "pdf",
         "xml",
-        "diff"
+        "diff",
+        "xpath"
     ],
     "state.allowSetFromUrl": [
         "pdf",

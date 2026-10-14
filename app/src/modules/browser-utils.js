@@ -103,6 +103,18 @@ export class CookieStorage {
 export class UrlHash {
 
   /**
+   * Serializes hash parameters, keeping characters that are valid in a URL fragment and make
+   * values like xpath expressions readable (`/`, `:`, `[`, `]`, `@`, `,`) unencoded.
+   * @param {URLSearchParams} params
+   * @returns {string} The hash string including the leading `#`
+   */
+  static serialize(params) {
+    const encode = /** @param {string} str */ str => encodeURIComponent(str)
+      .replace(/%(2F|3A|5B|5D|40|2C)/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    return '#' + Array.from(params.entries()).map(([key, value]) => `${encode(key)}=${encode(value)}`).join('&')
+  }
+
+  /**
    * Sets or updates a hash parameter in the URL without reloading the page and ensures browser history is updated.
    * @param {string|Object} keyOrObj - The key of the hash parameter to set, or an object with several key-value pairs
    * @param {string?} value - The value of the hash parameter to set. Not used if first parameter is an object
@@ -119,7 +131,7 @@ export class UrlHash {
     }
 
     // Use history.replaceState to update the current history entry
-    history.replaceState(null, '', '#' + hash.toString());
+    history.replaceState(null, '', UrlHash.serialize(hash));
     if (dispatchEvent) {
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     }
@@ -153,9 +165,8 @@ export class UrlHash {
     if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
     const hash = new URLSearchParams(window.location.hash.slice(1));
     hash.delete(key); // Remove the specified key
-    const updatedHash = hash.toString();
     // Use history.replaceState to update the current history entry
-    history.replaceState(null, '', '#' + updatedHash);
+    history.replaceState(null, '', UrlHash.serialize(hash));
     if (dispatchEvent) {
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     }

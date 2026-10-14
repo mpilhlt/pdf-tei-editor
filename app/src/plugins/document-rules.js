@@ -45,6 +45,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { GFM } from '@lezer/markdown'
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands'
 import { getTheme } from '../modules/codemirror/editor-themes.js'
+import { dialogSearch } from '../modules/codemirror/dialog-search.js'
 import { createOverrideRefField, createOverrideRefClickHandler, refDecorationTheme } from '../modules/document-rules-decorations.js'
 
 // Register templates at module level
@@ -210,6 +211,7 @@ class DocumentRulesPlugin extends Plugin {
         extensions: [
           lineNumbers(),
           this._cmHistoryCompartment.of(history()),
+          dialogSearch(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           xml(),
           getTheme(themeId).extensions,
@@ -241,6 +243,7 @@ class DocumentRulesPlugin extends Plugin {
           // position programmatically, so it never needed this).
           EditorView.theme({ '&': { height: '400px' }, '.cm-scroller': { overflow: 'auto' } }),
           this._cmMdHistoryCompartment.of(history()),
+          dialogSearch(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           getTheme(themeId).extensions,
           this._cmMdReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])

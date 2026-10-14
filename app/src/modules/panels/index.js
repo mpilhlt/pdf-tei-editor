@@ -119,6 +119,7 @@ const PanelUtils = {
    * @param {string} [options.icon] - Shoelace icon name
    * @param {string} [options.tooltip] - Tooltip text (rendered with sl-tooltip)
    * @param {boolean} [options.checked] - Whether the toggle is initially on
+   * @param {string} [options.appearance] - `flat` for a borderless look matching plain status-button siblings
    * @param {boolean} [options.disabled] - Whether the toggle is disabled
    * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusToggleButton}

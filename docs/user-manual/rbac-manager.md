@@ -57,6 +57,7 @@ Projects are the primary access-control containers. Each project lists the users
 | ID | Yes | URL-safe identifier (letters, numbers, `-`, `_`); cannot be changed after creation |
 | Name | Yes | Human-readable display name |
 | Description | No | Optional free-text note |
+| Archived | No | Hides the project and its collections from the Collections dropdown and the Collections & Files drawer. Collections that also belong to a non-archived project stay visible. Access rights are unchanged; uncheck to restore the project. |
 
 When an existing project is selected, three additional sections appear:
 

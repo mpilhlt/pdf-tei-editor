@@ -9,7 +9,9 @@ import assert from 'node:assert'
 import {
   getCollectionOwner,
   isCollectionOwner,
-  canDeleteCollection
+  canDeleteCollection,
+  getActiveProjects,
+  getArchivedCollectionIds
 } from '../../../app/src/modules/collection-utils.js'
 
 /** @param {string} username @param {string[]} [roles] @returns {import('../../../app/src/plugins/authentication.js').UserData} */
@@ -89,5 +91,26 @@ describe('canDeleteCollection', () => {
 
   it('returns false for null user', () => {
     assert.ok(!canDeleteCollection(null, col('alice')))
+  })
+})
+
+/** @param {string} id @param {string[]} collections @param {boolean} [archived] */
+const proj = (id, collections, archived = false) => ({ id, name: id, description: '', members: [], collections, archived })
+
+describe('getActiveProjects', () => {
+  it('excludes archived projects', () => {
+    const projects = [proj('a', ['c1']), proj('b', ['c2'], true), { ...proj('c', []), archived: undefined }]
+    assert.deepStrictEqual(getActiveProjects(projects).map(p => p.id), ['a', 'c'])
+  })
+})
+
+describe('getArchivedCollectionIds', () => {
+  it('returns collections that belong only to archived projects', () => {
+    const projects = [proj('a', ['c1', 'shared']), proj('b', ['c2', 'shared'], true)]
+    assert.deepStrictEqual([...getArchivedCollectionIds(projects)], ['c2'])
+  })
+
+  it('returns an empty set when no project is archived', () => {
+    assert.strictEqual(getArchivedCollectionIds([proj('a', ['c1'])]).size, 0)
   })
 })

@@ -1,6 +1,7 @@
 /**
  * Collection utility functions for ownership and access control.
  * @import { UserData } from '../plugins/authentication.js'
+ * @import { ProjectInfo } from '../state.js'
  */
 
 import { userIsAdmin } from './acl-utils.js'
@@ -45,4 +46,31 @@ export function isCollectionOwner(user, collection) {
 export function canDeleteCollection(user, collection) {
   if (!user) return false
   return userIsAdmin(user) || isCollectionOwner(user, collection)
+}
+
+/**
+ * Returns the projects that are not archived.
+ * @param {ProjectInfo[]} projects - All projects
+ * @returns {ProjectInfo[]}
+ */
+export function getActiveProjects(projects) {
+  return (projects || []).filter(p => !p.archived)
+}
+
+/**
+ * Returns the IDs of collections that belong only to archived projects.
+ *
+ * A collection that is also part of a non-archived project is not included,
+ * and collections that belong to no project are never considered archived.
+ * @param {ProjectInfo[]} projects - All projects
+ * @returns {Set<string>}
+ */
+export function getArchivedCollectionIds(projects) {
+  const activeIds = new Set(getActiveProjects(projects).flatMap(p => p.collections || []))
+  return new Set(
+    (projects || [])
+      .filter(p => p.archived)
+      .flatMap(p => p.collections || [])
+      .filter(colId => !activeIds.has(colId))
+  )
 }

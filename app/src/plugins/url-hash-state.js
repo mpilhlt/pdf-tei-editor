@@ -51,7 +51,7 @@ class UrlHashStatePlugin extends Plugin {
           urlHashParams.delete(key)
         }
       })
-    const hash = `#${urlHashParams.toString()}`
+    const hash = UrlHash.serialize(urlHashParams)
     if (hash !== url.hash) {
       url.hash = hash
       window.history.replaceState({}, '', url)
