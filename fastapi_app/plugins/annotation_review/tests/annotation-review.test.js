@@ -486,6 +486,69 @@ describe('runReview confirmation', () => {
   });
 });
 
+describe('node-scoped review', () => {
+  const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
+  const docText = '<TEI><text><bibl>One</bibl><bibl>Two</bibl></text></TEI>';
+
+  it('review() sends the navigated-to node as scope with the editor text', async () => {
+    const calls = [];
+    const { ext } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText,
+      planImpl: () => ({ chunk_count: 1 }),
+      callPluginApiImpl: async (endpoint, method, params) => { calls.push(params); return { findings: [] }; },
+    });
+    const from = docText.indexOf('<bibl>Two');
+    ext._deps.xmleditor.getSyntaxNodeByXpath = (xpath) => {
+      assert.strictEqual(xpath, '//tei:bibl[2]');
+      return { from, to: from + '<bibl>Two</bibl>'.length };
+    };
+    const result = await ext.review(undefined, { xpath: '//tei:bibl[2]' });
+    assert.deepStrictEqual(result, []);
+    assert.deepStrictEqual(calls[0], { xml: docText, scope: '<bibl>Two</bibl>', provider_id: 'p', model_id: 'm', chunk_index: 0 });
+  });
+
+  it('review() notifies and returns null when the node cannot be resolved', async () => {
+    const { ext, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText,
+    });
+    ext._deps.xmleditor.getSyntaxNodeByXpath = () => { throw new Error('No XML node found'); };
+    assert.strictEqual(await ext.review(undefined, { xpath: '//tei:bibl[9]' }), null);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /selected node/);
+  });
+
+  it('runReview() reviews only the node when the xpath state is set', async () => {
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      state: { xml: 'a', xpath: '//tei:bibl[1]' },
+    });
+    /** @type {any[]} */
+    const reviewArgs = [];
+    ext.review = async (override, hooks) => { reviewArgs.push(hooks.xpath); return []; };
+    await ext.runReview();
+    assert.deepStrictEqual(reviewArgs, ['//tei:bibl[1]']);
+    assert.match(confirmCalls[0].message, /selected node/);
+  });
+
+  it('runReview() reviews the whole document when the xpath state is unset', async () => {
+    const { ext, confirmCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      state: { xml: 'a', xpath: null },
+    });
+    const reviewArgs = [];
+    ext.review = async (override, hooks) => { reviewArgs.push(hooks.xpath); return []; };
+    await ext.runReview();
+    assert.deepStrictEqual(reviewArgs, [null]);
+    assert.match(confirmCalls[0].message, /current document/);
+  });
+});
+
 describe('chunked review', () => {
   const rules = [{ category: 'p', refs: [{ target: 'x', contentType: null, subtype: 'machine' }] }];
   const finding = (old) => ({ id: 0, old, new: 'n', rationale: 'r' });

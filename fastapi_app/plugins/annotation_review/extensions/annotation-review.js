@@ -5,7 +5,8 @@
  * enabled only when the open document has machine-readable rules. Running it
  * calls the backend review endpoint and shows the findings as diagnostics
  * merged into the editor's diagnostic set, each with a "Propose fix" action
- * that opens the merge view. See
+ * that opens the merge view. When node navigation is on (the `xpath` state is
+ * set), only the navigated-to node is reviewed. See
  * docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
  * for the design rationale.
  *
@@ -245,18 +246,21 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
    */
   async runReview(override) {
     const resolved = override ?? this.getDependency('inference-settings').getDefaultModel();
+    const xpath = this.state?.xpath || null;
+    const target = xpath ? 'the selected node' : 'the current document';
     let label = '';
     if (resolved) {
       label = this.getDependency('inference-settings').getModelLabel(resolved.providerId, resolved.modelId);
       const confirmed = await this.getDependency('dialog').confirm(
-        `Review the annotations in the current document using ${escapeHtml(label)}?`,
+        `Review the annotations in ${target}${xpath ? ` (<code>${escapeHtml(xpath)}</code>)` : ''} using ${escapeHtml(label)}?`,
         'Review Annotations'
       );
       if (!confirmed) return;
     }
     const progress = this.getDependency('progress');
     const progressId = 'annotation-review';
-    const heading = label ? `Reviewing annotations using ${label}…` : 'Reviewing annotations…';
+    const what = xpath ? 'annotations in the selected node' : 'annotations';
+    const heading = label ? `Reviewing ${what} using ${label}…` : `Reviewing ${what}…`;
     const xmlBefore = this.state?.xml;
     const documentChanged = () => this.state?.xml !== xmlBefore;
     let cancelled = false;
@@ -265,6 +269,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true; } });
     try {
       const findings = await this.review(resolved ?? undefined, {
+        xpath,
         onStart: (chunksTotal) => {
           total = chunksTotal;
           progress.setValue(progressId, 0);
@@ -313,13 +318,34 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
+   * Return the raw XML of the node the given xpath points to, as it appears in
+   * the given editor text, or null (user notified) if it cannot be resolved.
+   * @param {string} xpath
+   * @param {string} docText
+   * @returns {string|null}
+   */
+  _nodeText(xpath, docText) {
+    try {
+      const { from, to } = this.getDependency('xmleditor').getSyntaxNodeByXpath(xpath);
+      return docText.slice(from, to);
+    } catch (err) {
+      this.getDependency('sl-utils').notify(
+        `Cannot review the selected node: ${err.message}`,
+        'warning',
+        'exclamation-triangle'
+      );
+      return null;
+    }
+  }
+
+  /**
    * Review the current editor document's annotations against its own
    * editorialDecl rules, one backend chunk at a time. Resolves provider/model
    * from the given override, or from the shared default (Part F), unless one
    * isn't configured.
    * @param {{providerId: string, modelId: string}} [override]
-   * @param {{isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
-   *   onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
+   * @param {{xpath?: string|null, isCancelled?: () => boolean, onStart?: (total: number) => void, onProgress?: (done: number, total: number, findings: Finding[]) => void}} [hooks]
+   *   xpath limits the review to that node (the navigation mode's `xpath` state); onStart runs once the chunk count is known; isCancelled is polled before each further chunk; onProgress runs after each chunk with all findings so far.
    * @returns {Promise<Finding[]|null>}
    *   The findings (possibly partial if cancelled); null when the review could not be started or a chunk failed (user already notified).
    */
@@ -350,12 +376,21 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
       return null;
     }
 
-    const xml = xmleditorApi.getEditorContent();
+    let xml = xmleditorApi.getEditorContent();
+    /** @type {{scope?: string}} */
+    const scoped = {};
+    if (hooks.xpath) {
+      // positions of the syntax tree refer to the editor text, so slice and send that
+      xml = xmleditorApi.getView().state.doc.toString();
+      const scope = this._nodeText(hooks.xpath, xml);
+      if (scope === null) return null;
+      scoped.scope = scope;
+    }
     /** @type {Finding[]} */
     const findings = [];
     let total;
     try {
-      ({ chunk_count: total } = await this.callPluginApi('/api/plugins/annotation-review/plan', 'POST', { xml }));
+      ({ chunk_count: total } = await this.callPluginApi('/api/plugins/annotation-review/plan', 'POST', { xml, ...scoped }));
     } catch (err) {
       this.getDependency('sl-utils').notify(`Annotation review failed: ${err.message}`, 'danger', 'exclamation-octagon');
       return null;
@@ -367,7 +402,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
         const response = await this.callPluginApi(
           '/api/plugins/annotation-review/review',
           'POST',
-          { xml, provider_id: resolved.providerId, model_id: resolved.modelId, chunk_index: index }
+          { xml, ...scoped, provider_id: resolved.providerId, model_id: resolved.modelId, chunk_index: index }
         );
         total = response.chunk_count ?? total;
         for (const finding of response.findings) findings.push({ ...finding, id: findings.length });

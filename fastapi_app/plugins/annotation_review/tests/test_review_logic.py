@@ -13,6 +13,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
     _is_safe_fetch_url,
+    count_chunks,
     extract_text_content,
     gather_rule_excerpts,
     run_review,
@@ -298,6 +299,40 @@ class TestRunReview(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("Title 399", provider.calls[1]["user_prompt"])
         self.assertNotIn("Title 000", provider.calls[1]["user_prompt"])
+
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic._is_safe_fetch_url", return_value=True)
+    @mock.patch("fastapi_app.plugins.annotation_review.review_logic.fetch_rule_excerpt")
+    async def test_reviews_only_the_scope_and_validates_against_the_whole_document(self, mock_fetch, mock_is_safe):
+        mock_fetch.side_effect = lambda url, cache, **kwargs: "rule"
+        scope = "<title>A Paper</title>"
+        provider = _StubProvider(
+            '[{"old": "<title>A Paper</title>", "new": "<title level=\\"a\\">A Paper</title>", "rationale": "r"},'
+            ' {"old": "<persName>J. Doe</persName>", "new": "x", "rationale": "outside the node, still unique"},'
+            ' {"old": "interpretation", "new": "x", "rationale": "ambiguous"}]'
+        )
+        findings, chunk_count = await run_review(
+            TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice", scope=scope
+        )
+        self.assertEqual(chunk_count, 1)
+        prompt = provider.calls[0]["user_prompt"]
+        self.assertIn(scope, prompt)
+        self.assertNotIn("J. Doe", prompt)
+        self.assertIn("single element", prompt)
+        self.assertEqual([f["old"] for f in findings], ["<title>A Paper</title>", "<persName>J. Doe</persName>"])
+
+    def test_scope_may_lie_outside_text_element(self):
+        self.assertEqual(count_chunks(NO_TEXT_DOC, "<teiHeader/>"), 1)
+        with self.assertRaises(ValueError):
+            count_chunks(NO_TEXT_DOC)
+
+    async def test_raises_when_scope_is_not_part_of_the_document(self):
+        provider = _StubProvider("[]")
+        with self.assertRaises(ValueError):
+            await run_review(
+                TEI_DOC, provider, "m", cache=mock.MagicMock(), store=_no_override_store(), owner="alice",
+                scope="<title>Other</title>",
+            )
+        self.assertEqual(provider.calls, [])
 
     async def test_raises_when_chunk_index_is_out_of_range(self):
         provider = _StubProvider("[]")
