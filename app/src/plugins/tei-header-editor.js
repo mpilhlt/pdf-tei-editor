@@ -200,7 +200,8 @@ class TeiHeaderEditorPlugin extends Plugin {
     const currentValues = this.#collectValuesFromForm()
     applyFieldValues(fileDesc, this.#openedValues, currentValues, fileDesc.namespaceURI)
     prettyPrintXmlDom(xmlTree, 'teiHeader')
-    await this.#xmlEditorApi.updateEditorFromNode(fileDesc)
+    // teiHeader, not fileDesc: fields such as the language live outside fileDesc
+    await this.#xmlEditorApi.updateEditorFromNode(fileDesc.parentElement ?? fileDesc)
     await this.#xmlEditorApi.saveIfDirty()
     this.#dialogUi.hide()
   }

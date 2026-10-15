@@ -190,6 +190,7 @@ def parse_crossref_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
         "issn": issn,
         "isbn": isbn,
         "url": message.get("URL"),
+        "language": _normalize_language(message.get("language")),
     }
 
 
@@ -260,7 +261,14 @@ def parse_datacite_metadata(doi: str, timeout: int = 10) -> Dict[str, Any]:
         "issn": issn,
         "isbn": isbn,
         "url": url,
+        "language": _normalize_language(attributes.get("language")),
     }
+
+
+def _normalize_language(value: Optional[str]) -> Optional[str]:
+    """Normalize a registry language code to a BCP 47 tag (imported lazily: tei_utils imports this module)."""
+    from fastapi_app.lib.utils.tei_utils import normalize_language_code
+    return normalize_language_code(value)
 
 
 def normalize_doi(doi: str) -> str:
