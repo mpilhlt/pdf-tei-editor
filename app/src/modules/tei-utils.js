@@ -22,6 +22,27 @@ export function getTeiHeader(xmlDoc) {
 }
 
 /**
+ * Whether the given node is `/TEI/text` or one of its descendants, i.e. part of the
+ * document's transcribed text rather than its header or other metadata.
+ * @param {Node} node
+ * @returns {boolean}
+ */
+export function isInTeiText(node) {
+  /** @type {Node | null} */
+  let current = node;
+  while (current) {
+    const parent = current.parentNode;
+    if (current.nodeType === 1 && /** @type {Element} */ (current).localName === 'text'
+      && parent?.nodeType === 1 && /** @type {Element} */ (parent).localName === 'TEI'
+      && parent.parentNode?.nodeType === 9) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+/**
  * Returns the <respStmt> containing a <persName> with the given xml:id or null if none can be found  
  * @param {Document} xmlDoc 
  * @param {string} id 

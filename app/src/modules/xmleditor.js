@@ -1199,6 +1199,24 @@ export class XMLEditor extends EventEmitter {
    */
   selectByXpath(xpath) {
     const { from, to } = this.getSyntaxNodeByXpath(xpath);
+    this.#selectRange(from, to);
+  }
+
+  /**
+   * Selects the given DOM node in the editor and scrolls it to the vertical center.
+   * @param {Node} domNode - A node in the XML DOM
+   * @throws {Error} If the DOM node has no attached syntax node
+   */
+  selectDomNode(domNode) {
+    const { from, to } = this.getSyntaxNodeFromDomNode(domNode);
+    this.#selectRange(from, to);
+  }
+
+  /**
+   * @param {number} from
+   * @param {number} to
+   */
+  #selectRange(from, to) {
     this.#view.dispatch({
       selection: EditorSelection.range(from, to),
       effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' })

@@ -107,6 +107,14 @@ describe('readFieldValues', () => {
     assert.strictEqual(values.author[1].text, 'Plain Author');
     assert.strictEqual(values.author[1].readonly, undefined);
   });
+
+  it('attaches the source element to every entry, for the "Show source" button', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const values = readFieldValues(fileDesc);
+    assert.strictEqual(values.publisher[0].element, fileDesc.getElementsByTagName('publisher')[0]);
+    assert.strictEqual(values.author[1].element?.textContent, 'Second Author');
+    assert.strictEqual(values.author[1].element?.localName, 'persName');
+  });
 });
 
 describe('applyFieldValues', () => {
@@ -263,7 +271,9 @@ function parseHeader(headerInnerXml) {
 describe('language field (teiHeader/profileDesc/langUsage/language/@ident)', () => {
   it('reads the language from the ident attribute', () => {
     const fileDesc = parseHeader('<profileDesc><langUsage><language ident="de"/></langUsage></profileDesc>');
-    assert.deepStrictEqual(readFieldValues(fileDesc).language, [{ text: 'de' }]);
+    const [entry] = readFieldValues(fileDesc).language;
+    assert.strictEqual(entry.text, 'de');
+    assert.strictEqual(entry.element?.localName, 'language');
   });
 
   it('updates the ident attribute in place', () => {

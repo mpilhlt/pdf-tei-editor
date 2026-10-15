@@ -16,7 +16,7 @@ import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
-import { encodeXmlEntities } from '../modules/tei-utils.js'
+import { encodeXmlEntities, isInTeiText } from '../modules/tei-utils.js'
 
 class ServicesPlugin extends Plugin {
   /** @type {import('./logger.js').default} */
@@ -428,10 +428,14 @@ class ServicesPlugin extends Plugin {
   /**
    * Given a node in the XML, locate and highlight the region of the PDF
    * it was extracted from, using fuzzy sequence matching on the node's
-   * ordered text content.
+   * ordered text content. Nodes outside `/TEI/text` (e.g. in the teiHeader)
+   * are ignored, since they have no counterpart in the PDF.
    * @param {Element} node
    */
   async searchNodeContentsInPdf(node) {
+    if (!isInTeiText(node)) {
+      return
+    }
     const queryText = getNodeText(node).join(' ')
     if (!queryText.trim()) {
       return

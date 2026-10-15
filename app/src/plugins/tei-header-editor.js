@@ -170,7 +170,39 @@ class TeiHeaderEditorPlugin extends Plugin {
       removeBtn.addEventListener('click', () => row.remove())
       row.appendChild(removeBtn)
     }
+
+    const sourceBtn = document.createElement('sl-icon-button')
+    // Must be an icon already compiled into app/web/assets/icons (see scripts/build/compile-sl-icons.py,
+    // which does not detect sl-icon-button names set from JS); "arrow-right" is used in info-drawer.html
+    sourceBtn.setAttribute('name', 'arrow-right')
+    sourceBtn.setAttribute('label', 'Show source')
+    sourceBtn.title = 'Show source'
+    sourceBtn.dataset.action = 'show-source'
+    // Rows added in the dialog (and fields absent from the document) have no source node yet
+    sourceBtn.disabled = !entry.element
+    sourceBtn.style.fontSize = 'var(--sl-font-size-large)'
+    const sourceElement = entry.element
+    if (sourceElement) sourceBtn.addEventListener('click', () => this.#showSource(sourceElement))
+    row.appendChild(sourceBtn)
     return row
+  }
+
+  /**
+   * Closes the dialog without saving, unfolds the teiHeader in the XML editor
+   * and selects the element a field's value was read from.
+   * @param {Element} element
+   */
+  async #showSource(element) {
+    await this.#dialogUi.hide()
+    const xmlEditor = this.#xmlEditorApi
+    try {
+      // tei-tools.js syncs its header fold toggle from the resulting unfold effect
+      xmlEditor.unfoldByXpath('//tei:teiHeader')
+      xmlEditor.selectDomNode(element)
+      xmlEditor.getView().focus()
+    } catch (error) {
+      this.getDependency('logger').warn(`Cannot show source of header field: ${String(error)}`)
+    }
   }
 
   /**

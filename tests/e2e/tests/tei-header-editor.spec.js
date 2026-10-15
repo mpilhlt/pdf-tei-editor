@@ -122,6 +122,54 @@ test.describe('TEI Header Editor', () => {
     }
   });
 
+  test('"Show source" closes the dialog, unfolds the teiHeader and selects the field\'s element', async ({ page }) => {
+    test.setTimeout(60000);
+
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForSelector('#codemirror-container .cm-editor');
+      await page.waitForFunction(() => {
+        const app = /** @type {any} */ (window).app;
+        const xmlEditor = app && app.getDependency('xmleditor');
+        const view = xmlEditor && xmlEditor.getView();
+        return view && view.state.doc.length > 0;
+      }, { timeout: 15000 });
+      await page.waitForTimeout(500);
+
+      await page.evaluate(() => {
+        /** @type {any} */ (window).app.getDependency('xmleditor').foldByXpath('//tei:teiHeader');
+      });
+
+      await openHeaderEditor(page);
+      const titleRow = page.locator('sl-input[data-field="title"]').locator('..');
+      await titleRow.locator('sl-icon-button[data-action="show-source"]').click();
+
+      const dialog = page.locator('sl-dialog[name="teiHeaderEditorDialog"]');
+      await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+      const result = await page.evaluate(() => {
+        const xmlEditor = /** @type {any} */ (window).app.getDependency('xmleditor');
+        const { from, to } = xmlEditor.getView().state.selection.main;
+        return {
+          folded: xmlEditor.isFoldedByXpath('//tei:teiHeader'),
+          selected: xmlEditor.getView().state.doc.sliceString(from, to)
+        };
+      });
+      expect(result.folded).toBe(false);
+      expect(result.selected).toMatch(/^<title\b[\s\S]*<\/title>$/);
+    } finally {
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+      await performLogout(page);
+    }
+  });
+
   test('pure annotator does not see the header-editor button', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
