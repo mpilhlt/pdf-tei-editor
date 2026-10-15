@@ -601,15 +601,87 @@ export class PDFJSViewer {
     }
 
     this._highlightMatch = match;
-    await this.goToPage(match.page);
+
+    // Scroll from the current position to the match. The target is computed
+    // from the match's PDF coordinates, so it does not depend on the text
+    // layer of the target page having been rendered yet. Do not use
+    // goToPage() here: it jumps to the top of the page first, which makes
+    // the subsequent scroll start from there and leaves matches near the
+    // bottom of the page outside the visible area.
+    this._scrollToMatch(match);
 
     // If the text layer already exists (cached page), highlight directly;
     // otherwise the textlayerrendered handler will do it
     const pageDiv = this.viewer.querySelector(`.page[data-page-number="${match.page}"]`);
     if (pageDiv?.querySelector('.textLayer')) {
-      this._highlightMatchInTextLayer(match, true);
+      this._highlightMatchInTextLayer(match, false);
     }
     return match;
+  }
+
+  /**
+   * Smoothly scrolls the viewer container, starting from its current
+   * position, so that the match's bounding box is centered. Does not scroll
+   * along an axis on which the box is already fully visible.
+   * @param {MatchResult} match - The match to scroll to
+   * @private
+   */
+  _scrollToMatch(match) {
+    const pageView = this.pdfViewer.getPageView(match.page - 1);
+    if (!pageView?.div || !pageView.viewport) {
+      return;
+    }
+    const container = this.pdfViewerContainer;
+    const { x0, y0, x1, y1 } = match.bbox;
+    if (![x0, y0, x1, y1].every(Number.isFinite)) {
+      return;
+    }
+    // Viewport rectangle in CSS pixels relative to the page div (y axis down)
+    const [vx0, vy0] = pageView.viewport.convertToViewportPoint(x0, y0);
+    const [vx1, vy1] = pageView.viewport.convertToViewportPoint(x1, y1);
+    const left = Math.min(vx0, vx1);
+    const right = Math.max(vx0, vx1);
+    const top = Math.min(vy0, vy1);
+    const bottom = Math.max(vy0, vy1);
+
+    // Position of the page's content box in the container's scroll coordinates
+    const pageRect = pageView.div.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const pageStyle = window.getComputedStyle(pageView.div);
+    const pageLeft = pageRect.left - containerRect.left - container.clientLeft + container.scrollLeft + (parseFloat(pageStyle.borderLeftWidth) || 0);
+    const pageTop = pageRect.top - containerRect.top - container.clientTop + container.scrollTop + (parseFloat(pageStyle.borderTopWidth) || 0);
+
+    const margin = 20;
+    /**
+     * Computes the scroll offset along one axis, or null if no scroll is needed
+     * @param {number} start - Box start in scroll coordinates
+     * @param {number} end - Box end in scroll coordinates
+     * @param {number} scroll - Current scroll offset
+     * @param {number} size - Visible size of the container
+     * @param {number} max - Maximum scroll offset
+     * @returns {number|null}
+     */
+    const target = (start, end, scroll, size, max) => {
+      if (start - margin >= scroll && end + margin <= scroll + size) {
+        return null;
+      }
+      // Center the box; if it is taller/wider than the viewport, show its start
+      const offset = end - start + 2 * margin > size
+        ? start - margin
+        : (start + end) / 2 - size / 2;
+      return Math.max(0, Math.min(max, offset));
+    };
+
+    const scrollTop = target(pageTop + top, pageTop + bottom, container.scrollTop, container.clientHeight, container.scrollHeight - container.clientHeight);
+    const scrollLeft = target(pageLeft + left, pageLeft + right, container.scrollLeft, container.clientWidth, container.scrollWidth - container.clientWidth);
+    if (scrollTop === null && scrollLeft === null) {
+      return;
+    }
+    container.scrollTo({
+      top: scrollTop ?? container.scrollTop,
+      left: scrollLeft ?? container.scrollLeft,
+      behavior: 'smooth'
+    });
   }
 
   /**
@@ -706,7 +778,11 @@ export class PDFJSViewer {
    * @private
    */
   _mapItemsToSpans(textLayer, items, itemIndices) {
-    const spans = Array.from(textLayer.querySelectorAll('span'));
+    // Exclude PDF.js' `markedContent` wrapper spans: they have no box of their
+    // own (display: contents) and a wrapper around a single text span has the
+    // same textContent, so matching it would place the highlight at the page
+    // origin instead of at the text
+    const spans = Array.from(textLayer.querySelectorAll('span:not(.markedContent)'));
     const wanted = new Set(itemIndices);
     const result = [];
     let s = 0;
