@@ -53,10 +53,12 @@ async function pickBottomOfPageQuery(page) {
  * frame until scrolling has settled.
  * @param {Page} page
  * @param {string} query
+ * @param {number|null} [interruptAt] - If given, jump to this scroll position
+ *   right after the search to simulate an interrupted scroll
  * @returns {Promise<{samples: number[], start: number, matchPage: number|null, visible: boolean, boxTop: number, boxBottom: number, viewTop: number, viewBottom: number}>}
  */
-async function searchAndTrackScroll(page, query) {
-  return page.evaluate(async (query) => {
+async function searchAndTrackScroll(page, query, interruptAt = null) {
+  return page.evaluate(async ({ query, interruptAt }) => {
     /** @type {PDFJSViewer} */
     const viewer = /** @type {any} */ (window).app.getDependency('pdfviewer');
     const container = viewer.pdfViewerContainer;
@@ -69,12 +71,22 @@ async function searchAndTrackScroll(page, query) {
     };
     requestAnimationFrame(sample);
     const match = await viewer.search(query);
-    // Wait until the scroll position has been stable for a while
-    let last = -1, stableFrames = 0;
-    for (let i = 0; i < 300 && stableFrames < 20; i++) {
-      await new Promise(r => requestAnimationFrame(r));
-      stableFrames = container.scrollTop === last ? stableFrames + 1 : 0;
-      last = container.scrollTop;
+    if (interruptAt !== null) {
+      // Cut the smooth scroll short, as happens when the page geometry changes
+      // during the scroll
+      await new Promise(r => setTimeout(r, 50));
+      container.scrollTo({ top: interruptAt, behavior: 'instant' });
+    }
+    // Wait until the scroll position has been stable for a while, twice, so
+    // that a correction after the first scroll has settled is included
+    for (let round = 0; round < 2; round++) {
+      let last = -1, stableFrames = 0;
+      for (let i = 0; i < 300 && stableFrames < 20; i++) {
+        await new Promise(r => requestAnimationFrame(r));
+        stableFrames = container.scrollTop === last ? stableFrames + 1 : 0;
+        last = container.scrollTop;
+      }
+      await new Promise(r => setTimeout(r, 500));
     }
     running = false;
     // Wait for the highlight (drawn once the text layer is rendered)
@@ -95,7 +107,7 @@ async function searchAndTrackScroll(page, query) {
       viewTop: viewRect.top,
       viewBottom: viewRect.bottom
     };
-  }, query);
+  }, { query, interruptAt });
 }
 
 test.describe('PDF viewer search scrolling', () => {
@@ -142,6 +154,18 @@ test.describe('PDF viewer search scrolling', () => {
       for (let i = 1; i < near.samples.length; i++) {
         expect(near.samples[i], samples).toBeGreaterThanOrEqual(near.samples[i - 1] - 1);
       }
+
+      // 3. When the scroll is cut short, the position is corrected once it
+      //    has settled, so that the match still ends up visible
+      await page.evaluate(() => {
+        /** @type {PDFJSViewer} */
+        const viewer = /** @type {any} */ (window).app.getDependency('pdfviewer');
+        viewer._clearClusterHighlights(true);
+        viewer.pdfViewerContainer.scrollTop = 0;
+      });
+      await page.waitForTimeout(300);
+      const interrupted = await searchAndTrackScroll(page, query, 0);
+      expect(interrupted.visible, JSON.stringify({ ...interrupted, samples: undefined })).toBe(true);
     } finally {
       stopErrorMonitoring();
     }
