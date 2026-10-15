@@ -2,6 +2,22 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.72.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.71.1...v0.72.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **pdfviewer:** correct autosearch scroll when the match is not in view ([9fc6cda](https://github.com/mpilhlt/pdf-tei-editor/commit/9fc6cda844bc82914a617e49bf2166db2bc8d6a2))
+* **pdfviewer:** don't restore saved scroll position over an autosearch match ([52334e1](https://github.com/mpilhlt/pdf-tei-editor/commit/52334e1290d6e4786bbe76204acac6eb061032ec))
+* **pdfviewer:** scroll to autosearch match from current position ([513fd6a](https://github.com/mpilhlt/pdf-tei-editor/commit/513fd6a0bf82ece2f1662417df5c03cf0fcd4ced))
+
+
+### Features
+
+* **metadata-extraction:** admin endpoint to backfill missing metadata in a collection ([#544](https://github.com/mpilhlt/pdf-tei-editor/issues/544)) ([7034fce](https://github.com/mpilhlt/pdf-tei-editor/commit/7034fcea9ca7ac68d230527082b085ede41a916b))
+* **tei-header-editor:** "Show source" button per field; autosearch only in /TEI/text ([#543](https://github.com/mpilhlt/pdf-tei-editor/issues/543)) ([d892175](https://github.com/mpilhlt/pdf-tei-editor/commit/d892175b567731ac255972de1a309d3c9887f553))
+* **tei:** declare document language in teiHeader/profileDesc/langUsage ([3c4747d](https://github.com/mpilhlt/pdf-tei-editor/commit/3c4747dcd7127b3a23afbb5fbb686ab807aa8abd))
+
 ## [0.71.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.71.0...v0.71.1) (2026-10-14)
 
 
