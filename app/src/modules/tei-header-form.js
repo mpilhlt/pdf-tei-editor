@@ -68,10 +68,12 @@ function fieldRoot(fileDesc, def) {
  *   when the dialog opened. Flattening such an element's text content back
  *   onto it would silently destroy that markup, so these entries must be
  *   rendered non-editable and must never have their text content rewritten.
- * @property {Element} [element] - For a `readonly` entry, its original
- *   source leaf element - used only to recognize, at save time, whether the
+ * @property {Element} [element] - The source leaf element the value was read
+ *   from (absent for rows added in the dialog). Used by the dialog's "Show
+ *   source" button to select that element in the XML editor. For a
+ *   `readonly` entry it is also used to recognize, at save time, whether the
  *   user removed that entry's row (then its whole repeat unit is deleted);
- *   never used to write a new text content onto it.
+ *   it is never used to write a new text content onto it.
  */
 
 /**
@@ -132,9 +134,9 @@ export function readFieldValues(fileDesc) {
     const root = fileDesc ? fieldRoot(fileDesc, def) : null
     const elements = root ? findElementsAtPath(root, def) : []
     values[def.key] = (def.repeatable ? elements : elements.slice(0, 1)).map((el) => {
-      if (def.valueAttr) return { text: (el.getAttribute(def.valueAttr) ?? '').trim() }
+      if (def.valueAttr) return { text: (el.getAttribute(def.valueAttr) ?? '').trim(), element: el }
       if (el.children.length > 0) return { text: collapseWhitespace(el.textContent ?? ''), readonly: true, element: el }
-      return { text: (el.textContent ?? '').trim() }
+      return { text: (el.textContent ?? '').trim(), element: el }
     })
   }
   return values
