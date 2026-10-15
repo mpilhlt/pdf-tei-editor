@@ -5,7 +5,11 @@ Retrieves bibliographic metadata for documents and adds it to their TEI headers.
 - **TEI wizard enhancement** "Enrich TEI Header from PDF Metadata" ([enrich-tei-header.js](enhancements/enrich-tei-header.js)): fills missing `teiHeader` fields of the open document, using `GET /api/plugins/metadata-extraction/extract` (DOI lookup, LLM extraction as fallback).
 - **Collection backfill** (admin only): fills missing metadata for all documents of a collection, see below.
 
+The plugin's `required_roles` is `["admin"]`, which only restricts the menu entry: the enhancement and the `/extract` route remain available to all logged-in users.
+
 ## Collection backfill
+
+Admins start it from the plugin menu with **Backfill Missing Metadata** (in the "Collection" section). It opens a dialog for the currently selected collection with the options below (dry run is preselected) and shows the report as a table. The dialog page is [static/backfill.html](static/backfill.html), served by `GET /api/plugins/metadata-extraction/backfill/options?collection=<id>`.
 
 ```text
 POST /api/plugins/metadata-extraction/backfill?collection=<collection-id>

@@ -452,6 +452,18 @@ class TestBackfillCollection(unittest.IsolatedAsyncioTestCase):
         progress.assert_called_once()
 
 
+class TestPluginMenuEntry(unittest.IsolatedAsyncioTestCase):
+
+    async def test_opens_options_for_current_collection(self):
+        from fastapi_app.plugins.metadata_extraction.plugin import MetadataExtractionPlugin
+
+        plugin = MetadataExtractionPlugin()
+        self.assertEqual(plugin.metadata["required_roles"], ["admin"])
+        result = await plugin.backfill(MagicMock(), {"collection": "my coll"})
+        self.assertEqual(result["outputUrl"], "/api/plugins/metadata-extraction/backfill/options?collection=my+coll")
+        self.assertIn("error", await plugin.backfill(MagicMock(), {}))
+
+
 class TestBackfillRoute(unittest.TestCase):
 
     def setUp(self):
@@ -499,6 +511,17 @@ class TestBackfillRoute(unittest.TestCase):
     def test_unknown_collection(self):
         response = self.client.post(self.url, params={"collection": "nope", "session_id": "s"})
         self.assertEqual(response.status_code, 404)
+
+    def test_options_page(self):
+        response = self.client.get(self.url + "/options", params={"collection": "coll", "session_id": "s"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("<strong>coll</strong>", response.text)
+        self.assertIn("/api/plugins/metadata-extraction/static/backfill.js", response.text)
+
+    def test_options_page_requires_admin(self):
+        self.auth_manager.get_user_by_session_id.return_value = {"username": "u", "roles": ["annotator"]}
+        response = self.client.get(self.url + "/options", params={"collection": "coll", "session_id": "s"})
+        self.assertEqual(response.status_code, 403)
 
     def test_runs_backfill(self):
         report = {"summary": {"documents": 0, "documents_updated": 0, "errors": 0}}
