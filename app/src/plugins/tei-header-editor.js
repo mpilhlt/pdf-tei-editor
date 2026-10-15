@@ -172,8 +172,10 @@ class TeiHeaderEditorPlugin extends Plugin {
     }
 
     const sourceBtn = document.createElement('sl-icon-button')
-    sourceBtn.name = 'arrow-right-square'
-    sourceBtn.label = 'Show source'
+    // Must be an icon already compiled into app/web/assets/icons (see scripts/build/compile-sl-icons.py,
+    // which does not detect sl-icon-button names set from JS); "arrow-right" is used in info-drawer.html
+    sourceBtn.setAttribute('name', 'arrow-right')
+    sourceBtn.setAttribute('label', 'Show source')
     sourceBtn.title = 'Show source'
     sourceBtn.dataset.action = 'show-source'
     // Rows added in the dialog (and fields absent from the document) have no source node yet
