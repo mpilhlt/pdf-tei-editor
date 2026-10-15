@@ -39,6 +39,7 @@ class BibliographicMetadata(TypedDict, total=False):
     isbn: Optional[str]
     id: Optional[str]
     url: Optional[str]
+    language: Optional[str]
     # Additional fields for document ID resolution
     doc_id: Optional[str]
     doc_id_type: Optional[str]

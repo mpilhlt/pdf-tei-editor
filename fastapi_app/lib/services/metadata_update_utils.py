@@ -16,6 +16,8 @@ from typing import Callable, Optional
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.utils.tei_utils import (
+    normalize_language_code,
+    set_document_language,
     serialize_tei_with_formatted_header,
     extract_processing_instructions
 )
@@ -257,6 +259,11 @@ def update_biblstruct_in_tei(tei_root: etree._Element, metadata: dict) -> tuple[
         author_elems = title_stmt.findall('tei:author', ns)
         for author_elem in author_elems:
             title_stmt.remove(author_elem)
+
+    # Declare the language from the registry metadata (e.g. CrossRef), replacing a detected one
+    language = normalize_language_code(metadata.get('language'))
+    if language:
+        set_document_language(tei_root, language)
 
     return (True, "updated")
 

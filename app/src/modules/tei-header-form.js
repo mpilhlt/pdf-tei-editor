@@ -4,7 +4,8 @@
  * "Revision 2" for why this replaced an earlier generic, schema-derived
  * field tree (it corrupted real documents: flattened nested markup,
  * dropped attribute-only elements, reordered mixed content). Every field
- * here is a plain leaf bound to one fixed path under `fileDesc` - no
+ * here is a plain leaf bound to one fixed path under `fileDesc` (or, for
+ * the document language, under `teiHeader`) - no
  * schema traversal, no depth cap, no leaf/non-leaf ambiguity to get wrong.
  */
 
@@ -12,8 +13,10 @@
  * @typedef {Object} FieldDef
  * @property {string} key - unique id; used as the dataset.field marker on rendered inputs
  * @property {string} label
- * @property {Array<string>} path - tag names from fileDesc down to the leaf
+ * @property {Array<string>} path - tag names from the field's root (fileDesc, or teiHeader if `root` says so) down to the leaf
+ * @property {'fileDesc'|'teiHeader'=} root - element the path starts from; defaults to fileDesc. A teiHeader-rooted field is resolved via fileDesc's parent element
  * @property {Object<string, string>=} attrs - fixed attribute values the leaf element must carry (e.g. idno[@type="DOI"])
+ * @property {string=} valueAttr - attribute that holds the field's value (e.g. language/@ident); without it, the value is the leaf's text content. Removing such a value also removes the ancestors it leaves empty (e.g. langUsage, profileDesc)
  * @property {boolean} repeatable
  * @property {string} description - shown as the rendered input's help text
  */
@@ -28,10 +31,31 @@ export const FIELD_DEFS = [
   { key: 'author', label: 'Author(s)', path: ['sourceDesc', 'biblStruct', 'analytic', 'author', 'persName'], repeatable: true, description: 'Full name of an author of the cited source.' },
   { key: 'analyticTitle', label: 'Article/chapter title', path: ['sourceDesc', 'biblStruct', 'analytic', 'title'], repeatable: false, description: 'The title of the specific article or chapter being cited.' },
   { key: 'monogrTitle', label: 'Journal/book title', path: ['sourceDesc', 'biblStruct', 'monogr', 'title'], repeatable: false, description: 'The title of the journal or book containing the cited source.' },
-  { key: 'bibl', label: 'Source citation', path: ['sourceDesc', 'bibl'], repeatable: false, description: 'A free-text bibliographic citation for the source.' }
+  { key: 'bibl', label: 'Source citation', path: ['sourceDesc', 'bibl'], repeatable: false, description: 'A free-text bibliographic citation for the source.' },
+  { key: 'language', label: 'Language', root: 'teiHeader', path: ['profileDesc', 'langUsage', 'language'], valueAttr: 'ident', repeatable: false, description: 'The language of the document as a BCP 47 code, e.g. "en" or "de" ("und" if undetermined).' }
 ]
 
-const ROOT_ORDER = ['titleStmt', 'publicationStmt', 'sourceDesc']
+/**
+ * Required child order of the elements this dialog may create children in
+ * (TEI requires titleStmt/publicationStmt/sourceDesc in that order inside
+ * fileDesc, and profileDesc before xenoData/revisionDesc inside teiHeader).
+ * @type {Object<string, Array<string>>}
+ */
+const CHILD_ORDER = {
+  fileDesc: ['titleStmt', 'publicationStmt', 'sourceDesc'],
+  teiHeader: ['fileDesc', 'encodingDesc', 'profileDesc', 'xenoData', 'revisionDesc']
+}
+
+/**
+ * The element a field's path starts from: `fileDesc` itself, or its parent
+ * teiHeader for a teiHeader-rooted field.
+ * @param {Element} fileDesc
+ * @param {FieldDef} def
+ * @returns {Element|null}
+ */
+function fieldRoot(fileDesc, def) {
+  return def.root === 'teiHeader' ? fileDesc.parentElement : fileDesc
+}
 
 /**
  * @typedef {Object} FieldValue
@@ -105,8 +129,10 @@ export function readFieldValues(fileDesc) {
   /** @type {Object<string, Array<FieldValue>>} */
   const values = {}
   for (const def of FIELD_DEFS) {
-    const elements = fileDesc ? findElementsAtPath(fileDesc, def) : []
+    const root = fileDesc ? fieldRoot(fileDesc, def) : null
+    const elements = root ? findElementsAtPath(root, def) : []
     values[def.key] = (def.repeatable ? elements : elements.slice(0, 1)).map((el) => {
+      if (def.valueAttr) return { text: (el.getAttribute(def.valueAttr) ?? '').trim() }
       if (el.children.length > 0) return { text: collapseWhitespace(el.textContent ?? ''), readonly: true, element: el }
       return { text: (el.textContent ?? '').trim() }
     })
@@ -141,24 +167,23 @@ function repeatUnitLength(def) {
 }
 
 /**
- * Create one new element at `def`'s path under `fileDesc`, reusing
+ * Create one new element at `def`'s path under `root`, reusing
  * existing ancestor segments where they already exist. For a repeatable
  * field, the last two path segments (the repeat unit - e.g. `author` and
  * its `persName`) are always created fresh, never reused, so adding a
  * second author never collapses into the first one's wrapper; for a
  * non-repeatable field, only the leaf itself (the last segment) is always
- * fresh. `fileDesc`'s own direct children (titleStmt/publicationStmt/
- * sourceDesc) are the one ordering constraint this dialog has to honor -
- * TEI requires that specific order among them; nothing deeper has an
- * equivalent constraint this feature needs to enforce.
- * @param {Element} fileDesc
+ * fresh. The direct children of `fileDesc` and `teiHeader` are the only
+ * ordering constraints this dialog has to honor (see {@link CHILD_ORDER});
+ * nothing deeper has an equivalent constraint this feature needs to enforce.
+ * @param {Element} root - the field's root element (see {@link fieldRoot})
  * @param {FieldDef} def
  * @param {string} namespaceUri
  * @returns {Element}
  */
-function createElementAtPath(fileDesc, def, namespaceUri) {
+function createElementAtPath(root, def, namespaceUri) {
   const freshFromIndex = def.path.length - repeatUnitLength(def)
-  let parent = fileDesc
+  let parent = root
   for (let i = 0; i < def.path.length; i++) {
     const tag = def.path[i]
     const isLast = i === def.path.length - 1
@@ -167,10 +192,11 @@ function createElementAtPath(fileDesc, def, namespaceUri) {
     if (!child) {
       child = parent.ownerDocument.createElementNS(namespaceUri, tag)
       if (isLast && def.attrs) for (const [name, val] of Object.entries(def.attrs)) child.setAttribute(name, val)
-      if (parent === fileDesc && ROOT_ORDER.includes(tag)) {
-        const laterTags = ROOT_ORDER.slice(ROOT_ORDER.indexOf(tag) + 1)
-        const insertBefore = [...fileDesc.children].find((el) => laterTags.includes(el.localName))
-        fileDesc.insertBefore(child, insertBefore ?? null)
+      const order = CHILD_ORDER[parent.localName]
+      if (order && order.includes(tag)) {
+        const laterTags = order.slice(order.indexOf(tag) + 1)
+        const insertBefore = [...parent.children].find((el) => laterTags.includes(el.localName))
+        parent.insertBefore(child, insertBefore ?? null)
       } else {
         parent.appendChild(child)
       }
@@ -212,7 +238,13 @@ function createElementAtPath(fileDesc, def, namespaceUri) {
  * @param {string} namespaceUri
  */
 function applyOneField(fileDesc, def, newValues, namespaceUri) {
-  const existing = findElementsAtPath(fileDesc, def)
+  const root = fieldRoot(fileDesc, def)
+  if (!root) return
+  if (def.valueAttr) {
+    applyAttributeField(root, def, newValues, namespaceUri)
+    return
+  }
+  const existing = findElementsAtPath(root, def)
   const existingReadonly = existing.filter((el) => el.children.length > 0)
   const existingEditable = existing.filter((el) => el.children.length === 0)
   const climbLevels = repeatUnitLength(def) - 1
@@ -237,9 +269,38 @@ function applyOneField(fileDesc, def, newValues, namespaceUri) {
   }
 
   for (let i = existingEditable.length; i < wanted.length; i++) {
-    const el = createElementAtPath(fileDesc, def, namespaceUri)
+    const el = createElementAtPath(root, def, namespaceUri)
     el.textContent = wanted[i].text
   }
+}
+
+/**
+ * Apply a non-repeatable field whose value lives in an attribute
+ * (`def.valueAttr`): update the attribute in place, create the element
+ * path if missing, or - when the value was cleared - remove the leaf
+ * together with every ancestor (below the field's root) it leaves empty,
+ * so no invalid empty wrapper such as `<langUsage/>` stays behind.
+ * @param {Element} root
+ * @param {FieldDef} def
+ * @param {Array<FieldValue>} newValues
+ * @param {string} namespaceUri
+ */
+function applyAttributeField(root, def, newValues, namespaceUri) {
+  const valueAttr = /** @type {string} */ (def.valueAttr)
+  const value = newValues.map((v) => v.text.trim()).find((text) => text !== '')
+  const existing = findElementsAtPath(root, def)[0]
+  if (value) {
+    const el = existing ?? createElementAtPath(root, def, namespaceUri)
+    el.setAttribute(valueAttr, value)
+    return
+  }
+  if (!existing) return
+  /** @type {Element} */
+  let node = existing
+  while (node.parentElement && node.parentElement !== root && node.parentElement.children.length === 1) {
+    node = node.parentElement
+  }
+  node.remove()
 }
 
 /**

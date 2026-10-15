@@ -10,6 +10,7 @@ For FastAPI migration - Phase 5.
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pathlib import Path
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional, List
@@ -34,6 +35,7 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
+from ..lib.services.language_detection import add_document_language
 from ..lib.models import FileCreate, FileUpdate
 
 logger = logging.getLogger(__name__)
@@ -217,6 +219,13 @@ async def extract_metadata(
                 status_code=500,
                 detail=f"Extraction failed: {str(e)}"
             )
+
+        # Declare the document language in the TEI header, independent of the extractor
+        try:
+            language_pdf_path = pdf_path or _find_pdf_path(repo, storage_root, file_metadata.doc_id)
+            tei_xml = await asyncio.to_thread(add_document_language, tei_xml, language_pdf_path)
+        except Exception as e:
+            logger.warning(f"Could not add document language: {e}")
 
         # Save the extraction result
         if pdf_path and file_metadata.file_type == 'pdf':
@@ -466,6 +475,20 @@ def _find_pdf_stable_id(repo: FileRepository, doc_id: str) -> Optional[str]:
         for f in siblings:
             if f.file_type == 'pdf':
                 return f.stable_id
+    except Exception:
+        pass
+    return None
+
+
+def _find_pdf_path(repo: FileRepository, storage_root: Path, doc_id: Optional[str]) -> Optional[str]:
+    """Return the storage path of the PDF file with the given doc_id, or None."""
+    if not doc_id:
+        return None
+    try:
+        for f in repo.get_files_by_doc_id(doc_id):
+            if f.file_type == 'pdf':
+                path = get_storage_path(storage_root, f.id, 'pdf')
+                return str(path) if path.exists() else None
     except Exception:
         pass
     return None

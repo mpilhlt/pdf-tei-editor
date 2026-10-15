@@ -20,9 +20,10 @@ For fileDesc/publicationStmt/sourceDesc metadata semantics beyond what's listed 
 | `encodingDesc/appInfo/application` | extractors, `ensureExtractorVariant()` (copy-on-save) | variant/extractor-provenance readers across backend and frontend (see below) |
 | `encodingDesc/editorialDecl` | extractors (at extraction time), "Refresh document rules" action | `getEditorialDeclGuides()`, `extract_annotation_rule_refs()`, Annotation Guide drawer |
 | Schema location (`<?xml-model?>` PI, or `encodingDesc/schemaRef` fallback) | "Refresh document rules" action (PI only - see below) | `extract_schema_locations()`, `SchemaKind.discover()`, document-rules registry decorations |
+| `profileDesc/langUsage/language/@ident` | `create_tei_header()` (registry language), extraction route (`add_document_language()`, after every extractor), metadata-update job, metadata-extraction enhancement, `TeiHeaderEditorPlugin` ("Language" field) | `get_document_language()`, `TeiHeaderEditorPlugin` |
 | `revisionDesc/change` | `create_tei_header()` (seed), extractors (replace), "Save Revision" action, "Refresh document rules" action | revision-history UI, edit-history/annotation-history reporting plugins, `extract_tei_metadata()` (last status/label) |
 
-Not used anywhere in this app: `notesStmt`, `profileDesc`, `xenoData`.
+Not used anywhere in this app: `notesStmt`, `xenoData`, and `profileDesc` children other than `langUsage`.
 
 ## fileDesc/@xml:id — document identity
 
@@ -190,6 +191,23 @@ or, the standard TEI element, inside `encodingDesc` (element order: `editorialDe
 - Write: this app only ever writes the `<?xml-model?>` PI — `_replace_schema_pi()` in [rules_refresh.py](../../fastapi_app/lib/doc_rules/rules_refresh.py), run by the "Refresh document rules" action (`POST /api/v1/document-rules/refresh/{preview,execute}`), text-level remove-then-insert immediately after the XML declaration (lxml's parse/serialize round-trip doesn't preserve a PI that precedes the root element). `schemaRef` is read-only support for documents produced elsewhere that use the plain TEI element instead of the PI; nothing in this app writes one.
 - Read: `extract_schema_locations()` in [schema_validator.py](../../fastapi_app/lib/core/schema_validator.py) — checks the `<?xml-model?>` PI first (RelaxNG `schematypens` only in this function; XSD is handled separately via `xsi:schemaLocation` in the same function), falling back to `schemaRef/@target` only if no PI is present. Used by schema validation itself and by `rules_refresh.py`'s `_current_schema_location()` (to detect whether "Refresh document rules" needs to change anything).
 - Document-rules registry: `SchemaKind.discover()` in [schema_kind.py](../../fastapi_app/lib/doc_rules/schema_kind.py) reports whichever form the document uses as one "schema" resource (see [2026-09-27-document-rules-registry-design.md](../superpowers/specs/2026-09-27-document-rules-registry-design.md)), editable the same way as an interpretation-ref resource via the "Edit document rules" submenu. In the XML editor, `buildRefDecorations()` in [document-rules-decorations.js](../../app/src/modules/document-rules-decorations.js) makes it clickable the same way as an editorialDecl `<ref target>`: the PI's `href` if present, else the `schemaRef`'s `target`, mirroring `extract_schema_locations()`'s own precedence.
+
+## profileDesc/langUsage — document language
+
+Every extraction result declares the language of the document as a BCP 47 code:
+
+```xml
+<profileDesc>
+  <langUsage>
+    <language ident="de"/>
+  </langUsage>
+</profileDesc>
+```
+
+- Write: the `/api/v1/extract` route calls `add_document_language()` in [language_detection.py](../../fastapi_app/lib/services/language_detection.py) on the output of every extractor, so extractor plugins do not need to handle it. It keeps a declaration the extractor already made (`langUsage`, `TEI/@xml:lang`, or `text/@xml:lang` as set by GROBID), otherwise detects the language with py3langid from the text layer of the first pages of the PDF, falling back to the TEI `text` content. If no language can be detected (e.g. a scanned PDF without text layer), `und` (undetermined) is declared. The element is written by `set_document_language()` in `tei_utils.py`, which inserts `profileDesc` before `xenoData`/`revisionDesc`.
+- Registry language: `parse_crossref_metadata()`/`parse_datacite_metadata()` in [doi_utils.py](../../fastapi_app/lib/utils/doi_utils.py) return the registry's `language` field (normalized by `normalize_language_code()`, language names such as "English" are dropped). `create_tei_header()` writes it, so during extraction it takes precedence over the extractor's declaration and the detection above. `update_biblstruct_in_tei()` (metadata-update job) overwrites the declared language with it; `enrich-tei-header.js` only fills it in when no language or `und` is declared.
+- Header editor: `TeiHeaderEditorPlugin` has a "Language" field (`FIELD_DEFS` key `language` in [tei-header-form.js](../../app/src/modules/tei-header-form.js)), the only field rooted at `teiHeader` instead of `fileDesc` and the only one whose value is an attribute (`@ident`). Clearing it removes the `language` element together with the `langUsage`/`profileDesc` wrappers it leaves empty.
+- Read: `get_document_language()` in `tei_utils.py`.
 
 ## revisionDesc/change
 

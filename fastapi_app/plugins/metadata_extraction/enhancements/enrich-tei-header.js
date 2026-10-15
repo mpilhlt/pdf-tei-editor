@@ -13,7 +13,7 @@ export const name = "Enrich TEI Header from PDF Metadata";
 /**
  * Description shown in the UI
  */
-export const description = "Fetches bibliographic metadata for the current PDF (via DOI or LLM extraction) and fills in missing teiHeader fields (title, authors, date, publisher, identifiers).";
+export const description = "Fetches bibliographic metadata for the current PDF (via DOI or LLM extraction) and fills in missing teiHeader fields (title, authors, date, publisher, identifiers, language).";
 
 const TEI_NS = "http://www.tei-c.org/ns/1.0";
 
@@ -519,6 +519,27 @@ export async function execute(xmlDoc, currentState, configMap) {
       } else if (!ptrElem.getAttribute("target")) {
         ptrElem.setAttribute("target", meta.url);
       }
+    }
+  }
+
+  // --- profileDesc/langUsage (document language from CrossRef/DataCite) ---
+  // Only fill in if no language is declared yet or it is "und" (undetermined)
+  if (meta.language) {
+    let profileDesc = findTei(teiHeader, "profileDesc");
+    if (!profileDesc) {
+      profileDesc = createTei(xmlDoc, "profileDesc");
+      const revisionDesc = findTei(teiHeader, "revisionDesc");
+      teiHeader.insertBefore(profileDesc, revisionDesc);
+    }
+    let langUsage = findTei(profileDesc, "langUsage");
+    if (!langUsage) {
+      langUsage = profileDesc.appendChild(createTei(xmlDoc, "langUsage"));
+    }
+    const languageElem = findTei(langUsage, "language");
+    if (!languageElem) {
+      langUsage.appendChild(createTei(xmlDoc, "language", { ident: meta.language }));
+    } else if (!languageElem.getAttribute("ident") || languageElem.getAttribute("ident") === "und") {
+      languageElem.setAttribute("ident", meta.language);
     }
   }
 

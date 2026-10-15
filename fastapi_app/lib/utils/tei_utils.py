@@ -56,7 +56,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
 
     Args:
         doi: DOI of the document
-        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages, id
+        metadata: Dictionary with title, authors, date, publisher, journal, volume, issue, pages, id, language
         applications: List of application info dicts with keys: ident, version, label
 
     Returns:
@@ -219,6 +219,11 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     change = etree.SubElement(revisionDesc, 'change', when=timestamp, status="created")
     etree.SubElement(change, 'desc').text = "First version extracted automatically."
+
+    # profileDesc/langUsage from the metadata language (e.g. from CrossRef)
+    language = normalize_language_code(metadata.get("language"))
+    if language:
+        set_header_language(teiHeader, language)
 
     return teiHeader
 
@@ -1663,3 +1668,146 @@ def set_training_data_id(tei_root: etree._Element, training_data_id: str) -> boo
             grobid_app.append(label)
 
     return True
+
+
+_TEI_NS = "http://www.tei-c.org/ns/1.0"
+_XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
+
+
+def get_document_language(tei_root: etree._Element) -> Optional[str]:  # type: ignore[name-defined]
+    """
+    Return the language declared for a TEI document.
+
+    Lookup order: teiHeader/profileDesc/langUsage/language/@ident, then TEI/@xml:lang,
+    then text/@xml:lang (as set by e.g. GROBID).
+
+    Args:
+        tei_root: TEI root element
+
+    Returns:
+        BCP 47 language tag, or None if no language is declared
+    """
+    ns = {"tei": _TEI_NS}
+    ident = tei_root.xpath(
+        "string(tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language/@ident)", namespaces=ns
+    )
+    if ident:
+        return str(ident)
+    if tei_root.get(_XML_LANG):
+        return tei_root.get(_XML_LANG)
+    text_lang = tei_root.xpath("string(tei:text/@xml:lang)", namespaces=ns)
+    return str(text_lang) if text_lang else None
+
+
+def _insert_indented(parent: etree._Element, index: int, element: etree._Element) -> None:  # type: ignore[name-defined]
+    """
+    Insert an element into a parent, matching the indentation of the surrounding siblings.
+
+    If the parent is not pretty-printed, the element is inserted without added whitespace.
+    """
+    ws_before = (parent.text if index == 0 else parent[index - 1].tail) or ""
+    parent.insert(index, element)
+    if "\n" not in ws_before or ws_before.strip():
+        return
+    child_indent = ws_before.rsplit("\n", 1)[1]
+    previous, grandparent = parent.getprevious(), parent.getparent()
+    if previous is not None:
+        parent_ws = previous.tail
+    else:
+        parent_ws = grandparent.text if grandparent is not None else ""
+    parent_indent = (parent_ws or "").rsplit("\n", 1)[-1] if parent_ws and not parent_ws.strip() else ""
+    unit = child_indent[len(parent_indent):] if len(child_indent) > len(parent_indent) else "  "
+    etree.indent(element, space=unit, level=len(child_indent) // max(len(unit), 1))
+    if index == len(parent) - 1:
+        # Element is the last child: it takes over the closing whitespace from its predecessor
+        element.tail = parent[index - 1].tail if index > 0 else "\n" + parent_indent
+        if index > 0:
+            parent[index - 1].tail = ws_before
+    else:
+        element.tail = ws_before
+
+
+def set_document_language(tei_root: etree._Element, language: str) -> bool:  # type: ignore[name-defined]
+    """
+    Declare the document language in teiHeader/profileDesc/langUsage/language/@ident.
+
+    See `set_header_language()`.
+
+    Args:
+        tei_root: TEI root element
+        language: BCP 47 language tag, e.g. "en" or "und" for undetermined
+
+    Returns:
+        True if the language was set, False if the document has no teiHeader
+    """
+    header = tei_root.find(f"{{{_TEI_NS}}}teiHeader")
+    if header is None:
+        return False
+    set_header_language(header, language)
+    return True
+
+
+def set_header_language(header: etree._Element, language: str) -> None:  # type: ignore[name-defined]
+    """
+    Declare the document language in profileDesc/langUsage/language/@ident of a teiHeader.
+
+    Creates profileDesc (before xenoData/revisionDesc) and langUsage if missing, and replaces
+    any existing langUsage content. New elements use the namespace of the header element, so
+    this also works on the non-namespaced header built by `create_tei_header()`.
+
+    Args:
+        header: teiHeader element
+        language: BCP 47 language tag, e.g. "en" or "und" for undetermined
+    """
+    ns_uri = etree.QName(header).namespace
+    prefix = f"{{{ns_uri}}}" if ns_uri else ""
+
+    lang_usage = etree.Element(f"{prefix}langUsage")
+    etree.SubElement(lang_usage, f"{prefix}language", ident=language)
+
+    profile_desc = header.find(f"{prefix}profileDesc")
+    if profile_desc is None:
+        profile_desc = etree.Element(f"{prefix}profileDesc")
+        profile_desc.append(lang_usage)
+        index = len(header)
+        for i, child in enumerate(header):
+            if isinstance(child.tag, str) and etree.QName(child).localname in ("xenoData", "revisionDesc"):
+                index = i
+                break
+        _insert_indented(header, index, profile_desc)
+        return
+
+    existing = profile_desc.find(f"{prefix}langUsage")
+    if existing is not None:
+        index = profile_desc.index(existing)
+        lang_usage.tail = existing.tail
+        profile_desc.remove(existing)
+        profile_desc.insert(index, lang_usage)
+        ws = (profile_desc.text if index == 0 else profile_desc[index - 1].tail) or ""
+        if "\n" in ws and not ws.strip():
+            indent = ws.rsplit("\n", 1)[1]
+            etree.indent(lang_usage, space="  ", level=len(indent) // 2)
+    else:
+        _insert_indented(profile_desc, len(profile_desc), lang_usage)
+
+
+def normalize_language_code(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize a language code from external metadata (e.g. CrossRef, DataCite) to a BCP 47 tag.
+
+    Args:
+        value: Language code such as "en", "DE" or "en-US"
+
+    Returns:
+        The tag with a lower-case primary subtag, or None if the value is not a language code
+        (e.g. a language name such as "English")
+    """
+    import re
+
+    if not value or not isinstance(value, str):
+        return None
+    value = value.strip().replace("_", "-")
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*", value):
+        return None
+    primary, *rest = value.split("-")
+    return "-".join([primary.lower(), *rest])
