@@ -8,7 +8,8 @@
 /**
  * @typedef {object} FileResult
  * @property {string} stable_id
- * @property {string[]} filled
+ * @property {Object<string, any>} filled - Added data points and their values
+ * @property {string|null} language_source - Where an added language comes from
  * @property {boolean} locked
  * @property {string|null} error
  */
@@ -20,7 +21,7 @@
  * @property {string|null} doi
  * @property {string[]} sources
  * @property {FileResult[]} files
- * @property {string[]} pdf_filled
+ * @property {Object<string, any>} pdf_filled - Added doc_metadata keys and their values
  * @property {string[]} errors
  */
 
@@ -52,6 +53,7 @@ const startBtn = /** @type {HTMLButtonElement} */ (document.getElementById('star
 const closeBtn = /** @type {HTMLButtonElement} */ (document.getElementById('closeBtn'));
 const dryRunInput = /** @type {HTMLInputElement} */ (document.getElementById('dryRun'));
 const useGrobidInput = /** @type {HTMLInputElement} */ (document.getElementById('useGrobid'));
+const downloadInput = /** @type {HTMLInputElement} */ (document.getElementById('downloadReport'));
 const limitInput = /** @type {HTMLInputElement} */ (document.getElementById('limit'));
 const statusEl = /** @type {HTMLDivElement} */ (document.getElementById('status'));
 const resultsEl = /** @type {HTMLDivElement} */ (document.getElementById('results'));
@@ -77,6 +79,37 @@ function el(tag, text) {
   const element = document.createElement(tag);
   element.textContent = text;
   return element;
+}
+
+/**
+ * Label of an added data point; the language is shown with its value and source.
+ * @param {FileResult} file
+ * @param {string} name
+ * @returns {string}
+ */
+function fieldLabel(file, name) {
+  if (name !== 'language') {
+    return name;
+  }
+  return `language=${file.filled.language}${file.language_source ? ` (${file.language_source})` : ''}`;
+}
+
+/**
+ * Save the report as a JSON file on the user's computer.
+ * @param {BackfillReport} report
+ */
+function downloadReport(report) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const mode = report.dry_run ? 'dry-run' : 'applied';
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `metadata-backfill-${report.collection}-${mode}-${timestamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -117,10 +150,10 @@ function renderReport(report) {
     row.appendChild(el('td', doc.doi || doc.doc_id));
     row.appendChild(el('td', doc.sources.join(', ')));
     const filled = doc.files
-      .filter(f => f.filled.length > 0 && !f.locked)
-      .map(f => `${f.stable_id}: ${f.filled.join(', ')}`);
+      .filter(f => Object.keys(f.filled).length > 0 && !f.locked)
+      .map(f => `${f.stable_id}: ${Object.keys(f.filled).map(name => fieldLabel(f, name)).join(', ')}`);
     row.appendChild(el('td', filled.join('; ')));
-    row.appendChild(el('td', doc.pdf_filled.join(', ')));
+    row.appendChild(el('td', Object.keys(doc.pdf_filled).join(', ')));
     const problems = [
       ...doc.errors,
       ...doc.files.filter(f => f.locked).map(f => `${f.stable_id}: locked`),
@@ -158,7 +191,11 @@ async function startBackfill() {
       const body = await response.json().catch(() => ({}));
       throw new Error(body.detail || `Request failed (${response.status})`);
     }
-    renderReport(/** @type {BackfillReport} */ (await response.json()));
+    const report = /** @type {BackfillReport} */ (await response.json());
+    renderReport(report);
+    if (downloadInput.checked) {
+      downloadReport(report);
+    }
   } catch (error) {
     setStatus(`Backfill failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
   } finally {

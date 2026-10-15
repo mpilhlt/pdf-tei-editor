@@ -9,8 +9,9 @@ Strategies, per document:
 2. GROBID header extraction (`processHeaderDocument`) as fallback if no DOI is known or the
    lookup returned nothing, provided the GROBID plugin is active and its server is ready. A DOI
    found by GROBID is looked up in CrossRef/DataCite, GROBID's values fill the remaining gaps.
-3. Document language: the registry language if one was retrieved, otherwise the language
-   prediction path (`predict_document_language()`) used for new extractions
+3. Document language: `predict_document_language_with_source()`, the prediction path used for
+   new extractions: detection from the PDF text layer, then from the TEI text; only if the text
+   is too short or ambiguous, the registry language, then TEI/@xml:lang or text/@xml:lang.
 """
 
 import asyncio
@@ -26,9 +27,11 @@ from fastapi_app.lib.core.locking import check_lock
 from fastapi_app.lib.models.models import FileMetadata, FileUpdate
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.language_detection import (
+    LANGUAGE_FROM_PDF_TEXT,
+    LANGUAGE_FROM_TEI_TEXT,
     UNDETERMINED_LANGUAGE,
     extract_pdf_text,
-    predict_document_language,
+    predict_document_language_with_source,
 )
 from fastapi_app.lib.services.metadata_extraction import BibliographicMetadata
 from fastapi_app.lib.storage.file_storage import FileStorage
@@ -48,6 +51,9 @@ _NS = {"tei": TEI_NS}
 SOURCE_CROSSREF = "crossref"
 SOURCE_GROBID = "grobid"
 SOURCE_LANGUAGE_DETECTION = "language-detection"
+
+LANGUAGE_UNDETERMINED = "undetermined"
+"""FileResult.language_source if "und" was declared; other values are the LANGUAGE_FROM_* sources."""
 
 BIBLIOGRAPHIC_FIELDS: tuple[str, ...] = (
     "title", "authors", "date", "publisher", "journal", "volume", "issue", "pages", "doi", "issn", "isbn", "url",
@@ -86,7 +92,10 @@ class FileResult:
     """Outcome for one TEI file."""
 
     stable_id: str
-    filled: list[str] = field(default_factory=list)
+    filled: dict[str, Any] = field(default_factory=dict)
+    """Added data points and their values."""
+    language_source: Optional[str] = None
+    """Where an added language comes from: a LANGUAGE_FROM_* source of language_detection, or "undetermined"."""
     locked: bool = False
     error: Optional[str] = None
 
@@ -100,7 +109,7 @@ class DocumentResult:
     doi: Optional[str] = None
     sources: list[str] = field(default_factory=list)
     files: list[FileResult] = field(default_factory=list)
-    pdf_filled: list[str] = field(default_factory=list)
+    pdf_filled: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -564,21 +573,24 @@ async def backfill_document(
         if not missing:
             continue
 
-        file_result.filled = fill_missing_fields(root, metadata, missing)
+        for name in fill_missing_fields(root, metadata, missing):
+            file_result.filled[name] = metadata.get(name)
 
         if LANGUAGE_FIELD in missing:
-            language = registry_language
-            if not language:
-                if pdf_text is None:
-                    pdf_text = await asyncio.to_thread(extract_pdf_text, str(pdf_path)) if pdf_path else ""
-                language = await asyncio.to_thread(predict_document_language, root, None, pdf_text)
-                if language and SOURCE_LANGUAGE_DETECTION not in result.sources:
-                    result.sources.append(SOURCE_LANGUAGE_DETECTION)
+            if pdf_text is None:
+                pdf_text = await asyncio.to_thread(extract_pdf_text, str(pdf_path)) if pdf_path else ""
+            language, file_result.language_source = await asyncio.to_thread(
+                predict_document_language_with_source, root, None, pdf_text, registry_language
+            )
+            if file_result.language_source in (LANGUAGE_FROM_PDF_TEXT, LANGUAGE_FROM_TEI_TEXT) and SOURCE_LANGUAGE_DETECTION not in result.sources:
+                result.sources.append(SOURCE_LANGUAGE_DETECTION)
             has_declaration = root.find(f"{_T}teiHeader/{_T}profileDesc/{_T}langUsage/{_T}language") is not None
             if not language and not has_declaration:
-                language = UNDETERMINED_LANGUAGE
+                language, file_result.language_source = UNDETERMINED_LANGUAGE, LANGUAGE_UNDETERMINED
             if language and set_document_language(root, language):
-                file_result.filled.append(LANGUAGE_FIELD)
+                file_result.filled[LANGUAGE_FIELD] = language
+            else:
+                file_result.language_source = None
 
         if not file_result.filled:
             continue
@@ -596,17 +608,18 @@ async def backfill_document(
         except Exception as e:
             logger.error(f"Could not save TEI {tei.stable_id}: {e}", exc_info=True)
             file_result.error = str(e)
-            file_result.filled = []
+            file_result.filled = {}
 
     if pdf is not None and metadata:
-        doc_metadata, result.pdf_filled = fill_missing_pdf_metadata(pdf.doc_metadata or {}, metadata)
+        doc_metadata, pdf_filled = fill_missing_pdf_metadata(pdf.doc_metadata or {}, metadata)
+        result.pdf_filled = {name: doc_metadata[name] for name in pdf_filled}
         if result.pdf_filled and not dry_run:
             try:
                 file_repo.update_file(pdf.id, FileUpdate(doc_metadata=doc_metadata))
             except Exception as e:
                 logger.error(f"Could not update metadata of PDF {pdf.stable_id}: {e}", exc_info=True)
                 result.errors.append(f"PDF metadata update failed: {e}")
-                result.pdf_filled = []
+                result.pdf_filled = {}
 
     return result
 

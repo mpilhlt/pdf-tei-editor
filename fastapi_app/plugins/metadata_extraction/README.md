@@ -9,7 +9,7 @@ The plugin's `required_roles` is `["admin"]`, which only restricts the menu entr
 
 ## Collection backfill
 
-Admins start it from the plugin menu with **Backfill Missing Metadata** (in the "Collection" section). It opens a dialog for the currently selected collection with the options below (dry run is preselected) and shows the report as a table. The dialog page is [static/backfill.html](static/backfill.html), served by `GET /api/plugins/metadata-extraction/backfill/options?collection=<id>`.
+Admins start it from the plugin menu with **Backfill Missing Metadata** (in the "Collection" section). It opens a dialog for the currently selected collection with the options below (dry run and report download are preselected) and shows the report as a table. The dialog page is [static/backfill.html](static/backfill.html), served by `GET /api/plugins/metadata-extraction/backfill/options?collection=<id>`.
 
 ```text
 POST /api/plugins/metadata-extraction/backfill?collection=<collection-id>
@@ -51,7 +51,7 @@ Per document:
 
 1. **CrossRef/DataCite** if a DOI is known: from any TEI header, the PDF's `doc_metadata`, or a DOI-encoded `doc_id`.
 2. **GROBID** header extraction (`/api/processHeaderDocument`, without consolidation) if no DOI is known or the lookup returned nothing. Requires the `grobid` plugin to be active and its server to be ready (checked once per request, including the Hugging Face Space state). If GROBID finds a DOI, it is looked up in CrossRef/DataCite and GROBID's values only fill the remaining gaps.
-3. **Language**: the registry language if a DOI lookup returned one, otherwise `predict_document_language()` from [language_detection.py](../../lib/services/language_detection.py): a language declared via `TEI/@xml:lang` or `text/@xml:lang`, detection from the PDF text layer, detection from the TEI text. If nothing can be detected and the document has no declaration, `und` is declared.
+3. **Language**: `predict_document_language_with_source()` from [language_detection.py](../../lib/services/language_detection.py), the prediction path used for new extractions: detection from the PDF text layer, then from the TEI text; only if the text is too short for detection, the registry language, then `TEI/@xml:lang` or `text/@xml:lang`. Detection comes first because GROBID declares `text/@xml:lang="en"` regardless of the document language. If nothing can be determined and the document has no declaration, `und` is declared. The report gives the source of each added language (`pdf-text`, `tei-text`, `registry`, `xml-lang`, `undetermined`).
 
 Metadata is only retrieved if a TEI file misses a bibliographic data point or the PDF has no title, authors or date. Documents that only lack a language need no network access. Since registries often do not provide every field (e.g. no issue for a book chapter), such documents are looked up again on every run.
 
@@ -77,15 +77,23 @@ Metadata is only retrieved if a TEI file misses a bibliographic data point or th
       "pdf_stable_id": "abc123",
       "doi": "10.1234/example",
       "sources": ["crossref"],
-      "files": [{ "stable_id": "def456", "filled": ["journal", "pages", "language"], "locked": false, "error": null }],
-      "pdf_filled": ["journal", "pages"],
+      "files": [
+        {
+          "stable_id": "def456",
+          "filled": { "journal": "Journal of Examples", "pages": "1-20", "language": "de" },
+          "language_source": "pdf-text",
+          "locked": false,
+          "error": null
+        }
+      ],
+      "pdf_filled": { "journal": "Journal of Examples", "pages": "1-20" },
       "errors": []
     }
   ]
 }
 ```
 
-`documents` only lists documents with changes, locked files or errors. In a dry run, `filled` lists what would be added. A progress bar is shown via SSE while the request runs; for large collections, use `limit` or a dry run first, as the request runs until all documents are processed.
+`documents` only lists documents with changes, locked files or errors. `filled` and `pdf_filled` map each added data point to its value; in a dry run, they list what would be added. With **Download report** checked (default), the dialog saves this response as `metadata-backfill-<collection>-<dry-run|applied>-<timestamp>.json` when the run is finished. A progress bar is shown via SSE while the request runs; for large collections, use `limit` or a dry run first, as the request runs until all documents are processed.
 
 Example with the development helper:
 

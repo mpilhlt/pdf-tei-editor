@@ -82,7 +82,15 @@ GROBID_TEI = """<TEI xmlns="http://www.tei-c.org/ns/1.0">
 </TEI>"""
 
 
-def _tei(source_desc: str = "", profile_desc: str = "", text: str = ENGLISH) -> str:
+GERMAN = (
+    "Das Bundesverfassungsgericht hat entschieden, dass das Gesetz zur Vorratsdatenspeicherung "
+    "gegen das Fernmeldegeheimnis verstößt und daher nichtig ist. Das Gericht betonte, dass die "
+    "anlasslose Speicherung von Verkehrsdaten einen besonders schweren Eingriff in die "
+    "Grundrechte darstellt."
+)
+
+
+def _tei(source_desc: str = "", profile_desc: str = "", text: str = ENGLISH, text_attrs: str = "") -> str:
     return f"""<?xml-model href="https://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
@@ -99,7 +107,7 @@ def _tei(source_desc: str = "", profile_desc: str = "", text: str = ENGLISH) -> 
       <change when="2026-01-01" status="extraction"/>
     </revisionDesc>
   </teiHeader>
-  <text><body><p>{text}</p></body></text>
+  <text{text_attrs}><body><p>{text}</p></body></text>
 </TEI>
 """
 
@@ -359,11 +367,14 @@ class TestBackfillDocument(unittest.IsolatedAsyncioTestCase):
 
     async def test_backfills_from_crossref(self):
         result = await self._run()
-        self.assertEqual(result.sources, ["crossref"])
+        self.assertEqual(result.sources, ["crossref", "language-detection"])
         self.assertEqual(result.doi, "10.1234/registry")
-        self.assertIn("journal", result.files[0].filled)
-        self.assertIn("language", result.files[0].filled)
-        self.assertNotIn("doi", result.files[0].filled)
+        filled = result.files[0].filled
+        self.assertEqual(filled["journal"], "Journal of Tests")
+        self.assertEqual(filled["authors"], [{"given": "Ada", "family": "Lovelace"}])
+        self.assertEqual(filled["language"], "en")
+        self.assertEqual(result.files[0].language_source, "tei-text")
+        self.assertNotIn("doi", filled)
         self.assertEqual(len(self.storage.saved), 1)
         saved = self.storage.saved[0].decode("utf-8")
         self.assertTrue(saved.startswith("<?xml-model "))
@@ -405,8 +416,27 @@ class TestBackfillDocument(unittest.IsolatedAsyncioTestCase):
         result = await self._run()
         self.lookup.assert_not_called()
         self.assertEqual(result.sources, ["language-detection"])
-        self.assertEqual(result.files[0].filled, ["language"])
+        self.assertEqual(result.files[0].filled, {"language": "en"})
         self.assertEqual(_values(_root(self.storage.saved[0].decode("utf-8")), "//tei:language/@ident"), ["en"])
+
+    async def test_detected_language_wins_over_registry_and_grobid_xml_lang(self):
+        self.storage.contents[self.tei.id] = _tei(text=GERMAN, text_attrs=' xml:lang="en"').encode("utf-8")
+        result = await self._run()
+        self.assertEqual(result.files[0].filled["language"], "de")
+        self.assertEqual(result.files[0].language_source, "tei-text")
+
+    async def test_registry_language_if_text_too_short(self):
+        source_desc = '<biblStruct><idno type="DOI">10.1234/registry</idno></biblStruct>'
+        self.storage.contents[self.tei.id] = _tei(source_desc, text="Kurz.", text_attrs=' xml:lang="fr"').encode("utf-8")
+        self.lookup.return_value = dict(CROSSREF, language="de")
+        result = await self._run()
+        self.assertEqual(result.files[0].filled["language"], "de")
+        self.assertEqual(result.files[0].language_source, "registry")
+
+    async def test_pdf_metadata_values_are_reported(self):
+        result = await self._run()
+        self.assertEqual(result.pdf_filled["journal"], "Journal of Tests")
+        self.assertNotIn("title", result.pdf_filled)
 
     async def test_complete_document_is_untouched(self):
         source_desc = """<biblStruct>
