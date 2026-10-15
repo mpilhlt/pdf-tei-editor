@@ -329,10 +329,6 @@ class PdfViewerPlugin extends Plugin {
       });
     }
 
-    this.#pdfViewer.eventBus.on('pagesloaded', () => {
-      this.#pdfViewer._pagesLoaded = true;
-    });
-
     // Restore cursor tool mode
     if (this.uiStorage.get('handTool', false)) {
       this.#pdfViewer.setHandToolMode();
@@ -348,8 +344,6 @@ class PdfViewerPlugin extends Plugin {
    */
   async onStateUpdate(changedKeys, state) {
     if (changedKeys.includes('pdf')) {
-      this.#pdfViewer._pagesLoaded = false;
-
       if (state.pdf === null) {
         try {
           await this.#pdfViewer.clear();
@@ -441,22 +435,13 @@ class PdfViewerPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   #waitForPagesLoaded() {
-    return new Promise(resolve => {
-      if (this.#pdfViewer._pagesLoaded) {
-        resolve();
-        return;
-      }
-      const checkInterval = setInterval(() => {
-        if (this.#pdfViewer._pagesLoaded) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 50);
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        resolve();
-      }, 5000);
-    });
+    // The pdf state changes after the load has started, so the promise
+    // belongs to the document that is being shown. Fall back to a timeout
+    // in case PDF.js never reports the pages as loaded.
+    return Promise.race([
+      this.#pdfViewer.pagesLoadedPromise ?? Promise.resolve(),
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ]);
   }
 
   /**
@@ -578,13 +563,18 @@ class PdfViewerPlugin extends Plugin {
       if (state.zoom !== undefined) {
         await this.#pdfViewer.setZoom(state.zoom);
       }
+      // A search (e.g. autosearch) may already have positioned the view
+      // on a match in this document: don't jump away from it
+      if (this.#pdfViewer._highlightMatch) {
+        return;
+      }
       if (state.page !== undefined) {
         await this.#pdfViewer.goToPage(state.page);
       }
       if (state.scrollX !== undefined || state.scrollY !== undefined) {
         await new Promise(resolve => setTimeout(resolve, 150));
         const container = this.#pdfViewer.pdfViewerContainer;
-        if (container) {
+        if (container && !this.#pdfViewer._highlightMatch) {
           if (state.scrollX !== undefined) container.scrollLeft = state.scrollX;
           if (state.scrollY !== undefined) container.scrollTop = state.scrollY;
         }
