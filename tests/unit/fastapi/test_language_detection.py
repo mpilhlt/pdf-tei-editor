@@ -20,6 +20,7 @@ from lxml import etree
 from fastapi_app.lib.services.language_detection import (
     add_document_language,
     detect_language,
+    predict_document_language,
 )
 from fastapi_app.lib.utils.tei_utils import (
     create_tei_header,
@@ -228,6 +229,35 @@ class TestAddDocumentLanguage(unittest.TestCase):
     def test_malformed_xml_is_returned_unchanged(self):
         with self.assertLogs("fastapi_app.lib.services.language_detection", level="WARNING"):
             self.assertEqual(add_document_language("<TEI"), "<TEI")
+
+
+class TestPredictDocumentLanguage(unittest.TestCase):
+
+    def _root(self, source: str):
+        return etree.fromstring(source.encode("utf-8"))
+
+    def test_declared_language(self):
+        extra = """
+    <profileDesc>
+      <langUsage><language ident="fr"/></langUsage>
+    </profileDesc>"""
+        self.assertEqual(predict_document_language(self._root(_tei(GERMAN, header_extra=extra))), "fr")
+
+    def test_undetermined_declaration_is_ignored(self):
+        extra = """
+    <profileDesc>
+      <langUsage><language ident="und"/></langUsage>
+    </profileDesc>"""
+        self.assertEqual(predict_document_language(self._root(_tei(GERMAN, header_extra=extra))), "de")
+
+    def test_pdf_text_takes_precedence_over_pdf_path(self):
+        with patch("fastapi_app.lib.services.language_detection.extract_pdf_text") as extract:
+            language = predict_document_language(self._root(_tei(ENGLISH)), "/some/file.pdf", GERMAN)
+        extract.assert_not_called()
+        self.assertEqual(language, "de")
+
+    def test_no_language(self):
+        self.assertIsNone(predict_document_language(self._root(_tei("1, 2, 3"))))
 
 
 class TestExtractionRouteSetsLanguage(unittest.TestCase):

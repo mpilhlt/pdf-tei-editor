@@ -1791,6 +1791,31 @@ def set_header_language(header: etree._Element, language: str) -> None:  # type:
         _insert_indented(profile_desc, len(profile_desc), lang_usage)
 
 
+def serialize_tei_like_source(tei_root: etree._Element, source: str) -> str:  # type: ignore[name-defined]
+    """
+    Serialize a TEI document parsed from `source`, keeping the source's formatting.
+
+    Unlike `serialize_tei_with_formatted_header()`, whitespace is not normalized, so that only
+    the parts of the document that were changed differ from the source. Prolog/epilog nodes
+    (processing instructions, comments) are written one per line, and the XML declaration and
+    trailing newline are kept if the source has them.
+
+    Args:
+        tei_root: Root element of the (modified) document
+        source: The XML string the document was parsed from
+
+    Returns:
+        The serialized document
+    """
+    # lxml would otherwise join prolog/epilog nodes to the root element
+    parts = [etree.tostring(n, encoding="unicode", with_tail=False) for n in reversed(list(tei_root.itersiblings(preceding=True)))]
+    parts.append(etree.tostring(tei_root, encoding="unicode", with_tail=False))
+    parts.extend(etree.tostring(n, encoding="unicode", with_tail=False) for n in tei_root.itersiblings())
+    if source.lstrip().startswith("<?xml "):
+        parts.insert(0, '<?xml version="1.0" encoding="UTF-8"?>')
+    return "\n".join(parts) + ("\n" if source.endswith("\n") else "")
+
+
 def normalize_language_code(value: Optional[str]) -> Optional[str]:
     """
     Normalize a language code from external metadata (e.g. CrossRef, DataCite) to a BCP 47 tag.

@@ -1,7 +1,8 @@
 """
 Metadata Extraction Plugin.
 
-Provides a route for extracting bibliographic metadata from PDFs and
+Provides a route for extracting bibliographic metadata from PDFs, an admin route
+for backfilling missing metadata in all documents of a collection, and
 a TEI wizard enhancement that enriches teiHeader elements with the result.
 """
 
@@ -23,9 +24,9 @@ class MetadataExtractionPlugin(Plugin):
         return {
             "id": "metadata-extraction",
             "name": "Metadata Extraction",
-            "description": "Extract bibliographic metadata from PDFs and enrich TEI headers",
+            "description": "Extract bibliographic metadata from PDFs, enrich TEI headers and backfill missing metadata in collections",
             "category": "enhancement",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "required_roles": ["*"],
             "endpoints": [],
             "dependencies": ["tei-wizard"],
