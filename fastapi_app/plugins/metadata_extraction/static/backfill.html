@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Backfill Missing Metadata</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 760px; margin: 0 auto; color: #333; }
+        h2 { border-bottom: 2px solid #2196F3; padding-bottom: 10px; }
+        .intro { font-size: 0.95em; color: #555; }
+        .option-group { margin: 16px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+        .option-group label { display: block; margin: 8px 0; cursor: pointer; }
+        .option-group label input[type=checkbox] { margin-right: 8px; }
+        .option-group input[type=number] { width: 6em; margin-left: 8px; }
+        .description { font-size: 0.9em; color: #666; margin-left: 26px; margin-top: 2px; }
+        .buttons { margin-top: 20px; display: flex; gap: 10px; }
+        button { padding: 10px 24px; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; }
+        button.primary { background: #2196F3; color: white; }
+        button.primary:hover { background: #1976D2; }
+        button.secondary { background: #e0e0e0; color: #333; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .status { margin-top: 16px; padding: 10px; border-radius: 4px; }
+        .status.info { background: #e3f2fd; border-left: 4px solid #2196F3; }
+        .status.success { background: #e8f5e9; border-left: 4px solid #4caf50; }
+        .status.warning { background: #fff8e1; border-left: 4px solid #ffc107; }
+        .status.error { background: #ffebee; border-left: 4px solid #f44336; }
+        table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 0.9em; }
+        th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+        th { background: #fafafa; }
+        td.errors { color: #c62828; }
+    </style>
+</head>
+<body>
+    <h2>Backfill Missing Metadata</h2>
+    <p class="intro">
+        Adds missing bibliographic data and the document language to all documents in collection
+        <strong>__COLLECTION__</strong>. Existing values are never overwritten. Metadata comes from
+        CrossRef/DataCite if a DOI is known, otherwise from GROBID header extraction if available;
+        the language is predicted from the text if the registry does not provide it.
+    </p>
+
+    <div class="option-group">
+        <label><input type="checkbox" id="dryRun" checked>Dry run</label>
+        <div class="description">Only report what would be added, without saving anything.</div>
+        <label><input type="checkbox" id="useGrobid" checked>Use GROBID as fallback</label>
+        <div class="description">Extract header metadata with GROBID for documents without DOI, if the GROBID server is available.</div>
+        <label><input type="checkbox" id="downloadReport" checked>Download report</label>
+        <div class="description">Save a JSON report with the added fields and values of each document when the run is finished.</div>
+        <label>Maximum number of documents<input type="number" id="limit" min="1" placeholder="all"></label>
+    </div>
+
+    <div class="buttons">
+        <button class="primary" id="startBtn">Start</button>
+        <button class="secondary" id="closeBtn">Close</button>
+    </div>
+
+    <div id="status" class="status" hidden></div>
+    <div id="results"></div>
+
+    <script type="module" src="/api/plugins/metadata-extraction/static/backfill.js"></script>
+</body>
+</html>

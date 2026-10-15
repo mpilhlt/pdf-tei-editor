@@ -25,6 +25,7 @@ dependencies = [
     "webdav4[fsspec]>=0.10.0",
     "xmlschema>=4.3.2",
     "pypdf>=6.16.1",
+    "py3langid>=0.4.0",
 ]
 
 [tool.uv.sources]

@@ -107,6 +107,14 @@ describe('readFieldValues', () => {
     assert.strictEqual(values.author[1].text, 'Plain Author');
     assert.strictEqual(values.author[1].readonly, undefined);
   });
+
+  it('attaches the source element to every entry, for the "Show source" button', () => {
+    const fileDesc = parseFileDesc(FULL_FIXTURE);
+    const values = readFieldValues(fileDesc);
+    assert.strictEqual(values.publisher[0].element, fileDesc.getElementsByTagName('publisher')[0]);
+    assert.strictEqual(values.author[1].element?.textContent, 'Second Author');
+    assert.strictEqual(values.author[1].element?.localName, 'persName');
+  });
 });
 
 describe('applyFieldValues', () => {
@@ -245,5 +253,62 @@ describe('applyFieldValues', () => {
     const authors = fileDesc.getElementsByTagName('analytic')[0].getElementsByTagName('author');
     assert.strictEqual(authors.length, 1);
     assert.strictEqual(authors[0].getElementsByTagName('persName')[0].textContent, 'Plain Author');
+  });
+});
+
+/**
+ * @param {string} headerInnerXml - teiHeader content after fileDesc
+ * @returns {Element} the parsed <fileDesc> element
+ */
+function parseHeader(headerInnerXml) {
+  const dom = new JSDOM(
+    `<?xml version="1.0"?><TEI xmlns="${NS}"><teiHeader><fileDesc><titleStmt><title>T</title></titleStmt></fileDesc>${headerInnerXml}</teiHeader></TEI>`,
+    { contentType: 'text/xml' }
+  );
+  return dom.window.document.getElementsByTagName('fileDesc')[0];
+}
+
+describe('language field (teiHeader/profileDesc/langUsage/language/@ident)', () => {
+  it('reads the language from the ident attribute', () => {
+    const fileDesc = parseHeader('<profileDesc><langUsage><language ident="de"/></langUsage></profileDesc>');
+    const [entry] = readFieldValues(fileDesc).language;
+    assert.strictEqual(entry.text, 'de');
+    assert.strictEqual(entry.element?.localName, 'language');
+  });
+
+  it('updates the ident attribute in place', () => {
+    const fileDesc = parseHeader('<profileDesc><langUsage><language ident="und"/></langUsage></profileDesc>');
+    const opened = readFieldValues(fileDesc);
+    applyFieldValues(fileDesc, opened, { ...opened, language: [{ text: 'en' }] }, NS);
+    const header = fileDesc.parentElement;
+    assert.strictEqual(header.getElementsByTagName('language')[0].getAttribute('ident'), 'en');
+    assert.strictEqual(header.getElementsByTagName('language').length, 1);
+  });
+
+  it('creates profileDesc before revisionDesc when missing', () => {
+    const fileDesc = parseHeader('<encodingDesc/><revisionDesc/>');
+    const opened = readFieldValues(fileDesc);
+    applyFieldValues(fileDesc, opened, { ...opened, language: [{ text: 'fr' }] }, NS);
+    const header = fileDesc.parentElement;
+    assert.deepStrictEqual([...header.children].map((el) => el.localName), ['fileDesc', 'encodingDesc', 'profileDesc', 'revisionDesc']);
+    const language = header.getElementsByTagName('language')[0];
+    assert.strictEqual(language.namespaceURI, NS);
+    assert.strictEqual(language.parentElement.localName, 'langUsage');
+    assert.strictEqual(language.getAttribute('ident'), 'fr');
+  });
+
+  it('removes the emptied langUsage/profileDesc when the language is cleared', () => {
+    const fileDesc = parseHeader('<profileDesc><langUsage><language ident="de"/></langUsage></profileDesc><revisionDesc/>');
+    const opened = readFieldValues(fileDesc);
+    applyFieldValues(fileDesc, opened, { ...opened, language: [{ text: '' }] }, NS);
+    assert.deepStrictEqual([...fileDesc.parentElement.children].map((el) => el.localName), ['fileDesc', 'revisionDesc']);
+  });
+
+  it('keeps other profileDesc content when the language is cleared', () => {
+    const fileDesc = parseHeader('<profileDesc><abstract><p>A</p></abstract><langUsage><language ident="de"/></langUsage></profileDesc>');
+    const opened = readFieldValues(fileDesc);
+    applyFieldValues(fileDesc, opened, { ...opened, language: [{ text: '' }] }, NS);
+    const profileDesc = fileDesc.parentElement.getElementsByTagName('profileDesc')[0];
+    assert.deepStrictEqual([...profileDesc.children].map((el) => el.localName), ['abstract']);
   });
 });

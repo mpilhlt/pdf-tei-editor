@@ -107,6 +107,13 @@ export class PDFJSViewer {
     this.initializePromise = null;
     this.isReadyFlag = false;
     this.loadPromise = null;
+
+    /**
+     * Resolves when all pages of the most recently loaded document have been
+     * set up by PDF.js (its `pagesloaded` event); null before the first load
+     * @type {Promise<void>|null}
+     */
+    this.pagesLoadedPromise = null;
     this.isLoadedFlag = false;
 
     // Track active thumbnail render tasks for cancellation
@@ -126,6 +133,15 @@ export class PDFJSViewer {
     // Current match state for re-rendering highlights on zoom/navigation
     /** @type {MatchResult|null} */
     this._highlightMatch = null;
+
+    // Time of the last user interaction with the viewer: the scroll position
+    // is not corrected after a search once the user has taken over
+    this._lastUserInteraction = 0;
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+      this.pdfViewerContainer.addEventListener(type, () => {
+        this._lastUserInteraction = performance.now();
+      }, { passive: true });
+    }
 
     // Cached page models for the loaded document (built on first search)
     /** @type {PageModel[]|null} */
@@ -289,6 +305,11 @@ export class PDFJSViewer {
         this.pdfDoc = await loadingTask.promise;
 
         console.log(`PDF loaded successfully. Pages: ${this.pdfDoc.numPages}`);
+
+        // Resolves when PDF.js has set up all pages of this document
+        this.pagesLoadedPromise = new Promise(resolvePages => {
+          this.eventBus.on('pagesloaded', () => resolvePages(), { once: true });
+        });
 
         // Set document in viewer
         this.pdfViewer.setDocument(this.pdfDoc);
@@ -601,15 +622,195 @@ export class PDFJSViewer {
     }
 
     this._highlightMatch = match;
-    await this.goToPage(match.page);
+
+    // Scroll from the current position to the match. The target is computed
+    // from the match's PDF coordinates, so it does not depend on the text
+    // layer of the target page having been rendered yet. Do not use
+    // goToPage() here: it jumps to the top of the page first, which makes
+    // the subsequent scroll start from there and leaves matches near the
+    // bottom of the page outside the visible area.
+    this._scrollToMatch(match);
 
     // If the text layer already exists (cached page), highlight directly;
     // otherwise the textlayerrendered handler will do it
     const pageDiv = this.viewer.querySelector(`.page[data-page-number="${match.page}"]`);
     if (pageDiv?.querySelector('.textLayer')) {
-      this._highlightMatchInTextLayer(match, true);
+      this._highlightMatchInTextLayer(match, false);
     }
+
+    // The scroll above can be cut short or computed from page geometry that
+    // changes while it runs (e.g. when PDF.js loads the target page). Once it
+    // has settled, check the drawn highlight and correct the position if needed.
+    this._ensureMatchVisible(match);
     return match;
+  }
+
+  /**
+   * After the scroll to a match has settled, makes sure that the match
+   * highlight is inside the visible area, correcting the scroll position if
+   * it is not. Gives up when a newer search has replaced the match.
+   * @param {MatchResult} match - The match to keep in view
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _ensureMatchVisible(match) {
+    const container = this.pdfViewerContainer;
+    const startedAt = performance.now();
+    const superseded = () => this._highlightMatch !== match || this._lastUserInteraction > startedAt;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this._waitForScrollToSettle();
+      if (superseded()) return;
+
+      // The highlight is drawn once the page's text layer has been rendered,
+      // which happens only when the page has come into view
+      const boundary = await this._waitForHighlight(match);
+      if (superseded()) return;
+
+      let scrolled;
+      if (boundary) {
+        const r = boundary.getBoundingClientRect();
+        const c = container.getBoundingClientRect();
+        const offsetTop = c.top + container.clientTop - container.scrollTop;
+        const offsetLeft = c.left + container.clientLeft - container.scrollLeft;
+        scrolled = this._scrollRectIntoView({
+          top: r.top - offsetTop,
+          bottom: r.bottom - offsetTop,
+          left: r.left - offsetLeft,
+          right: r.right - offsetLeft
+        });
+      } else {
+        // Page not rendered: the first scroll went to the wrong place. Retry
+        // with the current page geometry.
+        scrolled = this._scrollToMatch(match);
+      }
+      if (!scrolled) return;
+    }
+  }
+
+  /**
+   * Resolves once the viewer container's scroll position has not changed
+   * for a number of animation frames, or after a timeout.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _waitForScrollToSettle() {
+    const container = this.pdfViewerContainer;
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+    let lastTop = NaN, lastLeft = NaN, stableFrames = 0;
+    const deadline = performance.now() + 3000;
+    while (stableFrames < 10 && performance.now() < deadline) {
+      await nextFrame();
+      if (container.scrollTop === lastTop && container.scrollLeft === lastLeft) {
+        stableFrames++;
+      } else {
+        stableFrames = 0;
+        lastTop = container.scrollTop;
+        lastLeft = container.scrollLeft;
+      }
+    }
+  }
+
+  /**
+   * Waits a short while for the highlight boundary of the given match to be
+   * drawn on its page.
+   * @param {MatchResult} match - The match whose highlight to wait for
+   * @returns {Promise<HTMLElement|null>} The boundary element, or null if it
+   *   was not drawn in time or the match was replaced
+   * @private
+   */
+  async _waitForHighlight(match) {
+    const deadline = performance.now() + 1000;
+    while (this._highlightMatch === match) {
+      const boundary = this.viewer.querySelector(`.page[data-page-number="${match.page}"] .cluster-highlight`);
+      if (boundary) return /** @type {HTMLElement} */ (boundary);
+      if (performance.now() > deadline) return null;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return null;
+  }
+
+  /**
+   * Smoothly scrolls the viewer container, starting from its current
+   * position, so that the match's bounding box is centered. Does not scroll
+   * along an axis on which the box is already fully visible.
+   * @param {MatchResult} match - The match to scroll to
+   * @returns {boolean} Whether a scroll was started
+   * @private
+   */
+  _scrollToMatch(match) {
+    const pageView = this.pdfViewer.getPageView(match.page - 1);
+    if (!pageView?.div || !pageView.viewport) {
+      return false;
+    }
+    const container = this.pdfViewerContainer;
+    const { x0, y0, x1, y1 } = match.bbox;
+    if (![x0, y0, x1, y1].every(Number.isFinite)) {
+      return false;
+    }
+    // Viewport coordinates in CSS pixels relative to the page div (y axis down)
+    const [vx0, vy0] = pageView.viewport.convertToViewportPoint(x0, y0);
+    const [vx1, vy1] = pageView.viewport.convertToViewportPoint(x1, y1);
+
+    // Position of the page's content box in the container's scroll coordinates
+    const pageRect = pageView.div.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const pageStyle = window.getComputedStyle(pageView.div);
+    const pageLeft = pageRect.left - containerRect.left - container.clientLeft + container.scrollLeft + (parseFloat(pageStyle.borderLeftWidth) || 0);
+    const pageTop = pageRect.top - containerRect.top - container.clientTop + container.scrollTop + (parseFloat(pageStyle.borderTopWidth) || 0);
+
+    return this._scrollRectIntoView({
+      top: pageTop + Math.min(vy0, vy1),
+      bottom: pageTop + Math.max(vy0, vy1),
+      left: pageLeft + Math.min(vx0, vx1),
+      right: pageLeft + Math.max(vx0, vx1)
+    });
+  }
+
+  /**
+   * Smoothly scrolls the viewer container, starting from its current
+   * position, so that the given rectangle is centered. Does not scroll along
+   * an axis on which the rectangle is already fully visible.
+   * @param {{top: number, bottom: number, left: number, right: number}} rect -
+   *   Rectangle in the container's scroll coordinates (CSS pixels)
+   * @returns {boolean} Whether a scroll was started
+   * @private
+   */
+  _scrollRectIntoView(rect) {
+    const container = this.pdfViewerContainer;
+    const margin = 20;
+    /**
+     * Computes the scroll offset along one axis, or null if no scroll is needed
+     * @param {number} start - Rectangle start in scroll coordinates
+     * @param {number} end - Rectangle end in scroll coordinates
+     * @param {number} scroll - Current scroll offset
+     * @param {number} size - Visible size of the container
+     * @param {number} max - Maximum scroll offset
+     * @returns {number|null}
+     */
+    const target = (start, end, scroll, size, max) => {
+      if (start - margin >= scroll && end + margin <= scroll + size) {
+        return null;
+      }
+      // Center the rectangle; if it is taller/wider than the viewport, show its start
+      const offset = end - start + 2 * margin > size
+        ? start - margin
+        : (start + end) / 2 - size / 2;
+      const clamped = Math.max(0, Math.min(max, offset));
+      // Already there (e.g. clamped at the end of the document)
+      return Math.abs(clamped - scroll) < 1 ? null : clamped;
+    };
+
+    const scrollTop = target(rect.top, rect.bottom, container.scrollTop, container.clientHeight, container.scrollHeight - container.clientHeight);
+    const scrollLeft = target(rect.left, rect.right, container.scrollLeft, container.clientWidth, container.scrollWidth - container.clientWidth);
+    if (scrollTop === null && scrollLeft === null) {
+      return false;
+    }
+    container.scrollTo({
+      top: scrollTop ?? container.scrollTop,
+      left: scrollLeft ?? container.scrollLeft,
+      behavior: 'smooth'
+    });
+    return true;
   }
 
   /**
@@ -706,7 +907,11 @@ export class PDFJSViewer {
    * @private
    */
   _mapItemsToSpans(textLayer, items, itemIndices) {
-    const spans = Array.from(textLayer.querySelectorAll('span'));
+    // Exclude PDF.js' `markedContent` wrapper spans: they have no box of their
+    // own (display: contents) and a wrapper around a single text span has the
+    // same textContent, so matching it would place the highlight at the page
+    // origin instead of at the text
+    const spans = Array.from(textLayer.querySelectorAll('span:not(.markedContent)'));
     const wanted = new Set(itemIndices);
     const result = [];
     let s = 0;

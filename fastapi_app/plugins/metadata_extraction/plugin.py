@@ -1,13 +1,15 @@
 """
 Metadata Extraction Plugin.
 
-Provides a route for extracting bibliographic metadata from PDFs and
+Provides a route for extracting bibliographic metadata from PDFs, an admin route
+for backfilling missing metadata in all documents of a collection, and
 a TEI wizard enhancement that enriches teiHeader elements with the result.
 """
 
 import logging
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
@@ -23,16 +25,45 @@ class MetadataExtractionPlugin(Plugin):
         return {
             "id": "metadata-extraction",
             "name": "Metadata Extraction",
-            "description": "Extract bibliographic metadata from PDFs and enrich TEI headers",
+            "description": "Extract bibliographic metadata from PDFs, enrich TEI headers and backfill missing metadata in collections",
             "category": "enhancement",
-            "version": "1.0.0",
-            "required_roles": ["*"],
-            "endpoints": [],
+            "version": "1.1.0",
+            # Restricts the menu entry to admins; the TEI wizard enhancement and the /extract
+            # route are not affected by plugin roles and stay available to all users
+            "required_roles": ["admin"],
+            "endpoints": [
+                {
+                    "name": "backfill",
+                    "label": "Backfill Missing Metadata",
+                    "description": "Add missing bibliographic metadata and document language to all documents of the current collection",
+                    "icon": "journal-plus",
+                    "category": "collection",
+                    "state_params": ["collection"],
+                }
+            ],
             "dependencies": ["tei-wizard"],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
-        return {}
+        return {"backfill": self.backfill}
+
+    async def backfill(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
+        """
+        Open the backfill options dialog for the current collection.
+
+        Args:
+            context: Plugin context
+            params: Parameters including 'collection'
+
+        Returns:
+            outputUrl pointing to the options page, or an error if no collection is selected
+        """
+        collection_id = params.get("collection")
+        if not collection_id:
+            return {"error": "Please select a collection first.", "notify": True}
+        return {
+            "outputUrl": f"/api/plugins/metadata-extraction/backfill/options?{urlencode({'collection': collection_id})}",
+        }
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the TEI header enrichment enhancement with tei-wizard."""

@@ -17,6 +17,7 @@ import {
   encodeFileIdForXmlId,
   decodeXmlIdToFileId,
   getEditorialDeclGuides,
+  isInTeiText,
 } from '../../../app/src/modules/tei-utils.js';
 
 describe('getEditorialDeclGuides', () => {
@@ -486,5 +487,25 @@ V1 - corrected
       const editorApp = xmlDoc.querySelector('application[type="editor"]');
       assert.ok(editorApp, 'Editor application should be preserved');
     });
+  });
+});
+
+describe('isInTeiText', () => {
+  const doc = new JSDOM(
+    '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title>T</title></titleStmt></fileDesc></teiHeader>'
+    + '<text><body><p>Body <hi>text</hi></p></body></text></TEI>',
+    { contentType: 'text/xml' }
+  ).window.document;
+
+  it('accepts /TEI/text and its descendants', () => {
+    assert.strictEqual(isInTeiText(doc.getElementsByTagName('text')[0]), true);
+    assert.strictEqual(isInTeiText(doc.getElementsByTagName('hi')[0]), true);
+    assert.strictEqual(isInTeiText(doc.getElementsByTagName('hi')[0].firstChild), true);
+  });
+
+  it('rejects header nodes and the root element', () => {
+    assert.strictEqual(isInTeiText(doc.getElementsByTagName('title')[0]), false);
+    assert.strictEqual(isInTeiText(doc.getElementsByTagName('teiHeader')[0]), false);
+    assert.strictEqual(isInTeiText(doc.documentElement), false);
   });
 });
