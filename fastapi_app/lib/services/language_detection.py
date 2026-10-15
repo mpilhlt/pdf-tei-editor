@@ -13,7 +13,11 @@ from typing import Optional
 from lxml import etree
 from py3langid.langid import LanguageIdentifier, MODEL_FILE
 
-from fastapi_app.lib.utils.tei_utils import get_document_language, set_document_language
+from fastapi_app.lib.utils.tei_utils import (
+    get_document_language,
+    serialize_tei_like_source,
+    set_document_language,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,13 +108,88 @@ def get_tei_text_content(tei_root: etree._Element) -> str:  # type: ignore[name-
     return " ".join(str(t) for t in texts) if isinstance(texts, list) else ""
 
 
+LANGUAGE_FROM_DECLARATION = "lang-usage"
+LANGUAGE_FROM_PDF_TEXT = "pdf-text"
+LANGUAGE_FROM_TEI_TEXT = "tei-text"
+LANGUAGE_FROM_REGISTRY = "registry"
+LANGUAGE_FROM_XML_LANG = "xml-lang"
+"""Sources of a predicted language, see `predict_document_language_with_source()`."""
+
+
+def predict_document_language_with_source(
+    tei_root: etree._Element,  # type: ignore[name-defined]
+    pdf_path: Optional[str] = None,
+    pdf_text: Optional[str] = None,
+    registry_language: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Predict the language of a TEI document and report where the prediction comes from.
+
+    Lookup order:
+
+    1. profileDesc/langUsage/language/@ident, ignoring "und"
+    2. detection from the PDF text layer
+    3. detection from the TEI text content
+    4. the registry language (CrossRef/DataCite), if given
+    5. TEI/@xml:lang or text/@xml:lang
+
+    Text detection takes precedence over xml:lang because GROBID declares text/@xml:lang="en"
+    for documents in other languages.
+
+    Args:
+        tei_root: TEI root element
+        pdf_path: Optional path to the source PDF, used as primary text source for detection
+        pdf_text: Optional pre-extracted PDF text; takes precedence over `pdf_path` so that callers
+            processing several TEI files of the same PDF extract its text only once
+        registry_language: Optional normalized language from bibliographic registry metadata
+
+    Returns:
+        Tuple of (BCP 47 language tag, LANGUAGE_FROM_* source), or (None, None)
+    """
+    ident = tei_root.xpath(
+        "string(tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language/@ident)",
+        namespaces={"tei": "http://www.tei-c.org/ns/1.0"},
+    )
+    if ident and ident != UNDETERMINED_LANGUAGE:
+        return str(ident), LANGUAGE_FROM_DECLARATION
+    if pdf_text is None and pdf_path:
+        pdf_text = extract_pdf_text(pdf_path)
+    language = detect_language(pdf_text) if pdf_text else None
+    if language:
+        return language, LANGUAGE_FROM_PDF_TEXT
+    language = detect_language(get_tei_text_content(tei_root))
+    if language:
+        return language, LANGUAGE_FROM_TEI_TEXT
+    if registry_language:
+        return registry_language, LANGUAGE_FROM_REGISTRY
+    language = get_document_language(tei_root)
+    if language and language != UNDETERMINED_LANGUAGE:
+        return language, LANGUAGE_FROM_XML_LANG
+    return None, None
+
+
+def predict_document_language(
+    tei_root: etree._Element,  # type: ignore[name-defined]
+    pdf_path: Optional[str] = None,
+    pdf_text: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Predict the language of a TEI document, see `predict_document_language_with_source()`.
+
+    Returns:
+        BCP 47 language tag, or None if no language is declared and none can be detected
+    """
+    return predict_document_language_with_source(tei_root, pdf_path, pdf_text)[0]
+
+
 def add_document_language(tei_xml: str, pdf_path: Optional[str] = None) -> str:
     """
     Make sure a TEI document declares its language in teiHeader/profileDesc/langUsage.
 
-    A language already declared by the extractor (langUsage, TEI/@xml:lang or text/@xml:lang)
-    is kept. Otherwise it is detected from the PDF text layer, then from the TEI text content.
-    If no language can be detected, "und" (undetermined) is declared.
+    The language is detected from the PDF text layer, then from the TEI text content. Only if
+    the text is too short for detection, a language declared by the extractor via TEI/@xml:lang
+    or text/@xml:lang is used (GROBID declares "en" regardless of the language). If no language
+    can be determined, "und" (undetermined) is declared.
 
     The document is returned unchanged if it already has a langUsage/language declaration,
     has no teiHeader, or cannot be parsed. Formatting outside the inserted element is preserved.
@@ -131,22 +210,10 @@ def add_document_language(tei_xml: str, pdf_path: Optional[str] = None) -> str:
     if root.find("tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language", namespaces=ns) is not None:
         return tei_xml
 
-    language = get_document_language(root)
-    if not language and pdf_path:
-        language = detect_language(extract_pdf_text(pdf_path))
-    if not language:
-        language = detect_language(get_tei_text_content(root))
-    language = language or UNDETERMINED_LANGUAGE
+    language = predict_document_language(root, pdf_path) or UNDETERMINED_LANGUAGE
 
     if not set_document_language(root, language):
         return tei_xml
     logger.debug(f"Declared document language: {language}")
 
-    # Serialize prolog/epilog nodes (processing instructions, comments) one per line, as lxml
-    # would otherwise join them to the root element
-    parts = [etree.tostring(n, encoding="unicode", with_tail=False) for n in reversed(list(root.itersiblings(preceding=True)))]
-    parts.append(etree.tostring(root, encoding="unicode", with_tail=False))
-    parts.extend(etree.tostring(n, encoding="unicode", with_tail=False) for n in root.itersiblings())
-    if tei_xml.lstrip().startswith("<?xml "):
-        parts.insert(0, '<?xml version="1.0" encoding="UTF-8"?>')
-    return "\n".join(parts) + ("\n" if tei_xml.endswith("\n") else "")
+    return serialize_tei_like_source(root, tei_xml)
