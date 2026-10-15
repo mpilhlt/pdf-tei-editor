@@ -107,6 +107,13 @@ export class PDFJSViewer {
     this.initializePromise = null;
     this.isReadyFlag = false;
     this.loadPromise = null;
+
+    /**
+     * Resolves when all pages of the most recently loaded document have been
+     * set up by PDF.js (its `pagesloaded` event); null before the first load
+     * @type {Promise<void>|null}
+     */
+    this.pagesLoadedPromise = null;
     this.isLoadedFlag = false;
 
     // Track active thumbnail render tasks for cancellation
@@ -298,6 +305,11 @@ export class PDFJSViewer {
         this.pdfDoc = await loadingTask.promise;
 
         console.log(`PDF loaded successfully. Pages: ${this.pdfDoc.numPages}`);
+
+        // Resolves when PDF.js has set up all pages of this document
+        this.pagesLoadedPromise = new Promise(resolvePages => {
+          this.eventBus.on('pagesloaded', () => resolvePages(), { once: true });
+        });
 
         // Set document in viewer
         this.pdfViewer.setDocument(this.pdfDoc);
@@ -672,7 +684,6 @@ export class PDFJSViewer {
         scrolled = this._scrollToMatch(match);
       }
       if (!scrolled) return;
-      console.debug(`PDF search: corrected scroll position to match on page ${match.page} (attempt ${attempt + 1})`);
     }
   }
 

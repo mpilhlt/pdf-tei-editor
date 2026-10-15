@@ -120,6 +120,7 @@ test.describe('PDF viewer search scrolling', () => {
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
+      const loadedAt = Date.now();
 
       const { query, pageNumber } = await pickBottomOfPageQuery(page);
 
@@ -133,6 +134,29 @@ test.describe('PDF viewer search scrolling', () => {
       const far = await searchAndTrackScroll(page, query);
       expect(far.matchPage).toBe(pageNumber);
       expect(far.visible, JSON.stringify({ ...far, samples: undefined })).toBe(true);
+
+      // The viewer's restore of the saved scroll position must not move the
+      // view away from the match later on (it used to run on a 5s timeout
+      // after loading). Make the saved position differ from the current one.
+      await page.evaluate(() => {
+        /** @type {any} */
+        const app = /** @type {any} */ (window).app;
+        const key = 'plugin.pdfviewer.state';
+        const saved = JSON.parse(sessionStorage.getItem(key) || '{}');
+        const pdfId = app.getCurrentState().pdf;
+        saved[pdfId] = { ...saved[pdfId], page: 1, scrollX: 0, scrollY: 0 };
+        sessionStorage.setItem(key, JSON.stringify(saved));
+      });
+      await page.waitForTimeout(Math.max(0, 6500 - (Date.now() - loadedAt)));
+      const stillVisible = await page.evaluate(() => {
+        /** @type {PDFJSViewer} */
+        const viewer = /** @type {any} */ (window).app.getDependency('pdfviewer');
+        const box = viewer.viewer.querySelector('.cluster-highlight');
+        const viewRect = viewer.pdfViewerContainer.getBoundingClientRect();
+        const boxRect = box?.getBoundingClientRect();
+        return !!boxRect && boxRect.top >= viewRect.top && boxRect.bottom <= viewRect.bottom;
+      });
+      expect(stillVisible).toBe(true);
 
       // 2. From a position inside the target page, with the match below the
       //    visible area: scrolling must start from the current position and
