@@ -77,8 +77,7 @@ class TestLLamorePluginRegistration(unittest.TestCase):
         """Clean up after each test."""
         ExtractorRegistry.reset_instance()
 
-    @patch.object(LLamoreExtractor, '_fetch_available_models', return_value=['gemini-2.0-flash'])
-    def test_llamore_plugin_registers_extractor(self, _mock_models):
+    def test_llamore_plugin_registers_extractor(self):
         """Test that LLamorePlugin registers LLamoreExtractor."""
         plugin = LLamorePlugin()
         context = PluginContext()
@@ -93,8 +92,7 @@ class TestLLamorePluginRegistration(unittest.TestCase):
         extractor_ids = [e['id'] for e in extractors]
         self.assertIn('llamore-gemini', extractor_ids)
 
-    @patch.object(LLamoreExtractor, '_fetch_available_models', return_value=['gemini-2.0-flash'])
-    def test_llamore_plugin_unregisters_extractor(self, _mock_models):
+    def test_llamore_plugin_unregisters_extractor(self):
         """Test that LLamorePlugin unregisters extractor on cleanup."""
         plugin = LLamorePlugin()
         context = PluginContext()

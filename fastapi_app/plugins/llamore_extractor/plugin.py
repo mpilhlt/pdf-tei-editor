@@ -12,8 +12,8 @@ from fastapi_app.lib.doc_rules.rules_providers import register_document_rules_pr
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef
-from .config import get_schema_url, init_plugin_config
-from .extractor import LLamoreExtractor
+from .config import get_schema_url
+from .extractor import EXTRACTOR_ID, LLamoreExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,13 @@ class LlamoreRulesProvider:
 class LLamorePlugin(Plugin):
     """Plugin that provides LLamore-based extraction."""
 
-    def __init__(self) -> None:
-        init_plugin_config()
-
     @property
     def metadata(self) -> dict[str, Any]:
         """Return plugin metadata."""
         return {
             "id": "llamore",
             "name": "LLamore Extractor",
-            "description": "Extract references using LLamore with Gemini AI",
+            "description": "Extract references using LLamore with the configured LLM model",
             "category": "extractor",
             "version": "1.0.0",
             "required_roles": ["user"],
@@ -66,10 +63,9 @@ class LLamorePlugin(Plugin):
         """Return available endpoints."""
         return {}  # Extractor accessed via /api/v1/extract endpoint
 
-    @classmethod
-    def is_available(cls) -> bool:
-        """Check if LLamore extractor is available."""
-        return LLamoreExtractor.is_available()
+    # No is_available() override: plugins are checked at load time, before the
+    # LLM provider plugins have registered their connectors. The extractor's own
+    # is_available() checks the LLM provider registry lazily instead.
 
     async def initialize(self, context: PluginContext) -> None:
         """Register the LLamore extractor and its DocumentRulesProvider."""
@@ -81,6 +77,6 @@ class LLamorePlugin(Plugin):
     async def cleanup(self) -> None:
         """Unregister the LLamore extractor and its DocumentRulesProvider."""
         registry = ExtractorRegistry.get_instance()
-        registry.unregister("llamore-gemini")
+        registry.unregister(EXTRACTOR_ID)
         unregister_document_rules_provider("llamore")
         logger.info("LLamore extractor plugin cleaned up")

@@ -10,7 +10,9 @@ than adding the anthropic SDK as a new project dependency.
 """
 
 import asyncio
+import base64
 import logging
+from pathlib import Path
 
 import requests
 
@@ -74,7 +76,35 @@ class AnthropicLLMProvider(LLMProvider):
             self._chat_completion_sync,
             model_id=model_id,
             system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            user_content=user_prompt,
+            temperature=temperature,
+        )
+
+    def supports_pdf_input(self, model_id: str) -> bool:
+        return True
+
+    async def chat_completion_with_pdf(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        pdf_path: str,
+        temperature: float = 0.2,
+    ) -> str:
+        """Send the PDF as a base64 `document` content block ahead of the prompt text."""
+        pdf_data = await asyncio.to_thread(Path(pdf_path).read_bytes)
+        user_content: list[dict[str, object]] = [
+            {
+                "type": "document",
+                "source": {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(pdf_data).decode("ascii")},
+            },
+            {"type": "text", "text": user_prompt},
+        ]
+        return await asyncio.to_thread(
+            self._chat_completion_sync,
+            model_id=model_id,
+            system_prompt=system_prompt,
+            user_content=user_content,
             temperature=temperature,
         )
 
@@ -82,7 +112,7 @@ class AnthropicLLMProvider(LLMProvider):
         self,
         model_id: str,
         system_prompt: str,
-        user_prompt: str,
+        user_content: str | list[dict[str, object]],
         temperature: float,
     ) -> str:
         session = get_retry_session(retries=3, backoff_factor=2.0, read_retries=0)
@@ -91,7 +121,7 @@ class AnthropicLLMProvider(LLMProvider):
             "model": model_id,
             "max_tokens": DEFAULT_MAX_TOKENS,
             "system": system_prompt,
-            "messages": [{"role": "user", "content": user_prompt}],
+            "messages": [{"role": "user", "content": user_content}],
             "temperature": temperature,
         }
         response = session.post(url, headers=self._headers(), json=data, timeout=REQUEST_TIMEOUT_SECONDS)

@@ -4,6 +4,8 @@ Unit tests for the Anthropic Claude LLM provider connector.
 @testCovers fastapi_app/plugins/anthropic_llm/llm_provider.py
 """
 
+import base64
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -139,6 +141,30 @@ class TestAnthropicLLMProviderTemperatureRejected(unittest.IsolatedAsyncioTestCa
         with self.assertRaises(requests.HTTPError):
             await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
         self.assertEqual(mock_session.post.call_count, 1)
+
+
+
+class TestAnthropicLLMProviderPdfInput(unittest.IsolatedAsyncioTestCase):
+    """Test chat_completion_with_pdf() sends the PDF as a base64 document block."""
+
+    @patch("fastapi_app.plugins.anthropic_llm.llm_provider.get_retry_session")
+    async def test_sends_document_block_before_prompt(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_session.post.return_value.json.return_value = {"content": [{"type": "text", "text": "refs"}]}
+        mock_get_session.return_value = mock_session
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as pdf:
+            pdf.write(b"%PDF-1.4")
+            pdf.flush()
+            provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="k")
+            self.assertTrue(provider.supports_pdf_input("m"))
+            result = await provider.chat_completion_with_pdf("m", "sys", "usr", pdf.name)
+
+        self.assertEqual(result, "refs")
+        content = mock_session.post.call_args[1]["json"]["messages"][0]["content"]
+        self.assertEqual(content[0]["type"], "document")
+        self.assertEqual(content[0]["source"], {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(b"%PDF-1.4").decode("ascii")})
+        self.assertEqual(content[1], {"type": "text", "text": "usr"})
 
 
 if __name__ == "__main__":
