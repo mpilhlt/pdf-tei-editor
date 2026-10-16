@@ -2,13 +2,15 @@
 LLamore-based reference extraction engine.
 """
 
+import asyncio
 from typing import Dict, Any, Optional
 import logging
-import time
 from pathlib import Path
 from lxml import etree
 
 from fastapi_app.lib.extraction import BaseExtractor
+from fastapi_app.lib.llm import LLMProvider, LLMProviderRegistry, get_default_model
+from fastapi_app.lib.llm.model_access import check_model_access
 from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
 from fastapi_app.lib.utils.tei_utils import (
     create_tei_document,
@@ -22,7 +24,7 @@ from fastapi_app.lib.utils.tei_utils import (
 from fastapi_app.lib.utils.doi_utils import encode_for_xml_id
 from fastapi_app.lib.utils.debug_utils import log_extraction_response, log_xml_parsing_error
 from fastapi_app.lib.utils.config_utils import get_config
-from fastapi_app.lib.core.dependencies import get_db, get_document_rules_store
+from fastapi_app.lib.core.dependencies import get_auth_manager, get_db, get_document_rules_store
 from fastapi_app.lib.doc_rules.extraction_contribution import ExtractionFragment, for_extraction
 from fastapi_app.lib.utils.annotation_rules_utils import AnnotationRuleRef
 from .config import (
@@ -41,79 +43,72 @@ ADDITIONAL_INSTRUCTIONS_URL = (
     "fastapi_app/plugins/llamore_extractor/prompts/additional-instructions.md"
 )
 
-from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
-from google import genai  # type: ignore[import-untyped]
+# Kept as the extractor id (rather than renamed to "llamore") so stored
+# configs, batch scripts and client defaults that name it keep working;
+# the extractor itself is no longer tied to Gemini.
+EXTRACTOR_ID = "llamore-gemini"
+
+NO_MODEL_MESSAGE = "No LLM model selected for LLamore extraction. Choose one under Tools > Default Model."
+
+from llamore import LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
+
 
 class LLamoreExtractor(BaseExtractor):
-    """LLamore-based reference extraction from PDF files."""
+    """
+    LLamore-based reference extraction from PDF files.
 
-    _models_cache: list[str] | None = None
-    _models_cache_time: float = 0
-    _CACHE_TTL: int = 86400  # 24 hours
-
-    @classmethod
-    def _fetch_available_models(cls) -> list[str]:
-        """Return available Gemini models from API with 24-hour caching."""
-        configured_model = get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
-
-        now = time.time()
-        if cls._models_cache is not None and (now - cls._models_cache_time) < cls._CACHE_TTL:
-            return cls._models_cache
-
-        api_key = get_config().get("plugin.llamore.api.key", default="")
-        if not api_key:
-            return [configured_model]
-
-        try:
-            client = genai.Client(api_key=api_key)
-            models = [
-                m.name.replace("models/", "")
-                for m in client.models.list()
-                if m.name and m.name.startswith("models/gemini-")
-                and "generateContent" in (m.supported_actions or [])
-            ]
-            if models:
-                if configured_model in models:
-                    models = [configured_model] + [m for m in models if m != configured_model]
-                cls._models_cache = models
-                cls._models_cache_time = now
-                return models
-        except Exception as exc:
-            logger.debug("Could not fetch Gemini model list: %s", exc)
-
-        return [configured_model]
-
-    @classmethod
-    def get_models(cls) -> list[str]:
-        return cls._fetch_available_models()
+    Inference runs through the general LLM provider registry
+    (fastapi_app/lib/llm/), using the provider/model passed in the options
+    (the client sends the model chosen under Tools > Default Model) or else
+    the installation-wide default model. LLamore only supplies the prompter
+    and the TEI serialization. Providers that accept PDF input get the PDF
+    itself; for the others the PDF's text layer is sent instead.
+    """
 
     @classmethod
     def get_info(cls) -> Dict[str, Any]:
         """Return information about the LLamore extractor."""
-        options = get_form_options()
-        options["model"] = {
-            "type": "string",
-            "label": "Model",
-            "description": "Gemini model to use for extraction",
-            "required": False,
-            "options": cls._fetch_available_models()
-        }
         return {
-            "id": "llamore-gemini",
-            "name": "LLamore + Gemini",
-            "description": "Extract bibliographic references from PDF using LLamore library with Gemini AI",
+            "id": EXTRACTOR_ID,
+            "name": "LLamore",
+            "description": "Extract bibliographic references from PDF using the LLamore library with the configured LLM model",
             "input": ["pdf"],
             "output": ["tei-document"],
+            "uses_inference_model": True,
             "variants": get_supported_variants(),
-            "options": options,
+            "options": get_form_options(),
             "navigation_xpath": get_navigation_xpath(),
             "annotationGuides": get_annotation_guides()
         }
 
     @classmethod
     def is_available(cls) -> bool:
-        """Check if Gemini API key is configured."""
-        return bool(get_config().get("plugin.llamore.api.key"))
+        """Available when at least one LLM provider is registered and usable."""
+        return bool(LLMProviderRegistry.get_instance().list_providers(available_only=True))
+
+    @staticmethod
+    def _resolve_model(options: Dict[str, Any]) -> tuple[LLMProvider, str]:
+        """
+        The provider and model to extract with: `provider_id`/`model_id` from
+        the options if given, else the configured default model. Raises
+        ValueError when neither is set or the provider is unknown, and
+        ModelAccessDenied when the requesting user may not use the model.
+        """
+        provider_id = options.get("provider_id")
+        model_id = options.get("model_id")
+        if not (provider_id and model_id):
+            default = get_default_model()
+            if default is None:
+                raise ValueError(NO_MODEL_MESSAGE)
+            provider_id, model_id = default
+        try:
+            provider = LLMProviderRegistry.get_instance().get_provider(provider_id)
+        except KeyError as e:
+            raise ValueError(f"LLM provider '{provider_id}' is not available. {NO_MODEL_MESSAGE}") from e
+        username = options.get("username")
+        user = get_auth_manager().get_user_by_username(username) if username else None
+        check_model_access(provider, model_id, user)
+        return provider, model_id
 
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Optional[Dict[str, Any]] = None) -> str:
@@ -132,10 +127,12 @@ class LLamoreExtractor(BaseExtractor):
             raise ValueError("PDF path is required for LLamore extraction")
 
         if not self.is_available():
-            raise RuntimeError("LLamore extractor is not available - check dependencies and API key")
+            raise RuntimeError("LLamore extractor is not available - no LLM provider is configured")
 
         if options is None:
             options = {}
+
+        provider, model_id = self._resolve_model(options)
 
         username = options.get("username")
         additional_instructions, editorial_decl_entries = self._resolve_additional_instructions(username)
@@ -171,8 +168,6 @@ class LLamoreExtractor(BaseExtractor):
         default_variant_id = info["options"]["variant_id"]["options"][0]  # "llamore-default"
         variant_id = options.get("variant_id", default_variant_id)
 
-        model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
-
         schema_url = get_schema_url(variant_id)
         encodingDesc = create_encoding_desc_with_extractor(
             timestamp=timestamp,
@@ -182,7 +177,8 @@ class LLamoreExtractor(BaseExtractor):
             variant_id=variant_id,
             additional_labels=[
                 ("prompter", "LineByLinePrompter"),
-                ("model", model),
+                ("provider", provider.label),
+                ("model", model_id),
             ],
             refs=[
                 "https://github.com/mpilhlt/llamore",
@@ -197,7 +193,6 @@ class LLamoreExtractor(BaseExtractor):
         if existing_revisionDesc is not None:
             tei_header.remove(existing_revisionDesc)
 
-        from fastapi_app.lib.utils.config_utils import get_config
         extraction_label = get_config().get('annotation.lifecycle.change-descriptions', default=["Extraction"])[0]
         revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with LLamore", label=extraction_label)
         tei_header.append(revision_desc)
@@ -205,7 +200,7 @@ class LLamoreExtractor(BaseExtractor):
         tei_doc.append(tei_header)
 
         # Extract references
-        listBibl = self._extract_refs_from_pdf(pdf_path, options, additional_instructions_text=additional_instructions)
+        listBibl = await self._extract_refs_from_pdf(pdf_path, provider, model_id, additional_instructions_text=additional_instructions)
 
         # Log the extracted references XML for debugging
         refs_xml = etree.tostring(listBibl, encoding='unicode', method='xml', pretty_print=True)
@@ -268,12 +263,9 @@ class LLamoreExtractor(BaseExtractor):
         }]
         return fragment.text, editorial_decl_entries
 
-    def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any], additional_instructions_text: str) -> etree._Element:  # type: ignore[name-defined]
-        """Extract references from PDF using LLamore."""
-        logger.info("Extracting references from %s via LLamore/Gemini", pdf_path)
-
-        gemini_api_key = get_config().get("plugin.llamore.api.key", default="")
-        model = options.get("model") or get_config().get("plugin.llamore.model", default="gemini-2.0-flash")
+    async def _extract_refs_from_pdf(self, pdf_path: str, provider: LLMProvider, model_id: str, additional_instructions_text: str) -> etree._Element:  # type: ignore[name-defined]
+        """Extract references from PDF using LLamore's prompter with the given LLM provider/model."""
+        logger.info("Extracting references from %s via LLamore/%s/%s", pdf_path, provider.id, model_id)
 
         # Named "_text" (not "additional_instructions") so it isn't shadowed
         # by user_prompt()'s own same-named parameter below, which llamore's
@@ -284,8 +276,17 @@ class LLamoreExtractor(BaseExtractor):
                     additional_instructions += "In particular, follow these rules:\n\n" + additional_instructions_text
                 return super().user_prompt(text, additional_instructions)
 
-        extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter(), model=model)
-        references = extractor(pdf_path)
+        prompter = CustomPrompter()
+        if provider.supports_pdf_input(model_id):
+            response = await provider.chat_completion_with_pdf(
+                model_id, prompter.system_prompt(), prompter.user_prompt(), pdf_path
+            )
+        else:
+            text = await asyncio.to_thread(_pdf_text, pdf_path)
+            if not text.strip():
+                raise ValueError(f"The PDF has no text layer, and LLM provider '{provider.label}' does not accept PDF input")
+            response = await provider.chat_completion(model_id, prompter.system_prompt(), prompter.user_prompt(text=text))
+        references = prompter.parse(response)
         parser = TeiBiblStruct()
 
         # Generate XML and handle parsing errors
@@ -308,3 +309,11 @@ class LLamoreExtractor(BaseExtractor):
 
             # Parse this properly constructed XML
             return etree.fromstring(error_xml.encode('utf-8'))
+
+
+def _pdf_text(pdf_path: str) -> str:
+    """The PDF's text layer, page by page."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(pdf_path)
+    return "\n\n".join((page.extract_text() or "") for page in reader.pages)

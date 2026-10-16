@@ -4,9 +4,9 @@ Google Gemini LLM provider connector.
 Implements LLMProvider directly (not OpenAICompatibleProvider) since the
 Gemini API is not itself an OpenAI chat/completions endpoint - unlike
 Kisski, which hosts Gemma models behind an OpenAI-compatible endpoint.
-Uses the google-genai SDK, an existing project dependency (see
-fastapi_app/plugins/llamore_extractor/extractor.py for the sibling usage
-this mirrors: same model-listing filter, same GEMINI_API_KEY convention).
+Uses the google-genai SDK, an existing project dependency. Accepts PDF
+input (chat_completion_with_pdf), which the LLamore extractor uses to send
+the PDF itself rather than its text layer.
 """
 
 import logging
@@ -109,7 +109,44 @@ class GoogleLLMProvider(LLMProvider):
             )
         except genai_errors.APIError as e:
             raise LLMProviderError(f"{e.code} {e.message}") from e
-        if not response.text:
-            finish_reason = response.candidates[0].finish_reason if response.candidates else None
-            logger.warning(f"Gemini model '{model_id}' returned no text (finish reason: {finish_reason})")
-        return response.text or ""
+        return _response_text(model_id, response)
+
+    def supports_pdf_input(self, model_id: str) -> bool:
+        return True
+
+    async def chat_completion_with_pdf(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        pdf_path: str,
+        temperature: float = 0.2,
+    ) -> str:
+        """Upload the PDF via the Files API (no inline size limit), prompt with it, then delete it."""
+        if self._client is None:
+            raise RuntimeError("Google LLM provider not configured (missing API key)")
+        try:
+            uploaded = await self._client.aio.files.upload(file=pdf_path, config={"mime_type": "application/pdf"})
+            try:
+                response = await self._client.aio.models.generate_content(
+                    model=model_id,
+                    contents=[uploaded, user_prompt],
+                    config=_generation_config(model_id, system_prompt, temperature),
+                )
+            finally:
+                if uploaded.name:
+                    try:
+                        await self._client.aio.files.delete(name=uploaded.name)
+                    except genai_errors.APIError as e:
+                        logger.warning(f"Could not delete uploaded file '{uploaded.name}': {e.message}")
+        except genai_errors.APIError as e:
+            raise LLMProviderError(f"{e.code} {e.message}") from e
+        return _response_text(model_id, response)
+
+
+def _response_text(model_id: str, response: types.GenerateContentResponse) -> str:
+    """The response text, logging a warning with the finish reason when it is empty."""
+    if not response.text:
+        finish_reason = response.candidates[0].finish_reason if response.candidates else None
+        logger.warning(f"Gemini model '{model_id}' returned no text (finish reason: {finish_reason})")
+    return response.text or ""

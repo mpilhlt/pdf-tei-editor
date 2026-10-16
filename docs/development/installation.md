@@ -71,11 +71,13 @@ For production deployments, containerized deployments, and comprehensive deploym
 
 ## LLamore Extraction Engine
 
-To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. For LLamore to work, you need a Gemini API Key:
+To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. LLamore runs on the LLM model selected under Tools > Default Model, so at least one LLM provider must be configured, for example Google Gemini:
 
 1. Get a key at <https://aistudio.google.com>
 2. Ensure you've copied the appropriate `.env.development` or `.env.production` file to `.env`
-3. Add your key to the `.env` file
+3. Add your key to the `.env` file as `GEMINI_API_KEY`
+
+Other providers (KISSKI, Anthropic) work the same way. Gemini and Anthropic models receive the PDF itself; other providers receive the PDF's text layer, so scanned PDFs without a text layer need one of the former.
 
 ## Security Considerations
 
