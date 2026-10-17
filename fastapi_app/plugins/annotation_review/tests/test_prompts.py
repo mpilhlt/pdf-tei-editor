@@ -155,6 +155,34 @@ class TestParseAndValidateFindings(unittest.TestCase):
         self.assertEqual(findings[1]["old"], "<title>A Paper</title>")
 
 
+class TestRedundantWrapFindings(unittest.TestCase):
+    SOURCE = (
+        "<text><bibl><author>Wilkinson, Mark D.</author>, <author>Myles Axton</author>, "
+        "Arie Baak, et al.</bibl></text>"
+    )
+
+    def _findings(self, old: str, new: str) -> list[dict[str, object]]:
+        raw = json.dumps([{"old": old, "new": new, "rationale": "Every author must be enclosed in <author>."}])
+        return [dict(f) for f in parse_and_validate_findings(raw, self.SOURCE)]
+
+    def test_drops_finding_that_wraps_an_authors_content_in_another_author(self):
+        self.assertEqual(self._findings("Myles Axton", "<author>Myles Axton</author>"), [])
+
+    def test_drops_finding_that_wraps_a_whole_author_in_another_author(self):
+        self.assertEqual(
+            self._findings("<author>Myles Axton</author>", "<author><author>Myles Axton</author></author>"), []
+        )
+
+    def test_keeps_finding_that_wraps_an_unannotated_author(self):
+        findings = self._findings("Arie Baak", "<author>Arie Baak</author>")
+        self.assertEqual(len(findings), 1)
+
+    def test_keeps_finding_when_the_source_is_not_well_formed(self):
+        raw = json.dumps([{"old": "Axton", "new": "<author>Axton</author>", "rationale": "r"}])
+        findings = parse_and_validate_findings(raw, "<author>Myles Axton</author> <bibl>")
+        self.assertEqual(len(findings), 1)
+
+
 class TestValidateFindingsUnmatched(unittest.TestCase):
     SOURCE = "<p><persName>J. Doe</persName> and <persName>J. Doe</persName> met <title>X</title></p>"
 
