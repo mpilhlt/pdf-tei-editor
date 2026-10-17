@@ -14,6 +14,8 @@ import logging
 import re
 from typing import TypedDict
 
+from lxml import etree
+
 logger = logging.getLogger(__name__)
 
 _REQUIRED_KEYS = ("old", "new", "rationale")
@@ -58,7 +60,9 @@ def build_system_prompt() -> str:
         "enclosing element when only a part of it changes. Report every "
         "distinct problem as its own finding with its own snippet; if one "
         "element has several problems, give one finding per problem, each "
-        "with a non-overlapping \"old\". If there is nothing to fix, respond "
+        "with a non-overlapping \"old\". Never wrap text in an element it is "
+        "already enclosed in (for example, do not wrap the content of an "
+        "<author> in another <author>). If there is nothing to fix, respond "
         "with an empty JSON array: []"
     )
 
@@ -219,6 +223,43 @@ def _anchor_in_scope(old: str, new: str, scope: str, document: str) -> tuple[str
     return scope[left:right], scope[left:start] + new + scope[end:right]
 
 
+def _count_redundant_wraps(xml: str) -> int | None:
+    """
+    Number of elements whose only content is a single child element of the
+    same name (e.g. <author><author>X</author></author>), or None if xml is
+    not well-formed on its own.
+    """
+    try:
+        root = etree.fromstring(xml.encode("utf-8"))
+    except etree.XMLSyntaxError:
+        return None
+    count = 0
+    for element in root.iter(tag=etree.Element):
+        children = [child for child in element if isinstance(child.tag, str)]
+        if (
+            len(children) == 1
+            and children[0].tag == element.tag
+            and not (element.text or "").strip()
+            and not (children[0].tail or "").strip()
+        ):
+            count += 1
+    return count
+
+
+def _adds_redundant_wrap(old: str, new: str, source_text: str, before: int | None) -> bool:
+    """
+    True if replacing the (unique) old in source_text with new wraps the whole
+    content of an element in another element of the same name. Models
+    reviewing already-annotated text sometimes propose to "add" an element
+    that is already there, which would nest it in itself.
+    """
+    if before is None:
+        return False
+    start = source_text.index(old)
+    after = _count_redundant_wraps(source_text[:start] + new + source_text[start + len(old):])
+    return after is not None and after > before
+
+
 def validate_findings(
     raw_response: str, source_text: str, scope: str | None = None
 ) -> tuple[list[Finding], list[str]]:
@@ -240,6 +281,8 @@ def validate_findings(
 
     kept: list[Finding] = []
     unmatched: list[str] = []
+    wraps_before: int | None = None
+    wraps_counted = False
     for item in parsed:
         if not isinstance(item, dict) or not all(k in item for k in _REQUIRED_KEYS):
             logger.warning(f"annotation-review: dropping finding missing required keys: {item!r}")
@@ -273,6 +316,14 @@ def validate_findings(
                 unmatched.append(old)
                 continue
             old, new = anchored
+        if not wraps_counted:
+            wraps_before = _count_redundant_wraps(source_text)
+            wraps_counted = True
+        if _adds_redundant_wrap(old, new, source_text, wraps_before):
+            logger.warning(
+                f"annotation-review: dropping finding that wraps an element's content in another element of the same name: {old!r} -> {new!r}"
+            )
+            continue
         kept.append({
             "id": len(kept),
             "old": old,
