@@ -613,9 +613,9 @@ sl-menu[name="pluginsMenu"] small {
   padding: 0.25em 0.6em;
 }
 
-/* Diagnostics drawer (diagnostics-drawer plugin): contained in the PDF viewer, entries styled like CodeMirror's lint panel */
+/* Diagnostics drawer (diagnostics-drawer plugin): contained in the PDF viewer, tinted to stand out from the PDF page */
 sl-drawer.diagnostics-drawer {
-  --size: min(28rem, 90%);
+  --size: min(26rem, 90%);
   --body-spacing: 0;
   --footer-spacing: var(--sl-spacing-x-small) var(--sl-spacing-small);
 }
@@ -628,19 +628,26 @@ sl-drawer.diagnostics-drawer::part(base) {
   z-index: 10;
 }
 
+/* the panel keeps its width and slides out, so its content never reflows */
 sl-drawer.diagnostics-drawer::part(panel) {
-  transition: width 0.2s ease;
-  box-shadow: var(--sl-shadow-large);
+  background: var(--sl-color-neutral-100);
+  border-right: 1px solid var(--sl-color-neutral-300);
+  box-shadow: 4px 0 14px rgba(0, 0, 0, 0.18);
   font-size: var(--sl-font-size-small);
-}
-
-sl-drawer.diagnostics-drawer.retracted {
-  --size: 100px;
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease, visibility 0s;
 }
 
 sl-drawer.diagnostics-drawer.retracted::part(panel) {
-  cursor: pointer;
-  overflow: hidden;
+  transform: translateX(calc(-100% - 20px));
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s 0.2s;
+}
+
+sl-drawer.diagnostics-drawer::part(footer) {
+  background: var(--sl-color-neutral-200);
+  border-top: 1px solid var(--sl-color-neutral-300);
 }
 
 .diagnostics-drawer-header {
@@ -651,8 +658,8 @@ sl-drawer.diagnostics-drawer.retracted::part(panel) {
   align-items: center;
   gap: var(--sl-spacing-x-small);
   padding: var(--sl-spacing-x-small) var(--sl-spacing-small);
-  background: var(--sl-color-neutral-50);
-  border-bottom: 1px solid var(--sl-color-neutral-200);
+  background: var(--sl-color-neutral-200);
+  border-bottom: 1px solid var(--sl-color-neutral-300);
   font-weight: var(--sl-font-weight-semibold);
   white-space: nowrap;
 }
@@ -661,22 +668,31 @@ sl-drawer.diagnostics-drawer.retracted::part(panel) {
   flex: 1 1 auto;
 }
 
+.diagnostics-drawer-list {
+  padding: 6px;
+}
+
 .diagnostics-drawer-item {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 3px 6px 3px 8px;
-  border-left: 5px solid #999;
-  border-bottom: 1px solid var(--sl-color-neutral-100);
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid var(--sl-color-neutral-200);
+  border-left: 4px solid #999;
+  border-radius: var(--sl-border-radius-medium);
   cursor: pointer;
 }
 
 .diagnostics-drawer-item:hover {
-  background: var(--sl-color-neutral-50);
+  border-top-color: var(--sl-color-neutral-400);
+  border-right-color: var(--sl-color-neutral-400);
+  border-bottom-color: var(--sl-color-neutral-400);
 }
 
 .diagnostics-drawer-item.selected {
-  background: #ddd;
+  background: var(--sl-color-primary-50);
 }
 
 .diagnostics-drawer-error { border-left-color: #d11; }
@@ -691,24 +707,41 @@ sl-drawer.diagnostics-drawer.retracted::part(panel) {
 .diagnostics-drawer-item-body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.diagnostics-drawer-message {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.diagnostics-drawer-action {
-  font: inherit;
-  border: none;
-  padding: 2px 4px;
-  background-color: #444;
-  color: white;
-  border-radius: 3px;
-  margin-left: 8px;
-  cursor: pointer;
+/* source on the left, actions on the right */
+.diagnostics-drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .diagnostics-drawer-source {
-  font-size: 70%;
-  opacity: 0.7;
+  flex: 1 1 auto;
+  font-size: 85%;
+  color: var(--sl-color-neutral-600);
+}
+
+.diagnostics-drawer-action {
+  flex: none;
+  font: inherit;
+  font-size: 85%;
+  padding: 0 7px;
+  color: var(--sl-color-primary-700);
+  background: var(--sl-color-primary-50);
+  border: 1px solid var(--sl-color-primary-200);
+  border-radius: var(--sl-border-radius-small);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-action:hover {
+  background: var(--sl-color-primary-100);
 }
 
 .diagnostics-drawer-footer {
@@ -724,21 +757,31 @@ sl-drawer.diagnostics-drawer.retracted::part(panel) {
   gap: var(--sl-spacing-x-small);
 }
 
-/* Retracted: only the count and the start of each entry remain visible */
-sl-drawer.diagnostics-drawer.retracted .diagnostics-drawer-title,
-sl-drawer.diagnostics-drawer.retracted .diagnostics-drawer-action,
-sl-drawer.diagnostics-drawer.retracted .diagnostics-drawer-footer {
+/* shown instead of the drawer while it is retracted */
+.diagnostics-drawer-button {
+  position: absolute;
+  top: var(--sl-spacing-small);
+  left: var(--sl-spacing-small);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  font: inherit;
+  font-size: var(--sl-font-size-small);
+  font-weight: var(--sl-font-weight-semibold);
+  color: white;
+  background: #3d4852;
+  border: none;
+  border-radius: var(--sl-border-radius-pill);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-button[hidden] {
   display: none;
 }
 
-sl-drawer.diagnostics-drawer.retracted .diagnostics-drawer-item-body {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-sl-drawer.diagnostics-drawer.retracted .diagnostics-drawer-message {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.diagnostics-drawer-button:hover {
+  background: #2b333b;
 }

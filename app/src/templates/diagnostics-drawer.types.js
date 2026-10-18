@@ -20,4 +20,9 @@
  * @property {import('../ui.js').SlButton} dismissBtn
  */
 
+/**
+ * @typedef {object} diagnosticsButtonPart
+ * @property {HTMLElement} count
+ */
+
 export {}

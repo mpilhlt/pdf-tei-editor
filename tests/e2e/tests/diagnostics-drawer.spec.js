@@ -2,7 +2,8 @@
  * Diagnostics drawer end-to-end tests
  *
  * Injects diagnostics into the XML editor and checks that the drawer over the
- * PDF viewer lists them, retracts and expands depending on the focus, selects
+ * PDF viewer lists them, slides out (leaving a floating button) and back in
+ * depending on the focus, selects
  * the text of a clicked diagnostic, and applies or dismisses the checked
  * diagnostics (switching off the merge view).
  *
@@ -110,20 +111,23 @@ async function injectDiagnostics(page) {
 /**
  * Returns the drawer's state and its entries of the test source.
  * @param {Page} page
- * @returns {Promise<{empty: boolean, retracted: boolean, width: number, messages: string[]}>}
+ * @returns {Promise<{empty: boolean, retracted: boolean, panelVisible: boolean, buttonVisible: boolean, messages: string[]}>}
  */
 async function drawerState(page) {
   return page.evaluate((source) => {
     const ui = /** @type {any} */ (window).ui;
     const drawer = ui.pdfViewer.diagnosticsDrawer;
     const panel = drawer.shadowRoot.querySelector('[part="panel"]');
+    const panelBox = panel.getBoundingClientRect();
+    const wrapperBox = drawer.parentElement.getBoundingClientRect();
     const messages = Array.from(drawer.list.children)
       .filter((/** @type {HTMLElement} */ item) => item.textContent.includes(source))
       .map((/** @type {HTMLElement} */ item) => item.querySelector('.diagnostics-drawer-message').textContent);
     return {
       empty: drawer.classList.contains('empty'),
       retracted: drawer.classList.contains('retracted'),
-      width: panel.getBoundingClientRect().width,
+      panelVisible: getComputedStyle(panel).visibility === 'visible' && panelBox.right > wrapperBox.left,
+      buttonVisible: !ui.pdfViewer.diagnosticsButton.hidden,
       messages
     };
   }, SOURCE);
@@ -155,14 +159,19 @@ test.describe('Diagnostics drawer', () => {
       let state = await drawerState(page);
       expect(state.empty).toBe(false);
       expect(state.retracted).toBe(false);
+      expect(state.panelVisible).toBe(true);
+      expect(state.buttonVisible).toBe(false);
 
-      // focus in the PDF viewer retracts the drawer, clicking it expands it again
+      // focus in the PDF viewer slides the drawer out, the floating button brings it back
       const box = await page.locator('#pdf-viewer-wrapper').boundingBox();
       await page.mouse.click(box.x + box.width - 20, box.y + box.height / 2);
       await expect.poll(async () => (await drawerState(page)).retracted).toBe(true);
-      await expect.poll(async () => Math.round((await drawerState(page)).width)).toBe(100);
-      await page.locator('.diagnostics-drawer-item', { hasText: 'fix B' }).click();
-      await expect.poll(async () => (await drawerState(page)).retracted).toBe(false);
+      await expect.poll(async () => (await drawerState(page)).panelVisible).toBe(false);
+      expect((await drawerState(page)).buttonVisible).toBe(true);
+      await expect(page.locator('.diagnostics-drawer-button sl-badge')).toHaveText('3');
+      await page.locator('.diagnostics-drawer-button').click();
+      await expect.poll(async () => (await drawerState(page)).panelVisible).toBe(true);
+      expect((await drawerState(page)).buttonVisible).toBe(false);
 
       // clicking a diagnostic selects its text in the editor
       await page.locator('.diagnostics-drawer-item', { hasText: 'fix B' }).locator('.diagnostics-drawer-message').click();

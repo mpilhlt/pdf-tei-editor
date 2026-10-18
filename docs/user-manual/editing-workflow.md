@@ -117,7 +117,7 @@ Click the **Validate** button to run a full schema validation against the TEI sc
 
 ## Diagnostics drawer
 
-While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is fully shown while you work in the XML editor; when you click into the PDF viewer it shrinks to a narrow strip so the PDF stays readable. Click the strip to show the drawer again.
+While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is fully shown while you work in the XML editor; when you click into the PDF viewer it slides out so the whole PDF is visible, leaving a **Diagnostics** button with the number of diagnostics in the top-left corner. Click the button to show the drawer again.
 
 - Click a diagnostic to select the text it applies to in the XML editor.
 - **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.

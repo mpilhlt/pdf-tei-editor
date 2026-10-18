@@ -5,8 +5,9 @@
  * suggestions, ...) in a drawer on the left side, over the PDF viewer,
  * instead of CodeMirror's lint panel below the editor. The drawer is shown
  * while there are diagnostics. It is fully expanded while the focus is in the
- * XML editor and retracts to a narrow strip while the focus is in the PDF
- * viewer; clicking the strip expands it again.
+ * XML editor and slides out while the focus is in the PDF viewer, leaving a
+ * floating "Diagnostics" button with the count; clicking it expands the drawer
+ * again.
  *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
  * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
@@ -20,12 +21,12 @@
  * @import { SlDrawer, SlCheckbox } from '../ui.js'
  * @import { ViewUpdate } from '@codemirror/view'
  * @import { FixableDiagnostic } from '../modules/lint-utils.js'
- * @import { diagnosticsDrawerPart } from '../templates/diagnostics-drawer.types.js'
+ * @import { diagnosticsDrawerPart, diagnosticsButtonPart } from '../templates/diagnostics-drawer.types.js'
  */
 
 import { EditorView } from '@codemirror/view'
 import { Plugin } from '../modules/plugin-base.js'
-import ui, { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import ui, { registerTemplate, createFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import {
   collectDiagnostics,
@@ -60,6 +61,9 @@ class DiagnosticsDrawerPlugin extends Plugin {
   /** @type {SlDrawer & diagnosticsDrawerPart} */
   #ui = null
 
+  /** @type {HTMLButtonElement & diagnosticsButtonPart} Shown instead of the retracted drawer */
+  #button = null
+
   /** @type {DiagnosticEntry[]} */
   #entries = []
 
@@ -83,26 +87,24 @@ class DiagnosticsDrawerPlugin extends Plugin {
 
     // the wrapper around the PDF pages, so that the drawer leaves the PDF toolbars visible
     const parent = this.getDependency('pdfviewer').viewerWrapper
-    this.#ui = this.createUi(createSingleFromTemplate('diagnostics-drawer', parent))
+    const [drawer, button] = createFromTemplate('diagnostics-drawer', parent)
+      .filter(node => node instanceof HTMLElement)
+    this.#ui = this.createUi(/** @type {SlDrawer} */ (drawer))
+    this.#button = this.createUi(/** @type {HTMLButtonElement} */ (button))
 
     // the drawer stays open; its visibility is controlled by the `empty` class
     this.#ui.addEventListener('sl-initial-focus', event => event.preventDefault())
     this.#ui.addEventListener('sl-request-close', event => event.preventDefault())
     this.#ui.open = true
 
-    // clicking the retracted drawer only expands it
-    this.#ui.addEventListener('click', event => {
-      if (this.#expanded) return
-      event.stopPropagation()
-      event.preventDefault()
-      this.#setExpanded(true)
-    }, true)
+    this.#button.addEventListener('click', () => this.#setExpanded(true))
 
     // focus-dependent expansion
     for (const type of ['focusin', 'pointerdown']) {
       ui.xmlEditor.addEventListener(type, () => this.#setExpanded(true))
       ui.pdfViewer.addEventListener(type, event => {
-        if (!this.#ui.contains(/** @type {Node} */ (event.target))) this.#setExpanded(false)
+        const target = /** @type {Node} */ (event.target)
+        if (!this.#ui.contains(target) && !this.#button.contains(target)) this.#setExpanded(false)
       })
     }
 
@@ -203,7 +205,14 @@ class DiagnosticsDrawerPlugin extends Plugin {
     if (this.#expanded === expanded) return
     this.#expanded = expanded
     this.#ui.classList.toggle('retracted', !expanded)
-    this.#ui.title = expanded ? '' : 'Show diagnostics'
+    this.#updateButton()
+  }
+
+  /**
+   * Shows the floating button while the drawer is retracted and has diagnostics
+   */
+  #updateButton() {
+    this.#button.hidden = this.#expanded || this.#entries.length === 0
   }
 
   /**
@@ -242,10 +251,13 @@ class DiagnosticsDrawerPlugin extends Plugin {
   #render() {
     const empty = this.#entries.length === 0
     this.#ui.classList.toggle('empty', empty)
-    this.#ui.header.count.textContent = String(this.#entries.length)
-    this.#ui.header.count.setAttribute('variant',
-      this.#entries.some(e => e.diagnostic.severity === 'error') ? 'danger'
-        : this.#entries.some(e => e.diagnostic.severity === 'warning') ? 'warning' : 'neutral')
+    const variant = this.#entries.some(e => e.diagnostic.severity === 'error') ? 'danger'
+      : this.#entries.some(e => e.diagnostic.severity === 'warning') ? 'warning' : 'neutral'
+    for (const count of [this.#ui.header.count, this.#button.count]) {
+      count.textContent = String(this.#entries.length)
+      count.setAttribute('variant', variant)
+    }
+    this.#updateButton()
     this.#ui.list.replaceChildren(...this.#entries.map(entry => this.#renderEntry(entry)))
     this.#updateFooter()
   }
@@ -281,6 +293,14 @@ class DiagnosticsDrawerPlugin extends Plugin {
     message.textContent = diagnostic.message
     body.append(message)
 
+    // source on the left, actions on the right
+    const meta = document.createElement('div')
+    meta.className = 'diagnostics-drawer-meta'
+    const info = document.createElement('span')
+    info.className = 'diagnostics-drawer-source'
+    info.textContent = [`Line ${entry.line}`, diagnostic.source].filter(Boolean).join(' · ')
+    meta.append(info)
+
     for (const action of diagnostic.actions ?? []) {
       const button = document.createElement('button')
       button.type = 'button'
@@ -292,13 +312,9 @@ class DiagnosticsDrawerPlugin extends Plugin {
         if (!current) return
         action.apply(this.#xmlEditor.getView(), current.from, current.to)
       })
-      body.append(button)
+      meta.append(button)
     }
-
-    const info = document.createElement('div')
-    info.className = 'diagnostics-drawer-source'
-    info.textContent = [`Line ${entry.line}`, diagnostic.source].filter(Boolean).join(' · ')
-    body.append(info)
+    body.append(meta)
 
     item.append(checkbox, body)
     item.addEventListener('click', () => this.#showInEditor(key))
