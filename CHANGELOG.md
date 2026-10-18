@@ -2,6 +2,21 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.73.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.72.0...v0.73.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **annotation-review:** drop findings that nest an element in itself ([#548](https://github.com/mpilhlt/pdf-tei-editor/issues/548)) ([db68018](https://github.com/mpilhlt/pdf-tei-editor/commit/db68018cb7df4aa8605a35b8e6c8b2c67fb498ad))
+* **llm:** report Gemini connection failures instead of crashing the review ([#551](https://github.com/mpilhlt/pdf-tei-editor/issues/551)) ([28ca9fc](https://github.com/mpilhlt/pdf-tei-editor/commit/28ca9fc534bec573296b611cd313431610d00718))
+
+
+### Features
+
+* **annotation-review:** keep review suggestions across page reloads ([#550](https://github.com/mpilhlt/pdf-tei-editor/issues/550)) ([53939fc](https://github.com/mpilhlt/pdf-tei-editor/commit/53939fc83cae5b3c53cfe95886a17a5a2d040a00))
+* **llamore:** run LLamore extraction on the configured LLM model ([1386cc2](https://github.com/mpilhlt/pdf-tei-editor/commit/1386cc286766446cfcbd326b381963e7fab1e7b4))
+* **xmleditor:** list diagnostics in a drawer with apply and dismiss ([#549](https://github.com/mpilhlt/pdf-tei-editor/issues/549)) ([c2fbca7](https://github.com/mpilhlt/pdf-tei-editor/commit/c2fbca7217cc0488e4f5288bea4226d5ed222030))
+
 # [0.72.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.71.1...v0.72.0) (2026-10-15)
 
 
