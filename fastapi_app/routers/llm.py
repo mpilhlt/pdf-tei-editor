@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
-from ..lib.llm import LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
+from ..lib.llm import LLMProviderError, LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
 from ..lib.llm.model_access import is_free_model, user_may_use_model
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def set_default(
         raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         models = provider.list_models()
-    except (requests.RequestException, RuntimeError) as e:
+    except (requests.RequestException, RuntimeError, LLMProviderError) as e:
         raise HTTPException(status_code=502, detail=f"Could not list models of '{provider.label}': {e}") from e
     model = next((m for m in models if m["id"] == body.model_id), None)
     if model is None:
