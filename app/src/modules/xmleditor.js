@@ -51,7 +51,7 @@ import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, 
 import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
-import { linter, lintGutter, forceLinting, lintKeymap } from "@codemirror/lint"
+import { linter, lintGutter, forceLinting, nextDiagnostic } from "@codemirror/lint"
 
 // custom modules
 
@@ -249,7 +249,8 @@ export class XMLEditor extends EventEmitter {
         ...historyKeymap,
         ...foldKeymap,
         ...completionKeymap,
-        ...lintKeymap
+        // lintKeymap without Mod-Shift-m: diagnostics are listed in the diagnostics drawer, not the lint panel
+        { key: 'F8', run: nextDiagnostic }
       ]),
       xml(),
       this.#xmlTagSyncCompartment.of(xmlTagSync),

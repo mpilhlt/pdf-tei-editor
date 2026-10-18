@@ -14,6 +14,7 @@ export { default as BackendPluginsPlugin } from './plugins/backend-plugins.js';
 export { default as ClientPlugin } from './plugins/client.js';
 export { default as ConfigEditorPlugin } from './plugins/config-editor.js';
 export { default as ConfigPlugin } from './plugins/config.js';
+export { default as DiagnosticsDrawerPlugin } from './plugins/diagnostics-drawer.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
 export { default as DocumentActionsPlugin } from './plugins/document-actions.js';
 export { default as DocumentRulesPlugin } from './plugins/document-rules.js';
@@ -56,6 +57,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   client: import('./plugins/client.js').default,
  *   "config-editor": import('./plugins/config-editor.js').default,
  *   config: import('./plugins/config.js').default,
+ *   "diagnostics-drawer": import('./plugins/diagnostics-drawer.js').default,
  *   dialog: import('./plugins/dialog.js').default,
  *   "document-actions": import('./plugins/document-actions.js').default,
  *   "document-rules": import('./plugins/document-rules.js').default,

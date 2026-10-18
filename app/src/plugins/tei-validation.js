@@ -8,6 +8,7 @@
 import { EditorView, ViewUpdate } from '@codemirror/view';
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import Plugin from '../modules/plugin-base.js';
+import { addDismissListener } from '../modules/lint-utils.js';
 import ep from '../extension-points.js';
 
 class TeiValidationPlugin extends Plugin {
@@ -42,10 +43,15 @@ class TeiValidationPlugin extends Plugin {
     this.#xmlEditor = this.getDependency('xmleditor');
     this.#logger.debug(`Installing plugin "${this.name}"`);
     this.#xmlEditor.addLinter([
-      linter(this.#lintSource.bind(this), { autoPanel: true, delay: 2000, needsRefresh: () => false }),
+      linter(this.#lintSource.bind(this), { delay: 2000, needsRefresh: () => false }),
       lintGutter()
     ]);
     this.#xmlEditor.on('editorUpdateDelayed', (update) => this.#removeDiagnosticsInChangedRanges(update));
+    // forget dismissed diagnostics, so the lint source does not return them again until the next validation
+    addDismissListener(dismissed => {
+      this.#lastDiagnostics = this.#lastDiagnostics.filter(d => !dismissed.some(x =>
+        !x.source && x.from === d.from && x.to === d.to && x.message === d.message));
+    });
   }
 
   /**

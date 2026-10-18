@@ -48,7 +48,7 @@ function fakeSessionStorageClass(store) {
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
+  const confirmCalls = [], lintCalls = [], dismissListeners = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
     progress: {
@@ -60,9 +60,10 @@ function buildExtension(opts = {}) {
     'lint-utils': {
       replacesDiagnostics: opts.replacesDiagnostics ?? (() => false),
       applyMergedDiagnostics: (view, source, own, options) => lintCalls.push({ view, source, own, options }),
+      addDismissListener: (fn) => { dismissListeners.push(fn); },
     },
     xmleditor: {
-      getView: () => ({ state: { doc: { toString: () => opts.docText ?? '' } }, dom: { querySelector: () => (opts.panelOpen?.() ? {} : null) } }),
+      getView: () => ({ state: { doc: { toString: () => opts.docText ?? '' } } }),
       addUpdateListener: (fn) => { updateListeners.push(fn); },
       showMergeView: async (text) => { if (opts.showMergeViewImpl) return opts.showMergeViewImpl(text); mergeViews.push(text); },
       on: (event, fn) => { handlers[event] = fn; },
@@ -95,7 +96,7 @@ function buildExtension(opts = {}) {
     }
     return impl(endpoint, ...rest);
   };
-  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
+  return { ext, notifyCalls, confirmCalls, lintCalls, dismissListeners, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
 }
 
 describe('hasReviewableRules', () => {
@@ -243,6 +244,29 @@ describe('findingsToDiagnostics', () => {
     result[0].actions[0].apply({}, 2, 5);
     assert.deepStrictEqual(proposed, [[0, 2, 5]]);
   });
+
+  it('carries the new text as the replacement applied by the diagnostics drawer', () => {
+    const [d] = findingsToDiagnostics([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }], 'x AAA y', () => {});
+    assert.strictEqual(d.replacement, 'a');
+  });
+});
+
+describe('dismissing diagnostics', () => {
+  it('forgets the findings whose diagnostics were dismissed, keeping the others', async () => {
+    const findings = [
+      { id: 0, old: 'AAA', new: 'a', rationale: 'first' },
+      { id: 1, old: 'BBB', new: 'b', rationale: 'second' },
+    ];
+    const { ext, dismissListeners } = buildExtension({ docText: 'x AAA BBB y' });
+    await ext.start();
+    ext.showFindings(findings);
+    assert.strictEqual(dismissListeners.length, 1);
+    dismissListeners[0]([
+      { from: 2, to: 5, severity: 'info', message: 'first', source: 'annotation-review' },
+      { from: 2, to: 5, severity: 'error', message: 'first' }, // foreign: ignored
+    ]);
+    assert.deepStrictEqual(ext._findings.map(f => f.id), [1]);
+  });
 });
 
 describe('showFindings / clearFindings', () => {
@@ -288,40 +312,6 @@ describe('re-rendering after diagnostics are replaced', () => {
     updateListeners[0]({ transactions: [] });
     await new Promise(r => setTimeout(r, 5));
     assert.strictEqual(lintCalls.length, 0);
-  });
-
-  it('keeps the panel open when a validation without errors closed it', async () => {
-    let panelOpen = false;
-    const { ext, lintCalls, updateListeners } = buildExtension({
-      docText: 'x AAA y',
-      replacesDiagnostics: () => true,
-      panelOpen: () => panelOpen,
-    });
-    await ext.start();
-    panelOpen = true; // opened by showFindings
-    ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'why' }]);
-    panelOpen = false; // closed by the validation linter's autoPanel
-    updateListeners[0]({ transactions: [] });
-    await new Promise(r => setTimeout(r, 5));
-    assert.strictEqual(lintCalls.at(-1).options.openPanel, true);
-  });
-
-  it('leaves the panel closed when the user closed it', async () => {
-    let panelOpen = true;
-    let replaced = false;
-    const { ext, lintCalls, updateListeners } = buildExtension({
-      docText: 'x AAA y',
-      replacesDiagnostics: () => replaced,
-      panelOpen: () => panelOpen,
-    });
-    await ext.start();
-    ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'why' }]);
-    panelOpen = false; // closed by the user
-    updateListeners[0]({ transactions: [] });
-    replaced = true;
-    updateListeners[0]({ transactions: [] });
-    await new Promise(r => setTimeout(r, 5));
-    assert.strictEqual(lintCalls.at(-1).options.openPanel, false);
   });
 });
 
@@ -422,6 +412,16 @@ describe('session cache', () => {
     await ext.onXmlChange('doc2');
     assert.deepStrictEqual(ext._findings, []);
     assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0, 1]);
+  });
+
+  it('removes findings dismissed in the diagnostics drawer from the cache', async () => {
+    const sessionStore = new Map();
+    const { ext, handlers, dismissListeners } = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await ext.start();
+    handlers.editorAfterLoad();
+    ext.showFindings(findings);
+    dismissListeners[0]([{ from: 6, to: 9, severity: 'info', message: 'edited away', source: 'annotation-review' }]);
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0]);
   });
 });
 
@@ -535,14 +535,14 @@ describe('runReview', () => {
   });
 });
 
-describe('lint panel handling', () => {
-  it('showFindings asks to open the lint panel', () => {
+describe('diagnostics drawer reveal', () => {
+  it('showFindings asks to expand the diagnostics drawer', () => {
     const { ext, lintCalls } = buildExtension({ docText: 'x AAA y' });
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);
     assert.deepStrictEqual(lintCalls[0].options, { openPanel: true });
   });
 
-  it('the listener-driven re-render does not open the lint panel', async () => {
+  it('the listener-driven re-render does not expand the drawer', async () => {
     const { ext, lintCalls, updateListeners } = buildExtension({ docText: 'x AAA y', replacesDiagnostics: () => true });
     await ext.start();
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);

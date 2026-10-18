@@ -6,7 +6,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EditorState } from '@codemirror/state';
 import { setDiagnostics } from '@codemirror/lint';
-import { collectDiagnostics, mergeDiagnostics, replacesDiagnostics } from '../../../app/src/modules/lint-utils.js';
+import {
+  addDismissListener, applyMergedDiagnostics, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges,
+  mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
+} from '../../../app/src/modules/lint-utils.js';
 
 const DOC = 'hello brave new world';
 
@@ -93,28 +96,73 @@ describe('applyMergedDiagnostics with a real EditorView (jsdom)', async () => {
   /** @returns {EditorView} */
   function makeView() {
     const parent = w.document.body.appendChild(w.document.createElement('div'));
-    return new EditorView({ doc: DOC, parent, extensions: [linter(() => [], { autoPanel: true })] });
+    return new EditorView({ doc: DOC, parent, extensions: [linter(() => [])] });
   }
   const own = [{ from: 0, to: 5, severity: 'info', message: 'm' }];
   const panelOpen = (/** @type {EditorView} */ v) => v.dom.querySelector('.cm-panel-lint') !== null;
 
-  it('does not reopen a closed lint panel', () => {
+  it('stores the merged diagnostics without opening the lint panel, also with openPanel', () => {
     const view = makeView();
     applyMergedDiagnostics(view, 'ar', own);
+    applyMergedDiagnostics(view, 'ar', own, { openPanel: true });
     assert.strictEqual(panelOpen(view), false);
     assert.strictEqual(collectDiagnostics(view.state).length, 1);
   });
+});
 
-  it('opens the panel when openPanel is true', () => {
-    const view = makeView();
-    applyMergedDiagnostics(view, 'ar', own, { openPanel: true });
-    assert.strictEqual(panelOpen(view), true);
+describe('applyMergedDiagnostics', () => {
+  /** @param {EditorState} state */
+  function fakeView(state) {
+    const view = { state, dispatched: [], dispatch(spec) { view.dispatched.push(spec); view.state = view.state.update(spec).state; } };
+    return view;
+  }
+
+  it('adds the reveal effect only with openPanel', () => {
+    const view = fakeView(EditorState.create({ doc: DOC }));
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', [validation]);
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', [validation], { openPanel: true });
+    const updates = view.dispatched.map(spec => ({ transactions: [EditorState.create({ doc: DOC }).update(spec)] }));
+    assert.deepStrictEqual(updates.map(u => revealsDiagnostics(u)), [false, true]);
+    assert.strictEqual(collectDiagnostics(view.state).length, 1);
   });
+});
 
-  it('leaves an open panel open', () => {
-    const view = makeView();
-    applyMergedDiagnostics(view, 'ar', own, { openPanel: true });
-    applyMergedDiagnostics(view, 'ar', own);
-    assert.strictEqual(panelOpen(view), true);
+describe('diagnosticKey', () => {
+  it('is equal for re-created diagnostics covering the same text, and differs otherwise', () => {
+    const state = EditorState.create({ doc: DOC });
+    const a = diagnosticKey(state, { ...validation });
+    assert.strictEqual(a, diagnosticKey(state, { ...validation }));
+    assert.notStrictEqual(a, diagnosticKey(state, { ...validation, from: 6, to: 11 }));
+    assert.notStrictEqual(a, diagnosticKey(state, { ...validation, source: 'x' }));
+  });
+});
+
+describe('dismissDiagnostics', () => {
+  it('removes the given diagnostics and notifies the dismiss listeners', () => {
+    const other = { from: 6, to: 11, severity: 'info', message: 'r', source: 'annotation-review' };
+    const view = { state: stateWith([validation, other]), dispatch(spec) { view.state = view.state.update(spec).state; } };
+    const notified = [];
+    const remove = addDismissListener(d => notified.push(d));
+    try {
+      dismissDiagnostics(/** @type {any} */ (view), [{ ...other }]);
+    } finally {
+      remove();
+    }
+    assert.deepStrictEqual(collectDiagnostics(view.state).map(d => d.message), ['schema error']);
+    assert.strictEqual(notified.length, 1);
+    assert.strictEqual(notified[0][0].message, 'r');
+  });
+});
+
+describe('fixChanges', () => {
+  it('returns sorted changes for diagnostics with a replacement, skipping others and overlaps', () => {
+    const { changes, applied } = fixChanges([
+      { from: 12, to: 15, severity: 'info', message: 'b', replacement: 'NEW' },
+      { from: 0, to: 5, severity: 'error', message: 'no fix' },
+      { from: 6, to: 11, severity: 'info', message: 'a', replacement: 'BRAVE' },
+      { from: 8, to: 13, severity: 'info', message: 'overlaps a', replacement: 'x' },
+    ]);
+    assert.deepStrictEqual(changes, [{ from: 6, to: 11, insert: 'BRAVE' }, { from: 12, to: 15, insert: 'NEW' }]);
+    assert.deepStrictEqual(applied.map(d => d.message), ['a', 'b']);
   });
 });
