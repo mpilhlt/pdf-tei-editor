@@ -375,6 +375,7 @@ describe('session cache', () => {
     await load(after);
     assert.deepStrictEqual(after.ext._findings.map(f => f.id), [0]);
     assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
+    assert.strictEqual(after.lintCalls.at(-1).options.openPanel, true);
   });
 
   it('keeps the cache of a document when another one is loaded', async () => {

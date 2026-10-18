@@ -236,7 +236,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     const cached = this._cache.load(docId);
     if (!cached.length) return;
     this._findings = cached.filter(f => locateFinding(f, docText) !== null);
-    this._renderFindings(false);
+    // open the panel, as after the review that produced them
+    this._renderFindings(this._findings.length > 0);
   }
 
   /**
