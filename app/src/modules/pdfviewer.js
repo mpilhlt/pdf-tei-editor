@@ -208,9 +208,23 @@ export class PDFJSViewer {
           this.eventBus = new pdfjsViewer.EventBus();
 
           // Create link service
+          // External links (e.g. URLs in the PDF text) open in a new tab instead of
+          // navigating away from the application.
           this.linkService = new pdfjsViewer.PDFLinkService({
-            eventBus: this.eventBus
+            eventBus: this.eventBus,
+            externalLinkTarget: pdfjsViewer.LinkTarget.BLANK
           });
+
+          // PDF.js sets a native `title` attribute on link anchors showing the raw URL.
+          // Native title tooltips are rendered by the browser above all page content,
+          // ignoring CSS z-index/overflow, so they can bleed through other UI (e.g. the
+          // diagnostics drawer). Strip it; the href/target/rel set by addLinkAttributes
+          // are kept.
+          const addLinkAttributes = this.linkService.addLinkAttributes.bind(this.linkService);
+          this.linkService.addLinkAttributes = (link, url, newWindow) => {
+            addLinkAttributes(link, url, newWindow);
+            link.removeAttribute('title');
+          };
 
           // Create find controller
           this.findController = new pdfjsViewer.PDFFindController({
