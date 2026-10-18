@@ -203,7 +203,10 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     });
     const { SessionStorage } = this.getDependency('session-storage');
     this._cache = new FindingsCache(new SessionStorage(SOURCE));
+    // services.load() loads the editor content before it sets `state.xml`, so the
+    // restore usually happens in onXmlChange(); this covers content loaded later
     xmleditor.on('editorAfterLoad', () => this._restoreFindings());
+    this._restoreFindings();
   }
 
   /**
@@ -217,17 +220,22 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * Show the cached findings of the document just loaded, e.g. after a page
+   * Once the document of `state.xml` is in the editor, make it the one the
+   * findings are stored for and show its cached findings, e.g. after a page
    * reload, keeping only those whose quoted text still occurs exactly once.
+   * The cache itself is only rewritten when the findings change.
    * @returns {void}
    */
   _restoreFindings() {
-    this._docId = this.state?.xml || null;
-    if (!this._docId || !this._cache) return;
-    const cached = this._cache.load(this._docId);
-    if (!cached.length) return;
+    const docId = this.state?.xml || null;
+    if (!docId || docId === this._docId || !this._cache) return;
     const docText = this.getDependency('xmleditor').getView().state.doc.toString();
-    this._setFindings(cached.filter(f => locateFinding(f, docText) !== null));
+    // not loaded yet: editorAfterLoad calls again
+    if (!docText) return;
+    this._docId = docId;
+    const cached = this._cache.load(docId);
+    if (!cached.length) return;
+    this._findings = cached.filter(f => locateFinding(f, docText) !== null);
     this._renderFindings(false);
   }
 
@@ -324,6 +332,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   async onXmlChange(_doc) {
     this._docId = null;
     this.clearFindings();
+    this._restoreFindings();
     this._updateMenuState();
   }
 

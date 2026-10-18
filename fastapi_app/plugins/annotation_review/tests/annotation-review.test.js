@@ -353,7 +353,28 @@ describe('session cache', () => {
     await after.ext.start();
     after.handlers.editorAfterLoad();
     assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
+  });
+
+  it('saves and restores findings when the document id is set after the content is loaded', async () => {
+    // services.load(): state.xml is null while the editor loads, then set to the new id
+    const sessionStore = new Map();
+    const load = async (/** @type {any} */ built) => {
+      built.ext.state = { xml: null };
+      await built.ext.start();
+      await built.ext.onXmlChange(null);
+      built.handlers.editorAfterLoad();
+      built.ext.state = { xml: 'doc1' };
+      await built.ext.onXmlChange('doc1');
+    };
+    const before = buildExtension({ docText: 'x AAA BBB y', sessionStore });
+    await load(before);
+    before.ext.showFindings(findings.slice(0, 1));
     assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0]);
+
+    const after = buildExtension({ docText: 'x AAA BBB y', sessionStore });
+    await load(after);
+    assert.deepStrictEqual(after.ext._findings.map(f => f.id), [0]);
+    assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
   });
 
   it('keeps the cache of a document when another one is loaded', async () => {
@@ -362,6 +383,7 @@ describe('session cache', () => {
     await ext.start();
     handlers.editorAfterLoad();
     ext.showFindings(findings);
+    ext.state = { xml: 'doc2' };
     await ext.onXmlChange('doc2');
     assert.deepStrictEqual(ext._findings, []);
     assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0, 1]);
