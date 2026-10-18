@@ -17,6 +17,9 @@
 /** Diagnostic source tag identifying this plugin's diagnostics. */
 const SOURCE = 'annotation-review';
 
+/** Format version of the cached review entries; entries of other versions are ignored. */
+export const CACHE_VERSION = 1;
+
 /**
  * @typedef {{id: number, old: string, new: string, rationale: string}} Finding
  */
@@ -77,6 +80,66 @@ export function findingsToDiagnostics(findings, docText, onProposeFix) {
 }
 
 /**
+ * The storage interface of `SessionStorage` (app/src/modules/session-storage.js)
+ * used by {@link FindingsCache}.
+ * @typedef {object} ContextStorage
+ * @property {(contextId: string, key: string, defaultValue?: any) => any} getValue
+ * @property {(contextId: string, updates: Record<string, any>) => void} setState
+ * @property {(contextId: string) => void} clearState
+ */
+
+/**
+ * A cached review of one document.
+ * @typedef {object} CachedReview
+ * @property {number} version - {@link CACHE_VERSION}
+ * @property {Finding[]} findings
+ */
+
+/**
+ * Keeps the findings of the current editing session per document in session
+ * storage, so that reloading the page does not require a new (expensive)
+ * review. Session storage is per browser tab and cleared when it is closed.
+ * Findings are anchored on their quoted text, not on positions; the caller
+ * re-locates them in the loaded document and drops those that no longer occur
+ * exactly once, so cached findings cannot go stale.
+ */
+export class FindingsCache {
+  /**
+   * @param {ContextStorage} storage
+   */
+  constructor(storage) {
+    this._storage = storage;
+  }
+
+  /**
+   * The cached findings of the document, or [] if none (or of another format version).
+   * @param {string} docId
+   * @returns {Finding[]}
+   */
+  load(docId) {
+    /** @type {CachedReview|undefined} */
+    const entry = this._storage.getValue(docId, 'review');
+    return entry?.version === CACHE_VERSION && Array.isArray(entry.findings) ? entry.findings : [];
+  }
+
+  /**
+   * Stores the findings of the document, or removes its entry if there are none.
+   * @param {string} docId
+   * @param {Finding[]} findings
+   * @returns {void}
+   */
+  save(docId, findings) {
+    if (!findings.length) {
+      this._storage.clearState(docId);
+      return;
+    }
+    /** @type {CachedReview} */
+    const review = { version: CACHE_VERSION, findings };
+    this._storage.setState(docId, { review });
+  }
+}
+
+/**
  * Escape text for use in the dialog's HTML message.
  * @param {string} text
  * @returns {string}
@@ -93,8 +156,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     super(context, { name: 'annotation-review', deps: ['xmleditor', 'tools'] });
     /** @type {Finding[]} Findings of the last review, shown as diagnostics. */
     this._findings = [];
+    /** @type {string|null} Stable id of the document the findings belong to; null while none is loaded. */
+    this._docId = null;
+    /** @type {FindingsCache|undefined} Created in start(). */
+    this._cache = undefined;
     /** @type {boolean} True while this plugin dispatches its own diagnostics. */
     this._rendering = false;
+    /** @type {boolean} Whether the lint panel was open before the diagnostic set was last replaced. */
+    this._panelOpen = false;
     /** @type {HTMLElement|undefined} The Tools-menu item, created in start(). */
     this._menuItem = undefined;
     /** @type {number} Debounce (ms) before dropping findings whose text was edited away. */
@@ -126,14 +195,56 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     this._updateMenuState();
 
     xmleditor.addUpdateListener(update => {
-      if (this.getDependency('lint-utils').replacesDiagnostics(update) && !this._rendering && this._findings.length) {
+      const replaced = this.getDependency('lint-utils').replacesDiagnostics(update);
+      // a replaced diagnostic set opens or closes the panel by itself (the validation
+      // linter's autoPanel closes it when there are no errors); any other update shows
+      // whether the user keeps it open
+      if (!replaced && !this._rendering) this._panelOpen = this._isPanelOpen();
+      if (replaced && !this._rendering && this._findings.length) {
         // CodeMirror forbids dispatching from inside an update listener
-        setTimeout(() => this._renderFindings(false), 0);
+        setTimeout(() => this._renderFindings(this._panelOpen), 0);
       } else if (update.docChanged && !this._rendering && this._findings.length) {
         clearTimeout(this._pruneTimer);
         this._pruneTimer = setTimeout(() => this._pruneFindings(), this._pruneDelayMs);
       }
     });
+    const { SessionStorage } = this.getDependency('session-storage');
+    this._cache = new FindingsCache(new SessionStorage(SOURCE));
+    // services.load() loads the editor content before it sets `state.xml`, so the
+    // restore usually happens in onXmlChange(); this covers content loaded later
+    xmleditor.on('editorAfterLoad', () => this._restoreFindings());
+    this._restoreFindings();
+  }
+
+  /**
+   * Replace the findings and store them in the session cache of the current document.
+   * @param {Finding[]} findings
+   * @returns {void}
+   */
+  _setFindings(findings) {
+    this._findings = findings;
+    if (this._docId && this._cache) this._cache.save(this._docId, findings);
+  }
+
+  /**
+   * Once the document of `state.xml` is in the editor, make it the one the
+   * findings are stored for and show its cached findings, e.g. after a page
+   * reload, keeping only those whose quoted text still occurs exactly once.
+   * The cache itself is only rewritten when the findings change.
+   * @returns {void}
+   */
+  _restoreFindings() {
+    const docId = this.state?.xml || null;
+    if (!docId || docId === this._docId || !this._cache) return;
+    const docText = this.getDependency('xmleditor').getView().state.doc.toString();
+    // not loaded yet: editorAfterLoad calls again
+    if (!docText) return;
+    this._docId = docId;
+    const cached = this._cache.load(docId);
+    if (!cached.length) return;
+    this._findings = cached.filter(f => locateFinding(f, docText) !== null);
+    // open the panel, as after the review that produced them
+    this._renderFindings(this._findings.length > 0);
   }
 
   /**
@@ -143,7 +254,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
    * @returns {void}
    */
   showFindings(findings, openPanel = true) {
-    this._findings = findings;
+    this._setFindings(findings);
     this._renderFindings(openPanel);
   }
 
@@ -153,7 +264,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
    */
   clearFindings() {
     if (!this._findings.length) return;
-    this._findings = [];
+    this._setFindings([]);
     this._renderFindings();
   }
 
@@ -166,7 +277,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     const docText = this.getDependency('xmleditor').getView().state.doc.toString();
     const kept = this._findings.filter(f => locateFinding(f, docText) !== null);
     if (kept.length === this._findings.length) return;
-    this._findings = kept;
+    this._setFindings(kept);
     this._renderFindings(false);
   }
 
@@ -188,6 +299,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     } finally {
       this._rendering = false;
     }
+    this._panelOpen = this._isPanelOpen();
+  }
+
+  /**
+   * @returns {boolean} Whether the editor's lint panel is shown
+   */
+  _isPanelOpen() {
+    return this.getDependency('xmleditor').getView().dom.querySelector('.cm-panel-lint') !== null;
   }
 
   /**
@@ -220,12 +339,16 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
   }
 
   /**
-   * A different document was loaded; drop stale findings.
+   * A different document is being loaded; drop the findings of the previous
+   * one from the editor but keep them in the session cache, so that they are
+   * restored when it is loaded again (see _restoreFindings()).
    * @param {string} [_doc] New document identifier
    * @returns {Promise<void>}
    */
   async onXmlChange(_doc) {
+    this._docId = null;
     this.clearFindings();
+    this._restoreFindings();
     this._updateMenuState();
   }
 
