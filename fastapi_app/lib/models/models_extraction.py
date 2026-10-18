@@ -109,6 +109,10 @@ class ExtractorInfo(BaseModel):
         ...,
         description="Whether the extractor is currently available"
     )
+    uses_inference_model: bool = Field(
+        False,
+        description="Whether the extractor runs on the LLM model chosen under Tools > Default Model; the client then sends it as the provider_id/model_id options"
+    )
     options: Optional[Dict[str, Any]] = Field(
         None,
         description="Configuration options supported by the extractor"

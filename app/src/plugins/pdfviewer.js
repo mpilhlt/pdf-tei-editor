@@ -5,6 +5,8 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { UIPart, SlDrawer } from '../ui.js'
+ * @import { diagnosticsDrawerPart, diagnosticsButtonPart } from '../templates/diagnostics-drawer.types.js'
  */
 
 import { PDFJSViewer } from '../modules/pdfviewer.js'
@@ -27,6 +29,8 @@ import Plugin from '../modules/plugin-base.js'
  * @property {import('../modules/panels/status-bar.js').StatusBar} headerbar
  * @property {import('../modules/panels/tool-bar.js').ToolBar} toolbar
  * @property {import('../modules/panels/status-bar.js').StatusBar} statusbar
+ * @property {UIPart<SlDrawer, diagnosticsDrawerPart>} diagnosticsDrawer - Diagnostics drawer over the PDF pages (added by diagnostics-drawer plugin)
+ * @property {UIPart<HTMLButtonElement, diagnosticsButtonPart>} diagnosticsButton - Floating button that shows the retracted diagnostics drawer (added by diagnostics-drawer plugin)
  */
 
 class PdfViewerPlugin extends Plugin {

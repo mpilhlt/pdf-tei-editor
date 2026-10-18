@@ -3,7 +3,7 @@
 This directory is reserved for dedicated integration tests of real extractors:
 
 - `grobid.test.js` - Grobid extractor integration tests (requires GROBID_SERVER_URL)
-- `llamore.test.js` - LLamore/Gemini extractor tests (requires GEMINI_API_KEY)
+- `llamore.test.js` - LLamore extractor tests (requires a configured LLM provider and default model)
 - `rng.test.js` - RNG schema validation extractor tests
 
 These tests are separate from the main test suite because they:
@@ -33,7 +33,7 @@ Real extractor tests should verify:
 export GROBID_SERVER_URL=http://localhost:8070
 npm run test:api -- --grep grobid
 
-# LLamore/Gemini extractor (requires API key)
+# LLamore extractor (requires a configured LLM provider)
 export GEMINI_API_KEY=your-api-key-here
 npm run test:api -- --grep llamore
 

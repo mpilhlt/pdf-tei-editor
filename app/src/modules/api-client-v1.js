@@ -334,6 +334,7 @@
  * @property {Array<string>} input - Supported input types (e.g., ['pdf'], ['xml'])
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
+ * @property {boolean=} uses_inference_model - Whether the extractor runs on the LLM model chosen under Tools > Default Model; the client then sends it as the provider_id/model_id options
  * @property {Object<string, any>=} options - Configuration options supported by the extractor
  * @property {Array<string>=} variants - List of supported variant identifiers
  * @property {Object<string, any>=} navigation_xpath - XPath expressions for navigation, keyed by variant_id

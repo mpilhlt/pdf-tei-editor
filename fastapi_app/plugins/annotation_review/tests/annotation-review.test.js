@@ -25,8 +25,21 @@ class FakeFrontendExtensionPlugin {
 global.FrontendExtensionPlugin = FakeFrontendExtensionPlugin;
 global.document = { createElement: () => ({ addEventListener(t, fn) { this._click = fn; }, style: {} }) };
 
-const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, findingsToDiagnostics } =
+const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, findingsToDiagnostics, FindingsCache, CACHE_VERSION } =
   await import('../extensions/annotation-review.js');
+
+/**
+ * In-memory stand-in for SessionStorage (app/src/modules/session-storage.js),
+ * sharing its contexts through the given map like sessionStorage across reloads.
+ * @param {Map<string, Record<string, any>>} store
+ */
+function fakeSessionStorageClass(store) {
+  return class {
+    getValue(contextId, key, defaultValue) { return store.get(contextId)?.[key] ?? defaultValue; }
+    setState(contextId, updates) { store.set(contextId, { ...store.get(contextId), ...updates }); }
+    clearState(contextId) { store.delete(contextId); }
+  };
+}
 
 /**
  * Build an extension instance with stubbed dependencies.
@@ -35,7 +48,7 @@ const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, fi
 function buildExtension(opts = {}) {
   const ext = new AnnotationReviewExtension({});
   const notifyCalls = [];
-  const confirmCalls = [], lintCalls = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
+  const confirmCalls = [], lintCalls = [], dismissListeners = [], updateListeners = [], mergeViews = [], menuAdds = [], progressCalls = [], progressOpts = {}, handlers = {}, focusActions = {};
   ext._deps = {
     tools: { addMenuItems: (items, category) => menuAdds.push({ items, category }) },
     progress: {
@@ -47,6 +60,7 @@ function buildExtension(opts = {}) {
     'lint-utils': {
       replacesDiagnostics: opts.replacesDiagnostics ?? (() => false),
       applyMergedDiagnostics: (view, source, own, options) => lintCalls.push({ view, source, own, options }),
+      addDismissListener: (fn) => { dismissListeners.push(fn); },
     },
     xmleditor: {
       getView: () => ({ state: { doc: { toString: () => opts.docText ?? '' } } }),
@@ -60,6 +74,7 @@ function buildExtension(opts = {}) {
     'sl-utils': {
       notify: (...args) => notifyCalls.push(args),
     },
+    'session-storage': { SessionStorage: fakeSessionStorageClass(opts.sessionStore ?? new Map()) },
     'tei-utils': {
       getEditorialDeclGuides: opts.getEditorialDeclGuides ?? (() => []),
     },
@@ -81,7 +96,7 @@ function buildExtension(opts = {}) {
     }
     return impl(endpoint, ...rest);
   };
-  return { ext, notifyCalls, confirmCalls, lintCalls, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
+  return { ext, notifyCalls, confirmCalls, lintCalls, dismissListeners, updateListeners, mergeViews, menuAdds, progressCalls, progressOpts, handlers, focusActions };
 }
 
 describe('hasReviewableRules', () => {
@@ -229,6 +244,29 @@ describe('findingsToDiagnostics', () => {
     result[0].actions[0].apply({}, 2, 5);
     assert.deepStrictEqual(proposed, [[0, 2, 5]]);
   });
+
+  it('carries the new text as the replacement applied by the diagnostics drawer', () => {
+    const [d] = findingsToDiagnostics([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }], 'x AAA y', () => {});
+    assert.strictEqual(d.replacement, 'a');
+  });
+});
+
+describe('dismissing diagnostics', () => {
+  it('forgets the findings whose diagnostics were dismissed, keeping the others', async () => {
+    const findings = [
+      { id: 0, old: 'AAA', new: 'a', rationale: 'first' },
+      { id: 1, old: 'BBB', new: 'b', rationale: 'second' },
+    ];
+    const { ext, dismissListeners } = buildExtension({ docText: 'x AAA BBB y' });
+    await ext.start();
+    ext.showFindings(findings);
+    assert.strictEqual(dismissListeners.length, 1);
+    dismissListeners[0]([
+      { from: 2, to: 5, severity: 'info', message: 'first', source: 'annotation-review' },
+      { from: 2, to: 5, severity: 'error', message: 'first' }, // foreign: ignored
+    ]);
+    assert.deepStrictEqual(ext._findings.map(f => f.id), [1]);
+  });
 });
 
 describe('showFindings / clearFindings', () => {
@@ -298,6 +336,92 @@ describe('onXmlChange', () => {
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);
     await ext.onXmlChange('newdoc');
     assert.deepStrictEqual(lintCalls.at(-1).own, []);
+  });
+});
+
+describe('FindingsCache', () => {
+  const findings = [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }];
+
+  it('stores findings per document and removes the entry when there are none', () => {
+    const store = new Map();
+    const cache = new FindingsCache(new (fakeSessionStorageClass(store))());
+    cache.save('doc1', findings);
+    assert.deepStrictEqual(cache.load('doc1'), findings);
+    assert.deepStrictEqual(cache.load('doc2'), []);
+    cache.save('doc1', []);
+    assert.strictEqual(store.has('doc1'), false);
+  });
+
+  it('ignores entries of another format version', () => {
+    const store = new Map([['doc1', { review: { version: CACHE_VERSION + 1, findings } }]]);
+    const cache = new FindingsCache(new (fakeSessionStorageClass(store))());
+    assert.deepStrictEqual(cache.load('doc1'), []);
+  });
+});
+
+describe('session cache', () => {
+  const findings = [
+    { id: 0, old: 'AAA', new: 'a', rationale: 'kept' },
+    { id: 1, old: 'BBB', new: 'b', rationale: 'edited away' },
+  ];
+
+  it('restores the findings still in the document after a reload', async () => {
+    const sessionStore = new Map();
+    const before = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await before.ext.start();
+    before.handlers.editorAfterLoad();
+    before.ext.showFindings(findings);
+
+    // page reload: new instance, same session storage, BBB edited meanwhile
+    const after = buildExtension({ docText: 'x AAA CCC y', sessionStore, state: { xml: 'doc1' } });
+    await after.ext.start();
+    after.handlers.editorAfterLoad();
+    assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
+  });
+
+  it('saves and restores findings when the document id is set after the content is loaded', async () => {
+    // services.load(): state.xml is null while the editor loads, then set to the new id
+    const sessionStore = new Map();
+    const load = async (/** @type {any} */ built) => {
+      built.ext.state = { xml: null };
+      await built.ext.start();
+      await built.ext.onXmlChange(null);
+      built.handlers.editorAfterLoad();
+      built.ext.state = { xml: 'doc1' };
+      await built.ext.onXmlChange('doc1');
+    };
+    const before = buildExtension({ docText: 'x AAA BBB y', sessionStore });
+    await load(before);
+    before.ext.showFindings(findings.slice(0, 1));
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0]);
+
+    const after = buildExtension({ docText: 'x AAA BBB y', sessionStore });
+    await load(after);
+    assert.deepStrictEqual(after.ext._findings.map(f => f.id), [0]);
+    assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
+    assert.strictEqual(after.lintCalls.at(-1).options.openPanel, true);
+  });
+
+  it('keeps the cache of a document when another one is loaded', async () => {
+    const sessionStore = new Map();
+    const { ext, handlers } = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await ext.start();
+    handlers.editorAfterLoad();
+    ext.showFindings(findings);
+    ext.state = { xml: 'doc2' };
+    await ext.onXmlChange('doc2');
+    assert.deepStrictEqual(ext._findings, []);
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0, 1]);
+  });
+
+  it('removes findings dismissed in the diagnostics drawer from the cache', async () => {
+    const sessionStore = new Map();
+    const { ext, handlers, dismissListeners } = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await ext.start();
+    handlers.editorAfterLoad();
+    ext.showFindings(findings);
+    dismissListeners[0]([{ from: 6, to: 9, severity: 'info', message: 'edited away', source: 'annotation-review' }]);
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0]);
   });
 });
 
@@ -391,16 +515,34 @@ describe('runReview', () => {
     assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'show' || c[0] === 'hide').map(c => c[0]), ['show', 'hide']);
     assert.strictEqual(lintCalls.length, 0);
   });
+
+  it('keeps the findings of the parts already reviewed when a later part fails', async () => {
+    let calls = 0;
+    const { ext, lintCalls, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText: 'x AAA y',
+      chunkCount: 3,
+      callPluginApiImpl: async () => {
+        if (calls++ === 0) return { chunk_count: 3, findings: [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }] };
+        throw new Error('LLM provider request failed: Could not reach the Gemini API');
+      },
+    });
+    await ext.runReview();
+    assert.deepStrictEqual(ext._findings.map(f => f.old), ['AAA']);
+    assert.strictEqual(lintCalls.at(-1).own.length, 1);
+    assert.match(notifyCalls.at(-1)[0], /failed in part 2 of 3/);
+  });
 });
 
-describe('lint panel handling', () => {
-  it('showFindings asks to open the lint panel', () => {
+describe('diagnostics drawer reveal', () => {
+  it('showFindings asks to expand the diagnostics drawer', () => {
     const { ext, lintCalls } = buildExtension({ docText: 'x AAA y' });
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);
     assert.deepStrictEqual(lintCalls[0].options, { openPanel: true });
   });
 
-  it('the listener-driven re-render does not open the lint panel', async () => {
+  it('the listener-driven re-render does not expand the drawer', async () => {
     const { ext, lintCalls, updateListeners } = buildExtension({ docText: 'x AAA y', replacesDiagnostics: () => true });
     await ext.start();
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);

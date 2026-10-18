@@ -1,4 +1,8 @@
 /**
+ * @registerModule
+ */
+
+/**
  * Session Storage Helper Module
  *
  * Provides a class for plugins to store/retrieve state in sessionStorage

@@ -27,6 +27,7 @@ import { getFileDataById } from '../modules/file-data-utils.js'
  * @property {string} name - Display name for the extractor
  * @property {string[]} input - Supported input types (e.g., ['pdf'])
  * @property {string[]} output - Supported output types (e.g., ['tei-document'])
+ * @property {boolean} [uses_inference_model] - Whether the extractor runs on the model chosen under Tools > Default Model
  * @property {Record<string, ExtractorOption>} [options] - Configuration options for the extractor
  */
 
@@ -290,6 +291,8 @@ class ExtractionPlugin extends Plugin {
     const dialog = this.getDependency('dialog')
     const logger = this.getDependency('logger')
     const dialogUi = this.#dialogUi
+    // Looked up lazily rather than declared in `deps`: only needed while the dialog is open
+    const inferenceSettings = this.getDependency('inference-settings')
 
     /** @type {DocumentMetadata} */
     let documentMetadata = {}
@@ -407,11 +410,33 @@ class ExtractionPlugin extends Plugin {
         }
       }
 
+      if (selectedExtractor.uses_inference_model && dynamicOptionsContainer) {
+        dynamicOptionsContainer.appendChild(createInferenceModelDisplay())
+      }
+
       requestAnimationFrame(() => {
         for (const [element, value] of pendingValues) {
           /** @type {any} */(element).value = value
         }
       })
+    }
+
+    /**
+     * Read-only display of the LLM model an extractor with `uses_inference_model`
+     * will run on. Has no `name`, so it is not submitted as an option.
+     * @returns {SlInput}
+     */
+    function createInferenceModelDisplay() {
+      const model = inferenceSettings.getDefaultModel()
+      const input = Object.assign(new SlInput, {
+        label: 'Model',
+        size: 'small',
+        type: 'text',
+        readonly: true,
+        value: model ? inferenceSettings.getModelLabel(model.providerId, model.modelId) : 'Server default'
+      })
+      input.setAttribute('help-text', 'Change under Tools > Default Model')
+      return input
     }
 
     /**
@@ -536,6 +561,7 @@ class ExtractionPlugin extends Plugin {
         /** @type {SlSelect|SlInput} */
         const typedInput = /** @type {SlSelect|SlInput} */(input)
         const name = typedInput.name
+        if (!name) continue
         let value = typedInput.value
 
         if (name === 'variant_id' && (!value || value === '')) {
@@ -546,6 +572,14 @@ class ExtractionPlugin extends Plugin {
       }
 
       const selectedExtractor = availableExtractors.find(e => e.id === formData.extractor)
+      if (selectedExtractor?.uses_inference_model) {
+        // Without a client-side choice the server uses the configured default model
+        const model = inferenceSettings.getDefaultModel()
+        if (model) {
+          formData.provider_id = model.providerId
+          formData.model_id = model.modelId
+        }
+      }
       const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes('xml')
 
       if (!isXmlExtractor && formData.doi) {

@@ -612,3 +612,176 @@ sl-menu[name="pluginsMenu"] small {
   margin: 0.5em 0 0.2em 0;
   padding: 0.25em 0.6em;
 }
+
+/* Diagnostics drawer (diagnostics-drawer plugin): contained in the PDF viewer, tinted to stand out from the PDF page */
+sl-drawer.diagnostics-drawer {
+  --size: min(26rem, 90%);
+  --body-spacing: 0;
+  --footer-spacing: var(--sl-spacing-x-small) var(--sl-spacing-small);
+}
+
+sl-drawer.diagnostics-drawer.empty {
+  display: none;
+}
+
+sl-drawer.diagnostics-drawer::part(base) {
+  z-index: 10;
+}
+
+/* the panel keeps its width and slides out, so its content never reflows */
+sl-drawer.diagnostics-drawer::part(panel) {
+  background: var(--sl-color-neutral-100);
+  border-right: 1px solid var(--sl-color-neutral-300);
+  box-shadow: 4px 0 14px rgba(0, 0, 0, 0.18);
+  font-size: var(--sl-font-size-small);
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease, visibility 0s;
+}
+
+sl-drawer.diagnostics-drawer.retracted::part(panel) {
+  transform: translateX(calc(-100% - 20px));
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s 0.2s;
+}
+
+sl-drawer.diagnostics-drawer::part(footer) {
+  background: var(--sl-color-neutral-200);
+  border-top: 1px solid var(--sl-color-neutral-300);
+}
+
+.diagnostics-drawer-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sl-spacing-x-small);
+  padding: var(--sl-spacing-x-small) var(--sl-spacing-small);
+  background: var(--sl-color-neutral-200);
+  border-bottom: 1px solid var(--sl-color-neutral-300);
+  font-weight: var(--sl-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.diagnostics-drawer-title {
+  flex: 1 1 auto;
+}
+
+.diagnostics-drawer-list {
+  padding: 6px;
+}
+
+.diagnostics-drawer-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: white;
+  border: 1px solid var(--sl-color-neutral-200);
+  border-left: 4px solid #999;
+  border-radius: var(--sl-border-radius-medium);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-item:hover {
+  border-top-color: var(--sl-color-neutral-400);
+  border-right-color: var(--sl-color-neutral-400);
+  border-bottom-color: var(--sl-color-neutral-400);
+}
+
+.diagnostics-drawer-item.selected {
+  background: var(--sl-color-primary-50);
+}
+
+.diagnostics-drawer-error { border-left-color: #d11; }
+.diagnostics-drawer-warning { border-left-color: orange; }
+.diagnostics-drawer-info { border-left-color: #999; }
+.diagnostics-drawer-hint { border-left-color: #66d; }
+
+.diagnostics-drawer-item sl-checkbox {
+  margin-top: 2px;
+}
+
+.diagnostics-drawer-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.diagnostics-drawer-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* source on the left, actions on the right */
+.diagnostics-drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.diagnostics-drawer-source {
+  flex: 1 1 auto;
+  font-size: 85%;
+  color: var(--sl-color-neutral-600);
+}
+
+.diagnostics-drawer-action {
+  flex: none;
+  font: inherit;
+  font-size: 85%;
+  padding: 0 7px;
+  color: var(--sl-color-primary-700);
+  background: var(--sl-color-primary-50);
+  border: 1px solid var(--sl-color-primary-200);
+  border-radius: var(--sl-border-radius-small);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-action:hover {
+  background: var(--sl-color-primary-100);
+}
+
+.diagnostics-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sl-spacing-x-small);
+  width: 100%;
+}
+
+.diagnostics-drawer-footer-buttons {
+  display: flex;
+  gap: var(--sl-spacing-x-small);
+}
+
+/* shown instead of the drawer while it is retracted */
+.diagnostics-drawer-button {
+  position: absolute;
+  top: var(--sl-spacing-small);
+  left: var(--sl-spacing-small);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  font: inherit;
+  font-size: var(--sl-font-size-small);
+  font-weight: var(--sl-font-weight-semibold);
+  color: white;
+  background: #3d4852;
+  border: none;
+  border-radius: var(--sl-border-radius-pill);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-button[hidden] {
+  display: none;
+}
+
+.diagnostics-drawer-button:hover {
+  background: #2b333b;
+}

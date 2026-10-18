@@ -75,7 +75,7 @@ Each time you navigate, the node is scrolled to the vertical center of the edito
 
 Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 
-While node navigation is on, **Tools → Review Annotations** reviews only the current node instead of the whole document. In focus mode, the same review can be started with the **LLM Review** button in the bottom right corner of the focused node.
+While node navigation is on, **Tools → Review Annotations** reviews only the current node instead of the whole document. In focus mode, the same review can be started with the **LLM Review** button in the bottom right corner of the focused node. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
 
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
@@ -111,7 +111,17 @@ The `<teiHeader>` block is folded by default to keep the annotation text in view
 
 ## Validation
 
-Click the **Validate** button to run a full schema validation against the TEI schema. Errors appear as red underlines in the editor; hovering over an underline shows the error message. The total error count appears in a notification. If continuous validation is enabled by an administrator, validation runs automatically on each change.
+Click the **Validate** button to run a full schema validation against the TEI schema. Errors appear as red underlines in the editor; hovering over an underline shows the error message. All diagnostics (validation errors and annotation review suggestions) are also listed in the diagnostics drawer, see [Diagnostics drawer](#diagnostics-drawer). The total error count appears in a notification. If continuous validation is enabled by an administrator, validation runs automatically on each change.
+
+---
+
+## Diagnostics drawer
+
+While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is fully shown while you work in the XML editor; when you click into the PDF viewer it slides out so the whole PDF is visible, leaving a **Diagnostics** button with the number of diagnostics in the top-left corner. Click the button to show the drawer again.
+
+- Click a diagnostic to select the text it applies to in the XML editor.
+- **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
+- Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply.
 
 ---
 

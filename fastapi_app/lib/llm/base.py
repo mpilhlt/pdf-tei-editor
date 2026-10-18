@@ -80,6 +80,28 @@ class LLMProvider(ABC):
         """Run a single chat completion and return the response text."""
         ...
 
+    def supports_pdf_input(self, model_id: str) -> bool:
+        """Whether chat_completion_with_pdf() can send a PDF to `model_id` as is.
+
+        Default False; consumers then fall back to sending the PDF's text
+        layer through chat_completion().
+        """
+        return False
+
+    async def chat_completion_with_pdf(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        pdf_path: str,
+        temperature: float = 0.2,
+    ) -> str:
+        """Run a chat completion with a PDF document attached to the user prompt.
+
+        Only called when supports_pdf_input() is True.
+        """
+        raise NotImplementedError(f"LLM provider '{self.id}' does not accept PDF input")
+
 
 class LLMProviderError(Exception):
     """A provider's service rejected or failed a request (rate limit, overload, bad request); the message is user-presentable."""
