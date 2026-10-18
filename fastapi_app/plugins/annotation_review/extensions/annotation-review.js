@@ -162,6 +162,8 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     this._cache = undefined;
     /** @type {boolean} True while this plugin dispatches its own diagnostics. */
     this._rendering = false;
+    /** @type {boolean} Whether the lint panel was open before the diagnostic set was last replaced. */
+    this._panelOpen = false;
     /** @type {HTMLElement|undefined} The Tools-menu item, created in start(). */
     this._menuItem = undefined;
     /** @type {number} Debounce (ms) before dropping findings whose text was edited away. */
@@ -193,9 +195,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     this._updateMenuState();
 
     xmleditor.addUpdateListener(update => {
-      if (this.getDependency('lint-utils').replacesDiagnostics(update) && !this._rendering && this._findings.length) {
+      const replaced = this.getDependency('lint-utils').replacesDiagnostics(update);
+      // a replaced diagnostic set opens or closes the panel by itself (the validation
+      // linter's autoPanel closes it when there are no errors); any other update shows
+      // whether the user keeps it open
+      if (!replaced && !this._rendering) this._panelOpen = this._isPanelOpen();
+      if (replaced && !this._rendering && this._findings.length) {
         // CodeMirror forbids dispatching from inside an update listener
-        setTimeout(() => this._renderFindings(false), 0);
+        setTimeout(() => this._renderFindings(this._panelOpen), 0);
       } else if (update.docChanged && !this._rendering && this._findings.length) {
         clearTimeout(this._pruneTimer);
         this._pruneTimer = setTimeout(() => this._pruneFindings(), this._pruneDelayMs);
@@ -292,6 +299,14 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     } finally {
       this._rendering = false;
     }
+    this._panelOpen = this._isPanelOpen();
+  }
+
+  /**
+   * @returns {boolean} Whether the editor's lint panel is shown
+   */
+  _isPanelOpen() {
+    return this.getDependency('xmleditor').getView().dom.querySelector('.cm-panel-lint') !== null;
   }
 
   /**
