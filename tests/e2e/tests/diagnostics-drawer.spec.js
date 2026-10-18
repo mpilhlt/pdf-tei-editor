@@ -76,10 +76,10 @@ async function injectDiagnostics(page) {
     /** @type {any[]} */
     let items = [
       {
-        ...at('<teiHeader'), severity: 'info', message: 'fix A', replacement: '<!--A--><teiHeader',
+        ...at('<front'), severity: 'info', message: 'fix A', replacement: '<!--A--><front',
         actions: [{ name: 'Propose fix', apply: (/** @type {any} */ _view, /** @type {number} */ from, /** @type {number} */ to) => { (/** @type {any} */ (window)).proposedFix = [from, to]; } }]
       },
-      { ...at('<text'), severity: 'info', message: 'fix B', replacement: '<!--B--><text' },
+      { ...at('<body'), severity: 'info', message: 'fix B', replacement: '<!--B--><body' },
       { ...at('<TEI'), severity: 'warning', message: 'no fix C' },
     ];
     let rendering = false;
@@ -171,7 +171,7 @@ test.describe('Diagnostics drawer', () => {
         const { from, to } = view.state.selection.main;
         return view.state.doc.sliceString(from, to);
       });
-      expect(selected).toBe('<text');
+      expect(selected).toBe('<body');
 
       // a diagnostic's actions are buttons called with its current range
       await page.locator('.diagnostics-drawer-item', { hasText: 'fix A' }).locator('.diagnostics-drawer-action').click();
@@ -181,12 +181,12 @@ test.describe('Diagnostics drawer', () => {
         const [from, to] = w.proposedFix;
         return text.slice(from, to);
       });
-      expect(proposed).toBe('<teiHeader');
+      expect(proposed).toBe('<front');
 
       // Apply: switches off the merge view, applies the fix, keeps a diagnostic without fix
       await page.evaluate(async () => {
         const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
-        await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<teiHeader', '<teiHeader '));
+        await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<front', '<front '));
       });
       await check(page, 'fix A');
       await check(page, 'no fix C');
@@ -197,7 +197,7 @@ test.describe('Diagnostics drawer', () => {
         return { mergeView: xmleditor.isMergeViewActive(), text: xmleditor.getView().state.doc.toString() };
       });
       expect(afterApply.mergeView).toBe(false);
-      expect(afterApply.text).toContain('<!--A--><teiHeader');
+      expect(afterApply.text).toContain('<!--A--><front');
 
       // Dismiss: removes the checked diagnostic (C is still checked)
       await page.locator('sl-button[name="dismissBtn"]').click();
@@ -209,7 +209,7 @@ test.describe('Diagnostics drawer', () => {
       await expect.poll(async () => (await drawerState(page)).messages).toEqual([]);
       const text = await page.evaluate(() =>
         (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
-      expect(text).toContain('<!--B--><text');
+      expect(text).toContain('<!--B--><body');
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

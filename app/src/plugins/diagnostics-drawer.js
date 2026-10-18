@@ -141,11 +141,21 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const view = this.#xmlEditor.getView()
     const checked = this.#checkedDiagnostics(view)
     const { changes, applied } = fixChanges(checked)
-    if (applied.length) {
+    // test each fix on its own: a transaction filter (e.g. the annotator edit guard)
+    // rejects a whole transaction if any of its changes touches protected text
+    const accepted = applied.filter((_d, i) => {
+      const tr = view.state.update({ changes: changes[i], userEvent: 'input' })
+      return tr.docChanged && tr.newDoc.sliceString(changes[i].from, changes[i].from + changes[i].insert.length) === changes[i].insert
+    })
+    if (accepted.length) {
       // dismiss first, while the diagnostics still cover the text they are keyed by
-      for (const d of applied) this.#checked.delete(diagnosticKey(view.state, d))
-      dismissDiagnostics(view, applied)
-      view.dispatch({ changes, userEvent: 'input' })
+      for (const d of accepted) this.#checked.delete(diagnosticKey(view.state, d))
+      dismissDiagnostics(view, accepted)
+      view.dispatch({ changes: changes.filter((_c, i) => accepted.includes(applied[i])), userEvent: 'input' })
+    }
+    const rejected = applied.length - accepted.length
+    if (rejected) {
+      notify(`${rejected} fix(es) could not be applied because they change protected text.`, 'warning', 'exclamation-triangle')
     }
     const kept = checked.length - applied.length
     if (kept) {
