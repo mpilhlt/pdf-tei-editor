@@ -5,13 +5,14 @@
  * enabled only when the open document has machine-readable rules. Running it
  * calls the backend review endpoint and shows the findings as diagnostics
  * merged into the editor's diagnostic set, each with a "Propose fix" action
- * that opens the merge view. When node navigation is on (the `xpath` state is
+ * that opens the merge view and a `replacement` that the diagnostics drawer
+ * applies directly. When node navigation is on (the `xpath` state is
  * set), only the navigated-to node is reviewed. See
  * docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
  * for the design rationale.
  *
  * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
- * @import { Diagnostic } from '@codemirror/lint'
+ * @import { FixableDiagnostic } from '../../../../app/src/modules/lint-utils.js'
  */
 
 /** Diagnostic source tag identifying this plugin's diagnostics. */
@@ -57,10 +58,10 @@ export function buildModifiedText(docText, from, to, finding) {
  * @param {Finding[]} findings
  * @param {string} docText
  * @param {(finding: Finding, from: number, to: number) => void} onProposeFix
- * @returns {Diagnostic[]}
+ * @returns {FixableDiagnostic[]}
  */
 export function findingsToDiagnostics(findings, docText, onProposeFix) {
-  /** @type {Diagnostic[]} */
+  /** @type {FixableDiagnostic[]} */
   const diagnostics = [];
   for (const finding of findings) {
     const range = locateFinding(finding, docText);
@@ -70,6 +71,7 @@ export function findingsToDiagnostics(findings, docText, onProposeFix) {
       to: range.to,
       severity: 'info',
       message: finding.rationale,
+      replacement: finding.new,
       actions: [{
         name: 'Propose fix',
         apply: (_view, from, to) => onProposeFix(finding, from, to),
@@ -214,6 +216,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     // restore usually happens in onXmlChange(); this covers content loaded later
     xmleditor.on('editorAfterLoad', () => this._restoreFindings());
     this._restoreFindings();
+    this.getDependency('lint-utils').addDismissListener(dismissed => this._forgetDismissed(dismissed));
   }
 
   /**
@@ -243,14 +246,30 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
     const cached = this._cache.load(docId);
     if (!cached.length) return;
     this._findings = cached.filter(f => locateFinding(f, docText) !== null);
-    // open the panel, as after the review that produced them
+    // reveal them, as after the review that produced them
     this._renderFindings(this._findings.length > 0);
+  }
+
+  /**
+   * Drop the findings whose diagnostics the user dismissed in the
+   * diagnostics drawer, so they are not re-merged.
+   * @param {FixableDiagnostic[]} dismissed
+   * @returns {void}
+   */
+  _forgetDismissed(dismissed) {
+    const own = dismissed.filter(d => d.source === SOURCE);
+    if (!own.length) return;
+    const docText = this.getDependency('xmleditor').getView().state.doc.toString();
+    this._setFindings(this._findings.filter(f => {
+      const range = locateFinding(f, docText);
+      return !own.some(d => range && d.from === range.from && d.message === f.rationale);
+    }));
   }
 
   /**
    * Store findings and display them as diagnostics.
    * @param {Finding[]} findings
-   * @param {boolean} [openPanel] Open the lint panel if it is closed
+   * @param {boolean} [openPanel] Expand the diagnostics drawer
    * @returns {void}
    */
   showFindings(findings, openPanel = true) {
@@ -283,7 +302,7 @@ export default class AnnotationReviewExtension extends FrontendExtensionPlugin {
 
   /**
    * Merge diagnostics for the stored findings into the editor's diagnostics.
-   * @param {boolean} [openPanel] Open the lint panel if it is closed (only for user-initiated display)
+   * @param {boolean} [openPanel] Expand the diagnostics drawer (only for user-initiated display)
    * @returns {void}
    */
   _renderFindings(openPanel = false) {

@@ -274,8 +274,9 @@ CodeMirror keeps one global diagnostic set, and `setDiagnostics` replaces it who
 | --- | --- |
 | `collectDiagnostics(state)` | Diagnostics currently stored in the editor state |
 | `mergeDiagnostics(state, source, own)` | Current diagnostics with those of `source` replaced by `own` |
-| `applyMergedDiagnostics(view, source, own, options)` | Merge and dispatch in one step; `options.openPanel` (default `false`) |
+| `applyMergedDiagnostics(view, source, own, options)` | Merge and dispatch in one step; `options.openPanel` (default `false`) expands the diagnostics drawer |
 | `replacesDiagnostics(update)` | True if a view update replaced the diagnostic set |
+| `addDismissListener(listener)` | Called with the diagnostics the user dismissed in the diagnostics drawer; returns a function removing the listener |
 
 Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal:
 
@@ -297,7 +298,16 @@ _render(openPanel = false) {
 }
 ```
 
-`tei-validation` configures its linter with `autoPanel: true`, so any non-empty diagnostic set opens the lint panel. `applyMergedDiagnostics` therefore closes a panel that was closed before the dispatch, unless `options.openPanel` is true. Pass `openPanel: true` only when displaying results the user just asked for, never for the re-apply from the update listener (otherwise the panel reopens after every validation run).
+Diagnostics are listed in the diagnostics drawer on the left, over the PDF viewer, not in CodeMirror's lint panel. The drawer expands while the focus is in the XML editor and retracts while it is in the PDF viewer. `options.openPanel: true` expands it regardless of the focus; pass it only when displaying results the user just asked for, never for the re-apply from the update listener.
+
+The drawer shows each diagnostic's `actions` as buttons. A diagnostic may also carry a `replacement` string, the text that replaces its range when the user checks it and clicks **Apply** in the drawer footer; without one, Apply leaves the diagnostic in place. **Dismiss** removes the checked diagnostics; register a dismiss listener to forget your own, so that the next re-apply does not bring them back:
+
+```js
+this.getDependency('lint-utils').addDismissListener(dismissed => {
+  const own = dismissed.filter(d => d.source === 'my-plugin');
+  // drop the items behind `own` from this._items
+});
+```
 
 See `fastapi_app/plugins/annotation_review/extensions/annotation-review.js` for a complete example.
 

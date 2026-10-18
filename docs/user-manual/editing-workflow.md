@@ -111,7 +111,17 @@ The `<teiHeader>` block is folded by default to keep the annotation text in view
 
 ## Validation
 
-Click the **Validate** button to run a full schema validation against the TEI schema. Errors appear as red underlines in the editor; hovering over an underline shows the error message. The total error count appears in a notification. If continuous validation is enabled by an administrator, validation runs automatically on each change.
+Click the **Validate** button to run a full schema validation against the TEI schema. Errors appear as red underlines in the editor; hovering over an underline shows the error message. All diagnostics (validation errors and annotation review suggestions) are also listed in the diagnostics drawer, see [Diagnostics drawer](#diagnostics-drawer). The total error count appears in a notification. If continuous validation is enabled by an administrator, validation runs automatically on each change.
+
+---
+
+## Diagnostics drawer
+
+While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is fully shown while you work in the XML editor; when you click into the PDF viewer it shrinks to a narrow strip so the PDF stays readable. Click the strip to show the drawer again.
+
+- Click a diagnostic to select the text it applies to in the XML editor.
+- **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
+- Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply.
 
 ---
 

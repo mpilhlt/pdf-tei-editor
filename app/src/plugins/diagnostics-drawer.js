@@ -1,0 +1,361 @@
+/**
+ * Diagnostics Drawer Plugin
+ *
+ * Lists the XML editor's diagnostics (validation errors, annotation review
+ * suggestions, ...) in a drawer on the left side, over the PDF viewer,
+ * instead of CodeMirror's lint panel below the editor. The drawer is shown
+ * while there are diagnostics. It is fully expanded while the focus is in the
+ * XML editor and retracts to a narrow strip while the focus is in the PDF
+ * viewer; clicking the strip expands it again.
+ *
+ * Clicking a diagnostic selects the text it applies to in the editor. Each
+ * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
+ * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
+ * checked diagnostics; both switch off the merge view first.
+ */
+
+/**
+ * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { ApplicationState } from '../state.js'
+ * @import { SlDrawer, SlCheckbox } from '../ui.js'
+ * @import { ViewUpdate } from '@codemirror/view'
+ * @import { FixableDiagnostic } from '../modules/lint-utils.js'
+ * @import { diagnosticsDrawerPart } from '../templates/diagnostics-drawer.types.js'
+ */
+
+import { EditorView } from '@codemirror/view'
+import { Plugin } from '../modules/plugin-base.js'
+import ui, { registerTemplate, createSingleFromTemplate } from '../ui.js'
+import { notify } from '../modules/sl-utils.js'
+import {
+  collectDiagnostics,
+  diagnosticKey,
+  dismissDiagnostics,
+  fixChanges,
+  replacesDiagnostics,
+  revealsDiagnostics
+} from '../modules/lint-utils.js'
+
+/**
+ * A diagnostic as listed in the drawer
+ * @typedef {object} DiagnosticEntry
+ * @property {FixableDiagnostic} diagnostic - With positions in the current editor state
+ * @property {string} key - See {@link diagnosticKey}
+ * @property {number} line - 1-based line of the diagnostic's start
+ */
+
+/** @type {Record<string, number>} Order of severities in the list, most severe first */
+const SEVERITY_ORDER = { error: 0, warning: 1, info: 2, hint: 3 }
+
+await registerTemplate('diagnostics-drawer', 'diagnostics-drawer.html')
+
+class DiagnosticsDrawerPlugin extends Plugin {
+  /** @param {PluginContext} context */
+  constructor(context) {
+    super(context, { name: 'diagnostics-drawer', deps: ['xmleditor', 'pdfviewer'] })
+  }
+
+  get #xmlEditor() { return this.getDependency('xmleditor') }
+
+  /** @type {SlDrawer & diagnosticsDrawerPart} */
+  #ui = null
+
+  /** @type {DiagnosticEntry[]} */
+  #entries = []
+
+  /** @type {Set<string>} Keys of the checked diagnostics */
+  #checked = new Set()
+
+  /** @type {string|null} Key of the diagnostic last clicked */
+  #selectedKey = null
+
+  /** True while the drawer is fully shown, false while retracted */
+  #expanded = true
+
+  #refreshScheduled = false
+
+  /**
+   * @param {ApplicationState} state
+   */
+  async install(state) {
+    await super.install(state)
+    this.getDependency('logger').debug(`Installing plugin "${this.name}"`)
+
+    // the wrapper around the PDF pages, so that the drawer leaves the PDF toolbars visible
+    const parent = this.getDependency('pdfviewer').viewerWrapper
+    this.#ui = this.createUi(createSingleFromTemplate('diagnostics-drawer', parent))
+
+    // the drawer stays open; its visibility is controlled by the `empty` class
+    this.#ui.addEventListener('sl-initial-focus', event => event.preventDefault())
+    this.#ui.addEventListener('sl-request-close', event => event.preventDefault())
+    this.#ui.open = true
+
+    // clicking the retracted drawer only expands it
+    this.#ui.addEventListener('click', event => {
+      if (this.#expanded) return
+      event.stopPropagation()
+      event.preventDefault()
+      this.#setExpanded(true)
+    }, true)
+
+    // focus-dependent expansion
+    for (const type of ['focusin', 'pointerdown']) {
+      ui.xmlEditor.addEventListener(type, () => this.#setExpanded(true))
+      ui.pdfViewer.addEventListener(type, event => {
+        if (!this.#ui.contains(/** @type {Node} */ (event.target))) this.#setExpanded(false)
+      })
+    }
+
+    this.#ui.footer.selectAll.addEventListener('sl-change', () => {
+      const checked = this.#ui.footer.selectAll.checked
+      this.#checked = checked ? new Set(this.#entries.map(e => e.key)) : new Set()
+      this.#render()
+    })
+    this.#ui.footer.applyBtn.addEventListener('click', () => this.applyChecked())
+    this.#ui.footer.dismissBtn.addEventListener('click', () => this.dismissChecked())
+
+    this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
+  }
+
+  /**
+   * @param {(keyof ApplicationState)[]} changedKeys
+   * @param {ApplicationState} _state
+   */
+  async onStateUpdate(changedKeys, _state) {
+    if (changedKeys.includes('editorReadOnly')) this.#updateFooter()
+  }
+
+  //
+  // Public API
+  //
+
+  /**
+   * Applies the fixes of the checked diagnostics without confirmation and
+   * removes these diagnostics. Checked diagnostics without a fix are kept.
+   * Switches off the merge view first.
+   * @returns {Promise<void>}
+   */
+  async applyChecked() {
+    if (this.state?.editorReadOnly) return
+    await this.#switchOffMergeView()
+    const view = this.#xmlEditor.getView()
+    const checked = this.#checkedDiagnostics(view)
+    const { changes, applied } = fixChanges(checked)
+    if (applied.length) {
+      // dismiss first, while the diagnostics still cover the text they are keyed by
+      for (const d of applied) this.#checked.delete(diagnosticKey(view.state, d))
+      dismissDiagnostics(view, applied)
+      view.dispatch({ changes, userEvent: 'input' })
+    }
+    const kept = checked.length - applied.length
+    if (kept) {
+      notify(`${kept} selected diagnostic(s) have no applicable fix and were kept.`, 'warning', 'exclamation-triangle')
+    }
+    this.#scheduleRefresh()
+  }
+
+  /**
+   * Removes the checked diagnostics. Switches off the merge view first.
+   * @returns {Promise<void>}
+   */
+  async dismissChecked() {
+    await this.#switchOffMergeView()
+    const view = this.#xmlEditor.getView()
+    dismissDiagnostics(view, this.#checkedDiagnostics(view))
+    this.#checked.clear()
+    this.#scheduleRefresh()
+  }
+
+  /**
+   * Whether the drawer is fully shown (true) or retracted (false)
+   * @returns {boolean}
+   */
+  isExpanded() {
+    return this.#expanded
+  }
+
+  //
+  // Private methods
+  //
+
+  /**
+   * @param {ViewUpdate} update
+   */
+  #onEditorUpdate(update) {
+    if (revealsDiagnostics(update)) this.#setExpanded(true)
+    if (update.docChanged || replacesDiagnostics(update)) this.#scheduleRefresh()
+  }
+
+  /**
+   * @param {boolean} expanded
+   */
+  #setExpanded(expanded) {
+    if (this.#expanded === expanded) return
+    this.#expanded = expanded
+    this.#ui.classList.toggle('retracted', !expanded)
+    this.#ui.title = expanded ? '' : 'Show diagnostics'
+  }
+
+  /**
+   * Refreshes the list once per animation frame at most
+   */
+  #scheduleRefresh() {
+    if (this.#refreshScheduled) return
+    this.#refreshScheduled = true
+    requestAnimationFrame(() => {
+      this.#refreshScheduled = false
+      this.#refresh()
+    })
+  }
+
+  /**
+   * Re-reads the diagnostics from the editor state and re-renders the list
+   */
+  #refresh() {
+    const state = this.#xmlEditor.getView().state
+    this.#entries = collectDiagnostics(state)
+      .map(diagnostic => ({
+        diagnostic,
+        key: diagnosticKey(state, diagnostic),
+        line: state.doc.lineAt(diagnostic.from).number
+      }))
+      .sort((a, b) => a.diagnostic.from - b.diagnostic.from
+        || SEVERITY_ORDER[a.diagnostic.severity] - SEVERITY_ORDER[b.diagnostic.severity])
+    const keys = new Set(this.#entries.map(e => e.key))
+    this.#checked = new Set([...this.#checked].filter(k => keys.has(k)))
+    this.#render()
+  }
+
+  /**
+   * Renders the list, header and footer from the current entries
+   */
+  #render() {
+    const empty = this.#entries.length === 0
+    this.#ui.classList.toggle('empty', empty)
+    this.#ui.header.count.textContent = String(this.#entries.length)
+    this.#ui.header.count.setAttribute('variant',
+      this.#entries.some(e => e.diagnostic.severity === 'error') ? 'danger'
+        : this.#entries.some(e => e.diagnostic.severity === 'warning') ? 'warning' : 'neutral')
+    this.#ui.list.replaceChildren(...this.#entries.map(entry => this.#renderEntry(entry)))
+    this.#updateFooter()
+  }
+
+  /**
+   * Creates the list item for one diagnostic, styled like CodeMirror's lint panel entries
+   * @param {DiagnosticEntry} entry
+   * @returns {HTMLElement}
+   */
+  #renderEntry(entry) {
+    const { diagnostic, key } = entry
+    const item = document.createElement('div')
+    item.className = `diagnostics-drawer-item diagnostics-drawer-${diagnostic.severity}`
+    item.classList.toggle('selected', key === this.#selectedKey)
+    item.setAttribute('role', 'listitem')
+    item.title = 'Show in the XML editor'
+
+    const checkbox = /** @type {SlCheckbox} */ (document.createElement('sl-checkbox'))
+    checkbox.size = 'small'
+    checkbox.checked = this.#checked.has(key)
+    checkbox.title = ''
+    checkbox.addEventListener('click', event => event.stopPropagation())
+    checkbox.addEventListener('sl-change', () => {
+      if (checkbox.checked) this.#checked.add(key)
+      else this.#checked.delete(key)
+      this.#updateFooter()
+    })
+
+    const body = document.createElement('div')
+    body.className = 'diagnostics-drawer-item-body'
+    const message = document.createElement('span')
+    message.className = 'diagnostics-drawer-message'
+    message.textContent = diagnostic.message
+    body.append(message)
+
+    for (const action of diagnostic.actions ?? []) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'diagnostics-drawer-action'
+      button.textContent = action.name
+      button.addEventListener('click', event => {
+        event.stopPropagation()
+        const current = this.#findCurrent(key)
+        if (!current) return
+        action.apply(this.#xmlEditor.getView(), current.from, current.to)
+      })
+      body.append(button)
+    }
+
+    const info = document.createElement('div')
+    info.className = 'diagnostics-drawer-source'
+    info.textContent = [`Line ${entry.line}`, diagnostic.source].filter(Boolean).join(' · ')
+    body.append(info)
+
+    item.append(checkbox, body)
+    item.addEventListener('click', () => this.#showInEditor(key))
+    return item
+  }
+
+  /**
+   * Enables the footer controls according to the checked diagnostics
+   */
+  #updateFooter() {
+    const { selectAll, applyBtn, dismissBtn } = this.#ui.footer
+    const count = this.#checked.size
+    selectAll.checked = count > 0 && count === this.#entries.length
+    selectAll.indeterminate = count > 0 && count < this.#entries.length
+    selectAll.disabled = this.#entries.length === 0
+    const fixable = this.#entries.some(e => this.#checked.has(e.key) && typeof e.diagnostic.replacement === 'string')
+    applyBtn.disabled = !fixable || Boolean(this.state?.editorReadOnly)
+    dismissBtn.disabled = count === 0
+  }
+
+  /**
+   * Selects the text of the diagnostic with the given key and scrolls it into view
+   * @param {string} key
+   */
+  #showInEditor(key) {
+    const current = this.#findCurrent(key)
+    if (!current) return
+    this.#selectedKey = key
+    for (const [index, item] of Array.from(this.#ui.list.children).entries()) {
+      item.classList.toggle('selected', this.#entries[index]?.key === key)
+    }
+    const view = this.#xmlEditor.getView()
+    view.dispatch({
+      selection: { anchor: current.from, head: current.to },
+      effects: EditorView.scrollIntoView(current.from, { y: 'center' })
+    })
+    view.focus()
+  }
+
+  /**
+   * Returns the diagnostic with the given key as currently stored in the editor
+   * @param {string} key
+   * @returns {FixableDiagnostic|undefined}
+   */
+  #findCurrent(key) {
+    const state = this.#xmlEditor.getView().state
+    return collectDiagnostics(state).find(d => diagnosticKey(state, d) === key)
+  }
+
+  /**
+   * Returns the checked diagnostics as currently stored in the editor
+   * @param {EditorView} view
+   * @returns {FixableDiagnostic[]}
+   */
+  #checkedDiagnostics(view) {
+    return collectDiagnostics(view.state).filter(d => this.#checked.has(diagnosticKey(view.state, d)))
+  }
+
+  /**
+   * Hides the merge view if it is shown, keeping the current document
+   * @returns {Promise<void>}
+   */
+  async #switchOffMergeView() {
+    if (this.#xmlEditor.isMergeViewActive()) {
+      await this.getDependency('services').removeMergeView()
+    }
+  }
+}
+
+export default DiagnosticsDrawerPlugin

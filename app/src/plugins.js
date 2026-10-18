@@ -20,6 +20,7 @@ import {
   ConfigEditorPlugin,
   ConfigPlugin,
   PluginAdminPlugin,
+  DiagnosticsDrawerPlugin,
   DialogPlugin,
   DocumentActionsPlugin,
   DocumentRulesPlugin,
@@ -99,6 +100,7 @@ const plugins = [
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiWizardPlugin,
   TeiValidationPlugin,
+  DiagnosticsDrawerPlugin, // lists editor diagnostics in a drawer over the PDF viewer
   MoveFilesPlugin,
   SsePlugin,
   ProgressPlugin,

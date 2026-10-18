@@ -1,0 +1,15 @@
+<sl-drawer name="diagnosticsDrawer" class="diagnostics-drawer empty" placement="start" contained no-header>
+  <div name="header" class="diagnostics-drawer-header">
+    <sl-icon name="exclamation-triangle"></sl-icon>
+    <span class="diagnostics-drawer-title">Diagnostics</span>
+    <sl-badge name="count" variant="neutral" pill>0</sl-badge>
+  </div>
+  <div name="list" class="diagnostics-drawer-list" role="list"></div>
+  <div slot="footer" name="footer" class="diagnostics-drawer-footer">
+    <sl-checkbox name="selectAll" size="small">Select all</sl-checkbox>
+    <span class="diagnostics-drawer-footer-buttons">
+      <sl-button name="applyBtn" size="small" variant="primary" disabled>Apply</sl-button>
+      <sl-button name="dismissBtn" size="small" disabled>Dismiss</sl-button>
+    </span>
+  </div>
+</sl-drawer>
