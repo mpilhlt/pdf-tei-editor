@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.73.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.0...v0.73.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **pdfviewer:** open PDF links in new tab, stop title tooltip bleed-through ([5732f51](https://github.com/mpilhlt/pdf-tei-editor/commit/5732f513233bc9434080dfac8592f326f95e94ba))
+
 # [0.73.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.72.0...v0.73.0) (2026-10-18)
 
 
