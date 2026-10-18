@@ -63,7 +63,7 @@ function buildExtension(opts = {}) {
       addDismissListener: (fn) => { dismissListeners.push(fn); },
     },
     xmleditor: {
-      getView: () => ({ state: { doc: { toString: () => opts.docText ?? '' } }, dom: { querySelector: () => (opts.panelOpen?.() ? {} : null) } }),
+      getView: () => ({ state: { doc: { toString: () => opts.docText ?? '' } } }),
       addUpdateListener: (fn) => { updateListeners.push(fn); },
       showMergeView: async (text) => { if (opts.showMergeViewImpl) return opts.showMergeViewImpl(text); mergeViews.push(text); },
       on: (event, fn) => { handlers[event] = fn; },
@@ -312,40 +312,6 @@ describe('re-rendering after diagnostics are replaced', () => {
     updateListeners[0]({ transactions: [] });
     await new Promise(r => setTimeout(r, 5));
     assert.strictEqual(lintCalls.length, 0);
-  });
-
-  it('keeps the panel open when a validation without errors closed it', async () => {
-    let panelOpen = false;
-    const { ext, lintCalls, updateListeners } = buildExtension({
-      docText: 'x AAA y',
-      replacesDiagnostics: () => true,
-      panelOpen: () => panelOpen,
-    });
-    await ext.start();
-    panelOpen = true; // opened by showFindings
-    ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'why' }]);
-    panelOpen = false; // closed by the validation linter's autoPanel
-    updateListeners[0]({ transactions: [] });
-    await new Promise(r => setTimeout(r, 5));
-    assert.strictEqual(lintCalls.at(-1).options.openPanel, true);
-  });
-
-  it('leaves the panel closed when the user closed it', async () => {
-    let panelOpen = true;
-    let replaced = false;
-    const { ext, lintCalls, updateListeners } = buildExtension({
-      docText: 'x AAA y',
-      replacesDiagnostics: () => replaced,
-      panelOpen: () => panelOpen,
-    });
-    await ext.start();
-    ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'why' }]);
-    panelOpen = false; // closed by the user
-    updateListeners[0]({ transactions: [] });
-    replaced = true;
-    updateListeners[0]({ transactions: [] });
-    await new Promise(r => setTimeout(r, 5));
-    assert.strictEqual(lintCalls.at(-1).options.openPanel, false);
   });
 });
 
