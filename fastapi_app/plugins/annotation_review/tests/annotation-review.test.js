@@ -25,8 +25,21 @@ class FakeFrontendExtensionPlugin {
 global.FrontendExtensionPlugin = FakeFrontendExtensionPlugin;
 global.document = { createElement: () => ({ addEventListener(t, fn) { this._click = fn; }, style: {} }) };
 
-const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, findingsToDiagnostics } =
+const { default: AnnotationReviewExtension, locateFinding, buildModifiedText, findingsToDiagnostics, FindingsCache, CACHE_VERSION } =
   await import('../extensions/annotation-review.js');
+
+/**
+ * In-memory stand-in for SessionStorage (app/src/modules/session-storage.js),
+ * sharing its contexts through the given map like sessionStorage across reloads.
+ * @param {Map<string, Record<string, any>>} store
+ */
+function fakeSessionStorageClass(store) {
+  return class {
+    getValue(contextId, key, defaultValue) { return store.get(contextId)?.[key] ?? defaultValue; }
+    setState(contextId, updates) { store.set(contextId, { ...store.get(contextId), ...updates }); }
+    clearState(contextId) { store.delete(contextId); }
+  };
+}
 
 /**
  * Build an extension instance with stubbed dependencies.
@@ -60,6 +73,7 @@ function buildExtension(opts = {}) {
     'sl-utils': {
       notify: (...args) => notifyCalls.push(args),
     },
+    'session-storage': { SessionStorage: fakeSessionStorageClass(opts.sessionStore ?? new Map()) },
     'tei-utils': {
       getEditorialDeclGuides: opts.getEditorialDeclGuides ?? (() => []),
     },
@@ -298,6 +312,59 @@ describe('onXmlChange', () => {
     ext.showFindings([{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }]);
     await ext.onXmlChange('newdoc');
     assert.deepStrictEqual(lintCalls.at(-1).own, []);
+  });
+});
+
+describe('FindingsCache', () => {
+  const findings = [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }];
+
+  it('stores findings per document and removes the entry when there are none', () => {
+    const store = new Map();
+    const cache = new FindingsCache(new (fakeSessionStorageClass(store))());
+    cache.save('doc1', findings);
+    assert.deepStrictEqual(cache.load('doc1'), findings);
+    assert.deepStrictEqual(cache.load('doc2'), []);
+    cache.save('doc1', []);
+    assert.strictEqual(store.has('doc1'), false);
+  });
+
+  it('ignores entries of another format version', () => {
+    const store = new Map([['doc1', { review: { version: CACHE_VERSION + 1, findings } }]]);
+    const cache = new FindingsCache(new (fakeSessionStorageClass(store))());
+    assert.deepStrictEqual(cache.load('doc1'), []);
+  });
+});
+
+describe('session cache', () => {
+  const findings = [
+    { id: 0, old: 'AAA', new: 'a', rationale: 'kept' },
+    { id: 1, old: 'BBB', new: 'b', rationale: 'edited away' },
+  ];
+
+  it('restores the findings still in the document after a reload', async () => {
+    const sessionStore = new Map();
+    const before = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await before.ext.start();
+    before.handlers.editorAfterLoad();
+    before.ext.showFindings(findings);
+
+    // page reload: new instance, same session storage, BBB edited meanwhile
+    const after = buildExtension({ docText: 'x AAA CCC y', sessionStore, state: { xml: 'doc1' } });
+    await after.ext.start();
+    after.handlers.editorAfterLoad();
+    assert.deepStrictEqual(after.lintCalls.at(-1).own.map(d => d.message), ['kept']);
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0]);
+  });
+
+  it('keeps the cache of a document when another one is loaded', async () => {
+    const sessionStore = new Map();
+    const { ext, handlers } = buildExtension({ docText: 'x AAA BBB y', sessionStore, state: { xml: 'doc1' } });
+    await ext.start();
+    handlers.editorAfterLoad();
+    ext.showFindings(findings);
+    await ext.onXmlChange('doc2');
+    assert.deepStrictEqual(ext._findings, []);
+    assert.deepStrictEqual(sessionStore.get('doc1').review.findings.map(f => f.id), [0, 1]);
   });
 });
 

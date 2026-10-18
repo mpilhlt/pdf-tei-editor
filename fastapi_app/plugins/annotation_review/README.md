@@ -9,6 +9,7 @@ Reviews the annotations in the open TEI document against the annotation rules th
 - A **Review Annotations** item in the Tools menu (under "Annotation"). It is enabled only when the open document's `teiHeader/encodingDesc/editorialDecl` contains a rule reference with `subtype="machine"` (a link to a machine-readable rules file, usually raw Markdown). Otherwise it is disabled and a tooltip explains why.
 - A confirmation dialog naming the provider/model that will be used, then a progress widget (minimizable, with a cancel button) that shows "part i of n" while the document is reviewed piece by piece.
 - Suggestions as info-level diagnostics in the editor's lint panel and gutter, merged with the TEI validation diagnostics. Each carries the model's rationale and a "Propose fix" button.
+- A per-tab session cache of the suggestions (browser session storage, keyed by document): after a page reload or after switching documents and back, the suggestions of the document are shown again without a new review. Suggestions whose quoted text no longer occurs exactly once in the loaded document are dropped, so applied ones are removed from the cache. The cache is gone when the tab is closed.
 
 The rules to review against are taken from the document, not from server configuration: every `editorialDecl` category with a machine-readable ref is fetched (via the shared rule cache in `data/annotation-rules/cache`) and included in the prompt.
 
