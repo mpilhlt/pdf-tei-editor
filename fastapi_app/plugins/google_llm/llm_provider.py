@@ -12,6 +12,7 @@ the PDF itself rather than its text layer.
 import logging
 import re
 
+import httpx
 from google import genai
 from google.genai import errors as genai_errors, types
 
@@ -28,6 +29,17 @@ logger = logging.getLogger(__name__)
 _NON_CHAT_NAME_MARKERS = ("-image", "-tts", "-transcribe", "-computer-use")
 
 _MAJOR_VERSION_RE = re.compile(r"^gemini-(\d+)")
+
+# Errors of a Gemini API call: the API rejected the request, or the connection
+# failed (the SDK sends its requests with httpx and does not wrap its errors)
+_API_ERRORS = (genai_errors.APIError, httpx.HTTPError)
+
+
+def _provider_error(error: genai_errors.APIError | httpx.HTTPError) -> LLMProviderError:
+    """A user-presentable LLMProviderError for a failed Gemini API call."""
+    if isinstance(error, genai_errors.APIError):
+        return LLMProviderError(f"{error.code} {error.message}")
+    return LLMProviderError(f"Could not reach the Gemini API: {error or type(error).__name__}")
 
 
 def _is_gemini_3_or_later(model_id: str) -> bool:
@@ -73,7 +85,11 @@ class GoogleLLMProvider(LLMProvider):
         if self._client is None:
             return []
         models: list[LLMModel] = []
-        for model in self._client.models.list():
+        try:
+            listed = list(self._client.models.list())
+        except _API_ERRORS as e:
+            raise _provider_error(e) from e
+        for model in listed:
             if not model.name or not model.name.startswith("models/gemini-"):
                 continue
             if "generateContent" not in (model.supported_actions or []):
@@ -107,8 +123,8 @@ class GoogleLLMProvider(LLMProvider):
                 contents=user_prompt,
                 config=_generation_config(model_id, system_prompt, temperature),
             )
-        except genai_errors.APIError as e:
-            raise LLMProviderError(f"{e.code} {e.message}") from e
+        except _API_ERRORS as e:
+            raise _provider_error(e) from e
         return _response_text(model_id, response)
 
     def supports_pdf_input(self, model_id: str) -> bool:
@@ -137,10 +153,10 @@ class GoogleLLMProvider(LLMProvider):
                 if uploaded.name:
                     try:
                         await self._client.aio.files.delete(name=uploaded.name)
-                    except genai_errors.APIError as e:
-                        logger.warning(f"Could not delete uploaded file '{uploaded.name}': {e.message}")
-        except genai_errors.APIError as e:
-            raise LLMProviderError(f"{e.code} {e.message}") from e
+                    except _API_ERRORS as e:
+                        logger.warning(f"Could not delete uploaded file '{uploaded.name}': {_provider_error(e)}")
+        except _API_ERRORS as e:
+            raise _provider_error(e) from e
         return _response_text(model_id, response)
 
 

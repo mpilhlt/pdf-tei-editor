@@ -105,6 +105,22 @@ class TestGoogleLLMProviderListModels(unittest.TestCase):
         self.assertEqual([m["id"] for m in models], ["gemini-2.5-flash"])
 
 
+class TestGoogleLLMProviderListModelsErrors(unittest.TestCase):
+    """Test list_models() reports failed API calls as LLMProviderError."""
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    def test_connection_error_becomes_llm_provider_error(self, mock_client_cls):
+        import httpx
+
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        mock_client_cls.return_value = mock_client
+
+        provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
+        with self.assertRaisesRegex(LLMProviderError, "Could not reach the Gemini API"):
+            provider.list_models()
+
+
 class TestGoogleLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
     """Test chat_completion() delegates to the SDK's async generate_content."""
 
@@ -172,6 +188,18 @@ class TestGoogleLLMProviderChatCompletion(unittest.IsolatedAsyncioTestCase):
 
         provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
         with self.assertRaisesRegex(LLMProviderError, "503.*high demand"):
+            await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
+
+    @patch("fastapi_app.plugins.google_llm.llm_provider.genai.Client")
+    async def test_connection_errors_become_llm_provider_errors(self, mock_client_cls):
+        import httpx
+
+        mock_client = MagicMock()
+        mock_client.aio.models.generate_content = AsyncMock(side_effect=httpx.RemoteProtocolError("Server disconnected"))
+        mock_client_cls.return_value = mock_client
+
+        provider = GoogleLLMProvider(id="google", label="Google Gemini", api_key="k")
+        with self.assertRaisesRegex(LLMProviderError, "Could not reach the Gemini API: Server disconnected"):
             await provider.chat_completion(model_id="m", system_prompt="s", user_prompt="u")
 
 

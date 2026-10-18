@@ -106,17 +106,16 @@ async def review(
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
-    try:
-        check_model_access(provider, body.model_id, current_user)
-    except ModelAccessDenied as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
-
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 
     try:
+        # may list the provider's models, so its connection errors are handled below
+        check_model_access(provider, body.model_id, current_user)
         findings, chunk_count, discarded = await run_review(
             body.xml, provider, body.model_id, cache, store, current_user["username"], body.chunk_index, body.scope
         )
+    except ModelAccessDenied as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except NoRuleExcerptsError as e:

@@ -230,6 +230,15 @@ class TestReviewRouteModelAccess(unittest.TestCase):
         self.assertEqual(mock_check.call_args.args[1], "m1")
         self.assertEqual(mock_check.call_args.args[2]["username"], "testuser")
 
+    @mock.patch.object(routes_module, "check_model_access", side_effect=LLMProviderError("Could not reach the Gemini API: Server disconnected"))
+    def test_provider_failure_during_the_access_check_returns_502(self, _mock_check):
+        response = self.client.post(
+            "/api/plugins/annotation-review/review",
+            json={"xml": TEI_DOC, "provider_id": "stub", "model_id": "m1"},
+        )
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Server disconnected", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

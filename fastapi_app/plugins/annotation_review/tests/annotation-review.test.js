@@ -515,6 +515,24 @@ describe('runReview', () => {
     assert.deepStrictEqual(progressCalls.filter(c => c[0] === 'show' || c[0] === 'hide').map(c => c[0]), ['show', 'hide']);
     assert.strictEqual(lintCalls.length, 0);
   });
+
+  it('keeps the findings of the parts already reviewed when a later part fails', async () => {
+    let calls = 0;
+    const { ext, lintCalls, notifyCalls } = buildExtension({
+      getEditorialDeclGuides: () => rules,
+      defaultModel: { providerId: 'p', modelId: 'm' },
+      docText: 'x AAA y',
+      chunkCount: 3,
+      callPluginApiImpl: async () => {
+        if (calls++ === 0) return { chunk_count: 3, findings: [{ id: 0, old: 'AAA', new: 'a', rationale: 'r' }] };
+        throw new Error('LLM provider request failed: Could not reach the Gemini API');
+      },
+    });
+    await ext.runReview();
+    assert.deepStrictEqual(ext._findings.map(f => f.old), ['AAA']);
+    assert.strictEqual(lintCalls.at(-1).own.length, 1);
+    assert.match(notifyCalls.at(-1)[0], /failed in part 2 of 3/);
+  });
 });
 
 describe('lint panel handling', () => {
