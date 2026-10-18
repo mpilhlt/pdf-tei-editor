@@ -7,6 +7,7 @@
  */
 
 import * as lintUtils from './modules/lint-utils.js';
+import * as sessionStorage from './modules/session-storage.js';
 import * as slUtils from './modules/sl-utils.js';
 import * as teiUtils from './modules/tei-utils.js';
 import ui from './ui.js';
@@ -20,6 +21,7 @@ export function registerModules(pluginManager) {
   /** @type {Record<string, unknown>} */
   const modules = {
     'lint-utils': lintUtils,
+    'session-storage': sessionStorage,
     'sl-utils': slUtils,
     'tei-utils': teiUtils,
     'ui': ui,
