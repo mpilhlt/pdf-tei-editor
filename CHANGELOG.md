@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.73.2](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.1...v0.73.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **pdfviewer:** strip title tooltip from whole annotation layer, not just linked anchors ([4ad5a18](https://github.com/mpilhlt/pdf-tei-editor/commit/4ad5a180f82a5d21e87d0c3d15ef0ea33290a9c6))
+
 ## [0.73.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.0...v0.73.1) (2026-10-18)
 
 
