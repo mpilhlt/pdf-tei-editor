@@ -32,6 +32,7 @@
         "sync": "info"
     },
     "application.mode": "testing",
+    "plugin.dashboard.show-on-login": false,
     "application.mode.values": [
         "development",
         "production",

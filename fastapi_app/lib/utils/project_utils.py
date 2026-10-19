@@ -55,6 +55,32 @@ def get_user_projects(
     return [p for p in projects if username in p.get('members', [])]
 
 
+def get_visible_projects(
+    user: Optional[dict[str, Any]],
+    db_dir: Path,
+) -> list[dict[str, Any]]:
+    """Return the non-archived projects shown to the user: all for admins (`*` role), else their own."""
+    if not user:
+        return []
+    if '*' in user.get('roles', []):
+        projects = get_projects_with_details(db_dir)
+    else:
+        projects = get_user_projects(user, db_dir)
+    return [p for p in projects if not p.get('archived')]
+
+
+def get_archived_collection_ids(db_dir: Path) -> set[str]:
+    """Return the IDs of collections that belong only to archived projects.
+
+    A collection that is also part of a non-archived project is not included, and collections
+    that belong to no project are never considered archived. Mirrors `getArchivedCollectionIds()`
+    in `app/src/modules/collection-utils.js`.
+    """
+    projects = get_projects_with_details(db_dir)
+    active = {c for p in projects if not p.get('archived') for c in p.get('collections', [])}
+    return {c for p in projects if p.get('archived') for c in p.get('collections', []) if c not in active}
+
+
 def get_project_for_collection(
     collection_id: str,
     db_dir: Path,
