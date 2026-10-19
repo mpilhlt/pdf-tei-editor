@@ -1,16 +1,19 @@
 """
 Edit History Plugin.
 
-This plugin creates a report about recent activity in the current collection
-by analyzing revision information from TEI artifacts.
+This plugin creates a report about recent activity in the current collection, or in all
+accessible projects, by analyzing revision information from TEI artifacts. It also
+contributes a "Recent edits" box to the dashboard (if the dashboard plugin is active).
 """
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable
 
 from lxml import etree
 
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,13 @@ class EditHistoryPlugin(Plugin):
                     "icon": "clock-history",
                     "state_params": ["collection", "variant"],
                 },
+                {
+                    "name": "show_all",
+                    "label": "Show Edit History of All Projects",
+                    "description": "Display all changes in the projects you can access",
+                    "icon": "clock-history",
+                    "state_params": [],
+                },
             ],
         }
 
@@ -46,7 +56,18 @@ class EditHistoryPlugin(Plugin):
         """Return available endpoints."""
         return {
             "show_history": self.show_history,
+            "show_all": self.show_all,
         }
+
+    async def initialize(self, context: PluginContext) -> None:
+        """Register the frontend extension that contributes the dashboard box."""
+        extension_file = Path(__file__).parent / "extensions" / "edit-history-dashboard.js"
+        if extension_file.exists():
+            FrontendExtensionRegistry.get_instance().register_extension(extension_file, self.metadata["id"])
+
+    async def show_all(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
+        """Return the URL of the edit history of all accessible, non-archived projects."""
+        return {"outputUrl": "/api/plugins/edit-history/all"}
 
     async def show_history(
         self, context: PluginContext, params: dict[str, Any]

@@ -6,9 +6,12 @@ by analyzing revision information from TEI artifacts.
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,18 @@ logger = logging.getLogger(__name__)
 class AnnotationProgressPlugin(Plugin):
     """
     Plugin that generates annotation progress reports for collections.
+
+    Also contributes a per-project progress box to the dashboard (if the dashboard
+    plugin is active) through the frontend extension `annotation-progress-dashboard.js`.
     """
+
+    def __init__(self):
+        get_plugin_config(
+            "plugin.annotation-progress.dashboard-threshold",
+            "PLUGIN_ANNOTATION_PROGRESS_DASHBOARD_THRESHOLD",
+            default="approved",
+            description="Lifecycle status (from annotation.lifecycle.order) from which a document counts as done in the dashboard's progress box",
+        )
 
     @property
     def metadata(self) -> dict[str, Any]:
@@ -44,6 +58,13 @@ class AnnotationProgressPlugin(Plugin):
         return {
             "show_progress": self.show_progress,
         }
+
+    async def initialize(self, context: PluginContext) -> None:
+        """Register the frontend extension that contributes the dashboard progress box."""
+        fe_registry = FrontendExtensionRegistry.get_instance()
+        extension_file = Path(__file__).parent / "extensions" / "annotation-progress-dashboard.js"
+        if extension_file.exists():
+            fe_registry.register_extension(extension_file, self.metadata["id"])
 
     async def show_progress(
         self, context: PluginContext, params: dict[str, Any]

@@ -121,6 +121,10 @@ for (const items of results) {
 }
 ```
 
+### Dashboard contributions
+
+Backend plugins can add boxes to the login dashboard by implementing `dashboard.contributions` in a frontend extension. See [fastapi_app/plugins/dashboard/README.md](../../fastapi_app/plugins/dashboard/README.md) for the contribution format and the layout rules.
+
 ### Auto-discovered extension points
 
 The base class auto-mounts these without any declaration:

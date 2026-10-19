@@ -9,8 +9,10 @@
     pointer-events: auto;
   }
 
-  /* Hide help icon when any drawer is open */
-  body:has(sl-drawer[open]) div[name="helpIcon"] {
+  /* Hide help icon when any page-level drawer is open. Contained drawers
+     (e.g. the diagnostics drawer, which stays open permanently) do not
+     cover the icon and are ignored. */
+  body:has(sl-drawer[open]:not([contained])) div[name="helpIcon"] {
     display: none !important;
   }
 
