@@ -6,6 +6,7 @@ import csv
 import io
 import logging
 from collections import defaultdict
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -15,8 +16,12 @@ from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
     get_file_storage,
+    get_file_repository,
     get_session_manager,
+    require_authenticated_user,
 )
+from fastapi_app.lib.models import FileMetadata
+from fastapi_app.lib.repository.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 
@@ -811,3 +816,87 @@ def _create_summary_card(
         </div>
     </div>
     """
+
+
+def _summarize_collection(files: list[FileMetadata], lifecycle_order: list[str], threshold: str) -> tuple[int, dict[str, int]]:
+    """Count the documents among `files` and, per TEI variant, those whose TEI status is at or after `threshold`.
+
+    Returns:
+        (number of documents, {variant: number of documents of that variant that reached the threshold}),
+        listing every variant that has a TEI file, even if no document reached the threshold.
+    """
+    from fastapi_app.lib.utils.doi_utils import normalize_legacy_encoding
+
+    threshold_index = lifecycle_order.index(threshold) if threshold in lifecycle_order else len(lifecycle_order) - 1
+    doc_ids: set[str] = set()
+    done: dict[str, set[str]] = {}
+    for f in files:
+        if not f.doc_id:
+            continue
+        doc_id = normalize_legacy_encoding(f.doc_id)
+        doc_ids.add(doc_id)
+        if f.file_type != "tei" or not f.variant:
+            continue
+        variant_done = done.setdefault(f.variant, set())
+        if f.status in lifecycle_order and lifecycle_order.index(f.status) >= threshold_index:
+            variant_done.add(doc_id)
+    return len(doc_ids), {variant: len(docs) for variant, docs in sorted(done.items())}
+
+
+@router.get("/dashboard-summary")
+async def dashboard_summary(
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    file_repo: FileRepository = Depends(get_file_repository),
+) -> dict[str, Any]:
+    """Per project the user can see and per collection: number of documents and, per variant, the number that reached the dashboard threshold status.
+
+    The threshold is `plugin.annotation-progress.dashboard-threshold` (a status from
+    `annotation.lifecycle.order`). Each collection is listed once, under the most specific
+    project containing it (fewest collections, wildcard projects last). Collections that belong
+    only to archived projects, collections without documents and projects without collections
+    are omitted.
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.utils.collection_utils import get_collections_with_details
+    from fastapi_app.lib.utils.config_utils import get_config
+    from fastapi_app.lib.utils.project_utils import get_archived_collection_ids, get_visible_projects
+    from fastapi_app.plugins.dashboard.documents import project_specificity
+
+    settings = get_settings()
+    config = get_config()
+    lifecycle_order: list[str] = config.get("annotation.lifecycle.order", default=[]) or []
+    threshold: str = config.get("plugin.annotation-progress.dashboard-threshold", default="approved")
+    if threshold not in lifecycle_order and lifecycle_order:
+        threshold = lifecycle_order[-1]
+
+    try:
+        collection_names = {c["id"]: c.get("name") or c["id"] for c in get_collections_with_details(settings.db_dir) or []}
+    except (FileNotFoundError, ValueError):
+        collection_names = {}
+    archived = get_archived_collection_ids(settings.db_dir)
+    seen: set[str] = set()
+
+    projects: list[dict[str, Any]] = []
+    for project in sorted(get_visible_projects(user, settings.db_dir), key=project_specificity):
+        collections = project.get("collections", [])
+        if "*" in collections:
+            collections = list(collection_names)
+        batches: list[dict[str, Any]] = []
+        for collection in collections:
+            if collection in seen or collection in archived:
+                continue
+            seen.add(collection)
+            total, variants = _summarize_collection(file_repo.get_files_by_collection(collection), lifecycle_order, threshold)
+            if total:
+                batches.append({
+                    "id": collection,
+                    "name": collection_names.get(collection, collection),
+                    "total": total,
+                    "variants": [{"variant": variant, "done": done} for variant, done in variants.items()],
+                })
+        if batches:
+            batches.sort(key=lambda batch: batch["name"].lower())
+            projects.append({"id": project["id"], "name": project.get("name") or project["id"], "batches": batches})
+
+    projects.sort(key=lambda project: project["name"].lower())
+    return {"threshold": threshold, "projects": projects}
