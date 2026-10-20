@@ -131,6 +131,10 @@ timeout = config.get('session.timeout', default=3600)
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - See [Backend Plugins - Plugin Configuration](../docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details
 
+## User Secrets
+
+Keys of services that are billed to the user are stored per user in `fastapi_app/lib/secrets/` (encrypted SQLite). Read them with `require_user_secret(username, service)`; NEVER log, return or put secret values in exception messages, and never add them to extractor options or config. See [Backend Plugins - User API Keys](../docs/code-assistant/backend-plugins.md#user-api-keys).
+
 ## Logging Configuration
 
 **Log Files:**

@@ -94,7 +94,7 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html')
 class ExtractionPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog'] })
+    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog', 'api-keys'] })
   }
 
   static extensionPoints = [ep.toolbar.contentItems];
@@ -246,7 +246,7 @@ class ExtractionPlugin extends Plugin {
           throw new Error('No source file available for extraction')
         }
 
-        result = await this.#client.extract(file_id, options)
+        result = await this.getDependency('api-keys').withKeyPrompt(() => this.#client.extract(file_id, options))
 
         await this.getDependency('file-selection').reload({ refresh: true })
 

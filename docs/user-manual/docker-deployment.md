@@ -144,6 +144,7 @@ These variables are passed to the running container:
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
 | `WEBDAV_ENABLED` | Enable WebDAV integration | `false` |
 | `WEBDAV_BASE_URL` | WebDAV server URL | - |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 
 See `.env.production` for complete list.

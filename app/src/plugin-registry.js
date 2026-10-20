@@ -17,6 +17,7 @@ export { default as ConfigPlugin } from './plugins/config.js';
 export { default as DiagnosticsDrawerPlugin } from './plugins/diagnostics-drawer.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
 export { default as DocumentActionsPlugin } from './plugins/document-actions.js';
+export { default as ApiKeysPlugin } from './plugins/api-keys.js';
 export { default as DocumentRulesPlugin } from './plugins/document-rules.js';
 export { default as ExtractionPlugin } from './plugins/extraction.js';
 export { default as FileSelectionDrawerPlugin } from './plugins/file-selection-drawer.js';

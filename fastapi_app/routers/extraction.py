@@ -36,6 +36,7 @@ from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
 from ..lib.services.language_detection import add_document_language
+from ..lib.secrets import MissingSecretError, SecretServiceRegistry
 from ..lib.models import FileCreate, FileUpdate
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,20 @@ async def extract_metadata(
 
             logger.debug(f"Extraction completed with {request.extractor}, result length: {len(tei_xml)}")
 
+        except MissingSecretError as e:
+            # The frontend prompts the user for the key and repeats the request
+            service = SecretServiceRegistry.describe(e.service)
+            raise HTTPException(
+                status_code=428,
+                detail={
+                    "code": "secret_required",
+                    "message": f"{service.label} needs your API key",
+                    "service": service.id,
+                    "label": service.label,
+                    "description": service.description,
+                    "help_url": service.help_url,
+                },
+            )
         except Exception as e:
             logger.error(f"Extraction failed with {request.extractor}: {e}")
             raise HTTPException(

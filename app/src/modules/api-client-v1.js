@@ -616,6 +616,20 @@
  */
 
 /**
+ * @typedef {Object} SecretServiceResponse
+ * @property {string} id
+ * @property {string} label
+ * @property {string} description
+ * @property {string} help_url
+ * @property {boolean} is_set - Whether the current user has stored a key for the service
+ */
+
+/**
+ * @typedef {Object} SecretValueRequest
+ * @property {string} value
+ */
+
+/**
  * @typedef {Object} QueryResourceRequest
  * @property {string} kind
  * @property {string} url
@@ -1720,6 +1734,40 @@ export class ApiClientV1 {
   async llmProviders() {
     const endpoint = `/llm/providers`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * List the services that need a user-supplied API key, with `is_set` for the current user.
+   * Key values are never returned.
+   *
+   * @returns {Promise<Array<SecretServiceResponse>>}
+   */
+  async secretsList() {
+    const endpoint = `/secrets`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Store the current user's API key for a service (encrypted on the server).
+   *
+   * @param {string} service
+   * @param {SecretValueRequest} requestBody
+   * @returns {Promise<SecretServiceResponse>}
+   */
+  async secretsSet(service, requestBody) {
+    const endpoint = `/secrets/${encodeURIComponent(service)}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Remove the current user's API key for a service.
+   *
+   * @param {string} service
+   * @returns {Promise<SecretServiceResponse>}
+   */
+  async secretsDelete(service) {
+    const endpoint = `/secrets/${encodeURIComponent(service)}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**

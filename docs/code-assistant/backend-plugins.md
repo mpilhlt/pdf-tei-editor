@@ -60,6 +60,24 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - In CI, check out the editor, install its environment and run the same command, pinned to a branch or tag of the editor.
 - Everything the plugin ships (schema, guidelines, prompts) stays inside the plugin directory; serve files through `static/` and reference them by their `/api/plugins/{plugin_id}/static/` URL.
 
+## User API Keys
+
+A plugin that calls a service billed to the user (instead of using a key configured by the administrator) reads the user's own key from the encrypted secret store in `fastapi_app/lib/secrets/` (SQLite `secrets.db`, Fernet; see [User API Keys](../user-manual/cli.md#user-api-keys) for the key management and the CLI):
+
+```python
+from fastapi_app.lib.secrets import register_secret_service, require_user_secret
+
+# in initialize(): tells the frontend how to ask for the key
+register_secret_service("anthropic", "Anthropic Claude", "Billed to your account.", "https://console.anthropic.com/settings/keys")
+
+# in extract(), on behalf of options["username"]; raises MissingSecretError if the user has no key yet
+api_key = require_user_secret(options.get("username"), "anthropic")
+```
+
+- `POST /api/v1/extract` turns `MissingSecretError` into HTTP 428 with `detail = {code: "secret_required", service, label, description, help_url}`. The frontend (`api-keys` plugin, `withKeyPrompt()`) then asks for the key, stores it through `PUT /api/v1/secrets/{service}` and repeats the request. Other routes can use the same pattern: raise `MissingSecretError` and wrap the frontend call in `getDependency('api-keys').withKeyPrompt(...)`.
+- The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
+- Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
+
 ## Creating a Plugin
 
 ### Directory Structure
