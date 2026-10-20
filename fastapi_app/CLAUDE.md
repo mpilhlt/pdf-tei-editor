@@ -126,7 +126,7 @@ timeout = config.get('session.timeout', default=3600)
 **Backend Plugin Configuration:**
 
 - **CRITICAL**: Initialize plugin config in the plugin class `__init__()` method, NOT in `__init__.py`
-- Plugin `__init__.py` files are NOT relied on during plugin discovery: `PluginRegistry._load_plugin()` does `importlib.import_module("fastapi_app.plugins.<name>.plugin")`, which does execute the package's `__init__.py` as a side effect, but the fallback path (`spec_from_file_location` on `plugin.py`) and route loading (`routes.py` by file path) bypass it. Never put required initialization (config keys, registrations) there
+- Plugin modules are imported as part of their package by `fastapi_app/lib/plugins/plugin_paths.py:import_plugin_module()` (`fastapi_app.plugins.<dir>` for built-in, `pte_external_plugins.<dir>` for `FASTAPI_PLUGIN_PATHS` plugins), so `__init__.py` runs before `plugin.py` and `routes.py`. Still keep it free of required initialization (config keys, registrations); plugins without `__init__.py` are supported too
 - Use `get_plugin_config()` in the plugin class `__init__()` to create config keys from environment variables
 - Access config everywhere else using `get_config()` (retrieves existing keys)
 - See [Backend Plugins - Plugin Configuration](../docs/code-assistant/backend-plugins.md#plugin-configuration-with-environment-variables) for details

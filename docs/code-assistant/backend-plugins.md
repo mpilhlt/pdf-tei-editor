@@ -14,7 +14,7 @@ Practical guide for creating **backend plugins** in the PDF-TEI Editor.
 Backend plugins are Python modules discovered at runtime from:
 
 - `fastapi_app/plugins/<plugin_id>/`
-- Paths in `FASTAPI_PLUGIN_PATHS` environment variable (colon-separated)
+- Paths in `FASTAPI_PLUGIN_PATHS` environment variable (see [External Plugins](#external-plugins))
 
 Each plugin:
 
@@ -22,6 +22,28 @@ Each plugin:
 - Defines metadata (id, name, description, category, version, required_roles)
 - Implements endpoints as async methods
 - Has access to `PluginContext` for app state and user info
+
+## External Plugins
+
+Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). Each directory contains one subdirectory per plugin, with the same layout as a built-in plugin:
+
+```text
+/opt/my-plugins/            # FASTAPI_PLUGIN_PATHS=/opt/my-plugins
+├── my_extractor/
+│   ├── __init__.py
+│   ├── plugin.py
+│   ├── extractor.py        # imported from plugin.py as `from .extractor import ...`
+│   ├── routes.py
+│   ├── static/
+│   └── extensions/
+└── another_plugin/
+```
+
+- External plugins are imported as packages under the `pte_external_plugins` namespace (e.g. `pte_external_plugins.my_extractor`), so they can consist of several modules using relative imports. Import application code with absolute imports (`from fastapi_app.lib.extraction import BaseExtractor`).
+- A directory name that also exists in `fastapi_app/plugins/` does not shadow or load the built-in plugin; plugin ids must still be unique.
+- `routes.py`, `static/` (served at `/api/plugins/{plugin_id}/static/`) and frontend extensions registered from `initialize()` work as for built-in plugins.
+- External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
+- The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
 
 ## Creating a Plugin
 

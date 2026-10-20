@@ -5,14 +5,13 @@ This module handles filesystem-based plugin discovery, validation,
 role-based filtering, and the derived enabled/disabled status of plugins.
 """
 
-import importlib
-import importlib.util
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_paths import import_plugin_module
 
 logger = logging.getLogger(__name__)
 
@@ -134,22 +133,9 @@ class PluginRegistry:
             PluginRecord; load_status is "ok", "unavailable" or "failed"
         """
         try:
-            # Use standard package import to support relative imports
-            plugin_name = plugin_path.name
-            module_name = f"fastapi_app.plugins.{plugin_name}.plugin"
-
-            # Try standard import first (works when fastapi_app is in sys.path)
-            try:
-                module = importlib.import_module(module_name)
-            except ModuleNotFoundError:
-                # Fallback to spec-based loading for edge cases
-                spec = importlib.util.spec_from_file_location(module_name, plugin_file)
-                if spec is None or spec.loader is None:
-                    logger.error(f"Could not load spec for {plugin_file}")
-                    return self._failed_record(plugin_path, "Could not load module spec")
-
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
+            # Import as part of the plugin's package so relative imports work,
+            # for built-in and external plugins alike
+            module = import_plugin_module(plugin_path, "plugin")
 
             # Find Plugin subclass in module
             plugin_class = None

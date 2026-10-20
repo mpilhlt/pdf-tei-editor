@@ -144,8 +144,22 @@ These variables are passed to the running container:
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
 | `WEBDAV_ENABLED` | Enable WebDAV integration | `false` |
 | `WEBDAV_BASE_URL` | WebDAV server URL | - |
+| `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 
 See `.env.production` for complete list.
+
+### External Plugins
+
+Plugins maintained outside this repository are added by mounting their directory into the container and listing it in `FASTAPI_PLUGIN_PATHS`:
+
+```bash
+docker run ... \
+  -v /opt/pte-plugins:/opt/pte-plugins:ro \
+  -e FASTAPI_PLUGIN_PATHS=/opt/pte-plugins \
+  cboulanger/pdf-tei-editor:latest
+```
+
+Each subdirectory of `/opt/pte-plugins` with a `plugin.py` is loaded as one plugin and shows up as "external" in the Plugin Manager. External plugins can only use Python packages that are installed in the image.
 
 ## Data Persistence
 

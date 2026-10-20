@@ -14,6 +14,8 @@ import shutil
 import re
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.plugins.plugin_manager import PluginManager
+from fastapi_app.lib.plugins.plugin_paths import get_plugin_dirs
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.core.database import DatabaseManager
@@ -383,27 +385,22 @@ class FileZipExporter:
         relative_path = match.group(2)
         logger.debug(f"Plugin ID: {plugin_id}, Relative path: {relative_path}")
 
-        # Get the app's plugins directory
-        app_plugins_dir = get_settings().plugins_code_dir
-        logger.debug(f"App plugins directory: {app_plugins_dir}")
+        # The static URL maps to the plugin's static/ directory: prefer the
+        # directory the plugin was discovered in, then search all plugin
+        # directories (built-in and FASTAPI_PLUGIN_PATHS) by directory name
+        candidates: list[Path] = []
+        record = PluginManager.get_instance().registry.get_record(plugin_id)
+        if record is not None and record.directory is not None:
+            candidates.append(record.directory)
+        for base_dir in get_plugin_dirs():
+            for dir_name in (plugin_id, plugin_id.replace('-', '_')):
+                candidates.append(base_dir / dir_name)
 
-        # The static URL maps to the plugin's static/ directory
-        # So if URL is /api/plugins/xslt_export/static/biblstruct-to-csv.xslt
-        # The path should be: .../plugins/xslt_export/static/biblstruct-to-csv.xslt
-        static_path = app_plugins_dir / plugin_id / 'static' / relative_path
-        logger.debug(f"Checking standard path: {static_path} (exists: {static_path.exists()})")
-
-        if static_path.exists():
-            return static_path
-
-        # Also check FASTAPI_PLUGIN_PATHS environment variable
-        plugin_paths_env = getattr(settings, 'fastapi_plugin_paths', None)
-        if plugin_paths_env:
-            for base_path in plugin_paths_env.split(':'):
-                alt_path = Path(base_path) / plugin_id / 'static' / relative_path
-                logger.debug(f"Checking alt path: {alt_path} (exists: {alt_path.exists()})")
-                if alt_path.exists():
-                    return alt_path
+        for plugin_dir in candidates:
+            static_path = plugin_dir / 'static' / relative_path
+            logger.debug(f"Checking path: {static_path} (exists: {static_path.exists()})")
+            if static_path.exists():
+                return static_path
 
         logger.debug(f"Could not resolve URL {url} to filesystem path")
         return None
