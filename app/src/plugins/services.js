@@ -435,10 +435,12 @@ class ServicesPlugin extends Plugin {
    * @param {Element} node
    */
   async searchNodeContentsInPdf(node) {
+    console.log('DEBUG searchNodeContentsInPdf', node?.nodeName, 'isInTeiText:', isInTeiText(node)) // DEBUG
     if (!isInTeiText(node)) {
       return
     }
     const queryText = getNodeText(node).join(' ')
+    console.log('DEBUG searchNodeContentsInPdf query:', JSON.stringify(queryText.slice(0, 80))) // DEBUG
     if (!queryText.trim()) {
       // Empty elements such as <pb/> have no text to search for, but a
       // pdfSearch.fallback handler may still know their page
@@ -452,6 +454,7 @@ class ServicesPlugin extends Plugin {
     const footnoteId = getSourceFootnoteId(node)
     const query = footnoteId ? `${footnoteId} ${queryText}` : queryText
     const match = await this.#pdfViewer.search(query)
+    console.log('DEBUG searchNodeContentsInPdf text match:', match ? { page: match.page, score: match.score } : null) // DEBUG
     if (match) {
       this.#logger.debug(`PDF match: page ${match.page}, score ${match.score.toFixed(3)}`)
     } else if (await this.#searchFallback(node)) {
@@ -475,6 +478,7 @@ class ServicesPlugin extends Plugin {
     )
     const pages = (Array.isArray(results) ? results : []).map(r => r?.page)
     const page = pages.find(p => Number.isInteger(p) && p >= 1 && p <= pageCount)
+    console.log('DEBUG pdfSearch.fallback', { pageCount, results, page }) // DEBUG
     if (!page) {
       return false
     }

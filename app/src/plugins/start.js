@@ -231,6 +231,11 @@ class StartPlugin extends Plugin {
       await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
       // trigger auto-search if enabled and if a new node has been selected
       const node = this.#getAutoSearchNode(ranges?.[0]?.node ?? null)
+      console.log('DEBUG autosearch selectionChanged', { // DEBUG
+        enabled: this.getDependency('pdfviewer').isAutoSearchEnabled(), // DEBUG
+        cursorNode: ranges?.[0]?.node?.nodeName, selectedNode: this.#xmlEditor.selectedNode?.nodeName, // DEBUG
+        parentPath: this.#xmlEditor.parentPath, node: node?.nodeName, sameAsLast: node === lastNode // DEBUG
+      }) // DEBUG
 
       if (this.getDependency('pdfviewer').isAutoSearchEnabled() && node && node !== lastNode) {
         // Record the node before awaiting the search: "selectionChanged" can fire
