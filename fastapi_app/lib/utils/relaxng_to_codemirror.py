@@ -220,6 +220,7 @@ class RelaxNGParser:
             tree = ET.parse(file_path)
             root = tree.getroot()
             self.root = root  # Retained for extract_tag_definitions()
+            self._normalize_mixed(root)
 
             # Extract namespace prefixes
             self._extract_namespaces(root)
@@ -238,6 +239,18 @@ class RelaxNGParser:
         except FileNotFoundError:
             raise FileNotFoundError(f"RelaxNG file not found: {file_path}")
     
+    @staticmethod
+    def _normalize_mixed(root: ET.Element) -> None:
+        """
+        Rewrite every `<mixed>p</mixed>` as `<interleave><text/>p</interleave>`,
+        its definition in the RELAX NG specification, so that the traversals
+        below, which only descend into choice/group/optional/zeroOrMore/
+        oneOrMore/interleave, also see the child elements of mixed content.
+        """
+        for mixed in root.iter(f'{RNG_NS}mixed'):
+            mixed.tag = f'{RNG_NS}interleave'
+            mixed.insert(0, ET.Element(f'{RNG_NS}text'))
+
     def _extract_namespaces(self, root: ET.Element) -> None:
         """Extract namespace prefixes from the root element."""
         for key, value in root.attrib.items():
