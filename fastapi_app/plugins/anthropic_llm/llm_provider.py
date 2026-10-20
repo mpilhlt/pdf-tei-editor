@@ -31,14 +31,18 @@ REQUEST_TIMEOUT_SECONDS = 300
 class AnthropicLLMProvider(LLMProvider):
     """LLM provider connector for Anthropic's Claude API."""
 
-    def __init__(self, id: str, label: str, api_key: str, base_url: str = "https://api.anthropic.com/v1"):
+    def __init__(self, id: str, label: str, api_key: str | None, base_url: str = "https://api.anthropic.com/v1", secret_service: str | None = None):
         self.id = id
         self.label = label
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
+        self.secret_service = secret_service
 
-    def is_available(self) -> bool:
+    def has_shared_key(self) -> bool:
         return bool(self._api_key)
+
+    def with_api_key(self, api_key: str) -> "AnthropicLLMProvider":
+        return AnthropicLLMProvider(self.id, self.label, api_key, self._base_url, self.secret_service)
 
     def _headers(self) -> dict[str, str]:
         return {

@@ -12,6 +12,7 @@ from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.llm import LLMProviderRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
+from fastapi_app.lib.secrets import register_secret_service
 from fastapi_app.lib.services.service_registry import get_service_registry
 from fastapi_app.lib.utils.config_utils import get_config
 
@@ -20,6 +21,8 @@ from .llm_provider import KisskiLLMProvider
 from .service import KisskiService
 
 logger = logging.getLogger(__name__)
+
+SECRET_SERVICE_ID = "kisski"
 
 
 class KisskiPlugin(Plugin):
@@ -92,19 +95,23 @@ class KisskiPlugin(Plugin):
         base_url = get_config().get("plugin.kisski.api.url")
         if app_mode == "testing":
             logger.info("KISSKI LLM provider not registered in testing mode")
-        elif api_key:
-            llm_registry = LLMProviderRegistry.get_instance()
-            llm_registry.register(
+        else:
+            register_secret_service(
+                SECRET_SERVICE_ID,
+                "KISSKI Academic Cloud",
+                "Used for KISSKI models in the inference model picker.",
+                "https://docs.hpc.gwdg.de/services/saia/index.html",
+            )
+            LLMProviderRegistry.get_instance().register(
                 KisskiLLMProvider(
                     id="kisski",
                     label="KISSKI Academic Cloud",
                     base_url=base_url,
                     api_key=api_key,
+                    secret_service=SECRET_SERVICE_ID,
                 )
             )
-            logger.info("KISSKI LLM provider registered")
-        else:
-            logger.warning("KISSKI LLM provider not registered - missing API key")
+            logger.info("KISSKI LLM provider registered (%s)", "shared key" if api_key else "per-user keys")
 
         logger.info(
             f"KISSKI extractor plugin initialized (PDF support: {pdf_support})"

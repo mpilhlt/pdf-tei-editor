@@ -90,7 +90,7 @@ describe('InferenceSettingsPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
     assert.strictEqual(plugin.name, 'inference-settings');
-    assert.deepStrictEqual(plugin.deps, ['client', 'tools']);
+    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'api-keys']);
   });
 });
 
@@ -256,6 +256,16 @@ describe('InferenceSettingsPlugin._populateSubmenu', () => {
     assert.strictEqual(children[2].textContent, 'Llama 3');
   });
 
+  it('offers to add the API key of a provider that needs one', () => {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    plugin._populateSubmenu([{ id: 'anthropic', label: 'Anthropic Claude', models: [], key_required: true, secret_service: 'anthropic' }]);
+    const children = [...plugin._submenu.children];
+    assert.strictEqual(children.length, 2);
+    assert.strictEqual(children[0].textContent, 'Anthropic Claude');
+    assert.strictEqual(children[1].dataset.secretService, 'anthropic');
+  });
+
   it('clears previous contents on repeated calls', () => {
     const plugin = makePlugin();
     plugin._submenu = document.createElement('sl-menu');
@@ -323,6 +333,22 @@ describe('InferenceSettingsPlugin._onSelect', () => {
     plugin._submenu = document.createElement('sl-menu');
     const bareItem = document.createElement('sl-menu-item');
     plugin._onSelect({ detail: { item: bareItem } });
+    assert.strictEqual(plugin.getDefaultModel(), null);
+  });
+});
+
+describe('InferenceSettingsPlugin key prompt', () => {
+  it('shows the key dialog for the service and refreshes once a key was saved', async () => {
+    const plugin = makePlugin();
+    plugin._providers = [{ id: 'anthropic', label: 'Anthropic Claude', models: [], key_required: true, secret_service: 'anthropic' }];
+    const show = mock.fn(async () => true);
+    plugin.getDependency = (name) => (name === 'api-keys' ? { show } : undefined);
+    const refresh = mock.method(plugin, '_refresh', async () => {});
+    const item = document.createElement('sl-menu-item');
+    item.dataset.secretService = 'anthropic';
+    await plugin._onSelect({ detail: { item } });
+    assert.strictEqual(show.mock.calls[0].arguments[1], 'anthropic');
+    assert.strictEqual(refresh.mock.calls.length, 1);
     assert.strictEqual(plugin.getDefaultModel(), null);
   });
 });

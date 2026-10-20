@@ -60,14 +60,15 @@ class TestKisskiPluginLLMRegistration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(provider.is_available())
 
     @patch("fastapi_app.plugins.kisski.plugin.get_config")
-    async def test_initialize_skips_llm_provider_without_api_key(self, mock_get_config):
+    async def test_initialize_registers_llm_provider_for_user_keys_without_api_key(self, mock_get_config):
         mock_get_config.return_value = self._mock_config(api_key=None)
         plugin = KisskiPlugin()
 
         await plugin.initialize(None)
 
-        with self.assertRaises(KeyError):
-            LLMProviderRegistry.get_instance().get_provider("kisski")
+        provider = LLMProviderRegistry.get_instance().get_provider("kisski")
+        self.assertFalse(provider.has_shared_key())
+        self.assertEqual(provider.secret_service, "kisski")
 
     @patch("fastapi_app.plugins.kisski.plugin.get_config")
     async def test_cleanup_unregisters_llm_provider(self, mock_get_config):

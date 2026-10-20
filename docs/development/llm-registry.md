@@ -23,7 +23,10 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 | `google_llm` | `google` | Google Gemini | `GEMINI_API_KEY` | `plugin.google-llm.api.key` |
 | `anthropic_llm` | `anthropic` | Anthropic Claude | `ANTHROPIC_API_KEY` (+ `ANTHROPIC_API_URL`) | `plugin.anthropic-llm.api.key` (+ `.api.url`) |
 
-A provider registers itself only if its API key is set (in `.env` or `config.json`; `config.json` wins). Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
+The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
+
+- **Per-user keys (default)**: without a configured key, each user supplies their own through Tools > API Keys (secret services `kisski`, `google`, `anthropic`; see [User API Keys](../code-assistant/backend-plugins.md#user-api-keys)). `GET /api/v1/llm/providers` lists such a provider with `key_required: true` and no models until the user stored a key; the model picker then shows "Add your API key…".
+- **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users and no key prompt appears.
 
 ## Writing a provider
 
@@ -44,7 +47,8 @@ class MyProvider(LLMProvider):
 
 - `LLMModel.free`: `True` if using the model costs the operator nothing. Non-free models are restricted (see [Access control](#access-control)).
 - `LLMModel.status`: optional live load state (`availability`: `available`, `busy` or `very_busy`, plus a free-text `detail`); the frontend shows a warning icon when not `available`.
-- `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used.
+- `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used. It is not about API keys.
+- Per-user keys: set `secret_service` to the id of a registered secret service, return `has_shared_key()` `True` only if a configured key exists, and implement `with_api_key(key)` returning a copy that uses the given key. Consumers get a provider for the requesting user with `LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, username)`, which raises `MissingSecretError` when the user has no key (map it to HTTP 428 with `secret_required_detail(error)`; the extraction endpoint does this already). Do not use `get_provider()` for requests made on behalf of a user.
 - Raise `LLMProviderError` with a user-presentable message for upstream failures (rate limit, overload, bad request); routes map it to HTTP 502.
 - Multimodal input is optional: override `supports_pdf_input(model_id)` and `chat_completion_with_pdf()` to accept a PDF file, and `supports_image_input(model_id)` and `chat_completion_with_images(model_id, system_prompt, user_prompt, images)` to accept a list of `LLMImage` (`{"data": bytes, "media_type": "image/png"}`), sent in order ahead of the prompt. Consumers check the `supports_*` method before calling. The Anthropic provider implements both.
 - Only offer chat models in `list_models()`. Commercial APIs mostly expose no machine-readable modality field, so the Google provider filters non-chat models (image, embedding, etc.) by name markers.

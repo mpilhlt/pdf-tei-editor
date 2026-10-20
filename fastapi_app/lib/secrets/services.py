@@ -59,6 +59,19 @@ class SecretServiceRegistry:
         cls._services.clear()
 
 
+def secret_required_detail(error: MissingSecretError) -> dict[str, str]:
+    """The `detail` of the HTTP 428 response that makes the frontend prompt the user for the key."""
+    service = SecretServiceRegistry.describe(error.service)
+    return {
+        "code": "secret_required",
+        "message": f"{service.label} needs your API key",
+        "service": service.id,
+        "label": service.label,
+        "description": service.description,
+        "help_url": service.help_url,
+    }
+
+
 def register_secret_service(id: str, label: str, description: str = "", help_url: str = "") -> SecretService:
     """Register a service whose secret users supply themselves, see :class:`SecretService`."""
     service = SecretService(id=id, label=label, description=description, help_url=help_url)

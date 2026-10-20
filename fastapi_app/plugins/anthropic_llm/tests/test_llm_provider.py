@@ -16,15 +16,15 @@ from fastapi_app.plugins.anthropic_llm.llm_provider import AnthropicLLMProvider
 
 
 class TestAnthropicLLMProviderAvailability(unittest.TestCase):
-    """Test is_available() reflects whether an API key was supplied."""
+    """Test has_shared_key() reflects whether an API key was supplied."""
 
-    def test_is_available_true_with_api_key(self):
+    def test_has_shared_key_with_api_key(self):
         provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="k")
-        self.assertTrue(provider.is_available())
+        self.assertTrue(provider.has_shared_key())
 
-    def test_is_available_false_without_api_key(self):
+    def test_has_no_shared_key_without_api_key(self):
         provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="")
-        self.assertFalse(provider.is_available())
+        self.assertFalse(provider.has_shared_key())
 
 
 class TestAnthropicLLMProviderListModels(unittest.TestCase):
