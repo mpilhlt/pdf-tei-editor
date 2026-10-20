@@ -12,7 +12,7 @@
  * @typedef {{ tag: string, label: string, color: string,
  *   attributes?: Array<{ name: string, values?: string[]|null, required?: boolean }>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
- *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
+ *   description?: string|null, childTags?: string[]|null, empty?: boolean }} AnnotationTagDef
  */
 
 /**
@@ -421,6 +421,9 @@ export class XmlAnnotationPopup {
     actionsRow.style.cssText = 'display:flex; gap:6px; width:100%; margin-bottom:8px;';
     this.#overlay.appendChild(actionsRow);
 
+    // An empty element (<gap/>, <pb/>) has no content to merge with its neighbours
+    const isEmptyElement = def.empty === true || element.childNodes.length === 0;
+
     const mergePrevBtn = document.createElement('sl-button');
     mergePrevBtn.className = 'ann-popup-action-btn ann-popup-action-btn--merge';
     mergePrevBtn.setAttribute('size', 'small');
@@ -435,7 +438,7 @@ export class XmlAnnotationPopup {
       await this.#editor.updateEditorFromNode(parent);
       this.#hide();
     });
-    actionsRow.appendChild(mergePrevBtn);
+    if (!isEmptyElement) actionsRow.appendChild(mergePrevBtn);
 
     const mergeNextBtn = document.createElement('sl-button');
     mergeNextBtn.className = 'ann-popup-action-btn ann-popup-action-btn--merge';
@@ -451,7 +454,7 @@ export class XmlAnnotationPopup {
       await this.#editor.updateEditorFromNode(parent);
       this.#hide();
     });
-    actionsRow.appendChild(mergeNextBtn);
+    if (!isEmptyElement) actionsRow.appendChild(mergeNextBtn);
 
     const removeBtn = document.createElement('sl-button');
     removeBtn.className = 'ann-popup-action-btn ann-popup-action-btn--remove';
@@ -590,7 +593,9 @@ export class XmlAnnotationPopup {
 
   /**
    * Renders one split-button chip per tag definition into `container`,
-   * sorted alphabetically by tag name. `currentElement` is the DOM element
+   * sorted alphabetically by tag name. Definitions marked `empty` appear
+   * only when `currentDef` is itself empty, and the others only when it
+   * isn't. `currentElement` is the DOM element
    * the "Change to" popup was opened on, or `null` for a fresh-selection
    * "Annotate as…" popup (where nothing is "current" and every action is
    * enabled). Muting is computed per-action, not per-chip: since one
@@ -607,7 +612,12 @@ export class XmlAnnotationPopup {
    * @param {(def: AnnotationTagDef, attrs: Record<string,string>) => void} onPick
    */
   #renderPalette(container, currentDef, currentElement, onPick) {
-    const sorted = [...this.#tagDefs].sort((a, b) => a.tag.localeCompare(b.tag));
+    // Empty elements (gap, pb, ...) don't wrap content: they are only offered in the "Change to"
+    // palette of another empty element, never for a text selection or an element with content
+    const emptyPalette = currentDef?.empty === true;
+    const sorted = this.#tagDefs
+      .filter(def => (def.empty === true) === emptyPalette)
+      .sort((a, b) => a.tag.localeCompare(b.tag));
     const row = document.createElement('div');
     Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' });
     for (const def of sorted) {

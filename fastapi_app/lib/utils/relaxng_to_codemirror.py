@@ -58,6 +58,7 @@ class TagDefinition(TypedDict):
     variants: List[TagVariant]
     bareAllowed: bool
     childCardinality: Dict[str, ChildCardinality]
+    textAllowed: bool
 
 
 class RelaxNGParser:
@@ -839,6 +840,7 @@ class RelaxNGParser:
             'variants': [{'attrs': dict[str, str], 'description': str | None}],
             'bareAllowed': bool,
             'childCardinality': {child_tag_name: {'required': bool, 'repeatable': bool}},
+            'textAllowed': bool,
         }}`. A `root_tag` not found as an `<element>` anywhere in the
         schema yields an empty dict. An attribute's `required` is `True`
         iff it is reachable from the element without passing through an
@@ -883,10 +885,40 @@ class RelaxNGParser:
                 'variants': variants,
                 'bareAllowed': bare_allowed,
                 'childCardinality': self._extract_child_cardinality(element),
+                'textAllowed': self._allows_text(element),
             }
             self._tag_definition_cache[tag_name] = tag_definition
             result[tag_name] = tag_definition
         return result
+
+    def _allows_text(self, container: ET.Element, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if the content model of `container` (an `<element>` or a
+        pattern inside one) allows character data: a `<text/>`, `<data>`,
+        `<value>` or `<list>` reachable without entering an `<attribute>`
+        (attribute values are not content) or a nested `<element>` (its
+        content belongs to the child). `<mixed>` counts as well, since
+        `parse_file()` rewrites it to an `<interleave>` starting with
+        `<text/>`.
+        """
+        if visited is None:
+            visited = set()
+        for child in container:
+            tag = child.tag
+            if tag in (f'{RNG_NS}text', f'{RNG_NS}data', f'{RNG_NS}value', f'{RNG_NS}list'):
+                return True
+            if tag in (f'{RNG_NS}attribute', f'{RNG_NS}element'):
+                continue
+            if tag == f'{RNG_NS}ref':
+                ref_name = child.get('name')
+                if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                    visited.add(ref_name)
+                    if self._allows_text(self.defined_patterns[ref_name], visited):
+                        return True
+                continue
+            if self._allows_text(child, visited):
+                return True
+        return False
 
     def _build_autocomplete_map(self) -> Dict[str, Dict]:
         """Build the final autocomplete map."""

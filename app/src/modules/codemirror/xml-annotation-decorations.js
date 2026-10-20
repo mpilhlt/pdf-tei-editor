@@ -32,7 +32,8 @@ export function resolveLabel(tagDef, element) {
 }
 
 /**
- * A badge widget rendered in place of an OpenTag for a known annotation element.
+ * A badge widget rendered in place of an OpenTag (or the SelfClosingTag of an
+ * empty element) for a known annotation element.
  * Dispatches `ann-badge-click` custom event with { tag, from } when clicked.
  * The popup handler resolves the XML DOM element from `from` at click-time.
  */
@@ -42,18 +43,20 @@ class BadgeWidget extends WidgetType {
    * @param {string} color
    * @param {string} tag
    * @param {number} from Document position of the open tag start
+   * @param {boolean} [empty] Whether the badge stands for a self-closing element (drawn as an outline)
    */
-  constructor(label, color, tag, from) {
+  constructor(label, color, tag, from, empty = false) {
     super();
     this.label = label;
     this.color = color;
     this.tag = tag;
     this.from = from;
+    this.empty = empty;
   }
 
   toDOM() {
     const span = document.createElement('span');
-    span.className = 'ann-badge';
+    span.className = this.empty ? 'ann-badge ann-badge--empty' : 'ann-badge';
     span.style.setProperty('--ann-color', this.color);
     span.dataset.tag = this.tag;
     span.dataset.from = String(this.from);
@@ -74,7 +77,8 @@ class BadgeWidget extends WidgetType {
       other.label === this.label &&
       other.color === this.color &&
       other.tag === this.tag &&
-      other.from === this.from;
+      other.from === this.from &&
+      other.empty === this.empty;
   }
 
   ignoreEvent() { return false; }
@@ -149,6 +153,9 @@ function readAttributes(openTagNode, state) {
  *   - OpenTag  → Decoration.replace → BadgeWidget (simplified label)
  *   - Content  → Decoration.mark class ann-outer (depth=1) or ann-inner (depth≥2)
  *   - CloseTag → Decoration.replace → zero-width hidden widget
+ *
+ * For each self-closing annotation element (e.g. <gap/>):
+ *   - SelfClosingTag → Decoration.replace → outlined BadgeWidget (no content)
  *
  * For each non-annotation element (tag name not in tagMap):
  *   - OpenTag and CloseTag → TagMarker atomic range (cursor skips over them)
@@ -239,13 +246,22 @@ function buildAll(state, tagMap) {
             });
           }
         } else if (firstChild.name === 'SelfClosingTag') {
-          // Self-closing element: make the tag atomic if not an annotation tag
+          // Self-closing element: a badge for an annotation tag, otherwise an atomic tag
           const tagNameNode = firstChild.firstChild?.nextSibling;
           if (!tagNameNode || tagNameNode.name !== 'TagName') return;
           const tagName = state.doc.sliceString(tagNameNode.from, tagNameNode.to);
-          if (!tagMap.has(tagName)) {
+          const def = tagMap.get(tagName);
+          if (!def) {
             pendingAtomic.push({ from: firstChild.from, to: firstChild.to });
+            return;
           }
+          // Empty annotation element (e.g. <gap/>, <pb/>): a badge without content, clickable to edit its attributes
+          const elemAttrs = (def.variants?.length ?? 0) > 0 ? readAttributes(firstChild, state) : {};
+          pendingDecos.push({
+            from: firstChild.from,
+            to: firstChild.to,
+            dec: Decoration.replace({ widget: new BadgeWidget(badgeLabel(def, elemAttrs), def.color, tagName, firstChild.from, true) })
+          });
         }
       }
     },
@@ -354,6 +370,12 @@ export const annotationTheme = EditorView.baseTheme({
     verticalAlign: 'middle',
     cursor: 'pointer',
     userSelect: 'none',
+  },
+  // Empty elements (<gap/>, <pb/>): outlined, so they read as markers rather than as spans of tagged text
+  '.ann-badge--empty': {
+    background: 'transparent',
+    color: 'inherit',
+    boxShadow: 'inset 0 0 0 1.5px var(--ann-color)',
   },
   '.ann-outer': {
     background: 'color-mix(in srgb, var(--ann-color) 18%, transparent)',

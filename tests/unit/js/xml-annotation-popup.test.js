@@ -991,6 +991,75 @@ describe('XmlAnnotationPopup - read-only mode', () => {
   });
 });
 
+// ── Empty elements ──────────────────────────────────────────────────────
+
+describe('XmlAnnotationPopup - empty elements', () => {
+  const defs = [
+    { tag: 'unclear', label: 'unclear', color: '#aaa', attributes: [], variants: [], bareAllowed: true, childTags: [] },
+    { tag: 'gap', label: 'gap', color: '#bbb', attributes: [{ name: 'reason', values: null, required: false }], variants: [], bareAllowed: true, childTags: [], empty: true },
+    { tag: 'space', label: 'space', color: '#ccc', attributes: [], variants: [], bareAllowed: true, childTags: [], empty: true },
+  ];
+
+  /** @param {HTMLElement} overlay */
+  const chipLabels = (overlay) => [...overlay.querySelectorAll('span')].map((s) => s.textContent);
+
+  it('leaves empty elements out of the "Annotate as…" palette', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const popup = new XmlAnnotationPopup({ getDomNodeAt: () => null, updateEditorFromNode: async () => {} });
+      popup.mount(container, defs);
+      popup.showForSelection({ clientX: 10, clientY: 10 }, 0, 3);
+      const labels = chipLabels(/** @type {HTMLElement} */ (container.querySelector('.ann-popup')));
+      assert.ok(labels.includes('unclear'));
+      assert.ok(!labels.includes('gap') && !labels.includes('space'), 'empty elements must not wrap a selection');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('shows the attributes of an empty element, offers only empty elements under "Change to" and no merge', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const gap = document.createElement('gap');
+      gap.setAttribute('reason', 'illegible');
+      parent.appendChild(gap);
+      const { overlay } = triggerPopupTracked(container, 'gap', gap, defs);
+      const labels = chipLabels(overlay);
+      assert.ok(labels.includes('space'), 'another empty element is offered');
+      assert.ok(!labels.includes('unclear'), 'elements with content are not offered for an empty element');
+      const input = [...overlay.querySelectorAll('sl-input')][0];
+      assert.ok(input, 'attribute editor is shown');
+      assert.strictEqual(input.getAttribute('value'), 'illegible');
+      const buttons = [...overlay.querySelectorAll('sl-button')].map((b) => b.textContent);
+      assert.ok(!buttons.some((t) => t.includes('Merge')), 'no merge buttons for an empty element');
+      assert.ok(buttons.some((t) => t.includes('Remove')), 'an empty element can still be removed');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not offer empty elements in the "Change to" palette of an element with content', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const parent = document.createElement('p');
+      const unclear = document.createElement('unclear');
+      unclear.textContent = 'word';
+      parent.appendChild(unclear);
+      const { overlay } = triggerPopupTracked(container, 'unclear', unclear, defs);
+      const labels = chipLabels(overlay);
+      assert.ok(!labels.includes('gap') && !labels.includes('space'));
+      const buttons = [...overlay.querySelectorAll('sl-button')].map((b) => b.textContent);
+      assert.ok(buttons.some((t) => t.includes('Merge')), 'merge stays available for elements with content');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});
+
 // ── computeOverlayPosition ───────────────────────────────────────────────
 
 describe('computeOverlayPosition', () => {

@@ -27,7 +27,7 @@ import { EditorSelection } from '@codemirror/state'
  * @typedef {{ tag: string, label: string, color: string,
  *   attributes?: Array<{name:string, values?: string[]|null, required?: boolean}>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
- *   description?: string|null, childTags?: string[]|null }} AnnotationTagDef
+ *   description?: string|null, childTags?: string[]|null, empty?: boolean }} AnnotationTagDef
  */
 
 class XmlAnnotationPlugin extends Plugin {
