@@ -51,6 +51,15 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
 - The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
 
+### Developing an External Plugin in Its Own Repository
+
+[pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) is a complete example (extractor, schema, guidelines, tests). Its conventions:
+
+- Keep the plugin directories under `plugins/` in the repository, each with `plugin.py` and `pte-plugin.json`. Users clone the repository and set `FASTAPI_PLUGIN_PATHS=<clone>/plugins`, or mount it into the Docker container (see [Docker deployment](../user-manual/docker-deployment.md#external-plugins)).
+- Run the plugin's tests in the Python environment of an editor checkout (`uv run --project <editor checkout> python -m pytest`), with a `conftest.py` that adds the `plugins/` directory to `sys.path`. A test can load the plugin through `FASTAPI_PLUGIN_PATHS` like the application does.
+- In CI, check out the editor, install its environment and run the same command, pinned to a branch or tag of the editor.
+- Everything the plugin ships (schema, guidelines, prompts) stays inside the plugin directory; serve files through `static/` and reference them by their `/api/plugins/{plugin_id}/static/` URL.
+
 ## Creating a Plugin
 
 ### Directory Structure
