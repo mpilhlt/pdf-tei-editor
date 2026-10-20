@@ -26,7 +26,7 @@ What is missing: packaging and entry-point discovery, loading plugins *after* st
 - Production runs **4 uvicorn workers** (`bin/start-prod`, used by `docker/entrypoint.sh`). Every runtime change to the plugin set has to reach all 4 processes.
 - Consequence for the existing feature: `PluginManager.set_plugin_enabled()` updates `registry._disabled` only in the worker that served the request. The other 3 workers keep the old state until restart, so a disabled plugin still answers on roughly 3 of 4 requests. This is a bug today, independent of this plan, and the propagation mechanism in [Multi-worker propagation](#multi-worker-propagation) fixes it.
 - Plugin routes are registered at module level in `main.py`; after them come the `/api/files/{document_id}` compat router and the `StaticFiles` mount at `/`. A route appended to `app.router.routes` after startup lands behind the `/` mount and is never reached.
-- Core imports plugin code in two places: `routers/files_gc.py` -> `plugins.grobid.cache`, `routers/files_locks.py` -> `plugins.webdav_sync`. Frontend couplings: `grobid_cache_deleted` in the GC response type, `grobid.` variant handling in `app/src/plugins/services.js`, default extractor `llamore-gemini` in `app/src/plugins/client.js`, `tei-wizard.js` loading `/api/plugins/tei-wizard/enhancements.js`.
+- Core imports plugin code directly in two places (`routers/files_gc.py` -> `plugins.grobid.cache`, `routers/files_locks.py` -> `plugins.webdav_sync`) and contains plugin-specific code, configuration and tests in many more. The full inventory and how each item is removed is in [Removing Plugin Code from Core](#removing-plugin-code-from-core).
 - `google-genai`, `llamore`, `tei-annotator` and `webdav4` are core dependencies only because of plugins. `kisski` imports `openai`, which is not declared anywhere and arrives transitively through `llamore`.
 - Core has no `[build-system]`; `fastapi_app` is not an installable distribution.
 
@@ -89,7 +89,7 @@ Criteria for staying: core code or the core frontend depends on it, other plugin
 | `llamore_extractor` | move | Extractor; takes `llamore` out of core deps |
 | `anthropic_llm` | move | LLM provider |
 | `google_llm` | move | LLM provider; takes `google-genai` out of core deps |
-| `tei_annotator` | move | Takes `tei-annotator` out of core deps |
+| `tei_annotator` | archive in monorepo | Superseded by `annotation_review` (LLM reviewer); kept for reference, not released |
 | `annotation_review` | move | LLM-based review |
 | `annotation_history` | move | Analysis tool |
 | `iaa_analyzer` | move | Analysis tool |
@@ -97,14 +97,71 @@ Criteria for staying: core code or the core frontend depends on it, other plugin
 | `update_metadata` | move | DOI backfill; belongs with `metadata_extraction` |
 | `webdav_sync` | move | Sync backend; takes `webdav4` out of core deps |
 | `local_sync` | move | Sync backend |
-| `edit_history` | move | Collection analytics (dashboard box) |
-| `annotation_progress` | move | Collection analytics (dashboard box) |
+| `edit_history` | move | Collection analytics (dashboard box), installed via deployment extras |
+| `annotation_progress` | move | Collection analytics (dashboard box), installed via deployment extras |
 | `collection_overview` | move | Depends on `annotation_progress` |
 | `revision_feed` | move | Atom feeds |
 
-9 stay, 17 move, 1 becomes a test fixture. The analytics group (`edit_history`, `annotation_progress`, `collection_overview`, `revision_feed`) is a judgment call: it has no external dependencies, and keeping it would make a fresh install's dashboard richer. Moving it is still recommended because it is large (about 4,500 lines) and its release cadence is independent of the editor.
+9 stay, 16 move, 1 is archived, 1 becomes a test fixture. The analytics group (`edit_history`, `annotation_progress`, `collection_overview`, `revision_feed`) moves and is part of the `default` extra, so standard deployments get it through `uv sync` / the deploy script.
 
 With no extractor in core, a fresh install cannot extract anything. Docker images and the demo therefore install the default set (see [Packaging and uv sync](#packaging-and-uv-sync)), and core shows a hint in the empty extraction dialog.
+
+## Removing Plugin Code from Core
+
+Rule: after the migration, nothing outside `fastapi_app/plugins/<staying plugin>/` may import, name or special-case a moved plugin. Core provides extension points; plugins use them. Generic references in comments and docstrings (e.g. "an extractor such as GROBID") are rewritten to be neutral where they describe behavior, and may stay where they only give an example.
+
+The inventory below comes from searching core (`fastapi_app` outside `plugins/`, `app/src`, `bin`, `scripts`, `config`, `tests`, `pyproject.toml`) for the ids and names of all moved plugins.
+
+### Backend
+
+| Location | Coupling | Fix |
+| --- | --- | --- |
+| `routers/files_gc.py` | Imports `plugins.grobid.cache.get_cache_dir` and deletes the GROBID training-data cache | Add a garbage-collection hook in core (`register_gc_handler(plugin_id, handler) -> int`, called by `files_gc` for active plugins, unregistered in `cleanup()`). The grobid plugin registers its cache cleanup. |
+| `lib/models/models_files.py` | `GarbageCollectResponse.grobid_cache_deleted` | Replace with `plugin_items_deleted: dict[str, int]` keyed by plugin id; update the matching typedef in `app/src/modules/api-client-v1.js` |
+| `routers/files_locks.py` | Imports `plugins.webdav_sync.config` and `SyncService` to push lock changes to WebDAV | Emit a `file.lock_changed` event on the existing `EventBus` (`lib/sse/event_bus.py`); `webdav_sync` subscribes in `initialize()` and unsubscribes in `cleanup()` |
+| `lib/extraction/manager.py` | Decides on the mock extractor by matching `GROBID_SERVER_URL` / `GEMINI_API_KEY` in error messages | Introduce `ExtractorUnavailableError` in `lib/extraction`; extractors raise it, the manager checks the type instead of strings |
+| `lib/core/schema_validator.py` | `SCHEMA_CONFIG` hard-codes the GROBID RelaxNG URL with a reduced timeout | Add `register_schema_config(url, timeout, reason)` next to the existing `register_schema_redirect()` / bundled-schema registration; the grobid plugin registers its schema |
+| `lib/utils/tei_utils.py` | `create_encoding_desc_with_grobid()`, `get_training_data_id()`, `set_training_data_id()` | No callers anywhere (verified by search); delete. The generic `create_encoding_desc_with_extractor()` stays |
+| `lib/services/statistics.py` | Only used by `collection_overview`, mirrors `annotation_progress` logic | Move into the analytics plugins (`annotation_progress` exports it, `collection_overview` imports it as a package dependency), together with `tests/unit/fastapi/test_statistics.py` |
+| `lib/services/metadata_extraction.py`, `metadata_update_utils.py` | Used by core (`tei_utils`, `doc_id_resolver`) and by several plugins | Generic DOI/bibliographic metadata service: stays in core and becomes part of `plugin_api` |
+| `lib/llm/openai_compatible.py`, `lib/llm/base.py` | Comments refer to kisski | Generic LLM layer: stays; comments made neutral |
+| `bin/migrations/migrate-tei-flavor-rename.py` | GROBID-specific flavor migration | Move to the grobid plugin (`bin/` of the plugin package, run via `python -m pte_plugin_grobid.migrations...`) |
+| `pyproject.toml` | `google-genai`, `llamore`, `tei-annotator`, `webdav4` and their `tool.uv.sources` | Remove; they come with the plugin packages |
+| `config/config.json` | `model-configurations` with a `llamore` entry | Unused by any code (verified by search); delete the key, with a migration that removes it from existing `data/db/config.json` |
+| `scripts/deploy/container.js` | Lists `GROBID_SERVER_URL`, `KISSKI_API_KEY`, `WEBDAV_*` as key variables | Point to the plugins' READMEs; each plugin documents its own variables |
+
+### Frontend
+
+| Location | Coupling | Fix |
+| --- | --- | --- |
+| `app/src/plugins/services.js` | Strips a `grobid.` prefix from the variant when building the download filename | Make the rule generic (strip the extractor id from the variant using the extractor list the backend already returns), or let extractors declare a `variant_prefix` in their metadata |
+| `app/src/plugins/client.js` | Default extractor `llamore-gemini` | No hard-coded default; use the first available extractor or the configured default from the backend |
+| `app/src/templates/extraction-dialog.html` | Static `<sl-option value="llamore">` and `value="llamore"` | Remove; the dialog is populated from the extractor list |
+| `app/src/modules/tei-utils.js` | Comment about lowercasing "GROBID" | The lowercasing is generic; neutral comment |
+| `app/src/modules/api-client-v1.js` | Typedefs for `kisski` routes, `grobid_cache_deleted` | Remove plugin route typedefs from the core client; plugins that need a typed client ship their own in their extension. Update the GC typedef as above |
+| `app/src/plugins/progress.js` | Example `cancelUrl` uses `/api/plugins/grobid/...` | Neutral example |
+
+The staying plugin `tei_wizard` is loaded by core (`tei-wizard.js` -> `/api/plugins/tei-wizard/enhancements.js`). That is a dependency on a core plugin, which is allowed.
+
+### Tests
+
+Core tests must run without any moved plugin installed:
+
+- **Extractor and plugin-system tests** (`test_extractor_plugins.py`, `test_extractor_annotation_guides_validation.py`, `test_external_plugins.py`, `test_plugin_management.py::test_dependent_cleanup_removes_its_enhancements`) import `grobid`, `kisski`, `llamore_extractor` or `metadata_extraction`. The plugin-specific parts move to the plugins' own tests; the core parts switch to the `test_plugin` fixture (which already registers an extractor and frontend extensions) or to small fixtures under `tests/fixtures/plugins/`.
+- **`TestBuiltinLifecycleConformance`** stays in core for the remaining built-in plugins and is exported as a reusable helper so the monorepo runs the same `initialize -> cleanup -> initialize` check for every plugin.
+- **E2E**: `dashboard-plugin.spec.js` relies on the `edit-history` and `annotation-progress` boxes, `revision-feed-plugin.spec.js` and `plugin-admin.spec.js` on moved plugins. Dashboard tests use a fixture box plugin; the plugin-specific specs move to the monorepo.
+- **WebDAV test infrastructure** (`tests/lib/webdav-server-manager.js`, `tests/api/helpers/webdav-server.js`, the WebDAV part of `tests/api/helpers/test-env.js` and `tests/e2e-runner.js`) moves to the monorepo with `webdav_sync`.
+- **Fixtures and data**: E2E fixture configs with `llamore` entries are cleaned up. Tests that only use `grobid...` as a variant *name* in sample data (`test_file_exporter.py`, `test_doc_rules_rules_refresh.py`, `test_tei_utils.py`) do not depend on the plugin and stay.
+- **Frontend unit tests** (`inference-settings.test.js`) use provider names `kisski`/`anthropic` as mock data only; they stay, with neutral names where it is cheap.
+- `test_plugin` moves to `tests/fixtures/plugins/test_plugin/` and is loaded by the test runners through `FASTAPI_PLUGIN_PATHS`, so it is never shipped.
+
+### Documentation
+
+User-manual pages that describe moved plugins (`extraction-workflow.md`, `batch-processing.md`, `docker-deployment.md`, `getting-started.md`, `import-export*.md`, `interface-overview.md`, `editing-workflow.md`) keep the generic workflow and link to the plugin READMEs for plugin-specific steps and configuration.
+
+### Guard against regressions
+
+Add a core unit test that fails if a file under `fastapi_app/` (outside `fastapi_app/plugins/`), `app/src/`, `bin/` or `config/` imports `fastapi_app.plugins.<id>` for a non-core plugin, or references `/api/plugins/<id>` for a plugin that is not in the core list. The list of core plugins is a constant in the test, so moving a plugin back into core is a deliberate change.
 
 ## Repository Layout: Monorepo (Recommended)
 
@@ -121,7 +178,7 @@ Costs: the GitHub topic applies per repository, not per plugin, so discovery nee
 
 Alternatives considered:
 
-- **One repository per plugin**: best fit for the topic-based discovery, worst for maintenance. Recommended only for third-party plugins and for a plugin whose owner differs (e.g. `tei_annotator` could also live in `cboulanger/tei-annotator`).
+- **One repository per plugin**: best fit for the topic-based discovery, worst for maintenance. Recommended only for third-party plugins and for plugins maintained by someone else.
 - **Keep plugins in the core repo but package them separately**: no history split and the simplest migration, but keeps the plugin release cadence tied to core and does not reduce the core repository. Worth keeping in mind as a fallback if the monorepo turns out to be too costly.
 
 ### Monorepo structure
@@ -141,8 +198,12 @@ pte-plugins/
 │           ├── extensions/*.js # package data
 │           ├── static/         # package data
 │           └── README.md
+├── archived/
+│   └── tei_annotator/          # superseded, not a workspace member, not in the index, never released
 └── tests/                      # shared fixtures; per-plugin tests next to each plugin
 ```
+
+`archived/` holds plugins that are no longer maintained but should stay available for reference. Archived plugins are excluded from the uv workspace, CI, releases and `pte-plugins.json`; each has a README line naming its successor. `tei_annotator` goes there directly (superseded by `annotation_review`), so the `tei-annotator` dependency is dropped from core without a replacement package.
 
 History is preserved with `git filter-repo --path fastapi_app/plugins/<id> --path-rename fastapi_app/plugins/<id>:plugins/<id>/src/pte_plugin_<id>` per plugin, merged into the new repository.
 
@@ -168,7 +229,7 @@ build-backend = "hatchling.build"
 - Package data (`extensions/`, `static/`, `README.md`, `pte-plugin.json`) is inside the package directory; hatchling includes it by default. `FrontendExtensionRegistry` and `GatedStaticFiles` read from that directory as today.
 - Imports change from `fastapi_app.plugins.grobid.x` to `pte_plugin_grobid.x` (relative imports inside a plugin are unaffected). Cross-plugin imports become package dependencies: `pte-plugin-metadata-extraction` depends on `pte-plugin-grobid`. Plugins that stay in core (`tei_wizard`, `dashboard`) are imported as `fastapi_app.plugins.*` and need no package dependency.
 - `pte-plugin.json` stays the source of compatibility information because it is also needed for plugins loaded from directories. The package version and the manifest version are kept in sync by the release tooling.
-- Plugin-specific Python dependencies move from core `pyproject.toml` into the plugin packages (`google-genai`, `llamore`, `tei-annotator`, `webdav4`; `kisski` declares `openai` explicitly).
+- Plugin-specific Python dependencies move from core `pyproject.toml` into the plugin packages (`google-genai`, `llamore`, `webdav4`; `kisski` declares `openai` explicitly). `tei-annotator` is dropped entirely with the archived plugin.
 
 ## Packaging and uv sync
 
@@ -179,7 +240,8 @@ Core declares first-party plugins as optional dependencies:
 grobid = ["pte-plugin-grobid"]
 webdav-sync = ["pte-plugin-webdav-sync"]
 # ...
-default = ["pte-plugin-grobid", "pte-plugin-llamore-extractor", "pte-plugin-google-llm", "pte-plugin-anthropic-llm", "pte-plugin-metadata-extraction"]
+analytics = ["pte-plugin-edit-history", "pte-plugin-annotation-progress", "pte-plugin-collection-overview", "pte-plugin-revision-feed"]
+default = ["pte-plugin-grobid", "pte-plugin-llamore-extractor", "pte-plugin-google-llm", "pte-plugin-anthropic-llm", "pte-plugin-metadata-extraction", "pte-plugin-annotation-review", "pte-plugin-edit-history", "pte-plugin-annotation-progress", "pte-plugin-collection-overview", "pte-plugin-revision-feed"]
 all = ["pte-plugin-grobid", "..."]
 
 [tool.uv.sources]
@@ -226,7 +288,7 @@ No change to the delivery mechanism: extensions are package data, registered in 
 
 - Extensions use JSDoc `@import` from core paths (`../ui.js`). Outside the core tree these resolve only with a core checkout next to the plugin. Publish core's frontend type definitions (`app/src/ui.js`, `endpoints.js`, the `FrontendExtensionPlugin` base) as a types-only npm package or document the sibling-checkout convention for plugin development.
 - E2E tests in `fastapi_app/plugins/*/tests/*.test.js` move with the plugins. Core's `tests/e2e-runner.js` gets a `--plugin-tests <dir>` option so plugin CI can run them against a core build.
-- Core frontend couplings listed under [Facts that shape the plan](#facts-that-shape-the-plan) are replaced by plugin-provided behavior (the GROBID variant handling moves into the grobid extension; the default extractor comes from the backend's extractor list).
+- Core frontend couplings to moved plugins are removed as listed in [Removing Plugin Code from Core](#removing-plugin-code-from-core).
 
 ## Security
 
@@ -246,7 +308,7 @@ Each phase is one or more PRs against `devel` and leaves the application working
 ### Phase 0: core prerequisites (no plugin moves)
 
 1. Fix multi-worker plugin state: `plugins-state.json`, reconcile task, migration of `plugins.disabled`. Ships independently because it fixes the current enable/disable bug.
-2. Remove core -> plugin imports: GC hook for plugin caches (replaces `files_gc` -> `grobid.cache`), sync-provider hook for lock checks (replaces `files_locks` -> `webdav_sync`); move the frontend couplings into the plugins.
+2. Remove all plugin code from core as listed in [Removing Plugin Code from Core](#removing-plugin-code-from-core): the two hooks, dead GROBID helpers, plugin-specific configuration, frontend couplings and tests. Add the coupling guard test so the state cannot regress.
 3. Add `fastapi_app/plugin_api.py` and `PLUGIN_API_VERSION`; switch the plugins that will move to import from it.
 4. Add `pte.plugins` entry-point discovery to `plugin_paths.py`/`PluginManager`.
 5. Move `test_plugin` to `tests/fixtures/plugins/`; add `--plugin-tests` to the test runners.
@@ -260,7 +322,7 @@ Each phase is one or more PRs against `devel` and leaves the application working
 
 ### Phase 2: remaining plugins
 
-Move in dependency order, one group per PR: `grobid` + `metadata_extraction` + `update_metadata`; `kisski`; `tei_annotator` + `annotation_review`; `webdav_sync` + `local_sync`; `annotation_history` + `iaa_analyzer` + `rng_converter`; `edit_history` + `annotation_progress` + `collection_overview` + `revision_feed`. Each PR deletes the plugin from core, adds the extra, and updates docs that link to the plugin source.
+Move in dependency order, one group per PR: `grobid` + `metadata_extraction` + `update_metadata`; `kisski`; `annotation_review`; `tei_annotator` (to `archived/`); `webdav_sync` + `local_sync`; `annotation_history` + `iaa_analyzer` + `rng_converter`; `edit_history` + `annotation_progress` + `collection_overview` + `revision_feed`. Each PR deletes the plugin from core, adds the extra, and updates docs that link to the plugin source.
 
 ### Phase 3: runtime install
 
@@ -276,5 +338,4 @@ Update `docs/code-assistant/backend-plugins.md` (packaging, entry points, `plugi
 
 - Monorepo release tooling: semantic-release with per-package tags vs. release-please manifest mode.
 - Whether to publish plugin packages to PyPI (simpler `uv sync`, needs a PyPI organization) or keep git sources.
-- Whether the analytics plugins should stay in core after all.
-- Whether `tei_annotator` lives in the monorepo or in `cboulanger/tei-annotator` next to the service it talks to.
+- Whether the plugins that stay in core (`dashboard`, `tei_wizard`, ...) should eventually become regular core modules instead of plugins.
