@@ -72,14 +72,18 @@ def _generation_config(model_id: str, system_prompt: str, temperature: float) ->
 class GoogleLLMProvider(LLMProvider):
     """LLM provider connector for Google's Gemini API."""
 
-    def __init__(self, id: str, label: str, api_key: str):
+    def __init__(self, id: str, label: str, api_key: str | None, secret_service: str | None = None):
         self.id = id
         self.label = label
         self._api_key = api_key
         self._client = genai.Client(api_key=api_key) if api_key else None
+        self.secret_service = secret_service
 
-    def is_available(self) -> bool:
+    def has_shared_key(self) -> bool:
         return bool(self._api_key)
+
+    def with_api_key(self, api_key: str) -> "GoogleLLMProvider":
+        return GoogleLLMProvider(self.id, self.label, api_key, self.secret_service)
 
     def list_models(self) -> list[LLMModel]:
         if self._client is None:

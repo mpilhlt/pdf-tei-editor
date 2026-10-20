@@ -12,6 +12,8 @@ between provider and consumer plugins never matters.
 
 import logging
 
+from fastapi_app.lib.secrets import require_user_secret
+
 from .base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,21 @@ class LLMProviderRegistry:
                 continue
             providers.append(provider)
         return providers
+
+    def get_provider_for_user(self, provider_id: str, username: str | None) -> LLMProvider:
+        """Get a provider that is ready to be used on behalf of `username`.
+
+        Returns the registered provider if it carries a shared key (or needs none),
+        else a copy using the user's own key from the secret store.
+
+        Raises:
+            KeyError: If no provider with that id is registered.
+            MissingSecretError: If the provider needs a per-user key the user has not stored.
+        """
+        provider = self.get_provider(provider_id)
+        if provider.has_shared_key() or not provider.secret_service:
+            return provider
+        return provider.with_api_key(require_user_secret(username, provider.secret_service))
 
     def get_provider(self, provider_id: str) -> LLMProvider:
         """Get a registered provider by id.

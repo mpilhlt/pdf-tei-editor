@@ -49,6 +49,7 @@ import {
   ToolsPlugin,
   UrlHashStatePlugin,
   UserAccountPlugin,
+  ApiKeysPlugin,
   XmlEditorPlugin,
   XmlAnnotationPlugin,
   XslViewerPlugin,
@@ -72,6 +73,7 @@ const plugins = [
   HelpPlugin,
 
   // Toolbar menu items (order matters - determines menu item order)
+  ApiKeysPlugin,       // API Keys
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Tools menu — Administration section (admin only, order determines item order)

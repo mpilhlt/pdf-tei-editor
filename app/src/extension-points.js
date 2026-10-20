@@ -140,6 +140,18 @@ const extensionPoints = {
      */
     contextMenuItems: "xmlEditor.contextMenuItems",
   },
+  pdfSearch: {
+    /**
+     * Fallback for the "Autosearch" synchronization of the XML selection with the PDF,
+     * invoked by ServicesPlugin.searchNodeContentsInPdf() when the text of the selected
+     * node was not found in the PDF (e.g. because the PDF has no text layer) or when the
+     * node has no text at all (e.g. an empty `<pb/>` selected via the navigation). Handlers
+     * return `{page}` (1-based PDF page) to scroll the PDF to that page, or null/undefined
+     * if they do not apply to the document. The first handler returning a page wins.
+     * Function signature: (node: Element, info: {xml: string|null, pageCount: number}) => Promise<{page: number}|null>|{page: number}|null
+     */
+    fallback: "pdfSearch.fallback"
+  },
   title: {
     /**
      * Merges the given slot values into the browser tab title (see `state.titleTemplate`)

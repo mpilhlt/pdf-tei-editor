@@ -46,14 +46,15 @@ class TestGoogleLLMPluginRegistration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(provider.is_available())
 
     @patch("fastapi_app.plugins.google_llm.plugin.get_config")
-    async def test_initialize_skips_provider_without_api_key(self, mock_get_config):
+    async def test_initialize_registers_provider_for_user_keys_without_api_key(self, mock_get_config):
         mock_get_config.return_value = self._mock_config(api_key=None)
         plugin = GoogleLLMPlugin()
 
         await plugin.initialize(None)
 
-        with self.assertRaises(KeyError):
-            LLMProviderRegistry.get_instance().get_provider("google")
+        provider = LLMProviderRegistry.get_instance().get_provider("google")
+        self.assertFalse(provider.has_shared_key())
+        self.assertEqual(provider.secret_service, "google")
 
     @patch("fastapi_app.plugins.google_llm.plugin.get_config")
     async def test_cleanup_unregisters_provider(self, mock_get_config):

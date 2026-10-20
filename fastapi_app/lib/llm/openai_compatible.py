@@ -55,14 +55,18 @@ def chat_completion_sync(
 class OpenAICompatibleProvider(LLMProvider):
     """Concrete base for providers speaking the OpenAI chat/completions wire format."""
 
-    def __init__(self, id: str, label: str, base_url: str, api_key: str):
+    def __init__(self, id: str, label: str, base_url: str, api_key: str | None, secret_service: str | None = None):
         self.id = id
         self.label = label
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self.secret_service = secret_service
 
-    def is_available(self) -> bool:
+    def has_shared_key(self) -> bool:
         return bool(self._api_key)
+
+    def with_api_key(self, api_key: str) -> "OpenAICompatibleProvider":
+        return type(self)(self.id, self.label, self._base_url, api_key, self.secret_service)
 
     def list_models(self) -> list[LLMModel]:
         session = get_retry_session(retries=3, backoff_factor=1.0)

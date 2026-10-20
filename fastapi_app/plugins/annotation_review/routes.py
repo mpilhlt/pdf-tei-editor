@@ -21,6 +21,7 @@ from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.llm import LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied, check_model_access
+from fastapi_app.lib.secrets import MissingSecretError, secret_required_detail
 from fastapi_app.plugins.annotation_review.prompts import UnusableResponseError
 from fastapi_app.plugins.annotation_review.review_logic import (
     NoRuleExcerptsError,
@@ -102,9 +103,11 @@ async def review(
     chunk_index in turn.
     """
     try:
-        provider = LLMProviderRegistry.get_instance().get_provider(body.provider_id)
+        provider = LLMProviderRegistry.get_instance().get_provider_for_user(body.provider_id, current_user["username"])
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
 
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
 

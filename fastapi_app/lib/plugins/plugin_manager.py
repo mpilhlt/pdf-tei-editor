@@ -7,7 +7,6 @@ initialization, route registration, and execution.
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +16,7 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import PluginContext
 from fastapi_app.lib.plugins.plugin_gate import GatedStaticFiles, plugin_gate
+from fastapi_app.lib.plugins.plugin_paths import get_plugin_dirs, import_plugin_module
 from fastapi_app.lib.plugins.plugin_registry import ChangePlan, PluginRegistry
 from fastapi_app.lib.utils.config_utils import get_config
 
@@ -80,24 +80,9 @@ class PluginManager:
         1. Built-in plugins: fastapi_app/plugins/
         2. Additional paths from FASTAPI_PLUGIN_PATHS environment variable
         """
-        plugin_dirs: list[Path] = []
-
-        # Built-in plugins directory
-        builtin_dir = get_settings().plugins_code_dir
-        plugin_dirs.append(builtin_dir)
-
-        # Additional plugin paths from environment
-        env_paths = os.getenv("FASTAPI_PLUGIN_PATHS", "")
-        if env_paths:
-            # Split by colon on Unix, semicolon on Windows
-            separator = ";" if os.name == "nt" else ":"
-            for path_str in env_paths.split(separator):
-                path_str = path_str.strip()
-                if path_str:
-                    plugin_dirs.append(Path(path_str))
-
+        plugin_dirs = get_plugin_dirs()
         logger.info(f"Discovering plugins from {len(plugin_dirs)} directories")
-        self.registry.discover_plugins(plugin_dirs, builtin_dir=builtin_dir)
+        self.registry.discover_plugins(plugin_dirs, builtin_dir=get_settings().plugins_code_dir)
         self.load_disabled()
 
     def load_disabled(self) -> None:
@@ -123,6 +108,19 @@ class PluginManager:
             except Exception as e:
                 logger.error(f"Error registering routes for plugin {plugin_id}: {e}")
 
+    def _get_plugin_directory(self, plugin_id: str) -> Path | None:
+        """
+        Return the directory a plugin was discovered in.
+
+        Args:
+            plugin_id: Plugin identifier
+
+        Returns:
+            Plugin directory, or None for plugins registered without discovery
+        """
+        record = self.registry.get_record(plugin_id)
+        return record.directory if record is not None else None
+
     def _try_register_plugin_routes(self, app: FastAPI, plugin_id: str) -> None:
         """
         Try to load and register routes.py for a plugin.
@@ -131,63 +129,22 @@ class PluginManager:
             app: FastAPI application instance
             plugin_id: Plugin identifier
         """
-        # Search plugin directories for this plugin's routes.py
-        plugin_dirs = self._get_plugin_dirs()
+        plugin_dir = self._get_plugin_directory(plugin_id)
+        if plugin_dir is None or not (plugin_dir / "routes.py").exists():
+            return
 
-        # Try both hyphenated and underscored directory names
-        # (plugin_id uses hyphens, directory names use underscores)
-        dir_names = [plugin_id, plugin_id.replace("-", "_")]
+        try:
+            # Import as part of the plugin's package so relative imports work
+            module = import_plugin_module(plugin_dir, "routes")
+        except (Exception, SystemExit) as e:
+            logger.error(f"Error loading routes.py for plugin {plugin_id}: {e}", exc_info=True)
+            return
 
-        for base_dir in plugin_dirs:
-            for dir_name in dir_names:
-                plugin_dir = base_dir / dir_name
-                routes_file = plugin_dir / "routes.py"
-
-                if routes_file.exists():
-                    try:
-                        # Load the routes module using its proper dotted module name
-                        # so relative imports work correctly.
-                        import importlib
-                        import importlib.util
-                        import sys
-
-                        project_root = get_settings().project_root_dir
-                        rel = routes_file.relative_to(project_root).with_suffix("")
-                        module_name = ".".join(rel.parts)
-                        package_name = ".".join(rel.parts[:-1])
-
-                        # Ensure all parent packages are importable
-                        if package_name not in sys.modules:
-                            importlib.import_module(package_name)
-
-                        spec = importlib.util.spec_from_file_location(
-                            module_name, routes_file,
-                            submodule_search_locations=[]
-                        )
-                        if spec is None or spec.loader is None:
-                            logger.warning(f"Could not create spec for {routes_file}")
-                            continue
-
-                        module = importlib.util.module_from_spec(spec)
-                        module.__package__ = package_name
-                        sys.modules[module_name] = module
-                        spec.loader.exec_module(module)
-
-                        # Look for 'router' in the module
-                        if hasattr(module, "router"):
-                            app.include_router(
-                                module.router, dependencies=[Depends(plugin_gate(plugin_id))]
-                            )
-                            logger.info(f"Registered custom routes for plugin: {plugin_id}")
-                            return
-                        else:
-                            logger.warning(f"No 'router' found in {routes_file}")
-
-                    except Exception as e:
-                        logger.error(
-                            f"Error loading routes.py for plugin {plugin_id}: {e}",
-                            exc_info=True
-                        )
+        if hasattr(module, "router"):
+            app.include_router(module.router, dependencies=[Depends(plugin_gate(plugin_id))])
+            logger.info(f"Registered custom routes for plugin: {plugin_id}")
+        else:
+            logger.warning(f"No 'router' found in {plugin_dir / 'routes.py'}")
 
     def _try_mount_plugin_static_files(self, app: FastAPI, plugin_id: str) -> None:
         """
@@ -197,51 +154,24 @@ class PluginManager:
             app: FastAPI application instance
             plugin_id: Plugin identifier
         """
-        plugin_dirs = self._get_plugin_dirs()
-        dir_names = [plugin_id, plugin_id.replace("-", "_")]
+        plugin_dir = self._get_plugin_directory(plugin_id)
+        if plugin_dir is None:
+            return
+        static_dir = plugin_dir / "static"
+        if not static_dir.is_dir():
+            return
 
-        for base_dir in plugin_dirs:
-            for dir_name in dir_names:
-                plugin_dir = base_dir / dir_name
-                static_dir = plugin_dir / "static"
-
-                if static_dir.exists() and static_dir.is_dir():
-                    try:
-                        # Mount at /api/plugins/{plugin_id}/static/
-                        mount_path = f"/api/plugins/{plugin_id}/static"
-                        app.mount(
-                            mount_path,
-                            GatedStaticFiles(plugin_id=plugin_id, directory=str(static_dir)),
-                            name=f"plugin_{plugin_id}_static"
-                        )
-                        logger.info(f"Mounted static files for plugin {plugin_id} at {mount_path}")
-                        return
-                    except Exception as e:
-                        logger.error(f"Error mounting static files for plugin {plugin_id}: {e}")
-
-    def _get_plugin_dirs(self) -> list[Path]:
-        """
-        Get list of plugin directories to search.
-
-        Returns:
-            List of plugin directory paths
-        """
-        plugin_dirs: list[Path] = []
-
-        # Built-in plugins
-        builtin_dir = get_settings().plugins_code_dir
-        plugin_dirs.append(builtin_dir)
-
-        # Additional paths from environment
-        env_paths = os.getenv("FASTAPI_PLUGIN_PATHS", "")
-        if env_paths:
-            separator = ";" if os.name == "nt" else ":"
-            for path_str in env_paths.split(separator):
-                path_str = path_str.strip()
-                if path_str:
-                    plugin_dirs.append(Path(path_str))
-
-        return plugin_dirs
+        try:
+            # Mount at /api/plugins/{plugin_id}/static/
+            mount_path = f"/api/plugins/{plugin_id}/static"
+            app.mount(
+                mount_path,
+                GatedStaticFiles(plugin_id=plugin_id, directory=str(static_dir)),
+                name=f"plugin_{plugin_id}_static"
+            )
+            logger.info(f"Mounted static files for plugin {plugin_id} at {mount_path}")
+        except Exception as e:
+            logger.error(f"Error mounting static files for plugin {plugin_id}: {e}")
 
     async def initialize_plugins(self, app: FastAPI) -> None:
         """

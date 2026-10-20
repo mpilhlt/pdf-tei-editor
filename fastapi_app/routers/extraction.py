@@ -36,6 +36,7 @@ from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
 from ..lib.services.language_detection import add_document_language
+from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.models import FileCreate, FileUpdate
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,9 @@ async def extract_metadata(
 
             logger.debug(f"Extraction completed with {request.extractor}, result length: {len(tei_xml)}")
 
+        except MissingSecretError as e:
+            # The frontend prompts the user for the key and repeats the request
+            raise HTTPException(status_code=428, detail=secret_required_detail(e))
         except Exception as e:
             logger.error(f"Extraction failed with {request.extractor}: {e}")
             raise HTTPException(

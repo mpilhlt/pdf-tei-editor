@@ -8,6 +8,7 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { RangeWithNode } from '../modules/xmleditor.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -225,11 +226,11 @@ class StartPlugin extends Plugin {
     let lastNode = null
 
     // Cross-plugin coordination: Find the currently selected node's contents in the PDF
-    this.#xmlEditor.on("selectionChanged", async () => {
+    this.#xmlEditor.on("selectionChanged", async (/** @type {RangeWithNode[]} */ ranges) => {
       // workaround for the node selection not being updated immediately
       await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
       // trigger auto-search if enabled and if a new node has been selected
-      const node = this.#xmlEditor.selectedNode
+      const node = this.#getAutoSearchNode(ranges?.[0]?.node ?? null)
 
       if (this.getDependency('pdfviewer').isAutoSearchEnabled() && node && node !== lastNode) {
         // Record the node before awaiting the search: "selectionChanged" can fire
@@ -241,6 +242,21 @@ class StartPlugin extends Plugin {
         await this.#services.searchNodeContentsInPdf(node)
       }
     })
+  }
+
+  /**
+   * The node whose position Autosearch looks up: the node selected via the navigation xpath, or the
+   * element at the cursor if the cursor is not inside it. The latter happens when the cursor is outside
+   * every element of the navigation xpath, e.g. in the text between two `<pb/>` with `//tei:pb`.
+   * @param {Element|null} cursorNode - the element at the cursor
+   * @returns {Element|null}
+   */
+  #getAutoSearchNode(cursorNode) {
+    const selectedNode = this.#xmlEditor.selectedNode
+    if (selectedNode && cursorNode && !selectedNode.contains(cursorNode)) {
+      return cursorNode
+    }
+    return selectedNode ?? cursorNode
   }
 }
 

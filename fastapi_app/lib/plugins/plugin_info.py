@@ -10,8 +10,8 @@ def readme_url_for(record: PluginRecord) -> str | None:
     """
     README link for a plugin.
 
-    Uses the `readme_url` metadata override if present; otherwise a GitHub URL for
-    built-in plugins that ship a README.md; otherwise None.
+    Uses the `readme_url` metadata override if present; then the `readme` of the
+    plugin's manifest; otherwise a GitHub URL for built-in plugins that ship a README.md; otherwise None.
 
     Args:
         record: Plugin record
@@ -22,6 +22,8 @@ def readme_url_for(record: PluginRecord) -> str | None:
     override = record.metadata.get("readme_url")
     if override:
         return str(override)
+    if record.manifest and record.manifest.readme:
+        return record.manifest.readme
     if record.external or record.directory is None:
         return None
     if not (record.directory / "README.md").is_file():
@@ -47,7 +49,9 @@ def build_plugin_info(registry: PluginRegistry, record: PluginRecord) -> dict[st
     return {
         "id": record.id,
         "name": str(meta.get("name", record.id)),
-        "version": str(meta.get("version", "")),
+        # the manifest is the single source of the plugin version when it declares one
+        "version": (record.manifest.version if record.manifest and record.manifest.version else None) or str(meta.get("version", "")),
+        "requires_pte": record.manifest.pte if record.manifest else None,
         "description": str(meta.get("description", "")),
         "category": str(meta.get("category", "")),
         "required_roles": list(meta.get("required_roles", [])),

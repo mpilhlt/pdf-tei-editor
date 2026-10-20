@@ -71,17 +71,17 @@ class TestChatCompletionSync(unittest.TestCase):
 class TestOpenAICompatibleProvider(unittest.IsolatedAsyncioTestCase):
     """Test the provider class wrapping the shared function."""
 
-    def test_is_available_true_with_api_key(self):
+    def test_has_shared_key_with_api_key(self):
         provider = OpenAICompatibleProvider(
             id="test", label="Test", base_url="https://example.com/v1", api_key="k"
         )
-        self.assertTrue(provider.is_available())
+        self.assertTrue(provider.has_shared_key())
 
-    def test_is_available_false_without_api_key(self):
+    def test_has_no_shared_key_without_api_key(self):
         provider = OpenAICompatibleProvider(
             id="test", label="Test", base_url="https://example.com/v1", api_key=""
         )
-        self.assertFalse(provider.is_available())
+        self.assertFalse(provider.has_shared_key())
 
     @patch("fastapi_app.lib.llm.openai_compatible.get_retry_session")
     def test_list_models_parses_data_array(self, mock_get_session):

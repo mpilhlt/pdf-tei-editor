@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
 from ..lib.llm import LLMProviderError, LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
+from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.llm.model_access import is_free_model, user_may_use_model
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class ProviderResponse(BaseModel):
     id: str
     label: str
     models: list[ModelResponse]
+    # True if the provider needs the user's own API key and none is stored yet (models is then empty)
+    key_required: bool = False
+    # The secret service the key belongs to, for the frontend's key prompt
+    secret_service: str | None = None
 
 
 @router.get("/providers", response_model=list[ProviderResponse])
@@ -56,9 +61,22 @@ def list_providers(
     Models the current user may not use (non-free models for non-admins,
     except the default - see fastapi_app/lib/llm/model_access.py) are
     omitted the same way.
+
+    Providers without a shared key use the current user's stored key; when
+    there is none, the provider is listed with `key_required` and no models
+    so the frontend can offer to add the key.
     """
     result: list[ProviderResponse] = []
-    for provider in LLMProviderRegistry.get_instance().list_providers(available_only=True):
+    registry = LLMProviderRegistry.get_instance()
+    for registered in registry.list_providers(available_only=True):
+        try:
+            provider = registry.get_provider_for_user(registered.id, current_user.get("username"))
+        except MissingSecretError:
+            result.append(ProviderResponse(
+                id=registered.id, label=registered.label, models=[], key_required=True,
+                secret_service=registered.secret_service,
+            ))
+            continue
         try:
             models = provider.list_models()
         except Exception as e:
@@ -80,7 +98,9 @@ def list_providers(
             if is_model_allowed(f"{provider.label}/{model['label']}")
             and user_may_use_model(provider, model, current_user)
         ]
-        result.append(ProviderResponse(id=provider.id, label=provider.label, models=visible_models))
+        result.append(ProviderResponse(
+            id=provider.id, label=provider.label, models=visible_models, secret_service=provider.secret_service,
+        ))
     return result
 
 
@@ -105,9 +125,11 @@ def set_default(
 ) -> DefaultModelResponse:
     """Set the installation-wide default model (admin only). The model must exist and pass the model filter."""
     try:
-        provider = LLMProviderRegistry.get_instance().get_provider(body.provider_id)
+        provider = LLMProviderRegistry.get_instance().get_provider_for_user(body.provider_id, current_user.get("username"))
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
     try:
         models = provider.list_models()
     except (requests.RequestException, RuntimeError, LLMProviderError) as e:

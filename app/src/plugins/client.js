@@ -21,16 +21,19 @@ import { ApiClientV1 } from '../modules/api-client-v1.js';
  * @extends {Error}
  * @property {string} message - The error message
  * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
+ * @property {any} [detail] - The structured `detail` of the response, if the server sent an object
  */
 class ApiError extends Error {
   /**
    * @param {string} message - The error message
    * @param {number} statusCode - The HTTP status code associated with the error, defaults to 400
+   * @param {any} [detail] - The structured `detail` of the response, if the server sent an object
    */  
-  constructor(message, statusCode = 400) {
+  constructor(message, statusCode = 400, detail = undefined) {
     super(message);
     this.name = "ApiError";
     this.statusCode = statusCode;
+    this.detail = detail;
   }
 }
 
@@ -227,6 +230,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     // handle error responses
     // FastAPI uses 'detail', Flask uses 'error'
     let message = result.detail || result.error
+    // structured errors ({code, message, ...}) keep the object for callers that react to the code
+    const detail = (message && typeof message === 'object' && !Array.isArray(message)) ? message : undefined
+    if (detail) {
+      message = detail.message || JSON.stringify(detail)
+    }
 
     // FastAPI validation errors (422) return detail as an array of error objects
     if (response.status === 422 && Array.isArray(message)) {
@@ -248,7 +256,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       default:
         // other 4XX errors
         if (response.status && String(response.status)[0] === '4') {
-          throw new ApiError(message, response.status);
+          throw new ApiError(message, response.status, detail);
         }
         throw new ServerError(message);
     }

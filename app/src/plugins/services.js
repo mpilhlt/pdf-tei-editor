@@ -429,7 +429,9 @@ class ServicesPlugin extends Plugin {
    * Given a node in the XML, locate and highlight the region of the PDF
    * it was extracted from, using fuzzy sequence matching on the node's
    * ordered text content. Nodes outside `/TEI/text` (e.g. in the teiHeader)
-   * are ignored, since they have no counterpart in the PDF.
+   * are ignored, since they have no counterpart in the PDF. Nodes without text
+   * (e.g. `<pb/>`) and nodes whose text is not found are passed to the
+   * `pdfSearch.fallback` handlers.
    * @param {Element} node
    */
   async searchNodeContentsInPdf(node) {
@@ -438,6 +440,11 @@ class ServicesPlugin extends Plugin {
     }
     const queryText = getNodeText(node).join(' ')
     if (!queryText.trim()) {
+      // Empty elements such as <pb/> have no text to search for, but a
+      // pdfSearch.fallback handler may still know their page
+      if (await this.#searchFallback(node)) {
+        this.#logger.debug('PDF position of an element without text found by a pdfSearch.fallback handler')
+      }
       return
     }
     // If the node originates from a footnote, prepend the printed footnote
@@ -447,10 +454,32 @@ class ServicesPlugin extends Plugin {
     const match = await this.#pdfViewer.search(query)
     if (match) {
       this.#logger.debug(`PDF match: page ${match.page}, score ${match.score.toFixed(3)}`)
+    } else if (await this.#searchFallback(node)) {
+      this.#logger.debug('PDF position found by a pdfSearch.fallback handler')
     } else {
       this.#logger.debug(`No PDF match for query: ${query.slice(0, 80)}...`)
       notify('No sufficiently similar text found in the PDF', 'warning', 'search')
     }
+  }
+
+  /**
+   * Asks the `pdfSearch.fallback` handlers of other plugins for the PDF page of a node
+   * whose text could not be found in the PDF, and scrolls to the first page returned.
+   * @param {Element} node
+   * @returns {Promise<boolean>} Whether a page was found
+   */
+  async #searchFallback(node) {
+    const pageCount = this.#pdfViewer.pdfDoc?.numPages ?? 0
+    const results = await this.context.invokePluginEndpoint(
+      ep.pdfSearch.fallback, [node, { xml: this.state?.xml ?? null, pageCount }], { result: 'values', throws: false }
+    )
+    const pages = (Array.isArray(results) ? results : []).map(r => r?.page)
+    const page = pages.find(p => Number.isInteger(p) && p >= 1 && p <= pageCount)
+    if (!page) {
+      return false
+    }
+    await this.#pdfViewer.goToPage(page)
+    return true
   }
 }
 
