@@ -25,12 +25,12 @@ Each plugin:
 
 ## External Plugins
 
-Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). An external plugin is a directory with the same layout as a built-in plugin plus a marker file `pte-plugin.json` (its content is not read yet; `{}` is fine):
+Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). An external plugin is a directory with the same layout as a built-in plugin plus the manifest `pte-plugin.json` (see [Plugin manifest](#plugin-manifest); an empty file or `{}` is fine):
 
 ```text
 /opt/my-plugins/            # FASTAPI_PLUGIN_PATHS=/opt/my-plugins
 ├── my_extractor/
-│   ├── pte-plugin.json     # marks the directory as a plugin
+│   ├── pte-plugin.json     # marks the directory as a plugin, declares version and compatibility
 │   ├── __init__.py
 │   ├── plugin.py
 │   ├── extractor.py        # imported from plugin.py as `from .extractor import ...`
@@ -50,6 +50,22 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - `routes.py`, `static/` (served at `/api/plugins/{plugin_id}/static/`) and frontend extensions registered from `initialize()` work as for built-in plugins.
 - External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
 - The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
+
+### Plugin Manifest
+
+`pte-plugin.json` marks an external plugin directory and may declare the plugin version and the editor versions it works with:
+
+```json
+{
+  "version": "1.2.0",
+  "engines": { "pte": ">=0.75.0 <1.0.0" }
+}
+```
+
+- `version`: semantic version of the plugin. The plugin manager shows it instead of the `version` in the plugin's `metadata`.
+- `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
+- Both fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
+- The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
 
 ### Developing an External Plugin in Its Own Repository
 

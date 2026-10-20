@@ -47,7 +47,9 @@ def build_plugin_info(registry: PluginRegistry, record: PluginRecord) -> dict[st
     return {
         "id": record.id,
         "name": str(meta.get("name", record.id)),
-        "version": str(meta.get("version", "")),
+        # the manifest is the single source of the plugin version when it declares one
+        "version": (record.manifest.version if record.manifest and record.manifest.version else None) or str(meta.get("version", "")),
+        "requires_pte": record.manifest.pte if record.manifest else None,
         "description": str(meta.get("description", "")),
         "category": str(meta.get("category", "")),
         "required_roles": list(meta.get("required_roles", [])),

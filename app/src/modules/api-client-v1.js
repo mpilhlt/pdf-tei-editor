@@ -542,6 +542,7 @@
  * @property {string} id
  * @property {string} name
  * @property {string} version
+ * @property {string=} requires_pte - Range of PDF-TEI-Editor versions the plugin declares in pte-plugin.json
  * @property {string} description
  * @property {string} category
  * @property {Array<string>} required_roles

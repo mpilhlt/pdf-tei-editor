@@ -31,10 +31,10 @@ await registerTemplate('plugin-admin-menu-item', 'plugin-admin-menu-item.html')
 // <sl-icon name="book"></sl-icon>
 
 /** @type {Record<string, string>} */
-const STATUS_LABELS = { active: 'Active', disabled: 'Disabled', inactive: 'Inactive', unavailable: 'Unavailable', failed: 'Failed' }
+const STATUS_LABELS = { active: 'Active', disabled: 'Disabled', inactive: 'Inactive', unavailable: 'Unavailable', incompatible: 'Incompatible', failed: 'Failed' }
 /** @type {Record<string, string>} */
-const STATUS_VARIANTS = { active: 'success', disabled: 'neutral', inactive: 'warning', unavailable: 'warning', failed: 'danger' }
-const STATUS_ORDER = ['all', 'active', 'disabled', 'inactive', 'unavailable', 'failed']
+const STATUS_VARIANTS = { active: 'success', disabled: 'neutral', inactive: 'warning', unavailable: 'warning', incompatible: 'danger', failed: 'danger' }
+const STATUS_ORDER = ['all', 'active', 'disabled', 'inactive', 'unavailable', 'incompatible', 'failed']
 
 /**
  * Escape a string for use in HTML text and attribute values
@@ -192,9 +192,9 @@ class PluginAdminPlugin extends Plugin {
     /** @param {string[]} ids */
     const chips = ids => ids.map(id => `<sl-button size="small" variant="default" data-go="${esc(id)}" style="font-family: var(--sl-font-mono);">${esc(id)}</sl-button>`).join(' ')
     const directDependents = this.#plugins.filter(o => o.dependencies.includes(p.id)).map(o => o.id)
-    const reasonColor = p.status === 'failed' ? 'danger' : 'warning'
+    const reasonColor = ['failed', 'incompatible'].includes(p.status) ? 'danger' : 'warning'
     return `<div id="plugin-row-${esc(p.id)}" style="display: grid; grid-template-columns: 3rem 1fr auto; gap: 0.75rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--sl-color-neutral-200);">
-      <sl-switch style="align-self: start; justify-self: start; margin-top: 0.15rem;" data-id="${esc(p.id)}" ${p.enabled && !['unavailable', 'failed'].includes(p.status) ? 'checked' : ''} ${canToggle ? '' : 'disabled'} title="${p.protected ? 'Protected plugin, cannot be disabled' : ''}"></sl-switch>
+      <sl-switch style="align-self: start; justify-self: start; margin-top: 0.15rem;" data-id="${esc(p.id)}" ${p.enabled && !['unavailable', 'incompatible', 'failed'].includes(p.status) ? 'checked' : ''} ${canToggle ? '' : 'disabled'} title="${p.protected ? 'Protected plugin, cannot be disabled' : ''}"></sl-switch>
       <div style="${dim}">
         <div style="display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap;">
           <strong>${esc(p.name)}</strong><small>v${esc(p.version)}</small>
@@ -207,7 +207,7 @@ class PluginAdminPlugin extends Plugin {
           ${p.dependencies.length ? `<span>Requires ${chips(p.dependencies)}</span>` : ''}
           ${directDependents.length ? `<span>Required by ${chips(directDependents)}</span>` : ''}</div>` : ''}
         <div style="margin-top: 0.3rem; font-size: 0.8em; color: var(--sl-color-neutral-500); display: flex; gap: 0.75rem; flex-wrap: wrap;">
-          <span>${esc(p.category)}</span><span>${p.source === 'external' ? 'external' : 'built-in'}</span>
+          <span>${esc(p.category)}</span><span>${p.source === 'external' ? 'external' : 'built-in'}</span>${p.requires_pte ? `<span>requires PDF-TEI-Editor ${esc(p.requires_pte)}</span>` : ''}
           <span>${p.menu_endpoints} menu ${p.menu_endpoints === 1 ? 'item' : 'items'}</span>${p.has_frontend_extension ? '<span>frontend extension</span>' : ''}
         </div>
       </div>

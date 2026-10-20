@@ -26,6 +26,7 @@ class PluginAdminInfo(BaseModel):
     id: str
     name: str
     version: str
+    requires_pte: str | None
     description: str
     category: str
     required_roles: list[str]

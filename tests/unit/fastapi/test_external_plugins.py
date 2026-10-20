@@ -24,7 +24,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.plugins import plugin_paths
+from fastapi_app.lib.plugins import plugin_manifest, plugin_paths
+from fastapi_app.lib.plugins.plugin_info import build_plugin_info
 from fastapi_app.lib.plugins.plugin_manager import PluginManager
 from fastapi_app.lib.storage.file_zip_exporter import FileZipExporter
 
@@ -231,6 +232,107 @@ class TestExternalPluginDiscovery(unittest.TestCase):
         working = manager.registry.get_record("ext-working")
         assert working is not None
         self.assertEqual(working.load_status, "ok", working.error)
+
+
+class TestPluginManifest(unittest.TestCase):
+    """version and engines.pte in pte-plugin.json."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.executed = self.tmp / "executed.txt"
+        self._saved_modules = set(sys.modules)
+        self._saved_names = dict(plugin_paths._package_names)
+        PluginManager._instance = None
+        self.pte = patch.object(plugin_manifest, "get_pte_version", return_value="0.75.2")
+        self.pte.start()
+
+    def tearDown(self):
+        self.pte.stop()
+        for name in set(sys.modules) - self._saved_modules:
+            if name.startswith(plugin_paths.EXTERNAL_NAMESPACE):
+                del sys.modules[name]
+        plugin_paths._package_names.clear()
+        plugin_paths._package_names.update(self._saved_names)
+        PluginManager._instance = None
+        shutil.rmtree(self.tmp)
+
+    def _plugin(self, dir_name: str, manifest: str | None) -> Path:
+        plugin_dir = write_plugin(self.tmp / "plugins", dir_name, dir_name.replace("_", "-"), "hello", marker=False)
+        if manifest is not None:
+            (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text(manifest)
+        (plugin_dir / "helper.py").write_text(f"open({str(self.executed)!r}, 'a').write('x')\nGREETING = 'hello'\n")
+        return plugin_dir
+
+    def _discover(self) -> PluginManager:
+        manager = PluginManager.get_instance()
+        manager.registry.discover_plugins([self.tmp / "plugins"], builtin_dir=get_settings().plugins_code_dir)
+        return manager
+
+    def test_read_manifest(self):
+        plugin_dir = self._plugin("p", '{"version": "1.2.0", "engines": {"pte": ">=0.75.0 <1.0.0"}}')
+        self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest("1.2.0", ">=0.75.0 <1.0.0"))
+        (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text("")
+        self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest())
+        (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).unlink()
+        self.assertIsNone(plugin_manifest.read_manifest(plugin_dir))
+
+    def test_invalid_manifests_are_rejected(self):
+        plugin_dir = self._plugin("p", "{}")
+        for bad in ("{not json", "[]", '{"version": 1}', '{"version": "1.2"}', '{"engines": []}',
+                    '{"engines": {"pte": 5}}', '{"engines": {"pte": ">=foo"}}'):
+            with self.subTest(bad=bad):
+                (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text(bad)
+                with self.assertRaises(plugin_manifest.ManifestError):
+                    plugin_manifest.read_manifest(plugin_dir)
+
+    def test_compatible_plugin_loads_and_reports_manifest_version(self):
+        self._plugin("fits", '{"version": "2.1.0", "engines": {"pte": "^0.75.0"}}')
+        manager = self._discover()
+        record = manager.registry.get_record("fits")
+        assert record is not None
+        self.assertEqual(record.load_status, "ok", record.error)
+        info = build_plugin_info(manager.registry, record)
+        self.assertEqual(info["version"], "2.1.0")
+        self.assertEqual(info["requires_pte"], "^0.75.0")
+
+    def test_incompatible_plugin_is_rejected_without_being_imported(self):
+        self._plugin("too_new", '{"version": "1.0.0", "engines": {"pte": ">=0.80.0"}}')
+        manager = self._discover()
+        record = manager.registry.get_record("too-new")
+        assert record is not None
+        self.assertEqual(record.load_status, "incompatible")
+        self.assertEqual(manager.registry.status("too-new"), ("incompatible", "Requires PDF-TEI-Editor >=0.80.0, but this is 0.75.2"))
+        self.assertFalse(self.executed.exists())
+        self.assertNotIn("too-new", manager.registry.get_all_plugins())
+
+    def test_invalid_manifest_marks_plugin_failed_without_importing_it(self):
+        self._plugin("broken", '{"engines": {"pte": ">=foo"}}')
+        record = self._discover().registry.get_record("broken")
+        assert record is not None
+        self.assertEqual(record.load_status, "failed")
+        self.assertIn("engines.pte", record.error or "")
+        self.assertFalse(self.executed.exists())
+
+    def test_manifest_without_fields_declares_no_constraints(self):
+        self._plugin("plain", "")
+        self._plugin("braces", "{}")
+        manager = self._discover()
+        for plugin_id in ("plain", "braces"):
+            record = manager.registry.get_record(plugin_id)
+            assert record is not None
+            self.assertEqual(record.load_status, "ok", record.error)
+            self.assertEqual(build_plugin_info(manager.registry, record)["version"], "1.0.0")
+
+    def test_pte_version_comes_from_package_json(self):
+        import json
+        self.pte.stop()
+        try:
+            plugin_manifest._pte_version = None
+            expected = json.loads((get_settings().project_root_dir / "package.json").read_text())["version"]
+            self.assertEqual(plugin_manifest.get_pte_version(), expected)
+        finally:
+            plugin_manifest._pte_version = None
+            self.pte.start()
 
 
 if __name__ == "__main__":

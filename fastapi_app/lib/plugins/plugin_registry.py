@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
+from fastapi_app.lib.plugins.plugin_manifest import ManifestError, PluginManifest, incompatibility, read_manifest
 from fastapi_app.lib.plugins.plugin_paths import find_external_plugins, import_plugin_module
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ class PluginRecord:
     plugin: Plugin | None
     directory: Path | None = None
     external: bool = False
-    load_status: str = "ok"  # "ok" | "unavailable" | "failed"
+    load_status: str = "ok"  # "ok" | "unavailable" | "incompatible" | "failed"
+    manifest: PluginManifest | None = None
     error: str | None = None
     initialized: bool = False
 
@@ -58,6 +60,29 @@ class PluginRegistry:
         self._records: dict[str, PluginRecord] = {}
         self._order: list[str] = []  # registered plugin ids, dependencies first
         self._disabled: set[str] = set()
+        self._manifests: dict[Path, PluginManifest | None] = {}
+
+    def _check_manifest(self, plugin_path: Path) -> PluginRecord | None:
+        """
+        Read the optional pte-plugin.json before the plugin is imported.
+
+        Returns:
+            A failed/incompatible record that replaces loading the plugin, or None if the plugin may be loaded
+        """
+        try:
+            manifest = read_manifest(plugin_path)
+        except ManifestError as e:
+            logger.error(f"Invalid manifest of plugin in {plugin_path}: {e}")
+            self._manifests[plugin_path] = None
+            return self._failed_record(plugin_path, str(e))
+        self._manifests[plugin_path] = manifest
+        reason = incompatibility(manifest)
+        if reason is None:
+            return None
+        logger.warning(f"Plugin in {plugin_path} is not loaded: {reason}")
+        record = self._failed_record(plugin_path, reason)
+        record.load_status = "incompatible"
+        return record
 
     def discover_plugins(self, plugin_dirs: list[Path], builtin_dir: Path | None = None) -> None:
         """
@@ -97,7 +122,10 @@ class PluginRegistry:
                 candidates = [p for p in sorted(plugin_dir.iterdir()) if (p / "plugin.py").is_file()]
 
             for plugin_path in candidates:
-                record = self._load_plugin(plugin_path, plugin_path / "plugin.py")
+                record = self._check_manifest(plugin_path)
+                if record is None:
+                    record = self._load_plugin(plugin_path, plugin_path / "plugin.py")
+                record.manifest = self._manifests.get(plugin_path)
                 record.external = is_external
                 self._records.setdefault(record.id, record)
                 if record.load_status == "ok" and record.plugin is not None:
@@ -339,11 +367,13 @@ class PluginRegistry:
         Derived status of a plugin.
 
         Returns:
-            (status, reason) where status is active, disabled, inactive, unavailable or failed
+            (status, reason) where status is active, disabled, inactive, unavailable, incompatible or failed
         """
         record = self._records[plugin_id]
         if record.load_status == "unavailable":
             return "unavailable", record.error
+        if record.load_status == "incompatible":
+            return "incompatible", record.error
         if record.load_status == "failed":
             return "failed", record.error
         if plugin_id in self._disabled:
