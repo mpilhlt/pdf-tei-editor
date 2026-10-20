@@ -167,3 +167,28 @@ describe('createAnnotationField with empty elements', () => {
     assert.strictEqual(atomic.size, 3);
   });
 });
+
+describe('createAnnotationField with nested badges', () => {
+  const tagDefs = [
+    { tag: 'p', label: 'p', color: '#94e2d5', attributes: [] },
+    { tag: 'unclear', label: 'unclear', color: '#f38ba8', attributes: [] },
+    { tag: 'lb', label: 'lb', color: '#89b4fa', attributes: [], empty: true },
+  ];
+  const extensions = createAnnotationField(tagDefs);
+
+  for (const doc of [
+    '<div><p><lb/>first line<lb/>second</p></div>',
+    '<div><p><unclear>word</unclear> rest</p></div>',
+    '<div><p>text<lb/></p></div>',
+    '<div><p><lb/></p></div>',
+  ]) {
+    it(`builds decorations without a range ordering error for ${doc}`, () => {
+      const parent = document.getElementById('editor');
+      parent.innerHTML = '';
+      assert.doesNotThrow(() => new EditorView({
+        state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+        parent
+      }));
+    });
+  }
+});

@@ -161,8 +161,8 @@ function readAttributes(openTagNode, state) {
  *   - OpenTag and CloseTag → TagMarker atomic range (cursor skips over them)
  *   - Self-closing elements → SelfClosingTag → TagMarker atomic range
  *
- * All decorations are collected and sorted by `from` position before being added to the
- * RangeSetBuilder, which requires strictly ascending order.
+ * All decorations are collected and sorted by `Decoration.set(…, true)` (position and startSide);
+ * the atomic ranges are sorted by `from` before being added to a RangeSetBuilder.
  *
  * @param {import('@codemirror/state').EditorState} state
  * @param {Map<string, {tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean, childTags?: string[]|null}>} tagMap
@@ -274,20 +274,18 @@ function buildAll(state, tagMap) {
   });
 
   // Sort by from position (RangeSetBuilder requires strictly ascending order)
-  pendingDecos.sort((a, b) => a.from - b.from || a.to - b.to);
   pendingAtomic.sort((a, b) => a.from - b.from || a.to - b.to);
 
-  const decoBuilder = new RangeSetBuilder();
-  for (const { from, to, dec } of pendingDecos) {
-    decoBuilder.add(from, to, dec);
-  }
+  // Decoration.set() with sort=true also orders ranges with equal positions by startSide, e.g. the content
+  // mark of <p> and the badge of an <lb/> that is its only content (`<p><lb/></p>`) cover the same range
+  const decos = Decoration.set(pendingDecos.map(({ from, to, dec }) => dec.range(from, to)), true);
 
   const atomicBuilder = new RangeSetBuilder();
   for (const { from, to } of pendingAtomic) {
     atomicBuilder.add(from, to, tagMarker);
   }
 
-  return { decos: decoBuilder.finish(), atomic: atomicBuilder.finish() };
+  return { decos, atomic: atomicBuilder.finish() };
 }
 
 /**
