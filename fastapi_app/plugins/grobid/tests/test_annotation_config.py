@@ -25,6 +25,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
+from fastapi_app.lib.utils.annotation_tags import clear_annotation_tags_cache
+
 FIXTURE_SCHEMA_CACHE_DIR = Path(__file__).parent / "fixtures" / "schema-cache"
 
 
@@ -67,7 +69,7 @@ class TestGetAnnotationTags(unittest.TestCase):
 
         # Regenerate against the fixtures instead of any stale (possibly empty)
         # result cached from an earlier call in this process.
-        grobid_config._ANNOTATION_TAGS_CACHE.clear()
+        clear_annotation_tags_cache()
 
         self._settings_patch = mock.patch.object(
             grobid_config,
@@ -76,7 +78,7 @@ class TestGetAnnotationTags(unittest.TestCase):
         )
         self._settings_patch.start()
         self.addCleanup(self._settings_patch.stop)
-        self.addCleanup(grobid_config._ANNOTATION_TAGS_CACHE.clear)
+        self.addCleanup(clear_annotation_tags_cache)
 
         self.get_annotation_tags = grobid_config.get_annotation_tags
 
@@ -244,9 +246,9 @@ class TestGetAnnotationTagsDownloadsMissingSchema(unittest.TestCase):
         import fastapi_app.plugins.grobid.config as grobid_config
         self.grobid_config = grobid_config
 
-        grobid_config._ANNOTATION_TAGS_CACHE.clear()
+        clear_annotation_tags_cache()
         grobid_config._SCHEMA_DOWNLOAD_FAILURES.clear()
-        self.addCleanup(grobid_config._ANNOTATION_TAGS_CACHE.clear)
+        self.addCleanup(clear_annotation_tags_cache)
         self.addCleanup(grobid_config._SCHEMA_DOWNLOAD_FAILURES.clear)
 
         self.cache_root = Path(tempfile.mkdtemp())
