@@ -636,6 +636,30 @@ class FileRepository:
 
             return [self._row_to_model(row) for row in rows]
 
+    def get_tei_files_by_status(self, statuses: List[str]) -> List[FileMetadata]:
+        """
+        Get all non-deleted TEI files whose lifecycle status is one of `statuses`.
+
+        Args:
+            statuses: Lifecycle statuses to match
+
+        Returns:
+            List of FileMetadata models, most recently updated first
+        """
+        if not statuses:
+            return []
+        placeholders = ", ".join("?" for _ in statuses)
+        query = f"""
+            SELECT * FROM files
+            WHERE file_type = 'tei' AND deleted = 0 AND status IN ({placeholders})
+            ORDER BY updated_at DESC
+        """
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(statuses))
+            return [self._row_to_model(row) for row in cursor.fetchall()]
+
     # Document-Centric Queries
 
     def get_files_by_doc_id(self, doc_id: str, include_deleted: bool = False) -> List[FileMetadata]:

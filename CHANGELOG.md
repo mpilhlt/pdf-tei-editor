@@ -2,6 +2,29 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.74.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.2...v0.74.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **help:** keep help icon visible while the diagnostics drawer is open ([16863d5](https://github.com/mpilhlt/pdf-tei-editor/commit/16863d5d6323c49cda61156e9923b78daa06fd7c)), closes [#549](https://github.com/mpilhlt/pdf-tei-editor/issues/549)
+
+
+### Features
+
+* **annotation-progress:** add dashboard box with progress rings ([2eba3af](https://github.com/mpilhlt/pdf-tei-editor/commit/2eba3af2a372851028aecfe9c0513aa71bf168dd))
+* **dashboard:** add login dashboard host plugin ([cc85c25](https://github.com/mpilhlt/pdf-tei-editor/commit/cc85c25f9ebc27e5cfd3762ee6f047724b3c5f70))
+* **edit-history:** add "Recent edits" dashboard box and all-projects view ([f5fe774](https://github.com/mpilhlt/pdf-tei-editor/commit/f5fe7742cb376cc039bad7251196c808f3a7f65c))
+* **recent-documents:** add "Recently edited" dashboard box ([bd0d062](https://github.com/mpilhlt/pdf-tei-editor/commit/bd0d062d16018e4a2b546447a6aaffc382a4bae6))
+* **review-queue:** add "Waiting for review" dashboard box ([fbf4387](https://github.com/mpilhlt/pdf-tei-editor/commit/fbf4387332faaf9a55b1bee7486f3523da145319))
+
+## [0.73.2](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.1...v0.73.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **pdfviewer:** strip title tooltip from whole annotation layer, not just linked anchors ([4ad5a18](https://github.com/mpilhlt/pdf-tei-editor/commit/4ad5a180f82a5d21e87d0c3d15ef0ea33290a9c6))
+
 ## [0.73.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.0...v0.73.1) (2026-10-18)
 
 

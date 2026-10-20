@@ -6,6 +6,8 @@ import csv
 import io
 import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -14,9 +16,14 @@ from lxml import etree
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_db,
+    get_file_repository,
     get_file_storage,
     get_session_manager,
+    require_authenticated_user,
 )
+from fastapi_app.lib.models import FileMetadata
+from fastapi_app.lib.repository.file_repository import FileRepository
+from fastapi_app.lib.storage.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +271,133 @@ async def export_csv(
     except Exception as e:
         logger.error(f"Failed to export edit history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# The dashboard box reads the changes of `limit * RECENT_FILES_FACTOR` most recently updated TEI files
+RECENT_FILES_FACTOR = 2
+
+
+def _accessible_tei_files(user: dict[str, Any], file_repo: FileRepository, db_dir: Path) -> list[FileMetadata]:
+    """TEI files in the collections of the non-archived projects the user can access, newest first.
+
+    Admins (`*` role) can access all projects. Files whose collections all belong only to
+    archived projects are left out.
+    """
+    from fastapi_app.lib.utils.project_utils import get_archived_collection_ids, get_visible_projects
+
+    archived = get_archived_collection_ids(db_dir)
+    collections = {c for p in get_visible_projects(user, db_dir) for c in p.get("collections", [])}
+    if "*" in collections:
+        candidates = file_repo.list_files(file_type="tei")
+    else:
+        by_id: dict[str, FileMetadata] = {}
+        for collection in collections - archived:
+            for f in file_repo.get_files_by_collection(collection):
+                if f.file_type == "tei":
+                    by_id[f.stable_id] = f
+        candidates = list(by_id.values())
+    files = [f for f in candidates if not f.doc_collections or not all(c in archived for c in f.doc_collections)]
+    files.sort(key=lambda f: f.updated_at, reverse=True)
+    return files
+
+
+def _history_entries(files: list[FileMetadata], file_storage: FileStorage) -> list[dict]:
+    """All changes of the given TEI files, newest first."""
+    entries: list[dict] = []
+    for file_metadata in files:
+        try:
+            content_bytes = file_storage.read_file(file_metadata.id, "tei")
+            if content_bytes:
+                entries.extend(_extract_revision_info(content_bytes.decode("utf-8"), file_metadata))
+        except Exception as e:
+            logger.error(f"Failed to parse TEI file {file_metadata.id}: {e}")
+    entries.sort(key=lambda x: x["timestamp"], reverse=True)
+    return entries
+
+
+@router.get("/all", response_class=HTMLResponse)
+async def view_all_history(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+    file_repo: FileRepository = Depends(get_file_repository),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> HTMLResponse:
+    """HTML page with all changes in the non-archived projects the user can access, newest first."""
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.plugins.plugin_tools import escape_html, generate_datatable_page
+
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    entries = _history_entries(_accessible_tei_files(user, file_repo, settings.db_dir), file_storage)
+    rows = [
+        [
+            escape_html(entry["date_str"]),
+            escape_html(entry["doc_id"]),
+            f'<a href="#" onclick="sandbox.openDocument(\'{entry["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(entry["doc_label"])}</a>',
+            escape_html(entry["description"]),
+            escape_html(entry["who"]),
+            escape_html(entry.get("status", "")),
+        ]
+        for entry in entries
+    ]
+    html = generate_datatable_page(
+        title="Edit History - All Projects",
+        headers=["Change Date", "Document ID", "Annotation Label", "Change Description", "Who", "Status"],
+        rows=rows,
+        table_id="editHistoryTable",
+        page_length=25,
+        default_sort_col=0,
+        default_sort_dir="desc",
+        enable_sandbox_client=True,
+        custom_css="table { font-size: 0.9em; }",
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/recent")
+async def recent_edits(
+    limit: int = Query(10, ge=1, le=50, description="Number of changes"),
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    file_repo: FileRepository = Depends(get_file_repository),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> dict[str, list[dict[str, Any]]]:
+    """The latest changes in the non-archived projects the user can access (JSON, used by the dashboard box).
+
+    Only the `limit * RECENT_FILES_FACTOR` most recently updated TEI files are read, since
+    changes are added when a file is saved.
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.plugins.dashboard.documents import DocumentInfoResolver
+
+    files = _accessible_tei_files(user, file_repo, get_settings().db_dir)[: limit * RECENT_FILES_FACTOR]
+    resolver = DocumentInfoResolver(file_repo)
+    entries: dict[str, dict[str, Any]] = {}
+    edits: list[dict[str, Any]] = []
+    for entry in _history_entries(files, file_storage)[:limit]:
+        stable_id = entry["stable_id"]
+        if stable_id not in entries:
+            file_metadata = file_repo.get_file_by_stable_id(stable_id)
+            if file_metadata is None:
+                continue
+            entries[stable_id] = resolver.entry(file_metadata)
+        edits.append({
+            **entries[stable_id],
+            "description": entry["description"],
+            "who": entry["who"],
+            "change_status": entry["status"],
+            "when": entry["timestamp"].isoformat(),
+        })
+    return {"edits": edits}
 
 
 def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
