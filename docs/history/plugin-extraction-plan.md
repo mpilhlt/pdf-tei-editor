@@ -69,14 +69,14 @@ Polling a file mtime is simpler and more robust than an IPC channel and needs no
 
 ## Which Plugins Stay in Core
 
-Criteria for staying: core code or the core frontend depends on it, other plugins use it as an extension point, or it is part of the tooling needed to administer plugins and recover the instance.
+Criteria for staying: other plugins use it as an extension point, it is part of the tooling needed to administer plugins and recover the instance, or it is a basic editor feature without external dependencies. Staying in core does not mean core may depend on it: core must work with any of these plugins removed, so each can be moved out later without core changes (see [Core plugins without hard dependencies](#core-plugins-without-hard-dependencies)).
 
 | Plugin | Decision | Reason |
 | --- | --- | --- |
 | `dashboard` | stay | Login landing page; extension host for 4 plugins |
 | `recent_documents` | stay | Default dashboard content |
 | `review_queue` | stay | Default dashboard content, core review workflow |
-| `tei_wizard` | stay | Loaded by core frontend; extension host for `grobid`, `metadata_extraction` |
+| `tei_wizard` | stay | Extension host for `grobid`, `metadata_extraction`; its frontend moves from core into the plugin |
 | `backup_restore` | stay | Protected; `main.py` handles pending restores |
 | `log_viewer` | stay | Protected; needed to debug failed plugin installs |
 | `active_sessions` | stay | Admin tooling |
@@ -108,7 +108,7 @@ With no extractor in core, a fresh install cannot extract anything. Docker image
 
 ## Removing Plugin Code from Core
 
-Rule: after the migration, nothing outside `fastapi_app/plugins/<staying plugin>/` may import, name or special-case a moved plugin. Core provides extension points; plugins use them. Generic references in comments and docstrings (e.g. "an extractor such as GROBID") are rewritten to be neutral where they describe behavior, and may stay where they only give an example.
+Rule: after the migration, nothing outside `fastapi_app/plugins/` may import, name or special-case any plugin, whether it moved or stays in the core repository. Plugins may depend on other plugins through declared dependencies; core depends on none. Core provides extension points; plugins use them. Generic references in comments and docstrings (e.g. "an extractor such as GROBID") are rewritten to be neutral where they describe behavior, and may stay where they only give an example.
 
 The inventory below comes from searching core (`fastapi_app` outside `plugins/`, `app/src`, `bin`, `scripts`, `config`, `tests`, `pyproject.toml`) for the ids and names of all moved plugins.
 
@@ -141,7 +141,20 @@ The inventory below comes from searching core (`fastapi_app` outside `plugins/`,
 | `app/src/modules/api-client-v1.js` | Typedefs for `kisski` routes, `grobid_cache_deleted` | Remove plugin route typedefs from the core client; plugins that need a typed client ship their own in their extension. Update the GC typedef as above |
 | `app/src/plugins/progress.js` | Example `cancelUrl` uses `/api/plugins/grobid/...` | Neutral example |
 
-The staying plugin `tei_wizard` is loaded by core (`tei-wizard.js` -> `/api/plugins/tei-wizard/enhancements.js`). That is a dependency on a core plugin, which is allowed.
+### Core plugins without hard dependencies
+
+The plugins that stay in the core repository must be removable like any other: core code may not import them, call their routes, or ship their frontend. Searching core for their ids gives:
+
+| Location | Coupling | Fix |
+| --- | --- | --- |
+| `app/src/plugins/tei-wizard.js`, `app/src/templates/tei-wizard-button.html`, `tei-wizard-dialog.html` (+ generated `.types.js`), `app/src/modules/enhancement-registry.js`, registration in `app/src/plugins.js` / `plugin-registry.js` | The whole frontend of the TEI wizard is a core frontend plugin that loads `/api/plugins/tei-wizard/enhancements.js` unconditionally | Move the frontend into the `tei_wizard` backend plugin as a frontend extension (the dashboard and document-search plugins already add toolbar buttons and dialogs this way). The enhancement registry moves with it. Without the backend plugin, no button appears and nothing is requested |
+| `app/src/ui.js` (`teiWizardDialog`), `app/src/plugins/xmleditor.js` (`teiWizardBtn`), `app/src/plugins/toolbar.js` (`searchBtn`, `dashboardBtn`) | Core UI typedefs declare elements that plugins add | Remove from core typedefs; each extension declares its own element types. Core code must not access these elements |
+| `bin/backup-download.js`, `tests/unit/js/backup-download.test.js` | Core CLI calls `/api/plugins/backup-restore/download` | Move into the `backup_restore` plugin directory (`bin/` inside the plugin) with its test |
+| `app/src/modules/api-client-v1.js` | Typedef for the backup-restore upload route | Remove; the core client covers `/api/v1/` only |
+| `fastapi_app/main.py` + `lib/core/data_restore.py` | Applies a pending restore from `data_restore/` at startup | Allowed: this is a generic core facility that must run before plugins load. `backup_restore` uses it; core does not import the plugin. Only the comment naming the plugin changes |
+| `grobid`, `metadata_extraction` -> `tei_wizard` | Plugins register enhancements | Allowed: plugin-to-plugin dependency declared in `metadata.dependencies` |
+| Tests in `tests/`: `tests/api/v1/tei_wizard_enhancements.test.js`, the `TestTeiWizardLifecycle` tests in `test_plugin_management.py`, `test_plugin_admin_api.py` and `plugin-admin.spec.js` (where they use real plugins), `dashboard-plugin.spec.js` | Core test suite requires these plugins | Plugin-specific tests move into each plugin's `tests/` directory; plugin-system tests use fixture plugins only |
+
 
 ### Tests
 
@@ -161,7 +174,10 @@ User-manual pages that describe moved plugins (`extraction-workflow.md`, `batch-
 
 ### Guard against regressions
 
-Add a core unit test that fails if a file under `fastapi_app/` (outside `fastapi_app/plugins/`), `app/src/`, `bin/` or `config/` imports `fastapi_app.plugins.<id>` for a non-core plugin, or references `/api/plugins/<id>` for a plugin that is not in the core list. The list of core plugins is a constant in the test, so moving a plugin back into core is a deliberate change.
+Two checks keep the state from regressing:
+
+- A core unit test fails if a file under `fastapi_app/` (outside `fastapi_app/plugins/`), `app/src/`, `bin/`, `config/` or `tests/` (outside `tests/fixtures/plugins/`) imports `fastapi_app.plugins.<id>` or references `/api/plugins/<id>` for any plugin id. There is no allowlist.
+- A CI job runs the core unit, API and E2E suites with `fastapi_app/plugins/` emptied (only `tests/fixtures/plugins/` on `FASTAPI_PLUGIN_PATHS`). If it passes, every remaining core plugin can be moved out without changing core.
 
 ## Repository Layout: Monorepo (Recommended)
 
@@ -308,7 +324,7 @@ Each phase is one or more PRs against `devel` and leaves the application working
 ### Phase 0: core prerequisites (no plugin moves)
 
 1. Fix multi-worker plugin state: `plugins-state.json`, reconcile task, migration of `plugins.disabled`. Ships independently because it fixes the current enable/disable bug.
-2. Remove all plugin code from core as listed in [Removing Plugin Code from Core](#removing-plugin-code-from-core): the two hooks, dead GROBID helpers, plugin-specific configuration, frontend couplings and tests. Add the coupling guard test so the state cannot regress.
+2. Remove all plugin code from core as listed in [Removing Plugin Code from Core](#removing-plugin-code-from-core): the two hooks, dead GROBID helpers, plugin-specific configuration, frontend couplings and tests, including the couplings to the plugins that stay (TEI wizard frontend, backup CLI). Add the guard test and the core-without-plugins CI job so the state cannot regress.
 3. Add `fastapi_app/plugin_api.py` and `PLUGIN_API_VERSION`; switch the plugins that will move to import from it.
 4. Add `pte.plugins` entry-point discovery to `plugin_paths.py`/`PluginManager`.
 5. Move `test_plugin` to `tests/fixtures/plugins/`; add `--plugin-tests` to the test runners.
