@@ -2,6 +2,29 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.75.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.74.0...v0.75.0) (2026-10-20)
+
+
+### Bug Fixes
+
+* **extraction:** lift the extraction blocker while the API key dialog is open ([ea90aaa](https://github.com/mpilhlt/pdf-tei-editor/commit/ea90aaabdd47191dc470ddf673f0d7aa98ee19e4))
+* **search:** ask pdfSearch.fallback handlers for elements without text ([88c9a9c](https://github.com/mpilhlt/pdf-tei-editor/commit/88c9a9c5f7792bdbfe20a88d671e815b3ed0711c))
+* **search:** autosearch the element at the cursor outside the navigation elements ([c5e4615](https://github.com/mpilhlt/pdf-tei-editor/commit/c5e461596e982d08134b6c8e0e895c683c77d602))
+* **secrets:** add missing semicolon that broke the importmap build and regenerate the plugin registry ([736a8be](https://github.com/mpilhlt/pdf-tei-editor/commit/736a8be5bf7283ae42c5570e3055a2873c0e7b21))
+
+
+### Features
+
+* let plugins register bundled copies of their schemas ([5b23cc0](https://github.com/mpilhlt/pdf-tei-editor/commit/5b23cc0fb3b7486f2ceb0a5732d120941a7fe15d))
+* **llm:** add image input to LLM providers ([a19bd59](https://github.com/mpilhlt/pdf-tei-editor/commit/a19bd592d3985075b83df68f43d3415e3647396e))
+* **llm:** let provider plugins register without a configured key and use per-user keys ([ce30952](https://github.com/mpilhlt/pdf-tei-editor/commit/ce30952c23da6a661af5cb7bcf3bd162973c5569))
+* **plugins:** load external plugins as packages with relative imports ([a1bc29c](https://github.com/mpilhlt/pdf-tei-editor/commit/a1bc29ce4d480be3f5ac34ce481fc94041ab0f95))
+* **plugins:** read plugin version and compatible editor versions from pte-plugin.json ([af71ead](https://github.com/mpilhlt/pdf-tei-editor/commit/af71ead73908ede95a1aa37c94cd80b7f753b6ee))
+* **plugins:** require pte-plugin.json marker for external plugins ([194a1f4](https://github.com/mpilhlt/pdf-tei-editor/commit/194a1f419a67ebd320c9cea9ededb598ec5d55b4))
+* **plugins:** show a README link from the manifest in the plugin manager ([51f2340](https://github.com/mpilhlt/pdf-tei-editor/commit/51f2340a71b9ca2281484dfc6029cca738f06138))
+* **search:** let plugins provide a fallback for Autosearch via pdfSearch.fallback ([71a6ac3](https://github.com/mpilhlt/pdf-tei-editor/commit/71a6ac376d5e96c8afbe034e9dd67b8211d267df))
+* **secrets:** encrypted per-user API keys with REST API, prompt in the app and CLI ([865ad86](https://github.com/mpilhlt/pdf-tei-editor/commit/865ad86fab18d34c494455759b8701febe0aadc7))
+
 # [0.74.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.73.2...v0.74.0) (2026-10-19)
 
 
