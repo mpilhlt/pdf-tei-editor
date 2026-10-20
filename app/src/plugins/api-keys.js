@@ -26,7 +26,7 @@ class ApiKeysPlugin extends Plugin {
     super(context, { name: 'api-keys', deps: ['client', 'toolbar'] })
   }
 
-  static extensionPoints = [ep.toolbar.menuItems]
+  static extensionPoints = [ep.toolbar.menuItems];
 
   /**
    * Extension point handler for `ep.toolbar.menuItems`.
