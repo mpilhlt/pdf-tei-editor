@@ -15,7 +15,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
-import { getSecretRequired } from '../modules/secret-required.js'
+import { withKeyPrompt } from '../modules/secret-required.js'
 
 await registerTemplate('api-keys-dialog', 'api-keys-dialog.html')
 await registerTemplate('api-keys-menu-item', 'api-keys-menu-item.html')
@@ -97,18 +97,12 @@ class ApiKeysPlugin extends Plugin {
    * `secret_required`, prompt for the key and run the action once more.
    * @template T
    * @param {() => Promise<T>} action
+   * @param {{before?: () => void, after?: () => void}=} blocker - Called around the prompt, e.g. to lift a
+   *   page blocker that would cover the dialog; `after` runs even if the prompt fails or is cancelled
    * @returns {Promise<T>}
    */
-  async withKeyPrompt(action) {
-    try {
-      return await action()
-    } catch (error) {
-      const required = getSecretRequired(error)
-      if (required && await this.promptForKey(required)) {
-        return await action()
-      }
-      throw error
-    }
+  async withKeyPrompt(action, blocker) {
+    return withKeyPrompt(action, detail => this.promptForKey(detail), blocker)
   }
 
   /** @param {SecretServiceResponse[]} services */
