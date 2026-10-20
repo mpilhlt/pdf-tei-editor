@@ -124,3 +124,46 @@ describe('createAnnotationField', () => {
     assert.ok(decos.size > 0, 'should produce at least one decoration for <bibl>');
   });
 });
+
+describe('createAnnotationField with empty elements', () => {
+  const tagDefs = [
+    { tag: 'gap', label: 'gap', color: '#f38ba8', attributes: [], empty: true }
+  ];
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
+
+  function makeView(doc) {
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    return new EditorView({
+      state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+      parent
+    });
+  }
+
+  it('replaces a self-closing annotation element with an outlined badge', () => {
+    const doc = '<root>a <gap reason="illegible"/> b</root>';
+    const view = makeView(doc);
+    const { decos, atomic } = view.state.field(annotationField);
+    const from = doc.indexOf('<gap');
+    const ranges = [];
+    decos.between(0, doc.length, (f, t, value) => { ranges.push({ f, t, value }); });
+    const badge = ranges.find(r => r.f === from);
+    assert.ok(badge, 'a decoration starts at <gap/>');
+    assert.strictEqual(badge.t, doc.indexOf('/>') + 2, 'it covers the whole self-closing tag');
+    const dom = badge.value.spec.widget.toDOM();
+    assert.ok(dom.classList.contains('ann-badge--empty'));
+    assert.strictEqual(dom.dataset.tag, 'gap');
+    let atomicAtGap = false;
+    atomic.between(from, from + 1, () => { atomicAtGap = true; });
+    assert.ok(!atomicAtGap, 'the badge replaces the tag instead of an atomic marker');
+  });
+
+  it('keeps self-closing elements without a tag definition as atomic tags', () => {
+    const doc = '<root>a <lb/> b</root>';
+    const view = makeView(doc);
+    const { decos, atomic } = view.state.field(annotationField);
+    assert.strictEqual(decos.size, 0);
+    assert.strictEqual(atomic.size, 3);
+  });
+});

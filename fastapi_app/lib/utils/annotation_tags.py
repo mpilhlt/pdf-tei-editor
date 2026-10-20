@@ -42,6 +42,7 @@ class AnnotationTag(TypedDict):
     variants: list[AnnotationTagVariant]
     bareAllowed: bool
     childTags: list[str]
+    empty: bool
 
 
 AnnotationTagsMap = dict[str, list[AnnotationTag]]
@@ -92,7 +93,10 @@ def generate_annotation_tags(
     Build a chip list from the RelaxNG schema at `schema_path`: `root` and
     every element allowed as its child, plus the children of each chip
     named in `expand`, minus `exclude` (which is also removed from every
-    chip's `childTags`). Chips are sorted by tag name. Returns an empty
+    chip's `childTags`). A chip whose element allows neither text nor any
+    of its `childTags` is marked `empty` (e.g. `gap`, `pb`): the editor shows
+    a badge for it, but does not offer it for wrapping selected text.
+    Chips are sorted by tag name. Returns an empty
     list if the schema file doesn't exist. The result is cached until the
     file's mtime changes; callers get a copy they may modify.
     """
@@ -120,6 +124,7 @@ def generate_annotation_tags(
     taken_colors: set[str] = set()
     for tag_name in sorted(definitions):
         data = definitions[tag_name]
+        child_tags = [c for c in data["children"] if c not in excluded]
         color = _color_for_tag(tag_name, taken_colors)
         taken_colors.add(color)
         tags.append({
@@ -130,7 +135,8 @@ def generate_annotation_tags(
             "attributes": data["attributes"],
             "variants": data["variants"],
             "bareAllowed": data["bareAllowed"],
-            "childTags": [c for c in data["children"] if c not in excluded],
+            "childTags": child_tags,
+            "empty": not data["textAllowed"] and not child_tags,
         })
     _CACHE[key] = tags
     return copy.deepcopy(tags)

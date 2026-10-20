@@ -164,6 +164,10 @@ class TestExtractTagDefinitions(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
+    def test_text_not_allowed_through_attribute_values_or_child_elements(self):
+        # <root> only holds child elements; their text and attribute values are not root's content
+        self.assertFalse(self.parser.extract_tag_definitions("root", set())["root"]["textAllowed"])
+
     def test_root_and_children_included(self):
         result = self.parser.extract_tag_definitions("root", set())
         self.assertIn("root", result)
@@ -507,6 +511,12 @@ class TestMixedContent(unittest.TestCase):
         result = self.parser.extract_tag_definitions("p", set())
         self.assertEqual(sorted(result), ["hi", "p", "unclear"])
         self.assertEqual(sorted(result["p"]["children"]), ["hi", "unclear"])
+
+    def test_text_allowed(self):
+        result = self.parser.extract_tag_definitions("p", set())
+        self.assertTrue(result["p"]["textAllowed"], "mixed content allows text")
+        self.assertTrue(result["hi"]["textAllowed"])
+        self.assertTrue(result["unclear"]["textAllowed"])
 
     def test_autocomplete_map_includes_children_of_mixed_content(self):
         self.assertEqual(sorted(self.autocomplete["p"]["children"]), ["hi", "unclear"])

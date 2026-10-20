@@ -31,6 +31,7 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
             <ref name="lb"/>
             <ref name="unclear"/>
             <ref name="choice"/>
+            <ref name="gap"/>
           </choice>
         </zeroOrMore>
       </mixed>
@@ -48,6 +49,12 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
     <element name="choice">
       <ref name="abbr"/>
       <ref name="expan"/>
+    </element>
+  </define>
+  <define name="gap">
+    <element name="gap">
+      <optional><attribute name="reason"/></optional>
+      <empty/>
     </element>
   </define>
   <define name="abbr"><element name="abbr"><text/></element></define>
@@ -70,15 +77,22 @@ class TestGenerateAnnotationTags(unittest.TestCase):
         return {t["tag"]: t for t in generate_annotation_tags(self.schema_path, "p", **kwargs)}
 
     def test_root_and_children_minus_exclude(self):
-        self.assertEqual(sorted(self._tags(exclude={"lb"})), ["choice", "p", "unclear"])
+        self.assertEqual(sorted(self._tags(exclude={"lb"})), ["choice", "gap", "p", "unclear"])
 
     def test_exclude_is_removed_from_child_tags(self):
-        self.assertEqual(self._tags(exclude={"lb"})["p"]["childTags"], ["choice", "unclear"])
+        self.assertEqual(self._tags(exclude={"lb"})["p"]["childTags"], ["choice", "gap", "unclear"])
 
     def test_expand_adds_children_of_named_chips(self):
         tags = self._tags(exclude={"lb"}, expand=["choice"])
-        self.assertEqual(sorted(tags), ["abbr", "choice", "expan", "p", "unclear"])
+        self.assertEqual(sorted(tags), ["abbr", "choice", "expan", "gap", "p", "unclear"])
         self.assertEqual(tags["expan"]["childTags"], [])
+
+    def test_empty_flag(self):
+        tags = self._tags(exclude={"lb"}, expand=["choice"])
+        self.assertTrue(tags["gap"]["empty"], "no text and no children")
+        self.assertFalse(tags["choice"]["empty"], "no text, but child elements")
+        self.assertFalse(tags["unclear"]["empty"], "text")
+        self.assertFalse(tags["expan"]["empty"], "mixed content, even with its only child excluded")
 
     def test_tag_data(self):
         unclear = self._tags()["unclear"]
