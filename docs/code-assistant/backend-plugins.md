@@ -108,7 +108,7 @@ from fastapi_app.lib.utils.annotation_tags import generate_annotation_tags
 "annotationTags": {VARIANT_ID: generate_annotation_tags(SCHEMA_PATH, "p", exclude={"lb", "pb"}, expand=["choice"])},
 ```
 
-The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `fastapi_app/plugins/grobid/config/annotation_tags_scope.py`.
+A chip whose element allows neither text nor any of its (non-excluded) children gets `empty: true` (e.g. `gap`, `pb`): the editor shows such elements as outlined badges that open the attributes popup, but does not offer them for wrapping selected text. Exclude a tag (e.g. `lb`) to leave it as plain XML. The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `fastapi_app/plugins/grobid/config/annotation_tags_scope.py`.
 
 ## Creating a Plugin
 
