@@ -17,7 +17,7 @@ from pathlib import Path
 import requests
 
 from fastapi_app.lib.extraction.http_utils import get_retry_session
-from fastapi_app.lib.llm.base import LLMModel, LLMProvider
+from fastapi_app.lib.llm.base import LLMImage, LLMModel, LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,34 @@ class AnthropicLLMProvider(LLMProvider):
             },
             {"type": "text", "text": user_prompt},
         ]
+        return await asyncio.to_thread(
+            self._chat_completion_sync,
+            model_id=model_id,
+            system_prompt=system_prompt,
+            user_content=user_content,
+            temperature=temperature,
+        )
+
+    def supports_image_input(self, model_id: str) -> bool:
+        return True
+
+    async def chat_completion_with_images(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[LLMImage],
+        temperature: float = 0.2,
+    ) -> str:
+        """Send the images as base64 `image` content blocks, in order, ahead of the prompt text."""
+        user_content: list[dict[str, object]] = [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": image["media_type"], "data": base64.b64encode(image["data"]).decode("ascii")},
+            }
+            for image in images
+        ]
+        user_content.append({"type": "text", "text": user_prompt})
         return await asyncio.to_thread(
             self._chat_completion_sync,
             model_id=model_id,

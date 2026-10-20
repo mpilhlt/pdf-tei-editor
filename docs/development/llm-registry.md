@@ -46,6 +46,7 @@ class MyProvider(LLMProvider):
 - `LLMModel.status`: optional live load state (`availability`: `available`, `busy` or `very_busy`, plus a free-text `detail`); the frontend shows a warning icon when not `available`.
 - `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used.
 - Raise `LLMProviderError` with a user-presentable message for upstream failures (rate limit, overload, bad request); routes map it to HTTP 502.
+- Multimodal input is optional: override `supports_pdf_input(model_id)` and `chat_completion_with_pdf()` to accept a PDF file, and `supports_image_input(model_id)` and `chat_completion_with_images(model_id, system_prompt, user_prompt, images)` to accept a list of `LLMImage` (`{"data": bytes, "media_type": "image/png"}`), sent in order ahead of the prompt. Consumers check the `supports_*` method before calling. The Anthropic provider implements both.
 - Only offer chat models in `list_models()`. Commercial APIs mostly expose no machine-readable modality field, so the Google provider filters non-chat models (image, embedding, etc.) by name markers.
 
 Register the instance in the owning plugin's `initialize()` (not `__init__`) and unregister it in `cleanup()`:

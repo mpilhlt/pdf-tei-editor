@@ -15,6 +15,18 @@ from abc import ABC, abstractmethod
 from typing import Literal, TypedDict
 
 
+class LLMImage(TypedDict):
+    """An image sent to a model along with the prompt.
+
+    `data` holds the raw image bytes; `media_type` is one of the image MIME
+    types multimodal APIs commonly accept ("image/png", "image/jpeg",
+    "image/webp", "image/gif").
+    """
+
+    data: bytes
+    media_type: str
+
+
 class ModelStatus(TypedDict):
     """A model's live load state, when a provider exposes one.
 
@@ -101,6 +113,27 @@ class LLMProvider(ABC):
         Only called when supports_pdf_input() is True.
         """
         raise NotImplementedError(f"LLM provider '{self.id}' does not accept PDF input")
+
+    def supports_image_input(self, model_id: str) -> bool:
+        """Whether chat_completion_with_images() can send images to `model_id`.
+
+        Default False.
+        """
+        return False
+
+    async def chat_completion_with_images(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[LLMImage],
+        temperature: float = 0.2,
+    ) -> str:
+        """Run a chat completion with images attached to the user prompt, in the given order.
+
+        Only called when supports_image_input() is True.
+        """
+        raise NotImplementedError(f"LLM provider '{self.id}' does not accept image input")
 
 
 class LLMProviderError(Exception):

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+from fastapi_app.lib.llm import LLMImage
 from fastapi_app.plugins.anthropic_llm.llm_provider import AnthropicLLMProvider
 
 
@@ -165,6 +166,33 @@ class TestAnthropicLLMProviderPdfInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content[0]["type"], "document")
         self.assertEqual(content[0]["source"], {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(b"%PDF-1.4").decode("ascii")})
         self.assertEqual(content[1], {"type": "text", "text": "usr"})
+
+
+class TestAnthropicLLMProviderImageInput(unittest.IsolatedAsyncioTestCase):
+    """Test chat_completion_with_images() sends the images as base64 image blocks, in order."""
+
+    @patch("fastapi_app.plugins.anthropic_llm.llm_provider.get_retry_session")
+    async def test_sends_image_blocks_before_prompt(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_session.post.return_value.json.return_value = {"content": [{"type": "text", "text": "transcript"}]}
+        mock_get_session.return_value = mock_session
+
+        provider = AnthropicLLMProvider(id="anthropic", label="Anthropic Claude", api_key="k")
+        self.assertTrue(provider.supports_image_input("m"))
+        images: list[LLMImage] = [
+            {"data": b"page-1", "media_type": "image/png"},
+            {"data": b"page-2", "media_type": "image/jpeg"},
+        ]
+        result = await provider.chat_completion_with_images("m", "sys", "usr", images)
+
+        self.assertEqual(result, "transcript")
+        content = mock_session.post.call_args[1]["json"]["messages"][0]["content"]
+        self.assertEqual(
+            content[0],
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(b"page-1").decode("ascii")}},
+        )
+        self.assertEqual(content[1]["source"]["media_type"], "image/jpeg")
+        self.assertEqual(content[2], {"type": "text", "text": "usr"})
 
 
 if __name__ == "__main__":
