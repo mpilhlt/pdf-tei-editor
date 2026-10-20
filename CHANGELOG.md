@@ -2,6 +2,20 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.76.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.75.0...v0.76.0) (2026-10-20)
+
+
+### Bug Fixes
+
+* decoration order when an empty badge fills an annotation's content ([af62b2f](https://github.com/mpilhlt/pdf-tei-editor/commit/af62b2fcd0b06406eaccd51e665624fde6e2314a))
+* read child elements of <mixed> content models in RelaxNGParser ([15628b2](https://github.com/mpilhlt/pdf-tei-editor/commit/15628b20a4ff7b573d624572eab5d0a6250ec334))
+
+
+### Features
+
+* clickable badges for empty annotation elements ([01d7b8c](https://github.com/mpilhlt/pdf-tei-editor/commit/01d7b8c5d67d347adb4d4dc8ca023647c4b34017))
+* shared annotation chip generator for plugins ([dab4aac](https://github.com/mpilhlt/pdf-tei-editor/commit/dab4aac61cd49d8eedb462f98715ce967a912897))
+
 # [0.75.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.74.0...v0.75.0) (2026-10-20)
 
 
