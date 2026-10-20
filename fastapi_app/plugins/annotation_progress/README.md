@@ -42,3 +42,7 @@ Documents without any annotations are listed with "No annotations" in the annota
 - Uses DataTables for sortable, searchable table display
 - Extracts edition title from TEI `<editionStmt>` or falls back to main title
 - Counts all `<change>` elements in `<revisionDesc>` for revision count
+
+## Dashboard box
+
+If the [dashboard](../dashboard/README.md) plugin is active, this plugin contributes an "Annotation progress" box. For each project the user can see, it lists the project's collections by name, each with one progress ring per variant: the share of the collection's documents whose TEI file of that variant has a status at or after `plugin.annotation-progress.dashboard-threshold` (default `approved`) in `annotation.lifecycle.order`. Hovering a ring shows the variant and the counts; clicking it opens the progress view for that collection and variant. Each collection is listed once, under the most specific project; collections that belong only to archived projects are omitted. The data comes from `GET /api/plugins/annotation-progress/dashboard-summary`; the box is rendered by [extensions/annotation-progress-dashboard.js](extensions/annotation-progress-dashboard.js).

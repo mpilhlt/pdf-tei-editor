@@ -5,9 +5,11 @@
  * PDF viewer lists them, slides out (leaving a floating button) and back in
  * depending on the focus, selects
  * the text of a clicked diagnostic, and applies or dismisses the checked
- * diagnostics (switching off the merge view).
+ * diagnostics (switching off the merge view). Also checks that the drawer,
+ * which stays open permanently, does not hide the help icon.
  *
  * @testCovers app/src/plugins/diagnostics-drawer.js
+ * @testCovers app/src/templates/help-widget.html
  * @testCovers app/src/modules/lint-utils.js
  */
 
@@ -156,6 +158,10 @@ test.describe('Diagnostics drawer', () => {
 
       await injectDiagnostics(page);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix A', 'fix B']);
+
+      // the drawer stays open permanently, which must not hide the help icon
+      await expect(page.locator('div[name="helpIcon"]')).toBeVisible();
+
       let state = await drawerState(page);
       expect(state.empty).toBe(false);
       expect(state.retracted).toBe(false);

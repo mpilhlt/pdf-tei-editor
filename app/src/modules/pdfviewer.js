@@ -215,16 +215,20 @@ export class PDFJSViewer {
             externalLinkTarget: pdfjsViewer.LinkTarget.BLANK
           });
 
-          // PDF.js sets a native `title` attribute on link anchors showing the raw URL.
-          // Native title tooltips are rendered by the browser above all page content,
-          // ignoring CSS z-index/overflow, so they can bleed through other UI (e.g. the
-          // diagnostics drawer). Strip it; the href/target/rel set by addLinkAttributes
-          // are kept.
-          const addLinkAttributes = this.linkService.addLinkAttributes.bind(this.linkService);
-          this.linkService.addLinkAttributes = (link, url, newWindow) => {
-            addLinkAttributes(link, url, newWindow);
-            link.removeAttribute('title');
+          // PDF.js sets a native `title` attribute on link annotations (both actual PDF
+          // links and plain-text URLs it auto-linkifies) showing the raw URL. Native
+          // title tooltips are rendered by the browser above all page content, ignoring
+          // CSS z-index/overflow, so they bleed through other UI (e.g. the diagnostics
+          // drawer). The title is set directly on the annotation container by pdf.js
+          // internals (not only via linkService.addLinkAttributes), so strip it from
+          // the whole annotation layer after each render pass, including the delayed
+          // pass that injects auto-linked plain-text URLs.
+          const stripTooltipTitles = (event) => {
+            const layerDiv = event.source?.annotationLayer?.div;
+            layerDiv?.querySelectorAll('[title]').forEach(el => el.removeAttribute('title'));
           };
+          this.eventBus.on('annotationlayerrendered', stripTooltipTitles);
+          this.eventBus.on('linkannotationsadded', stripTooltipTitles);
 
           // Create find controller
           this.findController = new pdfjsViewer.PDFFindController({

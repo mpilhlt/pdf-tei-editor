@@ -17,7 +17,7 @@ Key differences from Flask:
 
 import logging
 import base64
-from typing import Optional
+from typing import Any, Optional
 from lxml import etree
 from fastapi import APIRouter, Depends, Request, HTTPException
 from pathlib import Path
@@ -46,6 +46,16 @@ from ..lib.permissions.acl_utils import set_default_permissions_for_new_file
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+async def _emit_document_saved(stable_id: str, doc_id: str, user: dict[str, Any]) -> None:
+    """Emit the `document.saved` event after a TEI file has been saved successfully.
+
+    Unlike `document.save`, which fires before the file is written (and has no stable_id
+    for new versions), this event carries the saved file's stable_id and the saving user.
+    """
+    from ..lib.sse.event_bus import get_event_bus
+    await get_event_bus().emit("document.saved", stable_id=stable_id, doc_id=doc_id, username=user.get('username'))
 
 
 def _user_has_role(user: dict, role: str) -> bool:
@@ -420,6 +430,7 @@ async def save_file(
                 logger=logger_inst
             )
 
+            await _emit_document_saved(existing_file.stable_id, doc_id, user)
             return SaveFileResponse(status="saved", file_id=existing_file.stable_id)
 
         elif request.new_version or (not existing_file and existing_gold and existing_gold.variant == variant):
@@ -477,6 +488,7 @@ async def save_file(
                     # Acquire lock if we don't have it (using stable_id)
                     if not acquire_lock(existing_hash_file.stable_id, session_id, settings.db_dir, logger_inst):
                         raise HTTPException(status_code=423, detail="Failed to acquire lock")
+                    await _emit_document_saved(existing_hash_file.stable_id, doc_id, user)
                     return SaveFileResponse(status="saved", file_id=existing_hash_file.stable_id)
             except ValueError:
                 pass  # Hash doesn't exist, continue with creation
@@ -520,6 +532,7 @@ async def save_file(
                 logger=logger_inst
             )
 
+            await _emit_document_saved(created_file.stable_id, doc_id, user)
             status = "new"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)
 
@@ -617,6 +630,7 @@ async def save_file(
                 logger=logger_inst
             )
 
+            await _emit_document_saved(created_file.stable_id, doc_id, user)
             status = "new_gold"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)
 

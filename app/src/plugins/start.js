@@ -16,7 +16,6 @@ import ui, { Spinner, updateUi } from '../ui.js'
 import { testLog } from '../modules/test-log.js'
 import { HeartbeatPlugin } from '../plugin-registry.js'
 import { UrlHash, renderTitleTemplate } from '../modules/browser-utils.js'
-import { notify } from '../modules/sl-utils.js'
 
 class StartPlugin extends Plugin {
   static extensionPoints = [ep.title.updateSlots];
@@ -85,7 +84,6 @@ class StartPlugin extends Plugin {
       const userData = await this.#authentication.ensureAuthenticated()
       const name = userData.fullname || userData.username
       this.#logger.info(`${name} has logged in.`)
-      notify(`Welcome back, ${name}!`)
 
       testLog('USER_AUTHENTICATED', {
         username: userData.username,
