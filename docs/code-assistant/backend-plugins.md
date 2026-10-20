@@ -25,19 +25,25 @@ Each plugin:
 
 ## External Plugins
 
-Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). Each directory contains one subdirectory per plugin, with the same layout as a built-in plugin:
+Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). An external plugin is a directory with the same layout as a built-in plugin plus a marker file `pte-plugin.json` (its content is not read yet; `{}` is fine):
 
 ```text
 /opt/my-plugins/            # FASTAPI_PLUGIN_PATHS=/opt/my-plugins
 ├── my_extractor/
+│   ├── pte-plugin.json     # marks the directory as a plugin
 │   ├── __init__.py
 │   ├── plugin.py
 │   ├── extractor.py        # imported from plugin.py as `from .extractor import ...`
 │   ├── routes.py
 │   ├── static/
 │   └── extensions/
-└── another_plugin/
+└── some-repo/
+    └── plugins/
+        └── another_plugin/ # found too: plugins may be nested up to three levels deep
 ```
+
+- Only directories containing both `pte-plugin.json` and `plugin.py` are imported, so `FASTAPI_PLUGIN_PATHS` can point to a folder of checked-out repositories: other code, including unrelated `plugin.py` files, is never executed. A listed directory may also be a plugin itself. Hidden directories (`.git`, `.venv`), `node_modules`, `venv`, `env`, `site-packages`, `__pycache__`, symlinked directories and the subdirectories of a plugin are not searched (`find_external_plugins()` in `fastapi_app/lib/plugins/plugin_paths.py`).
+- A plugin whose import fails, including one that calls `sys.exit()`, is listed as failed in the Plugin Manager; the other plugins and the server keep running.
 
 - External plugins are imported as packages under the `pte_external_plugins` namespace (e.g. `pte_external_plugins.my_extractor`), so they can consist of several modules using relative imports. Import application code with absolute imports (`from fastapi_app.lib.extraction import BaseExtractor`).
 - A directory name that also exists in `fastapi_app/plugins/` does not shadow or load the built-in plugin; plugin ids must still be unique.

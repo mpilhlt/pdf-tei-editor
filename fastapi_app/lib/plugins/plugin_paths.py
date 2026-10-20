@@ -7,6 +7,11 @@ listed in the FASTAPI_PLUGIN_PATHS environment variable (separated by
 ``os.pathsep``: ":" on Unix, ";" on Windows) and are imported as packages
 under the synthetic namespace ``pte_external_plugins.<dir>``, so that they can
 consist of several modules using relative imports (``from .extractor import ...``).
+
+An external plugin is a directory containing both ``plugin.py`` and the marker
+file ``pte-plugin.json``. The directories in FASTAPI_PLUGIN_PATHS are searched
+a few levels deep for such directories, so FASTAPI_PLUGIN_PATHS can point to a
+folder of repositories without importing unrelated ``plugin.py`` files.
 """
 
 import importlib
@@ -21,6 +26,9 @@ from fastapi_app.config import get_settings
 
 PLUGIN_PATHS_ENV_VAR = "FASTAPI_PLUGIN_PATHS"
 EXTERNAL_NAMESPACE = "pte_external_plugins"
+PLUGIN_MARKER_FILE = "pte-plugin.json"
+EXTERNAL_SEARCH_DEPTH = 3
+SKIPPED_DIR_NAMES = frozenset({"node_modules", "__pycache__", "site-packages", "venv", "env"})
 
 # Resolved plugin directory -> package name, so that a plugin's modules
 # (plugin.py, routes.py, ...) are always imported under the same package.
@@ -38,6 +46,43 @@ def get_external_plugin_dirs() -> list[Path]:
     """
     env_paths = os.getenv(PLUGIN_PATHS_ENV_VAR, "")
     return [Path(p.strip()) for p in env_paths.split(os.pathsep) if p.strip()]
+
+
+def find_external_plugins(base: Path, max_depth: int = EXTERNAL_SEARCH_DEPTH) -> list[Path]:
+    """
+    Find external plugin directories (with ``plugin.py`` and the marker file) below a directory.
+
+    ``base`` itself and its subdirectories down to ``max_depth`` levels are searched.
+    Hidden directories (``.git``, ``.venv``, ...), :data:`SKIPPED_DIR_NAMES` and
+    the subdirectories of a plugin are not searched. Nothing is imported.
+
+    Args:
+        base: Directory listed in FASTAPI_PLUGIN_PATHS
+        max_depth: Number of directory levels below ``base`` to search
+
+    Returns:
+        Plugin directories, sorted by path
+    """
+    found: list[Path] = []
+
+    def visit(directory: Path, depth: int) -> None:
+        if (directory / PLUGIN_MARKER_FILE).is_file() and (directory / "plugin.py").is_file():
+            found.append(directory)
+            return
+        if depth >= max_depth:
+            return
+        try:
+            children = sorted(directory.iterdir())
+        except OSError:
+            return
+        for child in children:
+            if child.name.startswith(".") or child.name in SKIPPED_DIR_NAMES:
+                continue
+            if child.is_dir() and not child.is_symlink():
+                visit(child, depth + 1)
+
+    visit(base, 0)
+    return found
 
 
 def get_plugin_dirs() -> list[Path]:
@@ -122,7 +167,7 @@ def _ensure_external_package(plugin_path: Path, package_name: str) -> None:
     try:
         if spec.loader is not None:
             spec.loader.exec_module(package)
-    except Exception:
+    except BaseException:
         del sys.modules[package_name]
         raise
 

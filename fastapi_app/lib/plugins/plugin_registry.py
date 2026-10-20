@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
-from fastapi_app.lib.plugins.plugin_paths import import_plugin_module
+from fastapi_app.lib.plugins.plugin_paths import find_external_plugins, import_plugin_module
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,9 @@ class PluginRegistry:
         Discover plugins from the specified directories.
 
         Each plugin directory should contain a plugin.py file with a Plugin subclass.
+        Built-in plugins are the direct subdirectories of ``builtin_dir``; in the other
+        directories only plugins with the marker file are loaded (see find_external_plugins).
+        Without ``builtin_dir``, every directory is treated like the built-in one.
         Uses two-phase registration to handle dependencies:
         1. Load all plugins
         2. Register in dependency order
@@ -85,22 +88,20 @@ class PluginRegistry:
                 logger.warning(f"Plugin path is not a directory: {plugin_dir}")
                 continue
 
-            # Iterate through subdirectories (each is a potential plugin)
-            for plugin_path in sorted(plugin_dir.iterdir()):
-                if not plugin_path.is_dir():
-                    continue
+            # Built-in plugins: every subdirectory with a plugin.py. External plugins
+            # additionally need the marker file and may be nested a few levels deep.
+            is_external = builtin_dir is not None and plugin_dir != builtin_dir
+            if is_external:
+                candidates = find_external_plugins(plugin_dir)
+            else:
+                candidates = [p for p in sorted(plugin_dir.iterdir()) if (p / "plugin.py").is_file()]
 
-                plugin_file = plugin_path / "plugin.py"
-                if not plugin_file.exists():
-                    continue
-
-                record = self._load_plugin(plugin_path, plugin_file)
-                record.external = builtin_dir is not None and plugin_dir != builtin_dir
+            for plugin_path in candidates:
+                record = self._load_plugin(plugin_path, plugin_path / "plugin.py")
+                record.external = is_external
+                self._records.setdefault(record.id, record)
                 if record.load_status == "ok" and record.plugin is not None:
-                    self._records.setdefault(record.id, record)
                     pending_plugins.append(record.plugin)
-                else:
-                    self._records.setdefault(record.id, record)
 
         # Second pass: register with dependency resolution
         self._register_with_dependencies(pending_plugins)
@@ -169,8 +170,9 @@ class PluginRegistry:
 
             return PluginRecord(id=plugin_id, metadata=metadata, plugin=plugin_instance, directory=plugin_path)
 
-        except Exception as e:
-            logger.error(f"Error loading plugin from {plugin_file}: {e}")
+        except (Exception, SystemExit) as e:
+            # SystemExit too: a stray script calling sys.exit() must not stop the server
+            logger.error(f"Error loading plugin from {plugin_file}: {e!r}")
             return self._failed_record(plugin_path, f"{type(e).__name__}: {e}")
 
     def _register_plugin(self, plugin: Plugin) -> None:

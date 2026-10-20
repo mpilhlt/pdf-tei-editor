@@ -136,7 +136,7 @@ class PluginManager:
         try:
             # Import as part of the plugin's package so relative imports work
             module = import_plugin_module(plugin_dir, "routes")
-        except Exception as e:
+        except (Exception, SystemExit) as e:
             logger.error(f"Error loading routes.py for plugin {plugin_id}: {e}", exc_info=True)
             return
 
