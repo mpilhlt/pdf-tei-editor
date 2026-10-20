@@ -8,7 +8,7 @@ listed in the FASTAPI_PLUGIN_PATHS environment variable (separated by
 under the synthetic namespace ``pte_external_plugins.<dir>``, so that they can
 consist of several modules using relative imports (``from .extractor import ...``).
 
-An external plugin is a directory containing both ``plugin.py`` and the marker
+An external plugin is a directory containing both ``plugin.py`` and the manifest
 file ``pte-plugin.json``. The directories in FASTAPI_PLUGIN_PATHS are searched
 a few levels deep for such directories, so FASTAPI_PLUGIN_PATHS can point to a
 folder of repositories without importing unrelated ``plugin.py`` files.
@@ -23,10 +23,10 @@ import types
 from pathlib import Path
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.plugins.plugin_manifest import MANIFEST_FILE
 
 PLUGIN_PATHS_ENV_VAR = "FASTAPI_PLUGIN_PATHS"
 EXTERNAL_NAMESPACE = "pte_external_plugins"
-PLUGIN_MARKER_FILE = "pte-plugin.json"
 EXTERNAL_SEARCH_DEPTH = 3
 SKIPPED_DIR_NAMES = frozenset({"node_modules", "__pycache__", "site-packages", "venv", "env"})
 
@@ -50,7 +50,7 @@ def get_external_plugin_dirs() -> list[Path]:
 
 def find_external_plugins(base: Path, max_depth: int = EXTERNAL_SEARCH_DEPTH) -> list[Path]:
     """
-    Find external plugin directories (with ``plugin.py`` and the marker file) below a directory.
+    Find external plugin directories (with ``plugin.py`` and the manifest file) below a directory.
 
     ``base`` itself and its subdirectories down to ``max_depth`` levels are searched.
     Hidden directories (``.git``, ``.venv``, ...), :data:`SKIPPED_DIR_NAMES` and
@@ -66,7 +66,7 @@ def find_external_plugins(base: Path, max_depth: int = EXTERNAL_SEARCH_DEPTH) ->
     found: list[Path] = []
 
     def visit(directory: Path, depth: int) -> None:
-        if (directory / PLUGIN_MARKER_FILE).is_file() and (directory / "plugin.py").is_file():
+        if (directory / MANIFEST_FILE).is_file() and (directory / "plugin.py").is_file():
             found.append(directory)
             return
         if depth >= max_depth:

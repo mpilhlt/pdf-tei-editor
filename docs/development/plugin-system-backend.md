@@ -14,7 +14,7 @@ Technical architecture documentation for **backend plugins** in the PDF-TEI Edit
 Backend plugins are Python modules discovered at runtime from:
 
 - `fastapi_app/plugins/<plugin_id>/`
-- Paths in `FASTAPI_PLUGIN_PATHS` environment variable, separated by `os.pathsep`; only directories with a `pte-plugin.json` marker, which can declare the plugin version and the compatible editor versions, are loaded (see [External Plugins](../code-assistant/backend-plugins.md#external-plugins))
+- Paths in `FASTAPI_PLUGIN_PATHS` environment variable, separated by `os.pathsep`; only directories with a `pte-plugin.json` manifest, which can declare the plugin version and the compatible editor versions, are loaded (see [External Plugins](../code-assistant/backend-plugins.md#external-plugins))
 
 Each plugin:
 

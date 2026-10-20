@@ -60,12 +60,12 @@ async def hello() -> dict[str, str]:
 '''
 
 
-def write_plugin(base_dir: Path, dir_name: str, plugin_id: str, greeting: str, marker: bool = True) -> Path:
+def write_plugin(base_dir: Path, dir_name: str, plugin_id: str, greeting: str, manifest: bool = True) -> Path:
     """Write a multi-module external plugin with a route and a static file."""
     plugin_dir = base_dir / dir_name
     (plugin_dir / "static").mkdir(parents=True)
-    if marker:
-        (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text("{}")
+    if manifest:
+        (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text("{}")
     (plugin_dir / "__init__.py").write_text("")
     (plugin_dir / "helper.py").write_text(f"GREETING = {greeting!r}\n")
     cls = "".join(part.capitalize() for part in dir_name.split("_")) + "Plugin"
@@ -187,7 +187,7 @@ class TestExternalPluginDiscovery(unittest.TestCase):
         manager.registry.discover_plugins(list(dirs), builtin_dir=get_settings().plugins_code_dir)
         return manager
 
-    def test_only_marked_plugins_are_loaded_from_a_folder_of_repositories(self):
+    def test_only_plugins_with_a_manifest_are_loaded_from_a_folder_of_repositories(self):
         repos = self.tmp / "repos"
         # A plugin repository with its plugins one level down, as in pte-edition-plugin
         write_plugin(repos / "edition-repo" / "plugins", "nested", "ext-nested", "nested")
@@ -195,8 +195,8 @@ class TestExternalPluginDiscovery(unittest.TestCase):
         write_plugin(repos, "direct", "ext-direct", "direct")
         # Unrelated code with a plugin.py, which must not be imported
         self._unrelated(repos / "other-repo", "import sys; sys.exit(1)")
-        write_plugin(repos / "other-repo", "unmarked", "ext-unmarked", "unmarked", marker=False)
-        # Marked plugins in skipped and too deeply nested directories
+        write_plugin(repos / "other-repo", "no_manifest", "ext-no-manifest", "no manifest", manifest=False)
+        # Plugins with a manifest in skipped and too deeply nested directories
         write_plugin(repos / "app" / "node_modules", "pkg", "ext-node-modules", "skipped")
         write_plugin(repos / ".git", "hooks", "ext-hidden", "skipped")
         write_plugin(repos / "a" / "b" / "c", "deep", "ext-deep", "too deep")
@@ -210,7 +210,7 @@ class TestExternalPluginDiscovery(unittest.TestCase):
             record = manager.registry.get_record(plugin_id)
             assert record is not None, plugin_id
             self.assertEqual(record.load_status, "ok", record.error)
-        for plugin_id in ["ext-unmarked", "ext-node-modules", "ext-hidden", "ext-deep"]:
+        for plugin_id in ["ext-no-manifest", "ext-node-modules", "ext-hidden", "ext-deep"]:
             self.assertIsNone(manager.registry.get_record(plugin_id), plugin_id)
 
     def test_listed_directory_can_be_a_plugin_itself(self):
@@ -257,9 +257,9 @@ class TestPluginManifest(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def _plugin(self, dir_name: str, manifest: str | None) -> Path:
-        plugin_dir = write_plugin(self.tmp / "plugins", dir_name, dir_name.replace("_", "-"), "hello", marker=False)
+        plugin_dir = write_plugin(self.tmp / "plugins", dir_name, dir_name.replace("_", "-"), "hello", manifest=False)
         if manifest is not None:
-            (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text(manifest)
+            (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text(manifest)
         (plugin_dir / "helper.py").write_text(f"open({str(self.executed)!r}, 'a').write('x')\nGREETING = 'hello'\n")
         return plugin_dir
 
@@ -271,9 +271,9 @@ class TestPluginManifest(unittest.TestCase):
     def test_read_manifest(self):
         plugin_dir = self._plugin("p", '{"version": "1.2.0", "engines": {"pte": ">=0.75.0 <1.0.0"}}')
         self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest("1.2.0", ">=0.75.0 <1.0.0"))
-        (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text("")
+        (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text("")
         self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest())
-        (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).unlink()
+        (plugin_dir / plugin_manifest.MANIFEST_FILE).unlink()
         self.assertIsNone(plugin_manifest.read_manifest(plugin_dir))
 
     def test_invalid_manifests_are_rejected(self):
@@ -281,7 +281,7 @@ class TestPluginManifest(unittest.TestCase):
         for bad in ("{not json", "[]", '{"version": 1}', '{"version": "1.2"}', '{"engines": []}',
                     '{"engines": {"pte": 5}}', '{"engines": {"pte": ">=foo"}}'):
             with self.subTest(bad=bad):
-                (plugin_dir / plugin_paths.PLUGIN_MARKER_FILE).write_text(bad)
+                (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text(bad)
                 with self.assertRaises(plugin_manifest.ManifestError):
                     plugin_manifest.read_manifest(plugin_dir)
 

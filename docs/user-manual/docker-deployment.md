@@ -160,7 +160,7 @@ docker run ... \
   cboulanger/pdf-tei-editor:latest
 ```
 
-Every directory below `/opt/pte-plugins` (up to three levels deep) that contains a `plugin.py` and a `pte-plugin.json` marker file is loaded as one plugin and shows up as "external" in the Plugin Manager. External plugins can only use Python packages that are installed in the image.
+Every directory below `/opt/pte-plugins` (up to three levels deep) that contains a `plugin.py` and a `pte-plugin.json` manifest is loaded as one plugin and shows up as "external" in the Plugin Manager. External plugins can only use Python packages that are installed in the image.
 
 ## Data Persistence
 

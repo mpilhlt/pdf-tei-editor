@@ -90,7 +90,7 @@ class PluginRegistry:
 
         Each plugin directory should contain a plugin.py file with a Plugin subclass.
         Built-in plugins are the direct subdirectories of ``builtin_dir``; in the other
-        directories only plugins with the marker file are loaded (see find_external_plugins).
+        directories only plugins with a manifest (pte-plugin.json) are loaded (see find_external_plugins).
         Without ``builtin_dir``, every directory is treated like the built-in one.
         Uses two-phase registration to handle dependencies:
         1. Load all plugins
@@ -114,7 +114,7 @@ class PluginRegistry:
                 continue
 
             # Built-in plugins: every subdirectory with a plugin.py. External plugins
-            # additionally need the marker file and may be nested a few levels deep.
+            # additionally need the manifest file and may be nested a few levels deep.
             is_external = builtin_dir is not None and plugin_dir != builtin_dir
             if is_external:
                 candidates = find_external_plugins(plugin_dir)
