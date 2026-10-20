@@ -56,6 +56,7 @@
  * @property {boolean=} bareAllowed - Whether clicking the chip body (as opposed to only the dropdown) inserts the bare tag with no attributes
  * @property {string=} description - Tooltip text for the chip itself
  * @property {Array<string>=} childTags - Tag names that may be nested inside this element rather than splitting it
+ * @property {boolean=} empty - Element without content (e.g. gap, pb): shown as a clickable badge for its attributes, but not offered in the palette for wrapping text
  */
 
 /**

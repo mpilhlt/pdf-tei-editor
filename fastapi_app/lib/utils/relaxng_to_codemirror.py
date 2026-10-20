@@ -58,6 +58,7 @@ class TagDefinition(TypedDict):
     variants: List[TagVariant]
     bareAllowed: bool
     childCardinality: Dict[str, ChildCardinality]
+    textAllowed: bool
 
 
 class RelaxNGParser:
@@ -220,6 +221,7 @@ class RelaxNGParser:
             tree = ET.parse(file_path)
             root = tree.getroot()
             self.root = root  # Retained for extract_tag_definitions()
+            self._normalize_mixed(root)
 
             # Extract namespace prefixes
             self._extract_namespaces(root)
@@ -238,6 +240,18 @@ class RelaxNGParser:
         except FileNotFoundError:
             raise FileNotFoundError(f"RelaxNG file not found: {file_path}")
     
+    @staticmethod
+    def _normalize_mixed(root: ET.Element) -> None:
+        """
+        Rewrite every `<mixed>p</mixed>` as `<interleave><text/>p</interleave>`,
+        its definition in the RELAX NG specification, so that the traversals
+        below, which only descend into choice/group/optional/zeroOrMore/
+        oneOrMore/interleave, also see the child elements of mixed content.
+        """
+        for mixed in root.iter(f'{RNG_NS}mixed'):
+            mixed.tag = f'{RNG_NS}interleave'
+            mixed.insert(0, ET.Element(f'{RNG_NS}text'))
+
     def _extract_namespaces(self, root: ET.Element) -> None:
         """Extract namespace prefixes from the root element."""
         for key, value in root.attrib.items():
@@ -826,6 +840,7 @@ class RelaxNGParser:
             'variants': [{'attrs': dict[str, str], 'description': str | None}],
             'bareAllowed': bool,
             'childCardinality': {child_tag_name: {'required': bool, 'repeatable': bool}},
+            'textAllowed': bool,
         }}`. A `root_tag` not found as an `<element>` anywhere in the
         schema yields an empty dict. An attribute's `required` is `True`
         iff it is reachable from the element without passing through an
@@ -870,10 +885,40 @@ class RelaxNGParser:
                 'variants': variants,
                 'bareAllowed': bare_allowed,
                 'childCardinality': self._extract_child_cardinality(element),
+                'textAllowed': self._allows_text(element),
             }
             self._tag_definition_cache[tag_name] = tag_definition
             result[tag_name] = tag_definition
         return result
+
+    def _allows_text(self, container: ET.Element, visited: Optional[Set[str]] = None) -> bool:
+        """
+        True if the content model of `container` (an `<element>` or a
+        pattern inside one) allows character data: a `<text/>`, `<data>`,
+        `<value>` or `<list>` reachable without entering an `<attribute>`
+        (attribute values are not content) or a nested `<element>` (its
+        content belongs to the child). `<mixed>` counts as well, since
+        `parse_file()` rewrites it to an `<interleave>` starting with
+        `<text/>`.
+        """
+        if visited is None:
+            visited = set()
+        for child in container:
+            tag = child.tag
+            if tag in (f'{RNG_NS}text', f'{RNG_NS}data', f'{RNG_NS}value', f'{RNG_NS}list'):
+                return True
+            if tag in (f'{RNG_NS}attribute', f'{RNG_NS}element'):
+                continue
+            if tag == f'{RNG_NS}ref':
+                ref_name = child.get('name')
+                if ref_name and ref_name in self.defined_patterns and ref_name not in visited:
+                    visited.add(ref_name)
+                    if self._allows_text(self.defined_patterns[ref_name], visited):
+                        return True
+                continue
+            if self._allows_text(child, visited):
+                return True
+        return False
 
     def _build_autocomplete_map(self) -> Dict[str, Dict]:
         """Build the final autocomplete map."""

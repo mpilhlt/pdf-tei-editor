@@ -81,6 +81,10 @@ class AnnotationTagDef(BaseModel):
         default_factory=list,
         description="Tag names that may be nested inside this element rather than splitting it"
     )
+    empty: bool = Field(
+        False,
+        description="Element without content (e.g. gap, pb): shown as a clickable badge for its attributes, but not offered in the palette for wrapping text"
+    )
 
 
 class ExtractorInfo(BaseModel):

@@ -164,6 +164,10 @@ class TestExtractTagDefinitions(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
+    def test_text_not_allowed_through_attribute_values_or_child_elements(self):
+        # <root> only holds child elements; their text and attribute values are not root's content
+        self.assertFalse(self.parser.extract_tag_definitions("root", set())["root"]["textAllowed"])
+
     def test_root_and_children_included(self):
         result = self.parser.extract_tag_definitions("root", set())
         self.assertIn("root", result)
@@ -460,6 +464,62 @@ class TestExtractTagDefinitionsRealSchema(unittest.TestCase):
         )
         variant_attrs = [v["attrs"] for v in milestone["variants"]]
         self.assertIn({"unit": "page"}, variant_attrs)
+
+
+MIXED_RNG = """<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="p"/></start>
+  <define name="p">
+    <element name="p">
+      <ref name="macro.inline"/>
+    </element>
+  </define>
+  <define name="macro.inline">
+    <mixed>
+      <zeroOrMore>
+        <choice>
+          <ref name="hi"/>
+          <element name="unclear"><text/></element>
+        </choice>
+      </zeroOrMore>
+    </mixed>
+  </define>
+  <define name="hi">
+    <element name="hi">
+      <optional><attribute name="rend"/></optional>
+      <text/>
+    </element>
+  </define>
+</grammar>
+"""
+
+
+class TestMixedContent(unittest.TestCase):
+    """`<mixed>` content models expose their child elements like `<interleave>` does."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.schema_path = Path(self.tmpdir.name) / "mixed.rng"
+        self.schema_path.write_text(MIXED_RNG, encoding="utf-8")
+        self.parser = RelaxNGParser(include_global_attrs=False)
+        self.autocomplete = self.parser.parse_file(str(self.schema_path))
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_tag_definitions_include_children_of_mixed_content(self):
+        result = self.parser.extract_tag_definitions("p", set())
+        self.assertEqual(sorted(result), ["hi", "p", "unclear"])
+        self.assertEqual(sorted(result["p"]["children"]), ["hi", "unclear"])
+
+    def test_text_allowed(self):
+        result = self.parser.extract_tag_definitions("p", set())
+        self.assertTrue(result["p"]["textAllowed"], "mixed content allows text")
+        self.assertTrue(result["hi"]["textAllowed"])
+        self.assertTrue(result["unclear"]["textAllowed"])
+
+    def test_autocomplete_map_includes_children_of_mixed_content(self):
+        self.assertEqual(sorted(self.autocomplete["p"]["children"]), ["hi", "unclear"])
 
 
 if __name__ == "__main__":

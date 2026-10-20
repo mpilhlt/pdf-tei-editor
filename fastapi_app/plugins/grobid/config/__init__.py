@@ -18,7 +18,6 @@ from fastapi_app.lib.core.schema_validator import (
 )
 from fastapi_app.plugins.grobid.config.annotation_guides import ANNOTATION_GUIDES, AnnotationGuide
 from fastapi_app.plugins.grobid.config.annotation_tags_generator import (
-    AnnotationTag,
     AnnotationTagsMap,
     generate_annotation_tags,
 )
@@ -266,8 +265,6 @@ def get_annotation_guides() -> list[AnnotationGuide]:
     return ANNOTATION_GUIDES.copy()
 
 
-_ANNOTATION_TAGS_CACHE: dict[str, tuple[float | None, list[AnnotationTag]]] = {}
-
 # Seconds to wait before retrying a failed schema download for chip generation,
 # so an unreachable schema host doesn't add a network timeout to every
 # extractor-list request.
@@ -306,21 +303,13 @@ def _ensure_schema_cached(variant_id: str) -> Path:
 def get_annotation_tags() -> AnnotationTagsMap:
     """
     Return annotation tag definitions keyed by variant_id, generated from
-    each variant's cached RelaxNG schema (see annotation_tags_generator.py).
+    each variant's cached RelaxNG schema (see fastapi_app/lib/utils/annotation_tags.py).
     A schema that isn't cached yet is downloaded first (see
     _ensure_schema_cached()). A variant's chip list is regenerated only when
     its cached schema file's mtime changes since the last build; a variant
     whose schema can't be obtained gets an empty list rather than an error.
     """
-    result: AnnotationTagsMap = {}
-    for variant_id in ANNOTATION_TAG_SCOPE:
-        schema_cache_file = _ensure_schema_cached(variant_id)
-        mtime = schema_cache_file.stat().st_mtime if schema_cache_file.is_file() else None
-        cached = _ANNOTATION_TAGS_CACHE.get(variant_id)
-        if cached is not None and cached[0] == mtime:
-            result[variant_id] = copy.deepcopy(cached[1])
-            continue
-        tags = generate_annotation_tags(variant_id, schema_cache_file)
-        _ANNOTATION_TAGS_CACHE[variant_id] = (mtime, tags)
-        result[variant_id] = copy.deepcopy(tags)
-    return result
+    return {
+        variant_id: generate_annotation_tags(variant_id, _ensure_schema_cached(variant_id))
+        for variant_id in ANNOTATION_TAG_SCOPE
+    }

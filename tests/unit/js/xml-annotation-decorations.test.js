@@ -124,3 +124,71 @@ describe('createAnnotationField', () => {
     assert.ok(decos.size > 0, 'should produce at least one decoration for <bibl>');
   });
 });
+
+describe('createAnnotationField with empty elements', () => {
+  const tagDefs = [
+    { tag: 'gap', label: 'gap', color: '#f38ba8', attributes: [], empty: true }
+  ];
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
+
+  function makeView(doc) {
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    return new EditorView({
+      state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+      parent
+    });
+  }
+
+  it('replaces a self-closing annotation element with an outlined badge', () => {
+    const doc = '<root>a <gap reason="illegible"/> b</root>';
+    const view = makeView(doc);
+    const { decos, atomic } = view.state.field(annotationField);
+    const from = doc.indexOf('<gap');
+    const ranges = [];
+    decos.between(0, doc.length, (f, t, value) => { ranges.push({ f, t, value }); });
+    const badge = ranges.find(r => r.f === from);
+    assert.ok(badge, 'a decoration starts at <gap/>');
+    assert.strictEqual(badge.t, doc.indexOf('/>') + 2, 'it covers the whole self-closing tag');
+    const dom = badge.value.spec.widget.toDOM();
+    assert.ok(dom.classList.contains('ann-badge--empty'));
+    assert.strictEqual(dom.dataset.tag, 'gap');
+    let atomicAtGap = false;
+    atomic.between(from, from + 1, () => { atomicAtGap = true; });
+    assert.ok(!atomicAtGap, 'the badge replaces the tag instead of an atomic marker');
+  });
+
+  it('keeps self-closing elements without a tag definition as atomic tags', () => {
+    const doc = '<root>a <lb/> b</root>';
+    const view = makeView(doc);
+    const { decos, atomic } = view.state.field(annotationField);
+    assert.strictEqual(decos.size, 0);
+    assert.strictEqual(atomic.size, 3);
+  });
+});
+
+describe('createAnnotationField with nested badges', () => {
+  const tagDefs = [
+    { tag: 'p', label: 'p', color: '#94e2d5', attributes: [] },
+    { tag: 'unclear', label: 'unclear', color: '#f38ba8', attributes: [] },
+    { tag: 'lb', label: 'lb', color: '#89b4fa', attributes: [], empty: true },
+  ];
+  const extensions = createAnnotationField(tagDefs);
+
+  for (const doc of [
+    '<div><p><lb/>first line<lb/>second</p></div>',
+    '<div><p><unclear>word</unclear> rest</p></div>',
+    '<div><p>text<lb/></p></div>',
+    '<div><p><lb/></p></div>',
+  ]) {
+    it(`builds decorations without a range ordering error for ${doc}`, () => {
+      const parent = document.getElementById('editor');
+      parent.innerHTML = '';
+      assert.doesNotThrow(() => new EditorView({
+        state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+        parent
+      }));
+    });
+  }
+});
