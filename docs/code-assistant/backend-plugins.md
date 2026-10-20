@@ -77,6 +77,7 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - Run the plugin's tests in the Python environment of an editor checkout (`uv run --project <editor checkout> python -m pytest`), with a `conftest.py` that adds the `plugins/` directory to `sys.path`. A test can load the plugin through `FASTAPI_PLUGIN_PATHS` like the application does.
 - In CI, check out the editor, install its environment and run the same command, pinned to a branch or tag of the editor.
 - Everything the plugin ships (schema, guidelines, prompts) stays inside the plugin directory; serve files through `static/` and reference them by their `/api/plugins/{plugin_id}/static/` URL.
+- A schema the plugin's documents reference by a public URL (`<?xml-model href=...?>`) is shipped in `static/` as well and registered in `initialize()` with `register_bundled_schema(url, path)` from `fastapi_app.lib.core.schema_validator`. Validation and autocomplete then read the bundled file instead of downloading the URL, so they work offline and with the schema version of the installed plugin.
 
 ## User API Keys
 

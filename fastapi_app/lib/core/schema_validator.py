@@ -10,6 +10,7 @@ Ported from server/api/validate.py for FastAPI migration.
 import os
 import re
 import json
+import shutil
 import subprocess
 import tempfile
 import logging
@@ -102,6 +103,35 @@ def resolve_schema_location(schema_location: str) -> str:
     resolved = new_prefix + schema_location[len(best_match):]
     logger.info(f"Redirecting schema location {schema_location} -> {resolved}")
     return resolved
+
+
+# Local copies of schemas that a plugin ships with its code, keyed by the schema
+# URL that documents reference; see register_bundled_schema().
+_BUNDLED_SCHEMAS: Dict[str, Path] = {}
+
+
+def register_bundled_schema(schema_location: str, local_path: Path) -> None:
+    """
+    Register a local copy of a schema that a plugin ships with its code.
+
+    Documents reference a schema by its public URL (in `<?xml-model?>` or
+    `xsi:schemaLocation`), but the plugin that produces them usually bundles
+    the same file. Once registered, every fetch of `schema_location` (validation,
+    autocomplete data, schema kind detection) copies `local_path` into the
+    schema cache instead of downloading it. Validation then works offline and
+    before the public URL is reachable, and uses the schema version of the
+    installed plugin. Call it from the plugin's `initialize()`.
+
+    Args:
+        schema_location: The exact schema URL that documents reference
+        local_path: Path of the bundled schema file
+    """
+    _BUNDLED_SCHEMAS[schema_location] = Path(local_path)
+
+
+def unregister_bundled_schema(schema_location: str) -> None:
+    """Remove a previously registered bundled schema (e.g. on plugin cleanup)."""
+    _BUNDLED_SCHEMAS.pop(schema_location, None)
 
 
 class ValidationTimeoutError(Exception):
@@ -354,9 +384,18 @@ def download_schema_file(
     Raises:
         ValidationError: If download fails
     """
-    logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
     schema_cache_dir.mkdir(parents=True, exist_ok=True)
 
+    bundled_path = _BUNDLED_SCHEMAS.get(schema_location)
+    if bundled_path is not None:
+        logger.debug(f"Using bundled schema {bundled_path} for {schema_location}")
+        try:
+            shutil.copyfile(bundled_path, schema_cache_file)
+        except OSError as e:
+            raise ValidationError(f"Failed to copy bundled schema {bundled_path} for {schema_location}: {e}")
+        return
+
+    logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
     try:
         with requests.get(schema_location, stream=True, timeout=30) as r:
             r.raise_for_status()

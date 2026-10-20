@@ -15,8 +15,10 @@ from fastapi_app.lib.core.schema_validator import (
     SCHEMA_CACHE_TTL_SECONDS,
     extract_schema_locations,
     is_schema_cache_stale,
+    register_bundled_schema,
     register_schema_redirect,
     resolve_schema_location,
+    unregister_bundled_schema,
     unregister_schema_redirect,
     validate,
 )
@@ -176,6 +178,41 @@ class TestValidateAppliesSchemaRedirect(unittest.TestCase):
         # Cache already fresh under the new location, so no download is needed -
         # this only succeeds if the redirect was applied before the cache lookup.
         mock_download.assert_not_called()
+
+
+class TestBundledSchema(unittest.TestCase):
+    """A registered bundled schema is copied into the cache instead of being downloaded."""
+
+    LOCATION = "https://example.com/schema/tei.rng"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.cache_root = Path(self.temp_dir.name) / "cache"
+        self.bundled = Path(self.temp_dir.name) / "bundled.rng"
+        self.bundled.write_text(RELAXNG_SCHEMA)
+        register_bundled_schema(self.LOCATION, self.bundled)
+        self.addCleanup(unregister_bundled_schema, self.LOCATION)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    @patch("fastapi_app.lib.core.schema_validator.requests.get")
+    def test_validates_against_bundled_schema_without_download(self, mock_get):
+        valid = XML_WITH_RELAXNG_MODEL.replace(' xmlns="http://www.tei-c.org/ns/1.0"', "")
+        self.assertEqual(validate(valid, cache_root=self.cache_root), [])
+        invalid = valid.replace("<root>test</root>", "<other/>")
+        self.assertTrue(validate(invalid, cache_root=self.cache_root))
+        mock_get.assert_not_called()
+
+    @patch("fastapi_app.lib.core.schema_validator.requests.get")
+    def test_unregistered_location_is_downloaded(self, mock_get):
+        unregister_bundled_schema(self.LOCATION)
+        mock_get.side_effect = RuntimeError("network")
+        errors = None
+        with self.assertRaises(Exception):
+            errors = validate(XML_WITH_RELAXNG_MODEL, cache_root=self.cache_root)
+        self.assertIsNone(errors)
+        mock_get.assert_called_once()
 
 
 class TestExtractSchemaLocationsSchemaRef(unittest.TestCase):
