@@ -429,7 +429,9 @@ class ServicesPlugin extends Plugin {
    * Given a node in the XML, locate and highlight the region of the PDF
    * it was extracted from, using fuzzy sequence matching on the node's
    * ordered text content. Nodes outside `/TEI/text` (e.g. in the teiHeader)
-   * are ignored, since they have no counterpart in the PDF.
+   * are ignored, since they have no counterpart in the PDF. Nodes without text
+   * (e.g. `<pb/>`) and nodes whose text is not found are passed to the
+   * `pdfSearch.fallback` handlers.
    * @param {Element} node
    */
   async searchNodeContentsInPdf(node) {
@@ -438,6 +440,11 @@ class ServicesPlugin extends Plugin {
     }
     const queryText = getNodeText(node).join(' ')
     if (!queryText.trim()) {
+      // Empty elements such as <pb/> have no text to search for, but a
+      // pdfSearch.fallback handler may still know their page
+      if (await this.#searchFallback(node)) {
+        this.#logger.debug('PDF position of an element without text found by a pdfSearch.fallback handler')
+      }
       return
     }
     // If the node originates from a footnote, prepend the printed footnote
