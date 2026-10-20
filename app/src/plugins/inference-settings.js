@@ -55,11 +55,12 @@ const SESSION_MODEL_KEY = 'inference-settings.sessionModel';
 export class InferenceSettingsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'inference-settings', deps: ['client', 'tools'] });
+    super(context, { name: 'inference-settings', deps: ['client', 'tools', 'api-keys'] });
   }
 
   get #client() { return this.getDependency('client') }
   get #tools() { return this.getDependency('tools') }
+  get #apiKeys() { return this.getDependency('api-keys') }
 
   /**
    * Last successful GET /api/v1/llm/providers result. Empty until the
@@ -286,10 +287,16 @@ export class InferenceSettingsPlugin extends Plugin {
     this._submenu.innerHTML = '';
     const current = this.getDefaultModel();
     for (const provider of providers) {
-      if (provider.models.length === 0) continue;
+      if (provider.models.length === 0 && !provider.key_required) continue;
       const label = document.createElement('small');
       label.textContent = provider.label;
       this._submenu.appendChild(label);
+      if (provider.key_required && provider.secret_service) {
+        const item = document.createElement('sl-menu-item');
+        item.textContent = 'Add your API key…';
+        item.dataset.secretService = provider.secret_service;
+        this._submenu.appendChild(item);
+      }
       for (const model of provider.models) {
         this._submenu.appendChild(this._buildModelItem(provider, model, current));
       }
@@ -342,7 +349,13 @@ export class InferenceSettingsPlugin extends Plugin {
    */
   async _onSelect(event) {
     const item = /** @type {HTMLElement} */ (event.detail.item);
-    const { providerId, modelId } = item.dataset;
+    const { providerId, modelId, secretService } = item.dataset;
+    if (secretService) {
+      const provider = this._providers.find(p => p.secret_service === secretService);
+      const saved = await this.#apiKeys.show(`${provider?.label ?? secretService} needs your API key to list its models.`, secretService);
+      if (saved) await this._refresh();
+      return;
+    }
     if (!providerId || !modelId) return;
     const provider = this._providers.find(p => p.id === providerId);
     const model = provider?.models.find(m => m.id === modelId);

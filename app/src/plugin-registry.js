@@ -9,6 +9,7 @@
 // Class-based plugin re-exports
 export { default as AccessControlPlugin } from './plugins/access-control.js';
 export { default as AnnotationGuidePlugin } from './plugins/annotation-guide.js';
+export { default as ApiKeysPlugin } from './plugins/api-keys.js';
 export { default as AuthenticationPlugin } from './plugins/authentication.js';
 export { default as BackendPluginsPlugin } from './plugins/backend-plugins.js';
 export { default as ClientPlugin } from './plugins/client.js';
@@ -52,6 +53,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  * @typedef {{
  *   "access-control": import('./plugins/access-control.js').default,
  *   "annotation-guide": import('./plugins/annotation-guide.js').default,
+ *   "api-keys": import('./plugins/api-keys.js').default,
  *   authentication: import('./plugins/authentication.js').default,
  *   "backend-plugins": import('./plugins/backend-plugins.js').default,
  *   client: import('./plugins/client.js').default,

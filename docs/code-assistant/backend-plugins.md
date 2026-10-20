@@ -14,7 +14,7 @@ Practical guide for creating **backend plugins** in the PDF-TEI Editor.
 Backend plugins are Python modules discovered at runtime from:
 
 - `fastapi_app/plugins/<plugin_id>/`
-- Paths in `FASTAPI_PLUGIN_PATHS` environment variable (colon-separated)
+- Paths in `FASTAPI_PLUGIN_PATHS` environment variable (see [External Plugins](#external-plugins))
 
 Each plugin:
 
@@ -22,6 +22,79 @@ Each plugin:
 - Defines metadata (id, name, description, category, version, required_roles)
 - Implements endpoints as async methods
 - Has access to `PluginContext` for app state and user info
+
+## External Plugins
+
+Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to one or more directories, separated by `:` (`;` on Windows). An external plugin is a directory with the same layout as a built-in plugin plus the manifest `pte-plugin.json` (see [Plugin manifest](#plugin-manifest); an empty file or `{}` is fine):
+
+```text
+/opt/my-plugins/            # FASTAPI_PLUGIN_PATHS=/opt/my-plugins
+├── my_extractor/
+│   ├── pte-plugin.json     # marks the directory as a plugin, declares version and compatibility
+│   ├── __init__.py
+│   ├── plugin.py
+│   ├── extractor.py        # imported from plugin.py as `from .extractor import ...`
+│   ├── routes.py
+│   ├── static/
+│   └── extensions/
+└── some-repo/
+    └── plugins/
+        └── another_plugin/ # found too: plugins may be nested up to three levels deep
+```
+
+- Only directories containing both `pte-plugin.json` and `plugin.py` are imported, so `FASTAPI_PLUGIN_PATHS` can point to a folder of checked-out repositories: other code, including unrelated `plugin.py` files, is never executed. A listed directory may also be a plugin itself. Hidden directories (`.git`, `.venv`), `node_modules`, `venv`, `env`, `site-packages`, `__pycache__`, symlinked directories and the subdirectories of a plugin are not searched (`find_external_plugins()` in `fastapi_app/lib/plugins/plugin_paths.py`).
+- A plugin whose import fails, including one that calls `sys.exit()`, is listed as failed in the Plugin Manager; the other plugins and the server keep running.
+
+- External plugins are imported as packages under the `pte_external_plugins` namespace (e.g. `pte_external_plugins.my_extractor`), so they can consist of several modules using relative imports. Import application code with absolute imports (`from fastapi_app.lib.extraction import BaseExtractor`).
+- A directory name that also exists in `fastapi_app/plugins/` does not shadow or load the built-in plugin; plugin ids must still be unique.
+- `routes.py`, `static/` (served at `/api/plugins/{plugin_id}/static/`) and frontend extensions registered from `initialize()` work as for built-in plugins.
+- External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
+- The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
+
+### Plugin Manifest
+
+`pte-plugin.json` marks an external plugin directory and may declare the plugin version and the editor versions it works with:
+
+```json
+{
+  "version": "1.2.0",
+  "readme": "https://github.com/me/my-plugin#readme",
+  "engines": { "pte": ">=0.75.0 <1.0.0" }
+}
+```
+
+- `version`: semantic version of the plugin. The plugin manager shows it instead of the `version` in the plugin's `metadata`.
+- `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
+- `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
+- All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
+- The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
+
+### Developing an External Plugin in Its Own Repository
+
+[pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) is a complete example (extractor, schema, guidelines, tests). Its conventions:
+
+- Keep the plugin directories under `plugins/` in the repository, each with `plugin.py` and `pte-plugin.json`. Users clone the repository and set `FASTAPI_PLUGIN_PATHS=<clone>/plugins`, or mount it into the Docker container (see [Docker deployment](../user-manual/docker-deployment.md#external-plugins)).
+- Run the plugin's tests in the Python environment of an editor checkout (`uv run --project <editor checkout> python -m pytest`), with a `conftest.py` that adds the `plugins/` directory to `sys.path`. A test can load the plugin through `FASTAPI_PLUGIN_PATHS` like the application does.
+- In CI, check out the editor, install its environment and run the same command, pinned to a branch or tag of the editor.
+- Everything the plugin ships (schema, guidelines, prompts) stays inside the plugin directory; serve files through `static/` and reference them by their `/api/plugins/{plugin_id}/static/` URL.
+
+## User API Keys
+
+A plugin that calls a service billed to the user (instead of using a key configured by the administrator) reads the user's own key from the encrypted secret store in `fastapi_app/lib/secrets/` (SQLite `secrets.db`, Fernet; see [User API Keys](../user-manual/cli.md#user-api-keys) for the key management and the CLI):
+
+```python
+from fastapi_app.lib.secrets import register_secret_service, require_user_secret
+
+# in initialize(): tells the frontend how to ask for the key
+register_secret_service("anthropic", "Anthropic Claude", "Billed to your account.", "https://console.anthropic.com/settings/keys")
+
+# in extract(), on behalf of options["username"]; raises MissingSecretError if the user has no key yet
+api_key = require_user_secret(options.get("username"), "anthropic")
+```
+
+- `POST /api/v1/extract` turns `MissingSecretError` into HTTP 428 with `detail = {code: "secret_required", service, label, description, help_url}`. The frontend (`api-keys` plugin, `withKeyPrompt()`) then asks for the key, stores it through `PUT /api/v1/secrets/{service}` and repeats the request. Other routes can use the same pattern: raise `MissingSecretError` and wrap the frontend call in `getDependency('api-keys').withKeyPrompt(...)`.
+- The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
+- Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
 ## Creating a Plugin
 

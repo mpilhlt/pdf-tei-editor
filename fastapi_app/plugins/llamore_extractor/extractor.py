@@ -102,7 +102,7 @@ class LLamoreExtractor(BaseExtractor):
                 raise ValueError(NO_MODEL_MESSAGE)
             provider_id, model_id = default
         try:
-            provider = LLMProviderRegistry.get_instance().get_provider(provider_id)
+            provider = LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, options.get("username"))
         except KeyError as e:
             raise ValueError(f"LLM provider '{provider_id}' is not available. {NO_MODEL_MESSAGE}") from e
         username = options.get("username")

@@ -12,6 +12,7 @@ Scripts that ship in the production Docker image. Nothing here may depend on `sc
 | `batch-extract.js` | Batch extraction via the API |
 | `cli_storage_gc.py` | Storage garbage collection |
 | `cleanup-orphaned-xml.py` | Remove XML files without a PDF |
+| `user-secrets.py` | Store and retrieve users' encrypted API keys without printing them, see [User API Keys](../docs/user-manual/cli.md#user-api-keys) |
 | `migrations/` | One-off migrations to run on live instances, see its README |
 
 Build, development and deployment tooling lives in `scripts/`.
