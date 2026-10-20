@@ -1089,6 +1089,28 @@ async def initialize(self, context: PluginContext) -> None:
         registry.register_extension(extension_file, self.metadata["id"])
 ```
 
+
+### Fallback for Autosearch
+
+When the text of the selected XML node is not found in the PDF (typically because the PDF is a scan without text layer), the Autosearch switch of the PDF viewer asks the `pdfSearch.fallback` extension point for a page. A frontend extension implements it to supply its own heuristic:
+
+```javascript
+class MyExt extends window.FrontendExtensionPlugin {
+  static extensionPoints = ['pdfSearch.fallback'];
+
+  /**
+   * @param {Element} node - the selected XML node
+   * @param {{xml: string|null, pageCount: number}} info - the document id and the page count of the loaded PDF
+   * @returns {{page: number}|null} 1-based PDF page, or null if the handler does not apply to this document
+   */
+  ['pdfSearch.fallback'](node, { pageCount }) {
+    return { page: 3 }
+  }
+}
+```
+
+The first handler returning a valid page wins; the viewer scrolls to the top of that page. The pdf-tei-editor plugin [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) uses it to map the nearest preceding `<pb>` to a PDF page, taking the pages of the prepended form into account.
+
 ## Notes
 
 - **Directory naming**: Use underscores (e.g., `my_plugin`) not hyphens (e.g., `my-plugin`) in directory names to avoid Python import issues
