@@ -97,6 +97,19 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 - The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
+## Annotation Tags (Visual Mode)
+
+The XML editor offers its visual annotation mode for a variant only when an extractor declares chips for it in `get_info()` under `annotationTags[variant_id]`. Generate them from the variant's RelaxNG schema with `generate_annotation_tags()` instead of writing them by hand:
+
+```python
+from fastapi_app.lib.utils.annotation_tags import generate_annotation_tags
+
+# chips: <p> and every element allowed in it, plus the children of <choice>, without <lb>/<pb>
+"annotationTags": {VARIANT_ID: generate_annotation_tags(SCHEMA_PATH, "p", exclude={"lb", "pb"}, expand=["choice"])},
+```
+
+The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `fastapi_app/plugins/grobid/config/annotation_tags_scope.py`.
+
 ## Creating a Plugin
 
 ### Directory Structure
