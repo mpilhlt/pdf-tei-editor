@@ -58,13 +58,15 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 ```json
 {
   "version": "1.2.0",
+  "readme": "https://github.com/me/my-plugin#readme",
   "engines": { "pte": ">=0.75.0 <1.0.0" }
 }
 ```
 
 - `version`: semantic version of the plugin. The plugin manager shows it instead of the `version` in the plugin's `metadata`.
+- `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
 - `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
-- Both fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
+- All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
 - The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
 
 ### Developing an External Plugin in Its Own Repository

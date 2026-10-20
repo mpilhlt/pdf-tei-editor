@@ -3,10 +3,12 @@ The optional ``pte-plugin.json`` manifest of a plugin.
 
     {
       "version": "1.2.0",
+      "readme": "https://github.com/me/my-plugin#readme",
       "engines": { "pte": ">=0.75.0 <1.0.0" }
     }
 
 - ``version``: semantic version of the plugin itself, shown in the plugin manager
+- ``readme``: http(s) URL of the plugin's documentation, linked as "README" in the plugin manager
 - ``engines.pte``: npm-style semver range of the PDF-TEI-Editor versions the plugin works with
   (``>=0.75.0``, ``^0.75.0``, ``0.75.x``, ``>=0.75 <2`` ...); a plugin outside the range is not loaded
 
@@ -18,6 +20,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.utils.semver import SemverError, parse_version, satisfies, validate_range
@@ -37,6 +40,7 @@ class PluginManifest:
 
     version: str | None = None
     pte: str | None = None
+    readme: str | None = None
 
 
 def read_manifest(plugin_dir: Path) -> PluginManifest | None:
@@ -69,6 +73,13 @@ def read_manifest(plugin_dir: Path) -> PluginManifest | None:
         except SemverError as e:
             raise ManifestError(f"Invalid 'version': {e}") from e
 
+    readme = data.get("readme")
+    if readme is not None:
+        if not isinstance(readme, str):
+            raise ManifestError("'readme' must be a string")
+        if urlparse(readme).scheme not in ("http", "https") or not urlparse(readme).netloc:
+            raise ManifestError("'readme' must be an http(s) URL")
+
     pte = None
     engines = data.get("engines")
     if engines is not None:
@@ -82,7 +93,7 @@ def read_manifest(plugin_dir: Path) -> PluginManifest | None:
                 validate_range(pte)
             except SemverError as e:
                 raise ManifestError(f"Invalid 'engines.pte' range: {e}") from e
-    return PluginManifest(version=version, pte=pte)
+    return PluginManifest(version=version, pte=pte, readme=readme)
 
 
 _pte_version: str | None = None

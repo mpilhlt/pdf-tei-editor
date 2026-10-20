@@ -271,6 +271,8 @@ class TestPluginManifest(unittest.TestCase):
     def test_read_manifest(self):
         plugin_dir = self._plugin("p", '{"version": "1.2.0", "engines": {"pte": ">=0.75.0 <1.0.0"}}')
         self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest("1.2.0", ">=0.75.0 <1.0.0"))
+        (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text('{"readme": "https://example.org/docs"}')
+        self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest(readme="https://example.org/docs"))
         (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text("")
         self.assertEqual(plugin_manifest.read_manifest(plugin_dir), plugin_manifest.PluginManifest())
         (plugin_dir / plugin_manifest.MANIFEST_FILE).unlink()
@@ -279,14 +281,14 @@ class TestPluginManifest(unittest.TestCase):
     def test_invalid_manifests_are_rejected(self):
         plugin_dir = self._plugin("p", "{}")
         for bad in ("{not json", "[]", '{"version": 1}', '{"version": "1.2"}', '{"engines": []}',
-                    '{"engines": {"pte": 5}}', '{"engines": {"pte": ">=foo"}}'):
+                    '{"engines": {"pte": 5}}', '{"readme": 5}', '{"readme": "javascript:alert(1)"}', '{"readme": "docs/README.md"}', '{"engines": {"pte": ">=foo"}}'):
             with self.subTest(bad=bad):
                 (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text(bad)
                 with self.assertRaises(plugin_manifest.ManifestError):
                     plugin_manifest.read_manifest(plugin_dir)
 
     def test_compatible_plugin_loads_and_reports_manifest_version(self):
-        self._plugin("fits", '{"version": "2.1.0", "engines": {"pte": "^0.75.0"}}')
+        self._plugin("fits", '{"version": "2.1.0", "readme": "https://example.org/fits", "engines": {"pte": "^0.75.0"}}')
         manager = self._discover()
         record = manager.registry.get_record("fits")
         assert record is not None
@@ -294,6 +296,7 @@ class TestPluginManifest(unittest.TestCase):
         info = build_plugin_info(manager.registry, record)
         self.assertEqual(info["version"], "2.1.0")
         self.assertEqual(info["requires_pte"], "^0.75.0")
+        self.assertEqual(info["readme_url"], "https://example.org/fits")
 
     def test_incompatible_plugin_is_rejected_without_being_imported(self):
         self._plugin("too_new", '{"version": "1.0.0", "engines": {"pte": ">=0.80.0"}}')
