@@ -51,6 +51,37 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
 - The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
 
+### Installed Plugins (Python Packages)
+
+A plugin can also be a regular Python distribution installed into the application's environment (e.g. with `uv sync --extra ...`). It declares an entry point in the group `pte.plugins` that maps the plugin id to its package:
+
+```toml
+[project]
+name = "pte-plugin-grobid"
+dependencies = ["requests>=2.33"]
+
+[project.entry-points."pte.plugins"]
+grobid = "pte_plugin_grobid"
+```
+
+- The package directory is the plugin directory: it contains `plugin.py`, `pte-plugin.json` (required, as for external plugins), and optionally `routes.py`, `static/` and `extensions/` as package data.
+- Modules are imported under the real package name (`pte_plugin_grobid.plugin`), so plugins can import each other's packages; declare such dependencies both as a Python dependency and in `metadata["dependencies"]`.
+- The package is located with `importlib.util.find_spec()` without importing it (`get_installed_plugin_dirs()` in `plugin_paths.py`). Unlike directory plugins, an installed plugin declares its own Python dependencies.
+- The Plugin Manager lists installed plugins as "external".
+
+### Plugin API
+
+`fastapi_app/plugin_api.py` re-exports the core symbols plugins are supposed to use (plugin base classes, dependencies, registries, extension points such as `register_gc_handler()` and `register_schema_config()`). Within a major `PLUGIN_API_VERSION` they stay compatible; imports from other core modules keep working but may break with any core release. Plugins maintained outside the core repository should import from `fastapi_app.plugin_api` and declare `engines.pte-plugin-api` in their manifest.
+
+### Extension Points Instead of Core Couplings
+
+Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/test_core_plugin_independence.py` and the CI job that runs the core suites with `fastapi_app/plugins/` emptied). Plugins hook into core through:
+
+- `register_gc_handler(plugin_id, handler)` (`lib/core/gc_hooks.py`): reproducible plugin data deleted by `POST /api/v1/files/garbage_collect`; the response reports the counts in `plugin_items_deleted`.
+- Event bus events (`lib/sse/event_bus.py`): e.g. `file.lock_changed` (emitted after a lock is acquired or released, payload `stable_id`), `file.deleted`, `document.saved`.
+- `register_schema_config(url, timeout, reason)` (`lib/core/schema_validator.py`): a shorter validation timeout for complex schemas.
+- `ExtractorUnavailableError` (`lib/extraction`): raise it when an external dependency of an extractor is missing; the extraction router then falls back to the mock extractor if one is registered.
+
 ### Plugin Manifest
 
 `pte-plugin.json` marks an external plugin directory and may declare the plugin version and the editor versions it works with:
@@ -59,12 +90,13 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 {
   "version": "1.2.0",
   "readme": "https://github.com/me/my-plugin#readme",
-  "engines": { "pte": ">=0.75.0 <1.0.0" }
+  "engines": { "pte": ">=0.75.0 <1.0.0", "pte-plugin-api": "^1.0" }
 }
 ```
 
 - `version`: semantic version of the plugin. The plugin manager shows it instead of the `version` in the plugin's `metadata`.
 - `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
+- `engines.pte-plugin-api`: semver range of plugin API versions (`PLUGIN_API_VERSION`, see [Plugin API](#plugin-api)); a plugin outside the range is not loaded.
 - `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
 - All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
 - The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
@@ -304,7 +336,7 @@ def is_available(cls) -> bool:
 
 Administrators can enable and disable plugins at runtime from the Tools menu ("Manage Plugins", see the [user manual](../user-manual/plugin-manager.md)). Plugins stay imported and their routes stay mounted; a persisted state (config key `plugins.disabled`, managed by the plugin manager, hidden in the config editor) gates them. Consequences for plugin authors:
 
-- **`initialize()` and `cleanup()` must be re-entrant and symmetric.** `cleanup()` must undo everything `initialize()` did (service/extractor/provider registrations, event handlers, registrations with other plugins such as `tei-wizard` enhancements) so that `initialize()` can safely run again. Frontend extensions registered through `FrontendExtensionRegistry` are removed automatically. The test `TestBuiltinLifecycleConformance` in `tests/unit/fastapi/test_plugin_management.py` runs `initialize -> cleanup -> initialize` for all built-in plugins.
+- **`initialize()` and `cleanup()` must be re-entrant and symmetric.** `cleanup()` must undo everything `initialize()` did (service/extractor/provider registrations, event handlers, registrations with other plugins such as `tei-wizard` enhancements) so that `initialize()` can safely run again. Frontend extensions registered through `FrontendExtensionRegistry` are removed automatically. The test `TestBuiltinLifecycleConformance` in `tests/unit/fastapi/test_plugin_management.py` runs `initialize -> cleanup -> initialize` for all built-in plugins; plugin repositories run the same check with `check_lifecycle_conformance()` from `fastapi_app/lib/plugins/plugin_testing.py`.
 - **Disabling cascades along `dependencies`.** Disabling a plugin makes its dependents `inactive`; they return when it is enabled again (unless they are disabled explicitly). Dependents are cleaned up first, dependencies are initialized first.
 - **Inactive plugins answer 404.** Custom routes (`routes.py`) are gated with a router dependency and `static/` mounts with `GatedStaticFiles`; `/api/v1/plugins` and `/extensions.js` list only active plugins.
 - **Module-level code and `__init__()` still run at startup** for disabled plugins, so keep them free of side effects.

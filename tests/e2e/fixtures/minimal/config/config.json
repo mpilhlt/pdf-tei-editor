@@ -1,10 +1,4 @@
 {
-    "model-configurations": [
-        {
-            "value": "llamore",
-            "label": "LLamore"
-        }
-    ],
     "xml.encode-entities.server": true,
     "xml.encode-entities.client": false,
     "xml.encode-quotes": false,

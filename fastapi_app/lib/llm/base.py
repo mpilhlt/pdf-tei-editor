@@ -2,7 +2,7 @@
 Core LLM provider abstraction.
 
 Generalizes ad hoc OpenAI-compatible inference integrations (previously
-duplicated per-extractor, e.g. kisski/extractor.py) into a pluggable
+duplicated per extractor plugin) into a pluggable
 registry any backend plugin can register a connector into, and any
 consumer can query, without hardcoding provider-specific HTTP logic or
 env var names.
@@ -31,10 +31,10 @@ class ModelStatus(TypedDict):
     """A model's live load state, when a provider exposes one.
 
     Deliberately provider-agnostic: `availability` is a fixed 3-tier enum
-    any provider normalizes its own live-load signal onto (this codebase's
-    only current example, Kisski's numeric "demand", is one such signal).
+    any provider normalizes its own live-load signal onto (e.g. a numeric
+    "demand" value reported by the provider's API).
     `detail` carries whatever provider-specific elaboration is useful in a
-    warning tooltip (e.g. Kisski's raw demand number as text).
+    warning tooltip (e.g. the raw demand number as text).
     """
 
     availability: Literal["available", "busy", "very_busy"]
@@ -45,7 +45,7 @@ class LLMModel(TypedDict):
     """One model offered by an LLMProvider.
 
     `free` is True when using the model costs the operator nothing (e.g.
-    KISSKI's academic cloud); paid models are False and are restricted to
+    an academic cloud); paid models are False and are restricted to
     admins unless an admin picked them as the default model. Admins can
     mark further models as free via `llm.free-models` (see model_access.py).
     """

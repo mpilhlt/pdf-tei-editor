@@ -353,6 +353,10 @@ class ExtractionPlugin extends Plugin {
         modelSelectBox.appendChild(option)
       }
 
+      modelSelectBox.helpText = availableExtractors.length > 0
+        ? 'Choose the extraction engine'
+        : 'No extraction engine is installed for this document type. Extraction requires an extractor plugin.'
+
       if (availableExtractors.length > 0) {
         let defaultExtractor = availableExtractors[0].id
         const variantId = documentMetadata.variant_id || options.variant_id

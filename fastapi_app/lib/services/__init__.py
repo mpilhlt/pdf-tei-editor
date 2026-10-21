@@ -5,12 +5,10 @@ Provides high-level services that coordinate repository access and business rule
 """
 
 from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
-from fastapi_app.lib.services.statistics import calculate_collection_statistics
 from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 
 __all__ = [
     "get_metadata_for_document",
-    "calculate_collection_statistics",
     "BaseService",
     "get_service_registry",
 ]

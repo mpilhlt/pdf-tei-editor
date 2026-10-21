@@ -23,6 +23,7 @@ import { LocalServerManager } from './lib/local-server-manager.js';
 // import { ContainerServerManager } from './lib/container-server-manager.js'; // Removed - not used in new container approach
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
+import { removeStagedPluginTests, stagePluginTests } from './lib/plugin-tests.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
 import { TestLogger } from './api/helpers/test-logger.js';
 
@@ -350,8 +351,11 @@ async function main() {
       timeout: parseInt(cliOptions.timeout, 10) * 1000,
     };
 
-    // Step 1: Discover tests
+    // Step 1: Discover tests (plugin API tests are staged into tests/api/v1 first)
     logger.info('Discovering tests');
+    if (testDir === 'tests/api/v1') {
+      stagePluginTests('api', cliOptions.pluginTests || []);
+    }
     const allTests = await discoverTests(options.testDir);
 
     if (allTests.length === 0) {
@@ -449,6 +453,7 @@ async function main() {
     // Step 7: Cleanup
     // Store the test result exit code before cleanup to ensure cleanup errors don't override it
     const testExitCode = exitCode;
+    removeStagedPluginTests('api');
 
     if (serverManager) {
       try {

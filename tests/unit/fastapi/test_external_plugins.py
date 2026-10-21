@@ -11,6 +11,7 @@ modules with relative imports.
 @testCovers fastapi_app/lib/storage/file_zip_exporter.py
 """
 
+import importlib
 import os
 import shutil
 import sys
@@ -109,7 +110,8 @@ class TestExternalPlugins(unittest.TestCase):
 
     def test_get_external_plugin_dirs_splits_on_pathsep(self):
         value = os.pathsep.join([str(self.path_a), " ", str(self.path_b)])
-        with patch.dict(os.environ, {plugin_paths.PLUGIN_PATHS_ENV_VAR: value}):
+        with patch.dict(os.environ, {plugin_paths.PLUGIN_PATHS_ENV_VAR: value}), \
+                patch.object(plugin_paths, "get_installed_plugin_dirs", return_value=[]):
             self.assertEqual(plugin_paths.get_external_plugin_dirs(), [self.path_a, self.path_b])
             self.assertEqual(
                 plugin_paths.get_plugin_dirs(),
@@ -137,8 +139,8 @@ class TestExternalPlugins(unittest.TestCase):
         self.assertEqual(name_a, "pte_external_plugins.ext_multi")
         self.assertNotEqual(name_a, name_b)
         self.assertEqual(plugin_paths.get_plugin_package_name(self.path_a / "ext_multi"), name_a)
-        builtin = get_settings().plugins_code_dir / "grobid"
-        self.assertEqual(plugin_paths.get_plugin_package_name(builtin), "fastapi_app.plugins.grobid")
+        builtin = get_settings().plugins_code_dir / "some_builtin"
+        self.assertEqual(plugin_paths.get_plugin_package_name(builtin), "fastapi_app.plugins.some_builtin")
 
     def test_routes_and_static_files_are_served(self):
         manager = self._discover()
@@ -234,6 +236,63 @@ class TestExternalPluginDiscovery(unittest.TestCase):
         self.assertEqual(working.load_status, "ok", working.error)
 
 
+class TestInstalledPlugins(unittest.TestCase):
+    """Plugins installed as Python distributions with a ``pte.plugins`` entry point."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        # An installed distribution: the package plus a .dist-info with the entry point
+        write_plugin(self.tmp, "pte_plugin_ep_fixture", "ep-fixture", "hello from an entry point")
+        dist_info = self.tmp / "pte_plugin_ep_fixture-1.0.0.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text("Metadata-Version: 2.1\nName: pte-plugin-ep-fixture\nVersion: 1.0.0\n")
+        (dist_info / "entry_points.txt").write_text(
+            f"[{plugin_paths.ENTRY_POINT_GROUP}]\nep-fixture = pte_plugin_ep_fixture\n"
+        )
+        sys.path.insert(0, str(self.tmp))
+        importlib.invalidate_caches()
+        self._saved_modules = set(sys.modules)
+        self._saved_names = dict(plugin_paths._package_names)
+        self._saved_installed = set(plugin_paths._installed_packages)
+        PluginManager._instance = None
+
+    def tearDown(self):
+        sys.path.remove(str(self.tmp))
+        for name in set(sys.modules) - self._saved_modules:
+            if name.startswith("pte_plugin_ep_fixture"):
+                del sys.modules[name]
+        plugin_paths._package_names.clear()
+        plugin_paths._package_names.update(self._saved_names)
+        plugin_paths._installed_packages.clear()
+        plugin_paths._installed_packages.update(self._saved_installed)
+        PluginManager._instance = None
+        shutil.rmtree(self.tmp)
+
+    def test_entry_point_plugins_are_found_without_import(self):
+        dirs = plugin_paths.get_installed_plugin_dirs()
+        plugin_dir = self.tmp / "pte_plugin_ep_fixture"
+        self.assertIn(plugin_dir, dirs)
+        self.assertNotIn("pte_plugin_ep_fixture", sys.modules)
+        self.assertEqual(plugin_paths.get_plugin_package_name(plugin_dir), "pte_plugin_ep_fixture")
+
+    def test_entry_point_plugin_loads_under_its_package_name_and_serves_routes(self):
+        manager = PluginManager.get_instance()
+        manager.registry.discover_plugins(
+            plugin_paths.get_installed_plugin_dirs(), builtin_dir=get_settings().plugins_code_dir
+        )
+        record = manager.registry.get_record("ep-fixture")
+        assert record is not None
+        self.assertEqual(record.load_status, "ok", record.error)
+        self.assertTrue(record.external)
+        self.assertIn("pte_plugin_ep_fixture.plugin", sys.modules)
+        self.assertFalse(any(name.endswith("pte_plugin_ep_fixture") and name.startswith(plugin_paths.EXTERNAL_NAMESPACE) for name in sys.modules))
+
+        app = FastAPI()
+        manager.register_plugin_routes(app)
+        client = TestClient(app)
+        self.assertEqual(client.get("/api/plugins/ep-fixture/hello").json(), {"greeting": "hello from an entry point"})
+
+
 class TestPluginManifest(unittest.TestCase):
     """version and engines.pte in pte-plugin.json."""
 
@@ -281,7 +340,7 @@ class TestPluginManifest(unittest.TestCase):
     def test_invalid_manifests_are_rejected(self):
         plugin_dir = self._plugin("p", "{}")
         for bad in ("{not json", "[]", '{"version": 1}', '{"version": "1.2"}', '{"engines": []}',
-                    '{"engines": {"pte": 5}}', '{"readme": 5}', '{"readme": "javascript:alert(1)"}', '{"readme": "docs/README.md"}', '{"engines": {"pte": ">=foo"}}'):
+                    '{"engines": {"pte": 5}}', '{"engines": {"pte-plugin-api": ">=foo"}}', '{"readme": 5}', '{"readme": "javascript:alert(1)"}', '{"readme": "docs/README.md"}', '{"engines": {"pte": ">=foo"}}'):
             with self.subTest(bad=bad):
                 (plugin_dir / plugin_manifest.MANIFEST_FILE).write_text(bad)
                 with self.assertRaises(plugin_manifest.ManifestError):
@@ -307,6 +366,18 @@ class TestPluginManifest(unittest.TestCase):
         self.assertEqual(manager.registry.status("too-new"), ("incompatible", "Requires PDF-TEI-Editor >=0.80.0, but this is 0.75.2"))
         self.assertFalse(self.executed.exists())
         self.assertNotIn("too-new", manager.registry.get_all_plugins())
+
+    def test_plugin_api_range_is_checked(self):
+        self._plugin("api_fits", '{"engines": {"pte-plugin-api": "^1.0.0"}}')
+        self._plugin("api_too_new", '{"engines": {"pte-plugin-api": "^2.0.0"}}')
+        manager = self._discover()
+        fits = manager.registry.get_record("api-fits")
+        assert fits is not None
+        self.assertEqual(fits.load_status, "ok", fits.error)
+        self.assertEqual(
+            manager.registry.status("api-too-new"),
+            ("incompatible", f"Requires plugin API ^2.0.0, but this is {plugin_manifest.PLUGIN_API_VERSION}"),
+        )
 
     def test_invalid_manifest_marks_plugin_failed_without_importing_it(self):
         self._plugin("broken", '{"engines": {"pte": ">=foo"}}')

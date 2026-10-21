@@ -578,6 +578,21 @@ const runner = new SmartTestRunner({
 
 This enables smart test selection via `npm run test:changed`.
 
+### Plugin API and E2E Tests in the Core Suites
+
+Tests that belong to a plugin live in the plugin's directory, never in `tests/`: core tests must pass with `fastapi_app/plugins/` emptied (CI job `core-without-plugins`), and `tests/unit/fastapi/test_core_plugin_independence.py` fails if anything outside the plugin directories imports a plugin, calls its routes or names its files. Core tests that need a plugin use the fixture plugins in `tests/fixtures/plugins/` (`test-plugin` with the mock extractor, `test-base-plugin` and `test-dependent-plugin` for dependency cascades), which the API and E2E environments load through `FASTAPI_PLUGIN_PATHS=tests/fixtures/plugins`.
+
+Plugin tests that need the shared server setup go into two subdirectories, which the runners pick up automatically:
+
+```text
+fastapi_app/plugins/my_plugin/tests/
+├── test_*.py        # Python unit tests (smart test runner)
+├── api/*.test.js    # API tests, run by tests/backend-test-runner.js
+└── e2e/*.spec.js    # Playwright tests, run by tests/e2e-runner.js
+```
+
+Files in `api/` and `e2e/` are written as if they were located in `tests/api/v1/` resp. `tests/e2e/tests/` (same relative imports of helpers and fixtures). The runners copy them there as `plugin--<plugin>--<file>` before a run and delete the copies afterwards (`tests/lib/plugin-tests.js`; the copies are git-ignored). `--plugin-tests <dir>` adds the plugins below another directory, e.g. a checkout of the plugin monorepo. A plugin test file passed as argument (`node tests/e2e-runner.js fastapi_app/plugins/dashboard/tests/e2e/dashboard.spec.js`) runs from its staged copy.
+
 ### Plugin Integration Tests
 
 Plugin integration tests verify backend plugin functionality by testing custom routes and plugin endpoints with a live server. These tests are located in the plugin's `tests/` directory.

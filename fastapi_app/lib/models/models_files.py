@@ -229,5 +229,5 @@ class GarbageCollectResponse(BaseModel):
     files_deleted: int  # Number of physical files deleted
     storage_freed: int  # Total bytes freed from storage
     orphaned_xml_deleted: int = 0  # Number of orphaned XML files deleted (XML with no PDF)
-    grobid_cache_deleted: int = 0  # Number of GROBID training-data cache entries deleted
+    plugin_items_deleted: dict[str, int] = {}  # Number of plugin data items deleted, by plugin id
     annotation_rules_cache_deleted: int = 0  # Number of annotation-rules fetch cache entries deleted

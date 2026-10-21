@@ -248,52 +248,6 @@ def create_edition_stmt(date: str, title: str) -> etree._Element:  # type: ignor
     return editionStmt
 
 
-def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str, variant_id: str = "grobid-segmentation") -> etree._Element:  # type: ignore[name-defined]
-    """
-    Create an encodingDesc element with GROBID application info.
-
-    Args:
-        grobid_version: GROBID version string
-        grobid_revision: GROBID revision hash
-        timestamp: ISO timestamp string
-        variant_id: Variant identifier for this GROBID configuration
-
-    Returns:
-        encodingDesc element
-    """
-    encodingDesc = etree.Element("encodingDesc")
-    appInfo = etree.SubElement(encodingDesc, "appInfo")
-
-    # PDF-TEI-Editor application
-    pdf_tei_app = etree.SubElement(appInfo, "application",
-                                  version="1.0",
-                                  ident="pdf-tei-editor",
-                                  type="editor")
-    etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
-
-    # GROBID extractor application
-    grobid_app = etree.SubElement(appInfo, "application",
-                                 version=grobid_version,
-                                 ident="GROBID",
-                                 when=timestamp,
-                                 type="extractor")
-    desc = etree.SubElement(grobid_app, "desc")
-    desc.text = "GROBID - A machine learning software for extracting information from scholarly documents"
-
-    revision_label = etree.SubElement(grobid_app, "label", type="revision")
-    revision_label.text = grobid_revision
-
-    flavor_label = etree.SubElement(grobid_app, "label", type="flavor")
-    flavor_label.text = "article/footnotes-refs"
-
-    variant_label = etree.SubElement(grobid_app, "label", type="variant-id")
-    variant_label.text = variant_id
-
-    ref = etree.SubElement(grobid_app, "ref", target="https://github.com/kermitt2/grobid")
-
-    return encodingDesc
-
-
 def create_revision_desc_with_status(timestamp: str, status: str, description: str, label: Optional[str] = None) -> etree._Element:  # type: ignore[name-defined]
     """
     Create a revisionDesc element with change tracking.
@@ -399,8 +353,7 @@ def create_encoding_desc_with_extractor(
     """
     Create an encodingDesc element with PDF-TEI-Editor and extractor applications.
 
-    This is a generic version of create_encoding_desc_with_grobid() that can be
-    used by any extractor. It always includes the PDF-TEI-Editor application first,
+    Works for any extractor. It always includes the PDF-TEI-Editor application first,
     followed by the extractor-specific application, and - if editorial_decl_entries
     is given - an editorialDecl before both, documenting the annotation rules that
     apply to this document. See docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
@@ -1606,68 +1559,6 @@ def update_fileref_in_xml(xml_string: str | bytes, file_id: str) -> str:
     if changed:
         return serialize_tei_with_formatted_header(xml_root, processing_instructions)
     return xml_string
-
-
-def get_training_data_id(tei_root: etree._Element) -> Optional[str]:  # type: ignore[name-defined]
-    """
-    Extract training-data-id from TEI header.
-
-    Path: /TEI/teiHeader/encodingDesc/appInfo/application[@ident="GROBID"]/label[@type="training-data-id"]
-
-    Args:
-        tei_root: TEI root element
-
-    Returns:
-        Training data ID string or None if not found
-    """
-    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-    label = tei_root.find(
-        ".//tei:encodingDesc/tei:appInfo/tei:application[@ident='GROBID']/"
-        "tei:label[@type='training-data-id']",
-        namespaces=ns
-    )
-    return label.text if label is not None else None
-
-
-def set_training_data_id(tei_root: etree._Element, training_data_id: str) -> bool:  # type: ignore[name-defined]
-    """
-    Set or update training-data-id in TEI header.
-
-    Adds <label type="training-data-id"> to the GROBID application element.
-
-    Args:
-        tei_root: TEI root element
-        training_data_id: The training data ID to set
-
-    Returns:
-        True if successful, False if GROBID application element not found
-    """
-    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-    grobid_app = tei_root.find(
-        ".//tei:encodingDesc/tei:appInfo/tei:application[@ident='GROBID']",
-        namespaces=ns
-    )
-    if grobid_app is None:
-        return False
-
-    # Check if label already exists
-    existing_label = grobid_app.find("tei:label[@type='training-data-id']", namespaces=ns)
-    if existing_label is not None:
-        existing_label.text = training_data_id
-    else:
-        # Create new label element with TEI namespace
-        tei_ns = "http://www.tei-c.org/ns/1.0"
-        label = etree.Element(f"{{{tei_ns}}}label", type="training-data-id")
-        label.text = training_data_id
-
-        # Insert before <ref> element if present, otherwise append
-        ref = grobid_app.find("tei:ref", namespaces=ns)
-        if ref is not None:
-            ref.addprevious(label)
-        else:
-            grobid_app.append(label)
-
-    return True
 
 
 _TEI_NS = "http://www.tei-c.org/ns/1.0"

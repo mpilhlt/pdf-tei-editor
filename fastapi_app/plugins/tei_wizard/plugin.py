@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,11 @@ class TeiWizardPlugin(Plugin):
         return {"list": self.list_enhancements}
 
     async def initialize(self, context: PluginContext) -> None:
-        """Register default enhancements from this plugin's directory."""
+        """Register the frontend extension and the default enhancements from this plugin's directory."""
         plugin_dir = Path(__file__).parent
+        FrontendExtensionRegistry.get_instance().register_extension(
+            plugin_dir / "extensions" / "tei-wizard.js", self.metadata["id"]
+        )
         enhancements_dir = plugin_dir / "enhancements"
 
         # Auto-discover all .js enhancement files

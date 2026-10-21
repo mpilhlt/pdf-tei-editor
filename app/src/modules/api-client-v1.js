@@ -132,11 +132,6 @@
  */
 
 /**
- * @typedef {Object} Body_restore_backup_api_plugins_backup_restore_restore_post
- * @property {string} file
- */
-
-/**
  * @typedef {Object} Body_upload_file_api_v1_files_upload_post
  * @property {string=} collection_id
  * @property {string} file
@@ -416,7 +411,7 @@
  * @property {number} files_deleted
  * @property {number} storage_freed
  * @property {number=} orphaned_xml_deleted
- * @property {number=} grobid_cache_deleted
+ * @property {Object<string, number>=} plugin_items_deleted
  * @property {number=} annotation_rules_cache_deleted
  */
 
@@ -931,28 +926,6 @@
  * @property {string=} id - Document ID (for PDF-based extractions)
  * @property {string=} pdf - PDF file hash (if applicable)
  * @property {string} xml - Extracted/generated XML file hash
- */
-
-/**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractRequest
- * @property {string} model
- * @property {string} prompt
- * @property {string=} stable_id
- * @property {string=} text_input
- * @property {Object<string, any>=} json_schema
- * @property {number=} temperature
- * @property {number=} max_retries
- */
-
-/**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractResponse
- * @property {boolean} success
- * @property {Object<string, any>=} data
- * @property {string=} error
- * @property {string=} raw_response
- * @property {string} model
- * @property {string} extractor
- * @property {number=} retries
  */
 
 /**

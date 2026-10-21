@@ -114,9 +114,12 @@ async def extract_metadata(
             )
         except RuntimeError as e:
             # Check if this is a dependency/availability error and if we should fall back to mock
-            if should_use_mock_extractor(request.extractor, str(e)):
+            if should_use_mock_extractor(e):
                 logger.info(f"Using mock extractor for {request.extractor} due to missing dependencies: {e}")
-                extractor = create_extractor("mock-extractor")
+                try:
+                    extractor = create_extractor("mock-extractor")
+                except (KeyError, RuntimeError):
+                    raise HTTPException(status_code=400, detail=str(e))
             else:
                 raise HTTPException(status_code=400, detail=str(e))
 

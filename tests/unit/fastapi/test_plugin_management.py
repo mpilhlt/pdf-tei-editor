@@ -154,41 +154,6 @@ class TestExtensionUnregister(unittest.TestCase):
         self.assertEqual([pid for _, pid in reg.get_extension_files()], ["two"])
 
 
-class TestTeiWizardLifecycle(unittest.IsolatedAsyncioTestCase):
-    async def test_cleanup_then_initialize_is_symmetric(self):
-        from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
-        p = TeiWizardPlugin()
-        await p.initialize(None)
-        first = list(p._enhancement_files)
-        self.assertTrue(first)
-        await p.cleanup()
-        self.assertEqual(p._enhancement_files, [])
-        await p.initialize(None)
-        self.assertEqual(p._enhancement_files, first)
-
-    async def test_unregister_enhancements_by_plugin(self):
-        from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
-        p = TeiWizardPlugin()
-        p.register_enhancement(Path(__file__), "meta")
-        p.unregister_enhancements("meta")
-        self.assertEqual([pid for _, pid in p._enhancement_files], [])
-
-    async def test_dependent_cleanup_removes_its_enhancements(self):
-        from fastapi_app.lib.plugins.plugin_base import PluginContext
-        from fastapi_app.plugins.metadata_extraction.plugin import MetadataExtractionPlugin
-        from fastapi_app.plugins.tei_wizard.plugin import TeiWizardPlugin
-        registry = PluginRegistry()
-        wizard, meta = TeiWizardPlugin(), MetadataExtractionPlugin()
-        registry._register_with_dependencies([meta, wizard])
-        await wizard.initialize(None)
-        base = len(wizard._enhancement_files)
-        await meta.initialize(PluginContext(plugin_id="metadata-extraction", registry=registry))
-        self.assertEqual(len(wizard._enhancement_files), base + 1)
-        await meta.cleanup()
-        self.assertEqual(len(wizard._enhancement_files), base)
-
-
-
 # ---- PluginManager ---------------------------------------------------------------
 
 import tempfile
@@ -365,28 +330,13 @@ class TestBuiltinLifecycleConformance(unittest.IsolatedAsyncioTestCase):
 
     async def test_initialize_cleanup_initialize(self):
         from fastapi_app.config import get_settings
-        from fastapi_app.lib.plugins.plugin_base import PluginContext
+        from fastapi_app.lib.plugins.plugin_testing import check_lifecycle_conformance
 
         builtin = get_settings().plugins_code_dir
-        registry = PluginRegistry()
-        registry.discover_plugins([builtin], builtin_dir=builtin)
-        FrontendExtensionRegistry.reset_instance()
-        checked = 0
-        for record in registry.get_records():
-            if record.load_status != "ok" or record.plugin is None:
-                continue
-            ctx = PluginContext(app=None, plugin_id=record.id, registry=registry)
-            try:
-                await record.plugin.initialize(ctx)
-            except Exception:
-                continue  # plugin needs an environment this unit test does not provide
-            with self.subTest(plugin=record.id):
-                await record.plugin.cleanup()
-                await record.plugin.initialize(ctx)
-                await record.plugin.cleanup()
-            checked += 1
-        FrontendExtensionRegistry.reset_instance()
-        self.assertGreater(checked, 5)
+        if not any((p / "plugin.py").is_file() for p in builtin.iterdir()):
+            self.skipTest("no built-in plugins installed")
+        checked = await check_lifecycle_conformance([builtin], builtin_dir=builtin)
+        self.assertTrue(checked)
 
 
 if __name__ == "__main__":

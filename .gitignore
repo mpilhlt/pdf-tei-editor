@@ -62,3 +62,7 @@ tests/pdf-match/sources/*.pdf
 
 # Superpowers brainstorming visual-companion mockups
 .superpowers/
+
+# Plugin API/E2E tests staged by the test runners (see tests/lib/plugin-tests.js)
+tests/api/v1/plugin--*
+tests/e2e/tests/plugin--*

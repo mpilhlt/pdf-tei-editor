@@ -3,10 +3,9 @@ Concrete LLMProvider for endpoints speaking the OpenAI chat/completions
 wire format: POST {base_url}/chat/completions, GET {base_url}/models.
 
 chat_completion_sync() is a free function (not a method) so it can be
-reused directly by fastapi_app/plugins/kisski/extractor.py's existing
-_call_llm, eliminating duplicate HTTP-call code between the extraction
-feature and this new registry, without either one depending on the
-other's class hierarchy.
+reused directly by extractor plugins that call an OpenAI-compatible API,
+eliminating duplicate HTTP-call code between extraction and this registry,
+without either one depending on the other's class hierarchy.
 """
 
 import asyncio
