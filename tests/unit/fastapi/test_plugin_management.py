@@ -4,6 +4,7 @@ Tests for plugin management (registry status model and change planning).
 @testCovers fastapi_app/lib/plugins/plugin_registry.py
 """
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -164,6 +165,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_app.lib.plugins.plugin_gate import GatedStaticFiles, plugin_gate
 from fastapi_app.lib.plugins.plugin_manager import CascadeRequired, PluginChangeError, PluginManager
+from fastapi_app.lib.plugins.plugin_state import PluginStateStore
 
 
 class FakeConfig:
@@ -176,6 +178,17 @@ class FakeConfig:
     def set(self, key, value, **kw):
         self.store[key] = value
         return True, "ok"
+
+
+def make_state_store(db_dir: Path, cfg: "FakeConfig") -> PluginStateStore:
+    """A plugin state store in db_dir that migrates the legacy config key from cfg."""
+    return PluginStateStore(db_dir, legacy_disabled=lambda: list(cfg.get("plugins.disabled", [])))
+
+
+def set_shared_disabled(manager: PluginManager, disabled: list[str]) -> None:
+    """Store a disabled set as another worker would, and load it into the manager."""
+    manager.state_store.write(set(disabled))
+    manager.load_disabled()
 
 
 class RecordingPlugin(MockPlugin):
@@ -199,6 +212,9 @@ class ManagerTestBase(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.mgr = PluginManager.get_instance()
+        self.state_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.state_dir.cleanup)
+        self.mgr.state_store = make_state_store(Path(self.state_dir.name), self.cfg)
         self.mgr.registry._register_with_dependencies([
             RecordingPlugin("wizard"), RecordingPlugin("grobid", ["wizard"]),
             RecordingPlugin("meta", ["wizard"]), RecordingPlugin("prot", protected=True),
@@ -218,11 +234,11 @@ class TestSetEnabled(ManagerTestBase):
             await self.mgr.set_plugin_enabled("wizard", False, cascade=False)
         self.assertEqual(sorted(cm.exception.affected), ["grobid", "meta"])
         self.assertEqual(cm.exception.direction, "disable")
-        self.assertEqual(self.cfg.store["plugins.disabled"], [])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), [])
 
     async def test_disable_with_cascade_runs_cleanup_dependents_first(self):
         result = await self.mgr.set_plugin_enabled("wizard", False, cascade=True)
-        self.assertEqual(self.cfg.store["plugins.disabled"], ["wizard"])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), ["wizard"])
         self.assertEqual(RecordingPlugin.calls[-1], "cleanup:wizard")
         self.assertEqual(sorted(RecordingPlugin.calls[:2]), ["cleanup:grobid", "cleanup:meta"])
         self.assertEqual(result["changed"]["grobid"], "inactive")
@@ -235,16 +251,15 @@ class TestSetEnabled(ManagerTestBase):
         result = await self.mgr.set_plugin_enabled("wizard", True)
         self.assertEqual(RecordingPlugin.calls[0], "init:wizard")
         self.assertEqual(result["changed"]["grobid"], "active")
-        self.assertEqual(self.cfg.store["plugins.disabled"], [])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), [])
 
     async def test_enable_with_disabled_dependency_needs_cascade(self):
-        self.cfg.store["plugins.disabled"] = ["wizard", "grobid"]
-        self.mgr.load_disabled()
+        set_shared_disabled(self.mgr, ["wizard", "grobid"])
         with self.assertRaises(CascadeRequired) as cm:
             await self.mgr.set_plugin_enabled("grobid", True, cascade=False)
         self.assertEqual((cm.exception.direction, cm.exception.affected), ("enable", ["wizard"]))
         await self.mgr.set_plugin_enabled("grobid", True, cascade=True)
-        self.assertEqual(self.cfg.store["plugins.disabled"], [])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), [])
 
     async def test_protected_cannot_be_disabled(self):
         with self.assertRaises(PluginChangeError) as cm:
@@ -274,8 +289,11 @@ class TestSetEnabled(ManagerTestBase):
         self.assertEqual(self.mgr.registry.status("wizard")[0], "failed")
         self.assertIn("wizard", result["errors"])
 
-    async def test_config_write_failure_runs_no_hooks(self):
-        self.cfg.set = lambda *a, **k: (False, "disk full")
+    async def test_state_write_failure_runs_no_hooks(self):
+        def fail(disabled):
+            raise OSError("disk full")
+
+        self.mgr.state_store.write = fail
         with self.assertRaises(PluginChangeError) as cm:
             await self.mgr.set_plugin_enabled("wizard", False, cascade=True)
         self.assertEqual(cm.exception.status_code, 500)
@@ -287,10 +305,22 @@ class TestSetEnabled(ManagerTestBase):
         await self.mgr.set_plugin_enabled("wizard", False, cascade=True)
         self.assertEqual(FrontendExtensionRegistry.get_instance().get_extension_files(), [])
 
-    async def test_load_disabled_from_config(self):
-        self.cfg.store["plugins.disabled"] = ["grobid"]
-        self.mgr.load_disabled()
+    async def test_load_disabled_from_shared_state(self):
+        set_shared_disabled(self.mgr, ["grobid"])
         self.assertEqual(self.mgr.registry.status("grobid")[0], "disabled")
+
+    async def test_legacy_config_key_is_migrated_once(self):
+        # A fresh manager over a new state directory, as on the first start after an upgrade
+        with tempfile.TemporaryDirectory() as d:
+            self.cfg.store["plugins.disabled"] = ["grobid"]
+            self.mgr.state_store = make_state_store(Path(d), self.cfg)
+            self.mgr.load_disabled()
+            self.assertEqual(self.mgr.registry.status("grobid")[0], "disabled")
+            self.assertTrue((Path(d) / "plugins-state.json").is_file())
+            # the state file is the source from now on
+            self.cfg.store["plugins.disabled"] = []
+            self.mgr.load_disabled()
+            self.assertEqual(self.mgr.registry.status("grobid")[0], "disabled")
 
     async def test_execute_rejects_inactive_plugin(self):
         await self.mgr.set_plugin_enabled("wizard", False, cascade=True)

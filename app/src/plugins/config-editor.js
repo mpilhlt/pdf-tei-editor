@@ -125,7 +125,7 @@ class ConfigEditorPlugin extends Plugin {
     tbody.innerHTML = ''
 
     const configKeys = Object.keys(this.#originalConfig)
-      .filter(key => key !== 'plugins.disabled') // managed by the plugin manager
+      .filter(key => key !== 'plugins.disabled') // former plugin manager state, migrated to data/db/plugins-state.json
       .filter(key => !key.endsWith('.type') && !key.endsWith('.values') && !key.endsWith('.description') && !key.endsWith('.masked'))
       .filter(key => !filterText || (
         key.toLowerCase().includes(filterText.toLowerCase()) ||
