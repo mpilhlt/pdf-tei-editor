@@ -13,6 +13,7 @@
 
 /**
  * @typedef {object} reloadBannerPart
+ * @property {HTMLSpanElement} bannerText
  * @property {import('../ui.js').SlButton} reloadBtn
  */
 

@@ -11,7 +11,7 @@
  * @import { SlDialog } from '../ui.js'
  * @import { pluginAdminDialogPart } from '../templates/plugin-admin-dialog.types.js'
  * @import { pluginAdminConfirmDialogPart } from '../templates/plugin-admin-confirm-dialog.types.js'
- * @import { PluginAdminInfo } from '../modules/api-client-v1.js'
+ * @import { ChangeResult, PluginAdminInfo, PropagationInfo } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -35,6 +35,10 @@ const STATUS_LABELS = { active: 'Active', disabled: 'Disabled', inactive: 'Inact
 /** @type {Record<string, string>} */
 const STATUS_VARIANTS = { active: 'success', disabled: 'neutral', inactive: 'warning', unavailable: 'warning', incompatible: 'danger', failed: 'danger' }
 const STATUS_ORDER = ['all', 'active', 'disabled', 'inactive', 'unavailable', 'incompatible', 'failed']
+
+// Waiting for the other server worker processes to apply a change (they check every 2 s)
+const PROPAGATION_POLL_MS = 1000
+const PROPAGATION_TIMEOUT_MS = 20000
 
 /**
  * Escape a string for use in HTML text and attribute values
@@ -70,6 +74,9 @@ class PluginAdminPlugin extends Plugin {
 
   /** True after a successful change; the banner asks the user to reload */
   #reloadPending = false
+
+  /** @type {PropagationInfo | null} */
+  #propagation = null
 
   /** @type {(() => void) | null} */
   #onConfirm = null
@@ -148,6 +155,24 @@ class PluginAdminPlugin extends Plugin {
   async #load() {
     const response = await this.#api.pluginsAdmin()
     this.#plugins = response.plugins
+    this.#propagation = response.propagation
+  }
+
+  /**
+   * Poll the plugin list until all server worker processes have applied a change
+   * (each worker checks the shared plugin state every few seconds)
+   * @param {number} generation - Generation of the change
+   */
+  async #awaitPropagation(generation) {
+    const deadline = Date.now() + PROPAGATION_TIMEOUT_MS
+    while (Date.now() < deadline) {
+      await this.#load()
+      const prop = this.#propagation
+      if (!prop || prop.generation !== generation || prop.pending === 0) return
+      this.#render()
+      await new Promise(resolve => setTimeout(resolve, PROPAGATION_POLL_MS))
+    }
+    this.#logger.warn(`Plugin change ${generation} has not reached all server processes within ${PROPAGATION_TIMEOUT_MS} ms`)
   }
 
   /**
@@ -180,6 +205,10 @@ class PluginAdminPlugin extends Plugin {
       ? rows.map(p => this.#rowHtml(p)).join('')
       : '<div style="padding: 1.5rem; text-align: center; color: var(--sl-color-neutral-600);">No plugins match this filter.</div>'
     ui.reloadBanner.style.display = this.#reloadPending ? '' : 'none'
+    const prop = this.#propagation
+    ui.reloadBanner.bannerText.textContent = prop && prop.pending > 0
+      ? `Applying the change to all server processes (${prop.workers - prop.pending} of ${prop.workers} done)…`
+      : 'Changes apply to open pages after a reload.'
   }
 
   /**
@@ -314,9 +343,11 @@ class PluginAdminPlugin extends Plugin {
    * @param {boolean} cascade
    */
   async #apply(p, enable, cascade) {
+    /** @type {ChangeResult | null} */
+    let result = null
     try {
       const requestBody = { cascade }
-      const result = enable
+      result = enable
         ? await this.#api.pluginsAdminEnable(p.id, requestBody)
         : await this.#api.pluginsAdminDisable(p.id, requestBody)
       this.#reloadPending = true
@@ -332,7 +363,11 @@ class PluginAdminPlugin extends Plugin {
       notify(`Could not ${enable ? 'enable' : 'disable'} ${p.name}: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
     }
     try {
-      await this.#load()
+      if (result) {
+        await this.#awaitPropagation(result.generation)
+      } else {
+        await this.#load()
+      }
     } catch (error) {
       this.#logger.error('Failed to refresh plugin list: ' + String(error))
     }

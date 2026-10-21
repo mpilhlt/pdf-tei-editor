@@ -154,6 +154,7 @@
  * @property {Object<string, any>} changed
  * @property {Object<string, any>} errors
  * @property {boolean} reload_required
+ * @property {number} generation
  */
 
 /**
@@ -534,6 +535,13 @@
  */
 
 /**
+ * @typedef {Object} PropagationInfo
+ * @property {number} generation
+ * @property {number} workers
+ * @property {number} pending
+ */
+
+/**
  * @typedef {Object} PluginAdminInfo
  * @property {string} id
  * @property {string} name
@@ -558,6 +566,7 @@
 /**
  * @typedef {Object} PluginAdminListResponse
  * @property {Array<PluginAdminInfo>} plugins
+ * @property {PropagationInfo} propagation
  */
 
 /**

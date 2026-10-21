@@ -7,6 +7,7 @@ initialization, route registration, and execution.
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +19,13 @@ from fastapi_app.lib.plugins.plugin_base import PluginContext
 from fastapi_app.lib.plugins.plugin_gate import GatedStaticFiles, plugin_gate
 from fastapi_app.lib.plugins.plugin_paths import get_plugin_dirs, import_plugin_module
 from fastapi_app.lib.plugins.plugin_registry import ChangePlan, PluginRegistry
+from fastapi_app.lib.plugins.plugin_state import LEGACY_DISABLED_CONFIG_KEY, PluginStateStore
 from fastapi_app.lib.utils.config_utils import get_config
 
 logger = logging.getLogger(__name__)
 
-DISABLED_CONFIG_KEY = "plugins.disabled"
+# Seconds between two checks of the shared plugin state (see watch_state())
+STATE_CHECK_INTERVAL = 2.0
 
 
 class CascadeRequired(Exception):
@@ -59,6 +62,10 @@ class PluginManager:
         self._app: FastAPI | None = None
         self._initialized = False
         self._lock = asyncio.Lock()
+        self._state_store: PluginStateStore | None = None
+        # Generation of the shared plugin state this process has applied
+        self.generation = 0
+        self._watch_task: asyncio.Task[None] | None = None
 
     @classmethod
     def get_instance(cls) -> "PluginManager":
@@ -86,10 +93,107 @@ class PluginManager:
         self.registry.discover_plugins(plugin_dirs, builtin_dir=get_settings().plugins_code_dir)
         self.load_disabled()
 
+    @property
+    def state_store(self) -> PluginStateStore:
+        """Store of the plugin state shared by all worker processes (``data/db/plugins-state.json``)."""
+        if self._state_store is None:
+            self._state_store = PluginStateStore(
+                get_settings().db_dir,
+                legacy_disabled=lambda: list(get_config().get(LEGACY_DISABLED_CONFIG_KEY, default=[]) or []),
+            )
+        return self._state_store
+
+    @state_store.setter
+    def state_store(self, store: PluginStateStore) -> None:
+        self._state_store = store
+
     def load_disabled(self) -> None:
-        """Load the explicitly disabled plugin ids from config."""
-        disabled = get_config().get(DISABLED_CONFIG_KEY, default=[])
-        self.registry.set_disabled({str(p) for p in disabled})
+        """Load the explicitly disabled plugin ids from the shared plugin state."""
+        state = self.state_store.read()
+        self.registry.set_disabled(set(state.disabled))
+        self.generation = state.generation
+
+    async def reconcile(self) -> bool:
+        """
+        Apply the shared plugin state if another worker process has changed it.
+
+        Returns:
+            True if a change was applied
+        """
+        async with self._lock:
+            state = self.state_store.read()
+            if state.generation == self.generation:
+                return False
+            plan = self.registry.plan(set(state.disabled))
+            self.registry.set_disabled(set(state.disabled))
+            errors = await self._apply_plan(plan)
+            self.generation = state.generation
+            logger.info(
+                "Applied plugin state generation %s (deactivated: %s, activated: %s)",
+                state.generation,
+                plan.deactivate,
+                plan.activate,
+            )
+            for pid, message in errors.items():
+                logger.error(f"Plugin {pid}: {message}")
+            return True
+
+    async def watch_state(self, interval: float = STATE_CHECK_INTERVAL) -> None:
+        """
+        Keep this worker in sync with the shared plugin state until cancelled.
+
+        Checks the state file's modification time every ``interval`` seconds, applies
+        changes made by other workers, and writes this worker's heartbeat.
+        """
+        store = self.state_store
+        # The first check always reconciles: the state may have changed since discovery
+        first, last_mtime = True, store.mtime()
+        while True:
+            try:
+                mtime = store.mtime()
+                if first or mtime != last_mtime:
+                    first, last_mtime = False, mtime
+                    await self.reconcile()
+                store.write_heartbeat(self.generation)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"Error while syncing the plugin state: {e}", exc_info=True)
+            await asyncio.sleep(interval)
+
+    def start_state_watcher(self) -> None:
+        """Start watch_state() as a background task (called in the application lifespan)."""
+        if self._watch_task is None or self._watch_task.done():
+            self._watch_task = asyncio.create_task(self.watch_state(), name="plugin-state-watcher")
+
+    async def stop_state_watcher(self) -> None:
+        """Stop the background task and remove this worker's heartbeat."""
+        if self._watch_task is not None:
+            self._watch_task.cancel()
+            try:
+                await self._watch_task
+            except asyncio.CancelledError:
+                pass
+            self._watch_task = None
+        try:
+            self.state_store.remove_heartbeat()
+        except OSError as e:
+            logger.warning(f"Could not remove plugin worker heartbeat: {e}")
+
+    def propagation(self) -> dict[str, int]:
+        """
+        How far the current plugin state has reached the worker processes.
+
+        Returns:
+            {"generation": current generation, "workers": running workers,
+            "pending": workers that have not applied it yet}
+        """
+        generation = self.state_store.read().generation
+        beats = [b for b in self.state_store.heartbeats() if b.pid != os.getpid()]
+        pending = sum(1 for b in beats if b.generation < generation)
+        if self.generation < generation:
+            pending += 1
+        return {"generation": generation, "workers": len(beats) + 1, "pending": pending}
 
     def register_plugin_routes(self, app: FastAPI) -> None:
         """
@@ -263,11 +367,13 @@ class PluginManager:
             user: Acting user (for the audit log line)
 
         Returns:
-            {"changed": {id: status}, "errors": {id: message}, "reload_required": True}
+            {"changed": {id: status}, "errors": {id: message}, "reload_required": True,
+            "generation": n}; the other worker processes apply generation n within a few
+            seconds (see watch_state())
 
         Raises:
             PluginChangeError: unknown plugin (404); protected, unavailable or failed (409);
-                config write failed (500)
+                state file write failed (500)
             CascadeRequired: other plugins are affected and cascade is False
         """
         async with self._lock:
@@ -293,15 +399,12 @@ class PluginManager:
                     raise CascadeRequired(affected, "disable")
 
             plan = registry.plan(new_disabled)
-            ok, message = get_config().set(
-                DISABLED_CONFIG_KEY,
-                sorted(new_disabled),
-                value_type="array",
-                description="IDs of backend plugins disabled by an administrator (managed by the Plugin Manager)",
-            )
-            if not ok:
-                raise PluginChangeError(500, f"Could not save plugin state: {message}")
+            try:
+                state = self.state_store.write(new_disabled)
+            except OSError as e:
+                raise PluginChangeError(500, f"Could not save plugin state: {e}")
             registry.set_disabled(new_disabled)
+            self.generation = state.generation
 
             errors = await self._apply_plan(plan)
             logger.info(
@@ -317,6 +420,7 @@ class PluginManager:
                 "changed": {p: registry.status(p)[0] for p in touched},
                 "errors": errors,
                 "reload_required": True,
+                "generation": state.generation,
             }
 
     async def _apply_plan(self, plan: ChangePlan) -> dict[str, str]:

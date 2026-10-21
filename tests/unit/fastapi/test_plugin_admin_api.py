@@ -18,7 +18,7 @@ from fastapi_app.lib.plugins.plugin_info import readme_url_for
 from fastapi_app.lib.plugins.plugin_manager import PluginManager
 from fastapi_app.lib.plugins.plugin_registry import PluginRecord
 from fastapi_app.routers import plugins_admin
-from tests.unit.fastapi.test_plugin_management import FakeConfig, RecordingPlugin
+from tests.unit.fastapi.test_plugin_management import FakeConfig, RecordingPlugin, make_state_store
 
 
 class TestPluginAdminApi(unittest.TestCase):
@@ -30,6 +30,9 @@ class TestPluginAdminApi(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
         self.mgr = PluginManager.get_instance()
+        self.state_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.state_dir.cleanup)
+        self.mgr.state_store = make_state_store(Path(self.state_dir.name), self.cfg)
         self.mgr.registry._register_with_dependencies([
             RecordingPlugin("wizard"), RecordingPlugin("grobid", ["wizard"]),
         ])
@@ -52,6 +55,18 @@ class TestPluginAdminApi(unittest.TestCase):
         self.assertTrue(wizard["enabled"])
         self.assertIsNone(wizard["readme_url"])
 
+    def test_list_reports_propagation(self):
+        self.mgr.load_disabled()
+        r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": True})
+        generation = r.json()["generation"]
+        self.assertEqual(generation, 1)
+        prop = self.client.get("/api/v1/plugins/admin").json()["propagation"]
+        self.assertEqual(prop, {"generation": 1, "workers": 1, "pending": 0})
+        # another worker that has not applied the change yet
+        self.mgr.state_store.write_heartbeat(0, pid=999999)
+        prop = self.client.get("/api/v1/plugins/admin").json()["propagation"]
+        self.assertEqual(prop, {"generation": 1, "workers": 2, "pending": 1})
+
     def test_disable_without_cascade_returns_409(self):
         r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": False})
         self.assertEqual(r.status_code, 409)
@@ -61,7 +76,7 @@ class TestPluginAdminApi(unittest.TestCase):
         r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": True})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["changed"]["grobid"], "inactive")
-        self.assertEqual(self.cfg.store["plugins.disabled"], ["wizard"])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), ["wizard"])
 
     def test_enable(self):
         self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": True})
@@ -81,7 +96,7 @@ class TestPluginAdminApi(unittest.TestCase):
         self.assertEqual(self.client.get("/api/v1/plugins/admin").status_code, 403)
         r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": True})
         self.assertEqual(r.status_code, 403)
-        self.assertEqual(self.cfg.store["plugins.disabled"], [])
+        self.assertEqual(sorted(self.mgr.state_store.read().disabled), [])
 
 
 class TestReadmeUrl(unittest.TestCase):
