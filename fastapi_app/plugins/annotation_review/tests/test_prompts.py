@@ -129,6 +129,38 @@ class TestParseAndValidateFindings(unittest.TestCase):
         with self.assertRaises(UnusableResponseError):
             parse_and_validate_findings('```json\n[\n  {"old": "<persName>J. Do', self.SOURCE)
 
+    def test_repairs_unescaped_quotes_in_xml_attribute_values(self):
+        source = '<bibl>supra note <biblScope unit="issue">3</biblScope></bibl>'
+        raw = (
+            '[\n {\n "old": "supra note <biblScope unit="issue">3</biblScope>",\n'
+            ' "new": "<ref type=\\"precedingWork\\">supra</ref> note <biblScope unit=\\"issue\\">3</biblScope>",\n'
+            ' "rationale": "The word "supra", like "op. cit.", refers to an earlier work."\n }\n]'
+        )
+        findings = parse_and_validate_findings(raw, source)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["old"], 'supra note <biblScope unit="issue">3</biblScope>')
+        self.assertEqual(findings[0]["new"], '<ref type="precedingWork">supra</ref> note <biblScope unit="issue">3</biblScope>')
+        self.assertEqual(findings[0]["rationale"], 'The word "supra", like "op. cit.", refers to an earlier work.')
+
+    def test_repairs_invalid_escapes_and_raw_newlines(self):
+        raw = '[{"old": "<title>A Paper</title>", "new": "n", "rationale": "it\\\'s a\ntitle \\<x\\>"}]'
+        findings = parse_and_validate_findings(raw, self.SOURCE)
+        self.assertEqual(findings[0]["rationale"], "it\\'s a\ntitle \\<x\\>")
+
+    def test_quotes_in_prose_before_the_array_do_not_break_repair(self):
+        raw = 'Here is the "list":\n```json\n[{"old": "<title>A Paper</title>", "new": "<title level="a">A Paper</title>", "rationale": "r"}]\n```'
+        findings = parse_and_validate_findings(raw, self.SOURCE)
+        self.assertEqual(findings[0]["new"], '<title level="a">A Paper</title>')
+
+    def test_salvages_truncated_response_with_unescaped_quotes(self):
+        raw = (
+            '[{"old": "<title>A Paper</title>", "new": "<title level="a">A Paper</title>", "rationale": "r"},\n'
+            ' {"old": "<persName>J. Doe</persName>", "new": "<persName ref="#p'
+        )
+        with self.assertLogs("fastapi_app.plugins.annotation_review.prompts", level="WARNING"):
+            findings = parse_and_validate_findings(raw, self.SOURCE)
+        self.assertEqual([f["new"] for f in findings], ['<title level="a">A Paper</title>'])
+
     def test_empty_list_is_a_valid_result(self):
         self.assertEqual(parse_and_validate_findings("[]", self.SOURCE), [])
 
