@@ -43,10 +43,19 @@ class PluginAdminInfo(BaseModel):
     menu_endpoints: int
 
 
+class PropagationInfo(BaseModel):
+    """How far the current plugin state has reached the server's worker processes."""
+
+    generation: int
+    workers: int
+    pending: int
+
+
 class PluginAdminListResponse(BaseModel):
     """List of all discovered plugins."""
 
     plugins: list[PluginAdminInfo]
+    propagation: PropagationInfo
 
 
 class ChangeRequest(BaseModel):
@@ -61,6 +70,7 @@ class ChangeResult(BaseModel):
     changed: dict[str, str]
     errors: dict[str, str]
     reload_required: bool
+    generation: int
 
 
 class CascadeRequiredResponse(BaseModel):
@@ -75,11 +85,13 @@ class CascadeRequiredResponse(BaseModel):
 async def plugins_admin_list(
     _admin: dict[str, Any] = Depends(require_admin_user),
 ) -> PluginAdminListResponse:
-    """List all discovered plugins with status, dependencies and README link."""
-    registry = PluginManager.get_instance().registry
+    """List all discovered plugins with status, dependencies and README link, and the propagation of the last change."""
+    manager = PluginManager.get_instance()
+    registry = manager.registry
     records = sorted(registry.get_records(), key=lambda r: str(r.metadata.get("name", r.id)).lower())
     return PluginAdminListResponse(
-        plugins=[PluginAdminInfo(**build_plugin_info(registry, r)) for r in records]
+        plugins=[PluginAdminInfo(**build_plugin_info(registry, r)) for r in records],
+        propagation=PropagationInfo(**manager.propagation()),
     )
 
 

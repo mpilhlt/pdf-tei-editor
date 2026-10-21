@@ -144,6 +144,8 @@ async def lifespan(app: FastAPI):
     try:
         plugin_manager = PluginManager.get_instance()
         await plugin_manager.initialize_plugins(app)
+        # Apply plugin enable/disable changes made in other worker processes
+        plugin_manager.start_state_watcher()
         logger.info("Plugin system initialized")
     except Exception as e:
         logger.error(f"Error initializing plugin system: {e}")
@@ -182,6 +184,7 @@ async def lifespan(app: FastAPI):
     # Cleanup plugins
     try:
         plugin_manager = PluginManager.get_instance()
+        await plugin_manager.stop_state_watcher()
         await plugin_manager.shutdown_plugins()
     except Exception as e:
         logger.error(f"Error shutting down plugins: {e}")

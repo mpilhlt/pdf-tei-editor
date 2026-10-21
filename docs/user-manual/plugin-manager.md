@@ -32,6 +32,6 @@ Use the search field and the status chips at the top to filter the list.
 - Plugins marked **Protected** (for example the log viewer and backup tools) cannot be disabled.
 - Data created by a plugin is never deleted when it is disabled.
 
-Changes take effect on the server immediately. Pages that are already open keep their old menus until they are reloaded; the dialog offers a **Reload now** button after each change. Requests to a disabled plugin fail with "not found".
+Changes take effect on the server immediately. When the server runs several processes (as in production), the other processes follow within a few seconds; until then the dialog shows "Applying the change to all server processes". Pages that are already open keep their old menus until they are reloaded; the dialog offers a **Reload now** button after each change. Requests to a disabled plugin fail with "not found".
 
-The state is stored in the configuration key `plugins.disabled`, which is managed by the plugin manager and therefore not shown in the configuration editor.
+The state is stored in `data/db/plugins-state.json`. Older versions stored it in the configuration key `plugins.disabled`; it is moved to the new file on the first start.
