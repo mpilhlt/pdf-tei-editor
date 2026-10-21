@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi_app.config import get_settings
 from fastapi_app.lib.plugins import plugin_tools
 
 
@@ -19,6 +20,12 @@ class TestGenerateSandboxClientScript(unittest.TestCase):
     def test_uses_cached_script_when_source_missing(self):
         """When app/src is absent (production), the cached app/web/sandbox-client.js
         is used instead of extracting methods from the (missing) source file."""
+        # The cached script is a build artefact; without a build, create it from the source
+        cached_script = get_settings().project_root_dir / "app" / "web" / "sandbox-client.js"
+        if not cached_script.exists():
+            cached_script.write_text(plugin_tools.generate_sandbox_client_script(), encoding="utf-8")
+            self.addCleanup(cached_script.unlink)
+
         real_exists = Path.exists
 
         def fake_exists(path):

@@ -382,6 +382,31 @@ LOG_LEVEL=INFO
   }
 
   /**
+   * Print the last tracebacks of the server log, so that server errors behind failed
+   * tests are visible in CI, where the log file is not kept
+   *
+   * @param {number} [maxTracebacks] - Number of tracebacks to print, newest last
+   * @returns {Promise<void>}
+   */
+  async printServerTracebacks(maxTracebacks = 3) {
+    let lines;
+    try {
+      lines = (await fs.readFile(this.logFile, 'utf-8')).split('\n');
+    } catch {
+      return;
+    }
+    const starts = lines.flatMap((line, i) => (line.includes('Traceback (most recent call last)') ? [i] : []));
+    if (starts.length === 0) return;
+    console.error(`\n[ERROR] Last ${Math.min(maxTracebacks, starts.length)} of ${starts.length} tracebacks in the server log:`);
+    for (const start of starts.slice(-maxTracebacks)) {
+      // A traceback ends with the first unindented line after its frames (the exception)
+      let end = start + 1;
+      while (end < lines.length && (lines[end].startsWith(' ') || lines[end] === '')) end++;
+      console.error(lines.slice(Math.max(0, start - 1), end + 1).join('\n'));
+    }
+  }
+
+  /**
    * Wait for server to start up and verify health
    *
    * @private

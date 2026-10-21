@@ -460,6 +460,7 @@ class PlaywrightRunner {
       return 0;
     } catch (error) {
       console.error('💥 Playwright runner failed:', String(error));
+      await this.serverManager?.printServerTracebacks?.();
 
       // Ensure cleanup
       await this.stopServer({ noCleanup: false });
