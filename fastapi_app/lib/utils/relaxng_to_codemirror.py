@@ -30,6 +30,30 @@ import json
 # intentionally coexist.
 RNG_NS = '{http://relaxng.org/ns/structure/1.0}'
 
+XML_NS_URI = 'http://www.w3.org/XML/1998/namespace'
+
+
+def attribute_name(attr: ET.Element) -> Optional[str]:
+    """
+    Qualified name of an RNG `<attribute>`, as written in a document: an
+    attribute in the XML namespace (`<attribute name="lang"
+    ns="http://www.w3.org/XML/1998/namespace">`) is returned as `xml:lang`,
+    not `lang`. The name is read from the `name` attribute or, failing that,
+    a `<name>` child. Other namespaces have no fixed prefix and keep their
+    local name. Returns None for name classes such as `<anyName>`.
+    """
+    name = attr.get('name')
+    ns = attr.get('ns')
+    if not name:
+        name_el = attr.find(f'./{RNG_NS}name')
+        if name_el is None or not name_el.text:
+            return None
+        name = name_el.text.strip()
+        ns = name_el.get('ns', ns)
+    if ns == XML_NS_URI and not name.startswith('xml:'):
+        return f'xml:{name}'
+    return name
+
 
 class TagVariant(TypedDict):
     """One attribute-value preset for a tag, e.g. `{'level': 'a'}`."""
@@ -501,7 +525,7 @@ class RelaxNGParser:
         
         # Find all attribute definitions (only direct children, not descendants)
         for attr in element.findall('./{http://relaxng.org/ns/structure/1.0}attribute'):
-            attr_name = attr.get('name')
+            attr_name = attribute_name(attr)
             if attr_name:
                 # Check for value constraints
                 values = self._extract_attribute_values(attr)
@@ -641,7 +665,7 @@ class RelaxNGParser:
             visited = set()
         result: Set[str] = set()
         for attr in container.findall(f'./{RNG_NS}attribute'):
-            name = attr.get('name')
+            name = attribute_name(attr)
             if name:
                 result.add(name)
         for group in container.findall(f'./{RNG_NS}group'):
@@ -705,7 +729,7 @@ class RelaxNGParser:
         for group in groups:
             attrs = {}
             for attr in group.findall(f'./{RNG_NS}attribute'):
-                attr_name = attr.get('name')
+                attr_name = attribute_name(attr)
                 value = attr.find(f'./{RNG_NS}value')
                 if attr_name and value is not None and value.text:
                     attrs[attr_name] = value.text.strip()
@@ -730,7 +754,7 @@ class RelaxNGParser:
             visited = set()
         found: Dict[str, List[ET.Element]] = {}
         for attr in container.findall(f'./{RNG_NS}attribute'):
-            name = attr.get('name')
+            name = attribute_name(attr)
             if name:
                 found.setdefault(name, []).append(attr)
         for c in (container.findall(f'./{RNG_NS}choice') + container.findall(f'./{RNG_NS}group') +
