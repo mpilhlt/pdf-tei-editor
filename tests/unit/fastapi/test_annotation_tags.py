@@ -57,8 +57,18 @@ FIXTURE_RNG = """<?xml version="1.0" encoding="UTF-8"?>
       <empty/>
     </element>
   </define>
-  <define name="abbr"><element name="abbr"><text/></element></define>
-  <define name="expan"><element name="expan"><mixed><zeroOrMore><ref name="lb"/></zeroOrMore></mixed></element></define>
+  <define name="abbr">
+    <element name="abbr">
+      <optional><attribute name="lang" ns="http://www.w3.org/XML/1998/namespace"/></optional>
+      <text/>
+    </element>
+  </define>
+  <define name="expan">
+    <element name="expan">
+      <optional><attribute><name ns="http://www.w3.org/XML/1998/namespace">lang</name></attribute></optional>
+      <mixed><zeroOrMore><ref name="lb"/></zeroOrMore></mixed>
+    </element>
+  </define>
 </grammar>
 """
 
@@ -100,6 +110,11 @@ class TestGenerateAnnotationTags(unittest.TestCase):
         self.assertEqual(unclear["description"], "text that cannot be read with certainty")
         self.assertIn({"reason": "faded"}, [v["attrs"] for v in unclear["variants"]])
         self.assertTrue(unclear["bareAllowed"])
+
+    def test_xml_namespace_attribute_keeps_prefix(self):
+        tags = self._tags(expand=["choice"])
+        for tag in ("abbr", "expan"):
+            self.assertEqual(tags[tag]["attributes"], [{"name": "xml:lang", "values": None, "required": False}])
 
     def test_colors_distinct_and_from_palette(self):
         colors = [t["color"] for t in self._tags(expand=["choice"]).values()]
