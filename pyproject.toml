@@ -79,24 +79,24 @@ all = [
 ]
 
 [tool.uv.sources]
-pte-plugin-annotation-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-history", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-annotation-progress = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-annotation-review = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-review", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-anthropic-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-archival-edition = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/archival-edition", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-collection-overview = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/collection-overview", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-edit-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/edit-history", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-google-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/google-llm", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-grobid = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/grobid", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-iaa-analyzer = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/iaa-analyzer", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-kisski = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/kisski", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-llamore-extractor = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/llamore-extractor", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-local-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/local-sync", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-metadata-extraction = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/metadata-extraction", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-revision-feed = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/revision-feed", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-rng-converter = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/rng-converter", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-update-metadata = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/update-metadata", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
-pte-plugin-webdav-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/webdav-sync", rev = "1ba21ec6378d2209b5f1e5d2d70820f824d634c8" }
+pte-plugin-annotation-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-history", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-annotation-progress = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-annotation-review = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-review", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-anthropic-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-archival-edition = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/archival-edition", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-collection-overview = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/collection-overview", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-edit-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/edit-history", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-google-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/google-llm", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-grobid = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/grobid", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-iaa-analyzer = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/iaa-analyzer", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-kisski = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/kisski", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-llamore-extractor = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/llamore-extractor", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-local-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/local-sync", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-metadata-extraction = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/metadata-extraction", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-revision-feed = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/revision-feed", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-rng-converter = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/rng-converter", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-update-metadata = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/update-metadata", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-webdav-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/webdav-sync", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
 
 [tool.uv]
 # scipy <1.16.0 ships a _propack binary with a malformed Mach-O __thread_bss
