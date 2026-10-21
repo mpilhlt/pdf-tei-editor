@@ -102,7 +102,7 @@ Criteria for staying: other plugins use it as an extension point, it is part of 
 | `collection_overview` | move | Depends on `annotation_progress` |
 | `revision_feed` | move | Atom feeds |
 
-9 stay, 16 move, 1 is archived, 1 becomes a test fixture. The analytics group (`edit_history`, `annotation_progress`, `collection_overview`, `revision_feed`) moves and is part of the `default` extra, so standard deployments get it through `uv sync` / the deploy script.
+9 stay, 17 move, 1 is archived, 1 becomes a test fixture. The analytics group (`edit_history`, `annotation_progress`, `collection_overview`, `revision_feed`) moves and is part of the `default` extra, so standard deployments get it through `uv sync` / the deploy script.
 
 With no extractor in core, a fresh install cannot extract anything. Docker images and the demo therefore install the default set (see [Packaging and uv sync](#packaging-and-uv-sync)), and core shows a hint in the empty extraction dialog.
 
