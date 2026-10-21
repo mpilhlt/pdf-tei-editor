@@ -229,6 +229,11 @@ async function buildImage(tag, noCache) {
       buildArgs.push('--no-cache');
     }
 
+    // Plugins to install (optional dependency names, see PTE_PLUGIN_EXTRAS in the Dockerfile)
+    if (process.env.PTE_PLUGIN_EXTRAS !== undefined) {
+      buildArgs.push('--build-arg', `PTE_PLUGIN_EXTRAS=${process.env.PTE_PLUGIN_EXTRAS}`);
+    }
+
     buildArgs.push('-t', fullTag);
 
     if (tag !== 'latest') {

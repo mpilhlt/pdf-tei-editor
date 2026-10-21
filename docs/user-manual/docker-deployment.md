@@ -129,11 +129,13 @@ These variables are passed to the running container:
 
 #### AI/ML Services (Optional)
 
+These variables configure plugins (see [Plugins in the image](#plugins-in-the-image)); each plugin's README lists all of its variables.
+
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI extraction |
-| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing |
-| `KISSKI_API_KEY` | KISSKI Academic Cloud API key |
+| `GEMINI_API_KEY` | Google Gemini API key for AI extraction (`google-llm`) |
+| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing (`grobid`) |
+| `KISSKI_API_KEY` | KISSKI Academic Cloud API key (`kisski`) |
 
 #### Application Settings
 
@@ -142,12 +144,34 @@ These variables are passed to the running container:
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `LOG_CATEGORIES` | Log categories | `app,api,plugins` |
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
-| `WEBDAV_ENABLED` | Enable WebDAV integration | `false` |
-| `WEBDAV_BASE_URL` | WebDAV server URL | - |
+| `WEBDAV_ENABLED` | Enable WebDAV integration (`webdav-sync` plugin) | `false` |
+| `WEBDAV_BASE_URL` | WebDAV server URL (`webdav-sync` plugin) | - |
 | `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 
 See `.env.production` for complete list.
+
+### Plugins in the image
+
+Most plugins are maintained in the [pte-plugins](https://github.com/cboulanger/pte-plugins) repository and installed into the image as Python packages when it is built. The build argument `PTE_PLUGIN_EXTRAS` selects them by the names of the optional dependencies in `pyproject.toml`:
+
+| Value | Plugins |
+| --- | --- |
+| `default` (default) | GROBID, LLamore, Google Gemini, Anthropic Claude, metadata extraction, annotation review, and the analytics plugins (edit history, annotation progress, collection overview, revision feed) |
+| `analytics` | the analytics plugins only |
+| a plugin name, e.g. `kisski` or `webdav-sync` | that plugin and the plugins it requires |
+| `all` | all plugins of the repository |
+| empty | none |
+
+Several values are separated by commas:
+
+```bash
+docker build --build-arg PTE_PLUGIN_EXTRAS=default,kisski,webdav-sync -t pdf-tei-editor .
+# or with the deployment script
+PTE_PLUGIN_EXTRAS=default,kisski node scripts/deploy/container.js build
+```
+
+The plugin versions are pinned in `uv.lock`, so an image always contains the plugin versions of its release.
 
 ### External Plugins
 

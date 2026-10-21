@@ -68,6 +68,7 @@ grobid = "pte_plugin_grobid"
 - Modules are imported under the real package name (`pte_plugin_grobid.plugin`), so plugins can import each other's packages; declare such dependencies both as a Python dependency and in `metadata["dependencies"]`.
 - The package is located with `importlib.util.find_spec()` without importing it (`get_installed_plugin_dirs()` in `plugin_paths.py`). Unlike directory plugins, an installed plugin declares its own Python dependencies.
 - The Plugin Manager lists installed plugins as "external".
+- The first-party plugins (all except the ones in `fastapi_app/plugins/`) are such packages, maintained in the [pte-plugins](https://github.com/cboulanger/pte-plugins) monorepo. Core declares them as optional dependencies with git sources pinned to a commit (`[project.optional-dependencies]` and `[tool.uv.sources]` in `pyproject.toml`); the Docker build selects them with `PTE_PLUGIN_EXTRAS`. To update a plugin, change the `rev` of its source and run `uv lock`. Core code must not import them (guard test `tests/unit/fastapi/test_core_plugin_independence.py`).
 
 ### Plugin API
 
@@ -140,7 +141,7 @@ from fastapi_app.lib.utils.annotation_tags import generate_annotation_tags
 "annotationTags": {VARIANT_ID: generate_annotation_tags(SCHEMA_PATH, "p", exclude={"lb", "pb"}, expand=["choice"])},
 ```
 
-A chip whose element allows neither text nor any of its (non-excluded) children gets `empty: true` (e.g. `gap`, `pb`): the editor shows such elements as outlined badges that open the attributes popup, but does not offer them for wrapping selected text. Exclude a tag (e.g. `lb`) to leave it as plain XML. The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `fastapi_app/plugins/grobid/config/annotation_tags_scope.py`.
+A chip whose element allows neither text nor any of its (non-excluded) children gets `empty: true` (e.g. `gap`, `pb`): the editor shows such elements as outlined badges that open the attributes popup, but does not offer them for wrapping selected text. Exclude a tag (e.g. `lb`) to leave it as plain XML. The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `pte-plugins/plugins/grobid/src/pte_plugin_grobid/config/annotation_tags_scope.py`.
 
 ## Creating a Plugin
 
@@ -449,7 +450,7 @@ def is_available(cls) -> bool:
     return True
 ```
 
-**Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**Reference Implementation**: See [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ## Role-Based Access
 
@@ -624,8 +625,8 @@ async def analyze(self, context, params: dict) -> dict:
 
 ### Reference Examples
 
-- `fastapi_app/plugins/edit_history/` - Collection-based edit history with DataTables
-- `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
+- `pte-plugins/plugins/edit-history/src/pte_plugin_edit_history/` - Collection-based edit history with DataTables
+- `pte-plugins/plugins/annotation-history/src/pte_plugin_annotation_history/` - Document-based annotation history with nested tables
 
 
 
@@ -852,7 +853,7 @@ async def execute(self, context, params: dict) -> dict:
     }
 ```
 
-**See also:** [edit_history plugin](../../fastapi_app/plugins/edit_history) for complete example.
+**See also:** [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) for complete example.
 
 ### 3. Preview-then-Execute Pattern (for operations requiring confirmation)
 
@@ -941,7 +942,7 @@ async def execute_operation(
 - Optionally show errors if any occurred
 - Use complete HTML document with styles
 
-**See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**See also:** [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ### 4. Options-then-Execute Pattern (for user-configured operations)
 
@@ -965,7 +966,7 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 
 For detailed implementation pattern with code examples, see [Options-then-Execute Pattern](../development/plugin-system-backend.md#4-options-then-execute-pattern-for-user-configured-operations).
 
-**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+**See also:** [update_metadata plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/update-metadata/src/pte_plugin_update_metadata) for complete example.
 
 ## Interactive HTML Content
 
@@ -1054,8 +1055,8 @@ The sandbox can update any field from `ApplicationState` (see [app/src/state.js]
 
 ### Implementation Examples
 
-- **Inline HTML**: The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
-- **Standalone pages**: The [edit_history plugin](../../fastapi_app/plugins/edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
+- **Inline HTML**: The [iaa_analyzer plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/iaa-analyzer/src/pte_plugin_iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
+- **Standalone pages**: The [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
 
 ### Utility Functions
 

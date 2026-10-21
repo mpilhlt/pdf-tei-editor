@@ -44,12 +44,20 @@ WORKDIR /app
 # Stage 2: Build stage (includes all dependencies temporarily)
 FROM base AS builder
 
+# Plugins from the pte-plugins repository to install: names of optional dependencies of
+# pyproject.toml separated by commas or spaces ("default", "analytics", single plugins),
+# "all" for all of them, or empty for none
+ARG PTE_PLUGIN_EXTRAS=default
+
 # Copy dependency files first
 COPY package.json package-lock.json* ./
 COPY pyproject.toml uv.lock ./
 
 # Install all dependencies (both prod and dev) - this layer is cached unless deps change
-RUN uv sync --frozen && npm install --ignore-scripts --no-audit --no-fund
+RUN uv sync --frozen $(extras="$(echo "$PTE_PLUGIN_EXTRAS" | tr ',' ' ')"; \
+        if [ "$extras" = "all" ]; then echo --all-extras; \
+        else for extra in $extras; do printf -- '--extra %s ' "$extra"; done; fi) \
+    && npm install --ignore-scripts --no-audit --no-fund
 
 # Copy source code (needed for build scripts)
 COPY . .
@@ -119,7 +127,7 @@ COPY package.json package-lock.json* ./
 COPY pyproject.toml uv.lock ./
 
 # Install ALL dependencies (including dev dependencies for testing)
-RUN uv sync --frozen && npm install --ignore-scripts --no-audit --no-fund
+RUN uv sync --frozen --all-extras && npm install --ignore-scripts --no-audit --no-fund
 
 # Install Playwright browsers immediately after dependencies for early caching
 # This creates a separate layer that will be cached unless dependencies change
