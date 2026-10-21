@@ -37,39 +37,16 @@ from ..lib.utils.logging_utils import get_logger
 from ..lib.sse.sse_service import SSEService
 from ..lib.core.sessions import SessionManager
 from ..lib.sse.sse_utils import broadcast_to_other_sessions
+from ..lib.sse.event_bus import get_event_bus
 
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
-def _schedule_lock_sync(repo: FileRepository) -> None:
-    """Fire-and-forget: push updated lock state to remote if WebDAV is configured."""
-    try:
-        from fastapi_app.plugins.webdav_sync.config import is_configured, get_webdav_config
-        if not is_configured():
-            return
-    except Exception:
-        return
-
-    import threading
-
-    def _run() -> None:
-        try:
-            from fastapi_app.plugins.webdav_sync.service import SyncService
-            settings = get_settings()
-            service = SyncService(
-                file_repo=repo,
-                file_storage=None,
-                webdav_config=get_webdav_config(),
-                logger=logger,
-                db_dir=settings.db_dir,
-            )
-            service.sync_locks()
-        except Exception as exc:
-            logger.debug(f"Background lock sync failed (non-fatal): {exc}")
-
-    threading.Thread(target=_run, daemon=True).start()
+def _emit_lock_changed(stable_id: str) -> None:
+    """Notify listeners (e.g. sync plugins) that the lock state of a file changed."""
+    get_event_bus().emit_from_thread("file.lock_changed", stable_id=stable_id)
 
 
 @router.get("/locks", response_model=GetLocksResponse)
@@ -185,7 +162,7 @@ def acquire_lock_endpoint(
             logger=logger
         )
 
-        _schedule_lock_sync(repo)
+        _emit_lock_changed(file_metadata.stable_id)
         return "OK"
 
     # Could not acquire lock
@@ -243,7 +220,7 @@ def release_lock_endpoint(
             logger=logger
         )
 
-        _schedule_lock_sync(repo)
+        _emit_lock_changed(file_metadata.stable_id)
         return ReleaseLockResponse(
             action=result["action"],
             message=result["message"]

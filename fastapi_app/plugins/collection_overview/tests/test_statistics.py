@@ -1,14 +1,14 @@
 """
 Unit tests for statistics module.
 
-@testCovers fastapi_app/lib/services/statistics.py
+@testCovers fastapi_app/plugins/collection_overview/statistics.py
 """
 
 import unittest
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from fastapi_app.lib.services.statistics import (
+from fastapi_app.plugins.collection_overview.statistics import (
     build_overview_rows,
     calculate_collection_statistics,
     get_collection_variants,

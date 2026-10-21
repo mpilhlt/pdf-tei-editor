@@ -22,6 +22,7 @@ Example:
 
 from typing import Callable, Dict, List
 import asyncio
+import functools
 import logging
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,27 @@ class EventBus:
 
         # Launch handlers in background without awaiting
         asyncio.create_task(run_handlers())
+
+    def emit_from_thread(self, event_name: str, **kwargs):
+        """Emit an event from synchronous code running in a worker thread.
+
+        Use this in synchronous FastAPI endpoints (``def`` instead of ``async def``),
+        which run in an AnyIO worker thread without an event loop of their own.
+        The event is emitted on the application's event loop. Outside of a worker
+        thread (scripts, unit tests calling the function directly) there is no
+        loop to run handlers on, and the event is dropped.
+
+        Args:
+            event_name: Name of the event to emit
+            **kwargs: Event payload passed to all handlers
+        """
+        if event_name not in self._handlers:
+            return
+        try:
+            from anyio.from_thread import run as run_in_event_loop
+            run_in_event_loop(functools.partial(self.emit, event_name, **kwargs))
+        except RuntimeError as e:
+            logger.debug(f"Event '{event_name}' not emitted outside of a worker thread: {e}")
 
 
 # Singleton instance

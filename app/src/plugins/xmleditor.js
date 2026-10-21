@@ -87,7 +87,6 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusButton} validateBtn - Validate XML button
  * @property {StatusButton} undoBtn - Undo button
  * @property {StatusButton} redoBtn - Redo button
- * @property {StatusButton} teiWizardBtn - TEI Wizard button (added by tei-wizard plugin)
  * @property {SlDropdown} xslViewerDropdown - XSL viewer dropdown (added by xsl-viewer plugin)
  * @property {StatusButton} xslViewerBtn - XSL viewer button (added by xsl-viewer plugin)
  * @property {SlMenu} xslViewerMenu - XSL viewer menu (added by xsl-viewer plugin)

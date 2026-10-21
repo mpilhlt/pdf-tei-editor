@@ -28,7 +28,7 @@ async function openPluginManager(page) {
     menuItem.click();
   });
   await page.waitForSelector('sl-dialog[name="pluginAdminDialog"][open]');
-  await page.waitForSelector('sl-switch[data-id="tei-wizard"]');
+  await page.waitForSelector('sl-switch[data-id="test-base-plugin"]');
 }
 
 /**
@@ -46,6 +46,8 @@ async function pluginStatuses(page) {
 
 test.describe('Plugin manager', () => {
 
+  // Uses the fixture plugins test-base-plugin and test-dependent-plugin (tests/fixtures/plugins/),
+  // where the second depends on the first
   test('admin can disable a plugin with dependents and re-enable it', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
@@ -55,33 +57,28 @@ test.describe('Plugin manager', () => {
       await openPluginManager(page);
 
       const before = await pluginStatuses(page);
-      expect(before['tei-wizard']).toBe('active');
-      // grobid is only available where a GROBID server URL is configured (not in CI)
-      const grobidActive = before['grobid'] === 'active';
+      expect(before['test-base-plugin']).toBe('active');
+      expect(before['test-dependent-plugin']).toBe('active');
 
-      // Disabling tei-wizard warns about its dependents; cancelling changes nothing
-      await page.locator('sl-switch[data-id="tei-wizard"]').click();
+      // Disabling the base plugin warns about its dependents; cancelling changes nothing
+      await page.locator('sl-switch[data-id="test-base-plugin"]').click();
       const confirm = page.locator('sl-dialog[name="pluginAdminConfirmDialog"]');
       await expect(confirm).toHaveAttribute('open', '');
-      if (grobidActive) {
-        await expect(confirm.locator('ul[name="affectedList"]')).toContainText('grobid');
-      }
-      await expect(confirm.locator('ul[name="affectedList"]')).toContainText('metadata-extraction');
+      await expect(confirm.locator('ul[name="affectedList"]')).toContainText('test-dependent-plugin');
       await page.waitForTimeout(500);
       await confirm.locator('sl-button[name="cancelBtn"]').click();
-      expect((await pluginStatuses(page))['tei-wizard']).toBe('active');
+      expect((await pluginStatuses(page))['test-base-plugin']).toBe('active');
 
-      // Confirming disables tei-wizard and deactivates its dependents
+      // Confirming disables the base plugin and deactivates its dependents
       await page.waitForTimeout(500);
-      await page.locator('sl-switch[data-id="tei-wizard"]').click();
+      await page.locator('sl-switch[data-id="test-base-plugin"]').click();
       await page.waitForTimeout(500);
       await confirm.locator('sl-button[name="okBtn"]').click();
       await expect(page.locator('sl-alert[name="reloadBanner"]')).toBeVisible();
 
       await expect.poll(() => pluginStatuses(page)).toMatchObject({
-        'tei-wizard': 'disabled',
-        ...(grobidActive ? { 'grobid': 'inactive' } : {}),
-        'metadata-extraction': 'inactive'
+        'test-base-plugin': 'disabled',
+        'test-dependent-plugin': 'inactive'
       });
 
       // Disabled plugin's endpoints are no longer offered
@@ -90,15 +87,15 @@ test.describe('Plugin manager', () => {
         const result = await client.apiClient.plugins({});
         return result.plugins.map((/** @type {any} */ p) => p.id);
       });
-      expect(offered).not.toContain('tei-wizard');
-      if (grobidActive) expect(offered).not.toContain('grobid');
+      expect(offered).not.toContain('test-base-plugin');
+      expect(offered).not.toContain('test-dependent-plugin');
     } finally {
       // Restore state so other tests are not affected
       await page.evaluate(async () => {
         const client = /** @type {any} */(window).client;
-        await client.apiClient.pluginsAdminEnable('tei-wizard', { cascade: false });
+        await client.apiClient.pluginsAdminEnable('test-base-plugin', { cascade: false });
       });
-      expect(await pluginStatuses(page)).toMatchObject({ 'tei-wizard': 'active', 'metadata-extraction': 'active' });
+      expect(await pluginStatuses(page)).toMatchObject({ 'test-base-plugin': 'active', 'test-dependent-plugin': 'active' });
       stopErrorMonitoring();
       try {
         await performLogout(page);

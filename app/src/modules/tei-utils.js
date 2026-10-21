@@ -719,7 +719,7 @@ export function getDocumentMetadata(xmlDoc) {
 
   // Post-process extractor ID to match frontend extractor list format
   if (metadata.extractor_id) {
-    // Convert "GROBID" to lowercase to match extractor IDs
+    // Extractor ids are lowercase; application idents in documents may not be
     metadata.extractor_id = metadata.extractor_id.toLowerCase();
   }
 

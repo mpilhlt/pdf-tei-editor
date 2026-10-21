@@ -27,6 +27,8 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 3. For E2E tests: Builds Docker container and runs tests inside
 4. Comments on PRs with test results (success/failure)
 
+**Core without plugins** (job `core-without-plugins`): on every PR, the unit and API suites run with `fastapi_app/plugins/` emptied, so that core cannot start depending on a plugin again; only the fixture plugins in `tests/fixtures/plugins/` are loaded. For PRs to `main`, the E2E suite runs the same way in the CI container. The unit test `tests/unit/fastapi/test_core_plugin_independence.py` additionally fails if core code imports a plugin, calls its routes or refers to its files.
+
 **Outputs:**
 
 - `needs_tests`: Whether any tests need to run

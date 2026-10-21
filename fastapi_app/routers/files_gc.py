@@ -20,6 +20,7 @@ from ..config import get_settings
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.models.models_files import GarbageCollectRequest, GarbageCollectResponse
+from ..lib.core.gc_hooks import run_gc_handlers
 from ..lib.core.dependencies import (
     get_file_repository,
     get_file_storage,
@@ -352,32 +353,11 @@ def garbage_collect_files(
     else:
         logger.info("Annotation-rules cache directory does not exist or is empty")
 
-    # Clean up GROBID training-data cache (fully reproducible, safe to wipe)
-    logger.info("Cleaning up GROBID training-data cache...")
-    grobid_cache_deleted = 0
-    try:
-        from fastapi_app.plugins.grobid.cache import get_cache_dir
-        grobid_cache_dir = get_cache_dir()
-    except Exception:
-        grobid_cache_dir = None
-
-    if grobid_cache_dir and grobid_cache_dir.exists() and grobid_cache_dir.is_dir():
-        try:
-            for item in grobid_cache_dir.iterdir():
-                try:
-                    if item.is_file():
-                        item.unlink()
-                        grobid_cache_deleted += 1
-                    elif item.is_dir():
-                        shutil.rmtree(item)
-                        grobid_cache_deleted += 1
-                except Exception as e:
-                    logger.warning(f"Failed to delete GROBID cache item {item.name}: {e}")
-            logger.info(f"GROBID cache cleanup completed: {grobid_cache_deleted} items deleted")
-        except Exception as e:
-            logger.error(f"Failed to clean GROBID cache directory: {e}")
-    else:
-        logger.info("GROBID cache directory does not exist or is empty")
+    # Plugin data (caches etc.), deleted by the handlers the active plugins registered
+    logger.info("Running plugin garbage-collection handlers...")
+    plugin_items_deleted = run_gc_handlers()
+    for plugin_id, count in plugin_items_deleted.items():
+        logger.info(f"Plugin {plugin_id}: {count} items deleted")
 
     # Clean up application tmp directory
     logger.info("Cleaning up application tmp directory...")
@@ -407,6 +387,6 @@ def garbage_collect_files(
         files_deleted=files_deleted,
         storage_freed=storage_freed,
         orphaned_xml_deleted=orphaned_xml_deleted,
-        grobid_cache_deleted=grobid_cache_deleted,
+        plugin_items_deleted=plugin_items_deleted,
         annotation_rules_cache_deleted=annotation_rules_cache_deleted
     )

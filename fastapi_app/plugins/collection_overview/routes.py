@@ -72,7 +72,7 @@ def _resolve_accessible_collections(user: dict[str, Any]) -> list[dict[str, str]
 def _build_rows(db: DatabaseManager, user: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """Resolve accessible collections and build overview rows for them."""
     from fastapi_app.lib.repository.file_repository import FileRepository
-    from fastapi_app.lib.services.statistics import build_overview_rows
+    from .statistics import build_overview_rows
     from fastapi_app.lib.utils.config_utils import get_config
 
     file_repo = FileRepository(db)

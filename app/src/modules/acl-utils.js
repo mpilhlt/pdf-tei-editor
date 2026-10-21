@@ -1,4 +1,5 @@
 /**
+ * @registerModule
  * Access Control List utility functions for role-based permissions
  * @import { UserData } from '../plugins/authentication.js'
  */

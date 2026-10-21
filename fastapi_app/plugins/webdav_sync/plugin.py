@@ -4,11 +4,13 @@ WebDAV Sync backend plugin.
 Provides WebDAV-based file synchronization as a backend plugin.
 """
 
+import threading
 from pathlib import Path
 from typing import Any
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
+from fastapi_app.lib.sse.event_bus import get_event_bus
 from fastapi_app.lib.utils.logging_utils import get_logger
 
 from .config import init_plugin_config, get_webdav_config, is_configured
@@ -59,6 +61,35 @@ class WebDavSyncPlugin(Plugin):
         extension_file = Path(__file__).parent / "extensions" / "webdav-sync.js"
         if extension_file.exists():
             registry.register_extension(extension_file, self.metadata["id"])
+        get_event_bus().on("file.lock_changed", self._on_lock_changed)
+
+    async def cleanup(self) -> None:
+        """Unregister the lock change handler."""
+        get_event_bus().off("file.lock_changed", self._on_lock_changed)
+
+    async def _on_lock_changed(self, **kwargs: Any) -> None:
+        """Push the updated lock state to the WebDAV server in the background (fire-and-forget)."""
+        if not is_configured():
+            return
+
+        def _run() -> None:
+            try:
+                from fastapi_app.config import get_settings
+                from fastapi_app.lib.core.dependencies import get_db
+                from fastapi_app.lib.repository.file_repository import FileRepository
+                from .service import SyncService
+                service = SyncService(
+                    file_repo=FileRepository(get_db()),
+                    file_storage=None,
+                    webdav_config=get_webdav_config(),
+                    logger=logger,
+                    db_dir=get_settings().db_dir,
+                )
+                service.sync_locks()
+            except Exception as exc:
+                logger.debug(f"Background lock sync failed (non-fatal): {exc}")
+
+        threading.Thread(target=_run, daemon=True).start()
 
     async def execute_sync(self, context: PluginContext, params: dict) -> dict:
         """

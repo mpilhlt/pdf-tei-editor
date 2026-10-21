@@ -7,8 +7,6 @@
  * @testCovers fastapi_app/plugins/dashboard/extensions/dashboard.js
  * @testCovers fastapi_app/plugins/recent_documents/extensions/recent-documents.js
  * @testCovers fastapi_app/plugins/review_queue/extensions/review-queue.js
- * @testCovers fastapi_app/plugins/annotation_progress/extensions/annotation-progress-dashboard.js
- * @testCovers fastapi_app/plugins/edit_history/extensions/edit-history-dashboard.js
  */
 
 import { test, expect } from '../fixtures/debug-on-failure.js';
@@ -67,10 +65,7 @@ test.describe('Dashboard Plugin', () => {
     const headers = { 'X-Session-ID': sessionId };
     for (const path of [
       '/api/plugins/recent-documents/recent',
-      '/api/plugins/review-queue/documents',
-      '/api/plugins/annotation-progress/dashboard-summary',
-      '/api/plugins/edit-history/recent',
-      '/api/plugins/edit-history/all'
+      '/api/plugins/review-queue/documents'
     ]) {
       const response = await page.request.get(path, { headers });
       expect(response.status(), path).toBe(200);

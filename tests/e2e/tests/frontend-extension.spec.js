@@ -5,7 +5,7 @@
  * @testCovers app/src/modules/frontend-extension-plugin.js
  * @testCovers fastapi_app/lib/frontend_extension_registry.py
  * @testCovers fastapi_app/routers/plugins.py
- * @testCovers fastapi_app/plugins/test_plugin/extensions/hello-world.js
+ * @testCovers tests/fixtures/plugins/test_plugin/extensions/hello-world.js
  */
 
 import { test, expect } from '../fixtures/debug-on-failure.js';

@@ -400,8 +400,16 @@ class ServicesPlugin extends Plugin {
     // The item could be a version or gold file which has variant
     const variant = fileData?.item?.variant
     if (variant) {
-      // Extract the variant name from variant (e.g., "grobid.training.segmentation" -> "training.segmentation")
-      const variantName = variant.replace(/^grobid\./, '')
+      // Variants of an extractor may be prefixed with its id ("<extractor>.training.segmentation");
+      // the prefix is dropped from the filename
+      let variantName = variant
+      try {
+        const extractors = await this.#client.getExtractorList()
+        const extractor = extractors.find(e => variant.startsWith(`${e.id}.`))
+        if (extractor) variantName = variant.slice(extractor.id.length + 1)
+      } catch (error) {
+        this.#logger.warn('Could not load extractor list: ' + String(error))
+      }
       filename = `${filename}.${variantName}`
     }
 

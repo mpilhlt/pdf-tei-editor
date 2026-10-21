@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
 from .base import BaseExtractor
+from .registry import ExtractorUnavailableError
 
 
 class LLMBaseExtractor(BaseExtractor, ABC):
@@ -120,7 +121,7 @@ class LLMBaseExtractor(BaseExtractor, ABC):
         """
         if not self.is_available():
             env_var = self._get_api_key_env_var()
-            raise RuntimeError(f"LLM API is not available. Please set {env_var} environment variable.")
+            raise ExtractorUnavailableError(f"LLM API is not available. Please set {env_var} environment variable.")
 
         if not text_input:
             raise ValueError("text_input is required")

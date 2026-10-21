@@ -1,11 +1,4 @@
 {
-  "model-configurations": [
-    {
-      "value": "llamore",
-      "label": "LLamore"
-    }
-  ],
-  "model-configurations.description": "Available model configurations for extraction",
   "xml.encode-entities.server": true,
   "xml.encode-entities.server.description": "Encode XML special characters on the server side before saving",
   "xml.encode-entities.client": false,

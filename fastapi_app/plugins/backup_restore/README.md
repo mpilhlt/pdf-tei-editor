@@ -1,6 +1,6 @@
 # Backup & Restore Plugin
 
-The plugin downloads a backup of the application data as a ZIP file and restores the application from such a backup. Backups can be made by hand in the web interface or automatically with the script `bin/backup-download.js`.
+The plugin downloads a backup of the application data as a ZIP file and restores the application from such a backup. Backups can be made by hand in the web interface or automatically with the script `bin/backup-download.js` in this plugin's directory.
 
 - [Part 1: Manual backup and restore (web interface)](#part-1-manual-backup-and-restore-web-interface)
 - [Part 2: Automated backups (API and cron script)](#part-2-automated-backups-api-and-cron-script)
@@ -86,7 +86,7 @@ This part is for technical administrators with shell access to a machine that ca
 
 ### Overview
 
-`bin/backup-download.js` is a Node.js script that, on every run:
+`bin/backup-download.js` (in this plugin's directory) is a Node.js script that, on every run:
 
 1. logs in as a dedicated user,
 2. downloads a backup through the API,
@@ -94,7 +94,7 @@ This part is for technical administrators with shell access to a machine that ca
 4. stores it under a timestamped name and
 5. deletes old backups according to a retention policy.
 
-It runs from the application directory (`node bin/backup-download.js`) and needs no additional packages. It can run on the server itself or on any other machine that has a copy of the repository or the Docker image and network access to the server. For Docker deployments, run it on the host against the published port and write to a bind-mounted or host directory.
+It runs from the application directory (`node fastapi_app/plugins/backup_restore/bin/backup-download.js`) and needs no additional packages. It can run on the server itself or on any other machine that has a copy of the repository or the Docker image and network access to the server. For Docker deployments, run it on the host against the published port and write to a bind-mounted or host directory.
 
 ### Set up the backup bot user
 
@@ -126,7 +126,7 @@ Open the user management as an administrator, create a user `backup-bot`, set a 
 #### Check the setup
 
 ```bash
-node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor \
+node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor \
   --base-url https://editor.example.org --user backup-bot \
   --password-file /etc/pdf-tei-editor/backup.pw --dry-run
 ```
@@ -139,7 +139,7 @@ Example `/etc/cron.d/pdf-tei-editor-backup` (daily at 02:17, run as the user `ba
 
 ```bash
 MAILTO=admin@example.org
-17 2 * * * backup cd /opt/pdf-tei-editor && node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --user backup-bot --password-file /etc/pdf-tei-editor/backup.pw --quiet --ping-url https://hc-ping.com/YOUR-UUID
+17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --user backup-bot --password-file /etc/pdf-tei-editor/backup.pw --quiet --ping-url https://hc-ping.com/YOUR-UUID
 ```
 
 With `--quiet` the script prints only errors, so cron sends mail only when something went wrong.

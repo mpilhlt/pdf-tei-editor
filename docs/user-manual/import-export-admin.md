@@ -241,11 +241,11 @@ Security notes:
 
 ### Scheduled backups with cron
 
-`bin/backup-download.js` logs in, downloads a backup to a timestamped file (`pdf-tei-editor_20261003T020000Z.zip`, UTC), verifies it (size, SHA-256, ZIP structure) and prunes old backups. Create a dedicated user with only the `backup` role and store its password in a file readable only by the cron user.
+`fastapi_app/plugins/backup_restore/bin/backup-download.js` (shipped with the backup-restore plugin) logs in, downloads a backup to a timestamped file (`pdf-tei-editor_20261003T020000Z.zip`, UTC), verifies it (size, SHA-256, ZIP structure) and prunes old backups. Create a dedicated user with only the `backup` role and store its password in a file readable only by the cron user.
 
 ```bash
 # /etc/cron.d/pdf-tei-editor-backup: daily at 02:17
-17 2 * * * backup cd /opt/pdf-tei-editor && node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --user backup-cron --password-file /etc/pdf-tei-editor/backup.pw --base-url https://editor.example.org --quiet --ping-url https://hc-ping.com/<uuid>
+17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --user backup-cron --password-file /etc/pdf-tei-editor/backup.pw --base-url https://editor.example.org --quiet --ping-url https://hc-ping.com/<uuid>
 ```
 
 | Option | Default | Purpose |

@@ -9,6 +9,7 @@ import os
 from typing import List, Dict, Any
 
 from .registry import (
+    ExtractorUnavailableError,
     list_extractors as _list_extractors,
     create_extractor as _create_extractor,
     get_extractor as _get_extractor,
@@ -16,7 +17,7 @@ from .registry import (
 from .base import BaseExtractor
 
 # Re-export types
-__all__ = ['list_extractors', 'create_extractor', 'get_extractor', 'BaseExtractor', 'should_use_mock_extractor']
+__all__ = ['list_extractors', 'create_extractor', 'get_extractor', 'BaseExtractor', 'ExtractorUnavailableError', 'should_use_mock_extractor']
 
 
 def list_extractors(
@@ -60,7 +61,7 @@ def create_extractor(extractor_id: str) -> BaseExtractor:
 
     Raises:
         KeyError: If extractor is not found
-        RuntimeError: If extractor is not available (missing dependencies)
+        ExtractorUnavailableError: If extractor is not available (missing dependencies)
     """
     return _create_extractor(extractor_id)
 
@@ -82,29 +83,19 @@ def get_extractor(extractor_id: str):
     return _get_extractor(extractor_id)
 
 
-def should_use_mock_extractor(extractor_id: str, error_message: str) -> bool:
+def should_use_mock_extractor(error: Exception) -> bool:
     """
-    Determine if we should fall back to mock extractor for the given error.
+    Determine if we should fall back to the mock extractor for the given error.
 
     This is useful when external dependencies are missing but we want to continue
-    with mock data for development/testing.
+    with mock data for development/testing. The fallback only happens if an
+    extractor with the id "mock-extractor" is registered.
 
     Args:
-        extractor_id: The ID of the extractor that failed
-        error_message: The error message from the failed extractor
+        error: The exception raised while creating the extractor
 
     Returns:
         True if we should use mock extractor, False otherwise
     """
-    # Use mock extractor when external dependencies are missing
-    mock_conditions = [
-        "GROBID_SERVER_URL" in error_message,
-        "GEMINI_API_KEY" in error_message,
-        "not available" in error_message.lower(),
-        "dependencies" in error_message.lower()
-    ]
-
-    # Check environment variables for explicit mock mode
     use_mock_extractors = os.environ.get("USE_MOCK_EXTRACTORS", "").lower() in ["true", "1", "yes"]
-
-    return use_mock_extractors or any(mock_conditions)
+    return use_mock_extractors or isinstance(error, ExtractorUnavailableError)

@@ -87,14 +87,14 @@ class TestPluginAdminApi(unittest.TestCase):
 class TestReadmeUrl(unittest.TestCase):
     def test_builtin_with_readme(self):
         with tempfile.TemporaryDirectory() as d:
-            plugin_dir = Path(d) / "log_viewer"
+            plugin_dir = Path(d) / "sample_plugin"
             plugin_dir.mkdir()
-            rec = PluginRecord(id="log-viewer", metadata={}, plugin=None, directory=plugin_dir)
+            rec = PluginRecord(id="sample-plugin", metadata={}, plugin=None, directory=plugin_dir)
             self.assertIsNone(readme_url_for(rec))  # no README.md yet
             (plugin_dir / "README.md").write_text("x")
             self.assertEqual(
                 readme_url_for(rec),
-                "https://github.com/mpilhlt/pdf-tei-editor/blob/main/fastapi_app/plugins/log_viewer/README.md",
+                "https://github.com/mpilhlt/pdf-tei-editor/blob/main/fastapi_app/plugins/sample_plugin/README.md",
             )
             rec.external = True
             self.assertIsNone(readme_url_for(rec))

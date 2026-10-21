@@ -392,8 +392,10 @@ async function getExtractorList() {
  * @returns {Promise<Object>}
  */
 async function extract(file_id, options) {
-  // Extract extractor ID from options for new API format
-  const extractor = options.extractor || "llamore-gemini";
+  const extractor = options.extractor;
+  if (!extractor) {
+    throw new Error("No extractor given");
+  }
   const extractionOptions = { ...options };
   delete extractionOptions.extractor; // Remove extractor from options
 

@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
+from fastapi_app.lib.core.gc_hooks import clear_directory, register_gc_handler, unregister_gc_handler
+from fastapi_app.lib.core.schema_validator import register_schema_config, unregister_schema_config
 from fastapi_app.lib.doc_rules.rules_providers import register_document_rules_provider, unregister_document_rules_provider
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.plugins.grobid.annotation_rules import GrobidRulesProvider
@@ -17,9 +19,12 @@ from .config import init_plugin_config
 
 from fastapi_app.lib.extraction import ExtractorRegistry
 from fastapi_app.lib.sse.event_bus import get_event_bus
+from .cache import get_cache_dir
 from .extractor import GrobidTrainingExtractor
 
 logger = logging.getLogger(__name__)
+
+GROBID_RNG_URL = "https://raw.githubusercontent.com/kermitt2/grobid/refs/heads/master/grobid-home/schemas/rng/Grobid.rng"
 
 
 class GrobidPlugin(Plugin):
@@ -94,6 +99,8 @@ class GrobidPlugin(Plugin):
         registry = ExtractorRegistry.get_instance()
         registry.register(GrobidTrainingExtractor)
         register_document_rules_provider("GROBID", "grobid", GrobidRulesProvider())
+        register_schema_config(GROBID_RNG_URL, timeout=10, reason="Grobid RelaxNG schema is complex and may be slow")
+        register_gc_handler(self.metadata["id"], lambda: clear_directory(get_cache_dir()))
 
         # Register event handler for file deletion cache cleanup
         event_bus = get_event_bus()
@@ -120,6 +127,8 @@ class GrobidPlugin(Plugin):
         registry = ExtractorRegistry.get_instance()
         registry.unregister("grobid")
         unregister_document_rules_provider("GROBID")
+        unregister_schema_config(GROBID_RNG_URL)
+        unregister_gc_handler(self.metadata["id"])
 
         # Unregister event handler
         event_bus = get_event_bus()

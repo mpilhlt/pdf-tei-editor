@@ -18,7 +18,7 @@
  *
  * "Refresh document rules" itself does depend on live network access to
  * GitHub (github.com + raw.githubusercontent.com, via
- * fastapi_app/plugins/grobid/annotation_rules.py's resolve_forge_permalink /
+ * the extractor plugin's rules provider, resolve_forge_permalink /
  * translate_anchor_to_line_range) to permalink-pin the annotation guide -
  * this is inherent to the feature (confirmed by grep: every existing unit
  * test for that code path mocks the network call), not something this test

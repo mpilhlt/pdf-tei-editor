@@ -44,7 +44,6 @@ import {
   TeiHeaderEditorPlugin,
   TeiToolsPlugin,
   TeiValidationPlugin,
-  TeiWizardPlugin,
   ToolbarPlugin,
   ToolsPlugin,
   UrlHashStatePlugin,
@@ -100,7 +99,6 @@ const plugins = [
   ToolsPlugin,
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
-  TeiWizardPlugin,
   TeiValidationPlugin,
   DiagnosticsDrawerPlugin, // lists editor diagnostics in a drawer over the PDF viewer
   MoveFilesPlugin,

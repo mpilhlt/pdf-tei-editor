@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * @testCovers bin/backup-download.js
+ * @testCovers fastapi_app/plugins/backup_restore/bin/backup-download.js
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import {
   BackupError, EXIT, acquireLock, backupFileName, formatTimestamp, listZipEntries,
   parseBackupFileName, runBackup, selectBackupsToDelete,
-} from '../../../bin/backup-download.js';
+} from '../bin/backup-download.js';
 
 /**
  * Build a minimal ZIP with stored (uncompressed) empty entries.

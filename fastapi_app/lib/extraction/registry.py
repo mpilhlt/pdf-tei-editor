@@ -12,6 +12,16 @@ from .base import BaseExtractor
 logger = logging.getLogger(__name__)
 
 
+class ExtractorUnavailableError(RuntimeError):
+    """
+    Raised when an extractor cannot run in this environment.
+
+    Extractors raise it when an external dependency is missing (no server URL,
+    no API key, a package that is not installed). The extraction router falls
+    back to the mock extractor for this error type when one is registered.
+    """
+
+
 class ExtractorRegistry:
     """Registry for managing extraction engines."""
 
@@ -111,7 +121,7 @@ class ExtractorRegistry:
 
         Raises:
             KeyError: If extractor is not found
-            RuntimeError: If extractor is not available
+            ExtractorUnavailableError: If extractor is not available
         """
         if extractor_id not in self._extractors:
             raise KeyError(f"Extractor '{extractor_id}' not found")
@@ -119,7 +129,7 @@ class ExtractorRegistry:
         extractor_class = self._extractors[extractor_id]
 
         if not extractor_class.is_available():
-            raise RuntimeError(f"Extractor '{extractor_id}' is not available")
+            raise ExtractorUnavailableError(f"Extractor '{extractor_id}' is not available")
 
         return extractor_class
 

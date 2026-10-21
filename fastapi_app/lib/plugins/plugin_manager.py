@@ -79,6 +79,7 @@ class PluginManager:
         Searches:
         1. Built-in plugins: fastapi_app/plugins/
         2. Additional paths from FASTAPI_PLUGIN_PATHS environment variable
+        3. Installed packages with a ``pte.plugins`` entry point
         """
         plugin_dirs = get_plugin_dirs()
         logger.info(f"Discovering plugins from {len(plugin_dirs)} directories")
