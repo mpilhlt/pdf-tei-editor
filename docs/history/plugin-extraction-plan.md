@@ -317,9 +317,9 @@ Installing a plugin is installing server-side code with full access to all docum
 - **Audit log** entries for discover, install, enable, upgrade and remove, with user, repository, tag and hash.
 - **Network**: the backend needs outbound access to `api.github.com` and `objects.githubusercontent.com`; deployments without it use the `uv sync` path only.
 
-## Re-integrating pte-edition-plugin as `archive-edition`
+## Re-integrating pte-edition-plugin as `archival-edition`
 
-[cboulanger/pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) is an external plugin (extractor for photographed archival documents with a description form, Claude-based page transcription, the `tei-archival.rng` schema, annotation guidelines, and two frontend extensions). It was built as the example of an external plugin, so it already follows most monorepo conventions. It moves into the monorepo as `plugins/archive-edition/` (package `pte-plugin-archive-edition`, module `pte_plugin_archive_edition`).
+[cboulanger/pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) is an external plugin (extractor for photographed archival documents with a description form, Claude-based page transcription, the `tei-archival.rng` schema, annotation guidelines, and two frontend extensions). It was built as the example of an external plugin, so it already follows most monorepo conventions. It moves into the monorepo as `plugins/archival-edition/` (package `pte-plugin-archival-edition`, module `pte_plugin_archival_edition`).
 
 ### Current state
 
@@ -334,18 +334,14 @@ Installing a plugin is installing server-side code with full access to all docum
 
 ### Steps
 
-1. **Import with history**: `git filter-repo --to-subdirectory-filter plugins/archive-edition` on a clone, then merge into the monorepo with `--allow-unrelated-histories`. The 19 commits stay attributable.
-2. **Restructure** inside `plugins/archive-edition/`: the plugin code goes to `src/pte_plugin_archive_edition/` (package data: `extensions/`, `static/`, `prompts/`, `pte-plugin.json`); `schema/`, `scripts/`, `docs/`, `examples/` stay next to it in the plugin folder; `conftest.py` and the `PTE_ROOT` convention are replaced by the monorepo's shared test setup; `data/db/config.json` becomes a test fixture.
+1. **Import with history**: `git filter-repo --to-subdirectory-filter plugins/archival-edition` on a clone, then merge into the monorepo with `--allow-unrelated-histories`. The 19 commits stay attributable.
+2. **Restructure** inside `plugins/archival-edition/`: the plugin code goes to `src/pte_plugin_archival_edition/` (package data: `extensions/`, `static/`, `prompts/`, `pte-plugin.json`); `schema/`, `scripts/`, `docs/`, `examples/` stay next to it in the plugin folder; `conftest.py` and the `PTE_ROOT` convention are replaced by the monorepo's shared test setup; `data/db/config.json` becomes a test fixture.
 3. **Dependencies**: declare `pte-plugin-anthropic-llm` as a package dependency and `anthropic-llm` in `metadata.dependencies` (today the plugin fails at import if `anthropic_llm` is disabled or absent, instead of showing "inactive"); declare `pymupdf` explicitly, because it disappears from core when `llamore` moves out. Better: switch the import to the LLM provider registry in `lib/llm` (part of `plugin_api`), so the extractor works with any provider that supports image input and the hard dependency on `anthropic_llm` goes away.
-4. **Plugin id**: the plugin and package become `archive-edition`. Persisted identifiers need a decision, because they are stored in documents and config:
-   - extractor and variant id `archival-edition` appear in existing TEI files (`appInfo`, variant) and in the database;
-   - config keys `plugin.archival-edition.*` and env vars `ARCHIVAL_EDITION_*` are in existing deployments.
-
-   Recommended: rename everything to `archive-edition` in one release and ship a migration (in the plugin, run from its `initialize()` once or as a CLI) that rewrites the variant and extractor ids in stored documents and renames the config keys; read the old env var names as fallback for one major version. The alternative is to rename only the plugin/package id and keep the persisted `archival-edition` ids, which avoids the migration but leaves two names for one thing.
-5. **Schema and guidelines URL**: publish `docs/` from the monorepo's GitHub Pages under `https://mpilhlt.github.io/pte-plugins/archive-edition/` (one Pages site for all plugins, built in the monorepo's Pages workflow). New documents use the new URL. For existing documents, the plugin calls `register_schema_redirect("https://cboulanger.github.io/pte-edition-plugin/", "https://mpilhlt.github.io/pte-plugins/archive-edition/")` and keeps registering the bundled schema under both URLs. The old Pages site stays online (archived repository, Pages still served) so external validators keep working.
+4. **Name**: the plugin keeps its current name `archival-edition` (plugin, extractor and variant id, config keys `plugin.archival-edition.*`, env vars `ARCHIVAL_EDITION_*`); only the directory and package names follow the monorepo convention (`plugins/archival-edition/`, `pte-plugin-archival-edition`, `pte_plugin_archival_edition`). This needs no code changes beyond imports. The plugin is alpha with no production users, so no backwards compatibility or migration is provided for anything that changes in the move.
+5. **Schema and guidelines URL**: publish `docs/` from the monorepo's GitHub Pages under `https://mpilhlt.github.io/pte-plugins/archival-edition/` (one Pages site for all plugins, built in the monorepo's Pages workflow) and change `PAGES_URL` in `config.py`. The plugin keeps registering the bundled schema for validation. No redirect from the old `cboulanger.github.io/pte-edition-plugin/` URL is needed.
 6. **CI**: the schema check, the Node test and pytest become jobs of the monorepo matrix, on Python 3.13.
 7. **Release and install**: added to the `all` extra (not `default`, since it is a specialized workflow and needs per-user Anthropic keys); listed in `pte-plugins.json`, so it also appears in runtime discovery.
-8. **Old repository**: replace the README with a pointer to the monorepo, remove the topic `pte-plugin` so discovery does not list it twice, and archive the repository. Deployments using `FASTAPI_PLUGIN_PATHS=/opt/pte-edition-plugin/plugins` switch to the package; until they do, the old checkout keeps working with core versions inside its `engines.pte` range.
+8. **Old repository**: replace the README with a pointer to the monorepo, remove the topic `pte-plugin` so discovery does not list it twice, and archive the repository. Its GitHub Pages site can be switched off.
 
 The plugin's README section "an example of how to extend the editor without changing its source code" moves into the plugin template repository (`pte-plugin-template`), which takes over that role.
 
@@ -370,7 +366,7 @@ Each phase is one or more PRs against `devel` and leaves the application working
 
 ### Phase 2: remaining plugins
 
-Move in dependency order, one group per PR: `grobid` + `metadata_extraction` + `update_metadata`; `kisski`; `annotation_review`; `tei_annotator` (to `archived/`); `webdav_sync` + `local_sync`; `annotation_history` + `iaa_analyzer` + `rng_converter`; `edit_history` + `annotation_progress` + `collection_overview` + `revision_feed`. Then import `pte-edition-plugin` as `archive-edition` (see [Re-integrating pte-edition-plugin as `archive-edition`](#re-integrating-pte-edition-plugin-as-archive-edition)), after `anthropic_llm` is in the monorepo. Each PR deletes the plugin from core, adds the extra, and updates docs that link to the plugin source.
+Move in dependency order, one group per PR: `grobid` + `metadata_extraction` + `update_metadata`; `kisski`; `annotation_review`; `tei_annotator` (to `archived/`); `webdav_sync` + `local_sync`; `annotation_history` + `iaa_analyzer` + `rng_converter`; `edit_history` + `annotation_progress` + `collection_overview` + `revision_feed`. Then import `pte-edition-plugin` as `archival-edition` (see [Re-integrating pte-edition-plugin as `archival-edition`](#re-integrating-pte-edition-plugin-as-archival-edition)), after `anthropic_llm` is in the monorepo. Each PR deletes the plugin from core, adds the extra, and updates docs that link to the plugin source.
 
 ### Phase 3: runtime install
 
