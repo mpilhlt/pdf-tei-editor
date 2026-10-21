@@ -43,14 +43,34 @@ def plugin_names() -> set[str]:
     return names
 
 
+# Generated or test runtime directories, skipped when git is not available
+UNTRACKED_DIR_NAMES = {"__pycache__", "node_modules", "runtime", "test-results"}
+
+
+def candidate_files() -> list[Path]:
+    """Files under the checked directories that git tracks (generated and staged files are ignored).
+
+    Without git (the CI container image has no .git), all files below the checked
+    directories are used, except those in generated or test runtime directories.
+    """
+    try:
+        output = subprocess.run(
+            ["git", "ls-files", "--", *CHECKED_DIRS], cwd=PROJECT_ROOT, capture_output=True, text=True, check=True
+        ).stdout
+        return [PROJECT_ROOT / line for line in output.splitlines()]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return [
+            path
+            for checked in CHECKED_DIRS
+            for path in (PROJECT_ROOT / checked).rglob("*")
+            if not UNTRACKED_DIR_NAMES & set(path.relative_to(PROJECT_ROOT).parts)
+        ]
+
+
 def tracked_files() -> list[Path]:
-    """Files under the checked directories that git tracks (generated and staged files are ignored)."""
-    output = subprocess.run(
-        ["git", "ls-files", "--", *CHECKED_DIRS], cwd=PROJECT_ROOT, capture_output=True, text=True, check=True
-    ).stdout
+    """Files that the guard test checks."""
     files = []
-    for line in output.splitlines():
-        path = PROJECT_ROOT / line
+    for path in candidate_files():
         if path.suffix not in CHECKED_SUFFIXES or not path.is_file():
             continue
         if any(path.is_relative_to(excluded) for excluded in EXCLUDED_DIRS):
