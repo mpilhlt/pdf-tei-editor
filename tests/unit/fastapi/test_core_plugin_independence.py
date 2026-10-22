@@ -92,6 +92,8 @@ class TestCorePluginIndependence(unittest.TestCase):
             re.compile(rf"/api/plugins/(?:{alternatives})(?![\w-])"),
             # File paths into a plugin directory
             re.compile(rf"fastapi_app/plugins/(?:{alternatives})\b"),
+            # Imports of installed plugin packages (pte-plugins monorepo)
+            re.compile(r"^\s*(?:from|import)\s+pte_plugin_\w+"),
         ]
         violations = []
         for path in tracked_files():

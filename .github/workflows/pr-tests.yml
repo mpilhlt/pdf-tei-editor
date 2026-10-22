@@ -102,7 +102,8 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           npm ci
-          uv sync
+          # with all first-party plugins (pte-plugins), so that the suites check that they still load
+          uv sync --all-extras
 
       - name: Run tests natively
         if: steps.check-tests.outputs.needs_tests == 'true' && steps.check-tests.outputs.needs_e2e == 'false'

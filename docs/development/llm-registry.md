@@ -63,7 +63,7 @@ LLMProviderRegistry.get_instance().unregister("my-provider")
 
 Consumers query the registry lazily, inside route handlers, and never declare the provider plugin as a plugin dependency; registration order therefore does not matter. Use `get_provider(id)` (raises `KeyError`) or `list_providers(available_only=True)`.
 
-See `fastapi_app/plugins/anthropic_llm/plugin.py` for a complete example. For OpenAI-compatible endpoints, use `OpenAICompatibleProvider` instead of writing a new class (see `fastapi_app/plugins/kisski/`).
+See `pte-plugins/plugins/anthropic-llm/src/pte_plugin_anthropic_llm/plugin.py` for a complete example. For OpenAI-compatible endpoints, use `OpenAICompatibleProvider` instead of writing a new class (see `pte-plugins/plugins/kisski/src/pte_plugin_kisski/`).
 
 ## Model filter
 
@@ -93,7 +93,7 @@ A model is free if its provider sets `LLMModel.free`, or if its `<Provider label
 
 `GET /api/v1/llm/providers` lists only the models the current user may use, so non-admins never see models they cannot pick.
 
-Consuming routes must call it before invoking a provider; see `fastapi_app/plugins/annotation_review/routes.py`.
+Consuming routes must call it before invoking a provider; see `pte-plugins/plugins/annotation-review/src/pte_plugin_annotation_review/routes.py`.
 
 ## HTTP API
 

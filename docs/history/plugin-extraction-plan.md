@@ -420,3 +420,16 @@ Done as planned, with these differences:
 - CI installs the packages as editable into a core checkout, after deleting the core's built-in copies of the moved plugins, and runs the plugin unit tests plus core's API and E2E suites with `--plugin-tests`. It tests against this PR's core branch until #586 is merged.
 - Manual integration tests (KISSKI, local-sync, WebDAV) moved to `tests/integration/`; they load core's test helpers through `scripts/core.js`.
 - archival-edition: GitHub Pages moved to `https://cboulanger.github.io/pte-plugins/archival-edition/`. The plugin registers the bundled schema also for the old `cboulanger.github.io/pte-edition-plugin` schema URL, so existing documents validate in the editor; outside the editor the old URL only keeps working if `cboulanger/pte-edition-plugin` is archived rather than deleted.
+
+### PR 2: multi-worker plugin state
+
+Done as planned, with one difference: the workers report their applied generation in heartbeat files (`data/db/plugin-workers/<pid>.json`) instead of a SQLite table, which needs no schema migration and is cleaned up when a worker stops. The legacy config key `plugins.disabled` is migrated when the state file is created, without a script in `bin/migrations`.
+
+### PR 4: core without the moved plugins
+
+Done as planned, with these differences:
+
+- The git sources in `[tool.uv.sources]` are pinned with `rev` to a commit of the pte-plugins repository, since it has no per-package release tags yet. Updating a plugin means changing the `rev` and running `uv lock`.
+- `jsonschema` and `pdf2image` (only used by `kisski`) left core as well; the WebDAV test server (`tests/lib/webdav-server-manager.js`, with `wsgidav` and `cheroot`) moved to the webdav-sync plugin and runs WsgiDAV with `uvx`. The unused helpers `tests/api/helpers/webdav-server.js` and `test-env.js` were deleted.
+- The main CI job and the CI container install all plugins (`uv sync --all-extras`), so core's suites keep checking that they load; `core-without-plugins` covers the opposite case.
+- `scripts/dev/ui-screenshot.js` builds the demo image with `PTE_PLUGIN_EXTRAS=all`.

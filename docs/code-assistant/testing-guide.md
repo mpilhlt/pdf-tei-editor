@@ -231,8 +231,8 @@ response = self.client.get(
 
 **See Also:**
 
-- [fastapi_app/plugins/edit_history/tests/test_edit_history_export.py](../../fastapi_app/plugins/edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
-- [fastapi_app/plugins/annotation_history/tests/test_annotation_history.py](../../fastapi_app/plugins/annotation_history/tests/test_annotation_history.py) - Routes requiring authentication via dependency injection
+- [pte-plugins/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
+- [pte-plugins/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py](https://github.com/cboulanger/pte-plugins/tree/main/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py) - Routes requiring authentication via dependency injection
 
 ### API Integration Tests
 
@@ -814,7 +814,7 @@ node tests/backend-test-runner.js \
 
 #### Complete Example
 
-See `fastapi_app/plugins/local_sync/tests/test_sync_api.test.js` for a complete working example that includes:
+See `pte-plugins/plugins/local-sync/src/pte_plugin_local_sync/tests/integration/test_sync_api.test.js` for a complete working example that includes:
 
 - Environment configuration via `.env.test`
 - Authentication setup

@@ -55,7 +55,7 @@ Plugins can serve static files (CSS, JS, XSLT, images) by placing them in an `ht
 **Example:**
 
 ```text
-fastapi_app/plugins/grobid/html/bibl-struct.xslt
+pte-plugins/plugins/grobid/src/pte_plugin_grobid/html/bibl-struct.xslt
 → Served at: /api/plugins/grobid/static/bibl-struct.xslt
 ```
 
@@ -282,7 +282,7 @@ def is_available(cls) -> bool:
     return True
 ```
 
-**Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**Reference Implementation**: See [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ## Service Registry
 
@@ -614,7 +614,7 @@ async def execute(self, context, params: dict) -> dict:
     }
 ```
 
-**See also:** [edit_history plugin](../../fastapi_app/plugins/edit_history) for complete example.
+**See also:** [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) for complete example.
 
 ### 3. Preview-then-Execute Pattern (for operations requiring confirmation)
 
@@ -703,7 +703,7 @@ async def execute_operation(
 - Optionally show errors if any occurred
 - Use complete HTML document with styles
 
-**See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**See also:** [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ### 4. Options-then-Execute Pattern (for user-configured operations)
 
@@ -806,7 +806,7 @@ async def execute_operation(
 - The "Cancel" button can call `sandbox.closeDialog()` to dismiss the dialog
 - Each page in the chain is a full page load in the iframe, so the sandbox client reconnects on each navigation
 
-**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+**See also:** [update_metadata plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/update-metadata/src/pte_plugin_update_metadata) for complete example.
 
 ## Interactive HTML Content
 
@@ -895,8 +895,8 @@ The sandbox can update any field from `ApplicationState` (see [app/src/state.js]
 
 ### Implementation Examples
 
-- **Inline HTML**: The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
-- **Standalone pages**: The [edit_history plugin](../../fastapi_app/plugins/edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
+- **Inline HTML**: The [iaa_analyzer plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/iaa-analyzer/src/pte_plugin_iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
+- **Standalone pages**: The [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
 
 ### Utility Functions
 

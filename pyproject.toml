@@ -5,14 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "cryptography>=50.0.2",
     "fastapi>=0.119.0",
-    "google-genai>=1.56.0",
     "flask>=3.1.3",
-    "jsonschema>=4.23.0",
-    "llamore>=0.2.0",
-    "tei-annotator>=1.7.0",
     "lxml>=6.1.0",
-    "pdf2image>=1.17.0",
     "pydantic-settings>=2.10.1",
     "python-dotenv>=1.1.0",
     "python-magic>=0.4.27",
@@ -22,15 +18,85 @@ dependencies = [
     "tqdm>=4.67.1",
     "uvicorn[standard]>=0.36.0",
     "waitress>=3.0.2",
-    "webdav4[fsspec]>=0.10.0",
     "xmlschema>=4.3.2",
     "pypdf>=6.16.1",
     "py3langid>=0.4.0",
 ]
 
+[project.optional-dependencies]
+# First-party plugins from https://github.com/cboulanger/pte-plugins (see docs/user-manual/plugin-manager.md);
+# install with `uv sync --extra default`, `--extra <plugin>` or `--all-extras`
+annotation-history = ["pte-plugin-annotation-history"]
+annotation-progress = ["pte-plugin-annotation-progress"]
+annotation-review = ["pte-plugin-annotation-review"]
+anthropic-llm = ["pte-plugin-anthropic-llm"]
+archival-edition = ["pte-plugin-archival-edition"]
+collection-overview = ["pte-plugin-collection-overview"]
+edit-history = ["pte-plugin-edit-history"]
+google-llm = ["pte-plugin-google-llm"]
+grobid = ["pte-plugin-grobid"]
+iaa-analyzer = ["pte-plugin-iaa-analyzer"]
+kisski = ["pte-plugin-kisski"]
+llamore-extractor = ["pte-plugin-llamore-extractor"]
+local-sync = ["pte-plugin-local-sync"]
+metadata-extraction = ["pte-plugin-metadata-extraction"]
+revision-feed = ["pte-plugin-revision-feed"]
+rng-converter = ["pte-plugin-rng-converter"]
+update-metadata = ["pte-plugin-update-metadata"]
+webdav-sync = ["pte-plugin-webdav-sync"]
+analytics = ["pte-plugin-edit-history", "pte-plugin-annotation-progress", "pte-plugin-collection-overview", "pte-plugin-revision-feed"]
+default = [
+    "pte-plugin-grobid",
+    "pte-plugin-llamore-extractor",
+    "pte-plugin-google-llm",
+    "pte-plugin-anthropic-llm",
+    "pte-plugin-metadata-extraction",
+    "pte-plugin-annotation-review",
+    "pte-plugin-edit-history",
+    "pte-plugin-annotation-progress",
+    "pte-plugin-collection-overview",
+    "pte-plugin-revision-feed",
+]
+all = [
+    "pte-plugin-annotation-history",
+    "pte-plugin-annotation-progress",
+    "pte-plugin-annotation-review",
+    "pte-plugin-anthropic-llm",
+    "pte-plugin-archival-edition",
+    "pte-plugin-collection-overview",
+    "pte-plugin-edit-history",
+    "pte-plugin-google-llm",
+    "pte-plugin-grobid",
+    "pte-plugin-iaa-analyzer",
+    "pte-plugin-kisski",
+    "pte-plugin-llamore-extractor",
+    "pte-plugin-local-sync",
+    "pte-plugin-metadata-extraction",
+    "pte-plugin-revision-feed",
+    "pte-plugin-rng-converter",
+    "pte-plugin-update-metadata",
+    "pte-plugin-webdav-sync",
+]
+
 [tool.uv.sources]
-llamore = { git = "https://github.com/mpilhlt/llamore.git" }
-tei-annotator = { git = "https://github.com/cboulanger/tei-annotator" }
+pte-plugin-annotation-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-history", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-annotation-progress = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-annotation-review = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/annotation-review", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-anthropic-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-archival-edition = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/archival-edition", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-collection-overview = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/collection-overview", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-edit-history = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/edit-history", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-google-llm = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/google-llm", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-grobid = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/grobid", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-iaa-analyzer = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/iaa-analyzer", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-kisski = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/kisski", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-llamore-extractor = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/llamore-extractor", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-local-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/local-sync", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-metadata-extraction = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/metadata-extraction", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-revision-feed = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/revision-feed", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-rng-converter = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/rng-converter", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-update-metadata = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/update-metadata", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
+pte-plugin-webdav-sync = { git = "https://github.com/cboulanger/pte-plugins", subdirectory = "plugins/webdav-sync", rev = "1e7fef50755d68639157f665f0a96346a84ee3a2" }
 
 [tool.uv]
 # scipy <1.16.0 ships a _propack binary with a malformed Mach-O __thread_bss
@@ -39,7 +105,7 @@ constraint-dependencies = ["scipy>=1.16.0"]
 
 [dependency-groups]
 dev = [
-    "cheroot>=10.0.0",
+    "httpx>=0.28.1",
     "lxml-stubs>=0.5.1",
     "mypy>=2.3.1",
     "pdoc>=15.0.0",
@@ -47,7 +113,6 @@ dev = [
     "pytest>=8.4.0",
     "pytest-tap>=3.3",
     "send2trash>=2.1.0",
-    "wsgidav>=4.3.0",
 ]
 
 [tool.pytest.ini_options]

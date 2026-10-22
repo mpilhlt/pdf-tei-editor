@@ -53,7 +53,9 @@ function getFreePort() {
  */
 function container(args, ignoreErrors = false) {
   try {
-    execFileSync('node', [containerScript, ...args], { cwd: projectRoot, stdio: 'inherit' });
+    // The demo image includes all first-party plugins unless PTE_PLUGIN_EXTRAS says otherwise
+    const env = { ...process.env, PTE_PLUGIN_EXTRAS: process.env.PTE_PLUGIN_EXTRAS ?? 'all' };
+    execFileSync('node', [containerScript, ...args], { cwd: projectRoot, stdio: 'inherit', env });
   } catch (error) {
     if (!ignoreErrors) throw error;
   }
