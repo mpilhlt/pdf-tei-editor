@@ -195,7 +195,8 @@ def load_full_config(db_dir: Path, apply_masks: bool = False) -> dict:
     if apply_masks:
         for key in list(data.keys()):
             if not key.endswith(_METADATA_SUFFIXES):
-                if data.get(f"{key}.masked") is True:
+                # An empty masked value stays empty, so that the editor shows it as not set
+                if data.get(f"{key}.masked") is True and data[key] not in (None, ""):
                     data[key] = MASKED_SENTINEL
 
     return data
@@ -216,7 +217,7 @@ def get_config_value(key: str, db_dir: Path, default: Any = None, apply_masks: b
     """
     try:
         config_data = load_full_config(db_dir)
-        if apply_masks and config_data.get(f"{key}.masked") is True:
+        if apply_masks and config_data.get(f"{key}.masked") is True and config_data.get(key) not in (None, ""):
             return MASKED_SENTINEL
         return config_data.get(key, default)
     except (FileNotFoundError, ValueError):

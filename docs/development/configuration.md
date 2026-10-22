@@ -134,7 +134,7 @@ REST API endpoints for configuration access:
 
 - **`GET /api/v1/config/list`**: Returns complete configuration object
 - **`GET /api/v1/config/get/{key}`**: Returns specific configuration value by key
-- **`POST /api/v1/config/set`**: Sets a configuration value (requires authentication)
+- **`POST /api/v1/config/set`**: Sets a configuration value (requires the admin role)
   - Request body: `{"key": "config.key", "value": <json_value>}`
   - Validates user authentication via session
   - Calls `set_config_value()` which performs validation

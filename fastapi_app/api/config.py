@@ -8,7 +8,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
 
-from ..lib.core.dependencies import require_authenticated_user
+from ..lib.core.dependencies import require_admin_user, require_authenticated_user
 from ..lib.utils.config_utils import get_config, get_config_metadata, MASKED_SENTINEL
 from ..lib.utils.logging_utils import get_logger
 
@@ -115,7 +115,7 @@ async def get_config_value_endpoint(
     if key not in config_data:
         raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
 
-    if config_data.get(f"{key}.masked") is True:
+    if config_data.get(f"{key}.masked") is True and config_data[key] not in (None, ""):
         return MASKED_SENTINEL
 
     return config_data[key]
@@ -145,12 +145,13 @@ async def get_config_metadata_endpoint(
 @router.post("/set", response_model=ConfigSetResponse)
 async def set_config(
     request_data: ConfigSetRequest,
-    user: dict = Depends(require_authenticated_user)
+    user: dict = Depends(require_admin_user)
 ):
     """
     Set a configuration value.
 
-    Requires authentication.
+    Requires the admin role: configuration values include service URLs and shared API keys, so
+    changing them affects all users.
     """
     if not request_data.key:
         raise HTTPException(status_code=400, detail="Missing 'key' in request")

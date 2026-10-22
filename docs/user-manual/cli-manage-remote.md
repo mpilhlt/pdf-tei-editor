@@ -173,7 +173,7 @@ npm run manage-remote -- config <subcommand>
 |---------|-------------|
 | `config list` | List all configuration values |
 | `config get <key>` | Get a configuration value |
-| `config set <key> <json-value>` | Set a configuration value (value must be valid JSON) |
+| `config set <key> <json-value>` | Set a configuration value (value must be valid JSON; requires an admin account) |
 
 ### Examples
 

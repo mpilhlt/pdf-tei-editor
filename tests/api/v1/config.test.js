@@ -71,6 +71,18 @@ describe('Configuration API', () => {
         assert.strictEqual(response.status, 401);
     });
 
+    test('should reject set config for non-admin users', async () => {
+        const { sessionId } = await login('user', 'user');
+        try {
+            const response = await authenticatedRequest(
+                sessionId, '/config/set', 'POST', { key: 'test.key', value: 'changed by user' }
+            );
+            assert.strictEqual(response.status, 403);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
     test('should set config value with authentication', async () => {
         const { sessionId } = await login('admin', 'admin');
 
