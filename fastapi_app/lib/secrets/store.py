@@ -131,6 +131,13 @@ class SecretStore:
         conn.commit()
         return cursor.rowcount > 0
 
+    def delete_all(self, username: str) -> int:
+        """Remove all secrets of a user, including those of services that are no longer registered; returns how many existed."""
+        conn = get_connection(self.db_path)
+        cursor = conn.execute("DELETE FROM user_secrets WHERE username = ?", (username,))
+        conn.commit()
+        return cursor.rowcount
+
     def list_services(self, username: str) -> list[str]:
         """Ids of the services the user has a secret for (never the values)."""
         rows = get_connection(self.db_path).execute(

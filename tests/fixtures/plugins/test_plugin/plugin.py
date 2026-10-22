@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, Optional, NotRequired
 
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.extraction import ExtractorRegistry
+from fastapi_app.lib.secrets import register_secret_service
 from fastapi_app.lib.services.service_registry import ExtractionService, ExtractionResult, get_service_registry
 from .extractor import MockExtractor
 
@@ -156,7 +157,7 @@ class TestPlugin(Plugin):
         return app_mode in ("testing")
 
     async def initialize(self, context: PluginContext) -> None:
-        """Initialize plugin, register MockExtractor, DummyExtractionService, and frontend extensions."""
+        """Initialize plugin, register MockExtractor, DummyExtractionService, a secret service, and frontend extensions."""
         # Register MockExtractor for testing
         if MockExtractor.is_available():
             registry = ExtractorRegistry.get_instance()
@@ -167,6 +168,9 @@ class TestPlugin(Plugin):
         service_registry = get_service_registry()
         service_registry.register_service(DummyExtractionService())
         logger.info("DummyExtractionService registered for testing")
+
+        # Register a service that needs a user API key, for the API keys endpoints and dialog
+        register_secret_service("test-secret-service", "Test Service", "Key used by the API keys tests")
 
         # Register frontend extension
         from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry

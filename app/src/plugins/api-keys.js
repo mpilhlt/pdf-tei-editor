@@ -23,7 +23,7 @@ await registerTemplate('api-keys-menu-item', 'api-keys-menu-item.html')
 class ApiKeysPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'api-keys', deps: ['client', 'toolbar'] })
+    super(context, { name: 'api-keys', deps: ['client', 'toolbar', 'dialog'] })
   }
 
   static extensionPoints = [ep.toolbar.menuItems];
@@ -38,6 +38,8 @@ class ApiKeysPlugin extends Plugin {
 
   get #client() { return this.getDependency('client') }
 
+  get #dialog() { return this.getDependency('dialog') }
+
   /** @type {import('../ui.js').SlDialog & apiKeysDialogPart} */
   #dialogUi = null
 
@@ -51,6 +53,10 @@ class ApiKeysPlugin extends Plugin {
   /** Whether a key was saved while the dialog was open */
   #saved = false
 
+  /** The service the dialog is restricted to, if any
+   * @type {string|undefined} */
+  #onlyService = undefined
+
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState)
@@ -58,6 +64,7 @@ class ApiKeysPlugin extends Plugin {
     this.#menuItem = createSingleFromTemplate('api-keys-menu-item')
     this.#menuItem.addEventListener('click', () => this.show())
     this.#dialogUi.closeBtn.addEventListener('click', () => this.#dialogUi.hide())
+    this.#dialogUi.removeAllBtn.addEventListener('click', () => this.#removeAll())
     this.#dialogUi.addEventListener('sl-after-hide', event => {
       if (event.target !== this.#dialogUi) return
       this.#resolveClose?.(this.#saved)
@@ -73,11 +80,13 @@ class ApiKeysPlugin extends Plugin {
    */
   async show(message, onlyService) {
     this.#saved = false
+    this.#onlyService = onlyService
     this.#dialogUi.errorMessage.style.display = 'none'
     this.#dialogUi.intro.textContent = message ||
       'Some features use services that are billed to you. Your keys are stored encrypted on the server and are only used for your own requests.'
-    const services = (await this.#client.apiClient.secretsList()).filter(s => !onlyService || s.id === onlyService)
-    this.#renderServices(services)
+    // a prompt for a single missing key is not the place to remove all keys
+    this.#dialogUi.removeAllBtn.style.display = onlyService ? 'none' : ''
+    await this.#loadServices()
     this.#dialogUi.show()
     return new Promise(resolve => { this.#resolveClose = resolve })
   }
@@ -103,6 +112,30 @@ class ApiKeysPlugin extends Plugin {
    */
   async withKeyPrompt(action, blocker) {
     return withKeyPrompt(action, detail => this.promptForKey(detail), blocker)
+  }
+
+  /** Fetch the services and render them, restricted to `#onlyService` if set */
+  async #loadServices() {
+    const services = (await this.#client.apiClient.secretsList())
+      .filter(s => !this.#onlyService || s.id === this.#onlyService)
+    this.#renderServices(services)
+  }
+
+  /**
+   * Remove all keys of the current user after confirmation. This includes keys of services that are
+   * no longer installed and therefore not listed, so the button is enabled even if no listed key is set.
+   */
+  async #removeAll() {
+    const confirmed = await this.#dialog.confirm(
+      'This removes all API keys you have stored. Features that need a key will ask for it again. Continue?',
+      'Remove all API keys'
+    )
+    if (!confirmed) return
+    await this.#run(async () => {
+      const { removed } = await this.#client.apiClient.secretsDeleteAll()
+      await this.#loadServices()
+      notify(removed ? `Removed ${removed} key${removed === 1 ? '' : 's'}` : 'No keys were stored', 'success', 'check-circle')
+    })
   }
 
   /** @param {SecretServiceResponse[]} services */
