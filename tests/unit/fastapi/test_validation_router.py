@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from fastapi_app.routers.validation import router, resolve_document_schema_cache_file
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import require_authenticated_user
-from fastapi_app.lib.core.schema_validator import get_schema_cache_info
+from fastapi_app.lib.core.schema_validator import get_schema_cache_info, ValidationError
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_document_rules_store
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
@@ -252,6 +252,10 @@ class TestResolveDocumentSchemaCacheFile(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
 
+XML_WITH_MISSING_SCHEMA = '''<?xml-model href="https://example.org/missing-schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title/></titleStmt></fileDesc></teiHeader></TEI>'''
+
+
 class TestTeiHeaderStructureEndpoint(unittest.TestCase):
     """Test the /teiheader-structure endpoint: merging the open document's
     own schema (when resolvable) with the bundled core TEI schema
@@ -280,13 +284,13 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def test_merges_document_schema_with_core_fallback(self):
-        xml = '''<?xml-model href="https://example.org/missing-schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
-<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title/></titleStmt></fileDesc></teiHeader></TEI>'''
-        # The document's own schema location 404s/is unreachable in this
-        # unit test (no network dependency) - response must still succeed,
-        # built entirely from the bundled core schema.
-        response = self.client.post("/validate/teiheader-structure", json={"xml_string": xml})
+    @patch("fastapi_app.lib.core.schema_validator.download_schema_file")
+    def test_merges_document_schema_with_core_fallback(self, mock_download):
+        # The document's own schema location 404s (mocked, no network
+        # dependency) - response must still succeed, built entirely from
+        # the bundled core schema.
+        mock_download.side_effect = ValidationError("Failed to download schema from https://example.org/missing-schema.rng - check the URL: 404 Client Error: Not Found for url")
+        response = self.client.post("/validate/teiheader-structure", json={"xml_string": XML_WITH_MISSING_SCHEMA})
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(set(data["roots"]), {"titleStmt", "publicationStmt", "sourceDesc"})
@@ -301,6 +305,19 @@ class TestTeiHeaderStructureEndpoint(unittest.TestCase):
         self.assertIn("analytic", data["tags"]["biblStruct"]["children"])
         self.assertIn("analytic", data["tags"])
         self.assertTrue(data["tags"]["analytic"]["children"])
+
+    @patch("fastapi_app.lib.core.schema_validator.download_schema_file")
+    def test_unreachable_document_schema_falls_back_to_core(self, mock_download):
+        # No network (connection refused, proxy blocked, DNS failure):
+        # download_schema_file() raises a non-404 ValidationError, which
+        # resolve_document_schema_cache_file re-raises as-is. The endpoint
+        # must fall back to the core schema, not return a 500.
+        mock_download.side_effect = ValidationError("Failed to download schema: Max retries exceeded")
+        response = self.client.post("/validate/teiheader-structure", json={"xml_string": XML_WITH_MISSING_SCHEMA})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(set(data["roots"]), {"titleStmt", "publicationStmt", "sourceDesc"})
+        self.assertTrue(data["tags"]["title"]["children"])
 
     def test_document_schemas_empty_children_and_attributes_are_not_replaced_by_core(self):
         # The core schema's own "title" has a long, non-empty children list
