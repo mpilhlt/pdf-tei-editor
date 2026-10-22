@@ -7,7 +7,14 @@ Library:
 CLI: ``uv run python bin/secrets.py --help``
 """
 
-from .services import MissingSecretError, SecretService, SecretServiceRegistry, register_secret_service, secret_required_detail
+from .services import (
+    MissingSecretError,
+    SecretService,
+    SecretServiceRegistry,
+    register_secret_service,
+    secret_required_detail,
+    unregister_secret_service,
+)
 from .store import (
     ENCRYPTION_KEY_ENV_VAR,
     SecretStore,
@@ -27,4 +34,5 @@ __all__ = [
     "register_secret_service",
     "secret_required_detail",
     "require_user_secret",
+    "unregister_secret_service",
 ]

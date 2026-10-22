@@ -33,6 +33,7 @@ from fastapi_app.lib.secrets import (
     SecretsError,
     get_secret_store,
     register_secret_service,
+    unregister_secret_service,
 )
 from fastapi_app.routers import secrets as secrets_router
 
@@ -187,6 +188,12 @@ class TestSecretsRouter(unittest.TestCase):
         self.assertEqual(self.store.get("bob", "anthropic"), "other")
         self.assertFalse(self.client.get("/api/v1/secrets").json()[0]["is_set"])
         self.assertEqual(self.client.delete("/api/v1/secrets").json(), {"removed": 0})
+
+    def test_unregistered_service_is_no_longer_listed_or_settable(self):
+        unregister_secret_service("anthropic")
+        unregister_secret_service("anthropic")  # no-op when absent
+        self.assertEqual(self.client.get("/api/v1/secrets").json(), [])
+        self.assertEqual(self.client.put("/api/v1/secrets/anthropic", json={"value": SECRET}).status_code, 404)
 
     def test_unknown_service_and_empty_value(self):
         self.assertEqual(self.client.put("/api/v1/secrets/nope", json={"value": "x"}).status_code, 404)

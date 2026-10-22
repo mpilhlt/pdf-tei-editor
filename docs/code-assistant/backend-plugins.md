@@ -128,6 +128,7 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 
 - `POST /api/v1/extract` turns `MissingSecretError` into HTTP 428 with `detail = {code: "secret_required", service, label, description, help_url}`. The frontend (`api-keys` plugin, `withKeyPrompt()`) then asks for the key, stores it through `PUT /api/v1/secrets/{service}` and repeats the request. Other routes can use the same pattern: raise `MissingSecretError` and wrap the frontend call in `getDependency('api-keys').withKeyPrompt(...)`.
 - The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
+- `unregister_secret_service(id)` removes a service that no longer exists (e.g. a deleted endpoint of the inference-endpoints plugin) from the API Keys dialog; stored keys are kept.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
 ## Annotation Tags (Visual Mode)

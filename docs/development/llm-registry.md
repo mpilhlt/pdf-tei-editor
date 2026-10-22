@@ -22,6 +22,9 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 | `kisski` | `kisski` | KISSKI | `KISSKI_API_KEY` | `plugin.kisski.api.key` (+ `.api.url`) |
 | `google_llm` | `google` | Google Gemini | `GEMINI_API_KEY` | `plugin.google-llm.api.key` |
 | `anthropic_llm` | `anthropic` | Anthropic Claude | `ANTHROPIC_API_KEY` (+ `ANTHROPIC_API_URL`) | `plugin.anthropic-llm.api.key` (+ `.api.url`) |
+| `inference-endpoints` | `endpoint-<id>` | as entered | none (keys in the secret store) | none (endpoints in `data/db/inference-endpoints.json`) |
+
+The [inference-endpoints](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/inference-endpoints#readme) plugin registers one provider per OpenAI-compatible endpoint (e.g. Ollama) that an administrator adds in its management page; it is registered in testing mode too, since it has no endpoints until one is added.
 
 The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
 
