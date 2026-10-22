@@ -8,7 +8,6 @@ initialization, route registration, and execution.
 import asyncio
 import logging
 import os
-import signal
 import sys
 import time
 from dataclasses import replace
@@ -20,6 +19,7 @@ from packaging.version import InvalidVersion, Version
 from starlette.concurrency import run_in_threadpool
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.plugins import plugin_site
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import PluginContext
@@ -63,9 +63,6 @@ logger = logging.getLogger(__name__)
 # Seconds between two checks of the shared plugin state (see watch_state())
 STATE_CHECK_INTERVAL = 2.0
 
-# Set by bin/start-prod: the parent process is the uvicorn supervisor, which restarts
-# all worker processes one after the other on SIGHUP
-WORKER_RECYCLE_ENV_VAR = "PTE_WORKER_RECYCLE"
 
 
 class CascadeRequired(Exception):
@@ -119,6 +116,8 @@ class PluginManager:
         # Index in app.router.routes before which routes of plugins loaded later are inserted
         self._route_anchor: int | None = None
         self.catalog = PluginCatalog()
+        # Called after this process applied a change of the plugin state (see add_change_listener())
+        self._change_listeners: list[Callable[[], object]] = []
 
     @classmethod
     def get_instance(cls) -> "PluginManager":
@@ -334,7 +333,32 @@ class PluginManager:
             )
             for pid, message in errors.items():
                 logger.error(f"Plugin {pid}: {message}")
-            return True
+        self._notify_change()
+        return True
+
+    def add_change_listener(self, listener: Callable[[], object]) -> None:
+        """
+        Register a callback that runs after this process applied a change of the plugin state.
+
+        It runs in every worker: in the one that made the change and in the others when they
+        reconcile. The application uses it to tell the clients of this worker to reload.
+        """
+        self._change_listeners.append(listener)
+
+    def _notify_change(self) -> None:
+        for listener in self._change_listeners:
+            try:
+                listener()
+            except Exception as e:
+                logger.error(f"Plugin change listener failed: {e}", exc_info=True)
+
+    def plugins_version(self) -> int | None:
+        """
+        The plugin state generation that clients should have loaded, or None while a restart is
+        pending (clients reload only once the workers run the new code).
+        """
+        state = self.state_store.read()
+        return None if self.restart_pending(state) else state.generation
 
     async def watch_state(self, interval: float = STATE_CHECK_INTERVAL) -> None:
         """
@@ -664,6 +688,7 @@ class PluginManager:
             self.generation = state.generation
 
             errors = await self._apply_plan(plan)
+            self._notify_change()
             self._audit(
                 "enable" if enabled else "disable", user, plugin=plugin_id,
                 deactivated=plan.deactivate, activated=plan.activate,
@@ -913,6 +938,7 @@ class PluginManager:
             self.generation = state.generation
             self._sync_installed(state)
         action = "upgrade" if upgrade else "install"
+        self._notify_change()
         self._audit(
             action, user, plugin=info.plugin_id, version=info.version, repository=repository, tag=tag,
             sha256=sha256, trusted=trusted, restart_required=restart,
@@ -964,6 +990,7 @@ class PluginManager:
             self.registry.set_disabled(set(state.disabled))
             self.generation = state.generation
             self._sync_installed(state)
+        self._notify_change()
         self._audit("remove", user, plugin=plugin_id, version=entry.version, repository=entry.repository, tag=entry.tag)
         return {"plugin": plugin_id, "version": entry.version, "action": "remove", "restart_required": restart, "generation": state.generation}
 
@@ -977,14 +1004,13 @@ class PluginManager:
         Raises:
             PluginChangeError: The server was not started by bin/start-prod (409)
         """
-        if os.getenv(WORKER_RECYCLE_ENV_VAR) != "1" or not hasattr(signal, "SIGHUP"):
+        if not can_recycle_workers():
             raise PluginChangeError(409, "This server cannot restart its workers itself; restart the server to apply the plugin changes")
-        supervisor = os.getppid()
-        self._audit("restart", user, supervisor=supervisor)
-        self._schedule(0.5, lambda: os.kill(supervisor, signal.SIGHUP))
+        self._audit("restart", user, supervisor=os.getppid())
+        self._schedule(0.5, recycle_workers)
 
     @staticmethod
-    def _schedule(delay: float, callback: Callable[[], None]) -> None:
+    def _schedule(delay: float, callback: Callable[[], object]) -> None:
         """Run a callback after a delay on the running event loop."""
         asyncio.get_running_loop().call_later(delay, callback)
 

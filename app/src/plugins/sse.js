@@ -19,6 +19,8 @@ class SsePlugin extends Plugin {
 
   /** @type {Record<string, ((event: MessageEvent) => void)[]>} */
   #registeredListeners = {}
+  /** @type {Array<(connected: boolean) => void>} */
+  #connectionListeners = []
 
   /** @type {ReturnType<typeof setTimeout>|null} */
   #reconnectTimeout = null
@@ -86,6 +88,7 @@ class SsePlugin extends Plugin {
     this.#cachedSessionId = sessionId
 
     this.#eventSource.onopen = () => {
+      this.#notifyConnection(true)
       this.#reconnectAttempts = 0
       if (this.#reconnectTimeout) {
         clearTimeout(this.#reconnectTimeout)
@@ -102,6 +105,7 @@ class SsePlugin extends Plugin {
 
     this.#eventSource.onerror = (_event) => {
       if (this.#isUnloading) return
+      this.#notifyConnection(false)
 
       const readyState = this.#eventSource ? this.#eventSource.readyState : 'unknown'
       const errorMsg = `EventSource failed (readyState: ${readyState})`
@@ -148,6 +152,17 @@ class SsePlugin extends Plugin {
     })
   }
 
+  /** @param {boolean} connected */
+  #notifyConnection(connected) {
+    for (const listener of this.#connectionListeners) {
+      try {
+        listener(connected)
+      } catch (e) {
+        this.getDependency('logger').warn(`SSE connection listener failed: ${e}`)
+      }
+    }
+  }
+
   #cleanupConnection() {
     if (this.#reconnectTimeout) {
       clearTimeout(this.#reconnectTimeout)
@@ -184,6 +199,16 @@ class SsePlugin extends Plugin {
       if (this.#registeredListeners[type].length === 0) delete this.#registeredListeners[type]
     }
     if (this.#eventSource) this.#eventSource.removeEventListener(type, listener)
+  }
+
+  /**
+   * Registers a callback for the connection being opened (true) or lost (false), including
+   * every reconnection attempt. A connection is lost, for example, when the server replaces
+   * its worker processes.
+   * @param {(connected: boolean) => void} listener
+   */
+  onConnectionChange(listener) {
+    this.#connectionListeners.push(listener)
   }
 
   get readyState() {

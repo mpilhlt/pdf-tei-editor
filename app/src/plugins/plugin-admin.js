@@ -63,7 +63,7 @@ function esc(s) {
 class PluginAdminPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'plugin-admin', deps: ['client', 'tools', 'logger'] })
+    super(context, { name: 'plugin-admin', deps: ['client', 'tools', 'logger', 'services'] })
   }
 
   get #logger() { return this.getDependency('logger') }
@@ -121,6 +121,14 @@ class PluginAdminPlugin extends Plugin {
     this.#confirmUi = this.createUi(createSingleFromTemplate('plugin-admin-confirm-dialog', document.body))
 
     this.#dialogUi.closeBtn.addEventListener('click', () => this.#dialogUi.hide())
+    // Other clients reload when the plugins change; this one waits until the dialog is closed
+    const services = this.getDependency('services')
+    this.#dialogUi.addEventListener('sl-show', e => {
+      if (e.target === this.#dialogUi) services.holdServerChangeReload(true)
+    })
+    this.#dialogUi.addEventListener('sl-after-hide', e => {
+      if (e.target === this.#dialogUi) services.holdServerChangeReload(false)
+    })
     this.#installedUi.searchInput.addEventListener('sl-input', () => this.#render())
     this.#dialogUi.reloadBanner.reloadBtn.addEventListener('click', () => window.location.reload())
     this.#dialogUi.restartBanner.restartBtn.addEventListener('click', () => this.#confirmRestart())

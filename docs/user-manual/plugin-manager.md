@@ -33,7 +33,7 @@ Use the search field and the status chips at the top to filter the list.
 - Plugins marked **Protected** (for example the log viewer and backup tools) cannot be disabled.
 - Data created by a plugin is never deleted when it is disabled.
 
-Changes take effect on the server immediately. When the server runs several processes (as in production), the other processes follow within a few seconds; until then the dialog shows "Applying the change to all server processes". Pages that are already open keep their old menus until they are reloaded; the dialog offers a **Reload now** button after each change. Requests to a disabled plugin fail with "not found".
+Changes take effect on the server immediately. When the server runs several processes (as in production), the other processes follow within a few seconds; until then the dialog shows "Applying the change to all server processes". Other open pages reload automatically once all server processes have the change, and then show a message that the plugins were changed. Your own page reloads when you close the plugin manager, so you can make several changes in a row; the dialog also offers a **Reload now** button after each change. Requests to a disabled plugin fail with "not found".
 
 The state is stored in `data/db/plugins-state.json`. Older versions stored it in the configuration key `plugins.disabled`; it is moved to the new file on the first start.
 
@@ -52,6 +52,6 @@ The **Available** tab lists the plugins of the plugin repositories: [mpilhlt/pte
 
 **Upgrade to v…** in the **Available** tab installs a newer release, also of plugins that were installed with the editor. **Remove** in the **Installed** tab disables a plugin installed in the plugin manager and deletes its files at the next restart.
 
-Python code that is already loaded cannot be replaced in a running server. After an upgrade or removal of a plugin that is in use, the plugin shows **Restart pending** and the dialog shows **Apply plugin changes**, which restarts the server processes one after the other. Requests are still answered during the restart, but jobs running in a restarting process (for example a batch extraction) are interrupted and open pages reconnect. The button is offered when the server was started with `bin/start-prod` (as in the Docker image); otherwise restart the server.
+Python code that is already loaded cannot be replaced in a running server. After an upgrade or removal of a plugin that is in use, the plugin shows **Restart pending** and the dialog shows **Apply plugin changes**, which restarts the server processes one after the other. Requests are still answered during the restart, but jobs running in a restarting process (for example a batch extraction) are interrupted, and open pages reload once all processes run the new code. The button is offered when the server was started with `bin/start-prod` (as in the Docker image); otherwise restart the server.
 
 Installed plugins are stored in `data/plugins/site/`, and all plugin changes are recorded in the audit log `data/db/plugin-audit.jsonl`. The same operations are available on the command line: `npm run manage-remote -- plugin list|available|install|enable|disable|remove|apply` (see [manage-remote](cli-manage-remote.md#plugin-commands)).

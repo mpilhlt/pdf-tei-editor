@@ -137,6 +137,18 @@ class TestReconcile(TwoWorkersBase):
         self.assertTrue(self.b.registry.is_active("grobid"))
         self.assertEqual(RecordingPlugin.calls, ["init:wizard", "init:grobid"])
 
+    async def test_both_workers_notify_their_clients(self):
+        notified: list[str] = []
+        self.a.add_change_listener(lambda: notified.append("a"))
+        self.b.add_change_listener(lambda: notified.append("b"))
+        await self.a.set_plugin_enabled("wizard", False, cascade=True)
+        self.assertEqual(notified, ["a"])
+        await self.b.reconcile()
+        self.assertEqual(notified, ["a", "b"])
+        await self.b.reconcile()
+        self.assertEqual(notified, ["a", "b"])
+        self.assertEqual(self.a.plugins_version(), self.a.generation)
+
     async def test_propagation_counts_workers_behind(self):
         self.a.state_store.write_heartbeat(self.a.generation, pid=os.getpid())
         self.b.state_store.write_heartbeat(self.b.generation, pid=999999)

@@ -29,7 +29,8 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `locking.py` | File locking system |
 | `sessions.py` | Session management |
 | `schema_validator.py` | Schema validation |
-| `data_restore.py` | Data restoration utilities |
+| `data_restore.py` | Staging and applying backup restores (`data/.restore/`, applied at worker start under a file lock) |
+| `worker_recycle.py` | Replacing the uvicorn workers via SIGHUP (`PTE_WORKER_RECYCLE`, set by `bin/start-prod`) |
 | `migration_runner.py` | Migration execution |
 | `migrations/` | Migration system (`base.py`, `manager.py`, `utils.py`, `versions/`) |
 
