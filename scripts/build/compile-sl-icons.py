@@ -7,7 +7,8 @@ import shutil
 # metadata (e.g. `"icon": "graph-up-arrow"`) that is only ever assigned to an
 # sl-icon dynamically at runtime (`icon.setAttribute('name', endpoint.icon)`),
 # so those names never appear as a literal in any JS/HTML file. They must be
-# scanned for at their Python source instead.
+# scanned for at their Python source instead. The same applies to plugins installed as
+# packages and to FASTAPI_PLUGIN_PATHS (see plugin_directories()).
 SCAN_DIRECTORIES = ['./app/src', './fastapi_app/plugins']
 NODE_MODULES_PATH = './node_modules'
 SHOELACE_ICONS_BASE_PATH = os.path.join(
@@ -76,6 +77,23 @@ def find_used_icons(directory, patterns, extensions):
 
     return found_icons
 
+def plugin_directories():
+    """
+    Directories of the plugins installed as packages (entry point group ``pte.plugins``)
+    and of the external plugin directories in FASTAPI_PLUGIN_PATHS.
+
+    Plugins that are installed at runtime are not known at build time; icons that only
+    they use are missing from the bundle.
+    """
+    import sys
+    sys.path.insert(0, os.getcwd())
+    try:
+        from fastapi_app.lib.plugins.plugin_paths import get_external_plugin_dirs, get_installed_plugin_dirs
+    except ImportError as e:
+        print(f"Warning: cannot locate installed plugins: {e}")
+        return []
+    return [str(d) for d in [*get_installed_plugin_dirs(), *get_external_plugin_dirs()]]
+
 def copy_icons(icon_names, shoelace_base_path, destination_path):
     if not os.path.isdir(shoelace_base_path):
         import sys
@@ -113,7 +131,7 @@ def copy_icons(icon_names, shoelace_base_path, destination_path):
 # --- Main ---
 if __name__ == "__main__":
     used_icons = set()
-    for directory in SCAN_DIRECTORIES:
+    for directory in SCAN_DIRECTORIES + plugin_directories():
         used_icons.update(find_used_icons(directory, ICON_PATTERNS, SCAN_EXTENSIONS))
 
     if used_icons:
