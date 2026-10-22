@@ -57,10 +57,13 @@ def _load_fernet(db_dir: Path) -> Fernet:
             fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(Fernet.generate_key().decode())
-            logger.warning(
-                "Generated an encryption key for user secrets at %s. Set %s to keep the key outside the data directory.",
-                key_file, ENCRYPTION_KEY_ENV_VAR,
-            )
+            logger.info("Generated an encryption key for user secrets at %s", key_file)
+        # Every copy of the data directory (backups, sync mirrors) contains the key next to
+        # the secrets it encrypts
+        logger.warning(
+            "User secrets are encrypted with the key file %s, which is part of the data directory and its backups. Set %s to keep the key outside of it.",
+            key_file, ENCRYPTION_KEY_ENV_VAR,
+        )
         return Fernet(key_file.read_text().strip().encode())
     except (ValueError, OSError) as e:
         raise SecretsError(f"Invalid encryption key for user secrets: {e}") from e

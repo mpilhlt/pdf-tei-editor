@@ -4,9 +4,11 @@ Contributes a "Waiting for review" box to the [dashboard](../dashboard/README.md
 
 ## Configuration
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `plugin.review-queue.statuses` | `["in-review"]` | Lifecycle statuses (from `annotation.lifecycle.order`) of the listed documents |
+| Key | Environment variable | Default | Description |
+| --- | --- | --- | --- |
+| `plugin.review-queue.statuses` | `PLUGIN_REVIEW_QUEUE_STATUSES` | `["in-review"]` | Lifecycle statuses (from `annotation.lifecycle.order`) of the listed documents, as a JSON array |
+
+The environment variable sets the initial value when the key is not yet in `config.json`.
 
 A document is listed per variant, and only if its most recently updated TEI file has one of the statuses, so documents that moved on in a newer version disappear from the list. Documents in collections that belong only to archived projects are not listed.
 

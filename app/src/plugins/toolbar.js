@@ -107,12 +107,27 @@ class ToolbarPlugin extends Plugin {
     const menuResults = await this.context.invokePluginEndpoint(
       ep.toolbar.menuItems, [], { result: 'values', throws: false }
     )
+    // Items with an `after` hint are placed once all other items are in the menu, so that
+    // the plugin order does not matter
+    /** @type {Array<{element: HTMLElement, after: string}>} */
+    const placedAfter = []
     for (const items of menuResults) {
       if (!Array.isArray(items)) continue
-      for (const { element } of items) {
-        if (element instanceof HTMLElement) {
+      for (const { element, after } of items) {
+        if (!(element instanceof HTMLElement)) continue
+        if (after) {
+          placedAfter.push({ element, after })
+        } else {
           this.#menuUi.menu.appendChild(element)
         }
+      }
+    }
+    for (const { element, after } of placedAfter) {
+      const anchor = this.#menuUi.menu.querySelector(`:scope > [name="${after}"]`)
+      if (anchor) {
+        anchor.after(element)
+      } else {
+        this.#menuUi.menu.appendChild(element)
       }
     }
 

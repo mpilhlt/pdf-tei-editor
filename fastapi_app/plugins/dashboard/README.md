@@ -4,9 +4,11 @@ Shows a two-column dashboard in a dialog after login, once per login session (re
 
 ## Configuration
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `plugin.dashboard.show-on-login` | `true` | Open the dashboard automatically after login. Users can also turn this off with the "Show on login" checkbox (stored per browser). |
+| Key | Environment variable | Default | Description |
+| --- | --- | --- | --- |
+| `plugin.dashboard.show-on-login` | `PLUGIN_DASHBOARD_SHOW_ON_LOGIN` | `true` | Open the dashboard automatically after login. Users can also turn this off with the "Show on login" checkbox (stored per browser). |
+
+The environment variable sets the initial value when the key is not yet in `config.json`.
 
 ## Contributing a box
 

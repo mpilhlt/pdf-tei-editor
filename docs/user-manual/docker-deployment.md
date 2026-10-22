@@ -33,7 +33,6 @@ DEPLOY_REBUILD=true            # Build image if needed
 
 # Container Environment
 LOG_LEVEL=INFO
-# GEMINI_API_KEY=your-key-here
 ```
 
 Run with:
@@ -67,8 +66,7 @@ APP_DEMO_PASSWORD=secure-demo-password
 
 # Container Environment
 LOG_LEVEL=WARNING
-GEMINI_API_KEY=your-gemini-api-key
-GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+SECRETS_ENCRYPTION_KEY=your-fernet-key
 ```
 
 Run with:
@@ -127,15 +125,20 @@ These variables are passed to the running container:
 - Admin: `admin` / `APP_ADMIN_PASSWORD` (full access)
 - Demo: `demo` / `APP_DEMO_PASSWORD` (user, annotator, reviewer)
 
-#### AI/ML Services (Optional)
+#### API Keys and Plugins (Optional)
 
-These variables configure plugins (see [Plugins in the image](#plugins-in-the-image)); each plugin's README lists all of its variables.
+API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as environment variables. Each user enters their own keys in the web interface (user menu > API Keys); they are stored encrypted in `data/db/secrets.db` and can be managed with `bin/user-secrets.py` (see [CLI](cli.md#user-api-keys)).
 
 | Variable | Description |
-|----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI extraction (`google-llm`) |
-| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing (`grobid`) |
-| `KISSKI_API_KEY` | KISSKI Academic Cloud API key (`kisski`) |
+| --- | --- |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the stored API keys. Set it in production and keep it. Without it, the key is generated in `data/db/secrets.key`, next to the encrypted keys, so every copy of the data directory (backups, the volume) can decrypt them |
+| `PTE_PLUGIN_INSTALL` | Allow administrators to install plugins from GitHub releases (off by default) |
+| `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
+| `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
+| `PTE_PLUGIN_TRUSTED_ONLY` | Hide and refuse plugins of untrusted owners |
+| `GITHUB_TOKEN` | Raises the GitHub API rate limit for plugin discovery |
+
+See [Plugins in the image](#plugins-in-the-image). `.env.production` documents the plugin system variables. The settings of individual plugins (such as `GROBID_SERVER_URL`) are described in each plugin's README.
 
 #### Application Settings
 
@@ -251,7 +254,7 @@ npm run deploy .env.deploy.example.org
 - ✅ Use HTTPS with valid SSL certificate
 - ✅ Set `LOG_LEVEL=WARNING` or `ERROR`
 - ✅ Secure the data directory with proper file permissions
-- ✅ Keep API keys in environment variables, not config files
+- ✅ Set and back up `SECRETS_ENCRYPTION_KEY`; users enter API keys in the key store, not in environment variables
 - ✅ Use firewall rules to limit access
 
 ### Password Generation
@@ -367,7 +370,7 @@ docker run -p 8000:8000 \
 docker run -p 8000:8000 \
   -v /opt/pdf-tei-editor/data:/app/data \
   -e APP_ADMIN_PASSWORD=secure_password \
-  -e GEMINI_API_KEY=your_key \
+  -e SECRETS_ENCRYPTION_KEY=your_fernet_key \
   cboulanger/pdf-tei-editor:latest
 ```
 
@@ -385,7 +388,7 @@ services:
     environment:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo_password
-      - GEMINI_API_KEY=your_gemini_api_key
+      - SECRETS_ENCRYPTION_KEY=your_fernet_key
     volumes:
       - pdf_data:/app/data
 

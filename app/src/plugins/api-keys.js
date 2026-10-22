@@ -29,11 +29,11 @@ class ApiKeysPlugin extends Plugin {
   static extensionPoints = [ep.toolbar.menuItems];
 
   /**
-   * Extension point handler for `ep.toolbar.menuItems`.
-   * @returns {Array<{element: HTMLElement}>}
+   * Extension point handler for `ep.toolbar.menuItems`. The item is placed below "User Profile".
+   * @returns {Array<{element: HTMLElement, after: string}>}
    */
   [ep.toolbar.menuItems]() {
-    return [{ element: this.#menuItem }]
+    return [{ element: this.#menuItem, after: 'profileMenuItem' }]
   }
 
   get #client() { return this.getDependency('client') }
