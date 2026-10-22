@@ -19,6 +19,7 @@ logger = get_logger(__name__)
 # Apply a restore staged by the backup-restore plugin before anything (plugin discovery,
 # the databases) reads the data directory. Of several workers starting at once, one applies it.
 from .lib.core.data_restore import apply_pending_restore
+from .lib.core.request_cancellation import CancelledRequestMiddleware
 _data_was_restored = apply_pending_restore(get_settings().data_root, logger)
 
 
@@ -193,6 +194,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Added last, so it is the outermost user middleware and sees the CancelledError of every route
+app.add_middleware(CancelledRequestMiddleware)
 
 # Import API routers
 from .api import auth, config

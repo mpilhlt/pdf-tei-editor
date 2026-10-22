@@ -31,6 +31,7 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `schema_validator.py` | Schema validation |
 | `data_restore.py` | Staging and applying backup restores (`data/.restore/`, applied at worker start under a file lock) |
 | `worker_recycle.py` | Replacing the uvicorn workers via SIGHUP (`PTE_WORKER_RECYCLE`, set by `bin/start-prod`) |
+| `request_cancellation.py` | `CancelledRequestMiddleware`: ends requests that uvicorn cancels at shutdown/reload with a 503 and a one-line log instead of an "Exception in ASGI application" traceback. Routes need no own `CancelledError` handling |
 | `migration_runner.py` | Migration execution |
 | `migrations/` | Migration system (`base.py`, `manager.py`, `utils.py`, `versions/`) |
 
