@@ -231,8 +231,8 @@ response = self.client.get(
 
 **See Also:**
 
-- [pte-plugins/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
-- [pte-plugins/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py](https://github.com/cboulanger/pte-plugins/tree/main/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py) - Routes requiring authentication via dependency injection
+- [pte-plugins/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
+- [pte-plugins/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/annotation-history/src/pte_plugin_annotation_history/tests/test_annotation_history.py) - Routes requiring authentication via dependency injection
 
 ### API Integration Tests
 

@@ -61,11 +61,11 @@ class TestPluginAdminApi(unittest.TestCase):
         generation = r.json()["generation"]
         self.assertEqual(generation, 1)
         prop = self.client.get("/api/v1/plugins/admin").json()["propagation"]
-        self.assertEqual(prop, {"generation": 1, "workers": 1, "pending": 0})
+        self.assertEqual(prop, {"generation": 1, "workers": 1, "pending": 0, "restart_pending": 0})
         # another worker that has not applied the change yet
         self.mgr.state_store.write_heartbeat(0, pid=999999)
         prop = self.client.get("/api/v1/plugins/admin").json()["propagation"]
-        self.assertEqual(prop, {"generation": 1, "workers": 2, "pending": 1})
+        self.assertEqual(prop, {"generation": 1, "workers": 2, "pending": 1, "restart_pending": 0})
 
     def test_disable_without_cascade_returns_409(self):
         r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": False})

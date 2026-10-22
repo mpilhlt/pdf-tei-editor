@@ -67,8 +67,8 @@ grobid = "pte_plugin_grobid"
 - The package directory is the plugin directory: it contains `plugin.py`, `pte-plugin.json` (required, as for external plugins), and optionally `routes.py`, `static/` and `extensions/` as package data.
 - Modules are imported under the real package name (`pte_plugin_grobid.plugin`), so plugins can import each other's packages; declare such dependencies both as a Python dependency and in `metadata["dependencies"]`.
 - The package is located with `importlib.util.find_spec()` without importing it (`get_installed_plugin_dirs()` in `plugin_paths.py`). Unlike directory plugins, an installed plugin declares its own Python dependencies.
-- The Plugin Manager lists installed plugins as "external".
-- The first-party plugins (all except the ones in `fastapi_app/plugins/`) are such packages, maintained in the [pte-plugins](https://github.com/cboulanger/pte-plugins) monorepo. Core declares them as optional dependencies with git sources pinned to a commit (`[project.optional-dependencies]` and `[tool.uv.sources]` in `pyproject.toml`); the Docker build selects them with `PTE_PLUGIN_EXTRAS`. To update a plugin, change the `rev` of its source and run `uv lock`. Core code must not import them (guard test `tests/unit/fastapi/test_core_plugin_independence.py`).
+- The Plugin Manager lists installed plugins as "external", and plugins installed in the Plugin Manager as "site" (see [Runtime Install](#runtime-install)).
+- The first-party plugins (all except the ones in `fastapi_app/plugins/`) are such packages, maintained in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) monorepo. Core declares them as optional dependencies with git sources pinned to a commit (`[project.optional-dependencies]` and `[tool.uv.sources]` in `pyproject.toml`); the Docker build selects them with `PTE_PLUGIN_EXTRAS`. To update a plugin, change the `rev` of its source and run `uv lock`. Core code must not import them (guard test `tests/unit/fastapi/test_core_plugin_independence.py`).
 
 ### Plugin API
 
@@ -345,6 +345,19 @@ Administrators can enable and disable plugins at runtime from the Tools menu ("M
 - **Status** is derived: `active`, `disabled`, `inactive` (dependency not active), `unavailable` (`is_available()` is false; override `unavailable_reason()` to explain why), `failed` (import error, unresolved dependency, or `initialize()` raised).
 - **Optional metadata:** `"protected": True` prevents disabling (use for plugins the admin tooling depends on); `"readme_url"` overrides the README link shown in the manager (built-in plugins with a `README.md` link to GitHub automatically).
 
+## Runtime Install
+
+With `PTE_PLUGIN_INSTALL=1` (operator setting, see [Runtime Plugin Install](../user-manual/docker-deployment.md#runtime-plugin-install)), administrators install plugins from GitHub release wheels in the Plugin Manager. Modules: `plugin_catalog.py` (discovery), `plugin_wheel.py` (inspection, requirement check, unpacking), `plugin_install.py` (download and verification), `plugin_site.py` (`data/plugins/site/`), `plugin_install_policy.py` (settings and audit log), and the install/upgrade/remove methods of `PluginManager`.
+
+- **Releases.** A plugin repository lists its plugins in `pte-plugins.json` on its default branch (`id`, `package`, `module`, `path`, `version`, `requires` (plugin ids), `dependencies` (other Python requirements), `engines`); a repository with one plugin uses `"path": "."`. Releases are tagged `<id>-v<version>` (`v<version>` in a single-plugin repository) and carry the wheel (`py3-none-any`) and `SHA256SUMS` as assets; [pte-plugins](https://github.com/mpilhlt/pte-plugins) creates them with its release workflow.
+- **Install.** The wheel is downloaded, checked against `SHA256SUMS`, inspected without importing it (one `pte.plugins` entry point, only the plugin package plus `.dist-info`, no `.data`, compatible `engines`), and its `Requires-Dist` is checked against the installed distributions. Plugins that need packages that are not installed are refused ("install it with uv sync"). The wheel is unpacked into `data/plugins/site/<distribution>/<version>/` and recorded in `installed` of `plugins-state.json`.
+- **Not imported until enabled.** A new plugin is installed disabled. Disabled runtime-installed plugins are listed from their state entry (`PluginRecord.deferred`), not imported, also at startup. Enabling one imports it (`PluginRegistry.load_deferred()`), registers its routes and static files live and runs `initialize()`, in every worker (`PluginManager.reconcile()`).
+- **Live routes.** `register_plugin_routes()` records the position after the startup plugin routes; `register_live_routes()` inserts the routes of a plugin loaded later at that position, before the catch-all compat router and static mounts, by replacing `app.router.routes` in one assignment, and resets `app.openapi_schema`.
+- **Precedence.** The version directories are put at the front of `sys.path` at startup, so a runtime-installed version replaces a version installed with `uv sync` (its entry point and package are found first). Built-in plugins and plugins from `FASTAPI_PLUGIN_PATHS` cannot be replaced.
+- **Upgrade and removal** of a plugin that is imported take effect only in worker processes started afterwards: the state records `restart_required_at` and `restart_plugins`, heartbeats carry each worker's start time, and `propagation.restart_pending` counts the workers still running old code. `POST /api/v1/plugins/admin/restart` sends `SIGHUP` to the uvicorn supervisor (only when `PTE_WORKER_RECYCLE=1`, set by `bin/start-prod`), which restarts the workers one after the other. Superseded version directories (`pending_removal`) are deleted at startup once no older worker runs. Enabling a plugin with a pending restart is refused.
+- **Trust.** Repositories of `PTE_PLUGIN_TRUSTED_OWNERS` are trusted; others need the repository name as `confirm`, and `PTE_PLUGIN_TRUSTED_ONLY=1` refuses them. Only repositories in the catalog (`PTE_PLUGIN_SOURCES` and the `pte-plugin` topic search) can be installed from.
+- **Audit.** Discover, install, upgrade, remove, enable, disable and restart are appended to `data/db/plugin-audit.jsonl` and logged.
+
 ## Plugin Configuration with Environment Variables
 
 Plugins often need configuration that can be set via environment variables or config keys.
@@ -451,7 +464,7 @@ def is_available(cls) -> bool:
     return True
 ```
 
-**Reference Implementation**: See [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
+**Reference Implementation**: See [local_sync plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ## Role-Based Access
 
@@ -854,7 +867,7 @@ async def execute(self, context, params: dict) -> dict:
     }
 ```
 
-**See also:** [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) for complete example.
+**See also:** [edit_history plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) for complete example.
 
 ### 3. Preview-then-Execute Pattern (for operations requiring confirmation)
 
@@ -943,7 +956,7 @@ async def execute_operation(
 - Optionally show errors if any occurred
 - Use complete HTML document with styles
 
-**See also:** [local_sync plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
+**See also:** [local_sync plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ### 4. Options-then-Execute Pattern (for user-configured operations)
 
@@ -967,7 +980,7 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 
 For detailed implementation pattern with code examples, see [Options-then-Execute Pattern](../development/plugin-system-backend.md#4-options-then-execute-pattern-for-user-configured-operations).
 
-**See also:** [update_metadata plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/update-metadata/src/pte_plugin_update_metadata) for complete example.
+**See also:** [update_metadata plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/update-metadata/src/pte_plugin_update_metadata) for complete example.
 
 ## Interactive HTML Content
 
@@ -1056,8 +1069,8 @@ The sandbox can update any field from `ApplicationState` (see [app/src/state.js]
 
 ### Implementation Examples
 
-- **Inline HTML**: The [iaa_analyzer plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/iaa-analyzer/src/pte_plugin_iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
-- **Standalone pages**: The [edit_history plugin](https://github.com/cboulanger/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
+- **Inline HTML**: The [iaa_analyzer plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/iaa-analyzer/src/pte_plugin_iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
+- **Standalone pages**: The [edit_history plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
 
 ### Utility Functions
 

@@ -45,7 +45,7 @@ npm install
 
 ### Plugins
 
-Most plugins live in the [pte-plugins](https://github.com/cboulanger/pte-plugins) repository and are optional dependencies of the editor: `uv sync --extra <name>` installs one (e.g. `--extra kisski`), `--extra default` the default set and `--all-extras` all of them (see the `[project.optional-dependencies]` table in `pyproject.toml`). `uv sync` removes plugins that are not selected, so pass the extras every time; `uv run` (used by the npm scripts) keeps the installed set.
+Most plugins live in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) repository and are optional dependencies of the editor: `uv sync --extra <name>` installs one (e.g. `--extra kisski`), `--extra default` the default set and `--all-extras` all of them (see the `[project.optional-dependencies]` table in `pyproject.toml`). `uv sync` removes plugins that are not selected, so pass the extras every time; `uv run` (used by the npm scripts) keeps the installed set.
 
 To work on plugins, clone pte-plugins next to the editor and install the plugins as editable packages instead; see its README.
 

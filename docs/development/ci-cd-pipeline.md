@@ -27,7 +27,7 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 3. For E2E tests: Builds Docker container and runs tests inside
 4. Comments on PRs with test results (success/failure)
 
-**With all plugins**: the main test job and the CI container install the first-party plugins from [pte-plugins](https://github.com/cboulanger/pte-plugins) with `uv sync --all-extras` (versions pinned in `uv.lock`), so the suites also check that the plugins still load. The plugins' own tests run in the CI of that repository, against core's `devel` branch.
+**With all plugins**: the main test job and the CI container install the first-party plugins from [pte-plugins](https://github.com/mpilhlt/pte-plugins) with `uv sync --all-extras` (versions pinned in `uv.lock`), so the suites also check that the plugins still load. The plugins' own tests run in the CI of that repository, against core's `devel` branch.
 
 **Core without plugins** (job `core-without-plugins`): on every PR, the unit and API suites run with `fastapi_app/plugins/` emptied, so that core cannot start depending on a plugin again; only the fixture plugins in `tests/fixtures/plugins/` are loaded. For PRs to `main`, the E2E suite runs the same way in the CI container. The unit test `tests/unit/fastapi/test_core_plugin_independence.py` additionally fails if core code imports a plugin, calls its routes or refers to its files.
 

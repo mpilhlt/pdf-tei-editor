@@ -84,6 +84,35 @@
  */
 
 /**
+ * @typedef {Object} AvailablePlugin
+ * @property {string} id
+ * @property {string} repository - GitHub repository (owner/repo)
+ * @property {string} description
+ * @property {string} index_version - Version listed in the repository's pte-plugins.json
+ * @property {string=} latest_version - Version of the newest installable release
+ * @property {string=} latest_tag
+ * @property {Array<string>} versions - Versions of all installable releases, newest first
+ * @property {string=} installed_version
+ * @property {string=} installed_source - "site" (installed in the plugin manager), "external", "builtin" or null
+ * @property {Array<string>} requires - Ids of the plugins it requires
+ * @property {Array<string>} unmet_requirements - Python requirements not installed on the server; the plugin must be installed with uv sync
+ * @property {boolean} trusted - Whether the repository belongs to a trusted owner (PTE_PLUGIN_TRUSTED_OWNERS)
+ * @property {boolean} compatible
+ * @property {string=} incompatible_reason
+ * @property {boolean} installable
+ * @property {boolean} update_available
+ */
+
+/**
+ * @typedef {Object} AvailablePluginsResponse
+ * @property {Array<AvailablePlugin>} plugins
+ * @property {Object<string, string>} errors - Error messages by repository that could not be read
+ * @property {number} fetched_at
+ * @property {Array<string>} trusted_owners
+ * @property {boolean} trusted_only
+ */
+
+/**
  * @typedef {Object} AutocompleteDataRequest
  * @property {string} xml_string - XML document containing schema reference
  * @property {boolean=} invalidate_cache - Whether to invalidate cache and re-download schema
@@ -445,6 +474,31 @@
  */
 
 /**
+ * @typedef {Object} InstallErrorDetail
+ * @property {string} code - "not_installable", "unmet_requirements" or "confirmation_required"
+ * @property {string} message
+ * @property {Array<string>=} unmet - Requirements the server environment does not satisfy
+ * @property {string=} repository
+ */
+
+/**
+ * @typedef {Object} InstallRequest
+ * @property {string} repository - GitHub repository (owner/repo)
+ * @property {string} id - Plugin id
+ * @property {string=} version - Release version (default: the latest)
+ * @property {string=} confirm - The repository name, required for untrusted repositories
+ */
+
+/**
+ * @typedef {Object} InstallResult
+ * @property {string} plugin
+ * @property {string} version
+ * @property {string} action - "install", "upgrade" or "remove"
+ * @property {boolean} restart_required
+ * @property {number} generation
+ */
+
+/**
  * @typedef {Object} ListResourcesRequest
  * @property {string} xml_string
  */
@@ -539,6 +593,7 @@
  * @property {number} generation
  * @property {number} workers
  * @property {number} pending
+ * @property {number} restart_pending - Workers that still run code replaced by an upgrade or removal
  */
 
 /**
@@ -556,7 +611,11 @@
  * @property {boolean} protected
  * @property {Array<string>} dependencies
  * @property {Array<string>} dependents
- * @property {string} source
+ * @property {string} source - "builtin", "external" or "site" (installed in the plugin manager)
+ * @property {string=} installed_version
+ * @property {string=} installed_from - repository@tag of a plugin installed in the plugin manager
+ * @property {boolean} removable
+ * @property {boolean} restart_pending - An upgrade or removal of the plugin waits for a restart
  * @property {string} readme_url
  * @property {boolean} has_routes
  * @property {boolean} has_frontend_extension
@@ -567,6 +626,8 @@
  * @typedef {Object} PluginAdminListResponse
  * @property {Array<PluginAdminInfo>} plugins
  * @property {PropagationInfo} propagation
+ * @property {boolean} install_enabled - Whether the operator enabled runtime install (PTE_PLUGIN_INSTALL)
+ * @property {boolean} restart_supported - Whether the server can restart its workers itself
  */
 
 /**
@@ -683,6 +744,11 @@
  * @property {Array<RefTargetModel>} refs
  * @property {boolean} changed
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RestartResult
+ * @property {boolean} restarting
  */
 
 /**
@@ -2376,6 +2442,52 @@ export class ApiClientV1 {
   async pluginsAdminDisable(plugin_id, requestBody) {
     const endpoint = `/plugins/admin/${plugin_id}/disable`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List the plugins that can be installed from the plugin repositories (cached for an hour unless refresh is set).
+   *
+   * @param {Object=} params - Query parameters
+   * @param {boolean=} params.refresh
+   * @returns {Promise<AvailablePluginsResponse>}
+   */
+  async pluginsAdminAvailable(params) {
+    const endpoint = `/plugins/admin/available`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * Install or upgrade a plugin from a release of a plugin repository.
+   * A new plugin is installed disabled. Refusals have a structured detail (InstallErrorDetail).
+   *
+   * @param {InstallRequest} requestBody
+   * @returns {Promise<InstallResult>}
+   */
+  async pluginsAdminInstall(requestBody) {
+    const endpoint = `/plugins/admin/install`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Remove a plugin installed in the plugin manager; its files are deleted at the next restart.
+   *
+   * @param {string} plugin_id
+   * @param {ChangeRequest} requestBody
+   * @returns {Promise<InstallResult>}
+   */
+  async pluginsAdminRemove(plugin_id, requestBody) {
+    const endpoint = `/plugins/admin/${plugin_id}/remove`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Restart the server's worker processes one after the other, to apply plugin upgrades and removals.
+   *
+   * @returns {Promise<RestartResult>}
+   */
+  async pluginsAdminRestart() {
+    const endpoint = `/plugins/admin/restart`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

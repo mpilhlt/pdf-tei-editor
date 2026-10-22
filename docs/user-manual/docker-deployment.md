@@ -153,7 +153,7 @@ See `.env.production` for complete list.
 
 ### Plugins in the image
 
-Most plugins are maintained in the [pte-plugins](https://github.com/cboulanger/pte-plugins) repository and installed into the image as Python packages when it is built. The build argument `PTE_PLUGIN_EXTRAS` selects them by the names of the optional dependencies in `pyproject.toml`:
+Most plugins are maintained in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) repository and installed into the image as Python packages when it is built. The build argument `PTE_PLUGIN_EXTRAS` selects them by the names of the optional dependencies in `pyproject.toml`:
 
 | Value | Plugins |
 | --- | --- |
@@ -186,6 +186,27 @@ docker run ... \
 
 Every directory below `/opt/pte-plugins` (up to three levels deep) that contains a `plugin.py` and a `pte-plugin.json` manifest is loaded as one plugin and shows up as "external" in the Plugin Manager. External plugins can only use Python packages that are installed in the image.
 
+### Runtime Plugin Install
+
+Administrators can install and upgrade plugins from GitHub releases in the [Plugin Manager](plugin-manager.md#installing-plugins) if the operator enables it. A plugin runs with access to all documents, users and secrets of the instance, so this is off by default and controlled by environment variables, which an administrator account cannot change:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `PTE_PLUGIN_INSTALL` | `1` enables discovering and installing plugins at runtime | off |
+| `PTE_PLUGIN_SOURCES` | Comma-separated `owner/repo` list of plugin repositories that are always listed | `mpilhlt/pte-plugins` |
+| `PTE_PLUGIN_DISCOVER_TOPIC` | GitHub topic searched for further plugin repositories; empty disables the search | `pte-plugin` |
+| `PTE_PLUGIN_TRUSTED_OWNERS` | Comma-separated GitHub owners whose plugins are trusted; installing other plugins requires typing the repository name | `mpilhlt` |
+| `PTE_PLUGIN_TRUSTED_ONLY` | `1` hides and refuses plugins of other owners | off |
+| `GITHUB_TOKEN` | Optional token that raises the GitHub API rate limit | - |
+
+For example, a deployment that installs from a fork of the plugin repository sets `PTE_PLUGIN_SOURCES=myorg/pte-plugins` and `PTE_PLUGIN_TRUSTED_OWNERS=mpilhlt,myorg`.
+
+- The container needs outbound HTTPS access to `api.github.com`, `raw.githubusercontent.com` and `github.com` release downloads.
+- Installed plugins are unpacked into `data/plugins/site/`, which lies in the data volume: they survive recreating the container. A plugin installed at runtime takes precedence over the version built into the image. To return to the image's version, remove it in the Plugin Manager.
+- Only plugins whose Python dependencies are installed in the image can be installed at runtime; others need `PTE_PLUGIN_EXTRAS`.
+- Upgrades and removals of plugins in use take effect when the server processes restart ("Apply plugin changes", which sends `SIGHUP` to the uvicorn supervisor started by `bin/start-prod`).
+- All plugin changes are logged to `data/db/plugin-audit.jsonl`.
+
 ## Data Persistence
 
 ### Demo Deployments
@@ -205,6 +226,7 @@ Data persists in the mounted `DEPLOY_DATA_DIR` directory:
 │   ├── metadata.db
 │   ├── users.json
 │   └── roles.json
+├── plugins/        # plugin data, and plugins installed in the Plugin Manager (site/)
 └── versions/       # File version history
 ```
 

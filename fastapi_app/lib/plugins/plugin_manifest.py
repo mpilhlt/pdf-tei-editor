@@ -63,9 +63,23 @@ def read_manifest(plugin_dir: Path) -> PluginManifest | None:
     if not path.is_file():
         return None
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        text = path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ManifestError(f"Cannot read {MANIFEST_FILE}: {e}") from e
+    return parse_manifest(text)
+
+
+def parse_manifest(text: str) -> PluginManifest:
+    """
+    Parse and validate the contents of a manifest file.
+
+    Raises:
+        ManifestError: If the text cannot be parsed or a field is invalid
+    """
+    try:
+        text = text.strip()
         data = json.loads(text) if text else {}
-    except (OSError, ValueError) as e:
+    except ValueError as e:
         raise ManifestError(f"Cannot read {MANIFEST_FILE}: {e}") from e
     if not isinstance(data, dict):
         raise ManifestError(f"{MANIFEST_FILE} must contain a JSON object")

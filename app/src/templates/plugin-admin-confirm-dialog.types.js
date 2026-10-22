@@ -5,6 +5,7 @@
  * @typedef {object} pluginAdminConfirmDialogPart
  * @property {HTMLElement} text
  * @property {HTMLElement} affectedList
+ * @property {import('../ui.js').SlInput} confirmInput
  * @property {import('../ui.js').SlButton} cancelBtn
  * @property {import('../ui.js').SlButton} okBtn
  */
