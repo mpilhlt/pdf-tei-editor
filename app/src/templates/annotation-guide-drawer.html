@@ -2,8 +2,17 @@
   <div name="content" class="markdown-body" data-theme="light" style="color-scheme: light !important;">
     <!-- content will be dynamically updated-->
   </div>
-  <div slot="footer" style="display: flex; width: 100%; justify-content: flex-end; gap: 8px;">
-    <sl-button name="openInNewWindowBtn" variant="default">Open in new window</sl-button>
-    <sl-button name="closeBtn" variant="primary">Close</sl-button>
+  <div slot="footer" style="display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px;">
+    <sl-dropdown name="tocDropdown" placement="top-start" hoist hidden>
+      <sl-button name="tocBtn" variant="default" slot="trigger" caret>
+        <sl-icon slot="prefix" name="list-nested"></sl-icon>
+        Contents
+      </sl-button>
+      <sl-menu name="tocMenu" style="overflow-y: auto; text-align: left;"></sl-menu>
+    </sl-dropdown>
+    <div style="display: flex; gap: 8px; margin-left: auto;">
+      <sl-button name="openInNewWindowBtn" variant="default">Open in new window</sl-button>
+      <sl-button name="closeBtn" variant="primary">Close</sl-button>
+    </div>
   </div>
 </sl-drawer>

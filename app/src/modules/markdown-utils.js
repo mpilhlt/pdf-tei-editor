@@ -153,16 +153,68 @@ export function createMarkdownRenderer() {
     const contentToken = tokens[idx + 1]
 
     if (contentToken && contentToken.type === 'inline') {
-      const text = contentToken.content
-      // Generate anchor from heading text
-      const anchor = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
-      token.attrSet('id', anchor)
+      token.attrSet('id', headingAnchor(contentToken.content))
     }
 
     return defaultHeadingRender(tokens, idx, options, _env, self)
   }
 
   return md
+}
+
+/**
+ * Generates the anchor id of a heading from its Markdown source text:
+ * lowercase, strip characters that aren't word characters/spaces/hyphens,
+ * collapse whitespace to hyphens. Used by createMarkdownRenderer() to
+ * `id`-tag rendered headings.
+ * @param {string} text - The heading's Markdown source text
+ * @returns {string} The anchor id
+ */
+export function headingAnchor(text) {
+  return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+}
+
+/**
+ * A heading of a Markdown document
+ * @typedef {object} MarkdownHeading
+ * @property {number} level - Heading level, 1-6
+ * @property {string} text - Plain text of the heading, without inline markup
+ * @property {string} anchor - The id createMarkdownRenderer() gives the rendered heading
+ * @property {number} occurrence - 0-based index among the headings sharing the same anchor
+ */
+
+/**
+ * Extracts the headings of a Markdown document in document order, using the
+ * markdown-it parser so that ATX and setext headings are found and lines
+ * starting with "#" inside code blocks are ignored.
+ * @param {MarkdownIt} md - Markdown renderer instance (see createMarkdownRenderer)
+ * @param {string} markdown - Markdown content to analyze
+ * @returns {MarkdownHeading[]} The headings
+ */
+export function extractHeadings(md, markdown) {
+  /** @type {MarkdownHeading[]} */
+  const headings = []
+  /** @type {Map<string, number>} */
+  const anchorCounts = new Map()
+  const tokens = md.parse(markdown, {})
+  tokens.forEach((token, idx) => {
+    if (token.type !== 'heading_open') return
+    const inline = tokens[idx + 1]
+    if (!inline || inline.type !== 'inline') return
+    const text = (inline.children || [])
+      .map(child => {
+        if (child.type === 'text' || child.type === 'code_inline') return child.content
+        if (child.type === 'softbreak' || child.type === 'hardbreak') return ' '
+        return ''
+      })
+      .join('')
+      .trim()
+    const anchor = headingAnchor(inline.content)
+    const occurrence = anchorCounts.get(anchor) || 0
+    anchorCounts.set(anchor, occurrence + 1)
+    headings.push({ level: Number(token.tag.slice(1)), text: text || inline.content, anchor, occurrence })
+  })
+  return headings
 }
 
 /**
@@ -243,8 +295,7 @@ export function generateTOC(markdown) {
     if (match) {
       const level = match[1].length
       const text = match[2].trim()
-      // Create anchor from heading text (lowercase, replace spaces with hyphens)
-      const anchor = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+      const anchor = headingAnchor(text)
       headings.push({ level, text, anchor })
     }
   })
@@ -290,7 +341,7 @@ export function findHeadingLineForAnchor(markdown, anchor) {
   for (let i = 0; i < lines.length; i++) {
     const match = /^(#{1,6})\s+(.+)$/.exec(lines[i])
     if (!match) continue
-    const slug = match[2].trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+    const slug = headingAnchor(match[2].trim())
     if (slug === anchor) return i + 1
   }
   return null
