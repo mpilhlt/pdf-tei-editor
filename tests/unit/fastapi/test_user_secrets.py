@@ -65,6 +65,16 @@ class TestSecretStore(unittest.TestCase):
         self.assertFalse(store.delete("alice", "anthropic"))
         self.assertIsNone(store.get("alice", "anthropic"))
 
+    def test_delete_all_only_affects_the_user(self):
+        store = SecretStore(self.tmp)
+        store.set("alice", "anthropic", SECRET)
+        store.set("alice", "openai", SECRET)
+        store.set("bob", "anthropic", "other")
+        self.assertEqual(store.delete_all("alice"), 2)
+        self.assertEqual(store.list_services("alice"), [])
+        self.assertEqual(store.get("bob", "anthropic"), "other")
+        self.assertEqual(store.delete_all("alice"), 0)
+
     def test_value_is_encrypted_at_rest(self):
         store = SecretStore(self.tmp)
         store.set("alice", "anthropic", SECRET)
@@ -162,6 +172,21 @@ class TestSecretsRouter(unittest.TestCase):
     def test_other_users_do_not_see_the_key(self):
         self.store.set("bob", "anthropic", SECRET)
         self.assertFalse(self.client.get("/api/v1/secrets").json()[0]["is_set"])
+
+    def test_delete_all_removes_only_own_keys(self):
+        self.store.set("alice", "anthropic", SECRET)
+        # a key for a service that is no longer registered is removed as well
+        self.store.set("alice", "uninstalled", SECRET)
+        self.store.set("bob", "anthropic", "other")
+        self.store.set("bob", "uninstalled", "other")
+        response = self.client.delete("/api/v1/secrets")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"removed": 2})
+        self.assertEqual(self.store.list_services("alice"), [])
+        self.assertEqual(self.store.list_services("bob"), ["anthropic", "uninstalled"])
+        self.assertEqual(self.store.get("bob", "anthropic"), "other")
+        self.assertFalse(self.client.get("/api/v1/secrets").json()[0]["is_set"])
+        self.assertEqual(self.client.delete("/api/v1/secrets").json(), {"removed": 0})
 
     def test_unknown_service_and_empty_value(self):
         self.assertEqual(self.client.put("/api/v1/secrets/nope", json={"value": "x"}).status_code, 404)

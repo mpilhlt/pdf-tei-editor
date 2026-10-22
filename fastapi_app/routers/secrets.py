@@ -34,6 +34,12 @@ class SecretValueRequest(BaseModel):
     value: Annotated[str, Field(min_length=1, max_length=4096)]
 
 
+class SecretsDeleteAllResponse(BaseModel):
+    """The result of removing all of the current user's secrets."""
+
+    removed: int
+
+
 def _username(user: dict) -> str:
     return user["username"]
 
@@ -81,3 +87,14 @@ def delete_secret(
     info = SecretServiceRegistry.describe(service)
     store.delete(_username(user), service)
     return SecretServiceResponse(id=info.id, label=info.label, description=info.description, help_url=info.help_url, is_set=False)
+
+
+@router.delete("", response_model=SecretsDeleteAllResponse)
+def delete_all_secrets(
+    user: dict = Depends(require_authenticated_user),
+    store: SecretStore = Depends(get_secret_store),
+) -> SecretsDeleteAllResponse:
+    """Remove all secrets of the current user, including those of services that are no longer registered. Other users' secrets are not affected."""
+    removed = store.delete_all(_username(user))
+    logger.info("Removed %d secret(s) of user %s", removed, _username(user))
+    return SecretsDeleteAllResponse(removed=removed)

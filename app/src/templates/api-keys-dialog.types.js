@@ -6,6 +6,7 @@
  * @property {HTMLElement} intro
  * @property {HTMLDivElement} serviceList
  * @property {HTMLDivElement} errorMessage
+ * @property {import('../ui.js').SlButton} removeAllBtn
  * @property {import('../ui.js').SlButton} closeBtn
  */
 

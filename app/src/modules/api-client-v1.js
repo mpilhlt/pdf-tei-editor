@@ -711,6 +711,11 @@
  */
 
 /**
+ * @typedef {Object} SecretsDeleteAllResponse
+ * @property {number} removed - Number of keys that were removed
+ */
+
+/**
  * @typedef {Object} QueryResourceRequest
  * @property {string} kind
  * @property {string} url
@@ -1831,6 +1836,17 @@ export class ApiClientV1 {
    */
   async secretsDelete(service) {
     const endpoint = `/secrets/${encodeURIComponent(service)}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Remove all API keys of the current user, including those of services that are no longer
+   * registered. Other users' keys are not affected.
+   *
+   * @returns {Promise<SecretsDeleteAllResponse>}
+   */
+  async secretsDeleteAll() {
+    const endpoint = `/secrets`
     return this.callApi(endpoint, 'DELETE');
   }
 
