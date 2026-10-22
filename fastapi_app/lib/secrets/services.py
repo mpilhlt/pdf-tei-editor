@@ -39,6 +39,11 @@ class SecretServiceRegistry:
         cls._services[service.id] = service
 
     @classmethod
+    def unregister(cls, service_id: str) -> None:
+        """Remove a registration (no-op if absent); stored secrets of the service are kept."""
+        cls._services.pop(service_id, None)
+
+    @classmethod
     def get(cls, service_id: str) -> SecretService | None:
         """The registered service, or None."""
         return cls._services.get(service_id)
@@ -77,3 +82,8 @@ def register_secret_service(id: str, label: str, description: str = "", help_url
     service = SecretService(id=id, label=label, description=description, help_url=help_url)
     SecretServiceRegistry.register(service)
     return service
+
+
+def unregister_secret_service(id: str) -> None:
+    """Remove a service registered with :func:`register_secret_service`, e.g. in a plugin's cleanup()."""
+    SecretServiceRegistry.unregister(id)
