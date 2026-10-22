@@ -8,7 +8,6 @@ initialization, route registration, and execution.
 import asyncio
 import logging
 import os
-import signal
 import sys
 import time
 from dataclasses import replace
@@ -20,6 +19,7 @@ from packaging.version import InvalidVersion, Version
 from starlette.concurrency import run_in_threadpool
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.plugins import plugin_site
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import PluginContext
@@ -63,9 +63,6 @@ logger = logging.getLogger(__name__)
 # Seconds between two checks of the shared plugin state (see watch_state())
 STATE_CHECK_INTERVAL = 2.0
 
-# Set by bin/start-prod: the parent process is the uvicorn supervisor, which restarts
-# all worker processes one after the other on SIGHUP
-WORKER_RECYCLE_ENV_VAR = "PTE_WORKER_RECYCLE"
 
 
 class CascadeRequired(Exception):
@@ -977,14 +974,13 @@ class PluginManager:
         Raises:
             PluginChangeError: The server was not started by bin/start-prod (409)
         """
-        if os.getenv(WORKER_RECYCLE_ENV_VAR) != "1" or not hasattr(signal, "SIGHUP"):
+        if not can_recycle_workers():
             raise PluginChangeError(409, "This server cannot restart its workers itself; restart the server to apply the plugin changes")
-        supervisor = os.getppid()
-        self._audit("restart", user, supervisor=supervisor)
-        self._schedule(0.5, lambda: os.kill(supervisor, signal.SIGHUP))
+        self._audit("restart", user, supervisor=os.getppid())
+        self._schedule(0.5, recycle_workers)
 
     @staticmethod
-    def _schedule(delay: float, callback: Callable[[], None]) -> None:
+    def _schedule(delay: float, callback: Callable[[], object]) -> None:
         """Run a callback after a delay on the running event loop."""
         asyncio.get_running_loop().call_later(delay, callback)
 

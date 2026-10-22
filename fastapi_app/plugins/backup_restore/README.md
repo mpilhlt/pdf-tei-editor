@@ -58,15 +58,18 @@ Restoring replaces **all** current data with the contents of the backup. Changes
 2. Tell users to save their work. They will be interrupted.
 3. Open the plugin and click **Upload & Restore**.
 4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`. A missing `db/metadata.db` only produces a warning.
-5. The server checks and unpacks the file, then:
-   - On a server that runs under a supervisor (Docker, systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds. The restored data is active when it comes back.
-   - On a server without a supervisor, the message "Please restart the server manually to apply the restore" appears. The restore is applied at the next start.
+5. The server checks the file and unpacks it into `data/.restore/`, then:
+   - On a server started with `bin/start-prod` (this includes the Docker image), it switches all open sessions to a maintenance screen and, after about 10 seconds, replaces its worker processes one after the other. The first new worker applies the restore before it opens any database; the server stays reachable throughout. Reload the page if the maintenance screen does not go away by itself.
+   - On a server that runs under another supervisor (systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds.
+   - Otherwise, the message "Please restart the server manually to apply the restore" appears. The restore is applied at the next start.
 
 After the restart, log in and check that your documents and users are as expected. Note that user accounts and passwords are also restored, so use the login of the backup, not the one from before.
 
 #### What happens to the old data
 
-The previous data directory is not deleted. At startup it is renamed to `data_YYYYMMDD_HHMMSS` next to `data/` in the application directory. This allows you to undo a wrong restore by an administrator with server access (stop the server, rename the directories back). Delete these directories manually when you no longer need them: they use as much disk space as the data itself.
+The previous data is not deleted. When the restore is applied, everything in the data directory (`db/`, `files/` and the caches and plugin data that a backup does not contain) is moved to `data/.restore-previous/YYYYMMDD_HHMMSS/`. Only plugins installed at runtime (`data/plugins/site/`) stay in place; the restored plugin settings decide which of them are active. This stays inside the data directory, so it also works when the data directory is a Docker volume. An administrator with server access can undo a wrong restore: stop the server, move the current contents aside and move the contents of the `.restore-previous` directory back. Delete these directories when you no longer need them: they use as much disk space as the data itself.
+
+If the server stops while the restore is applied, the next start completes it.
 
 #### Troubleshooting
 

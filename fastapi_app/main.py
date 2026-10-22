@@ -16,6 +16,11 @@ from .lib.core.database_init import initialize_all_databases
 
 logger = get_logger(__name__)
 
+# Apply a restore staged by the backup-restore plugin before anything (plugin discovery,
+# the databases) reads the data directory. Of several workers starting at once, one applies it.
+from .lib.core.data_restore import apply_pending_restore
+_data_was_restored = apply_pending_restore(get_settings().data_root, logger)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,15 +40,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
 
-    # Check for pending data restore (from backup-restore plugin)
-    project_root = get_settings().project_root_dir
-    data_restore_dir = project_root / "data_restore"
-    data_was_restored = False
-    if data_restore_dir.exists() and data_restore_dir.is_dir():
-        from .lib.core.data_restore import apply_pending_restore
-        data_was_restored = apply_pending_restore(
-            project_root, settings.data_root, logger
-        )
+    data_was_restored = _data_was_restored
+    if data_was_restored:
+        logger.info("Started with the data of a restored backup")
 
     # Initialize database directory from config defaults FIRST
     # This copies JSON files from config/ to db/ if they don't exist

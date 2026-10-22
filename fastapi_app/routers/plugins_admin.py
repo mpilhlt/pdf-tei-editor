@@ -6,7 +6,6 @@ requires the operator to set PTE_PLUGIN_INSTALL=1 (see plugin_install_policy).
 """
 
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,11 +13,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from fastapi_app.lib.core.dependencies import require_admin_user
+from fastapi_app.lib.core.worker_recycle import can_recycle_workers
 from fastapi_app.lib.plugins.plugin_info import build_plugin_info
 from fastapi_app.lib.plugins.plugin_install import InstallError
 from fastapi_app.lib.plugins.plugin_install_policy import install_enabled, trusted_only, trusted_owners
 from fastapi_app.lib.plugins.plugin_manager import (
-    WORKER_RECYCLE_ENV_VAR,
     CascadeRequired,
     ConfirmationRequired,
     PluginChangeError,
@@ -186,7 +185,7 @@ async def plugins_admin_list(
         ],
         propagation=PropagationInfo(**manager.propagation()),
         install_enabled=install_enabled(),
-        restart_supported=os.getenv(WORKER_RECYCLE_ENV_VAR) == "1",
+        restart_supported=can_recycle_workers(),
     )
 
 

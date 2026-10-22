@@ -6,13 +6,14 @@ and restoring from an uploaded ZIP file.
 """
 
 import asyncio
-import io
 import logging
 import os
 import shutil
 import signal
+import tempfile
 import time
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +26,8 @@ from fastapi_app.lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
 )
+from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError, stage_restore
+from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions, send_notification
 from fastapi_app.plugins.backup_restore.archive import create_backup_zip
 
@@ -36,10 +39,8 @@ router = APIRouter(prefix="/api/plugins/backup-restore", tags=["backup-restore"]
 REQUIRED_FILES = {"db/users.json", "db/config.json"}
 RECOMMENDED_FILES = {"db/metadata.db"}
 
-
-def _get_project_root() -> Path:
-    """Return the project root directory."""
-    return Path(__file__).resolve().parent.parent.parent.parent
+# Seconds between staging a restore and restarting, so clients can show the maintenance notice
+RESTART_DELAY_SECONDS = 10
 
 
 BACKUP_ROLE = "backup"
@@ -54,6 +55,11 @@ _ROLE_ALLOWED = {
 
 # Serializes backup creation so overlapping requests do not double the I/O load
 _backup_lock = asyncio.Lock()
+
+
+def _schedule(delay: float, callback: Callable[[], object]) -> None:
+    """Run a callback after a delay on the running event loop."""
+    asyncio.get_running_loop().call_later(delay, callback)
 
 
 def _user_has_role(user: dict, role: str) -> bool:
@@ -216,94 +222,96 @@ async def restore_backup(
 ):
     """Upload a ZIP file to restore application data.
 
-    Validates the ZIP contents, extracts to data_restore/, and optionally
-    triggers a server restart if running under a supervisor.
+    Validates the ZIP contents and stages them in ``<data>/.restore/`` (see
+    fastapi_app.lib.core.data_restore). The restore is applied when the worker processes
+    restart: on a server started by bin/start-prod the workers are replaced after a short
+    delay, under another supervisor the process exits, otherwise the admin restarts manually.
     """
     session_id_value, user = _authenticate(
         RESTORE_ROLE, session_id, x_session_id, session_manager, auth_manager
     )
     logger.info(f"Restore requested by user '{user.get('username', 'unknown')}'")
 
-    # Read uploaded file
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    from fastapi_app.config import get_settings
 
-    # Validate ZIP
+    settings = get_settings()
+    data_root = settings.data_root
+    settings.tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(dir=settings.tmp_dir, prefix="restore_", suffix=".zip", delete=False) as tmp:
+        zip_path = Path(tmp.name)
+        await asyncio.to_thread(shutil.copyfileobj, file.file, tmp, 1024 * 1024)
     try:
-        zf = zipfile.ZipFile(io.BytesIO(content))
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Invalid ZIP file")
+        if zip_path.stat().st_size == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    names = set(zf.namelist())
+        # Validate ZIP
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                names = set(zf.namelist())
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid ZIP file")
 
-    # Check for required files (handle both with and without leading data/ prefix)
-    missing_required = []
-    for req in REQUIRED_FILES:
-        # Accept either "db/users.json" or "data/db/users.json" patterns
-        if req not in names and f"data/{req}" not in names:
-            missing_required.append(req)
+        # Check for required files (handle both with and without leading data/ prefix)
+        missing_required = []
+        for req in REQUIRED_FILES:
+            # Accept either "db/users.json" or "data/db/users.json" patterns
+            if req not in names and f"data/{req}" not in names:
+                missing_required.append(req)
 
-    if missing_required:
-        detail = f"ZIP is missing required files: {', '.join(missing_required)}"
-        send_notification(sse_service, session_id_value, detail, "danger", "exclamation-octagon")
-        raise HTTPException(status_code=400, detail=detail)
+        if missing_required:
+            detail = f"ZIP is missing required files: {', '.join(missing_required)}"
+            send_notification(sse_service, session_id_value, detail, "danger", "exclamation-octagon")
+            raise HTTPException(status_code=400, detail=detail)
 
-    # Warn about recommended files
-    missing_recommended = []
-    for rec in RECOMMENDED_FILES:
-        if rec not in names and f"data/{rec}" not in names:
-            missing_recommended.append(rec)
+        # Warn about recommended files
+        missing_recommended = []
+        for rec in RECOMMENDED_FILES:
+            if rec not in names and f"data/{rec}" not in names:
+                missing_recommended.append(rec)
 
-    if missing_recommended:
-        warn_msg = f"ZIP is missing recommended files: {', '.join(missing_recommended)}"
-        send_notification(sse_service, session_id_value, warn_msg, "warning", "exclamation-triangle")
-        logger.warning(warn_msg)
+        if missing_recommended:
+            warn_msg = f"ZIP is missing recommended files: {', '.join(missing_recommended)}"
+            send_notification(sse_service, session_id_value, warn_msg, "warning", "exclamation-triangle")
+            logger.warning(warn_msg)
 
-    # Determine if ZIP contents are nested under a top-level directory
-    # (e.g., "data/db/..." vs "db/..." directly)
-    has_data_prefix = all(
-        n.startswith("data/") or n == "data" for n in names if n.strip("/")
-    )
+        # Determine if ZIP contents are nested under a top-level directory
+        # (e.g., "data/db/..." vs "db/..." directly)
+        has_data_prefix = all(
+            n.startswith("data/") or n == "data" for n in names if n.strip("/")
+        )
 
-    # Extract to data_restore/
-    project_root = _get_project_root()
-    restore_dir = project_root / "data_restore"
-
-    # Clean up any previous restore attempt
-    if restore_dir.exists():
-        shutil.rmtree(restore_dir)
-
-    restore_dir.mkdir(parents=True)
-
-    logger.info(f"Extracting restore ZIP ({len(content)} bytes) to {restore_dir}")
-
-    if has_data_prefix:
-        # ZIP contains "data/..." structure — extract and strip the prefix
-        for member in zf.namelist():
-            if not member.startswith("data/"):
-                continue
-            rel = member[len("data/"):]
-            if not rel:
-                continue
-            target = restore_dir / rel
-            if member.endswith("/"):
-                target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with zf.open(member) as src, open(target, "wb") as dst:
-                    dst.write(src.read())
-    else:
-        # ZIP contains direct structure (db/, files/, etc.)
-        zf.extractall(restore_dir)
-
-    zf.close()
+        logger.info(f"Staging restore ZIP ({zip_path.stat().st_size} bytes) in {data_root / STAGING_DIR}")
+        try:
+            count = await asyncio.to_thread(stage_restore, zip_path, data_root, "data" if has_data_prefix else None)
+        except RestoreError as e:
+            send_notification(sse_service, session_id_value, str(e), "danger", "exclamation-octagon")
+            raise HTTPException(status_code=400, detail=str(e))
+        logger.info(f"Staged {count} files for restore")
+    finally:
+        zip_path.unlink(missing_ok=True)
 
     send_notification(
         sse_service, session_id_value,
         "Restore data extracted. Preparing server restart...",
         "success", "check-circle",
     )
+
+    if can_recycle_workers():
+        logger.info(f"Restarting the workers in {RESTART_DELAY_SECONDS} seconds to apply the restore")
+        broadcast_to_all_sessions(
+            sse_service=sse_service,
+            session_manager=session_manager,
+            event_type="maintenanceOn",
+            data={"message": "Application restarting for data restore, please wait..."},
+            logger=logger,
+        )
+        _schedule(RESTART_DELAY_SECONDS, recycle_workers)
+        return JSONResponse({
+            "status": "ok",
+            "message": f"Restore data uploaded. Server will restart in {RESTART_DELAY_SECONDS} seconds.",
+            "supervised": True,
+        })
 
     supervised = _is_supervised()
 
@@ -321,7 +329,7 @@ async def restore_backup(
 
         # Schedule restart in background
         async def _delayed_restart():
-            await asyncio.sleep(10)
+            await asyncio.sleep(RESTART_DELAY_SECONDS)
             logger.info("Sending SIGTERM for data restore restart")
             os.kill(os.getpid(), signal.SIGTERM)
 
@@ -329,7 +337,7 @@ async def restore_backup(
 
         return JSONResponse({
             "status": "ok",
-            "message": "Restore data uploaded. Server will restart in 10 seconds.",
+            "message": f"Restore data uploaded. Server will restart in {RESTART_DELAY_SECONDS} seconds.",
             "supervised": True,
         })
     else:
