@@ -40,8 +40,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
 
-    data_was_restored = _data_was_restored
-    if data_was_restored:
+    if _data_was_restored:
         logger.info("Started with the data of a restored backup")
 
     # Initialize database directory from config defaults FIRST
@@ -145,6 +144,17 @@ async def lifespan(app: FastAPI):
         await plugin_manager.initialize_plugins(app)
         # Apply plugin enable/disable changes made in other worker processes
         plugin_manager.start_state_watcher()
+        # Tell this worker's clients to reload when the plugins change; the clients check
+        # GET /api/v1/maintenance/status and reload once all workers run the new plugins
+        from .lib.sse.sse_utils import broadcast_to_all_sessions
+        from .lib.core.dependencies import get_session_manager
+        plugin_manager.add_change_listener(lambda: broadcast_to_all_sessions(
+            sse_service=get_sse_service(),
+            session_manager=get_session_manager(),
+            event_type="serverChanged",
+            data={},
+            logger=logger,
+        ))
         logger.info("Plugin system initialized")
     except Exception as e:
         logger.error(f"Error initializing plugin system: {e}")
@@ -152,28 +162,6 @@ async def lifespan(app: FastAPI):
 
     # Log startup complete
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
-
-    # If data was restored, broadcast maintenance-off and reload to reconnecting clients
-    if data_was_restored:
-        from .lib.sse.sse_utils import broadcast_to_all_sessions
-        from .lib.core.dependencies import get_session_manager
-        sse_svc = get_sse_service()
-        sess_mgr = get_session_manager()
-        broadcast_to_all_sessions(
-            sse_service=sse_svc,
-            session_manager=sess_mgr,
-            event_type="maintenanceOff",
-            data={},
-            logger=logger,
-        )
-        broadcast_to_all_sessions(
-            sse_service=sse_svc,
-            session_manager=sess_mgr,
-            event_type="maintenanceReload",
-            data={},
-            logger=logger,
-        )
-        logger.info("Broadcast maintenanceOff + maintenanceReload after data restore")
 
     yield
 

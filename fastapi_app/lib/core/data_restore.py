@@ -16,6 +16,7 @@ at the same time exactly one applies the restore, before any of them opens the d
 A swap that was interrupted is completed at the next start.
 """
 
+import json
 import logging
 import shutil
 import sys
@@ -29,8 +30,11 @@ STAGING_DIR = ".restore"
 PREVIOUS_DIR = ".restore-previous"
 LOCK_FILE = ".restore.lock"
 
+# Records the last applied restore, so that clients can notice it (see read_applied_restore())
+APPLIED_FILE = ".restore-applied.json"
+
 # Entries of the data root that a restore leaves in place
-RESERVED_NAMES = frozenset({STAGING_DIR, PREVIOUS_DIR, LOCK_FILE, ".gitignore"})
+RESERVED_NAMES = frozenset({STAGING_DIR, PREVIOUS_DIR, LOCK_FILE, APPLIED_FILE, ".gitignore"})
 
 # Directory that is carried over from the previous data: plugins installed at runtime
 # (see fastapi_app.lib.plugins.plugin_site)
@@ -224,8 +228,28 @@ def apply_pending_restore(
             kept.parent.mkdir(parents=True, exist_ok=True)
             previous.rename(kept)
 
+        (data_root / APPLIED_FILE).write_text(
+            json.dumps({"id": archive_name, "applied_at": now().isoformat(timespec="seconds")}), encoding="utf-8"
+        )
         shutil.rmtree(staging)
         logger.info(
             f"Data restore complete. The previous data is in {data_root / PREVIOUS_DIR / archive_name}; delete it when it is no longer needed."
         )
         return True
+
+
+def read_applied_restore(data_root: Path) -> dict[str, str] | None:
+    """
+    The last restore applied to a data root.
+
+    Returns:
+        ``{"id": ..., "applied_at": ...}`` (the id is the name of the directory with the
+        previous data), or None if no restore was applied
+    """
+    try:
+        value = json.loads((data_root / APPLIED_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(value, dict) or not isinstance(value.get("id"), str):
+        return None
+    return {"id": value["id"], "applied_at": str(value.get("applied_at", ""))}

@@ -103,6 +103,24 @@ class TestDataRestore(unittest.TestCase):
         self.assertTrue(json.loads((archives[0] / "db" / "config.json").read_text())["old"])
         self.assertFalse(apply_pending_restore(self.data, self.logger))
 
+    def test_applied_restore_is_recorded(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, apply_pending_restore, read_applied_restore
+
+        self.assertIsNone(read_applied_restore(self.data))
+        self._stage(self._backup())
+        apply_pending_restore(self.data, self.logger)
+        applied = read_applied_restore(self.data)
+        assert applied is not None
+        self.assertEqual(applied["id"], next((self.data / PREVIOUS_DIR).iterdir()).name)
+        # A second restore keeps the marker in place and replaces it
+        self._stage(self._backup())
+        with patch("fastapi_app.lib.core.data_restore.datetime") as clock:
+            from datetime import datetime as real_datetime
+
+            clock.now.return_value = real_datetime(2030, 1, 1)
+            apply_pending_restore(self.data, self.logger, now=clock.now)
+        self.assertEqual(read_applied_restore(self.data)["id"], "20300101_000000")
+
     def test_nothing_staged(self):
         from fastapi_app.lib.core.data_restore import apply_pending_restore
 

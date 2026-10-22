@@ -59,7 +59,7 @@ Restoring replaces **all** current data with the contents of the backup. Changes
 3. Open the plugin and click **Upload & Restore**.
 4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`. A missing `db/metadata.db` only produces a warning.
 5. The server checks the file and unpacks it into `data/.restore/`, then:
-   - On a server started with `bin/start-prod` (this includes the Docker image), it switches all open sessions to a maintenance screen and, after about 10 seconds, replaces its worker processes one after the other. The first new worker applies the restore before it opens any database; the server stays reachable throughout. Reload the page if the maintenance screen does not go away by itself.
+   - On a server started with `bin/start-prod` (this includes the Docker image), it switches all open sessions to a maintenance screen and, after about 10 seconds, replaces its worker processes one after the other. The first new worker applies the restore before it opens any database; the server stays reachable throughout. All open pages reload by themselves once the restored data is active and show a message about the restore.
    - On a server that runs under another supervisor (systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds.
    - Otherwise, the message "Please restart the server manually to apply the restore" appears. The restore is applied at the next start.
 

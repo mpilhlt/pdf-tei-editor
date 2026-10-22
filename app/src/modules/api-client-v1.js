@@ -528,6 +528,18 @@
  */
 
 /**
+ * @typedef {Object} DataRestoreInfo
+ * @property {string} id
+ * @property {string} applied_at
+ */
+
+/**
+ * @typedef {Object} MaintenanceStatus
+ * @property {(DataRestoreInfo | null)} data_restore
+ * @property {(number | null)} plugins_version
+ */
+
+/**
  * @typedef {Object} MaintenanceOffRequest
  * @property {string=} message
  */
@@ -2398,6 +2410,20 @@ export class ApiClientV1 {
   async maintenanceOff(requestBody) {
     const endpoint = `/maintenance/off`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Server-side state that the loaded frontend depends on; no authentication required.
+   *
+   * Clients compare it with the value at page load and reload when it changes:
+   * `data_restore` changes when a backup has been restored, `plugins_version` when the
+   * plugins were changed (it is null while the workers still have to restart).
+   *
+   * @returns {Promise<MaintenanceStatus>}
+   */
+  async maintenanceStatus() {
+    const endpoint = `/maintenance/status`
+    return this.callApi(endpoint, 'GET');
   }
 
   /**

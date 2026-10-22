@@ -16,6 +16,12 @@ The backup-restore plugin extracted an uploaded backup to `<project>/data_restor
 - `fastapi_app/lib/core/worker_recycle.py`: `can_recycle_workers()` / `recycle_workers()` (SIGHUP to the uvicorn supervisor), shared with the plugin manager.
 - The restore endpoint streams the upload to `data/tmp/`, stages it, and on `bin/start-prod` servers recycles the workers after 10 s instead of sending SIGTERM. uvicorn starts each replacement and waits until it is ready before stopping the old worker, so the first replacement applies the restore and the server stays up. The SIGTERM path remains for other supervisors.
 
-## Remaining limitation
+## Reloading the clients
 
-SSE queues are per worker, so the `maintenanceOn` broadcast reaches only clients connected to the uploading worker, and the startup `maintenanceOff`/`maintenanceReload` broadcast reaches nobody (no client queues exist at startup). Users may have to reload the page after a restore.
+SSE queues are per worker, so a broadcast reaches only the clients of the worker that sends it, and the old startup `maintenanceOff`/`maintenanceReload` broadcast reached nobody (no client queues exist at startup). After a restore the clients' sessions are usually invalid as well (`sessions.db` comes from the backup). The clients therefore detect the change themselves:
+
+- `apply_pending_restore()` writes `data/.restore-applied.json`; the plugin state generation identifies the plugin configuration.
+- `GET /api/v1/maintenance/status` (no authentication) returns both: `data_restore` and `plugins_version` (null while a restart of the workers is pending).
+- `app/src/modules/server-change-monitor.js` (used by the services plugin) remembers the status at page load and checks it whenever the SSE connection opens or is lost (every client loses it when its worker is replaced) and on the SSE event `serverChanged`. On a change it stores a message in sessionStorage and reloads; after the reload the message is shown.
+- `PluginManager.add_change_listener()`: every worker broadcasts `serverChanged` to its own clients after it applied a plugin change (the changing worker immediately, the others when they reconcile), so plugin changes reach all clients without a restart.
+- The plugin manager dialog holds the reload while it is open, so the administrator's page reloads when the dialog is closed.
