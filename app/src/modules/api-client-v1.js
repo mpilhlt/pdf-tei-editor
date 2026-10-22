@@ -252,6 +252,11 @@
  */
 
 /**
+ * @typedef {Object} ConfigDeleteResponse
+ * @property {string} result
+ */
+
+/**
  * @typedef {Object} CopyFilesRequest
  * @property {string} pdf_id
  * @property {string} destination_collection
@@ -1114,7 +1119,7 @@ export class ApiClientV1 {
 
   /**
    * Set a configuration value.
-   * Requires authentication.
+   * Requires the admin role.
    *
    * @param {ConfigSetRequest} requestBody
    * @returns {Promise<ConfigSetResponse>}
@@ -1122,6 +1127,18 @@ export class ApiClientV1 {
   async configSet(requestBody) {
     const endpoint = `/config/set`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete a plugin configuration value together with its type, allowed values and description.
+   * Requires the admin role. Only keys starting with "plugin." can be deleted.
+   *
+   * @param {string} key
+   * @returns {Promise<ConfigDeleteResponse>}
+   */
+  async configDelete(key) {
+    const endpoint = `/config/${key}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**
