@@ -32,6 +32,10 @@ class SSEService:
         self.logger = logger
         self.message_queues: Dict[str, queue.Queue] = {}
         self.queue_timestamps: Dict[str, datetime] = {}
+        # Never call self.logger while holding this lock: SSELogHandler may
+        # forward the record back into send_message() on the same thread
+        # (e.g. a log-viewer subscriber), which would deadlock trying to
+        # re-acquire this non-reentrant lock.
         self.lock = threading.Lock()
 
         # Configuration
@@ -49,14 +53,16 @@ class SSEService:
             Message queue for the client
         """
         with self.lock:
-            if client_id not in self.message_queues:
+            created = client_id not in self.message_queues
+            if created:
                 self.message_queues[client_id] = queue.Queue()
                 self.queue_timestamps[client_id] = datetime.now()
+            msg_queue = self.message_queues[client_id]
 
-                if self.logger:
-                    self.logger.debug(f"Created SSE queue for client: {client_id}")
+        if created and self.logger:
+            self.logger.debug(f"Created SSE queue for client: {client_id}")
 
-            return self.message_queues[client_id]
+        return msg_queue
 
     def remove_queue(self, client_id: str) -> None:
         """
@@ -66,12 +72,13 @@ class SSEService:
             client_id: Client identifier
         """
         with self.lock:
-            if client_id in self.message_queues:
+            removed = client_id in self.message_queues
+            if removed:
                 del self.message_queues[client_id]
                 del self.queue_timestamps[client_id]
 
-                if self.logger:
-                    self.logger.debug(f"Removed SSE queue for client: {client_id}")
+        if removed and self.logger:
+            self.logger.debug(f"Removed SSE queue for client: {client_id}")
 
     def send_message(
         self,
@@ -91,26 +98,27 @@ class SSEService:
             True if message was queued, False if queue doesn't exist
         """
         with self.lock:
-            if client_id not in self.message_queues:
-                if self.logger:
-                    self.logger.debug(f"No SSE queue for client: {client_id}")
-                return False
+            msg_queue = self.message_queues.get(client_id)
 
-            try:
-                self.message_queues[client_id].put({
-                    'event': event_type,
-                    'data': data
-                }, block=False)
+        if msg_queue is None:
+            if self.logger:
+                self.logger.debug(f"No SSE queue for client: {client_id}")
+            return False
 
-                if self.logger:
-                    self.logger.debug(f"Sent SSE {event_type} to {client_id}: {data[:50]}")
+        try:
+            msg_queue.put({
+                'event': event_type,
+                'data': data
+            }, block=False)
+        except queue.Full:
+            if self.logger:
+                self.logger.error(f"SSE queue full for client: {client_id}")
+            return False
 
-                return True
+        if self.logger:
+            self.logger.debug(f"Sent SSE {event_type} to {client_id}: {data[:50]}")
 
-            except queue.Full:
-                if self.logger:
-                    self.logger.error(f"SSE queue full for client: {client_id}")
-                return False
+        return True
 
     def event_stream(self, client_id: str) -> Generator[str, None, None]:
         """
@@ -191,10 +199,11 @@ class SSEService:
                 del self.message_queues[client_id]
                 del self.queue_timestamps[client_id]
 
-                if self.logger:
-                    self.logger.info(f"Cleaned up stale SSE queue: {client_id}")
+        if self.logger:
+            for client_id in stale_clients:
+                self.logger.info(f"Cleaned up stale SSE queue: {client_id}")
 
-            return len(stale_clients)
+        return len(stale_clients)
 
     def get_active_clients(self) -> list[str]:
         """

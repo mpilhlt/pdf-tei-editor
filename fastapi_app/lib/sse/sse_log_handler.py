@@ -20,10 +20,10 @@ if TYPE_CHECKING:
 # SSEService logs while holding its own lock, so forwarding those records
 # through this handler would risk deadlocks and infinite recursion.
 _SUPPRESSED_LOGGERS = frozenset((
-    "fastapi_app.lib.sse_service",
-    "fastapi_app.lib.sse_log_handler",
-    "fastapi_app.lib.sse_utils",
-    "fastapi_app.lib.dependencies",
+    "fastapi_app.lib.sse.sse_service",
+    "fastapi_app.lib.sse.sse_log_handler",
+    "fastapi_app.lib.sse.sse_utils",
+    "fastapi_app.lib.core.dependencies",
     "uvicorn.access",
 ))
 
