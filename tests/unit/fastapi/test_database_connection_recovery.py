@@ -65,35 +65,25 @@ class TestConnectionRecovery(unittest.TestCase):
         with self.db.get_connection() as conn:
             return conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
 
-    def _fill_pool(self, size: int) -> None:
-        """Open several connections at once so that the pool keeps them idle afterwards."""
-        contexts = [self.db.get_connection() for _ in range(size)]
-        for context in contexts:
-            context.__enter__().execute("SELECT 1").fetchone()
-        for context in reversed(contexts):
-            context.__exit__(None, None, None)
-
     def _remove_wal(self) -> None:
         self.assertTrue(self.wal_path.exists(), "test requires the WAL file to exist")
         self.wal_path.unlink()
 
     def _query_with_new_connection(self) -> None:
-        """Run a query while another pooled connection is in use, forcing a new connection."""
+        """Run a query on a new connection while the pooled connection is in use."""
         with self.db.get_connection() as held:
             held.execute("SELECT 1").fetchone()
             with self.db.get_connection() as conn:
                 conn.execute("SELECT COUNT(*) FROM files").fetchone()
 
     def test_recovers_after_wal_file_removed(self):
-        self._insert("abc123")
-        self._fill_pool(3)
+        self._insert("abc123")  # leaves one idle connection in the pool
         self._remove_wal()
 
-        # The first access fails: the process still maps the WAL index of the removed file
+        # A new connection fails: the pooled connection keeps the WAL index of the removed file mapped
         with self.assertLogs("fastapi_app.lib.core.database", level="WARNING") as logs:
             with self.assertRaises(sqlite3.DatabaseError) as ctx:
-                for _ in range(5):
-                    self._query_with_new_connection()
+                self._query_with_new_connection()
         self.assertTrue(is_connection_broken(ctx.exception))
         self.assertIn("metadata.db-wal: ", logs.output[0])
 
