@@ -1,6 +1,6 @@
 # RBAC Manager
 
-The RBAC Manager is the administration UI for users, projects, collections, groups, and roles. It is only accessible to users with the **admin** role, via the **Manage Users & Roles** item in the left Tools dropdown menu.
+The RBAC Manager is the administration UI for users, projects, collections, groups, and roles. It is only accessible to users with the **admin** role, via the **Manage Access & Projects** item in the Administration menu.
 
 See [User Management](./user-management.md) for background on the authentication and role system.
 

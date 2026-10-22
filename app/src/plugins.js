@@ -77,7 +77,7 @@ const plugins = [
 
   // Tools menu — Administration section (admin only, order determines item order)
   FiledataPlugin,      // Garbage Collection
-  RbacManagerPlugin,   // Manage Users & Roles
+  RbacManagerPlugin,   // Manage Access & Projects
   ConfigEditorPlugin,  // Configuration Editor
   PluginAdminPlugin,   // Manage Plugins
 
