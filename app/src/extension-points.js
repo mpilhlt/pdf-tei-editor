@@ -128,7 +128,8 @@ const extensionPoints = {
     /**
      * Contribute static items to the main toolbar dropdown menu.
      * Called by ToolbarPlugin.start() on all plugins that declare this extension point.
-     * Function signature: () => Array<{element: HTMLElement}>
+     * Function signature: () => Array<{element: HTMLElement, after?: string}>
+     * `after` is the `name` of a menu item to insert the element after (appended if not found).
      */
     menuItems: "toolbar.menuItems",
   },

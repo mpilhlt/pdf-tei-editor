@@ -33,7 +33,6 @@ DEPLOY_REBUILD=true            # Build image if needed
 
 # Container Environment
 LOG_LEVEL=INFO
-# GROBID_SERVER_URL=http://localhost:8070
 ```
 
 Run with:
@@ -68,7 +67,6 @@ APP_DEMO_PASSWORD=secure-demo-password
 # Container Environment
 LOG_LEVEL=WARNING
 SECRETS_ENCRYPTION_KEY=your-fernet-key
-GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
 ```
 
 Run with:
@@ -133,15 +131,14 @@ API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as 
 
 | Variable | Description |
 | --- | --- |
-| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the stored API keys; set it in production and keep it (default: a key file generated in `data/db/secrets.key`) |
-| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing (`grobid`) |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the stored API keys. Set it in production and keep it. Without it, the key is generated in `data/db/secrets.key`, next to the encrypted keys, so every copy of the data directory (backups, the volume) can decrypt them |
 | `PTE_PLUGIN_INSTALL` | Allow administrators to install plugins from GitHub releases (off by default) |
 | `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
 | `PTE_PLUGIN_TRUSTED_ONLY` | Hide and refuse plugins of untrusted owners |
 | `GITHUB_TOKEN` | Raises the GitHub API rate limit for plugin discovery |
 
-See [Plugins in the image](#plugins-in-the-image). `.env.production` documents all plugin-related variables, and each plugin's README lists its settings.
+See [Plugins in the image](#plugins-in-the-image). `.env.production` documents the plugin system variables. The settings of individual plugins (such as `GROBID_SERVER_URL`) are described in each plugin's README.
 
 #### Application Settings
 

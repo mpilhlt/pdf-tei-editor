@@ -79,10 +79,16 @@ class TestSecretStore(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((self.tmp / "secrets.db").stat().st_mode), 0o600)
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
 
+    def test_key_file_fallback_logs_a_warning(self):
+        with self.assertLogs("fastapi_app.lib.secrets.store", level="WARNING") as logs:
+            SecretStore(self.tmp)
+        self.assertTrue(any(ENCRYPTION_KEY_ENV_VAR in line for line in logs.output))
+
     def test_environment_key_takes_precedence(self):
         from cryptography.fernet import Fernet
         os.environ[ENCRYPTION_KEY_ENV_VAR] = Fernet.generate_key().decode()
-        SecretStore(self.tmp).set("alice", "s", SECRET)
+        with self.assertNoLogs("fastapi_app.lib.secrets.store", level="WARNING"):
+            SecretStore(self.tmp).set("alice", "s", SECRET)
         self.assertFalse((self.tmp / "secrets.key").exists())
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
 
