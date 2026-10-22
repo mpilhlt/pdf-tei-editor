@@ -435,7 +435,7 @@ get_plugin_config(
 
 Failure to pass `masked=True` for credentials is a security defect.
 
-A masked key without a value (no environment variable, `default=None`) is stored as an empty string, so that it appears as "not set" in the config editor and administrators can enter a shared key there. An empty string counts as unset: the environment variable still applies at the next start, and plugins must treat an empty value like a missing one.
+A masked key without a value (no environment variable, `default=None`) is stored as an empty string, so that it appears as "not set" in the config editor and administrators can enter a shared key there. An empty string counts as unset: the environment variable still applies at the next start, and plugins must treat an empty value like a missing one. Administrators can clear a masked value in the config editor (it saves `""`) and delete any `plugin.*` key (`DELETE /api/v1/config/{key}`); code reading a plugin key must therefore cope with a missing key until the next start re-registers it.
 
 **Example - Plugin availability based on config**:
 

@@ -96,6 +96,32 @@ class TestConfigUtils(unittest.TestCase):
         value = self.config.get('delete.me')
         self.assertIsNone(value)
 
+    def test_delete_with_metadata(self):
+        """Deleting with metadata removes type, values and description, but keeps the masked flag."""
+        self.config.set('plugin.x.mode', 'a', allowed_values=['a', 'b'], description='Mode', masked=True)
+        self.config.set('plugin.x.other', 'kept')
+
+        success, _ = self.config.delete('plugin.x.mode', with_metadata=True)
+        self.assertTrue(success)
+
+        data = self.config.load()
+        for key in ('plugin.x.mode', 'plugin.x.mode.type', 'plugin.x.mode.values', 'plugin.x.mode.description'):
+            self.assertNotIn(key, data)
+        self.assertTrue(data['plugin.x.mode.masked'])
+        self.assertEqual(data['plugin.x.other'], 'kept')
+
+        # A key can be registered again with a different type
+        success, _ = self.config.set('plugin.x.mode', 1)
+        self.assertTrue(success)
+
+    def test_delete_without_metadata_keeps_it(self):
+        """By default, only the value is deleted."""
+        self.config.set('delete.me', 'value', description='Desc')
+        self.config.delete('delete.me')
+        data = self.config.load()
+        self.assertNotIn('delete.me', data)
+        self.assertEqual(data['delete.me.description'], 'Desc')
+
     def test_delete_nonexistent_key(self):
         """Test deleting a key that doesn't exist."""
         success, msg = self.config.delete('nonexistent')

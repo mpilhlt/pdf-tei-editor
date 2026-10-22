@@ -54,6 +54,24 @@ class TestMaskedPluginConfig(unittest.TestCase):
         with mock.patch.dict(os.environ, {ENV: "from-env"}):
             self.assertEqual(self._register(), "from-editor")
 
+    def test_cleared_value_is_shown_as_not_set(self):
+        self._register()
+        self.config.set(KEY, "from-editor")
+        self.config.set(KEY, "")
+        self.assertEqual(self.config.load(apply_masks=True)[KEY], "")
+        self.assertIsNone(self._register())
+
+    def test_deleted_key_is_registered_again(self):
+        self._register()
+        self.config.set(KEY, "from-editor")
+        self.config.delete(KEY, with_metadata=True)
+        self.assertNotIn(KEY, self.config.load())
+        self.assertIsNone(self._register())
+        data = self.config.load()
+        self.assertEqual(data[KEY], "")
+        self.assertTrue(data[f"{KEY}.masked"])
+        self.assertEqual(data[f"{KEY}.description"], "Shared key")
+
 
 if __name__ == "__main__":
     unittest.main()

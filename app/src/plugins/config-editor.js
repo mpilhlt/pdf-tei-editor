@@ -28,14 +28,22 @@ await registerTemplate('config-editor-menu-item', 'config-editor-menu-item.html'
 // <sl-icon name="check-circle"></sl-icon>
 // <sl-icon name="arrow-counterclockwise"></sl-icon>
 // <sl-icon name="pencil"></sl-icon>
+// <sl-icon name="eraser"></sl-icon>
+// <sl-icon name="trash"></sl-icon>
+
+// Only plugin settings can be deleted (enforced by the backend as well): plugins register their keys
+// again with the default value on startup, core settings have no such fallback.
+const DELETABLE_KEY_PREFIX = 'plugin.'
 
 class ConfigEditorPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'config-editor', deps: ['client', 'tools', 'logger'] })
+    super(context, { name: 'config-editor', deps: ['client', 'tools', 'logger', 'dialog'] })
   }
 
   get #logger() { return this.getDependency('logger') }
+
+  get #dialog() { return this.getDependency('dialog') }
 
   /** @type {SlDialog & configEditorDialogPart} */
   #dialogUi = null
@@ -217,6 +225,27 @@ class ConfigEditorPlugin extends Plugin {
       resetBtn.setAttribute('label', 'Reset')
       resetBtn.addEventListener('click', () => this.#resetValue(key))
       actionsCell.appendChild(resetBtn)
+    } else {
+      const isMasked = this.#originalConfig[`${key}.masked`] === true
+      if (isMasked && value === '****') {
+        const clearBtn = document.createElement('sl-icon-button')
+        clearBtn.setAttribute('name', 'eraser')
+        clearBtn.setAttribute('label', 'Clear value')
+        clearBtn.title = 'Clear value'
+        clearBtn.dataset.action = 'clear'
+        clearBtn.addEventListener('click', () => this.#clearValue(key))
+        actionsCell.appendChild(clearBtn)
+      }
+      if (key.startsWith(DELETABLE_KEY_PREFIX)) {
+        const deleteBtn = document.createElement('sl-icon-button')
+        deleteBtn.setAttribute('name', 'trash')
+        deleteBtn.setAttribute('label', 'Delete')
+        deleteBtn.title = 'Delete'
+        deleteBtn.dataset.action = 'delete'
+        deleteBtn.style.cssText = 'color: var(--sl-color-danger-600);'
+        deleteBtn.addEventListener('click', () => this.#deleteValue(key))
+        actionsCell.appendChild(deleteBtn)
+      }
     }
 
     row.appendChild(actionsCell)
@@ -314,6 +343,58 @@ class ConfigEditorPlugin extends Plugin {
     } catch (error) {
       this.#logger.error('Failed to save config value:', error)
       notify(`Failed to save ${key}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Clear a masked value (e.g. a shared API key) by saving an empty string. An empty input cannot be
+   * saved in the editor, because it is indistinguishable from "not changed".
+   * @param {string} key
+   */
+  async #clearValue(key) {
+    const confirmed = await this.#dialog.confirm(
+      `Clear the value of "${key}"? Features that depend on it stop working until a new value is set. If the value comes from an environment variable, it is applied again on the next server start.`,
+      'Clear configuration value'
+    )
+    if (!confirmed) return
+    try {
+      await this.getDependency('client').apiClient.configSet({ key, value: '' })
+      this.#originalConfig[key] = ''
+      this.#modifiedConfig[key] = ''
+      this.#modifiedKeys.delete(key)
+      this.#editingKey = null
+      notify(`Cleared ${key}`, 'success', 'check-circle')
+      this.#renderConfigList(this.#dialogUi.searchInput.value)
+    } catch (error) {
+      this.#logger.error('Failed to clear config value:', error)
+      notify(`Failed to clear ${key}`, 'danger', 'exclamation-octagon')
+    }
+  }
+
+  /**
+   * Delete a plugin configuration value together with its type, allowed values and description,
+   * after a warning.
+   * @param {string} key
+   */
+  async #deleteValue(key) {
+    const confirmed = await this.#dialog.confirm(
+      `WARNING: Deleting "${key}" can break the plugin that uses it, or the whole application. The key is removed from the configuration together with its type, allowed values and description. The plugin registers it again with its default value (or the environment variable) on the next server start; until then, the setting has no value. Only continue if you know what you are doing. Delete the key?`,
+      'Delete configuration value'
+    )
+    if (!confirmed) return
+    try {
+      await this.getDependency('client').apiClient.configDelete(key)
+      for (const k of [key, `${key}.type`, `${key}.values`, `${key}.description`]) {
+        delete this.#originalConfig[k]
+        delete this.#modifiedConfig[k]
+      }
+      this.#modifiedKeys.delete(key)
+      this.#editingKey = null
+      notify(`Deleted ${key}`, 'success', 'check-circle')
+      this.#renderConfigList(this.#dialogUi.searchInput.value)
+    } catch (error) {
+      this.#logger.error('Failed to delete config value:', error)
+      notify(`Failed to delete ${key}`, 'danger', 'exclamation-octagon')
     }
   }
 
