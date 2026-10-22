@@ -4,7 +4,13 @@ Plugin state shared by all server processes.
 Production runs several uvicorn workers, each with its own PluginRegistry. The set of
 plugins disabled by an administrator is therefore kept in ``data/db/plugins-state.json``::
 
-    {"generation": 3, "disabled": ["grobid"]}
+    {"generation": 3, "disabled": ["grobid"], "installed": [...], "pending_removal": [...],
+     "restart_required_at": 1761120000.0, "restart_plugins": ["grobid"]}
+
+``installed`` lists the plugins installed at runtime into ``data/plugins/site/`` (see
+``plugin_install``), ``pending_removal`` the site directories to delete at the next start,
+and ``restart_required_at`` the time of the last change (upgrade, removal) that only takes
+effect in worker processes started after it; ``restart_plugins`` are the plugins concerned.
 
 The worker that serves a change request writes the file and applies the change; the
 other workers watch the file and apply it when ``generation`` changes (see
@@ -22,7 +28,7 @@ import os
 import tempfile
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -44,11 +50,54 @@ HEARTBEAT_STALE_AGE = 300.0
 
 
 @dataclass(frozen=True)
+class InstalledPlugin:
+    """A plugin installed at runtime from a release wheel into ``data/plugins/site/``."""
+
+    id: str
+    package: str  # import package, e.g. pte_plugin_grobid
+    distribution: str  # distribution name, e.g. pte-plugin-grobid
+    version: str
+    path: str  # version directory, relative to the site directory
+    repository: str  # owner/repo
+    tag: str
+    sha256: str
+    name: str = ""
+    description: str = ""
+    dependencies: tuple[str, ...] = ()  # ids of the plugins it requires
+    trusted: bool = True
+    installed_at: float = 0.0
+    installed_by: str = ""
+
+    def to_json(self) -> dict[str, object]:
+        """JSON representation for the state file."""
+        data = dict(self.__dict__)
+        data["dependencies"] = list(self.dependencies)
+        return data
+
+    @classmethod
+    def from_json(cls, data: dict[str, object]) -> "InstalledPlugin":
+        """Create from the state file's representation; unknown keys are ignored."""
+        known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        deps = known.get("dependencies") or []
+        known["dependencies"] = tuple(str(d) for d in deps) if isinstance(deps, list) else ()
+        return cls(**known)  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True)
 class PluginState:
     """Desired plugin state; ``generation`` increases with every change."""
 
     generation: int = 0
     disabled: frozenset[str] = field(default_factory=frozenset)
+    installed: tuple[InstalledPlugin, ...] = ()
+    pending_removal: frozenset[str] = field(default_factory=frozenset)
+    restart_required_at: float | None = None
+    # Plugins whose upgrade or removal waits for the restart requested at restart_required_at
+    restart_plugins: frozenset[str] = field(default_factory=frozenset)
+
+    def get_installed(self, plugin_id: str) -> InstalledPlugin | None:
+        """The runtime installation of a plugin, or None."""
+        return next((p for p in self.installed if p.id == plugin_id), None)
 
 
 @dataclass(frozen=True)
@@ -58,6 +107,7 @@ class WorkerHeartbeat:
     pid: int
     generation: int
     time: float
+    started: float = 0.0
 
 
 class PluginStateStore:
@@ -93,13 +143,32 @@ class PluginStateStore:
         except (OSError, ValueError) as e:
             logger.error(f"Cannot read {self.state_file}, assuming no disabled plugins: {e}")
             return PluginState()
+        installed: list[InstalledPlugin] = []
+        for entry in data.get("installed", []):
+            try:
+                installed.append(InstalledPlugin.from_json(entry))
+            except (TypeError, ValueError) as e:
+                logger.error(f"Ignoring invalid entry in {self.state_file}: {entry!r} ({e})")
+        restart = data.get("restart_required_at")
         return PluginState(
             generation=int(data.get("generation", 0)),
             disabled=frozenset(str(p) for p in data.get("disabled", [])),
+            installed=tuple(installed),
+            pending_removal=frozenset(str(p) for p in data.get("pending_removal", [])),
+            restart_required_at=float(restart) if restart is not None else None,
+            restart_plugins=frozenset(str(p) for p in data.get("restart_plugins", [])),
         )
 
     def _write_unlocked(self, state: PluginState) -> None:
-        content = json.dumps({"generation": state.generation, "disabled": sorted(state.disabled)}, indent=2)
+        data: dict[str, object] = {"generation": state.generation, "disabled": sorted(state.disabled)}
+        if state.installed:
+            data["installed"] = [p.to_json() for p in sorted(state.installed, key=lambda p: p.id)]
+        if state.pending_removal:
+            data["pending_removal"] = sorted(state.pending_removal)
+        if state.restart_required_at is not None:
+            data["restart_required_at"] = state.restart_required_at
+            data["restart_plugins"] = sorted(state.restart_plugins)
+        content = json.dumps(data, indent=2)
         fd, tmp = tempfile.mkstemp(dir=self.db_dir, prefix=".plugins-state-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -142,9 +211,24 @@ class PluginStateStore:
         Raises:
             OSError: If the file cannot be written
         """
+        return self.update(lambda current: replace(current, disabled=frozenset(disabled)))
+
+    def update(self, change: Callable[[PluginState], PluginState]) -> PluginState:
+        """
+        Change the state under the file lock and store it with the next generation.
+
+        Args:
+            change: Returns the new state for the current one (its generation is ignored)
+
+        Returns:
+            The stored state
+
+        Raises:
+            OSError: If the file cannot be written
+        """
         with self._locked():
             current = self._read_unlocked() or PluginState()
-            state = PluginState(generation=current.generation + 1, disabled=frozenset(disabled))
+            state = replace(change(current), generation=current.generation + 1)
             self._write_unlocked(state)
         return state
 
@@ -155,13 +239,21 @@ class PluginStateStore:
         except OSError:
             return None
 
-    def write_heartbeat(self, generation: int, pid: int | None = None) -> None:
-        """Record that this worker process has applied a generation."""
+    def write_heartbeat(self, generation: int, pid: int | None = None, started: float = 0.0) -> None:
+        """
+        Record that this worker process has applied a generation.
+
+        Args:
+            generation: Applied state generation
+            pid: Process id (default: this process)
+            started: Start time of the process, compared with ``restart_required_at``
+        """
         pid = os.getpid() if pid is None else pid
         self.workers_dir.mkdir(parents=True, exist_ok=True)
         path = self.workers_dir / f"{pid}.json"
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"pid": pid, "generation": generation, "time": time.time()}), encoding="utf-8")
+        beat = {"pid": pid, "generation": generation, "time": time.time(), "started": started}
+        tmp.write_text(json.dumps(beat), encoding="utf-8")
         os.replace(tmp, path)
 
     def remove_heartbeat(self, pid: int | None = None) -> None:
@@ -186,7 +278,10 @@ class PluginStateStore:
         for path in self.workers_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                beat = WorkerHeartbeat(pid=int(data["pid"]), generation=int(data["generation"]), time=float(data["time"]))
+                beat = WorkerHeartbeat(
+                    pid=int(data["pid"]), generation=int(data["generation"]), time=float(data["time"]),
+                    started=float(data.get("started", 0.0)),
+                )
             except (OSError, ValueError, KeyError, TypeError):
                 continue
             age = now - beat.time

@@ -126,14 +126,40 @@ def get_installed_plugin_dirs() -> list[Path]:
     return dirs
 
 
+def register_installed_package(plugin_dir: Path, package_name: str) -> None:
+    """
+    Register the package of a plugin installed after discovery (see ``plugin_site``).
+
+    Args:
+        plugin_dir: Package directory of the plugin
+        package_name: Importable package name
+    """
+    _package_names[plugin_dir.resolve()] = package_name
+    _installed_packages.add(package_name)
+
+
+def is_installed_package_dir(plugin_dir: Path) -> bool:
+    """Whether a plugin directory is the package of an installed (entry-point) plugin."""
+    return _package_names.get(plugin_dir.resolve()) in _installed_packages
+
+
 def get_plugin_dirs() -> list[Path]:
     """
     Return all directories to search for plugins: built-in, then external, then installed.
 
+    A directory is listed once, even if it is reachable in several ways.
+
     Returns:
         List of directory paths
     """
-    return [get_settings().plugins_code_dir, *get_external_plugin_dirs(), *get_installed_plugin_dirs()]
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for directory in [get_settings().plugins_code_dir, *get_external_plugin_dirs(), *get_installed_plugin_dirs()]:
+        resolved = directory.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            dirs.append(directory)
+    return dirs
 
 
 def is_builtin_plugin_dir(plugin_path: Path) -> bool:

@@ -817,6 +817,98 @@ async function maintenanceRepopulate(baseUrl, sessionId, fields) {
 }
 
 // ============================================================================
+// Plugin Commands
+// ============================================================================
+
+/**
+ * List the installed plugins with their status
+ */
+async function pluginList(baseUrl, sessionId) {
+  const { plugins, propagation, install_enabled } = await apiRequest(baseUrl, sessionId, 'GET', '/api/v1/plugins/admin');
+  for (const p of plugins) {
+    const source = p.source === 'site' ? `installed from ${p.installed_from}` : p.source;
+    const flags = [p.restart_pending ? 'restart pending' : '', p.status_reason || ''].filter(Boolean).join('; ');
+    console.log(`${p.id.padEnd(28)} ${String(p.version).padEnd(10)} ${p.status.padEnd(12)} ${source}${flags ? `  (${flags})` : ''}`);
+  }
+  console.log(`\nRuntime install: ${install_enabled ? 'enabled' : 'disabled (PTE_PLUGIN_INSTALL)'}`);
+  if (propagation.restart_pending > 0) {
+    console.log(`${propagation.restart_pending} of ${propagation.workers} server processes run replaced plugin code; run "plugin apply".`);
+  }
+}
+
+/**
+ * List the plugins available in the plugin repositories
+ */
+async function pluginAvailable(baseUrl, sessionId, cmdOptions) {
+  const query = cmdOptions.refresh ? '?refresh=true' : '';
+  const { plugins, errors } = await apiRequest(baseUrl, sessionId, 'GET', `/api/v1/plugins/admin/available${query}`);
+  for (const p of plugins) {
+    const state = p.installed_version
+      ? (p.update_available ? `installed ${p.installed_version}, update available` : `installed ${p.installed_version}`)
+      : (p.installable ? 'installable' : (p.incompatible_reason || 'no installable release'));
+    console.log(`${p.id.padEnd(28)} ${String(p.latest_version ?? '-').padEnd(10)} ${p.repository.padEnd(28)} ${p.trusted ? 'trusted   ' : 'unverified'} ${state}`);
+  }
+  for (const [source, message] of Object.entries(errors)) {
+    console.error(`Could not read ${source}: ${message}`);
+  }
+}
+
+/**
+ * Install or upgrade a plugin from a release of a plugin repository
+ */
+async function pluginInstall(baseUrl, sessionId, pluginId, cmdOptions) {
+  const body = { repository: cmdOptions.repository, id: pluginId };
+  if (cmdOptions.version) body.version = cmdOptions.version;
+  if (cmdOptions.confirm) body.confirm = cmdOptions.repository;
+  try {
+    const result = await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/plugins/admin/install', body);
+    console.log(`${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${result.plugin} ${result.version}.`);
+    if (result.restart_required) {
+      console.log('The new version is used after the server processes restart: run "plugin apply".');
+    } else if (result.action === 'install') {
+      console.log(`The plugin is disabled; enable it with "plugin enable ${result.plugin}".`);
+    }
+  } catch (error) {
+    if (String(error.message).includes('confirmation_required')) {
+      throw new Error(`${cmdOptions.repository} is not a trusted plugin source; repeat with --confirm to install anyway`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Enable or disable a plugin, including the plugins affected by the change
+ */
+async function pluginSetEnabled(baseUrl, sessionId, pluginId, enable) {
+  const result = await apiRequest(baseUrl, sessionId, 'POST', `/api/v1/plugins/admin/${encodeURIComponent(pluginId)}/${enable ? 'enable' : 'disable'}`, { cascade: true });
+  for (const [id, status] of Object.entries(result.changed)) {
+    console.log(`${id}: ${status}`);
+  }
+  for (const [id, message] of Object.entries(result.errors)) {
+    console.error(`${id}: ${message}`);
+  }
+}
+
+/**
+ * Remove a plugin installed in the plugin manager
+ */
+async function pluginRemove(baseUrl, sessionId, pluginId) {
+  const result = await apiRequest(baseUrl, sessionId, 'POST', `/api/v1/plugins/admin/${encodeURIComponent(pluginId)}/remove`, { cascade: true });
+  console.log(`Removed ${result.plugin} ${result.version}; its files are deleted when the server processes restart.`);
+  if (result.restart_required) {
+    console.log('The plugin is still loaded: run "plugin apply".');
+  }
+}
+
+/**
+ * Restart the server processes to apply plugin upgrades and removals
+ */
+async function pluginApply(baseUrl, sessionId) {
+  await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/plugins/admin/restart');
+  console.log('The server processes restart one after the other.');
+}
+
+// ============================================================================
 // CLI Setup
 // ============================================================================
 
@@ -1153,6 +1245,62 @@ Examples:
     await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
       maintenanceRepopulate(baseUrl, sessionId, fields)
     );
+  });
+
+// --- Plugin Commands ---
+const pluginCmd = program.command('plugin').description('Manage backend plugins');
+
+pluginCmd
+  .command('list')
+  .description('List the installed plugins and their status')
+  .action(async () => {
+    await runAuthenticated(getGlobalOptions(), pluginList);
+  });
+
+pluginCmd
+  .command('available')
+  .description('List the plugins in the plugin repositories (requires PTE_PLUGIN_INSTALL=1 on the server)')
+  .option('--refresh', 'Read the repositories again instead of using the cached list')
+  .action(async (cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => pluginAvailable(baseUrl, sessionId, cmdOptions));
+  });
+
+pluginCmd
+  .command('install <plugin-id>')
+  .description('Install or upgrade a plugin from a GitHub release (requires PTE_PLUGIN_INSTALL=1 on the server)')
+  .option('--repository <owner/repo>', 'Plugin repository', 'mpilhlt/pte-plugins')
+  .option('--version <version>', 'Release version (default: the latest)')
+  .option('--confirm', 'Confirm installing from a repository of an untrusted owner')
+  .action(async (pluginId, cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => pluginInstall(baseUrl, sessionId, pluginId, cmdOptions));
+  });
+
+pluginCmd
+  .command('enable <plugin-id>')
+  .description('Enable a plugin and the disabled plugins it requires')
+  .action(async (pluginId) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => pluginSetEnabled(baseUrl, sessionId, pluginId, true));
+  });
+
+pluginCmd
+  .command('disable <plugin-id>')
+  .description('Disable a plugin and deactivate the plugins that depend on it')
+  .action(async (pluginId) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => pluginSetEnabled(baseUrl, sessionId, pluginId, false));
+  });
+
+pluginCmd
+  .command('remove <plugin-id>')
+  .description('Remove a plugin installed with "plugin install"')
+  .action(async (pluginId) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => pluginRemove(baseUrl, sessionId, pluginId));
+  });
+
+pluginCmd
+  .command('apply')
+  .description('Restart the server processes to apply plugin upgrades and removals')
+  .action(async () => {
+    await runAuthenticated(getGlobalOptions(), pluginApply);
   });
 
 // Parse and execute

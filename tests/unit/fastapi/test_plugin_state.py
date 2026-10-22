@@ -141,10 +141,10 @@ class TestReconcile(TwoWorkersBase):
         self.a.state_store.write_heartbeat(self.a.generation, pid=os.getpid())
         self.b.state_store.write_heartbeat(self.b.generation, pid=999999)
         await self.a.set_plugin_enabled("wizard", False, cascade=True)
-        self.assertEqual(self.a.propagation(), {"generation": 1, "workers": 2, "pending": 1})
+        self.assertEqual(self.a.propagation(), {"generation": 1, "workers": 2, "pending": 1, "restart_pending": 0})
         await self.b.reconcile()
         self.b.state_store.write_heartbeat(self.b.generation, pid=999999)
-        self.assertEqual(self.a.propagation(), {"generation": 1, "workers": 2, "pending": 0})
+        self.assertEqual(self.a.propagation(), {"generation": 1, "workers": 2, "pending": 0, "restart_pending": 0})
 
 
 class TestWatchState(TwoWorkersBase):

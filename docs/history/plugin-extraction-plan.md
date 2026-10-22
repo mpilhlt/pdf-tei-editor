@@ -386,7 +386,7 @@ Update `docs/code-assistant/backend-plugins.md` (packaging, entry points, `plugi
 
 ## Implementation
 
-The plan is implemented in several pull requests (issue #582). The first-party plugin monorepo is [cboulanger/pte-plugins](https://github.com/cboulanger/pte-plugins), not `mpilhlt/pte-plugins`.
+The plan is implemented in several pull requests (issue #582). The first-party plugin monorepo is [mpilhlt/pte-plugins](https://github.com/mpilhlt/pte-plugins). It is developed in the fork [cboulanger/pte-plugins](https://github.com/cboulanger/pte-plugins), whose changes reach mpilhlt/pte-plugins through pull requests; code and documentation refer to mpilhlt/pte-plugins only.
 
 | PR | Repository | Content |
 | --- | --- | --- |
@@ -394,7 +394,7 @@ The plan is implemented in several pull requests (issue #582). The first-party p
 | 2 | pdf-tei-editor | Phase 0 item 1: multi-worker plugin state |
 | 3 | pte-plugins ([#1](https://github.com/cboulanger/pte-plugins/pull/1)) | Phase 1 and 2: the 17 plugins as packages, `tei_annotator` in `archived/`, `pte-edition-plugin` imported with history as `archival-edition` |
 | 4 | pdf-tei-editor | Phase 1 and 2 in core: moved plugins deleted, optional dependencies and `tool.uv.sources`, `PTE_PLUGIN_EXTRAS` Docker build argument |
-| 5 | pdf-tei-editor | Phase 3: runtime install |
+| 5 | pdf-tei-editor, pte-plugins ([#2](https://github.com/cboulanger/pte-plugins/pull/2)) | Phase 3: runtime install; release workflow in pte-plugins |
 
 ### PR 1: decoupling core
 
@@ -433,3 +433,18 @@ Done as planned, with these differences:
 - `jsonschema` and `pdf2image` (only used by `kisski`) left core as well; the WebDAV test server (`tests/lib/webdav-server-manager.js`, with `wsgidav` and `cheroot`) moved to the webdav-sync plugin and runs WsgiDAV with `uvx`. The unused helpers `tests/api/helpers/webdav-server.js` and `test-env.js` were deleted.
 - The main CI job and the CI container install all plugins (`uv sync --all-extras`), so core's suites keep checking that they load; `core-without-plugins` covers the opposite case.
 - `scripts/dev/ui-screenshot.js` builds the demo image with `PTE_PLUGIN_EXTRAS=all`.
+
+### PR 5: runtime install
+
+Done as planned, with these differences:
+
+- The plugin repositories are configured with `PTE_PLUGIN_SOURCES` (default `mpilhlt/pte-plugins`), in addition to the topic search (`PTE_PLUGIN_DISCOVER_TOPIC`, default `pte-plugin`, empty to disable). Only repositories in this catalog can be installed from. A single-plugin repository also needs a `pte-plugins.json` (with `"path": "."`) instead of being detected from its root.
+- The index lists each plugin's non-plugin Python requirements (`dependencies`), so the "Available" tab shows before downloading anything which plugins need a deployment install.
+- Release tags are `<id>-v<version>`. The pte-plugins release workflow builds the wheel with `uv build`, writes `SHA256SUMS` and attests build provenance; the plugin manager verifies only the sha256.
+- Runtime-installed versions take precedence over versions installed with `uv sync` (their directories are put first on `sys.path`), so first-party plugins can be upgraded at runtime. Built-in plugins and `FASTAPI_PLUGIN_PATHS` plugins cannot be replaced.
+- Disabled runtime-installed plugins are not imported, also not at startup; the "no code execution before enabling" rule therefore holds across restarts. Upgrading a plugin that was never imported needs no restart.
+- Restart tracking: the state stores `restart_required_at` and `restart_plugins`, worker heartbeats carry the worker's start time, and `propagation.restart_pending` counts workers still running replaced code. Superseded version directories are deleted at startup once no older worker runs. Enabling a plugin whose upgrade waits for a restart is refused, so workers never run two versions.
+- "Apply plugin changes" sends `SIGHUP` to the parent process only if `PTE_WORKER_RECYCLE=1`, which `bin/start-prod` sets for the uvicorn supervisor (not on Windows, where uvicorn runs under `uv run`). In development, the server is restarted manually.
+- The command line operations are `plugin list|available|install|enable|disable|remove|apply` in `bin/manage-remote.js` (HTTP API), not in the deprecated `bin/manage.py`.
+- The audit log is `data/db/plugin-audit.jsonl` (JSON lines) plus the `fastapi_app.plugins.audit` logger.
+- Not done: GitHub artifact attestation verification in the editor, choosing a specific older release in the UI (the API and CLI accept `version`).
