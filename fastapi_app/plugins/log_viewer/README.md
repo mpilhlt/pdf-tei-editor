@@ -14,6 +14,14 @@ Real-time application log viewer for administrators. Streams server logs to the 
 
 5. **Log Viewer UI** (`html/view.html`): A static HTML page served at `/api/plugins/log-viewer/static/view.html`. On load, it calls the subscribe endpoint and then `sandbox.subscribeSSE('logEntry', callback)`. Log entries are displayed in a dark terminal-style view with color-coding by level (DEBUG=gray, INFO=default, WARNING=orange, ERROR/CRITICAL=red). Controls: level filter, text filter (case-insensitive substring match, `*` matches any characters), auto-scroll, pause, jump to bottom, save (downloads the shown entries as a `.txt` file), clear. Max 5000 entries.
 
+## Configuration
+
+| Key | Environment variable | Default | Description |
+| --- | --- | --- | --- |
+| `plugin.log-viewer.initial-lines` | `PLUGIN_LOG_VIEWER_INITIAL_LINES` | `1000` | Number of log lines shown when the log viewer opens |
+
+The environment variable sets the initial value when the key is not yet in `config.json`.
+
 ## Files
 
 - `plugin.py` — Plugin metadata and `show_logs` endpoint (returns `outputUrl`)
