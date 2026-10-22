@@ -95,7 +95,8 @@
  * @property {string=} installed_version
  * @property {string=} installed_source - "site" (installed in the plugin manager), "external", "builtin" or null
  * @property {Array<string>} requires - Ids of the plugins it requires
- * @property {Array<string>} unmet_requirements - Python requirements not installed on the server; the plugin must be installed with uv sync
+ * @property {Array<string>} unmet_requirements - Python requirements that prevent a runtime install; the plugin must be installed with uv sync
+ * @property {Array<string>} install_packages - Missing Python requirements that are installed with the plugin (PTE_PLUGIN_INSTALL_DEPENDENCIES)
  * @property {boolean} trusted - Whether the repository belongs to a trusted owner (PTE_PLUGIN_TRUSTED_OWNERS)
  * @property {boolean} compatible
  * @property {string=} incompatible_reason
@@ -496,6 +497,7 @@
  * @property {string} action - "install", "upgrade" or "remove"
  * @property {boolean} restart_required
  * @property {number} generation
+ * @property {Array<string>} packages - Python packages installed with the plugin (name==version)
  */
 
 /**

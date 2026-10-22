@@ -330,7 +330,7 @@ class PluginAdminPlugin extends Plugin {
       ? 'No release with a wheel'
       : p.unmet_requirements.length
         ? `Needs packages that are not installed on the server (${p.unmet_requirements.join(', ')}); install it with uv sync`
-        : p.incompatible_reason
+        : p.incompatible_reason ?? (p.install_packages?.length ? `Installs the packages ${p.install_packages.join(', ')} from PyPI` : null)
     return `<div data-available="${esc(p.id)}" style="display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--sl-color-neutral-200);">
       <div>
         <div style="display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap;">
@@ -536,6 +536,7 @@ class PluginAdminPlugin extends Plugin {
     const text = (upgrade
       ? `Upgrade ${id} from v${p.installed_version} to v${version} (${repository})? If the plugin is in use, the new version takes effect after the server processes restart.`
       : `Install ${id} v${version} from ${repository}? Plugins run on the server with access to all documents, users and stored credentials. The plugin is installed disabled; enable it in the "Installed" tab.`)
+      + (p.install_packages?.length ? ` The packages ${p.install_packages.join(', ')} and their dependencies are installed from PyPI with it.` : '')
       + (p.trusted ? '' : ` ${repository} does not belong to a trusted owner. Type the repository name to confirm.`)
     this.#confirm(`${upgrade ? 'Upgrade' : 'Install'} ${id}?`, text, [], upgrade ? 'Upgrade' : 'Install', p.trusted ? 'primary' : 'danger',
       () => this.#install(p, version), p.trusted ? null : repository)
@@ -551,6 +552,7 @@ class PluginAdminPlugin extends Plugin {
         repository: p.repository, id: p.id, version, confirm: p.trusted ? undefined : p.repository
       })
       notify(`${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${p.id} v${result.version}`
+        + (result.packages?.length ? ` with ${result.packages.length} package${result.packages.length === 1 ? '' : 's'}` : '')
         + (result.restart_required ? '; apply the plugin changes to use the new version' : result.action === 'install' ? '; enable it in the "Installed" tab' : ''),
       'success', 'check-circle', 6000)
     } catch (error) {

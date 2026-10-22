@@ -45,7 +45,7 @@ The **Available** tab lists the plugins of the plugin repositories: [mpilhlt/pte
 
 - **Trusted** plugins come from the owners listed in `PTE_PLUGIN_TRUSTED_OWNERS` (default: `mpilhlt`). Plugins of other owners are marked **Unverified**: anyone can give a GitHub repository the `pte-plugin` topic. Installing an unverified plugin requires typing the repository name to confirm.
 - Only GitHub **releases** are installed: the release's wheel is downloaded and its checksum verified against the release's `SHA256SUMS` file. Nothing of the plugin runs during installation.
-- A plugin can be installed only if the Python packages it needs are already installed on the server. Other plugins must be installed when the editor is installed or the Docker image is built.
+- By default, a plugin can be installed only if the Python packages it needs are already installed on the server. If the operator sets `PTE_PLUGIN_INSTALL_DEPENDENCIES=1`, the missing packages are installed from PyPI into the plugin's directory; the entry and the confirmation name them. Packages of the server are never changed: a plugin that needs another version of one of them cannot be installed at runtime. Plugins that cannot be installed here must be installed when the editor is installed or the Docker image is built. A plugin that requires another plugin can be installed once that plugin is installed.
 - A newly installed plugin is **disabled**. Its code is loaded when you enable it in the **Installed** tab; it is available immediately, without a restart.
 
 ### Upgrading and removing
