@@ -111,6 +111,7 @@ class AvailablePlugin(BaseModel):
     installed_source: str | None
     requires: list[str]
     unmet_requirements: list[str]
+    install_packages: list[str] = []  # missing packages installed with the plugin (PTE_PLUGIN_INSTALL_DEPENDENCIES)
     trusted: bool
     compatible: bool
     incompatible_reason: str | None
@@ -145,6 +146,7 @@ class InstallResult(BaseModel):
     action: str
     restart_required: bool
     generation: int
+    packages: list[str] = []  # packages installed with the plugin
 
 
 class InstallErrorDetail(BaseModel):

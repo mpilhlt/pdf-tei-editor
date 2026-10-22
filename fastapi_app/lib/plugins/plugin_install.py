@@ -4,9 +4,11 @@ Runtime install of plugins from GitHub release wheels into ``data/plugins/site/`
 1. The release's wheel and ``SHA256SUMS`` are downloaded; the wheel's sha256 must match.
 2. The wheel is inspected without importing it (``plugin_wheel``): one ``pte.plugins`` entry
    point, compatible ``engines`` in its manifest, and all requirements satisfied by the
-   distributions already installed. Plugins that need new packages must be installed with
-   ``uv sync`` (see docs/user-manual/plugin-manager.md).
-3. The wheel is unpacked into ``data/plugins/site/<distribution>/<version>/``.
+   distributions already installed. Missing packages are installed with the plugin only if the
+   operator enabled it (``PTE_PLUGIN_INSTALL_DEPENDENCIES``, see ``plugin_deps``); otherwise
+   such plugins must be installed with ``uv sync`` (see docs/user-manual/plugin-manager.md).
+3. The wheel is unpacked into ``data/plugins/site/<distribution>/<version>/``, and the missing
+   packages, if any, are installed into the same directory.
 
 Recording the installation in the plugin state and loading it is done by ``PluginManager``.
 """
@@ -19,6 +21,7 @@ from pathlib import Path
 
 from packaging.utils import canonicalize_name
 
+from fastapi_app.lib.plugins import plugin_deps
 from fastapi_app.lib.plugins.plugin_catalog import CatalogEntry, CatalogError, CatalogRelease, GitHubClient
 from fastapi_app.lib.plugins.plugin_manifest import incompatibility
 from fastapi_app.lib.plugins.plugin_site import resolve_site_path
@@ -26,7 +29,6 @@ from fastapi_app.lib.plugins.plugin_state import InstalledPlugin
 from fastapi_app.lib.plugins.plugin_wheel import (
     WheelError,
     WheelInfo,
-    check_requirements,
     extract_wheel,
     inspect_wheel,
     installed_distributions,
@@ -82,16 +84,21 @@ def download_release(client: GitHubClient, entry: CatalogEntry, release: Catalog
     return Download(path=path, sha256=actual, release=release)
 
 
-def check_wheel(info: WheelInfo, plugin_id: str | None = None) -> list[str]:
+def check_wheel(
+    info: WheelInfo, plugin_id: str | None = None, site_dir: Path | None = None, replaced: Path | None = None
+) -> plugin_deps.RequirementCheck:
     """
     Check that an inspected wheel can be installed here.
 
     Args:
         info: Inspected wheel
         plugin_id: Expected plugin id (the catalog entry's)
+        site_dir: Plugin site directory; packages that only other runtime-installed plugins
+            provide count as missing (default: all installed distributions count)
+        replaced: Version directory of the version being upgraded, which is deleted afterwards
 
     Returns:
-        Unmet requirements (empty if the plugin can be installed)
+        The requirements that are not installed (see plugin_deps.RequirementCheck)
 
     Raises:
         InstallError: If the wheel is for another plugin or incompatible with this editor
@@ -101,7 +108,9 @@ def check_wheel(info: WheelInfo, plugin_id: str | None = None) -> list[str]:
     reason = incompatibility(info.manifest)
     if reason:
         raise InstallError(409, f"Plugin {info.plugin_id} {info.version} is incompatible: {reason}")
-    return check_requirements(info.requires, installed_distributions())
+    available = plugin_deps.distributions_outside(replaced) if replaced is not None else installed_distributions()
+    packages = plugin_deps.environment_distributions(site_dir) if site_dir is not None else None
+    return plugin_deps.check(info.requires, available, packages)
 
 
 def unpack(wheel: Path, info: WheelInfo, site_dir: Path) -> str:
@@ -125,6 +134,24 @@ def unpack(wheel: Path, info: WheelInfo, site_dir: Path) -> str:
     except OSError as e:
         raise InstallError(500, f"Could not unpack {wheel.name}: {e}") from e
     return relative
+
+
+def install_packages(missing: list[str], relative: str, site_dir: Path, replaced: Path | None = None) -> list[str]:
+    """
+    Install the missing packages of an unpacked plugin into its version directory.
+
+    Returns:
+        The installed packages (``name==version``)
+
+    Raises:
+        InstallError: If the packages cannot be resolved or installed
+    """
+    target = resolve_site_path(relative, site_dir)
+    with new_workdir(site_dir) as workdir:
+        try:
+            return plugin_deps.install_missing(missing, site_dir, target, Path(workdir), replaced)
+        except plugin_deps.DependencyError as e:
+            raise InstallError(409, str(e), missing) from e
 
 
 def installed_entry(

@@ -13,6 +13,9 @@ keys that an administrator account could change from the web UI:
 - ``PTE_PLUGIN_TRUSTED_OWNERS``: comma-separated GitHub owners whose plugins are trusted
   (default: ``mpilhlt``); installing other plugins requires typing the repository name to confirm
 - ``PTE_PLUGIN_TRUSTED_ONLY=1``: hides and refuses plugins of untrusted owners
+- ``PTE_PLUGIN_INSTALL_DEPENDENCIES=1``: also installs the Python packages a plugin needs and
+  the environment lacks, from PyPI into the plugin's directory (off by default: only plugins
+  whose requirements are already installed can be installed; see ``plugin_deps``)
 - ``GITHUB_TOKEN``: optional, raises the GitHub API rate limit
 
 The topic can be set by anyone on GitHub; it is a discovery hint, never a trust signal.
@@ -34,6 +37,7 @@ SOURCES_ENV_VAR = "PTE_PLUGIN_SOURCES"
 TOPIC_ENV_VAR = "PTE_PLUGIN_DISCOVER_TOPIC"
 TRUSTED_OWNERS_ENV_VAR = "PTE_PLUGIN_TRUSTED_OWNERS"
 TRUSTED_ONLY_ENV_VAR = "PTE_PLUGIN_TRUSTED_ONLY"
+DEPENDENCIES_ENV_VAR = "PTE_PLUGIN_INSTALL_DEPENDENCIES"
 GITHUB_TOKEN_ENV_VAR = "GITHUB_TOKEN"
 
 DEFAULT_SOURCES = ("mpilhlt/pte-plugins",)
@@ -59,6 +63,11 @@ def _list(name: str, default: tuple[str, ...]) -> list[str]:
 def install_enabled() -> bool:
     """Whether the operator enabled runtime install (``PTE_PLUGIN_INSTALL``)."""
     return _flag(INSTALL_ENV_VAR)
+
+
+def dependencies_install_enabled() -> bool:
+    """Whether missing Python packages of a plugin are installed with it (``PTE_PLUGIN_INSTALL_DEPENDENCIES``)."""
+    return _flag(DEPENDENCIES_ENV_VAR)
 
 
 def plugin_sources() -> list[str]:

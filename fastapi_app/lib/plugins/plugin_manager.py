@@ -8,6 +8,7 @@ initialization, route registration, and execution.
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import time
 from dataclasses import replace
@@ -30,12 +31,14 @@ from fastapi_app.lib.plugins.plugin_install import (
     check_wheel,
     download_release,
     inspect,
+    install_packages,
     installed_entry,
     new_workdir,
     unpack,
 )
 from fastapi_app.lib.plugins.plugin_install_policy import (
     audit,
+    dependencies_install_enabled,
     install_enabled,
     is_repository_name,
     is_trusted,
@@ -55,7 +58,8 @@ from fastapi_app.lib.plugins.plugin_state import (
     PluginState,
     PluginStateStore,
 )
-from fastapi_app.lib.plugins.plugin_wheel import check_requirements, installed_distributions
+from fastapi_app.lib.plugins.plugin_deps import check as check_requirements, environment_distributions
+from fastapi_app.lib.plugins.plugin_wheel import installed_distributions
 from fastapi_app.lib.utils.config_utils import get_config
 
 logger = logging.getLogger(__name__)
@@ -768,6 +772,8 @@ class PluginManager:
             self._audit("discover", user, repositories=sorted({e.repository for e in catalog.entries}), errors=catalog.errors)
         state = self.state_store.read()
         available = installed_distributions()
+        packages = environment_distributions(plugin_site.get_site_dir())
+        install_missing = dependencies_install_enabled()
         plugins: list[dict[str, Any]] = []
         for entry in catalog.entries:
             record = self.registry.get_record(entry.id)
@@ -783,7 +789,8 @@ class PluginManager:
                 current_version = (record.manifest.version if record.manifest else None) or str(
                     record.metadata.get("version", "")
                 ) or None
-            unmet = check_requirements(entry.dependencies, available)
+            requirements = check_requirements(entry.dependencies, available, packages)
+            unmet = requirements.unmet(install_missing)
             installable = latest is not None and reason is None and not unmet and self._replaceable(record) is None
             plugins.append({
                 "id": entry.id,
@@ -799,6 +806,7 @@ class PluginManager:
                 ),
                 "requires": entry.requires,
                 "unmet_requirements": unmet,
+                "install_packages": requirements.missing if install_missing else [],
                 "trusted": entry.trusted,
                 "compatible": reason is None,
                 "incompatible_reason": reason or self._replaceable(record),
@@ -887,7 +895,7 @@ class PluginManager:
 
         Returns:
             {"plugin": id, "version": v, "action": "install" | "upgrade", "restart_required": bool,
-            "generation": n}
+            "generation": n, "packages": [packages installed with it]}
 
         Raises:
             InstallError: Not installable here (incompatible, unmet requirements, already installed)
@@ -902,15 +910,26 @@ class PluginManager:
                 raise InstallError(409, f"Plugin {info.plugin_id} cannot be replaced: {reason}")
             if previous is not None and previous.version == info.version:
                 raise InstallError(409, f"Plugin {info.plugin_id} {info.version} is installed already")
-            unmet = check_wheel(info, expected_id)
-            if unmet:
-                raise InstallError(
-                    409,
-                    f"Plugin {info.plugin_id} needs packages that are not installed; install it with uv sync instead",
-                    unmet,
-                )
             site_dir = plugin_site.get_site_dir()
+            replaced = plugin_site.version_dir(previous, site_dir) if previous is not None else None
+            requirements = check_wheel(info, expected_id, site_dir, replaced)
+            install_missing = dependencies_install_enabled()
+            unmet = requirements.unmet(install_missing)
+            if unmet:
+                hint = (
+                    "install it with uv sync instead, or let the operator set PTE_PLUGIN_INSTALL_DEPENDENCIES=1"
+                    if requirements.missing and not install_missing
+                    else "these requirements cannot be installed at runtime"
+                )
+                raise InstallError(409, f"Plugin {info.plugin_id} needs packages that are not installed; {hint}", unmet)
             relative = await run_in_threadpool(unpack, wheel, info, site_dir)
+            packages: list[str] = []
+            if requirements.missing:
+                try:
+                    packages = await run_in_threadpool(install_packages, requirements.missing, relative, site_dir, replaced)
+                except InstallError:
+                    shutil.rmtree(plugin_site.resolve_site_path(relative, site_dir), ignore_errors=True)
+                    raise
             new_entry = installed_entry(
                 info, relative, sha256, repository, tag, trusted, (user or {}).get("username", "cli")
             )
@@ -941,7 +960,7 @@ class PluginManager:
         self._notify_change()
         self._audit(
             action, user, plugin=info.plugin_id, version=info.version, repository=repository, tag=tag,
-            sha256=sha256, trusted=trusted, restart_required=restart,
+            sha256=sha256, trusted=trusted, restart_required=restart, packages=packages,
         )
         return {
             "plugin": info.plugin_id,
@@ -949,6 +968,7 @@ class PluginManager:
             "action": action,
             "restart_required": restart,
             "generation": state.generation,
+            "packages": packages,
         }
 
     async def remove_plugin(self, plugin_id: str, cascade: bool = False, user: dict[str, Any] | None = None) -> dict[str, Any]:

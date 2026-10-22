@@ -136,6 +136,7 @@ API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as 
 | `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
 | `PTE_PLUGIN_TRUSTED_ONLY` | Hide and refuse plugins of untrusted owners |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | Install the missing Python packages of a plugin with it (from PyPI) |
 | `GITHUB_TOKEN` | Raises the GitHub API rate limit for plugin discovery |
 
 See [Plugins in the image](#plugins-in-the-image). `.env.production` documents the plugin system variables. The settings of individual plugins (such as `GROBID_SERVER_URL`) are described in each plugin's README.
@@ -200,13 +201,14 @@ Administrators can install and upgrade plugins from GitHub releases in the [Plug
 | `PTE_PLUGIN_DISCOVER_TOPIC` | GitHub topic searched for further plugin repositories; empty disables the search | `pte-plugin` |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | Comma-separated GitHub owners whose plugins are trusted; installing other plugins requires typing the repository name | `mpilhlt` |
 | `PTE_PLUGIN_TRUSTED_ONLY` | `1` hides and refuses plugins of other owners | off |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | `1` also installs the Python packages a plugin needs and the image lacks, from PyPI into the plugin's directory | off |
 | `GITHUB_TOKEN` | Optional token that raises the GitHub API rate limit | - |
 
 For example, a deployment that installs from a fork of the plugin repository sets `PTE_PLUGIN_SOURCES=myorg/pte-plugins` and `PTE_PLUGIN_TRUSTED_OWNERS=mpilhlt,myorg`.
 
 - The container needs outbound HTTPS access to `api.github.com`, `raw.githubusercontent.com` and `github.com` release downloads.
 - Installed plugins are unpacked into `data/plugins/site/`, which lies in the data volume: they survive recreating the container. A plugin installed at runtime takes precedence over the version built into the image. To return to the image's version, remove it in the Plugin Manager.
-- Only plugins whose Python dependencies are installed in the image can be installed at runtime; others need `PTE_PLUGIN_EXTRAS`.
+- Without `PTE_PLUGIN_INSTALL_DEPENDENCIES=1`, only plugins whose Python dependencies are installed in the image can be installed at runtime; others need `PTE_PLUGIN_EXTRAS`. With it, the missing packages are resolved with `uv` while every package of the image stays at its installed version, and installed into the plugin's directory in `data/plugins/site/` (they are deleted with the plugin). A plugin that needs another version of a package of the image is refused. The container then also needs access to `pypi.org` and `files.pythonhosted.org`.
 - Upgrades and removals of plugins in use take effect when the server processes restart ("Apply plugin changes", which sends `SIGHUP` to the uvicorn supervisor started by `bin/start-prod`).
 - All plugin changes are logged to `data/db/plugin-audit.jsonl`.
 
