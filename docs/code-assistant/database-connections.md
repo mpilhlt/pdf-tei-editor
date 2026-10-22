@@ -68,6 +68,14 @@ All connections set `PRAGMA busy_timeout = 30000` (30 seconds) to wait for locks
     - `conn.rollback()` is called to ensure no uncommitted state leaks to the next user.
     - The connection is put back into the pool.
 
+## Recovery from "disk I/O error"
+
+If the `-wal` file of a WAL-mode database is removed or replaced while a process has connections open, every connection of that process fails with `sqlite3.OperationalError: disk I/O error`, including newly opened ones. SQLite keeps the stale WAL index mapped until the last connection of the process to that database is closed. A pooled connection never closes, so before issue #589 the error persisted until the server restarted.
+
+`DatabaseManager.get_connection()` therefore treats SQLite I/O and corruption errors (`is_connection_broken()`) as fatal for the pool: it closes the failing connection and all idle pooled ones, retires connections still in use (they are closed on release), runs `gc.collect()` before the next connection is opened (a failed request leaves its cursor and connection in a reference cycle, and a connection with unfinalized statements stays open in SQLite), and logs a warning with the size and inode of the database files and the free disk space. The request that hit the error still fails, later ones work.
+
+Never delete or replace a database file or its `-wal`/`-shm` files while a server uses it. Test runners must stop the server before wiping `runtime/db`.
+
 ## Best Practices for Code Assistants
 
 - **Always use `DatabaseManager`**: Do not create raw `sqlite3.connect()` calls in business logic.
