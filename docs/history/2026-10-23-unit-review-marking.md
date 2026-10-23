@@ -1,6 +1,6 @@
 # Unit review marking (concept)
 
-Status: concept agreed, not implemented. Mockups: `line-review-marking/*.png` in the project files folder (rendered from `mockups.html`). Mockups 1–5 also show alternatives that were rejected. 6–8 show the agreed design. The decisions below take precedence.
+Status: concept agreed, not implemented. Mockups: `unit-review-marking/*.png` in the project files folder (rendered from `mockups.html`). Mockups 1–5 also show alternatives that were rejected. 6–8 show the agreed design. The decisions below take precedence.
 
 ## Goal
 
@@ -170,7 +170,7 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
 
 ## Workflow
 
-1. A reviewer opens a document (normally in status `in-review`) and turns on **Review** (labelled "Review lines" in the mockups) in the XML editor toolbar. This shows the strip and enables the shortcuts and menu entries. Nothing changes for users who don't review.
+1. A reviewer opens a document (normally in status `in-review`) and turns on **Review** in the XML editor toolbar. This shows the strip and enables the shortcuts and menu entries. Nothing changes for users who don't review.
 2. The reviewer moves through the document. The PDF viewer follows the cursor as it does now (Autosearch).
 3. Marking. Every action applies to the units under the cursor line, or to every unit the selection touches:
    - `Ctrl/⌘+Enter`: mark OK, then jump to the next unreviewed unit.
@@ -189,6 +189,7 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
    - `Mod-Enter` (CodeMirror: `insertBlankLine`) is overridden only while review mode is on. Check the final keys against browser-reserved shortcuts before implementing.
 4. Fixing: an annotator or reviewer edits a not-OK unit. It becomes unreviewed, and the old marks and comments are kept as `was-*` (see [Non-matching fingerprints](#non-matching-fingerprints)). The strip shows a dashed bar, and the popover shows the old comment next to the new state.
 5. Marking makes the document dirty like any edit, and saving writes the annotations and the summary. Saving as a new version keeps all marks, since the copy carries the `standOff`.
+   - **Clear reviews:** the Save Revision dialog (`app/src/templates/save-document-dialog.html`) gets a "Clear reviews" checkbox in the "Save to a new personal version" section, below the label field. It is shown only while that option is checked and only to users with the `reviewer` or `admin` role. When it is checked, the copy is saved without `standOff/listAnnotation[@type="unit-review"]`. An empty `standOff` is removed as well. The original document keeps its marks. Help text: "Starts the new version without any review marks. The original keeps them."
 6. Progress shows in the status bar meter (P1), e.g. "112 OK · 8 not OK · 64 open". Clicking it jumps to the next open unit. The counts appear in the review queue and the file drawer (P4).
 7. Before setting `approved`, the save dialog warns if there are not-OK or unreviewed units. This is a warning, not a block.
 
@@ -210,6 +211,7 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
   - GROBID: a review-unit XPath per variant.
   - annotation-review: record chunk results through `setMarks()`.
 - pdf-tei-editor:
+  - Save Revision dialog: the "Clear reviews" checkbox (`document-actions.js` and its template), which removes the `unit-review` `listAnnotation` from the copy before it is saved.
   - frontend `unit-review` plugin: gutter, state field, fingerprinting, keymap, context menu entries, comment field and review popover, status bar widget, linter source for the diagnostics drawer, and the `getUnits()` / `setMarks()` API.
   - config: `unit-review.mode` (`majority` or `final`) and `unit-review.llm-vote` (boolean).
   - backend: parse `note[@type="summary"]` into file metadata for P4.
