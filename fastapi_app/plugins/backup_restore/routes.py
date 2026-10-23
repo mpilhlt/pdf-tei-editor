@@ -28,8 +28,14 @@ from fastapi_app.lib.core.dependencies import (
 )
 from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError, stage_restore
 from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
+from fastapi_app.lib.plugins.plugin_manifest import get_pte_version
 from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions, send_notification
 from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+from fastapi_app.plugins.backup_restore.manifest import (
+    IncompatibleBackupError,
+    check_compatible,
+    read_backup_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +177,8 @@ async def download_backup(
     """Download the `db/` and `files/` directories as a ZIP file.
 
     The ZIP is built on disk, SQLite databases are snapshotted consistently, and
-    the response carries `X-Content-SHA256` for client-side verification. Only
+    the response carries `X-Content-SHA256` for client-side verification. The ZIP
+    records the application version in `backup-manifest.json`. Only
     one backup is created at a time; a concurrent request gets 409.
     """
     _, user = _authenticate(BACKUP_ROLE, session_id, x_session_id, session_manager, auth_manager)
@@ -194,7 +201,10 @@ async def download_backup(
     async with _backup_lock:
         logger.info(f"Creating backup ZIP of {data_root} for user '{username}'")
         started = time.monotonic()
-        zip_path, sha256 = await asyncio.to_thread(create_backup_zip, data_root, settings.tmp_dir)
+        pte_version = get_pte_version()
+        if pte_version is None:
+            logger.warning("Cannot determine the application version; the backup cannot be restored without editing its manifest")
+        zip_path, sha256 = await asyncio.to_thread(create_backup_zip, data_root, settings.tmp_dir, pte_version)
 
     size = zip_path.stat().st_size
     logger.info(
@@ -222,7 +232,8 @@ async def restore_backup(
 ):
     """Upload a ZIP file to restore application data.
 
-    Validates the ZIP contents and stages them in ``<data>/.restore/`` (see
+    Validates the ZIP contents, refuses backups of an incompatible application version (see
+    fastapi_app.plugins.backup_restore.manifest) and stages them in ``<data>/.restore/`` (see
     fastapi_app.lib.core.data_restore). The restore is applied when the worker processes
     restart: on a server started by bin/start-prod the workers are replaced after a short
     delay, under another supervisor the process exits, otherwise the admin restarts manually.
@@ -280,6 +291,16 @@ async def restore_backup(
         has_data_prefix = all(
             n.startswith("data/") or n == "data" for n in names if n.strip("/")
         )
+
+        # Refuse backups of an incompatible application version
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                backup_version = read_backup_version(zf, "data" if has_data_prefix else None)
+            check_compatible(backup_version, get_pte_version())
+        except IncompatibleBackupError as e:
+            logger.warning(f"Restore refused: {e}")
+            send_notification(sse_service, session_id_value, str(e), "danger", "exclamation-octagon")
+            raise HTTPException(status_code=400, detail=str(e))
 
         logger.info(f"Staging restore ZIP ({zip_path.stat().st_size} bytes) in {data_root / STAGING_DIR}")
         try:
