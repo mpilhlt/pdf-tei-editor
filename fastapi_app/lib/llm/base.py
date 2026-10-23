@@ -72,6 +72,11 @@ class LLMProvider(ABC):
     #: API key users supply themselves, or None if the provider has no per-user keys.
     secret_service: str | None = None
 
+    #: True on the per-request copy that LLMProviderRegistry.get_provider_for_user()
+    #: returns when the provider authenticates with the requesting user's own key.
+    #: Usage is then billed to that user, so model_access lets them use any model.
+    uses_user_key: bool = False
+
     def is_available(self) -> bool:
         """Whether this provider instance is usable at all.
 
