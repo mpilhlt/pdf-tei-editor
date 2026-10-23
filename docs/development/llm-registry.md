@@ -29,7 +29,7 @@ The [inference-endpoints](https://github.com/mpilhlt/pte-plugins/tree/main/plugi
 The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
 
 - **Per-user keys (default)**: without a configured key, each user supplies their own through Tools > API Keys (secret services `kisski`, `google`, `anthropic`; see [User API Keys](../code-assistant/backend-plugins.md#user-api-keys)). `GET /api/v1/llm/providers` lists such a provider with `key_required: true` and no models until the user stored a key; the model picker then shows "Add your API key…". A provider whose models cannot be listed (rejected key, network or API error, or a stored key that cannot be decrypted after `SECRETS_ENCRYPTION_KEY` changed) is listed with an `error` and no models; the picker shows "Models unavailable" with the error as tooltip, and for per-user-key providers opens the key dialog with the error when selected.
-- **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users and no key prompt appears.
+- **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users and no key prompt appears. The providers read the shared key from config on every use, so a key set or removed in `config.json` takes effect without a restart (`kisski`, `google_llm` and `anthropic_llm` from [pte-plugins#10](https://github.com/mpilhlt/pte-plugins/pull/10) on; older versions read it once at startup and need `POST /api/v1/plugins/admin/restart`). A provider written for this registry should do the same rather than copying the key in `initialize()`.
 
 ## Writing a provider
 
@@ -110,7 +110,7 @@ Consuming routes must call it before invoking a provider; see `pte-plugins/plugi
 
 ## Frontend
 
-`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models, the default, and all models of providers they stored their own key for (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
+`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default, after confirming "Set <provider>/<model> as default model for all users?"; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models, the default, and all models of providers they stored their own key for (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
 
 ## Design documents
 
