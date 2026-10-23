@@ -1148,6 +1148,15 @@ npm install
 
 This is particularly important for SSE tests which require the `eventsource-client` package.
 
+### E2E Tests in the Claude Code Cloud Sandbox
+
+The cloud sandbox (`CLAUDE_CODE_REMOTE=true`) ships an older Chromium at `/opt/pw-browsers/chromium` than the pinned Playwright expects, and cannot download browsers. `tests/lib/cloud-sandbox.js` handles this, and only takes effect there:
+
+- `playwright.config.js` launches the sandbox Chromium via `executablePath`.
+- The `debug-on-failure.js` fixture polyfills `Map`/`WeakMap.prototype.getOrInsertComputed`, which the bundled PDF.js needs, as an init script and prepended to `pdf.worker.mjs` (init scripts do not reach workers). It covers the default `context` and contexts created with `browser.newContext()`. Specs must import `test` from `../fixtures/debug-on-failure.js` to get it.
+
+Run `npm install` first (`node_modules` is not preinstalled), then `npm run test:e2e` as usual.
+
 ## Debugging
 
 ### API Tests

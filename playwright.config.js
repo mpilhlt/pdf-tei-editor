@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { detectContainerTool } from './tests/lib/detect-container-tool.js';
+import { sandboxChromiumLaunchOptions } from './tests/lib/cloud-sandbox.js';
 
 // Detect container tool (docker or podman)
 // Skip detection if E2E_SKIP_WEBSERVER is set (running inside container)
@@ -54,7 +55,8 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      // In the Claude Code cloud sandbox, use its preinstalled Chromium (see tests/lib/cloud-sandbox.js)
+      use: { ...devices['Desktop Chrome'], launchOptions: sandboxChromiumLaunchOptions() },
     },
 
     {
