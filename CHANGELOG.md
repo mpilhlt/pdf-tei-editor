@@ -2,6 +2,37 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.77.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.76.0...v0.77.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* **annotation-review:** repair unescaped quotes and invalid escapes in LLM JSON ([a27b679](https://github.com/mpilhlt/pdf-tei-editor/commit/a27b67915f18ba695c34556c83339732dde81e79))
+* **backup-restore:** apply restores by recycling the workers, inside the data volume ([7315d20](https://github.com/mpilhlt/pdf-tei-editor/commit/7315d205fb63c9e5ad4deb5a27290424744cc5ac))
+* **build:** bundle the icons of plugins installed as packages ([98e3923](https://github.com/mpilhlt/pdf-tei-editor/commit/98e3923a0b342bd2a8db929253fe259fcfe99da8)), closes [#588](https://github.com/mpilhlt/pdf-tei-editor/issues/588)
+* **db:** recover the metadata.db connection pool after "disk I/O error" ([c6229b4](https://github.com/mpilhlt/pdf-tei-editor/commit/c6229b4fa1fa378c2504d0f9c2ac542d62981d7a)), closes [#589](https://github.com/mpilhlt/pdf-tei-editor/issues/589)
+* **deps:** declare cryptography and httpx, which came in through plugin dependencies ([2f29548](https://github.com/mpilhlt/pdf-tei-editor/commit/2f2954834f8f50e612701248bf65bb68f8a1eab8))
+* **deps:** pin the plugins to the pte-plugins main commit ([c56888c](https://github.com/mpilhlt/pdf-tei-editor/commit/c56888c2d56d342a505660ba4e32bb180e64f406)), closes [pte-plugins#1](https://github.com/pte-plugins/issues/1)
+* eliminate deadlock between SSEService and SSELogHandler ([7855e9f](https://github.com/mpilhlt/pdf-tei-editor/commit/7855e9fbe3bb056a0709c726a7ad251db022a2aa))
+* end requests cancelled at server shutdown without an ASGI traceback ([#606](https://github.com/mpilhlt/pdf-tei-editor/issues/606)) ([eaed62c](https://github.com/mpilhlt/pdf-tei-editor/commit/eaed62cbc81f63dca39b94e2a6288f7c9178e15a))
+* **plugins:** apply plugin enable/disable in all worker processes ([4321f45](https://github.com/mpilhlt/pdf-tei-editor/commit/4321f453ded7a930eddc0f93048c7947b20a6721))
+* rename "Manage Users & Roles" menu entry to "Manage Access & Projects" ([f4e1262](https://github.com/mpilhlt/pdf-tei-editor/commit/f4e12622b4a42290649cb11a518e10364d0595d1))
+* require admin role for config writes, show unset shared API keys in the config editor ([45ec9e8](https://github.com/mpilhlt/pdf-tei-editor/commit/45ec9e81774371528c0369f248995165f56d3735))
+* **validation:** fall back to core teiHeader schema when document schema is unreachable ([1ee2b10](https://github.com/mpilhlt/pdf-tei-editor/commit/1ee2b10da72f5b9181a6711a2b43995861f107b5))
+* **xml-editor:** offer xml:lang in the visual mode attribute editor ([8a767a2](https://github.com/mpilhlt/pdf-tei-editor/commit/8a767a258491b846c03adecabe3ea4abc56f5fb1))
+
+
+### Features
+
+* **annotation-guide:** table of contents drop-up in the drawer footer ([6da7e69](https://github.com/mpilhlt/pdf-tei-editor/commit/6da7e6985b97e9736ff25429543ff79b80744df6))
+* **backup-restore:** record the app version in backups and refuse incompatible restores ([#607](https://github.com/mpilhlt/pdf-tei-editor/issues/607)) ([6f1f166](https://github.com/mpilhlt/pdf-tei-editor/commit/6f1f166545b5953c870a0fe340e1560b41a602ba))
+* **config-editor:** delete plugin settings and clear hidden values ([5329052](https://github.com/mpilhlt/pdf-tei-editor/commit/5329052b651f0725f463fb75f98aed25e4b50648))
+* install missing Python packages of runtime-installed plugins (PTE_PLUGIN_INSTALL_DEPENDENCIES) ([806b121](https://github.com/mpilhlt/pdf-tei-editor/commit/806b12168471e874d1a94335c9c6ecd7ae113a82))
+* **plugins:** install plugins at runtime from GitHub releases ([a51b5f1](https://github.com/mpilhlt/pdf-tei-editor/commit/a51b5f125c64647923110cfd9cef94a2d83f8f77)), closes [#574](https://github.com/mpilhlt/pdf-tei-editor/issues/574)
+* reload all clients after a restore or a plugin change, then show why ([9779251](https://github.com/mpilhlt/pdf-tei-editor/commit/9779251010d7748c50e1e400ed3ac446128291f7))
+* remove all of a user's API keys at once from the API Keys dialog ([e785f98](https://github.com/mpilhlt/pdf-tei-editor/commit/e785f980a36f59b2822b3d7dba3c101ad2da9c31))
+* **secrets:** unregister secret services ([b7b3844](https://github.com/mpilhlt/pdf-tei-editor/commit/b7b3844ddc4c20c687d4383b5fa410813a6c93d2)), closes [#583](https://github.com/mpilhlt/pdf-tei-editor/issues/583)
+
 # [0.76.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.75.0...v0.76.0) (2026-10-20)
 
 
