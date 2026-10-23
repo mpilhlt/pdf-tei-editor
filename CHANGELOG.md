@@ -2,6 +2,13 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.77.2](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.77.1...v0.77.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **llm:** show providers whose models cannot be listed instead of dropping them ([2a265ab](https://github.com/mpilhlt/pdf-tei-editor/commit/2a265ab84c939da9dcc857293128a79bf16640ee))
+
 ## [0.77.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.77.0...v0.77.1) (2026-10-23)
 
 
