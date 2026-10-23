@@ -266,6 +266,26 @@ describe('InferenceSettingsPlugin._populateSubmenu', () => {
     assert.strictEqual(children[1].dataset.secretService, 'anthropic');
   });
 
+  it('shows the error of a provider whose models could not be listed, linked to its key', () => {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    plugin._populateSubmenu([{ id: 'kisski', label: 'KISSKI', models: [], secret_service: 'kisski', error: 'Could not list models: 401' }]);
+    const children = [...plugin._submenu.children];
+    assert.strictEqual(children.length, 2);
+    assert.strictEqual(children[0].textContent, 'KISSKI');
+    assert.strictEqual(children[1].dataset.secretService, 'kisski');
+    assert.strictEqual(children[1].title, 'Could not list models: 401');
+  });
+
+  it('shows a disabled error entry for a provider without user keys', () => {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    plugin._populateSubmenu([{ id: 'p', label: 'P', models: [], secret_service: null, error: 'Could not list models: timeout' }]);
+    const item = /** @type {any} */ (plugin._submenu.children[1]);
+    assert.strictEqual(item.disabled, true);
+    assert.strictEqual(item.dataset.secretService, undefined);
+  });
+
   it('clears previous contents on repeated calls', () => {
     const plugin = makePlugin();
     plugin._submenu = document.createElement('sl-menu');
@@ -350,6 +370,17 @@ describe('InferenceSettingsPlugin key prompt', () => {
     assert.strictEqual(show.mock.calls[0].arguments[1], 'anthropic');
     assert.strictEqual(refresh.mock.calls.length, 1);
     assert.strictEqual(plugin.getDefaultModel(), null);
+  });
+
+  it('passes the provider error to the key dialog', async () => {
+    const plugin = makePlugin();
+    plugin._providers = [{ id: 'kisski', label: 'KISSKI', models: [], secret_service: 'kisski', error: 'Could not list models: 401' }];
+    const show = mock.fn(async () => false);
+    plugin.getDependency = (name) => (name === 'api-keys' ? { show } : undefined);
+    const item = document.createElement('sl-menu-item');
+    item.dataset.secretService = 'kisski';
+    await plugin._onSelect({ detail: { item } });
+    assert.strictEqual(show.mock.calls[0].arguments[0], 'KISSKI: Could not list models: 401');
   });
 });
 

@@ -28,7 +28,7 @@ The [inference-endpoints](https://github.com/mpilhlt/pte-plugins/tree/main/plugi
 
 The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
 
-- **Per-user keys (default)**: without a configured key, each user supplies their own through Tools > API Keys (secret services `kisski`, `google`, `anthropic`; see [User API Keys](../code-assistant/backend-plugins.md#user-api-keys)). `GET /api/v1/llm/providers` lists such a provider with `key_required: true` and no models until the user stored a key; the model picker then shows "Add your API key…".
+- **Per-user keys (default)**: without a configured key, each user supplies their own through Tools > API Keys (secret services `kisski`, `google`, `anthropic`; see [User API Keys](../code-assistant/backend-plugins.md#user-api-keys)). `GET /api/v1/llm/providers` lists such a provider with `key_required: true` and no models until the user stored a key; the model picker then shows "Add your API key…". A provider whose models cannot be listed (rejected key, network or API error, or a stored key that cannot be decrypted after `SECRETS_ENCRYPTION_KEY` changed) is listed with an `error` and no models; the picker shows "Models unavailable" with the error as tooltip, and for per-user-key providers opens the key dialog with the error when selected.
 - **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users and no key prompt appears.
 
 ## Writing a provider

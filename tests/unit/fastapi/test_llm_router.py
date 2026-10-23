@@ -89,7 +89,7 @@ class TestListProvidersRoute(unittest.TestCase):
         response = self.client.get("/llm/providers")
         self.assertIsNone(response.json()[0]["models"][0]["status"])
 
-    def test_failing_provider_is_skipped_others_still_returned(self):
+    def test_failing_provider_is_listed_with_error_others_still_returned(self):
         registry = LLMProviderRegistry.get_instance()
         registry.register(
             _StubProvider(id="broken", label="Broken", models=[], raise_on_list_models=True)
@@ -111,9 +111,12 @@ class TestListProvidersRoute(unittest.TestCase):
         with self.assertLogs("fastapi_app.routers.llm", level="WARNING"):
             response = self.client.get("/llm/providers")
         self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]["id"], "healthy")
+        body = {p["id"]: p for p in response.json()}
+        self.assertEqual(set(body), {"broken", "healthy"})
+        self.assertEqual(body["broken"]["models"], [])
+        self.assertEqual(body["broken"]["error"], "Could not list models: simulated provider failure")
+        self.assertIsNone(body["healthy"]["error"])
+        self.assertEqual([m["id"] for m in body["healthy"]["models"]], ["model-a"])
 
     def test_requires_authentication(self):
         self.app.dependency_overrides.clear()
