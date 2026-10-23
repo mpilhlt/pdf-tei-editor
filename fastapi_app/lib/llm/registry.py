@@ -62,7 +62,8 @@ class LLMProviderRegistry:
         """Get a provider that is ready to be used on behalf of `username`.
 
         Returns the registered provider if it carries a shared key (or needs none),
-        else a copy using the user's own key from the secret store.
+        else a copy using the user's own key from the secret store, marked with
+        `uses_user_key`.
 
         Raises:
             KeyError: If no provider with that id is registered.
@@ -71,7 +72,9 @@ class LLMProviderRegistry:
         provider = self.get_provider(provider_id)
         if provider.has_shared_key() or not provider.secret_service:
             return provider
-        return provider.with_api_key(require_user_secret(username, provider.secret_service))
+        user_provider = provider.with_api_key(require_user_secret(username, provider.secret_service))
+        user_provider.uses_user_key = True
+        return user_provider
 
     def get_provider(self, provider_id: str) -> LLMProvider:
         """Get a registered provider by id.

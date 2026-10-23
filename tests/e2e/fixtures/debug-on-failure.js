@@ -16,6 +16,7 @@
 import { test as base, expect } from '@playwright/test';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { IS_CLOUD_SANDBOX, prepareSandboxContext } from '../../lib/cloud-sandbox.js';
 
 const DEBUG_ON_FAILURE = process.env.E2E_DEBUG_ON_FAILURE === 'true';
 
@@ -23,6 +24,25 @@ const DEBUG_ON_FAILURE = process.env.E2E_DEBUG_ON_FAILURE === 'true';
  * Extended test fixture that captures comprehensive failure information
  */
 export const test = base.extend({
+  // The cloud sandbox's older Chromium lacks APIs that PDF.js needs (see tests/lib/cloud-sandbox.js).
+  // Patch newContext() as well, for tests that create their own contexts.
+  browser: [async ({ browser }, use) => {
+    if (IS_CLOUD_SANDBOX) {
+      const newContext = browser.newContext.bind(browser);
+      browser.newContext = async options => {
+        const context = await newContext(options);
+        await prepareSandboxContext(context);
+        return context;
+      };
+    }
+    await use(browser);
+  }, { scope: 'worker' }],
+
+  context: async ({ context }, use) => {
+    await prepareSandboxContext(context);
+    await use(context);
+  },
+
   page: async ({ page }, use, testInfo) => {
     const consoleMessages = [];
     const pageErrors = [];

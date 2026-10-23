@@ -50,6 +50,9 @@ test.describe('Application Loading', () => {
     // Wait for application to be ready - look for the main application container
     await expect(page.locator('body')).toBeVisible();
 
+    // Wait until the UI is built (slow machines need more than the fixed wait below)
+    await page.waitForFunction(() => /** @type {any} */(window).ui?.loginDialog, null, { timeout: 30000 });
+
     // Wait a bit for any async loading to complete
     await page.waitForTimeout(2000);
 

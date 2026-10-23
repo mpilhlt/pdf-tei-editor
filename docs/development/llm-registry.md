@@ -90,7 +90,9 @@ The admin-chosen default is stored under `llm.default-model.provider` / `llm.def
 `check_model_access(provider, model_id, user)` raises `ModelAccessDenied` (routes return 403) unless:
 
 1. the model passes the include/exclude filter (applies to everyone, admins included), and
-2. the user is an admin, or the model is free, or it is the configured default model.
+2. the user is an admin, or the provider runs on the user's own API key (`provider.uses_user_key`, set by `get_provider_for_user()`; usage is billed to the user), or the model is free, or it is the configured default model.
+
+Pass the provider returned by `get_provider_for_user()`, not the registered one, so that `uses_user_key` is set.
 
 A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Use this for models on a provider's free tier, e.g. `"^Google Gemini/Gemini Flash"`.
 
@@ -108,7 +110,7 @@ Consuming routes must call it before invoking a provider; see `pte-plugins/plugi
 
 ## Frontend
 
-`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models and the default (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
+`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models, the default, and all models of providers they stored their own key for (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
 
 ## Design documents
 

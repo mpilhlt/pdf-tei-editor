@@ -2,8 +2,9 @@
 The installation-wide default LLM model, chosen by an admin and stored in
 the config (`llm.default-model.provider` / `llm.default-model.model`).
 
-Non-admin users may use free models (LLMModel["free"]) and this default;
-everything else is admin-only.
+Non-admin users may use free models (LLMModel["free"]), this default and
+any model of a provider they use with their own API key; everything else is
+admin-only (see model_access.py).
 """
 
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config

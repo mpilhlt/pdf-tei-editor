@@ -46,6 +46,7 @@ class TestPerUserProviderKeys(unittest.TestCase):
         with patch("fastapi_app.lib.llm.registry.require_user_secret") as lookup:
             self.assertIs(registry.get_provider_for_user("test", "alice"), shared)
             lookup.assert_not_called()
+        self.assertFalse(shared.uses_user_key)
 
     def test_user_key_is_used_without_shared_key(self):
         registry = LLMProviderRegistry.get_instance()
@@ -57,8 +58,10 @@ class TestPerUserProviderKeys(unittest.TestCase):
         assert isinstance(resolved, OpenAICompatibleProvider)
         self.assertEqual(resolved._api_key, "user-key")
         self.assertEqual(resolved.id, "test")
-        # the registered provider stays keyless
+        self.assertTrue(resolved.uses_user_key)
+        # the registered provider stays keyless and unmarked
         self.assertFalse(registry.get_provider("test").has_shared_key())
+        self.assertFalse(registry.get_provider("test").uses_user_key)
 
     def test_missing_user_key_raises(self):
         registry = LLMProviderRegistry.get_instance()
@@ -98,6 +101,26 @@ class TestLlmRouter(unittest.TestCase):
             providers = llm_router.list_providers(current_user=USER)
         self.assertFalse(providers[0].key_required)
         self.assertEqual([m.id for m in providers[0].models], ["m"])
+
+    def test_listing_shows_paid_models_to_non_admin_with_own_key(self):
+        paid = [{"id": "paid", "label": "Paid", "capabilities": frozenset({"chat"}), "status": None, "free": False}]
+        with patch("fastapi_app.lib.llm.registry.require_user_secret", return_value="user-key"), \
+                patch.object(OpenAICompatibleProvider, "list_models", return_value=paid), \
+                patch("fastapi_app.routers.llm.is_free_model", return_value=False), \
+                patch("fastapi_app.lib.llm.model_access.is_free_model", return_value=False), \
+                patch("fastapi_app.lib.llm.model_access.is_default_model", return_value=False):
+            providers = llm_router.list_providers(current_user=USER)
+        self.assertEqual([m.id for m in providers[0].models], ["paid"])
+
+    def test_listing_hides_paid_models_of_shared_key_provider_from_non_admin(self):
+        LLMProviderRegistry.get_instance().register(make_provider("shared"))
+        paid = [{"id": "paid", "label": "Paid", "capabilities": frozenset({"chat"}), "status": None, "free": False}]
+        with patch.object(OpenAICompatibleProvider, "list_models", return_value=paid), \
+                patch("fastapi_app.routers.llm.is_free_model", return_value=False), \
+                patch("fastapi_app.lib.llm.model_access.is_free_model", return_value=False), \
+                patch("fastapi_app.lib.llm.model_access.is_default_model", return_value=False):
+            providers = llm_router.list_providers(current_user=USER)
+        self.assertEqual(providers[0].models, [])
 
     def test_setting_default_model_without_key_answers_428(self):
         admin = {"username": "root", "roles": ["admin"]}
