@@ -110,6 +110,23 @@ validated the identical tree.
 3. Build the `production` target and push `cboulanger/pdf-tei-editor:<version>`
    and `:latest` to Docker Hub.
 
+### Documentation Workflow ([.github/workflows/pages.yml](../../.github/workflows/pages.yml))
+
+**Trigger:**
+
+- Push to `main` that changes `docs/**` or the workflow itself.
+- `workflow_dispatch` (manual run).
+
+**Steps:**
+
+1. Install Ruby and the gems from `docs/Gemfile` (Jekyll 4, the Primer theme and the plugins GitHub Pages uses by default).
+2. Build `docs/` with `docs/_config.yml` and the Pages base path.
+3. Upload the site and deploy it with `actions/deploy-pages`.
+
+**Requirements:** Settings > Pages > Build and deployment > Source must be "GitHub Actions". With "Deploy from a branch", GitHub runs its built-in "pages build and deployment" instead, which uses Jekyll 3.
+
+**Why not the built-in Pages build:** Jekyll 3 parses every Markdown file as a Liquid template and cannot switch that off. The docs contain JSDoc types such as `{{page: number}|null}`, which abort the build, and GitHub Actions expressions such as `${{ github.ref }}`, which Liquid silently replaces with an empty string. `docs/_config.yml` sets `render_with_liquid: false` for all pages, which needs Jekyll 4. Do not use Liquid in the docs.
+
 ## Execution Flow
 
 ### For Releases
