@@ -110,7 +110,7 @@ Consuming routes must call it before invoking a provider; see `pte-plugins/plugi
 
 ## Frontend
 
-`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models, the default, and all models of providers they stored their own key for (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
+`inference-settings.js` adds a Tools menu entry listing every provider's models. The entry label shows the selected `<provider>/<model>` (else "Default Model"), and a toast confirms each selection. Admins set the installation default, after confirming "Set <provider>/<model> as default model for all users?"; any user can pick a per-session model (kept in `sessionStorage`, takes precedence over the default). Non-admins only see free models, the default, and all models of providers they stored their own key for (the server omits the rest); providers without visible models are left out of the menu. No requests are made without a session. Other plugins read the effective choice via the plugin's `getDefaultModel()`.
 
 ## Design documents
 
