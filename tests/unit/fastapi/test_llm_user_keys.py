@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from fastapi_app.lib.llm import LLMProviderRegistry
 from fastapi_app.lib.llm.openai_compatible import OpenAICompatibleProvider
-from fastapi_app.lib.secrets import MissingSecretError, SecretServiceRegistry, register_secret_service, secret_required_detail
+from fastapi_app.lib.secrets import MissingSecretError, SecretServiceRegistry, SecretsError, register_secret_service, secret_required_detail
 from fastapi_app.routers import llm as llm_router
 
 USER = {"username": "alice", "roles": ["user"]}
@@ -93,6 +93,16 @@ class TestLlmRouter(unittest.TestCase):
         self.assertTrue(providers[0].key_required)
         self.assertEqual(providers[0].secret_service, "test-svc")
         self.assertEqual(providers[0].models, [])
+
+    def test_listing_reports_undecryptable_user_key(self):
+        with patch("fastapi_app.lib.llm.registry.require_user_secret", side_effect=SecretsError("the encryption key has changed")), \
+                self.assertLogs("fastapi_app.routers.llm", level="WARNING"):
+            providers = llm_router.list_providers(current_user=USER)
+        self.assertEqual(len(providers), 1)
+        self.assertFalse(providers[0].key_required)
+        self.assertEqual(providers[0].models, [])
+        self.assertEqual(providers[0].secret_service, "test-svc")
+        self.assertIn("cannot be decrypted", providers[0].error or "")
 
     def test_listing_uses_user_key(self):
         with patch("fastapi_app.lib.llm.registry.require_user_secret", return_value="user-key"), \

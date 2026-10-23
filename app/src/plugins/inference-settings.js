@@ -287,7 +287,7 @@ export class InferenceSettingsPlugin extends Plugin {
     this._submenu.innerHTML = '';
     const current = this.getDefaultModel();
     for (const provider of providers) {
-      if (provider.models.length === 0 && !provider.key_required) continue;
+      if (provider.models.length === 0 && !provider.key_required && !provider.error) continue;
       const label = document.createElement('small');
       label.textContent = provider.label;
       this._submenu.appendChild(label);
@@ -296,11 +296,36 @@ export class InferenceSettingsPlugin extends Plugin {
         item.textContent = 'Add your API key…';
         item.dataset.secretService = provider.secret_service;
         this._submenu.appendChild(item);
+      } else if (provider.error) {
+        this._submenu.appendChild(this._buildErrorItem(provider));
       }
       for (const model of provider.models) {
         this._submenu.appendChild(this._buildModelItem(provider, model, current));
       }
     }
+  }
+
+  /**
+   * Build the entry for a provider whose models could not be listed: shows
+   * the error and, if the provider uses the user's own key, opens the key
+   * dialog when selected (a wrong or undecryptable key is the usual cause).
+   * @param {ProviderResponse} provider
+   * @returns {HTMLElement}
+   */
+  _buildErrorItem(provider) {
+    const item = /** @type {HTMLElement & {disabled: boolean}} */ (document.createElement('sl-menu-item'));
+    item.textContent = provider.secret_service ? 'Models unavailable, check your API key…' : 'Models unavailable';
+    item.title = provider.error ?? '';
+    if (provider.secret_service) {
+      item.dataset.secretService = provider.secret_service;
+    } else {
+      item.disabled = true;
+    }
+    const icon = /** @type {HTMLElement & {name: string, slot: string}} */ (document.createElement('sl-icon'));
+    icon.name = 'exclamation-triangle';
+    icon.slot = 'suffix';
+    item.appendChild(icon);
+    return item;
   }
 
   /**
@@ -352,7 +377,10 @@ export class InferenceSettingsPlugin extends Plugin {
     const { providerId, modelId, secretService } = item.dataset;
     if (secretService) {
       const provider = this._providers.find(p => p.secret_service === secretService);
-      const saved = await this.#apiKeys.show(`${provider?.label ?? secretService} needs your API key to list its models.`, secretService);
+      const message = provider?.error
+        ? `${provider.label}: ${provider.error}`
+        : `${provider?.label ?? secretService} needs your API key to list its models.`;
+      const saved = await this.#apiKeys.show(message, secretService);
       if (saved) await this._refresh();
       return;
     }
