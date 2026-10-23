@@ -1,0 +1,28 @@
+# Jekyll configuration for the documentation site on GitHub Pages,
+# built by .github/workflows/pages.yml.
+title: PDF-TEI Editor
+description: Documentation of the PDF-TEI Editor
+theme: jekyll-theme-primer
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+plugins:
+  - jekyll-default-layout
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-seo-tag
+  - jekyll-titles-from-headings
+# The docs contain JSDoc types such as {{page: number}|null} and GitHub Actions
+# expressions such as ${{ github.ref }}, which Liquid would parse as template
+# tags. No page uses Liquid, so it is switched off for all of them.
+defaults:
+  - scope:
+      path: ""
+    values:
+      render_with_liquid: false
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

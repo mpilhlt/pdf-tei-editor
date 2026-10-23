@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
 from ..lib.llm import LLMProviderError, LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
-from ..lib.secrets import MissingSecretError, secret_required_detail
+from ..lib.secrets import MissingSecretError, SecretsError, secret_required_detail
 from ..lib.llm.model_access import is_free_model, user_may_use_model
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,12 @@ class ProviderResponse(BaseModel):
     key_required: bool = False
     # The secret service the key belongs to, for the frontend's key prompt
     secret_service: str | None = None
+    # Why the provider's models could not be listed (models is then empty)
+    error: str | None = None
+
+
+# Longest provider error message passed on to the frontend
+MAX_ERROR_LENGTH = 300
 
 
 @router.get("/providers", response_model=list[ProviderResponse])
@@ -52,9 +58,11 @@ def list_providers(
 ) -> list[ProviderResponse]:
     """List available LLM providers and their models.
 
-    A provider whose list_models() call fails (network error, malformed
-    response, etc.) is skipped rather than failing the whole request -
-    other providers should still be listed. Models rejected by the
+    A provider whose list_models() call fails (network error, rejected key,
+    malformed response, etc.) or whose stored user key cannot be decrypted
+    is listed with an `error` and no models rather than failing the whole
+    request - other providers should still be listed, and the user should
+    see why one has no models. Models rejected by the
     admin-configured `llm.model-filter.include`/`.exclude` filters (see
     fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
     returned with a flag - the picker should simply never offer them.
@@ -77,10 +85,21 @@ def list_providers(
                 secret_service=registered.secret_service,
             ))
             continue
+        except SecretsError as e:
+            logger.warning(f"Cannot use the stored key of '{current_user.get('username')}' for LLM provider '{registered.id}': {e}")
+            result.append(ProviderResponse(
+                id=registered.id, label=registered.label, models=[], secret_service=registered.secret_service,
+                error="Your stored API key cannot be decrypted. Please enter it again.",
+            ))
+            continue
         try:
             models = provider.list_models()
         except Exception as e:
-            logger.warning(f"Skipping LLM provider '{provider.id}' - list_models() failed: {e}")
+            logger.warning(f"LLM provider '{provider.id}' has no models - list_models() failed: {e}")
+            result.append(ProviderResponse(
+                id=provider.id, label=provider.label, models=[], secret_service=provider.secret_service,
+                error=f"Could not list models: {e}"[:MAX_ERROR_LENGTH],
+            ))
             continue
         visible_models = [
             ModelResponse(

@@ -701,6 +701,7 @@
  * @property {Array<ModelResponse>} models
  * @property {boolean=} key_required - True if the user has to store their own API key before the provider's models can be listed
  * @property {string|null=} secret_service - Id of the secret service holding the provider's API key
+ * @property {string|null=} error - Why the provider's models could not be listed (models is then empty)
  */
 
 /**
