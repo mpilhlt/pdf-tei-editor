@@ -6,6 +6,7 @@
  * Re-run the build step after adding or removing @registerModule tags.
  */
 
+import * as aclUtils from './modules/acl-utils.js';
 import * as lintUtils from './modules/lint-utils.js';
 import * as sessionStorage from './modules/session-storage.js';
 import * as slUtils from './modules/sl-utils.js';
@@ -20,6 +21,7 @@ import ui from './ui.js';
 export function registerModules(pluginManager) {
   /** @type {Record<string, unknown>} */
   const modules = {
+    'acl-utils': aclUtils,
     'lint-utils': lintUtils,
     'session-storage': sessionStorage,
     'sl-utils': slUtils,

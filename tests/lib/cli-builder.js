@@ -59,7 +59,13 @@ export function createTestRunnerCommand(config) {
 
   // Test directory
   program
-    .option('--test-dir <path>', 'test directory (auto-detected if not specified)');
+    .option('--test-dir <path>', 'test directory (auto-detected if not specified)')
+    .option(
+      '--plugin-tests <dir>',
+      'also run the API/E2E tests of the plugins below this directory (can be repeated, see tests/lib/plugin-tests.js)',
+      collectEnvVars,
+      []
+    );
 
   // Server options
   program
@@ -89,7 +95,7 @@ export function createTestRunnerCommand(config) {
 }
 
 /**
- * Collector function for --env option (allows multiple values)
+ * Collector function for repeatable options (--env, --plugin-tests)
  *
  * @param {string} value - Current env argument
  * @param {string[]} previous - Previously collected values

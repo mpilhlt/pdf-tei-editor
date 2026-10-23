@@ -7,7 +7,7 @@ Extractors register themselves via the ExtractorRegistry during plugin initializ
 
 from .base import BaseExtractor
 from .llm_base import LLMBaseExtractor
-from .registry import ExtractorRegistry
+from .registry import ExtractorRegistry, ExtractorUnavailableError
 from .manager import (
     list_extractors,
     get_extractor,
@@ -20,6 +20,7 @@ __all__ = [
     'BaseExtractor',
     'LLMBaseExtractor',
     'ExtractorRegistry',
+    'ExtractorUnavailableError',
     'list_extractors',
     'get_extractor',
     'create_extractor',

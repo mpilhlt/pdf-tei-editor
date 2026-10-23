@@ -2,7 +2,8 @@
 Maintenance endpoints for remote UI control via SSE.
 
 Provides admin-only endpoints to broadcast maintenance events to all connected
-clients (show blocking spinner, remove it, force page reload).
+clients (show blocking spinner, remove it, force page reload), and a public status
+endpoint that clients poll to notice server-side changes that require a reload.
 """
 
 from typing import Dict
@@ -10,6 +11,8 @@ from typing import Dict
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from ..config import get_settings
+from ..lib.core.data_restore import read_applied_restore
 from ..lib.core.dependencies import (
     get_session_manager,
     get_sse_service,
@@ -18,6 +21,7 @@ from ..lib.core.dependencies import (
 from ..lib.utils.logging_utils import get_logger
 from ..lib.core.sessions import SessionManager
 from ..lib.sse.sse_service import SSEService
+from ..lib.plugins.plugin_manager import PluginManager
 from ..lib.sse.sse_utils import broadcast_to_all_sessions
 
 logger = get_logger(__name__)
@@ -87,3 +91,34 @@ async def maintenance_reload(
         logger=logger,
     )
     return {"status": "ok", "clients_notified": count}
+
+
+class DataRestoreInfo(BaseModel):
+    id: str
+    applied_at: str
+
+
+class MaintenanceStatus(BaseModel):
+    data_restore: DataRestoreInfo | None
+    plugins_version: int | None
+
+
+@router.get("/status", response_model=MaintenanceStatus)
+async def maintenance_status() -> MaintenanceStatus:
+    """
+    Server-side state that the loaded frontend depends on; no authentication required.
+
+    Clients compare it with the value at page load and reload when it changes:
+    `data_restore` changes when a backup has been restored, `plugins_version` when the
+    plugins were changed (it is null while the workers still have to restart).
+    """
+    restore = read_applied_restore(get_settings().data_root)
+    try:
+        plugins_version = PluginManager.get_instance().plugins_version()
+    except Exception as e:
+        logger.warning(f"Could not read the plugin state: {e}")
+        plugins_version = None
+    return MaintenanceStatus(
+        data_restore=DataRestoreInfo(**restore) if restore else None,
+        plugins_version=plugins_version,
+    )

@@ -4,7 +4,9 @@ Unit tests for Backup & Restore plugin.
 @testCovers fastapi_app/plugins/backup_restore/plugin.py
 @testCovers fastapi_app/plugins/backup_restore/routes.py
 @testCovers fastapi_app/plugins/backup_restore/archive.py
-@testCovers fastapi_app/lib/data_restore.py
+@testCovers fastapi_app/plugins/backup_restore/manifest.py
+@testCovers fastapi_app/lib/core/data_restore.py
+@testCovers fastapi_app/lib/core/worker_recycle.py
 """
 
 import hashlib
@@ -12,6 +14,7 @@ import io
 import json
 import shutil
 import sqlite3
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -44,78 +47,239 @@ class TestBackupRestorePlugin(unittest.TestCase):
         self.assertEqual(result["outputUrl"], "/api/plugins/backup-restore/view")
 
 
+def _zip(path: Path, files: dict[str, str]) -> Path:
+    """Write a ZIP with the given members."""
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, content in files.items():
+            zf.writestr(name, content)
+    return path
+
+
+MANIFEST = json.dumps({"format": 1, "pte_version": "0.76.0"})
+
+
+class TestBackupVersionCompatibility(unittest.TestCase):
+    """Test the version rule of fastapi_app.plugins.backup_restore.manifest."""
+
+    def test_compatibility_line(self):
+        from fastapi_app.plugins.backup_restore.manifest import compatibility_line
+
+        self.assertEqual(compatibility_line("0.76.3"), (0, 76))
+        self.assertEqual(compatibility_line("0.77.0-devel.2"), (0, 77))
+        self.assertEqual(compatibility_line("1.0.0"), (1,))
+        self.assertEqual(compatibility_line("2.5.1"), (2,))
+
+    def test_compatible_pairs(self):
+        from fastapi_app.plugins.backup_restore.manifest import check_compatible
+
+        for backup, current in [
+            ("0.76.0", "0.76.0"),
+            ("0.76.5", "0.76.0"),
+            ("0.76.0", "0.76.9"),
+            ("1.0.0", "1.9.3"),
+            ("1.9.3", "1.0.0"),
+            ("2.1.0-beta.1", "2.4.0"),
+        ]:
+            with self.subTest(backup=backup, current=current):
+                check_compatible(backup, current)
+
+    def test_incompatible_pairs(self):
+        from fastapi_app.plugins.backup_restore.manifest import IncompatibleBackupError, check_compatible
+
+        for backup, current in [
+            ("0.75.4", "0.76.0"),
+            ("0.77.0", "0.76.0"),
+            ("0.99.0", "1.0.0"),
+            ("1.4.0", "2.0.0"),
+            ("2.0.0", "1.4.0"),
+        ]:
+            with self.subTest(backup=backup, current=current):
+                with self.assertRaises(IncompatibleBackupError) as ctx:
+                    check_compatible(backup, current)
+                self.assertIn(backup, str(ctx.exception))
+                self.assertIn(current, str(ctx.exception))
+
+    def test_unversioned_or_invalid_backup_is_incompatible(self):
+        from fastapi_app.plugins.backup_restore.manifest import IncompatibleBackupError, check_compatible
+
+        for backup, current in [(None, "0.76.0"), ("garbage", "0.76.0"), ("0.76.0", None)]:
+            with self.subTest(backup=backup, current=current):
+                with self.assertRaises(IncompatibleBackupError):
+                    check_compatible(backup, current)
+
+    def test_read_backup_version(self):
+        from fastapi_app.plugins.backup_restore.manifest import IncompatibleBackupError, read_backup_version
+
+        def read(files: dict[str, str], prefix: str | None = None) -> str | None:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                for name, content in files.items():
+                    zf.writestr(name, content)
+            with zipfile.ZipFile(buf) as zf:
+                return read_backup_version(zf, prefix)
+
+        self.assertEqual(read({"backup-manifest.json": MANIFEST}), "0.76.0")
+        self.assertEqual(read({"data/backup-manifest.json": MANIFEST}, "data"), "0.76.0")
+        self.assertIsNone(read({"db/users.json": "[]"}))
+        with self.assertRaises(IncompatibleBackupError):
+            read({"backup-manifest.json": "not json"})
+        with self.assertRaises(IncompatibleBackupError):
+            read({"backup-manifest.json": '{"format": 1}'})
+
+
 class TestDataRestore(unittest.TestCase):
-    """Test the data_restore utility module."""
+    """Test staging and applying restores (fastapi_app.lib.core.data_restore)."""
 
     def setUp(self):
         self.temp_dir = Path(tempfile.mkdtemp())
+        self.data = self.temp_dir / "data"
+        (self.data / "db").mkdir(parents=True)
+        (self.data / "db" / "config.json").write_text('{"old": true}')
+        (self.data / "files").mkdir()
+        (self.data / "files" / "old.xml").write_text("<old/>")
+        (self.data / "plugins" / "site").mkdir(parents=True)
+        (self.data / "plugins" / "site" / "wheel.txt").write_text("code")
+        (self.data / "plugins" / "work").mkdir()
+        (self.data / ".gitignore").write_text("*\n")
+        self.logger = MagicMock()
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
 
-    def test_apply_pending_restore_swaps_directories(self):
-        """Verify data_restore/ is swapped into data/ and old data is preserved."""
+    def _stage(self, files: dict[str, str], prefix: str | None = None) -> int:
+        from fastapi_app.lib.core.data_restore import stage_restore
+
+        return stage_restore(_zip(self.temp_dir / "b.zip", files), self.data, prefix)
+
+    def _backup(self) -> dict[str, str]:
+        return {"db/users.json": "[]", "db/config.json": '{"restored": true}', "files/new.xml": "<new/>"}
+
+    def test_stage_then_apply_swaps_contents_and_keeps_old_data(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, apply_pending_restore, is_restore_pending
+
+        self.assertEqual(self._stage(self._backup()), 3)
+        self.assertTrue(is_restore_pending(self.data))
+        self.assertTrue(json.loads((self.data / "db" / "config.json").read_text())["old"])
+
+        self.assertTrue(apply_pending_restore(self.data, self.logger))
+
+        self.assertTrue(json.loads((self.data / "db" / "config.json").read_text())["restored"])
+        self.assertEqual(sorted(p.name for p in (self.data / "files").iterdir()), ["new.xml"])
+        self.assertTrue((self.data / "plugins" / "site" / "wheel.txt").exists())
+        self.assertFalse((self.data / "plugins" / "work").exists())
+        self.assertTrue((self.data / ".gitignore").exists())
+        self.assertFalse(is_restore_pending(self.data))
+        archives = list((self.data / PREVIOUS_DIR).iterdir())
+        self.assertEqual(len(archives), 1)
+        self.assertEqual(sorted(p.name for p in archives[0].iterdir()), ["db", "files", "plugins"])
+        self.assertTrue((archives[0] / "plugins" / "work").is_dir())
+        self.assertTrue(json.loads((archives[0] / "db" / "config.json").read_text())["old"])
+        self.assertFalse(apply_pending_restore(self.data, self.logger))
+
+    def test_applied_restore_is_recorded(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, apply_pending_restore, read_applied_restore
+
+        self.assertIsNone(read_applied_restore(self.data))
+        self._stage(self._backup())
+        apply_pending_restore(self.data, self.logger)
+        applied = read_applied_restore(self.data)
+        assert applied is not None
+        self.assertEqual(applied["id"], next((self.data / PREVIOUS_DIR).iterdir()).name)
+        # A second restore keeps the marker in place and replaces it
+        self._stage(self._backup())
+        with patch("fastapi_app.lib.core.data_restore.datetime") as clock:
+            from datetime import datetime as real_datetime
+
+            clock.now.return_value = real_datetime(2030, 1, 1)
+            apply_pending_restore(self.data, self.logger, now=clock.now)
+        self.assertEqual(read_applied_restore(self.data)["id"], "20300101_000000")
+
+    def test_nothing_staged(self):
         from fastapi_app.lib.core.data_restore import apply_pending_restore
 
-        data_dir = self.temp_dir / "data"
-        data_dir.mkdir()
-        (data_dir / "db").mkdir()
-        (data_dir / "db" / "config.json").write_text('{"old": true}')
+        self.assertFalse(apply_pending_restore(self.data, self.logger))
+        self.assertTrue(json.loads((self.data / "db" / "config.json").read_text())["old"])
 
-        restore_dir = self.temp_dir / "data_restore"
-        restore_dir.mkdir()
-        (restore_dir / "db").mkdir()
-        (restore_dir / "db" / "config.json").write_text('{"restored": true}')
-        # Restore ZIP includes .gitignore
-        (restore_dir / ".gitignore").write_text("*\n!.gitignore\n")
-
-        logger = MagicMock()
-
-        result = apply_pending_restore(self.temp_dir, data_dir, logger)
-
-        self.assertTrue(result)
-        # data/ should now contain the restored content
-        config = json.loads((data_dir / "db" / "config.json").read_text())
-        self.assertTrue(config.get("restored"))
-        # Old data should be preserved in data_{timestamp}/
-        backup_dirs = [d for d in self.temp_dir.iterdir() if d.name.startswith("data_2")]
-        self.assertEqual(len(backup_dirs), 1)
-        old_config = json.loads(
-            (backup_dirs[0] / "db" / "config.json").read_text()
-        )
-        self.assertTrue(old_config.get("old"))
-        # .gitignore should be copied to archived directory
-        self.assertTrue((backup_dirs[0] / ".gitignore").exists())
-        # data_restore/ should no longer exist
-        self.assertFalse(restore_dir.exists())
-
-    def test_apply_pending_restore_no_restore_dir(self):
-        """Return False when no data_restore/ directory exists."""
+    def test_data_prefix_is_stripped(self):
         from fastapi_app.lib.core.data_restore import apply_pending_restore
 
-        data_dir = self.temp_dir / "data"
-        data_dir.mkdir()
-        logger = MagicMock()
+        self._stage({"data/db/users.json": "[]", "data/db/config.json": "{}", "other/x": ""}, "data")
+        apply_pending_restore(self.data, self.logger)
+        self.assertTrue((self.data / "db" / "users.json").exists())
+        self.assertFalse((self.data / "other").exists())
 
-        result = apply_pending_restore(self.temp_dir, data_dir, logger)
-        self.assertFalse(result)
+    def test_unsafe_paths_are_refused(self):
+        from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError
 
-    def test_apply_pending_restore_no_existing_data(self):
-        """Handle case where data/ does not exist yet."""
+        for name in ("../evil", "db/../../evil", "/abs", "C:/evil", "db\\..\\evil"):
+            with self.subTest(name=name), self.assertRaises(RestoreError):
+                self._stage({"db/users.json": "[]", name: "x"})
+            self.assertFalse((self.data / STAGING_DIR).exists())
+        self.assertFalse((self.temp_dir / "evil").exists())
+
+    def test_manifest_is_not_extracted(self):
+        from fastapi_app.lib.core.data_restore import STAGING_DIR
+
+        self.assertEqual(self._stage({"backup-manifest.json": MANIFEST, "db/config.json": "{}"}), 1)
+        self.assertFalse((self.data / STAGING_DIR / "data" / "backup-manifest.json").exists())
+
+    def test_reserved_names_are_not_extracted(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, apply_pending_restore
+
+        self._stage({**self._backup(), f"{PREVIOUS_DIR}/x": "", ".restore.lock": ""})
+        apply_pending_restore(self.data, self.logger)
+        archive = next((self.data / PREVIOUS_DIR).iterdir())
+        self.assertNotEqual(archive.name, "x")
+        self.assertEqual(len(list((self.data / PREVIOUS_DIR).iterdir())), 1)
+
+    def test_interrupted_swap_is_completed(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, STAGING_DIR, apply_pending_restore
+
+        self._stage(self._backup())
+        staging = self.data / STAGING_DIR
+        # State after a crash between moving the old contents out and moving the new ones in
+        archive = self.data / PREVIOUS_DIR / "20260101_000000"
+        archive.mkdir(parents=True)
+        (staging / "archive").write_text(archive.name)
+        for name in ("db", "files", "plugins"):
+            (self.data / name).rename(archive / name)
+        (staging / "moved-out").touch()
+        (staging / "data" / "db").rename(self.data / "db")
+
+        self.assertTrue(apply_pending_restore(self.data, self.logger))
+        self.assertTrue(json.loads((self.data / "db" / "config.json").read_text())["restored"])
+        self.assertTrue((self.data / "files" / "new.xml").exists())
+        self.assertEqual([p.name for p in (self.data / PREVIOUS_DIR).iterdir()], [archive.name])
+        self.assertFalse(staging.exists())
+
+    def test_entry_recreated_by_old_worker_is_archived(self):
+        from fastapi_app.lib.core.data_restore import PREVIOUS_DIR, STAGING_DIR, apply_pending_restore
+
+        self._stage(self._backup())
+        staging = self.data / STAGING_DIR
+        archive = self.data / PREVIOUS_DIR / "20260101_000000"
+        archive.mkdir(parents=True)
+        (staging / "archive").write_text(archive.name)
+        for name in ("db", "files", "plugins"):
+            (self.data / name).rename(archive / name)
+        (staging / "moved-out").touch()
+        (self.data / "db").mkdir()  # recreated by a worker of the previous generation
+
+        self.assertTrue(apply_pending_restore(self.data, self.logger))
+        self.assertTrue((self.data / "db" / "users.json").exists())
+        self.assertTrue((archive / "db.1").is_dir())
+
+    @unittest.skipIf(sys.platform == "win32", "flock")
+    def test_concurrent_workers_apply_once(self):
+        from concurrent.futures import ThreadPoolExecutor
+
         from fastapi_app.lib.core.data_restore import apply_pending_restore
 
-        data_dir = self.temp_dir / "data"
-        restore_dir = self.temp_dir / "data_restore"
-        restore_dir.mkdir()
-        (restore_dir / "db").mkdir()
-        (restore_dir / "db" / "config.json").write_text("{}")
-
-        logger = MagicMock()
-
-        result = apply_pending_restore(self.temp_dir, data_dir, logger)
-        self.assertTrue(result)
-        self.assertTrue(data_dir.exists())
-        self.assertFalse(restore_dir.exists())
+        self._stage(self._backup())
+        with ThreadPoolExecutor(4) as pool:
+            results = list(pool.map(lambda _: apply_pending_restore(self.data, self.logger), range(4)))
+        self.assertEqual(results.count(True), 1)
+        self.assertTrue(json.loads((self.data / "db" / "config.json").read_text())["restored"])
 
 
 class TestRestoreZipValidation(unittest.TestCase):
@@ -296,15 +460,19 @@ class TestBackupArchive(unittest.TestCase):
     def test_zip_content_checksum_and_consistent_database(self):
         from fastapi_app.plugins.backup_restore.archive import create_backup_zip
 
-        zip_path, sha = create_backup_zip(self.data, self.data / "tmp")
+        zip_path, sha = create_backup_zip(self.data, self.data / "tmp", "0.76.0")
         self.assertEqual(sha, hashlib.sha256(zip_path.read_bytes()).hexdigest())
 
         with zipfile.ZipFile(zip_path) as zf:
             names = set(zf.namelist())
             self.assertEqual(
                 names,
-                {"db/users.json", "db/config.json", "db/metadata.db", "files/ab/doc.xml"},
+                {"backup-manifest.json", "db/users.json", "db/config.json", "db/metadata.db", "files/ab/doc.xml"},
             )
+            manifest = json.loads(zf.read("backup-manifest.json"))
+            self.assertEqual(manifest["format"], 1)
+            self.assertEqual(manifest["pte_version"], "0.76.0")
+            self.assertIn("created_at", manifest)
             out = self.root / "restored.db"
             out.write_bytes(zf.read("db/metadata.db"))
 
@@ -324,7 +492,7 @@ class TestDownloadRoute(unittest.TestCase):
     def setUp(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
+        from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager, get_sse_service
         from fastapi_app.plugins.backup_restore.routes import router
 
         self.root = Path(tempfile.mkdtemp())
@@ -343,6 +511,7 @@ class TestDownloadRoute(unittest.TestCase):
         app.include_router(router)
         app.dependency_overrides[get_session_manager] = lambda: session_manager
         app.dependency_overrides[get_auth_manager] = lambda: auth_manager
+        app.dependency_overrides[get_sse_service] = lambda: MagicMock()
         self.client = TestClient(app)
 
         settings = MagicMock(
@@ -352,6 +521,12 @@ class TestDownloadRoute(unittest.TestCase):
         patcher = patch("fastapi_app.config.get_settings", return_value=settings)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.version = "0.76.2"
+        version_patcher = patch(
+            "fastapi_app.plugins.backup_restore.routes.get_pte_version", side_effect=lambda: self.version
+        )
+        version_patcher.start()
+        self.addCleanup(version_patcher.stop)
 
     def tearDown(self):
         shutil.rmtree(self.root)
@@ -375,6 +550,101 @@ class TestDownloadRoute(unittest.TestCase):
             files={"file": ("b.zip", b"x")},
         )
         self.assertEqual(r.status_code, 403)
+
+    def _restore(self, files: dict[str, str]):
+        self.roles = ["restore"]
+        return self.client.post(
+            "/api/plugins/backup-restore/restore",
+            headers={"X-Session-ID": "s"},
+            files={"file": ("b.zip", _zip(self.root / "upload.zip", files).read_bytes())},
+        )
+
+    def test_restore_stages_and_recycles_workers(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+        from fastapi_app.lib.core.worker_recycle import recycle_workers
+        from fastapi_app.plugins.backup_restore import routes
+
+        with patch.dict("os.environ", {"PTE_WORKER_RECYCLE": "1"}), \
+                patch.object(routes, "_schedule") as schedule, \
+                patch.object(routes, "broadcast_to_all_sessions") as broadcast:
+            r = self._restore({"backup-manifest.json": MANIFEST, "db/users.json": "[]", "db/config.json": "{}"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["supervised"])
+        self.assertTrue(is_restore_pending(self.data))
+        schedule.assert_called_once_with(routes.RESTART_DELAY_SECONDS, recycle_workers)
+        self.assertEqual(broadcast.call_args.kwargs["event_type"], "maintenanceOn")
+        self.assertEqual(list((self.data / "tmp").glob("restore_*")), [])
+
+    def test_restore_without_supervisor_waits_for_manual_restart(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+        from fastapi_app.plugins.backup_restore import routes
+
+        with patch.dict("os.environ", {"PTE_WORKER_RECYCLE": ""}), \
+                patch.object(routes, "_is_supervised", return_value=False), \
+                patch.object(routes, "_schedule") as schedule:
+            r = self._restore({"backup-manifest.json": MANIFEST, "db/users.json": "[]", "db/config.json": "{}"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse(r.json()["supervised"])
+        self.assertTrue(is_restore_pending(self.data))
+        schedule.assert_not_called()
+
+    def test_restore_refuses_unsafe_paths(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+
+        r = self._restore({"backup-manifest.json": MANIFEST, "db/users.json": "[]", "db/config.json": "{}", "../../evil": "x"})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(is_restore_pending(self.data))
+        self.assertFalse((self.root.parent / "evil").exists())
+
+    def test_downloaded_backup_restores_into_same_version(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+        from fastapi_app.plugins.backup_restore import routes
+
+        r = self.client.get("/api/plugins/backup-restore/download", headers={"X-Session-ID": "s"})
+        self.assertEqual(r.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+            self.assertEqual(json.loads(zf.read("backup-manifest.json"))["pte_version"], "0.76.2")
+
+        self.roles = ["restore"]
+        with patch.object(routes, "can_recycle_workers", return_value=False), \
+                patch.object(routes, "_is_supervised", return_value=False):
+            r = self.client.post(
+                "/api/plugins/backup-restore/restore",
+                headers={"X-Session-ID": "s"},
+                files={"file": ("b.zip", r.content)},
+            )
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(is_restore_pending(self.data))
+
+    def test_restore_refuses_incompatible_version(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+
+        self.version = "0.77.0"
+        r = self._restore({"backup-manifest.json": MANIFEST, "db/users.json": "[]", "db/config.json": "{}"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("0.76.0", r.json()["detail"])
+        self.assertIn("0.77.0", r.json()["detail"])
+        self.assertFalse(is_restore_pending(self.data))
+
+    def test_restore_refuses_unversioned_backup(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+
+        r = self._restore({"db/users.json": "[]", "db/config.json": "{}"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("backup-manifest.json", r.json()["detail"])
+        self.assertFalse(is_restore_pending(self.data))
+
+    def test_restore_accepts_manifest_under_data_prefix(self):
+        from fastapi_app.lib.core.data_restore import is_restore_pending
+        from fastapi_app.plugins.backup_restore import routes
+
+        with patch.object(routes, "can_recycle_workers", return_value=False), \
+                patch.object(routes, "_is_supervised", return_value=False):
+            r = self._restore({
+                "data/backup-manifest.json": MANIFEST, "data/db/users.json": "[]", "data/db/config.json": "{}",
+            })
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(is_restore_pending(self.data))
 
     def test_concurrent_download_returns_409(self):
         import asyncio

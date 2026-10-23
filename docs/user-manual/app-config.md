@@ -13,7 +13,7 @@ The configuration editor displays all application settings in a table with four 
 | **Key** | The internal configuration key name (monospace font) |
 | **Description** | A short explanation of what the setting controls |
 | **Value** | The current value, shown read-only until edited |
-| **Actions** | Buttons to edit, save, or reset the value |
+| **Actions** | Buttons to edit, save, reset, clear or delete the value |
 
 ## Searching
 
@@ -42,6 +42,14 @@ While a value is being edited or has been changed, the row is highlighted and th
 Each value is saved individually. There is no global "save all" button.
 
 A success or error notification appears after each save attempt.
+
+## Clearing hidden values
+
+Values such as shared API keys are hidden: the input shows "(set but hidden)" or "(not set)" instead of the value. To remove a hidden value, click the **eraser icon** and confirm. The value is saved as empty and shown as "(not set)". If the value was originally taken from an environment variable, that variable applies again on the next server start.
+
+## Deleting plugin settings
+
+Settings whose key starts with `plugin.` have a red **trash icon**. Deleting a setting removes it together with its type, allowed values and description. The plugin creates it again with its default value (or the environment variable) on the next server start; until then, the setting has no value, which can make the plugin, or the application, misbehave. A warning has to be confirmed before the setting is deleted. Core settings cannot be deleted.
 
 ## Notes
 

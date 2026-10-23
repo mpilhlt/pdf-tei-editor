@@ -84,6 +84,36 @@
  */
 
 /**
+ * @typedef {Object} AvailablePlugin
+ * @property {string} id
+ * @property {string} repository - GitHub repository (owner/repo)
+ * @property {string} description
+ * @property {string} index_version - Version listed in the repository's pte-plugins.json
+ * @property {string=} latest_version - Version of the newest installable release
+ * @property {string=} latest_tag
+ * @property {Array<string>} versions - Versions of all installable releases, newest first
+ * @property {string=} installed_version
+ * @property {string=} installed_source - "site" (installed in the plugin manager), "external", "builtin" or null
+ * @property {Array<string>} requires - Ids of the plugins it requires
+ * @property {Array<string>} unmet_requirements - Python requirements that prevent a runtime install; the plugin must be installed with uv sync
+ * @property {Array<string>} install_packages - Missing Python requirements that are installed with the plugin (PTE_PLUGIN_INSTALL_DEPENDENCIES)
+ * @property {boolean} trusted - Whether the repository belongs to a trusted owner (PTE_PLUGIN_TRUSTED_OWNERS)
+ * @property {boolean} compatible
+ * @property {string=} incompatible_reason
+ * @property {boolean} installable
+ * @property {boolean} update_available
+ */
+
+/**
+ * @typedef {Object} AvailablePluginsResponse
+ * @property {Array<AvailablePlugin>} plugins
+ * @property {Object<string, string>} errors - Error messages by repository that could not be read
+ * @property {number} fetched_at
+ * @property {Array<string>} trusted_owners
+ * @property {boolean} trusted_only
+ */
+
+/**
  * @typedef {Object} AutocompleteDataRequest
  * @property {string} xml_string - XML document containing schema reference
  * @property {boolean=} invalidate_cache - Whether to invalidate cache and re-download schema
@@ -132,11 +162,6 @@
  */
 
 /**
- * @typedef {Object} Body_restore_backup_api_plugins_backup_restore_restore_post
- * @property {string} file
- */
-
-/**
  * @typedef {Object} Body_upload_file_api_v1_files_upload_post
  * @property {string=} collection_id
  * @property {string} file
@@ -159,6 +184,7 @@
  * @property {Object<string, any>} changed
  * @property {Object<string, any>} errors
  * @property {boolean} reload_required
+ * @property {number} generation
  */
 
 /**
@@ -222,6 +248,11 @@
 
 /**
  * @typedef {Object} ConfigSetResponse
+ * @property {string} result
+ */
+
+/**
+ * @typedef {Object} ConfigDeleteResponse
  * @property {string} result
  */
 
@@ -416,7 +447,7 @@
  * @property {number} files_deleted
  * @property {number} storage_freed
  * @property {number=} orphaned_xml_deleted
- * @property {number=} grobid_cache_deleted
+ * @property {Object<string, number>=} plugin_items_deleted
  * @property {number=} annotation_rules_cache_deleted
  */
 
@@ -449,6 +480,32 @@
  */
 
 /**
+ * @typedef {Object} InstallErrorDetail
+ * @property {string} code - "not_installable", "unmet_requirements" or "confirmation_required"
+ * @property {string} message
+ * @property {Array<string>=} unmet - Requirements the server environment does not satisfy
+ * @property {string=} repository
+ */
+
+/**
+ * @typedef {Object} InstallRequest
+ * @property {string} repository - GitHub repository (owner/repo)
+ * @property {string} id - Plugin id
+ * @property {string=} version - Release version (default: the latest)
+ * @property {string=} confirm - The repository name, required for untrusted repositories
+ */
+
+/**
+ * @typedef {Object} InstallResult
+ * @property {string} plugin
+ * @property {string} version
+ * @property {string} action - "install", "upgrade" or "remove"
+ * @property {boolean} restart_required
+ * @property {number} generation
+ * @property {Array<string>} packages - Python packages installed with the plugin (name==version)
+ */
+
+/**
  * @typedef {Object} ListResourcesRequest
  * @property {string} xml_string
  */
@@ -475,6 +532,18 @@
 /**
  * @typedef {Object} LogoutResponse
  * @property {string} status
+ */
+
+/**
+ * @typedef {Object} DataRestoreInfo
+ * @property {string} id
+ * @property {string} applied_at
+ */
+
+/**
+ * @typedef {Object} MaintenanceStatus
+ * @property {(DataRestoreInfo | null)} data_restore
+ * @property {(number | null)} plugins_version
  */
 
 /**
@@ -539,6 +608,14 @@
  */
 
 /**
+ * @typedef {Object} PropagationInfo
+ * @property {number} generation
+ * @property {number} workers
+ * @property {number} pending
+ * @property {number} restart_pending - Workers that still run code replaced by an upgrade or removal
+ */
+
+/**
  * @typedef {Object} PluginAdminInfo
  * @property {string} id
  * @property {string} name
@@ -553,7 +630,11 @@
  * @property {boolean} protected
  * @property {Array<string>} dependencies
  * @property {Array<string>} dependents
- * @property {string} source
+ * @property {string} source - "builtin", "external" or "site" (installed in the plugin manager)
+ * @property {string=} installed_version
+ * @property {string=} installed_from - repository@tag of a plugin installed in the plugin manager
+ * @property {boolean} removable
+ * @property {boolean} restart_pending - An upgrade or removal of the plugin waits for a restart
  * @property {string} readme_url
  * @property {boolean} has_routes
  * @property {boolean} has_frontend_extension
@@ -563,6 +644,9 @@
 /**
  * @typedef {Object} PluginAdminListResponse
  * @property {Array<PluginAdminInfo>} plugins
+ * @property {PropagationInfo} propagation
+ * @property {boolean} install_enabled - Whether the operator enabled runtime install (PTE_PLUGIN_INSTALL)
+ * @property {boolean} restart_supported - Whether the server can restart its workers itself
  */
 
 /**
@@ -634,6 +718,11 @@
  */
 
 /**
+ * @typedef {Object} SecretsDeleteAllResponse
+ * @property {number} removed - Number of keys that were removed
+ */
+
+/**
  * @typedef {Object} QueryResourceRequest
  * @property {string} kind
  * @property {string} url
@@ -679,6 +768,11 @@
  * @property {Array<RefTargetModel>} refs
  * @property {boolean} changed
  * @property {string} message
+ */
+
+/**
+ * @typedef {Object} RestartResult
+ * @property {boolean} restarting
  */
 
 /**
@@ -934,28 +1028,6 @@
  */
 
 /**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractRequest
- * @property {string} model
- * @property {string} prompt
- * @property {string=} stable_id
- * @property {string=} text_input
- * @property {Object<string, any>=} json_schema
- * @property {number=} temperature
- * @property {number=} max_retries
- */
-
-/**
- * @typedef {Object} fastapi_app__plugins__kisski__routes__ExtractResponse
- * @property {boolean} success
- * @property {Object<string, any>=} data
- * @property {string=} error
- * @property {string=} raw_response
- * @property {string} model
- * @property {string} extractor
- * @property {number=} retries
- */
-
-/**
  * API Client for FastAPI v1 endpoints
  *
  * This client wraps the callApi function to provide typed methods for all API endpoints.
@@ -1047,7 +1119,7 @@ export class ApiClientV1 {
 
   /**
    * Set a configuration value.
-   * Requires authentication.
+   * Requires the admin role.
    *
    * @param {ConfigSetRequest} requestBody
    * @returns {Promise<ConfigSetResponse>}
@@ -1055,6 +1127,18 @@ export class ApiClientV1 {
   async configSet(requestBody) {
     const endpoint = `/config/set`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete a plugin configuration value together with its type, allowed values and description.
+   * Requires the admin role. Only keys starting with "plugin." can be deleted.
+   *
+   * @param {string} key
+   * @returns {Promise<ConfigDeleteResponse>}
+   */
+  async configDelete(key) {
+    const endpoint = `/config/${key}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**
@@ -1775,6 +1859,17 @@ export class ApiClientV1 {
   }
 
   /**
+   * Remove all API keys of the current user, including those of services that are no longer
+   * registered. Other users' keys are not affected.
+   *
+   * @returns {Promise<SecretsDeleteAllResponse>}
+   */
+  async secretsDeleteAll() {
+    const endpoint = `/secrets`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
    * The installation-wide default model set by an admin, or null if none is set.
    *
    * @returns {Promise<(DefaultModelResponse | null)>}
@@ -2353,6 +2448,20 @@ export class ApiClientV1 {
   }
 
   /**
+   * Server-side state that the loaded frontend depends on; no authentication required.
+   *
+   * Clients compare it with the value at page load and reload when it changes:
+   * `data_restore` changes when a backup has been restored, `plugins_version` when the
+   * plugins were changed (it is null while the workers still have to restart).
+   *
+   * @returns {Promise<MaintenanceStatus>}
+   */
+  async maintenanceStatus() {
+    const endpoint = `/maintenance/status`
+    return this.callApi(endpoint, 'GET');
+  }
+
+  /**
    * Force all clients to reload the page.
    *
    * @returns {Promise<any>}
@@ -2394,6 +2503,52 @@ export class ApiClientV1 {
   async pluginsAdminDisable(plugin_id, requestBody) {
     const endpoint = `/plugins/admin/${plugin_id}/disable`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List the plugins that can be installed from the plugin repositories (cached for an hour unless refresh is set).
+   *
+   * @param {Object=} params - Query parameters
+   * @param {boolean=} params.refresh
+   * @returns {Promise<AvailablePluginsResponse>}
+   */
+  async pluginsAdminAvailable(params) {
+    const endpoint = `/plugins/admin/available`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * Install or upgrade a plugin from a release of a plugin repository.
+   * A new plugin is installed disabled. Refusals have a structured detail (InstallErrorDetail).
+   *
+   * @param {InstallRequest} requestBody
+   * @returns {Promise<InstallResult>}
+   */
+  async pluginsAdminInstall(requestBody) {
+    const endpoint = `/plugins/admin/install`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Remove a plugin installed in the plugin manager; its files are deleted at the next restart.
+   *
+   * @param {string} plugin_id
+   * @param {ChangeRequest} requestBody
+   * @returns {Promise<InstallResult>}
+   */
+  async pluginsAdminRemove(plugin_id, requestBody) {
+    const endpoint = `/plugins/admin/${plugin_id}/remove`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Restart the server's worker processes one after the other, to apply plugin upgrades and removals.
+   *
+   * @returns {Promise<RestartResult>}
+   */
+  async pluginsAdminRestart() {
+    const endpoint = `/plugins/admin/restart`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

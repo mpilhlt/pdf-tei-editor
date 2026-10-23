@@ -33,7 +33,6 @@ DEPLOY_REBUILD=true            # Build image if needed
 
 # Container Environment
 LOG_LEVEL=INFO
-# GEMINI_API_KEY=your-key-here
 ```
 
 Run with:
@@ -67,8 +66,7 @@ APP_DEMO_PASSWORD=secure-demo-password
 
 # Container Environment
 LOG_LEVEL=WARNING
-GEMINI_API_KEY=your-gemini-api-key
-GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+SECRETS_ENCRYPTION_KEY=your-fernet-key
 ```
 
 Run with:
@@ -127,13 +125,21 @@ These variables are passed to the running container:
 - Admin: `admin` / `APP_ADMIN_PASSWORD` (full access)
 - Demo: `demo` / `APP_DEMO_PASSWORD` (user, annotator, reviewer)
 
-#### AI/ML Services (Optional)
+#### API Keys and Plugins (Optional)
+
+API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as environment variables. Each user enters their own keys in the web interface (user menu > API Keys); they are stored encrypted in `data/db/secrets.db` and can be managed with `bin/user-secrets.py` (see [CLI](cli.md#user-api-keys)).
 
 | Variable | Description |
-|----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI extraction |
-| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing |
-| `KISSKI_API_KEY` | KISSKI Academic Cloud API key |
+| --- | --- |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the stored API keys. Set it in production and keep it. Without it, the key is generated in `data/db/secrets.key`, next to the encrypted keys, so every copy of the data directory (backups, the volume) can decrypt them |
+| `PTE_PLUGIN_INSTALL` | Allow administrators to install plugins from GitHub releases (off by default) |
+| `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
+| `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
+| `PTE_PLUGIN_TRUSTED_ONLY` | Hide and refuse plugins of untrusted owners |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | Install the missing Python packages of a plugin with it (from PyPI) |
+| `GITHUB_TOKEN` | Raises the GitHub API rate limit for plugin discovery |
+
+See [Plugins in the image](#plugins-in-the-image). `.env.production` documents the plugin system variables. The settings of individual plugins (such as `GROBID_SERVER_URL`) are described in each plugin's README.
 
 #### Application Settings
 
@@ -142,12 +148,34 @@ These variables are passed to the running container:
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `LOG_CATEGORIES` | Log categories | `app,api,plugins` |
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
-| `WEBDAV_ENABLED` | Enable WebDAV integration | `false` |
-| `WEBDAV_BASE_URL` | WebDAV server URL | - |
+| `WEBDAV_ENABLED` | Enable WebDAV integration (`webdav-sync` plugin) | `false` |
+| `WEBDAV_BASE_URL` | WebDAV server URL (`webdav-sync` plugin) | - |
 | `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 
 See `.env.production` for complete list.
+
+### Plugins in the image
+
+Most plugins are maintained in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) repository and installed into the image as Python packages when it is built. The build argument `PTE_PLUGIN_EXTRAS` selects them by the names of the optional dependencies in `pyproject.toml`:
+
+| Value | Plugins |
+| --- | --- |
+| `default` (default) | GROBID, LLamore, Google Gemini, Anthropic Claude, metadata extraction, annotation review, and the analytics plugins (edit history, annotation progress, collection overview, revision feed) |
+| `analytics` | the analytics plugins only |
+| a plugin name, e.g. `kisski` or `webdav-sync` | that plugin and the plugins it requires |
+| `all` | all plugins of the repository |
+| empty | none |
+
+Several values are separated by commas:
+
+```bash
+docker build --build-arg PTE_PLUGIN_EXTRAS=default,kisski,webdav-sync -t pdf-tei-editor .
+# or with the deployment script
+PTE_PLUGIN_EXTRAS=default,kisski node scripts/deploy/container.js build
+```
+
+The plugin versions are pinned in `uv.lock`, so an image always contains the plugin versions of its release.
 
 ### External Plugins
 
@@ -161,6 +189,28 @@ docker run ... \
 ```
 
 Every directory below `/opt/pte-plugins` (up to three levels deep) that contains a `plugin.py` and a `pte-plugin.json` manifest is loaded as one plugin and shows up as "external" in the Plugin Manager. External plugins can only use Python packages that are installed in the image.
+
+### Runtime Plugin Install
+
+Administrators can install and upgrade plugins from GitHub releases in the [Plugin Manager](plugin-manager.md#installing-plugins) if the operator enables it. A plugin runs with access to all documents, users and secrets of the instance, so this is off by default and controlled by environment variables, which an administrator account cannot change:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `PTE_PLUGIN_INSTALL` | `1` enables discovering and installing plugins at runtime | off |
+| `PTE_PLUGIN_SOURCES` | Comma-separated `owner/repo` list of plugin repositories that are always listed | `mpilhlt/pte-plugins` |
+| `PTE_PLUGIN_DISCOVER_TOPIC` | GitHub topic searched for further plugin repositories; empty disables the search | `pte-plugin` |
+| `PTE_PLUGIN_TRUSTED_OWNERS` | Comma-separated GitHub owners whose plugins are trusted; installing other plugins requires typing the repository name | `mpilhlt` |
+| `PTE_PLUGIN_TRUSTED_ONLY` | `1` hides and refuses plugins of other owners | off |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | `1` also installs the Python packages a plugin needs and the image lacks, from PyPI into the plugin's directory | off |
+| `GITHUB_TOKEN` | Optional token that raises the GitHub API rate limit | - |
+
+For example, a deployment that installs from a fork of the plugin repository sets `PTE_PLUGIN_SOURCES=myorg/pte-plugins` and `PTE_PLUGIN_TRUSTED_OWNERS=mpilhlt,myorg`.
+
+- The container needs outbound HTTPS access to `api.github.com`, `raw.githubusercontent.com` and `github.com` release downloads.
+- Installed plugins are unpacked into `data/plugins/site/`, which lies in the data volume: they survive recreating the container. A plugin installed at runtime takes precedence over the version built into the image. To return to the image's version, remove it in the Plugin Manager.
+- Without `PTE_PLUGIN_INSTALL_DEPENDENCIES=1`, only plugins whose Python dependencies are installed in the image can be installed at runtime; others need `PTE_PLUGIN_EXTRAS`. With it, the missing packages are resolved with `uv` while every package of the image stays at its installed version, and installed into the plugin's directory in `data/plugins/site/` (they are deleted with the plugin). A plugin that needs another version of a package of the image is refused. The container then also needs access to `pypi.org` and `files.pythonhosted.org`.
+- Upgrades and removals of plugins in use take effect when the server processes restart ("Apply plugin changes", which sends `SIGHUP` to the uvicorn supervisor started by `bin/start-prod`).
+- All plugin changes are logged to `data/db/plugin-audit.jsonl`.
 
 ## Data Persistence
 
@@ -181,6 +231,7 @@ Data persists in the mounted `DEPLOY_DATA_DIR` directory:
 │   ├── metadata.db
 │   ├── users.json
 │   └── roles.json
+├── plugins/        # plugin data, and plugins installed in the Plugin Manager (site/)
 └── versions/       # File version history
 ```
 
@@ -205,7 +256,7 @@ npm run deploy .env.deploy.example.org
 - ✅ Use HTTPS with valid SSL certificate
 - ✅ Set `LOG_LEVEL=WARNING` or `ERROR`
 - ✅ Secure the data directory with proper file permissions
-- ✅ Keep API keys in environment variables, not config files
+- ✅ Set and back up `SECRETS_ENCRYPTION_KEY`; users enter API keys in the key store, not in environment variables
 - ✅ Use firewall rules to limit access
 
 ### Password Generation
@@ -321,7 +372,7 @@ docker run -p 8000:8000 \
 docker run -p 8000:8000 \
   -v /opt/pdf-tei-editor/data:/app/data \
   -e APP_ADMIN_PASSWORD=secure_password \
-  -e GEMINI_API_KEY=your_key \
+  -e SECRETS_ENCRYPTION_KEY=your_fernet_key \
   cboulanger/pdf-tei-editor:latest
 ```
 
@@ -339,7 +390,7 @@ services:
     environment:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo_password
-      - GEMINI_API_KEY=your_gemini_api_key
+      - SECRETS_ENCRYPTION_KEY=your_fernet_key
     volumes:
       - pdf_data:/app/data
 

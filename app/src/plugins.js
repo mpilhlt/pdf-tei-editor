@@ -44,7 +44,6 @@ import {
   TeiHeaderEditorPlugin,
   TeiToolsPlugin,
   TeiValidationPlugin,
-  TeiWizardPlugin,
   ToolbarPlugin,
   ToolsPlugin,
   UrlHashStatePlugin,
@@ -78,7 +77,7 @@ const plugins = [
 
   // Tools menu — Administration section (admin only, order determines item order)
   FiledataPlugin,      // Garbage Collection
-  RbacManagerPlugin,   // Manage Users & Roles
+  RbacManagerPlugin,   // Manage Access & Projects
   ConfigEditorPlugin,  // Configuration Editor
   PluginAdminPlugin,   // Manage Plugins
 
@@ -100,7 +99,6 @@ const plugins = [
   ToolsPlugin,
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
-  TeiWizardPlugin,
   TeiValidationPlugin,
   DiagnosticsDrawerPlugin, // lists editor diagnostics in a drawer over the PDF viewer
   MoveFilesPlugin,

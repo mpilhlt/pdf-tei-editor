@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from pathlib import Path
 from lxml import etree  # type: ignore
 from lxml.etree import XMLSyntaxError
@@ -42,13 +42,31 @@ SCHEMA_CACHE_TTL_SECONDS = 3600
 # submissions from being a cheap way to fill disk.
 MAX_SCHEMA_OVERRIDE_BYTES = 5 * 1024 * 1024
 
-# Known schemas with special handling requirements
-SCHEMA_CONFIG = {
-    "https://raw.githubusercontent.com/kermitt2/grobid/refs/heads/master/grobid-home/schemas/rng/Grobid.rng": {
-        "timeout": 10,  # Reduced timeout for complex schemas
-        "reason": "Grobid RelaxNG schema is complex and may be slow"
-    }
-}
+# Schemas with special handling requirements, registered by the plugins that
+# use them; see register_schema_config(). Maps a schema URL to its settings.
+_SCHEMA_CONFIG: Dict[str, Dict[str, Any]] = {}
+
+
+def register_schema_config(schema_location: str, timeout: float, reason: str = "") -> None:
+    """
+    Register special validation settings for a schema.
+
+    Complex schemas can take long to compile and validate. A plugin that
+    produces documents with such a schema calls this from `initialize()` to
+    validate them with a shorter timeout than the default.
+
+    Args:
+        schema_location: The exact schema URL that documents reference
+        timeout: Validation timeout in seconds
+        reason: Why the schema needs the setting (logged at debug level)
+    """
+    _SCHEMA_CONFIG[schema_location] = {"timeout": timeout, "reason": reason}
+
+
+def unregister_schema_config(schema_location: str) -> None:
+    """Remove previously registered schema settings (e.g. on plugin cleanup)."""
+    _SCHEMA_CONFIG.pop(schema_location, None)
+
 
 # Redirects for schema URLs that have permanently moved (e.g. a renamed GitHub
 # repository, whose Pages site does not itself serve HTTP redirects). Maps an
@@ -478,8 +496,8 @@ def validate(
 
         # Check for schema-specific configuration
         validation_timeout = VALIDATION_TIMEOUT
-        if schema_location in SCHEMA_CONFIG:
-            schema_config = SCHEMA_CONFIG[schema_location]
+        if schema_location in _SCHEMA_CONFIG:
+            schema_config = _SCHEMA_CONFIG[schema_location]
             validation_timeout = schema_config.get("timeout", VALIDATION_TIMEOUT)
             logger.debug(
                 f"Using custom timeout {validation_timeout}s for {schema_location}: "

@@ -35,7 +35,7 @@ from fastapi_app.lib.utils.data_utils import get_data_file_path
 
 MASKED_SENTINEL = "****"
 
-_METADATA_SUFFIXES = ('.type', '.values', '.description', '.masked')
+METADATA_SUFFIXES = ('.type', '.values', '.description', '.masked')
 
 
 # Platform-specific imports for file locking
@@ -141,17 +141,19 @@ class Config:
         """Return metadata dict with type, values, description for key."""
         return get_config_metadata(key, self.db_dir)
 
-    def delete(self, key: str) -> tuple[bool, str]:
+    def delete(self, key: str, with_metadata: bool = False) -> tuple[bool, str]:
         """
         Delete a configuration key.
 
         Args:
             key: The configuration key to delete
+            with_metadata: When True, also delete the key's .type, .values and .description entries
+                (.masked is kept, see delete_config_value())
 
         Returns:
             Tuple of (success: bool, message: str)
         """
-        return delete_config_value(key, self.db_dir)
+        return delete_config_value(key, self.db_dir, with_metadata=with_metadata)
 
     def load(self, apply_masks: bool = False) -> dict:
         """
@@ -194,8 +196,9 @@ def load_full_config(db_dir: Path, apply_masks: bool = False) -> dict:
 
     if apply_masks:
         for key in list(data.keys()):
-            if not key.endswith(_METADATA_SUFFIXES):
-                if data.get(f"{key}.masked") is True:
+            if not key.endswith(METADATA_SUFFIXES):
+                # An empty masked value stays empty, so that the editor shows it as not set
+                if data.get(f"{key}.masked") is True and data[key] not in (None, ""):
                     data[key] = MASKED_SENTINEL
 
     return data
@@ -216,7 +219,7 @@ def get_config_value(key: str, db_dir: Path, default: Any = None, apply_masks: b
     """
     try:
         config_data = load_full_config(db_dir)
-        if apply_masks and config_data.get(f"{key}.masked") is True:
+        if apply_masks and config_data.get(f"{key}.masked") is True and config_data.get(key) not in (None, ""):
             return MASKED_SENTINEL
         return config_data.get(key, default)
     except (FileNotFoundError, ValueError):
@@ -356,13 +359,16 @@ def set_config_value(
         return False, str(e)
 
 
-def delete_config_value(key: str, db_dir: Path) -> tuple[bool, str]:
+def delete_config_value(key: str, db_dir: Path, with_metadata: bool = False) -> tuple[bool, str]:
     """
     Delete a configuration key with thread-safe file locking.
 
     Args:
         key: The configuration key to delete
         db_dir: Path to the database directory containing config.json
+        with_metadata: When True, also delete the key's .type, .values and .description entries in the
+            same write. The .masked flag is kept, so that a secret that is set again later (by the
+            plugin's registration or an environment variable) stays hidden.
 
     Returns:
         Tuple of (success: bool, message: str)
@@ -389,6 +395,9 @@ def delete_config_value(key: str, db_dir: Path) -> tuple[bool, str]:
                     return False, f"Key '{key}' not found"
 
                 del config_data[key]
+                if with_metadata:
+                    for suffix in ('.type', '.values', '.description'):
+                        config_data.pop(f"{key}{suffix}", None)
 
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')
                 try:

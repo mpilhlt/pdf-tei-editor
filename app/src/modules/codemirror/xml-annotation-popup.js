@@ -38,6 +38,21 @@ function resolvePopupTitle(tagDef, element) {
   return `${tagDef.tag}[${parts.map(([name, value]) => `${name}=${value}`).join(',')}]`;
 }
 
+const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+
+/**
+ * Sets an attribute by its qualified name as given in a tag definition. An
+ * `xml:`-prefixed name (e.g. `xml:lang`) is created in the XML namespace, so
+ * the result is the same attribute a parsed `xml:lang="…"` would be.
+ * @param {Element} element
+ * @param {string} name - Qualified attribute name, e.g. `level` or `xml:lang`
+ * @param {string} value
+ */
+export function setPopupAttribute(element, name, value) {
+  if (name.startsWith('xml:')) element.setAttributeNS(XML_NS, name, value);
+  else element.setAttribute(name, value);
+}
+
 /**
  * Merges `element` into its nearest preceding element sibling: element's children and all
  * nodes that sit between the sibling and element (text nodes, etc.) are appended in order to
@@ -528,7 +543,7 @@ export class XmlAnnotationPopup {
           if (this.#readOnly) return;
           const live = this.#resolveElement(from);
           if (!live) return;
-          live.setAttribute(attr.name, /** @type {any} */ (sel).value);
+          setPopupAttribute(live, attr.name, /** @type {any} */ (sel).value);
           await this.#editor.updateEditorFromNode(live);
         });
         row.appendChild(sel);
@@ -544,7 +559,7 @@ export class XmlAnnotationPopup {
           const live = this.#resolveElement(from);
           if (!live) return;
           const newVal = /** @type {any} */ (input).value;
-          if (newVal) live.setAttribute(attr.name, newVal);
+          if (newVal) setPopupAttribute(live, attr.name, newVal);
           else live.removeAttribute(attr.name);
           await this.#editor.updateEditorFromNode(live);
         });

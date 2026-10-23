@@ -30,6 +30,10 @@ class PluginRecord:
     manifest: PluginManifest | None = None
     error: str | None = None
     initialized: bool = False
+    # Installed at runtime and not imported yet: plugin is None until load_deferred()
+    deferred: bool = False
+    # Installed at runtime into data/plugins/site/
+    site: bool = False
 
     @property
     def dependencies(self) -> list[str]:
@@ -84,7 +88,13 @@ class PluginRegistry:
         record.load_status = "incompatible"
         return record
 
-    def discover_plugins(self, plugin_dirs: list[Path], builtin_dir: Path | None = None) -> None:
+    def discover_plugins(
+        self,
+        plugin_dirs: list[Path],
+        builtin_dir: Path | None = None,
+        deferred: dict[Path, PluginRecord] | None = None,
+        site_dirs: set[Path] | None = None,
+    ) -> None:
         """
         Discover plugins from the specified directories.
 
@@ -101,6 +111,9 @@ class PluginRegistry:
         Args:
             plugin_dirs: List of directories to search for plugins
             builtin_dir: Directory of built-in plugins; plugins elsewhere are marked external
+            deferred: Records for plugin directories (resolved) that are listed but not
+                imported (disabled runtime-installed plugins, see load_deferred())
+            site_dirs: Resolved directories of runtime-installed plugins
         """
         pending_plugins: list[Plugin] = []
 
@@ -122,11 +135,16 @@ class PluginRegistry:
                 candidates = [p for p in sorted(plugin_dir.iterdir()) if (p / "plugin.py").is_file()]
 
             for plugin_path in candidates:
+                resolved = plugin_path.resolve()
                 record = self._check_manifest(plugin_path)
-                if record is None:
+                if record is None and deferred and resolved in deferred:
+                    record = deferred[resolved]
+                    record.directory = plugin_path
+                elif record is None:
                     record = self._load_plugin(plugin_path, plugin_path / "plugin.py")
                 record.manifest = self._manifests.get(plugin_path)
                 record.external = is_external
+                record.site = bool(site_dirs and resolved in site_dirs)
                 self._records.setdefault(record.id, record)
                 if record.load_status == "ok" and record.plugin is not None:
                     pending_plugins.append(record.plugin)
@@ -256,7 +274,8 @@ class PluginRegistry:
         plugin_map = {p.metadata["id"]: p for p in plugins}
         for pid, p in plugin_map.items():
             self._records.setdefault(pid, PluginRecord(id=pid, metadata=p.metadata, plugin=p))
-        registered: set[str] = set()
+        # plugins registered earlier (when a plugin is loaded after startup) satisfy dependencies
+        registered: set[str] = set(self._plugins)
 
         def register_plugin(plugin_id: str, path: list[str]) -> bool:
             """
@@ -280,6 +299,8 @@ class PluginRegistry:
                 return False
 
             if plugin_id not in plugin_map:
+                if plugin_id in self._plugins:
+                    return True
                 logger.error(f"Missing dependency: {plugin_id}")
                 return False
 
@@ -318,6 +339,52 @@ class PluginRegistry:
         # Register all plugins
         for plugin_id in plugin_map:
             register_plugin(plugin_id, [])
+
+    # ---- plugins installed or loaded after startup -------------------------------
+
+    def add_deferred(self, record: PluginRecord) -> None:
+        """
+        List a runtime-installed plugin without importing it (see load_deferred()).
+
+        The manifest is read and checked; an incompatible plugin is recorded as such.
+        """
+        record.deferred = True
+        if record.directory is not None:
+            failed = self._check_manifest(record.directory)
+            if failed is not None:
+                failed.id, failed.metadata, failed.site = record.id, record.metadata, record.site
+                self._records[record.id] = failed
+                return
+            record.manifest = self._manifests.get(record.directory)
+        self._records[record.id] = record
+
+    def load_deferred(self, plugin_id: str) -> PluginRecord:
+        """
+        Import and register a plugin that was listed with add_deferred().
+
+        Its dependencies must be registered already. On failure the record is marked failed.
+
+        Returns:
+            The new record (load_status "ok" when the plugin was registered)
+        """
+        old = self._records[plugin_id]
+        if not old.deferred or old.directory is None:
+            return old
+        record = self._load_plugin(old.directory, old.directory / "plugin.py")
+        record.manifest, record.external, record.site = old.manifest, old.external, old.site
+        if record.load_status == "ok" and record.id != plugin_id:
+            record = self._failed_record(old.directory, f"Plugin id {record.id} does not match the installed id {plugin_id}")
+            record.id = plugin_id
+        self._records[plugin_id] = record
+        if record.load_status == "ok" and record.plugin is not None:
+            self._register_with_dependencies([record.plugin])
+        return record
+
+    def remove_record(self, plugin_id: str) -> None:
+        """Forget a plugin that was never imported (a removed deferred plugin)."""
+        record = self._records.get(plugin_id)
+        if record is not None and record.plugin is None:
+            del self._records[plugin_id]
 
     # ---- status, graph and change planning -------------------------------------
 

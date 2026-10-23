@@ -89,56 +89,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bcrypt"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bb/5d/6d7433e0f3cd46ce0b43cd65e1db465ea024dbb8216fb2404e919c2ad77b/bcrypt-4.3.0.tar.gz", hash = "sha256:3a3fd2204178b6d2adcf09cb4f6426ffef54762577a7c9b54c159008cb288c18", size = 25697, upload-time = "2025-02-28T01:24:09.174Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/2c/3d44e853d1fe969d229bd58d39ae6902b3d924af0e2b5a60d17d4b809ded/bcrypt-4.3.0-cp313-cp313t-macosx_10_12_universal2.whl", hash = "sha256:f01e060f14b6b57bbb72fc5b4a83ac21c443c9a2ee708e04a10e9192f90a6281", size = 483719, upload-time = "2025-02-28T01:22:34.539Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/e2/58ff6e2a22eca2e2cff5370ae56dba29d70b1ea6fc08ee9115c3ae367795/bcrypt-4.3.0-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c5eeac541cefd0bb887a371ef73c62c3cd78535e4887b310626036a7c0a817bb", size = 272001, upload-time = "2025-02-28T01:22:38.078Z" },
-    { url = "https://files.pythonhosted.org/packages/37/1f/c55ed8dbe994b1d088309e366749633c9eb90d139af3c0a50c102ba68a1a/bcrypt-4.3.0-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:59e1aa0e2cd871b08ca146ed08445038f42ff75968c7ae50d2fdd7860ade2180", size = 277451, upload-time = "2025-02-28T01:22:40.787Z" },
-    { url = "https://files.pythonhosted.org/packages/d7/1c/794feb2ecf22fe73dcfb697ea7057f632061faceb7dcf0f155f3443b4d79/bcrypt-4.3.0-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:0042b2e342e9ae3d2ed22727c1262f76cc4f345683b5c1715f0250cf4277294f", size = 272792, upload-time = "2025-02-28T01:22:43.144Z" },
-    { url = "https://files.pythonhosted.org/packages/13/b7/0b289506a3f3598c2ae2bdfa0ea66969812ed200264e3f61df77753eee6d/bcrypt-4.3.0-cp313-cp313t-manylinux_2_28_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:74a8d21a09f5e025a9a23e7c0fd2c7fe8e7503e4d356c0a2c1486ba010619f09", size = 289752, upload-time = "2025-02-28T01:22:45.56Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/24/d0fb023788afe9e83cc118895a9f6c57e1044e7e1672f045e46733421fe6/bcrypt-4.3.0-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:0142b2cb84a009f8452c8c5a33ace5e3dfec4159e7735f5afe9a4d50a8ea722d", size = 277762, upload-time = "2025-02-28T01:22:47.023Z" },
-    { url = "https://files.pythonhosted.org/packages/e4/38/cde58089492e55ac4ef6c49fea7027600c84fd23f7520c62118c03b4625e/bcrypt-4.3.0-cp313-cp313t-manylinux_2_34_aarch64.whl", hash = "sha256:12fa6ce40cde3f0b899729dbd7d5e8811cb892d31b6f7d0334a1f37748b789fd", size = 272384, upload-time = "2025-02-28T01:22:49.221Z" },
-    { url = "https://files.pythonhosted.org/packages/de/6a/d5026520843490cfc8135d03012a413e4532a400e471e6188b01b2de853f/bcrypt-4.3.0-cp313-cp313t-manylinux_2_34_x86_64.whl", hash = "sha256:5bd3cca1f2aa5dbcf39e2aa13dd094ea181f48959e1071265de49cc2b82525af", size = 277329, upload-time = "2025-02-28T01:22:51.603Z" },
-    { url = "https://files.pythonhosted.org/packages/b3/a3/4fc5255e60486466c389e28c12579d2829b28a527360e9430b4041df4cf9/bcrypt-4.3.0-cp313-cp313t-musllinux_1_1_aarch64.whl", hash = "sha256:335a420cfd63fc5bc27308e929bee231c15c85cc4c496610ffb17923abf7f231", size = 305241, upload-time = "2025-02-28T01:22:53.283Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/15/2b37bc07d6ce27cc94e5b10fd5058900eb8fb11642300e932c8c82e25c4a/bcrypt-4.3.0-cp313-cp313t-musllinux_1_1_x86_64.whl", hash = "sha256:0e30e5e67aed0187a1764911af023043b4542e70a7461ad20e837e94d23e1d6c", size = 309617, upload-time = "2025-02-28T01:22:55.461Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/1f/99f65edb09e6c935232ba0430c8c13bb98cb3194b6d636e61d93fe60ac59/bcrypt-4.3.0-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:3b8d62290ebefd49ee0b3ce7500f5dbdcf13b81402c05f6dafab9a1e1b27212f", size = 335751, upload-time = "2025-02-28T01:22:57.81Z" },
-    { url = "https://files.pythonhosted.org/packages/00/1b/b324030c706711c99769988fcb694b3cb23f247ad39a7823a78e361bdbb8/bcrypt-4.3.0-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:2ef6630e0ec01376f59a006dc72918b1bf436c3b571b80fa1968d775fa02fe7d", size = 355965, upload-time = "2025-02-28T01:22:59.181Z" },
-    { url = "https://files.pythonhosted.org/packages/aa/dd/20372a0579dd915dfc3b1cd4943b3bca431866fcb1dfdfd7518c3caddea6/bcrypt-4.3.0-cp313-cp313t-win32.whl", hash = "sha256:7a4be4cbf241afee43f1c3969b9103a41b40bcb3a3f467ab19f891d9bc4642e4", size = 155316, upload-time = "2025-02-28T01:23:00.763Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/52/45d969fcff6b5577c2bf17098dc36269b4c02197d551371c023130c0f890/bcrypt-4.3.0-cp313-cp313t-win_amd64.whl", hash = "sha256:5c1949bf259a388863ced887c7861da1df681cb2388645766c89fdfd9004c669", size = 147752, upload-time = "2025-02-28T01:23:02.908Z" },
-    { url = "https://files.pythonhosted.org/packages/11/22/5ada0b9af72b60cbc4c9a399fdde4af0feaa609d27eb0adc61607997a3fa/bcrypt-4.3.0-cp38-abi3-macosx_10_12_universal2.whl", hash = "sha256:f81b0ed2639568bf14749112298f9e4e2b28853dab50a8b357e31798686a036d", size = 498019, upload-time = "2025-02-28T01:23:05.838Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/8c/252a1edc598dc1ce57905be173328eda073083826955ee3c97c7ff5ba584/bcrypt-4.3.0-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:864f8f19adbe13b7de11ba15d85d4a428c7e2f344bac110f667676a0ff84924b", size = 279174, upload-time = "2025-02-28T01:23:07.274Z" },
-    { url = "https://files.pythonhosted.org/packages/29/5b/4547d5c49b85f0337c13929f2ccbe08b7283069eea3550a457914fc078aa/bcrypt-4.3.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3e36506d001e93bffe59754397572f21bb5dc7c83f54454c990c74a468cd589e", size = 283870, upload-time = "2025-02-28T01:23:09.151Z" },
-    { url = "https://files.pythonhosted.org/packages/be/21/7dbaf3fa1745cb63f776bb046e481fbababd7d344c5324eab47f5ca92dd2/bcrypt-4.3.0-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:842d08d75d9fe9fb94b18b071090220697f9f184d4547179b60734846461ed59", size = 279601, upload-time = "2025-02-28T01:23:11.461Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/64/e042fc8262e971347d9230d9abbe70d68b0a549acd8611c83cebd3eaec67/bcrypt-4.3.0-cp38-abi3-manylinux_2_28_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:7c03296b85cb87db865d91da79bf63d5609284fc0cab9472fdd8367bbd830753", size = 297660, upload-time = "2025-02-28T01:23:12.989Z" },
-    { url = "https://files.pythonhosted.org/packages/50/b8/6294eb84a3fef3b67c69b4470fcdd5326676806bf2519cda79331ab3c3a9/bcrypt-4.3.0-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:62f26585e8b219cdc909b6a0069efc5e4267e25d4a3770a364ac58024f62a761", size = 284083, upload-time = "2025-02-28T01:23:14.5Z" },
-    { url = "https://files.pythonhosted.org/packages/62/e6/baff635a4f2c42e8788fe1b1633911c38551ecca9a749d1052d296329da6/bcrypt-4.3.0-cp38-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:beeefe437218a65322fbd0069eb437e7c98137e08f22c4660ac2dc795c31f8bb", size = 279237, upload-time = "2025-02-28T01:23:16.686Z" },
-    { url = "https://files.pythonhosted.org/packages/39/48/46f623f1b0c7dc2e5de0b8af5e6f5ac4cc26408ac33f3d424e5ad8da4a90/bcrypt-4.3.0-cp38-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:97eea7408db3a5bcce4a55d13245ab3fa566e23b4c67cd227062bb49e26c585d", size = 283737, upload-time = "2025-02-28T01:23:18.897Z" },
-    { url = "https://files.pythonhosted.org/packages/49/8b/70671c3ce9c0fca4a6cc3cc6ccbaa7e948875a2e62cbd146e04a4011899c/bcrypt-4.3.0-cp38-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:191354ebfe305e84f344c5964c7cd5f924a3bfc5d405c75ad07f232b6dffb49f", size = 312741, upload-time = "2025-02-28T01:23:21.041Z" },
-    { url = "https://files.pythonhosted.org/packages/27/fb/910d3a1caa2d249b6040a5caf9f9866c52114d51523ac2fb47578a27faee/bcrypt-4.3.0-cp38-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:41261d64150858eeb5ff43c753c4b216991e0ae16614a308a15d909503617732", size = 316472, upload-time = "2025-02-28T01:23:23.183Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/cf/7cf3a05b66ce466cfb575dbbda39718d45a609daa78500f57fa9f36fa3c0/bcrypt-4.3.0-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:33752b1ba962ee793fa2b6321404bf20011fe45b9afd2a842139de3011898fef", size = 343606, upload-time = "2025-02-28T01:23:25.361Z" },
-    { url = "https://files.pythonhosted.org/packages/e3/b8/e970ecc6d7e355c0d892b7f733480f4aa8509f99b33e71550242cf0b7e63/bcrypt-4.3.0-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:50e6e80a4bfd23a25f5c05b90167c19030cf9f87930f7cb2eacb99f45d1c3304", size = 362867, upload-time = "2025-02-28T01:23:26.875Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/97/8d3118efd8354c555a3422d544163f40d9f236be5b96c714086463f11699/bcrypt-4.3.0-cp38-abi3-win32.whl", hash = "sha256:67a561c4d9fb9465ec866177e7aebcad08fe23aaf6fbd692a6fab69088abfc51", size = 160589, upload-time = "2025-02-28T01:23:28.381Z" },
-    { url = "https://files.pythonhosted.org/packages/29/07/416f0b99f7f3997c69815365babbc2e8754181a4b1899d921b3c7d5b6f12/bcrypt-4.3.0-cp38-abi3-win_amd64.whl", hash = "sha256:584027857bc2843772114717a7490a37f68da563b3620f78a849bcb54dc11e62", size = 152794, upload-time = "2025-02-28T01:23:30.187Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/c1/3fa0e9e4e0bfd3fd77eb8b52ec198fd6e1fd7e9402052e43f23483f956dd/bcrypt-4.3.0-cp39-abi3-macosx_10_12_universal2.whl", hash = "sha256:0d3efb1157edebfd9128e4e46e2ac1a64e0c1fe46fb023158a407c7892b0f8c3", size = 498969, upload-time = "2025-02-28T01:23:31.945Z" },
-    { url = "https://files.pythonhosted.org/packages/ce/d4/755ce19b6743394787fbd7dff6bf271b27ee9b5912a97242e3caf125885b/bcrypt-4.3.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:08bacc884fd302b611226c01014eca277d48f0a05187666bca23aac0dad6fe24", size = 279158, upload-time = "2025-02-28T01:23:34.161Z" },
-    { url = "https://files.pythonhosted.org/packages/9b/5d/805ef1a749c965c46b28285dfb5cd272a7ed9fa971f970435a5133250182/bcrypt-4.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f6746e6fec103fcd509b96bacdfdaa2fbde9a553245dbada284435173a6f1aef", size = 284285, upload-time = "2025-02-28T01:23:35.765Z" },
-    { url = "https://files.pythonhosted.org/packages/ab/2b/698580547a4a4988e415721b71eb45e80c879f0fb04a62da131f45987b96/bcrypt-4.3.0-cp39-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:afe327968aaf13fc143a56a3360cb27d4ad0345e34da12c7290f1b00b8fe9a8b", size = 279583, upload-time = "2025-02-28T01:23:38.021Z" },
-    { url = "https://files.pythonhosted.org/packages/f2/87/62e1e426418204db520f955ffd06f1efd389feca893dad7095bf35612eec/bcrypt-4.3.0-cp39-abi3-manylinux_2_28_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:d9af79d322e735b1fc33404b5765108ae0ff232d4b54666d46730f8ac1a43676", size = 297896, upload-time = "2025-02-28T01:23:39.575Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/c6/8fedca4c2ada1b6e889c52d2943b2f968d3427e5d65f595620ec4c06fa2f/bcrypt-4.3.0-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:f1e3ffa1365e8702dc48c8b360fef8d7afeca482809c5e45e653af82ccd088c1", size = 284492, upload-time = "2025-02-28T01:23:40.901Z" },
-    { url = "https://files.pythonhosted.org/packages/4d/4d/c43332dcaaddb7710a8ff5269fcccba97ed3c85987ddaa808db084267b9a/bcrypt-4.3.0-cp39-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:3004df1b323d10021fda07a813fd33e0fd57bef0e9a480bb143877f6cba996fe", size = 279213, upload-time = "2025-02-28T01:23:42.653Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/7f/1e36379e169a7df3a14a1c160a49b7b918600a6008de43ff20d479e6f4b5/bcrypt-4.3.0-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:531457e5c839d8caea9b589a1bcfe3756b0547d7814e9ce3d437f17da75c32b0", size = 284162, upload-time = "2025-02-28T01:23:43.964Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/0a/644b2731194b0d7646f3210dc4d80c7fee3ecb3a1f791a6e0ae6bb8684e3/bcrypt-4.3.0-cp39-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:17a854d9a7a476a89dcef6c8bd119ad23e0f82557afbd2c442777a16408e614f", size = 312856, upload-time = "2025-02-28T01:23:46.011Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/62/2a871837c0bb6ab0c9a88bf54de0fc021a6a08832d4ea313ed92a669d437/bcrypt-4.3.0-cp39-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:6fb1fd3ab08c0cbc6826a2e0447610c6f09e983a281b919ed721ad32236b8b23", size = 316726, upload-time = "2025-02-28T01:23:47.575Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/a1/9898ea3faac0b156d457fd73a3cb9c2855c6fd063e44b8522925cdd8ce46/bcrypt-4.3.0-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:e965a9c1e9a393b8005031ff52583cedc15b7884fce7deb8b0346388837d6cfe", size = 343664, upload-time = "2025-02-28T01:23:49.059Z" },
-    { url = "https://files.pythonhosted.org/packages/40/f2/71b4ed65ce38982ecdda0ff20c3ad1b15e71949c78b2c053df53629ce940/bcrypt-4.3.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:79e70b8342a33b52b55d93b3a59223a844962bef479f6a0ea318ebbcadf71505", size = 363128, upload-time = "2025-02-28T01:23:50.399Z" },
-    { url = "https://files.pythonhosted.org/packages/11/99/12f6a58eca6dea4be992d6c681b7ec9410a1d9f5cf368c61437e31daa879/bcrypt-4.3.0-cp39-abi3-win32.whl", hash = "sha256:b4d4e57f0a63fd0b358eb765063ff661328f69a04494427265950c71b992a39a", size = 160598, upload-time = "2025-02-28T01:23:51.775Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/cf/45fb5261ece3e6b9817d3d82b2f343a505fd58674a92577923bc500bd1aa/bcrypt-4.3.0-cp39-abi3-win_amd64.whl", hash = "sha256:e53e074b120f2877a35cc6c736b8eb161377caae8925c17688bd46ba56daaa5b", size = 152799, upload-time = "2025-02-28T01:23:53.139Z" },
-]
-
-[[package]]
 name = "blinker"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -201,19 +151,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cd/e5/131d2fb1b0dddafc37be4f3a2fa79aa4c037368be9423061dccadfd90091/charset_normalizer-3.4.1-cp313-cp313-win32.whl", hash = "sha256:eb8178fe3dba6450a3e024e95ac49ed3400e506fd4e9e5c32d30adda88cbd407", size = 95391, upload-time = "2024-12-24T18:11:24.139Z" },
     { url = "https://files.pythonhosted.org/packages/27/f2/4f9a69cc7712b9b5ad8fdb87039fd89abba997ad5cbe690d1835d40405b0/charset_normalizer-3.4.1-cp313-cp313-win_amd64.whl", hash = "sha256:b1ac5992a838106edb89654e0aebfc24f5848ae2547d22c2c3f66454daa11971", size = 102702, upload-time = "2024-12-24T18:11:26.535Z" },
     { url = "https://files.pythonhosted.org/packages/0e/f6/65ecc6878a89bb1c23a086ea335ad4bf21a588990c3f535a227b9eea9108/charset_normalizer-3.4.1-py3-none-any.whl", hash = "sha256:d98b1668f06378c6dbefec3b92299716b931cd4e6061f3c875a71ced1780ab85", size = 49767, upload-time = "2024-12-24T18:12:32.852Z" },
-]
-
-[[package]]
-name = "cheroot"
-version = "11.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jaraco-functools" },
-    { name = "more-itertools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/68/e4/5c2020b60a55aca8d79ed55b62ad1cd7fc47ea44ad6b584e83f5f1bf58b0/cheroot-11.1.2.tar.gz", hash = "sha256:bfb70c49663f63b0440f2b54dbc6b0d1650e56dfe4e2641f59b2c6f727b44aca", size = 185716, upload-time = "2025-11-07T17:26:54.818Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/99/af65511a10c4212438ac52bc5e45e486e7a04d292201ad84dfd9208fe9a8/cheroot-11.1.2-py3-none-any.whl", hash = "sha256:0f6c0ba05c00fbc869fb46b1de4ec2384e1d85418ae963d3bc10ae83b688dbfa", size = 109248, upload-time = "2025-11-07T17:26:53.393Z" },
 ]
 
 [[package]]
@@ -285,15 +222,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/10/bf/8d6ebc7dded797bd0f0160d52188021211f011a2b164ef0ae1dac4587465/cryptography-50.0.2-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:7a8701d6b584d76e909e3d305b7d126b41439876a5aaf76cddc67fc230eafa2e", size = 4897738, upload-time = "2026-09-30T15:29:43.106Z" },
     { url = "https://files.pythonhosted.org/packages/d4/aa/f3f6e0de7e6253b8baa8b2d8fb9d50924fa75cee3d4624bd4bc1208ee923/cryptography-50.0.2-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:ce47f66801c20ec6c6632453bb5960fe38939e9306970b48b3a5a26de7745d94", size = 5058280, upload-time = "2026-09-30T15:29:44.827Z" },
     { url = "https://files.pythonhosted.org/packages/f6/b6/a1faf3a27ae9405fb34b1713cc73b2d8a26b04d5c561578fa2e6ef3e5bb9/cryptography-50.0.2-cp39-abi3-win_amd64.whl", hash = "sha256:4e81d95e5bafc2d6e34e4bed780e53e4d5b9a2f928573428aa4d35fbec1eb0de", size = 3854095, upload-time = "2026-09-30T15:29:46.782Z" },
-]
-
-[[package]]
-name = "defusedxml"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
 ]
 
 [[package]]
@@ -476,18 +404,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jaraco-functools"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "more-itertools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f7/ed/1aa2d585304ec07262e1a83a9889880701079dde796ac7b1d1826f40c63d/jaraco_functools-4.3.0.tar.gz", hash = "sha256:cfd13ad0dd2c47a3600b439ef72d8615d482cedcff1632930d6f28924d92f294", size = 19755, upload-time = "2025-08-18T20:05:09.91Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/09/726f168acad366b11e420df31bf1c702a54d373a83f968d94141a8c3fde0/jaraco_functools-4.3.0-py3-none-any.whl", hash = "sha256:227ff8ed6f7b8f62c56deff101545fa7543cf2c8e7b82a7c2116e672f29c26e8", size = 10408, upload-time = "2025-08-18T20:05:08.69Z" },
-]
-
-[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -520,15 +436,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/78/0f/77a63ca7aa5fed9a1b9135af57e190d905bcd3702b36aca46a01090d39ad/jiter-0.9.0-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:f0b2827fb88dda2cbecbbc3e596ef08d69bda06c6f57930aec8e79505dc17001", size = 317281, upload-time = "2025-03-10T21:36:22.959Z" },
     { url = "https://files.pythonhosted.org/packages/f9/39/a3a1571712c2bf6ec4c657f0d66da114a63a2e32b7e4eb8e0b83295ee034/jiter-0.9.0-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:062b756ceb1d40b0b28f326cba26cfd575a4918415b036464a52f08632731e5a", size = 350273, upload-time = "2025-03-10T21:36:24.414Z" },
     { url = "https://files.pythonhosted.org/packages/ee/47/3729f00f35a696e68da15d64eb9283c330e776f3b5789bac7f2c0c4df209/jiter-0.9.0-cp313-cp313t-win_amd64.whl", hash = "sha256:6f7838bc467ab7e8ef9f387bd6de195c43bad82a569c1699cb822f6609dd4cdf", size = 206867, upload-time = "2025-03-10T21:36:25.843Z" },
-]
-
-[[package]]
-name = "json5"
-version = "0.12.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/12/ae/929aee9619e9eba9015207a9d2c1c54db18311da7eb4dcf6d41ad6f0eb67/json5-0.12.1.tar.gz", hash = "sha256:b2743e77b3242f8d03c143dd975a6ec7c52e2f2afe76ed934e53503dd4ad4990", size = 52191, upload-time = "2025-08-12T19:47:42.583Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/e2/05328bd2621be49a6fed9e3030b1e51a2d04537d3f816d211b9cc53c5262/json5-0.12.1-py3-none-any.whl", hash = "sha256:d9c9b3bc34a5f54d43c35e11ef7cb87d8bdd098c6ace87117a7b7e83e705c1d5", size = 36119, upload-time = "2025-08-12T19:47:41.131Z" },
 ]
 
 [[package]]
@@ -692,15 +599,6 @@ wheels = [
 ]
 
 [[package]]
-name = "more-itertools"
-version = "10.8.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ea/5d/38b681d3fce7a266dd9ab73c66959406d565b3e85f21d5e66e1181d93721/more_itertools-10.8.0.tar.gz", hash = "sha256:f638ddf8a1a0d134181275fb5d58b086ead7c6a72429ad725c67503f13ba30bd", size = 137431, upload-time = "2025-09-02T15:23:11.018Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/8e/469e5a4a2f5855992e425f3cb33804cc07bf18d48f2db061aec61ce50270/more_itertools-10.8.0-py3-none-any.whl", hash = "sha256:52d4362373dcf7c52546bc4af9a86ee7c4579df9a8dc268be0a2f949d376cc9b", size = 69667, upload-time = "2025-09-02T15:23:09.635Z" },
-]
-
-[[package]]
 name = "mypy"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -800,15 +698,6 @@ wheels = [
 ]
 
 [[package]]
-name = "passlib"
-version = "1.7.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b6/06/9da9ee59a67fae7761aab3ccc84fa4f3f33f125b370f1ccdb915bf967c11/passlib-1.7.4.tar.gz", hash = "sha256:defd50f72b65c5402ab2c573830a6978e5f202ad0d984793c8dde2c4152ebe04", size = 689844, upload-time = "2020-10-08T19:00:52.121Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/a4/ab6b7589382ca3df236e03faa71deac88cae040af60c071a78d254a62172/passlib-1.7.4-py2.py3-none-any.whl", hash = "sha256:aa6bca462b8d8bda89c70b382f0c298a20b5560af6cbfa2dce410c0a2fb669f1", size = 525554, upload-time = "2020-10-08T19:00:49.856Z" },
-]
-
-[[package]]
 name = "pathspec"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -822,13 +711,11 @@ name = "pdf-tei-editor"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "flask" },
-    { name = "google-genai" },
-    { name = "jsonschema" },
-    { name = "llamore" },
     { name = "lxml" },
-    { name = "pdf2image" },
+    { name = "packaging" },
     { name = "py3langid" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
@@ -837,17 +724,109 @@ dependencies = [
     { name = "python-multipart" },
     { name = "requests" },
     { name = "routes" },
-    { name = "tei-annotator" },
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "waitress" },
-    { name = "webdav4", extra = ["fsspec"] },
     { name = "xmlschema" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "pte-plugin-annotation-history" },
+    { name = "pte-plugin-annotation-progress" },
+    { name = "pte-plugin-annotation-review" },
+    { name = "pte-plugin-anthropic-llm" },
+    { name = "pte-plugin-archival-edition" },
+    { name = "pte-plugin-collection-overview" },
+    { name = "pte-plugin-edit-history" },
+    { name = "pte-plugin-google-llm" },
+    { name = "pte-plugin-grobid" },
+    { name = "pte-plugin-iaa-analyzer" },
+    { name = "pte-plugin-kisski" },
+    { name = "pte-plugin-llamore-extractor" },
+    { name = "pte-plugin-local-sync" },
+    { name = "pte-plugin-metadata-extraction" },
+    { name = "pte-plugin-revision-feed" },
+    { name = "pte-plugin-rng-converter" },
+    { name = "pte-plugin-update-metadata" },
+    { name = "pte-plugin-webdav-sync" },
+]
+analytics = [
+    { name = "pte-plugin-annotation-progress" },
+    { name = "pte-plugin-collection-overview" },
+    { name = "pte-plugin-edit-history" },
+    { name = "pte-plugin-revision-feed" },
+]
+annotation-history = [
+    { name = "pte-plugin-annotation-history" },
+]
+annotation-progress = [
+    { name = "pte-plugin-annotation-progress" },
+]
+annotation-review = [
+    { name = "pte-plugin-annotation-review" },
+]
+anthropic-llm = [
+    { name = "pte-plugin-anthropic-llm" },
+]
+archival-edition = [
+    { name = "pte-plugin-archival-edition" },
+]
+collection-overview = [
+    { name = "pte-plugin-collection-overview" },
+]
+default = [
+    { name = "pte-plugin-annotation-progress" },
+    { name = "pte-plugin-annotation-review" },
+    { name = "pte-plugin-anthropic-llm" },
+    { name = "pte-plugin-collection-overview" },
+    { name = "pte-plugin-edit-history" },
+    { name = "pte-plugin-google-llm" },
+    { name = "pte-plugin-grobid" },
+    { name = "pte-plugin-llamore-extractor" },
+    { name = "pte-plugin-metadata-extraction" },
+    { name = "pte-plugin-revision-feed" },
+]
+edit-history = [
+    { name = "pte-plugin-edit-history" },
+]
+google-llm = [
+    { name = "pte-plugin-google-llm" },
+]
+grobid = [
+    { name = "pte-plugin-grobid" },
+]
+iaa-analyzer = [
+    { name = "pte-plugin-iaa-analyzer" },
+]
+kisski = [
+    { name = "pte-plugin-kisski" },
+]
+llamore-extractor = [
+    { name = "pte-plugin-llamore-extractor" },
+]
+local-sync = [
+    { name = "pte-plugin-local-sync" },
+]
+metadata-extraction = [
+    { name = "pte-plugin-metadata-extraction" },
+]
+revision-feed = [
+    { name = "pte-plugin-revision-feed" },
+]
+rng-converter = [
+    { name = "pte-plugin-rng-converter" },
+]
+update-metadata = [
+    { name = "pte-plugin-update-metadata" },
+]
+webdav-sync = [
+    { name = "pte-plugin-webdav-sync" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "cheroot" },
+    { name = "httpx" },
     { name = "lxml-stubs" },
     { name = "mypy" },
     { name = "pdoc" },
@@ -855,18 +834,65 @@ dev = [
     { name = "pytest" },
     { name = "pytest-tap" },
     { name = "send2trash" },
-    { name = "wsgidav" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=50.0.2" },
     { name = "fastapi", specifier = ">=0.119.0" },
     { name = "flask", specifier = ">=3.1.3" },
-    { name = "google-genai", specifier = ">=1.56.0" },
-    { name = "jsonschema", specifier = ">=4.23.0" },
-    { name = "llamore", git = "https://github.com/mpilhlt/llamore.git" },
     { name = "lxml", specifier = ">=6.1.0" },
-    { name = "pdf2image", specifier = ">=1.17.0" },
+    { name = "packaging", specifier = ">=25.0" },
+    { name = "pte-plugin-annotation-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-history", marker = "extra == 'annotation-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'annotation-progress'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'annotation-review'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'anthropic-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-archival-edition", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-archival-edition", marker = "extra == 'archival-edition'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'collection-overview'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'edit-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'google-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-grobid", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-grobid", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-grobid", marker = "extra == 'grobid'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'iaa-analyzer'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-kisski", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-kisski", marker = "extra == 'kisski'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'llamore-extractor'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-local-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-local-sync", marker = "extra == 'local-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'metadata-extraction'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'revision-feed'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-rng-converter", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-rng-converter", marker = "extra == 'rng-converter'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-update-metadata", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-update-metadata", marker = "extra == 'update-metadata'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-webdav-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-webdav-sync", marker = "extra == 'webdav-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
     { name = "py3langid", specifier = ">=0.4.0" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pypdf", specifier = ">=6.16.1" },
@@ -875,17 +901,16 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.31" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "routes", specifier = ">=2.5.1" },
-    { name = "tei-annotator", git = "https://github.com/cboulanger/tei-annotator" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.36.0" },
     { name = "waitress", specifier = ">=3.0.2" },
-    { name = "webdav4", extras = ["fsspec"], specifier = ">=0.10.0" },
     { name = "xmlschema", specifier = ">=4.3.2" },
 ]
+provides-extras = ["annotation-history", "annotation-progress", "annotation-review", "anthropic-llm", "archival-edition", "collection-overview", "edit-history", "google-llm", "grobid", "iaa-analyzer", "kisski", "llamore-extractor", "local-sync", "metadata-extraction", "revision-feed", "rng-converter", "update-metadata", "webdav-sync", "analytics", "default", "all"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "cheroot", specifier = ">=10.0.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "lxml-stubs", specifier = ">=0.5.1" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pdoc", specifier = ">=15.0.0" },
@@ -893,7 +918,6 @@ dev = [
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-tap", specifier = ">=3.3" },
     { name = "send2trash", specifier = ">=2.1.0" },
-    { name = "wsgidav", specifier = ">=4.3.0" },
 ]
 
 [[package]]
@@ -950,6 +974,121 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pte-plugin-annotation-history"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-annotation-progress"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-annotation-review"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-anthropic-llm"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-archival-edition"
+version = "0.1.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "pte-plugin-anthropic-llm" },
+    { name = "pymupdf" },
+]
+
+[[package]]
+name = "pte-plugin-collection-overview"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "pte-plugin-annotation-progress" },
+]
+
+[[package]]
+name = "pte-plugin-edit-history"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-google-llm"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "google-genai" },
+    { name = "httpx" },
+]
+
+[[package]]
+name = "pte-plugin-grobid"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-iaa-analyzer"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-kisski"
+version = "2.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pdf2image" },
+]
+
+[[package]]
+name = "pte-plugin-llamore-extractor"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "llamore" },
+    { name = "pypdf" },
+]
+
+[[package]]
+name = "pte-plugin-local-sync"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-metadata-extraction"
+version = "1.1.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "pte-plugin-grobid" },
+]
+
+[[package]]
+name = "pte-plugin-revision-feed"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-rng-converter"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-update-metadata"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+
+[[package]]
+name = "pte-plugin-webdav-sync"
+version = "1.0.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+dependencies = [
+    { name = "webdav4", extra = ["fsspec"] },
 ]
 
 [[package]]
@@ -1383,17 +1522,6 @@ wheels = [
 ]
 
 [[package]]
-name = "tei-annotator"
-version = "1.7.0"
-source = { git = "https://github.com/cboulanger/tei-annotator#eb885de0071611f590438c32709189e7d58694d5" }
-dependencies = [
-    { name = "jinja2" },
-    { name = "lxml" },
-    { name = "python-dotenv" },
-    { name = "rapidfuzz" },
-]
-
-[[package]]
 name = "tenacity"
 version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1572,23 +1700,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd117872481b6e378f85c957dd7c5bca38897b08f765fd/werkzeug-3.1.8.tar.gz", hash = "sha256:9bad61a4268dac112f1c5cd4630a56ede601b6ed420300677a869083d70a4c44", size = 875852, upload-time = "2026-04-02T18:49:14.268Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/8c/2e650f2afeb7ee576912636c23ddb621c91ac6a98e66dc8d29c3c69446e1/werkzeug-3.1.8-py3-none-any.whl", hash = "sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50", size = 226459, upload-time = "2026-04-02T18:49:12.72Z" },
-]
-
-[[package]]
-name = "wsgidav"
-version = "4.3.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "bcrypt" },
-    { name = "defusedxml" },
-    { name = "jinja2" },
-    { name = "json5" },
-    { name = "passlib" },
-    { name = "pyyaml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/c7/5591a7f0590bf1f9aff6f7cb9256fa5b0f1d132bdc3a38a5f8115e8ce7b4/wsgidav-4.3.5.tar.gz", hash = "sha256:2f2055a949f69db3e8c1f37d787f6ffd076ea29d561dda68918289a2a5d41a93", size = 160942, upload-time = "2026-06-27T07:33:03.467Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/e2/d70dbfe68aada7735d38a1a0eeda079b39478f0ec993fec00c432cf4dcfc/wsgidav-4.3.5-py3-none-any.whl", hash = "sha256:0985f5cb572e00c151e1c60d00e1ae8cbf74dea2a3286ec0bc040ab482cd5095", size = 168873, upload-time = "2026-06-27T07:33:05.937Z" },
 ]
 
 [[package]]

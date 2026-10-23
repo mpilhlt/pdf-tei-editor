@@ -4,17 +4,44 @@
     <sl-alert name="reloadBanner" variant="warning" open style="display: none;">
       <sl-icon slot="icon" name="exclamation-triangle"></sl-icon>
       <div style="display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap;">
-        <span>Changes apply to open pages after a reload.</span>
+        <span name="bannerText">Changes apply to open pages after a reload.</span>
         <sl-button name="reloadBtn" variant="primary" size="small">Reload now</sl-button>
       </div>
     </sl-alert>
-    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-      <sl-input name="searchInput" placeholder="Filter by name, description or category" clearable size="small" style="flex: 1; min-width: 14rem;">
-        <sl-icon slot="prefix" name="search"></sl-icon>
-      </sl-input>
-      <div name="statusChips" style="display: flex; gap: 0.35rem; flex-wrap: wrap;"></div>
-    </div>
-    <div name="pluginList" style="overflow-y: auto; max-height: 55vh; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium);"></div>
+    <sl-alert name="restartBanner" variant="primary" open style="display: none;">
+      <sl-icon slot="icon" name="arrow-repeat"></sl-icon>
+      <div style="display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap;">
+        <span name="restartText">Plugin upgrades and removals take effect after the server processes restart.</span>
+        <sl-button name="restartBtn" variant="primary" size="small">Apply plugin changes</sl-button>
+      </div>
+    </sl-alert>
+    <sl-tab-group name="tabs">
+      <sl-tab slot="nav" panel="installed" name="installedTab">Installed</sl-tab>
+      <sl-tab slot="nav" panel="available" name="availableTab" style="display: none;">Available</sl-tab>
+      <sl-tab-panel name="installed" data-name="installedPanel">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <sl-input name="searchInput" placeholder="Filter by name, description or category" clearable size="small" style="flex: 1; min-width: 14rem;">
+              <sl-icon slot="prefix" name="search"></sl-icon>
+            </sl-input>
+            <div name="statusChips" style="display: flex; gap: 0.35rem; flex-wrap: wrap;"></div>
+          </div>
+          <div name="pluginList" style="overflow-y: auto; max-height: 50vh; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium);"></div>
+        </div>
+      </sl-tab-panel>
+      <sl-tab-panel name="available" data-name="availablePanel">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <sl-input name="availableSearch" placeholder="Filter by name, description or repository" clearable size="small" style="flex: 1; min-width: 14rem;">
+              <sl-icon slot="prefix" name="search"></sl-icon>
+            </sl-input>
+            <sl-button name="refreshBtn" size="small"><sl-icon slot="prefix" name="arrow-clockwise"></sl-icon>Refresh</sl-button>
+          </div>
+          <div name="availableNote" style="color: var(--sl-color-neutral-600); font-size: 0.85em;"></div>
+          <div name="availableList" style="overflow-y: auto; max-height: 50vh; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium);"></div>
+        </div>
+      </sl-tab-panel>
+    </sl-tab-group>
   </div>
   <div slot="footer">
     <sl-button name="closeBtn" variant="default">Close</sl-button>

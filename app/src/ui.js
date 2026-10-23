@@ -59,7 +59,6 @@ import './modules/panels/index.js';
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
- * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {teiRevisionHistoryDrawerPart} from './plugins/tei-tools.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  * @import {backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
@@ -96,7 +95,6 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
- * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDialog, saveDocumentDialogPart>} saveDocumentDialog - Save revision dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)

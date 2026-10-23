@@ -15,7 +15,7 @@ global.document = dom.window.document;
 global.window = dom.window;
 global.Window = dom.window.Window;
 
-const { mergeWithPrev, mergeWithNext, computeOverlayPosition, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
+const { mergeWithPrev, mergeWithNext, computeOverlayPosition, setPopupAttribute, XmlAnnotationPopup } = await import('../../../app/src/modules/codemirror/xml-annotation-popup.js');
 
 /**
  * Build a parent <p> element whose innerHTML is set to `html`, then return
@@ -30,6 +30,35 @@ function build(html, id) {
   if (!child) throw new Error(`element #${id} not found in "${html}"`);
   return { parent, child };
 }
+
+// ── setPopupAttribute ──────────────────────────────────────────────────────
+
+describe('setPopupAttribute', () => {
+  const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+  const parse = (/** @type {string} */ xml) =>
+    new dom.window.DOMParser().parseFromString(xml, 'application/xml');
+
+  it('creates xml:lang in the XML namespace', () => {
+    const title = parse('<title>Tytuł</title>').documentElement;
+    setPopupAttribute(title, 'xml:lang', 'pl');
+    assert.strictEqual(title.getAttributeNS(XML_NS, 'lang'), 'pl');
+    assert.strictEqual(title.getAttribute('xml:lang'), 'pl');
+    assert.strictEqual(new dom.window.XMLSerializer().serializeToString(title), '<title xml:lang="pl">Tytuł</title>');
+  });
+
+  it('replaces an existing xml:lang instead of adding a second one', () => {
+    const title = parse('<title xml:lang="en">Title</title>').documentElement;
+    setPopupAttribute(title, 'xml:lang', 'de');
+    assert.strictEqual(title.attributes.length, 1);
+    assert.strictEqual(title.getAttributeNS(XML_NS, 'lang'), 'de');
+  });
+
+  it('sets unprefixed attributes without a namespace', () => {
+    const title = parse('<title>Title</title>').documentElement;
+    setPopupAttribute(title, 'level', 'm');
+    assert.strictEqual(title.getAttributeNS(null, 'level'), 'm');
+  });
+});
 
 // ── mergeWithPrev ──────────────────────────────────────────────────────────
 

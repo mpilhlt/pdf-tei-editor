@@ -1,7 +1,7 @@
 /**
  * @testCovers fastapi_app/lib/service_registry.py
- * @testCovers fastapi_app/plugins/test_plugin/routes.py
- * @testCovers fastapi_app/plugins/test_plugin/plugin.py
+ * @testCovers tests/fixtures/plugins/test_plugin/routes.py
+ * @testCovers tests/fixtures/plugins/test_plugin/plugin.py
  * @testCovers fastapi_app/lib/plugin_base.py
  */
 

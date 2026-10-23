@@ -12,7 +12,7 @@
  * ### `progressShow`
  * Shows or creates a progress widget. Data is JSON:
  * ```json
- * {"progress_id": "abc123", "label": "Processing...", "value": null, "cancellable": true, "cancelUrl": "/api/plugins/grobid/cancel/abc123"}
+ * {"progress_id": "abc123", "label": "Processing...", "value": null, "cancellable": true, "cancelUrl": "/api/plugins/my-plugin/cancel/abc123"}
  * ```
  * - `progress_id` (string, required): Unique identifier for this progress instance
  * - `label` (string, optional): Initial text label

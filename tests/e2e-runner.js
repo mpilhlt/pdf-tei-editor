@@ -28,6 +28,7 @@ import { LocalServerManager } from './lib/local-server-manager.js';
 // import { ContainerServerManager } from './lib/container-server-manager.js'; // Removed - not used in new container approach
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
+import { isPluginTestFile, removeStagedPluginTests, stagePluginTests, stagedPathOf } from './lib/plugin-tests.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
 import { logger } from './api/helpers/test-logger.js';
 
@@ -439,8 +440,19 @@ class PlaywrightRunner {
       // Start server
       await this.startServer(serverOptions);
 
+      // Stage plugin E2E tests next to the core ones; plugin test files given as
+      // arguments are run from their staged copies
+      stagePluginTests('e2e', cliOptions.pluginTests || []);
+      playwrightOptions.testFiles = playwrightOptions.testFiles.map(
+        file => isPluginTestFile(file, 'e2e') ? stagedPathOf(file, 'e2e') : file
+      );
+
       // Run tests
-      await this.runPlaywrightTests(playwrightOptions);
+      try {
+        await this.runPlaywrightTests(playwrightOptions);
+      } finally {
+        removeStagedPluginTests('e2e');
+      }
 
       // Stop server
       await this.stopServer({ noCleanup: cliOptions.cleanup === false });
@@ -448,6 +460,7 @@ class PlaywrightRunner {
       return 0;
     } catch (error) {
       console.error('💥 Playwright runner failed:', String(error));
+      await this.serverManager?.printServerTracebacks?.();
 
       // Ensure cleanup
       await this.stopServer({ noCleanup: false });

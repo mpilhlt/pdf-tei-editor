@@ -33,6 +33,7 @@ from fastapi_app.lib.secrets import (
     SecretsError,
     get_secret_store,
     register_secret_service,
+    unregister_secret_service,
 )
 from fastapi_app.routers import secrets as secrets_router
 
@@ -65,6 +66,16 @@ class TestSecretStore(unittest.TestCase):
         self.assertFalse(store.delete("alice", "anthropic"))
         self.assertIsNone(store.get("alice", "anthropic"))
 
+    def test_delete_all_only_affects_the_user(self):
+        store = SecretStore(self.tmp)
+        store.set("alice", "anthropic", SECRET)
+        store.set("alice", "openai", SECRET)
+        store.set("bob", "anthropic", "other")
+        self.assertEqual(store.delete_all("alice"), 2)
+        self.assertEqual(store.list_services("alice"), [])
+        self.assertEqual(store.get("bob", "anthropic"), "other")
+        self.assertEqual(store.delete_all("alice"), 0)
+
     def test_value_is_encrypted_at_rest(self):
         store = SecretStore(self.tmp)
         store.set("alice", "anthropic", SECRET)
@@ -79,10 +90,16 @@ class TestSecretStore(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((self.tmp / "secrets.db").stat().st_mode), 0o600)
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
 
+    def test_key_file_fallback_logs_a_warning(self):
+        with self.assertLogs("fastapi_app.lib.secrets.store", level="WARNING") as logs:
+            SecretStore(self.tmp)
+        self.assertTrue(any(ENCRYPTION_KEY_ENV_VAR in line for line in logs.output))
+
     def test_environment_key_takes_precedence(self):
         from cryptography.fernet import Fernet
         os.environ[ENCRYPTION_KEY_ENV_VAR] = Fernet.generate_key().decode()
-        SecretStore(self.tmp).set("alice", "s", SECRET)
+        with self.assertNoLogs("fastapi_app.lib.secrets.store", level="WARNING"):
+            SecretStore(self.tmp).set("alice", "s", SECRET)
         self.assertFalse((self.tmp / "secrets.key").exists())
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
 
@@ -156,6 +173,27 @@ class TestSecretsRouter(unittest.TestCase):
     def test_other_users_do_not_see_the_key(self):
         self.store.set("bob", "anthropic", SECRET)
         self.assertFalse(self.client.get("/api/v1/secrets").json()[0]["is_set"])
+
+    def test_delete_all_removes_only_own_keys(self):
+        self.store.set("alice", "anthropic", SECRET)
+        # a key for a service that is no longer registered is removed as well
+        self.store.set("alice", "uninstalled", SECRET)
+        self.store.set("bob", "anthropic", "other")
+        self.store.set("bob", "uninstalled", "other")
+        response = self.client.delete("/api/v1/secrets")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"removed": 2})
+        self.assertEqual(self.store.list_services("alice"), [])
+        self.assertEqual(self.store.list_services("bob"), ["anthropic", "uninstalled"])
+        self.assertEqual(self.store.get("bob", "anthropic"), "other")
+        self.assertFalse(self.client.get("/api/v1/secrets").json()[0]["is_set"])
+        self.assertEqual(self.client.delete("/api/v1/secrets").json(), {"removed": 0})
+
+    def test_unregistered_service_is_no_longer_listed_or_settable(self):
+        unregister_secret_service("anthropic")
+        unregister_secret_service("anthropic")  # no-op when absent
+        self.assertEqual(self.client.get("/api/v1/secrets").json(), [])
+        self.assertEqual(self.client.put("/api/v1/secrets/anthropic", json={"value": SECRET}).status_code, 404)
 
     def test_unknown_service_and_empty_value(self):
         self.assertEqual(self.client.put("/api/v1/secrets/nope", json={"value": "x"}).status_code, 404)

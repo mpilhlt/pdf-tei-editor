@@ -48,6 +48,9 @@ def get_plugin_config(
         masked: When True, stores {config_key}.masked = True so the value is hidden in
             the config editor and excluded from the public (pre-auth) config. Any plugin
             that reads credentials from environment variables MUST pass masked=True.
+            A masked key without a value is stored as an empty string, so that
+            administrators can set it in the config editor; an empty string counts as
+            unset, so the environment variable still applies.
 
     Returns:
         Configuration value
@@ -66,6 +69,8 @@ def get_plugin_config(
 
     config = get_config()
     value = config.get(config_key)
+    if masked and value == "":
+        value = None
 
     if value is None:
         env_value = os.environ.get(env_var)
@@ -88,6 +93,9 @@ def get_plugin_config(
     if value is not None:
         config.set(config_key, value, allowed_values=allowed_values, description=description,
                    masked=True if masked else None)
+    elif masked:
+        # Make the unset secret visible (as "not set") in the config editor
+        config.set(config_key, "", description=description, masked=True)
 
     return value
 

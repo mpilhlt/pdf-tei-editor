@@ -17,6 +17,7 @@ import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
 import { encodeXmlEntities, isInTeiText } from '../modules/tei-utils.js'
+import { ServerChangeMonitor } from '../modules/server-change-monitor.js'
 
 class ServicesPlugin extends Plugin {
   /** @type {import('./logger.js').default} */
@@ -37,6 +38,8 @@ class ServicesPlugin extends Plugin {
   #validation
   /** @type {import('./file-selection.js').default} */
   #fileSelection
+  /** @type {ServerChangeMonitor} */
+  #serverChangeMonitor
 
   /** @param {PluginContext} context */
   constructor(context) {
@@ -79,6 +82,16 @@ class ServicesPlugin extends Plugin {
       window.location.reload()
     })
 
+    // Reload when a backup was restored or the plugins were changed (see server-change-monitor.js)
+    this.#serverChangeMonitor = new ServerChangeMonitor({
+      fetchStatus: () => this.#client.apiClient.maintenanceStatus(),
+      reload: () => window.location.reload(),
+      storage: getSessionStorage(),
+      logger: this.#logger
+    })
+    SsePlugin.getInstance().addEventListener('serverChanged', () => this.#serverChangeMonitor.check())
+    SsePlugin.getInstance().onConnectionChange(() => this.#serverChangeMonitor.check())
+
     // Listen for lock release events to attempt acquiring locks for read-only documents
     SsePlugin.getInstance().addEventListener('lockReleased', async (event) => {
       const data = JSON.parse(event.data)
@@ -107,6 +120,22 @@ class ServicesPlugin extends Plugin {
         }
       }
     })
+  }
+
+  async start() {
+    const notice = await this.#serverChangeMonitor.init()
+    if (notice) this.#dialog.info(notice)
+  }
+
+  /**
+   * Postpones the automatic reload after server-side changes (restored backup, changed
+   * plugins), e.g. while the plugin manager is open. Releasing the hold reloads the page if
+   * the server changed in the meantime.
+   * @param {boolean} held
+   * @returns {Promise<void>}
+   */
+  holdServerChangeReload(held) {
+    return this.#serverChangeMonitor.hold(held)
   }
 
   /**
@@ -400,8 +429,16 @@ class ServicesPlugin extends Plugin {
     // The item could be a version or gold file which has variant
     const variant = fileData?.item?.variant
     if (variant) {
-      // Extract the variant name from variant (e.g., "grobid.training.segmentation" -> "training.segmentation")
-      const variantName = variant.replace(/^grobid\./, '')
+      // Variants of an extractor may be prefixed with its id ("<extractor>.training.segmentation");
+      // the prefix is dropped from the filename
+      let variantName = variant
+      try {
+        const extractors = await this.#client.getExtractorList()
+        const extractor = extractors.find(e => variant.startsWith(`${e.id}.`))
+        if (extractor) variantName = variant.slice(extractor.id.length + 1)
+      } catch (error) {
+        this.#logger.warn('Could not load extractor list: ' + String(error))
+      }
       filename = `${filename}.${variantName}`
     }
 
@@ -533,4 +570,16 @@ export function getSourceFootnoteId(node) {
     current = current.parentElement
   }
   return null
+}
+
+/**
+ * The session storage, or null where it is not accessible (e.g. blocked site data).
+ * @returns {Storage|null}
+ */
+function getSessionStorage() {
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
 }

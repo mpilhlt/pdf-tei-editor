@@ -1,6 +1,6 @@
 # Backup & Restore Plugin
 
-The plugin downloads a backup of the application data as a ZIP file and restores the application from such a backup. Backups can be made by hand in the web interface or automatically with the script `bin/backup-download.js`.
+The plugin downloads a backup of the application data as a ZIP file and restores the application from such a backup. Backups can be made by hand in the web interface or automatically with the script `bin/backup-download.js` in this plugin's directory.
 
 - [Part 1: Manual backup and restore (web interface)](#part-1-manual-backup-and-restore-web-interface)
 - [Part 2: Automated backups (API and cron script)](#part-2-automated-backups-api-and-cron-script)
@@ -13,6 +13,29 @@ A backup contains the two directories that hold all persistent data:
 - `files/`: all uploaded and generated documents (PDF and XML)
 
 It does not contain caches, temporary files or plugin working data. These are rebuilt by the application.
+
+It also contains the file `backup-manifest.json`, which records the version of the PDF-TEI-Editor that made the backup:
+
+```json
+{
+  "format": 1,
+  "pte_version": "0.76.0",
+  "created_at": "2026-10-23T08:00:00+00:00"
+}
+```
+
+## Version compatibility
+
+A backup can only be restored into a compatible version of the PDF-TEI-Editor, because the structure of the data may change between versions:
+
+| Version of the server | Restores backups made by |
+| --- | --- |
+| before 1.0.0, e.g. `0.76.2` | the same minor version: any `0.76.x` |
+| 1.0.0 or later, e.g. `1.4.0` | the same major version: any `1.x.x` |
+
+A backup of another version is refused with a message that names both versions, and nothing is changed. To move data to a newer version, restore the backup into an installation of the backup's version and upgrade that installation; the upgrade migrates the data.
+
+Backups without `backup-manifest.json` (made before backups recorded their version, or packed by hand) are refused too, since their compatibility cannot be checked. If you know which version made such a backup, add a `backup-manifest.json` with that version at the top level of the ZIP (next to `db/` and `files/`) and upload it again. Only do this if you are sure: restoring data of an incompatible version can leave the application unusable.
 
 A backup contains password hashes and configuration values such as API keys. Store backups as carefully as the live data.
 
@@ -57,16 +80,19 @@ Restoring replaces **all** current data with the contents of the backup. Changes
 1. Make a fresh backup of the current state first, unless you are sure you do not need it.
 2. Tell users to save their work. They will be interrupted.
 3. Open the plugin and click **Upload & Restore**.
-4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`. A missing `db/metadata.db` only produces a warning.
-5. The server checks and unpacks the file, then:
-   - On a server that runs under a supervisor (Docker, systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds. The restored data is active when it comes back.
-   - On a server without a supervisor, the message "Please restart the server manually to apply the restore" appears. The restore is applied at the next start.
+4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`, and a `backup-manifest.json` of a compatible version (see [Version compatibility](#version-compatibility)). A missing `db/metadata.db` only produces a warning.
+5. The server checks the file and unpacks it into `data/.restore/`, then:
+   - On a server started with `bin/start-prod` (this includes the Docker image), it switches all open sessions to a maintenance screen and, after about 10 seconds, replaces its worker processes one after the other. The first new worker applies the restore before it opens any database; the server stays reachable throughout. All open pages reload by themselves once the restored data is active and show a message about the restore.
+   - On a server that runs under another supervisor (systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds.
+   - Otherwise, the message "Please restart the server manually to apply the restore" appears. The restore is applied at the next start.
 
 After the restart, log in and check that your documents and users are as expected. Note that user accounts and passwords are also restored, so use the login of the backup, not the one from before.
 
 #### What happens to the old data
 
-The previous data directory is not deleted. At startup it is renamed to `data_YYYYMMDD_HHMMSS` next to `data/` in the application directory. This allows you to undo a wrong restore by an administrator with server access (stop the server, rename the directories back). Delete these directories manually when you no longer need them: they use as much disk space as the data itself.
+The previous data is not deleted. When the restore is applied, everything in the data directory (`db/`, `files/` and the caches and plugin data that a backup does not contain) is moved to `data/.restore-previous/YYYYMMDD_HHMMSS/`. Only plugins installed at runtime (`data/plugins/site/`) stay in place; the restored plugin settings decide which of them are active. This stays inside the data directory, so it also works when the data directory is a Docker volume. An administrator with server access can undo a wrong restore: stop the server, move the current contents aside and move the contents of the `.restore-previous` directory back. Delete these directories when you no longer need them: they use as much disk space as the data itself.
+
+If the server stops while the restore is applied, the next start completes it.
 
 #### Troubleshooting
 
@@ -76,6 +102,8 @@ The previous data directory is not deleted. At startup it is renamed to `data_YY
 | "Another backup is already in progress" | Another download is running. Try again shortly. |
 | "Invalid ZIP file" | The file is damaged or not a backup. Download or copy it again. |
 | "ZIP is missing required files" | The ZIP was not created by this plugin, or is incomplete. |
+| "This backup was made with version ... and cannot be restored into version ..." | The backup is from an incompatible version. See [Version compatibility](#version-compatibility). |
+| "The backup has no backup-manifest.json" | The backup was made before backups recorded their version, or by hand. See [Version compatibility](#version-compatibility). |
 | "Invalid or expired session" | Log in again and reopen the plugin. |
 
 ---
@@ -86,7 +114,7 @@ This part is for technical administrators with shell access to a machine that ca
 
 ### Overview
 
-`bin/backup-download.js` is a Node.js script that, on every run:
+`bin/backup-download.js` (in this plugin's directory) is a Node.js script that, on every run:
 
 1. logs in as a dedicated user,
 2. downloads a backup through the API,
@@ -94,7 +122,7 @@ This part is for technical administrators with shell access to a machine that ca
 4. stores it under a timestamped name and
 5. deletes old backups according to a retention policy.
 
-It runs from the application directory (`node bin/backup-download.js`) and needs no additional packages. It can run on the server itself or on any other machine that has a copy of the repository or the Docker image and network access to the server. For Docker deployments, run it on the host against the published port and write to a bind-mounted or host directory.
+It runs from the application directory (`node fastapi_app/plugins/backup_restore/bin/backup-download.js`) and needs no additional packages. It can run on the server itself or on any other machine that has a copy of the repository or the Docker image and network access to the server. For Docker deployments, run it on the host against the published port and write to a bind-mounted or host directory.
 
 ### Set up the backup bot user
 
@@ -126,7 +154,7 @@ Open the user management as an administrator, create a user `backup-bot`, set a 
 #### Check the setup
 
 ```bash
-node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor \
+node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor \
   --base-url https://editor.example.org --user backup-bot \
   --password-file /etc/pdf-tei-editor/backup.pw --dry-run
 ```
@@ -139,7 +167,7 @@ Example `/etc/cron.d/pdf-tei-editor-backup` (daily at 02:17, run as the user `ba
 
 ```bash
 MAILTO=admin@example.org
-17 2 * * * backup cd /opt/pdf-tei-editor && node bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --user backup-bot --password-file /etc/pdf-tei-editor/backup.pw --quiet --ping-url https://hc-ping.com/YOUR-UUID
+17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --user backup-bot --password-file /etc/pdf-tei-editor/backup.pw --quiet --ping-url https://hc-ping.com/YOUR-UUID
 ```
 
 With `--quiet` the script prints only errors, so cron sends mail only when something went wrong.
@@ -213,7 +241,7 @@ The script is a thin client for these endpoints. You can call them from other to
 | --- | --- | --- |
 | `POST /api/v1/auth/login` | none | Log in; body `{"username": "...", "passwd_hash": "<SHA-256 hex of the password>"}`; returns `sessionId` |
 | `GET /api/plugins/backup-restore/download` | `backup` | Download the backup ZIP |
-| `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore |
+| `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore; 400 if the backup is invalid or of an incompatible version |
 | `POST /api/v1/auth/logout` | session | End the session |
 
 Send the session id in the `X-Session-ID` header. The download response contains these headers for verification: `Content-Length` and `X-Content-SHA256` (hex SHA-256 of the ZIP). The download returns 403 if the user lacks the `backup` role and 409 if another backup is running.

@@ -57,10 +57,13 @@ def _load_fernet(db_dir: Path) -> Fernet:
             fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(Fernet.generate_key().decode())
-            logger.warning(
-                "Generated an encryption key for user secrets at %s. Set %s to keep the key outside the data directory.",
-                key_file, ENCRYPTION_KEY_ENV_VAR,
-            )
+            logger.info("Generated an encryption key for user secrets at %s", key_file)
+        # Every copy of the data directory (backups, sync mirrors) contains the key next to
+        # the secrets it encrypts
+        logger.warning(
+            "User secrets are encrypted with the key file %s, which is part of the data directory and its backups. Set %s to keep the key outside of it.",
+            key_file, ENCRYPTION_KEY_ENV_VAR,
+        )
         return Fernet(key_file.read_text().strip().encode())
     except (ValueError, OSError) as e:
         raise SecretsError(f"Invalid encryption key for user secrets: {e}") from e
@@ -127,6 +130,13 @@ class SecretStore:
         cursor = conn.execute("DELETE FROM user_secrets WHERE username = ? AND service = ?", (username, service))
         conn.commit()
         return cursor.rowcount > 0
+
+    def delete_all(self, username: str) -> int:
+        """Remove all secrets of a user, including those of services that are no longer registered; returns how many existed."""
+        conn = get_connection(self.db_path)
+        cursor = conn.execute("DELETE FROM user_secrets WHERE username = ?", (username,))
+        conn.commit()
+        return cursor.rowcount
 
     def list_services(self, username: str) -> list[str]:
         """Ids of the services the user has a secret for (never the values)."""

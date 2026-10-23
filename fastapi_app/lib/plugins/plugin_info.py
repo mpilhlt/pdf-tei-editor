@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi_app.config import GITHUB_REPO_URL
 from fastapi_app.lib.plugins.plugin_registry import PluginRecord, PluginRegistry
+from fastapi_app.lib.plugins.plugin_state import InstalledPlugin
 
 
 def readme_url_for(record: PluginRecord) -> str | None:
@@ -31,13 +32,20 @@ def readme_url_for(record: PluginRecord) -> str | None:
     return f"{GITHUB_REPO_URL}/blob/main/fastapi_app/plugins/{record.directory.name}/README.md"
 
 
-def build_plugin_info(registry: PluginRegistry, record: PluginRecord) -> dict[str, Any]:
+def build_plugin_info(
+    registry: PluginRegistry,
+    record: PluginRecord,
+    installed: InstalledPlugin | None = None,
+    restart_pending: bool = False,
+) -> dict[str, Any]:
     """
     Assemble the admin info dict for one plugin.
 
     Args:
         registry: Plugin registry (provides derived status and dependents)
         record: Plugin record
+        installed: The plugin's runtime installation (from the plugin state), if any
+        restart_pending: An upgrade or removal of the plugin waits for a restart
 
     Returns:
         Dict matching the PluginAdminInfo response model
@@ -61,7 +69,11 @@ def build_plugin_info(registry: PluginRegistry, record: PluginRecord) -> dict[st
         "protected": bool(meta.get("protected", False)),
         "dependencies": record.dependencies,
         "dependents": registry.dependents(record.id, transitive=True),
-        "source": "external" if record.external else "builtin",
+        "source": "site" if record.site else "external" if record.external else "builtin",
+        "installed_version": installed.version if installed else None,
+        "installed_from": f"{installed.repository}@{installed.tag}" if installed else None,
+        "removable": installed is not None,
+        "restart_pending": restart_pending,
         "readme_url": readme_url_for(record),
         "has_routes": bool(directory and (directory / "routes.py").is_file()),
         "has_frontend_extension": bool(ext_dir and ext_dir.is_dir() and any(ext_dir.glob("*.js"))),

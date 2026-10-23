@@ -173,7 +173,7 @@ npm run manage-remote -- config <subcommand>
 |---------|-------------|
 | `config list` | List all configuration values |
 | `config get <key>` | Get a configuration value |
-| `config set <key> <json-value>` | Set a configuration value (value must be valid JSON) |
+| `config set <key> <json-value>` | Set a configuration value (value must be valid JSON; requires an admin account) |
 
 ### Examples
 
@@ -221,6 +221,35 @@ npm run manage-remote -- maintenance off --message "Maintenance complete. Please
 
 # Force all clients to reload (e.g. after deploying a frontend update)
 npm run manage-remote -- maintenance reload
+```
+
+## Plugin Commands
+
+```bash
+npm run manage-remote -- plugin <subcommand>
+```
+
+Requires admin privileges. See the [Plugin Manager](plugin-manager.md) for what the operations do.
+
+| Command | Description |
+| --- | --- |
+| `plugin list` | List the installed plugins with version, status and source |
+| `plugin available [--refresh]` | List the plugins of the plugin repositories (requires `PTE_PLUGIN_INSTALL=1` on the server) |
+| `plugin install <id> [--repository <owner/repo>] [--version <v>] [--confirm]` | Install or upgrade a plugin from a GitHub release (default repository: `mpilhlt/pte-plugins`, default version: the latest release); `--confirm` is required for repositories of untrusted owners |
+| `plugin enable <id>` / `plugin disable <id>` | Enable or disable a plugin, including the plugins affected by the change |
+| `plugin remove <id>` | Remove a plugin installed with `plugin install` |
+| `plugin apply` | Restart the server processes to apply upgrades and removals |
+
+### Examples
+
+```bash
+# Install the latest release of the GROBID plugin and enable it
+npm run manage-remote -- plugin install grobid
+npm run manage-remote -- plugin enable grobid
+
+# Upgrade it, then restart the server processes
+npm run manage-remote -- plugin install grobid --version 1.1.0
+npm run manage-remote -- plugin apply
 ```
 
 ## Diagnostic Commands

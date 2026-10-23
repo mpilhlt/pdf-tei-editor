@@ -309,7 +309,7 @@ this.getDependency('lint-utils').addDismissListener(dismissed => {
 });
 ```
 
-See `fastapi_app/plugins/annotation_review/extensions/annotation-review.js` for a complete example.
+See `pte-plugins/plugins/annotation-review/src/pte_plugin_annotation_review/extensions/annotation-review.js` for a complete example.
 
 ## Migration from Function-Based Extensions
 

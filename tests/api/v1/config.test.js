@@ -71,6 +71,18 @@ describe('Configuration API', () => {
         assert.strictEqual(response.status, 401);
     });
 
+    test('should reject set config for non-admin users', async () => {
+        const { sessionId } = await login('user', 'user');
+        try {
+            const response = await authenticatedRequest(
+                sessionId, '/config/set', 'POST', { key: 'test.key', value: 'changed by user' }
+            );
+            assert.strictEqual(response.status, 403);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
     test('should set config value with authentication', async () => {
         const { sessionId } = await login('admin', 'admin');
 
@@ -129,6 +141,84 @@ describe('Configuration API', () => {
 
             const arrVal = await authenticatedApiCall(sessionId, '/config/get/test.array', 'GET');
             assert.deepStrictEqual(arrVal, [1, 2, 3]);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
+    test('should reject delete config for non-admin users', async () => {
+        const { sessionId: adminSession } = await login('admin', 'admin');
+        try {
+            await authenticatedApiCall(adminSession, '/config/set', 'POST', { key: 'plugin.api-test.setting', value: 'x' });
+        } finally {
+            await logout(adminSession);
+        }
+        const { sessionId } = await login('user', 'user');
+        try {
+            const response = await authenticatedRequest(sessionId, '/config/plugin.api-test.setting', 'DELETE');
+            assert.strictEqual(response.status, 403);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
+    test('should refuse to delete keys that do not start with "plugin."', async () => {
+        const { sessionId } = await login('admin', 'admin');
+        try {
+            const response = await authenticatedRequest(sessionId, '/config/session.timeout', 'DELETE');
+            assert.strictEqual(response.status, 400);
+            const value = await authenticatedApiCall(sessionId, '/config/get/session.timeout', 'GET');
+            assert.strictEqual(typeof value, 'number', 'session.timeout must not be deleted');
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
+    test('should refuse to delete metadata keys separately', async () => {
+        const { sessionId } = await login('admin', 'admin');
+        try {
+            await authenticatedApiCall(sessionId, '/config/set', 'POST', { key: 'plugin.api-test.setting', value: 'x' });
+            const response = await authenticatedRequest(sessionId, '/config/plugin.api-test.setting.type', 'DELETE');
+            assert.strictEqual(response.status, 400);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
+    test('should delete a plugin key together with its metadata', async () => {
+        const { sessionId } = await login('admin', 'admin');
+        try {
+            await authenticatedApiCall(sessionId, '/config/set', 'POST', {
+                key: 'plugin.api-test.setting', value: 'x', description: 'Test setting'
+            });
+            const result = await authenticatedApiCall(sessionId, '/config/plugin.api-test.setting', 'DELETE');
+            assert.strictEqual(result.result, 'OK');
+
+            const config = await authenticatedApiCall(sessionId, '/config/list', 'GET');
+            assert.ok(!('plugin.api-test.setting' in config), 'value should be deleted');
+            assert.ok(!('plugin.api-test.setting.type' in config), 'type should be deleted');
+            assert.ok(!('plugin.api-test.setting.description' in config), 'description should be deleted');
+
+            const response = await authenticatedRequest(sessionId, '/config/plugin.api-test.setting', 'DELETE');
+            assert.strictEqual(response.status, 404);
+        } finally {
+            await logout(sessionId);
+        }
+    });
+
+    test('should clear a masked value by saving an empty string', async () => {
+        const { sessionId } = await login('admin', 'admin');
+        try {
+            const key = 'plugin.api-test.api.key';
+            await authenticatedApiCall(sessionId, '/config/set', 'POST', { key, value: 'secret', masked: true });
+            assert.strictEqual(await authenticatedApiCall(sessionId, `/config/get/${key}`, 'GET'), '****');
+
+            await authenticatedApiCall(sessionId, '/config/set', 'POST', { key, value: '' });
+            assert.strictEqual(await authenticatedApiCall(sessionId, `/config/get/${key}`, 'GET'), '');
+            const config = await authenticatedApiCall(sessionId, '/config/list', 'GET');
+            assert.strictEqual(config[key], '', 'cleared masked value is listed as not set');
+
+            await authenticatedApiCall(sessionId, `/config/${key}`, 'DELETE');
         } finally {
             await logout(sessionId);
         }

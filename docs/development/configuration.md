@@ -134,11 +134,15 @@ REST API endpoints for configuration access:
 
 - **`GET /api/v1/config/list`**: Returns complete configuration object
 - **`GET /api/v1/config/get/{key}`**: Returns specific configuration value by key
-- **`POST /api/v1/config/set`**: Sets a configuration value (requires authentication)
+- **`POST /api/v1/config/set`**: Sets a configuration value (requires the admin role)
   - Request body: `{"key": "config.key", "value": <json_value>}`
   - Validates user authentication via session
   - Calls `set_config_value()` which performs validation
   - Logs the configuration change with username
+- **`DELETE /api/v1/config/{key}`**: Deletes a plugin setting together with its `.type`, `.values` and `.description` entries (requires the admin role)
+  - Only keys starting with `plugin.` can be deleted (400 otherwise); metadata keys cannot be deleted separately
+  - The `.masked` flag is kept, so a secret registered again later stays hidden
+  - The plugin registers the key again with its default (or environment variable) at the next server start, through `get_plugin_config()`
 
 ### Frontend Integration
 

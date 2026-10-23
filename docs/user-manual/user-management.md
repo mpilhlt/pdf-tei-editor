@@ -4,7 +4,7 @@ This guide covers authentication, user account management, and access control fo
 
 ## Authentication System
 
-User, group, and collection data is managed via the ["RBAC Management" tool](./rbac-manager.md), or via [`npm run manage-remote`](./cli-manage-remote.md) (using the http API).
+User, group, and collection data is managed via the ["Manage Access & Projects" tool](./rbac-manager.md), or via [`npm run manage-remote`](./cli-manage-remote.md) (using the http API).
 
 ## User Roles
 

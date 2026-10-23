@@ -346,9 +346,11 @@ def generate_teiheader_structure(
         doc_parser = RelaxNGParser()
         doc_parser.parse_file(str(schema_cache_file))
         doc_defs = _collect_merged_defs(doc_parser, _TEIHEADER_ROOTS, _TEIHEADER_EXCLUDE)
-    except (HTTPException, ValueError) as e:
-        # No/unreachable document schema (HTTPException from
-        # resolve_document_schema_cache_file), or its content isn't valid
+    except (HTTPException, ValidationError, ValueError) as e:
+        # No/404ing document schema (HTTPException from
+        # resolve_document_schema_cache_file), an unreachable one (no
+        # network - download_schema_file's non-404 ValidationError, which
+        # resolve_document_schema_cache_file re-raises), or its content isn't valid
         # RelaxNG - e.g. the document only declares a DTD/Schematron/other
         # non-RelaxNG schema location (resolve_document_schema_cache_file
         # falls back to schema_locations[0] when no RelaxNG-typed location

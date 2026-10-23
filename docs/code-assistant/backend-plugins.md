@@ -51,6 +51,38 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 - External plugins run in the application's Python environment and cannot declare their own dependencies. Use only packages the application already installs, or install additional ones into the deployment yourself.
 - The Plugin Manager lists them as "external". See [pte-edition-plugin](https://github.com/cboulanger/pte-edition-plugin) for a complete example.
 
+### Installed Plugins (Python Packages)
+
+A plugin can also be a regular Python distribution installed into the application's environment (e.g. with `uv sync --extra ...`). It declares an entry point in the group `pte.plugins` that maps the plugin id to its package:
+
+```toml
+[project]
+name = "pte-plugin-grobid"
+dependencies = ["requests>=2.33"]
+
+[project.entry-points."pte.plugins"]
+grobid = "pte_plugin_grobid"
+```
+
+- The package directory is the plugin directory: it contains `plugin.py`, `pte-plugin.json` (required, as for external plugins), and optionally `routes.py`, `static/` and `extensions/` as package data.
+- Modules are imported under the real package name (`pte_plugin_grobid.plugin`), so plugins can import each other's packages; declare such dependencies both as a Python dependency and in `metadata["dependencies"]`.
+- The package is located with `importlib.util.find_spec()` without importing it (`get_installed_plugin_dirs()` in `plugin_paths.py`). Unlike directory plugins, an installed plugin declares its own Python dependencies.
+- The Plugin Manager lists installed plugins as "external", and plugins installed in the Plugin Manager as "site" (see [Runtime Install](#runtime-install)).
+- The first-party plugins (all except the ones in `fastapi_app/plugins/`) are such packages, maintained in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) monorepo. Core declares them as optional dependencies with git sources pinned to a commit (`[project.optional-dependencies]` and `[tool.uv.sources]` in `pyproject.toml`); the Docker build selects them with `PTE_PLUGIN_EXTRAS`. To update a plugin, change the `rev` of its source and run `uv lock`. Core code must not import them (guard test `tests/unit/fastapi/test_core_plugin_independence.py`).
+
+### Plugin API
+
+`fastapi_app/plugin_api.py` re-exports the core symbols plugins are supposed to use (plugin base classes, dependencies, registries, extension points such as `register_gc_handler()` and `register_schema_config()`). Within a major `PLUGIN_API_VERSION` they stay compatible; imports from other core modules keep working but may break with any core release. Plugins maintained outside the core repository should import from `fastapi_app.plugin_api` and declare `engines.pte-plugin-api` in their manifest.
+
+### Extension Points Instead of Core Couplings
+
+Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/test_core_plugin_independence.py` and the CI job that runs the core suites with `fastapi_app/plugins/` emptied). Plugins hook into core through:
+
+- `register_gc_handler(plugin_id, handler)` (`lib/core/gc_hooks.py`): reproducible plugin data deleted by `POST /api/v1/files/garbage_collect`; the response reports the counts in `plugin_items_deleted`.
+- Event bus events (`lib/sse/event_bus.py`): e.g. `file.lock_changed` (emitted after a lock is acquired or released, payload `stable_id`), `file.deleted`, `document.saved`.
+- `register_schema_config(url, timeout, reason)` (`lib/core/schema_validator.py`): a shorter validation timeout for complex schemas.
+- `ExtractorUnavailableError` (`lib/extraction`): raise it when an external dependency of an extractor is missing; the extraction router then falls back to the mock extractor if one is registered.
+
 ### Plugin Manifest
 
 `pte-plugin.json` marks an external plugin directory and may declare the plugin version and the editor versions it works with:
@@ -59,12 +91,13 @@ Plugins do not have to live in the source tree. Set `FASTAPI_PLUGIN_PATHS` to on
 {
   "version": "1.2.0",
   "readme": "https://github.com/me/my-plugin#readme",
-  "engines": { "pte": ">=0.75.0 <1.0.0" }
+  "engines": { "pte": ">=0.75.0 <1.0.0", "pte-plugin-api": "^1.0" }
 }
 ```
 
 - `version`: semantic version of the plugin. The plugin manager shows it instead of the `version` in the plugin's `metadata`.
 - `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
+- `engines.pte-plugin-api`: semver range of plugin API versions (`PLUGIN_API_VERSION`, see [Plugin API](#plugin-api)); a plugin outside the range is not loaded.
 - `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
 - All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
 - The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
@@ -95,6 +128,7 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 
 - `POST /api/v1/extract` turns `MissingSecretError` into HTTP 428 with `detail = {code: "secret_required", service, label, description, help_url}`. The frontend (`api-keys` plugin, `withKeyPrompt()`) then asks for the key, stores it through `PUT /api/v1/secrets/{service}` and repeats the request. Other routes can use the same pattern: raise `MissingSecretError` and wrap the frontend call in `getDependency('api-keys').withKeyPrompt(...)`.
 - The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
+- `unregister_secret_service(id)` removes a service that no longer exists (e.g. a deleted endpoint of the inference-endpoints plugin) from the API Keys dialog; stored keys are kept.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
 ## Annotation Tags (Visual Mode)
@@ -108,7 +142,7 @@ from fastapi_app.lib.utils.annotation_tags import generate_annotation_tags
 "annotationTags": {VARIANT_ID: generate_annotation_tags(SCHEMA_PATH, "p", exclude={"lb", "pb"}, expand=["choice"])},
 ```
 
-A chip whose element allows neither text nor any of its (non-excluded) children gets `empty: true` (e.g. `gap`, `pb`): the editor shows such elements as outlined badges that open the attributes popup, but does not offer them for wrapping selected text. Exclude a tag (e.g. `lb`) to leave it as plain XML. The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `fastapi_app/plugins/grobid/config/annotation_tags_scope.py`.
+A chip whose element allows neither text nor any of its (non-excluded) children gets `empty: true` (e.g. `gap`, `pb`): the editor shows such elements as outlined badges that open the attributes popup, but does not offer them for wrapping selected text. Exclude a tag (e.g. `lb`) to leave it as plain XML. The result is cached until the schema file's mtime changes. Colors are derived from the tag name, so a tag has the same color in every variant. The GROBID plugin uses the same function with the scopes in `pte-plugins/plugins/grobid/src/pte_plugin_grobid/config/annotation_tags_scope.py`.
 
 ## Creating a Plugin
 
@@ -302,14 +336,29 @@ def is_available(cls) -> bool:
 
 ## Runtime Enable/Disable
 
-Administrators can enable and disable plugins at runtime from the Tools menu ("Manage Plugins", see the [user manual](../user-manual/plugin-manager.md)). Plugins stay imported and their routes stay mounted; a persisted state (config key `plugins.disabled`, managed by the plugin manager, hidden in the config editor) gates them. Consequences for plugin authors:
+Administrators can enable and disable plugins at runtime from the Tools menu ("Manage Plugins", see the [user manual](../user-manual/plugin-manager.md)). Plugins stay imported and their routes stay mounted; a persisted state gates them. Consequences for plugin authors:
 
-- **`initialize()` and `cleanup()` must be re-entrant and symmetric.** `cleanup()` must undo everything `initialize()` did (service/extractor/provider registrations, event handlers, registrations with other plugins such as `tei-wizard` enhancements) so that `initialize()` can safely run again. Frontend extensions registered through `FrontendExtensionRegistry` are removed automatically. The test `TestBuiltinLifecycleConformance` in `tests/unit/fastapi/test_plugin_management.py` runs `initialize -> cleanup -> initialize` for all built-in plugins.
+- **`initialize()` and `cleanup()` must be re-entrant and symmetric.** `cleanup()` must undo everything `initialize()` did (service/extractor/provider registrations, event handlers, registrations with other plugins such as `tei-wizard` enhancements) so that `initialize()` can safely run again. Frontend extensions registered through `FrontendExtensionRegistry` are removed automatically. The test `TestBuiltinLifecycleConformance` in `tests/unit/fastapi/test_plugin_management.py` runs `initialize -> cleanup -> initialize` for all built-in plugins; plugin repositories run the same check with `check_lifecycle_conformance()` from `fastapi_app/lib/plugins/plugin_testing.py`.
 - **Disabling cascades along `dependencies`.** Disabling a plugin makes its dependents `inactive`; they return when it is enabled again (unless they are disabled explicitly). Dependents are cleaned up first, dependencies are initialized first.
 - **Inactive plugins answer 404.** Custom routes (`routes.py`) are gated with a router dependency and `static/` mounts with `GatedStaticFiles`; `/api/v1/plugins` and `/extensions.js` list only active plugins.
 - **Module-level code and `__init__()` still run at startup** for disabled plugins, so keep them free of side effects.
+- **Every worker process applies the change.** The disabled set is stored in `data/db/plugins-state.json` (`{"generation": n, "disabled": [...]}`, `fastapi_app/lib/plugins/plugin_state.py`). The worker that serves the admin request writes it and runs the hooks; the other workers check the file every 2 seconds (`PluginManager.watch_state()`, started in the lifespan) and run `cleanup()`/`initialize()` themselves. Each worker reports the generation it has applied in `data/db/plugin-workers/<pid>.json`; `GET /api/v1/plugins/admin` returns `propagation` (`generation`, `workers`, `pending`) and the dialog waits until `pending` is 0. So hooks run once per worker, possibly a few seconds apart. The former config key `plugins.disabled` is migrated when the state file is created.
 - **Status** is derived: `active`, `disabled`, `inactive` (dependency not active), `unavailable` (`is_available()` is false; override `unavailable_reason()` to explain why), `failed` (import error, unresolved dependency, or `initialize()` raised).
 - **Optional metadata:** `"protected": True` prevents disabling (use for plugins the admin tooling depends on); `"readme_url"` overrides the README link shown in the manager (built-in plugins with a `README.md` link to GitHub automatically).
+
+## Runtime Install
+
+With `PTE_PLUGIN_INSTALL=1` (operator setting, see [Runtime Plugin Install](../user-manual/docker-deployment.md#runtime-plugin-install)), administrators install plugins from GitHub release wheels in the Plugin Manager. Modules: `plugin_catalog.py` (discovery), `plugin_wheel.py` (inspection, requirement check, unpacking), `plugin_install.py` (download and verification), `plugin_site.py` (`data/plugins/site/`), `plugin_install_policy.py` (settings and audit log), and the install/upgrade/remove methods of `PluginManager`.
+
+- **Releases.** A plugin repository lists its plugins in `pte-plugins.json` on its default branch (`id`, `package`, `module`, `path`, `version`, `requires` (plugin ids), `dependencies` (other Python requirements), `engines`); a repository with one plugin uses `"path": "."`. Releases are tagged `<id>-v<version>` (`v<version>` in a single-plugin repository) and carry the wheel (`py3-none-any`) and `SHA256SUMS` as assets; [pte-plugins](https://github.com/mpilhlt/pte-plugins) creates them with its release workflow.
+- **Install.** The wheel is downloaded, checked against `SHA256SUMS`, inspected without importing it (one `pte.plugins` entry point, only the plugin package plus `.dist-info`, no `.data`, compatible `engines`), and its `Requires-Dist` is checked against the installed distributions. Plugins that need packages that are not installed are refused ("install it with uv sync"). The wheel is unpacked into `data/plugins/site/<distribution>/<version>/` and recorded in `installed` of `plugins-state.json`.
+- **Not imported until enabled.** A new plugin is installed disabled. Disabled runtime-installed plugins are listed from their state entry (`PluginRecord.deferred`), not imported, also at startup. Enabling one imports it (`PluginRegistry.load_deferred()`), registers its routes and static files live and runs `initialize()`, in every worker (`PluginManager.reconcile()`).
+- **Live routes.** `register_plugin_routes()` records the position after the startup plugin routes; `register_live_routes()` inserts the routes of a plugin loaded later at that position, before the catch-all compat router and static mounts, by replacing `app.router.routes` in one assignment, and resets `app.openapi_schema`.
+- **Precedence.** The version directories are put at the front of `sys.path` at startup, so a runtime-installed version replaces a version installed with `uv sync` (its entry point and package are found first). Built-in plugins and plugins from `FASTAPI_PLUGIN_PATHS` cannot be replaced.
+- **Upgrade and removal** of a plugin that is imported take effect only in worker processes started afterwards: the state records `restart_required_at` and `restart_plugins`, heartbeats carry each worker's start time, and `propagation.restart_pending` counts the workers still running old code. `POST /api/v1/plugins/admin/restart` sends `SIGHUP` to the uvicorn supervisor (only when `PTE_WORKER_RECYCLE=1`, set by `bin/start-prod`), which restarts the workers one after the other. Superseded version directories (`pending_removal`) are deleted at startup once no older worker runs. Enabling a plugin with a pending restart is refused.
+- **Client reload**: after a worker applied a plugin change it calls the listeners of `PluginManager.add_change_listener()`; `fastapi_app/main.py` uses this to broadcast the SSE event `serverChanged` to the worker's clients. The clients compare `plugins_version` of `GET /api/v1/maintenance/status` (null while a restart is pending) with the value at page load and reload (`app/src/modules/server-change-monitor.js`).
+- **Trust.** Repositories of `PTE_PLUGIN_TRUSTED_OWNERS` are trusted; others need the repository name as `confirm`, and `PTE_PLUGIN_TRUSTED_ONLY=1` refuses them. Only repositories in the catalog (`PTE_PLUGIN_SOURCES` and the `pte-plugin` topic search) can be installed from.
+- **Audit.** Discover, install, upgrade, remove, enable, disable and restart are appended to `data/db/plugin-audit.jsonl` and logged.
 
 ## Plugin Configuration with Environment Variables
 
@@ -386,6 +435,8 @@ get_plugin_config(
 
 Failure to pass `masked=True` for credentials is a security defect.
 
+A masked key without a value (no environment variable, `default=None`) is stored as an empty string, so that it appears as "not set" in the config editor and administrators can enter a shared key there. An empty string counts as unset: the environment variable still applies at the next start, and plugins must treat an empty value like a missing one. Administrators can clear a masked value in the config editor (it saves `""`) and delete any `plugin.*` key (`DELETE /api/v1/config/{key}`); code reading a plugin key must therefore cope with a missing key until the next start re-registers it.
+
 **Example - Plugin availability based on config**:
 
 ```python
@@ -417,7 +468,7 @@ def is_available(cls) -> bool:
     return True
 ```
 
-**Reference Implementation**: See [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**Reference Implementation**: See [local_sync plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ## Role-Based Access
 
@@ -592,8 +643,8 @@ async def analyze(self, context, params: dict) -> dict:
 
 ### Reference Examples
 
-- `fastapi_app/plugins/edit_history/` - Collection-based edit history with DataTables
-- `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
+- `pte-plugins/plugins/edit-history/src/pte_plugin_edit_history/` - Collection-based edit history with DataTables
+- `pte-plugins/plugins/annotation-history/src/pte_plugin_annotation_history/` - Document-based annotation history with nested tables
 
 
 
@@ -820,7 +871,7 @@ async def execute(self, context, params: dict) -> dict:
     }
 ```
 
-**See also:** [edit_history plugin](../../fastapi_app/plugins/edit_history) for complete example.
+**See also:** [edit_history plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) for complete example.
 
 ### 3. Preview-then-Execute Pattern (for operations requiring confirmation)
 
@@ -909,7 +960,7 @@ async def execute_operation(
 - Optionally show errors if any occurred
 - Use complete HTML document with styles
 
-**See also:** [local_sync plugin](../../fastapi_app/plugins/local_sync) for complete example.
+**See also:** [local_sync plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/local-sync/src/pte_plugin_local_sync) for complete example.
 
 ### 4. Options-then-Execute Pattern (for user-configured operations)
 
@@ -933,7 +984,7 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 
 For detailed implementation pattern with code examples, see [Options-then-Execute Pattern](../development/plugin-system-backend.md#4-options-then-execute-pattern-for-user-configured-operations).
 
-**See also:** [update_metadata plugin](../../fastapi_app/plugins/update_metadata) for complete example.
+**See also:** [update_metadata plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/update-metadata/src/pte_plugin_update_metadata) for complete example.
 
 ## Interactive HTML Content
 
@@ -1022,8 +1073,8 @@ The sandbox can update any field from `ApplicationState` (see [app/src/state.js]
 
 ### Implementation Examples
 
-- **Inline HTML**: The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
-- **Standalone pages**: The [edit_history plugin](../../fastapi_app/plugins/edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
+- **Inline HTML**: The [iaa_analyzer plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/iaa-analyzer/src/pte_plugin_iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
+- **Standalone pages**: The [edit_history plugin](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/edit-history/src/pte_plugin_edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
 
 ### Utility Functions
 

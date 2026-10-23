@@ -28,7 +28,7 @@ async function openPluginManager(page) {
     menuItem.click();
   });
   await page.waitForSelector('sl-dialog[name="pluginAdminDialog"][open]');
-  await page.waitForSelector('sl-switch[data-id="tei-wizard"]');
+  await page.waitForSelector('sl-switch[data-id="test-base-plugin"]');
 }
 
 /**
@@ -46,6 +46,8 @@ async function pluginStatuses(page) {
 
 test.describe('Plugin manager', () => {
 
+  // Uses the fixture plugins test-base-plugin and test-dependent-plugin (tests/fixtures/plugins/),
+  // where the second depends on the first
   test('admin can disable a plugin with dependents and re-enable it', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
@@ -55,33 +57,28 @@ test.describe('Plugin manager', () => {
       await openPluginManager(page);
 
       const before = await pluginStatuses(page);
-      expect(before['tei-wizard']).toBe('active');
-      // grobid is only available where a GROBID server URL is configured (not in CI)
-      const grobidActive = before['grobid'] === 'active';
+      expect(before['test-base-plugin']).toBe('active');
+      expect(before['test-dependent-plugin']).toBe('active');
 
-      // Disabling tei-wizard warns about its dependents; cancelling changes nothing
-      await page.locator('sl-switch[data-id="tei-wizard"]').click();
+      // Disabling the base plugin warns about its dependents; cancelling changes nothing
+      await page.locator('sl-switch[data-id="test-base-plugin"]').click();
       const confirm = page.locator('sl-dialog[name="pluginAdminConfirmDialog"]');
       await expect(confirm).toHaveAttribute('open', '');
-      if (grobidActive) {
-        await expect(confirm.locator('ul[name="affectedList"]')).toContainText('grobid');
-      }
-      await expect(confirm.locator('ul[name="affectedList"]')).toContainText('metadata-extraction');
+      await expect(confirm.locator('ul[name="affectedList"]')).toContainText('test-dependent-plugin');
       await page.waitForTimeout(500);
       await confirm.locator('sl-button[name="cancelBtn"]').click();
-      expect((await pluginStatuses(page))['tei-wizard']).toBe('active');
+      expect((await pluginStatuses(page))['test-base-plugin']).toBe('active');
 
-      // Confirming disables tei-wizard and deactivates its dependents
+      // Confirming disables the base plugin and deactivates its dependents
       await page.waitForTimeout(500);
-      await page.locator('sl-switch[data-id="tei-wizard"]').click();
+      await page.locator('sl-switch[data-id="test-base-plugin"]').click();
       await page.waitForTimeout(500);
       await confirm.locator('sl-button[name="okBtn"]').click();
       await expect(page.locator('sl-alert[name="reloadBanner"]')).toBeVisible();
 
       await expect.poll(() => pluginStatuses(page)).toMatchObject({
-        'tei-wizard': 'disabled',
-        ...(grobidActive ? { 'grobid': 'inactive' } : {}),
-        'metadata-extraction': 'inactive'
+        'test-base-plugin': 'disabled',
+        'test-dependent-plugin': 'inactive'
       });
 
       // Disabled plugin's endpoints are no longer offered
@@ -90,15 +87,88 @@ test.describe('Plugin manager', () => {
         const result = await client.apiClient.plugins({});
         return result.plugins.map((/** @type {any} */ p) => p.id);
       });
-      expect(offered).not.toContain('tei-wizard');
-      if (grobidActive) expect(offered).not.toContain('grobid');
+      expect(offered).not.toContain('test-base-plugin');
+      expect(offered).not.toContain('test-dependent-plugin');
     } finally {
       // Restore state so other tests are not affected
       await page.evaluate(async () => {
         const client = /** @type {any} */(window).client;
-        await client.apiClient.pluginsAdminEnable('tei-wizard', { cascade: false });
+        await client.apiClient.pluginsAdminEnable('test-base-plugin', { cascade: false });
       });
-      expect(await pluginStatuses(page)).toMatchObject({ 'tei-wizard': 'active', 'metadata-extraction': 'active' });
+      expect(await pluginStatuses(page)).toMatchObject({ 'test-base-plugin': 'active', 'test-dependent-plugin': 'active' });
+      stopErrorMonitoring();
+      try {
+        await performLogout(page);
+      } catch {
+        // ignore logout errors
+      }
+    }
+  });
+
+  // The E2E server does not enable runtime install, so the admin API is mocked:
+  // the list reports install_enabled, the Available tab lists a trusted and an untrusted plugin
+  test('admin installs a plugin from the Available tab, confirming an untrusted repository', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {any[]} */
+    const installRequests = [];
+
+    try {
+      await page.route('**/api/v1/plugins/admin', async route => {
+        const response = await route.fetch();
+        const json = await response.json();
+        await route.fulfill({ response, json: { ...json, install_enabled: true } });
+      });
+      await page.route('**/api/v1/plugins/admin/available*', route => route.fulfill({
+        json: {
+          fetched_at: Date.now() / 1000,
+          errors: {},
+          trusted_owners: ['mpilhlt'],
+          trusted_only: false,
+          plugins: [
+            {
+              id: 'demo-plugin', repository: 'mpilhlt/pte-plugins', description: 'A trusted plugin', index_version: '1.0.0',
+              latest_version: '1.0.0', latest_tag: 'demo-plugin-v1.0.0', versions: ['1.0.0'], installed_version: null,
+              installed_source: null, requires: [], unmet_requirements: [], trusted: true, compatible: true, incompatible_reason: null,
+              installable: true, update_available: false
+            },
+            {
+              id: 'stranger-plugin', repository: 'stranger/plugins', description: 'An unverified plugin', index_version: '0.1.0',
+              latest_version: '0.1.0', latest_tag: 'stranger-plugin-v0.1.0', versions: ['0.1.0'], installed_version: null,
+              installed_source: null, requires: [], unmet_requirements: [], trusted: false, compatible: true, incompatible_reason: null,
+              installable: true, update_available: false
+            }
+          ]
+        }
+      }));
+      await page.route('**/api/v1/plugins/admin/install', async route => {
+        installRequests.push(route.request().postDataJSON());
+        await route.fulfill({ json: { plugin: 'stranger-plugin', version: '0.1.0', action: 'install', restart_required: false, generation: 1 } });
+      });
+
+      await navigateAndLogin(page, TEST_ADMIN.username, TEST_ADMIN.password);
+      await openPluginManager(page);
+
+      const availableTab = page.locator('sl-tab[name="availableTab"]');
+      await expect(availableTab).toBeVisible();
+      await availableTab.click();
+      await expect(page.locator('[data-available="demo-plugin"]')).toContainText('Trusted');
+      await expect(page.locator('[data-available="stranger-plugin"]')).toContainText('Unverified');
+
+      // Installing from an untrusted repository requires typing its name
+      await page.locator('sl-button[data-install="stranger-plugin"]').click();
+      const confirm = page.locator('sl-dialog[name="pluginAdminConfirmDialog"]');
+      await expect(confirm).toHaveAttribute('open', '');
+      const okBtn = confirm.locator('sl-button[name="okBtn"]');
+      await expect(okBtn).toHaveAttribute('disabled', '');
+      await confirm.locator('sl-input[name="confirmInput"] input').fill('stranger/plugins');
+      await expect(okBtn).not.toHaveAttribute('disabled', '');
+      await page.waitForTimeout(500);
+      await okBtn.click();
+
+      await expect.poll(() => installRequests.length).toBe(1);
+      expect(installRequests[0]).toMatchObject({ repository: 'stranger/plugins', id: 'stranger-plugin', version: '0.1.0', confirm: 'stranger/plugins' });
+    } finally {
       stopErrorMonitoring();
       try {
         await performLogout(page);

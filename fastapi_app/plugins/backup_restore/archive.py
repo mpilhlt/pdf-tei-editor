@@ -7,12 +7,16 @@ in use.
 """
 
 import hashlib
+import json
 import logging
 import os
 import sqlite3
 import tempfile
 import zipfile
 from pathlib import Path
+
+from fastapi_app.lib.core.data_restore import BACKUP_MANIFEST
+from fastapi_app.plugins.backup_restore.manifest import build_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +49,14 @@ def _is_sqlite_sidecar(path: Path) -> bool:
     return path.name.endswith(SQLITE_SIDECAR_SUFFIXES)
 
 
-def create_backup_zip(data_root: Path, tmp_dir: Path) -> tuple[Path, str]:
+def create_backup_zip(data_root: Path, tmp_dir: Path, pte_version: str | None) -> tuple[Path, str]:
     """Create the backup ZIP of ``db/`` and ``files/`` in ``tmp_dir``.
 
     Args:
         data_root: Application data root
         tmp_dir: Directory in which the ZIP and temporary snapshots are created.
             Must not be inside any of the archived directories.
+        pte_version: Application version recorded in the backup manifest
 
     Returns:
         Tuple of (path of the ZIP file, hex SHA-256 of the ZIP file). The caller
@@ -66,6 +71,7 @@ def create_backup_zip(data_root: Path, tmp_dir: Path) -> tuple[Path, str]:
         with tempfile.TemporaryDirectory(dir=tmp_dir) as snap_dir_name:
             snap_dir = Path(snap_dir_name)
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(BACKUP_MANIFEST, json.dumps(build_manifest(pte_version), indent=2))
                 for name in BACKUP_DIRS:
                     backup_dir = data_root / name
                     if not backup_dir.exists():

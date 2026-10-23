@@ -8,8 +8,8 @@ from typing import Any, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
 
-from ..lib.core.dependencies import require_authenticated_user
-from ..lib.utils.config_utils import get_config, get_config_metadata, MASKED_SENTINEL
+from ..lib.core.dependencies import require_admin_user, require_authenticated_user
+from ..lib.utils.config_utils import get_config, get_config_metadata, MASKED_SENTINEL, METADATA_SUFFIXES
 from ..lib.utils.logging_utils import get_logger
 
 
@@ -52,6 +52,16 @@ class StateResponse(BaseModel):
 class ConfigSetResponse(BaseModel):
     """Response for config set operation"""
     result: str
+
+
+class ConfigDeleteResponse(BaseModel):
+    """Response for config delete operation"""
+    result: str
+
+
+# Only plugin settings can be deleted: plugins re-register their keys with the default value (or the
+# environment variable) on startup, whereas core settings have no such fallback.
+DELETABLE_KEY_PREFIX = "plugin."
 
 
 # Helper functions
@@ -115,7 +125,7 @@ async def get_config_value_endpoint(
     if key not in config_data:
         raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
 
-    if config_data.get(f"{key}.masked") is True:
+    if config_data.get(f"{key}.masked") is True and config_data[key] not in (None, ""):
         return MASKED_SENTINEL
 
     return config_data[key]
@@ -145,12 +155,13 @@ async def get_config_metadata_endpoint(
 @router.post("/set", response_model=ConfigSetResponse)
 async def set_config(
     request_data: ConfigSetRequest,
-    user: dict = Depends(require_authenticated_user)
+    user: dict = Depends(require_admin_user)
 ):
     """
     Set a configuration value.
 
-    Requires authentication.
+    Requires the admin role: configuration values include service URLs and shared API keys, so
+    changing them affects all users.
     """
     if not request_data.key:
         raise HTTPException(status_code=400, detail="Missing 'key' in request")
@@ -173,6 +184,36 @@ async def set_config(
     logger.info(f"User {user['username']} set config {request_data.key}")
 
     return ConfigSetResponse(result="OK")
+
+
+@router.delete("/{key}", response_model=ConfigDeleteResponse)
+async def delete_config(
+    key: str,
+    user: dict = Depends(require_admin_user)
+) -> ConfigDeleteResponse:
+    """
+    Delete a plugin configuration value together with its type, allowed values and description.
+
+    Requires the admin role. Only keys starting with "plugin." can be deleted. The plugin registers
+    the key again with its default value (or the environment variable) on the next server start;
+    until then, code reading the key gets no value. The ".masked" flag is kept.
+    """
+    if not key.startswith(DELETABLE_KEY_PREFIX):
+        raise HTTPException(status_code=400, detail=f"Only keys starting with '{DELETABLE_KEY_PREFIX}' can be deleted")
+
+    if key.endswith(METADATA_SUFFIXES):
+        raise HTTPException(status_code=400, detail="Metadata keys cannot be deleted separately")
+
+    if key not in config.load():
+        raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
+
+    success, message = config.delete(key, with_metadata=True)
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+
+    logger.info(f"User {user['username']} deleted config {key}")
+
+    return ConfigDeleteResponse(result="OK")
 
 
 @router.get("/state", response_model=StateResponse)

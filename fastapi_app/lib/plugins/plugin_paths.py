@@ -8,6 +8,11 @@ listed in the FASTAPI_PLUGIN_PATHS environment variable (separated by
 under the synthetic namespace ``pte_external_plugins.<dir>``, so that they can
 consist of several modules using relative imports (``from .extractor import ...``).
 
+Installed plugins are Python distributions that declare an entry point in the
+group ``pte.plugins`` (``<plugin-id> = "<package>"``). Their package directory is
+the plugin directory, and its modules are imported under the real package name
+(``pte_plugin_grobid.plugin``), so plugins can import each other's packages.
+
 An external plugin is a directory containing both ``plugin.py`` and the manifest
 file ``pte-plugin.json``. The directories in FASTAPI_PLUGIN_PATHS are searched
 a few levels deep for such directories, so FASTAPI_PLUGIN_PATHS can point to a
@@ -16,7 +21,9 @@ folder of repositories without importing unrelated ``plugin.py`` files.
 
 import importlib
 import importlib.machinery
+import importlib.metadata
 import importlib.util
+import logging
 import os
 import sys
 import types
@@ -25,7 +32,10 @@ from pathlib import Path
 from fastapi_app.config import get_settings
 from fastapi_app.lib.plugins.plugin_manifest import MANIFEST_FILE
 
+logger = logging.getLogger(__name__)
+
 PLUGIN_PATHS_ENV_VAR = "FASTAPI_PLUGIN_PATHS"
+ENTRY_POINT_GROUP = "pte.plugins"
 EXTERNAL_NAMESPACE = "pte_external_plugins"
 EXTERNAL_SEARCH_DEPTH = 3
 SKIPPED_DIR_NAMES = frozenset({"node_modules", "__pycache__", "site-packages", "venv", "env"})
@@ -33,6 +43,9 @@ SKIPPED_DIR_NAMES = frozenset({"node_modules", "__pycache__", "site-packages", "
 # Resolved plugin directory -> package name, so that a plugin's modules
 # (plugin.py, routes.py, ...) are always imported under the same package.
 _package_names: dict[Path, str] = {}
+
+# Package names of installed (entry-point) plugins, which are importable as they are
+_installed_packages: set[str] = set()
 
 
 def get_external_plugin_dirs() -> list[Path]:
@@ -85,14 +98,68 @@ def find_external_plugins(base: Path, max_depth: int = EXTERNAL_SEARCH_DEPTH) ->
     return found
 
 
+def get_installed_plugin_dirs() -> list[Path]:
+    """
+    Return the package directories of installed plugins (entry point group ``pte.plugins``).
+
+    The packages are located without being imported. Entry points whose package
+    cannot be found are logged and skipped.
+
+    Returns:
+        Plugin directories, in entry point order
+    """
+    dirs: list[Path] = []
+    for entry_point in importlib.metadata.entry_points(group=ENTRY_POINT_GROUP):
+        package_name = entry_point.value.split(":")[0].strip()
+        try:
+            spec = importlib.util.find_spec(package_name)
+        except (ImportError, ValueError) as e:
+            logger.error(f"Cannot locate plugin package {package_name} of entry point {entry_point.name}: {e}")
+            continue
+        if spec is None or not spec.submodule_search_locations:
+            logger.error(f"Entry point {entry_point.name} does not refer to a package: {package_name}")
+            continue
+        plugin_dir = Path(next(iter(spec.submodule_search_locations)))
+        _package_names[plugin_dir.resolve()] = package_name
+        _installed_packages.add(package_name)
+        dirs.append(plugin_dir)
+    return dirs
+
+
+def register_installed_package(plugin_dir: Path, package_name: str) -> None:
+    """
+    Register the package of a plugin installed after discovery (see ``plugin_site``).
+
+    Args:
+        plugin_dir: Package directory of the plugin
+        package_name: Importable package name
+    """
+    _package_names[plugin_dir.resolve()] = package_name
+    _installed_packages.add(package_name)
+
+
+def is_installed_package_dir(plugin_dir: Path) -> bool:
+    """Whether a plugin directory is the package of an installed (entry-point) plugin."""
+    return _package_names.get(plugin_dir.resolve()) in _installed_packages
+
+
 def get_plugin_dirs() -> list[Path]:
     """
-    Return all directories to search for plugins: built-in first, then external.
+    Return all directories to search for plugins: built-in, then external, then installed.
+
+    A directory is listed once, even if it is reachable in several ways.
 
     Returns:
         List of directory paths
     """
-    return [get_settings().plugins_code_dir, *get_external_plugin_dirs()]
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for directory in [get_settings().plugins_code_dir, *get_external_plugin_dirs(), *get_installed_plugin_dirs()]:
+        resolved = directory.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            dirs.append(directory)
+    return dirs
 
 
 def is_builtin_plugin_dir(plugin_path: Path) -> bool:
@@ -187,6 +254,6 @@ def import_plugin_module(plugin_path: Path, module: str) -> types.ModuleType:
         ImportError: If the module cannot be imported
     """
     package_name = get_plugin_package_name(plugin_path)
-    if not package_name.startswith("fastapi_app."):
+    if not package_name.startswith("fastapi_app.") and package_name not in _installed_packages:
         _ensure_external_package(plugin_path, package_name)
     return importlib.import_module(f"{package_name}.{module}")

@@ -66,7 +66,10 @@ if __name__ == '__main__':
             '--workers', '4'
         ]
     else:
-        # Linux/Mac: use venv python directly
+        # Linux/Mac: use venv python directly. The workers' parent is the uvicorn supervisor,
+        # which restarts the workers one after the other on SIGHUP; the plugin manager uses
+        # this to apply plugin upgrades and removals (see PluginManager.restart_workers())
+        os.environ['PTE_WORKER_RECYCLE'] = '1'
         venv_python = project_root / '.venv' / 'bin' / 'python'
         cmd = [
             str(venv_python), '-m', 'uvicorn',

@@ -11,6 +11,10 @@ echo
 
 cd /app
 
+# Disk usage, to rule out a full disk when database errors occur (issue #589)
+df -h / /tmp 2>/dev/null || true
+echo
+
 echo "Running tests..."
 echo "Arguments: $@"
 echo

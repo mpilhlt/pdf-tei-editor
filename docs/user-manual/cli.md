@@ -8,7 +8,7 @@ The `manage-remote.js` script provides a command-line interface for managing use
 
 ## User API Keys
 
-Extractors and plugins that call services billed to the user (e.g. Claude) use the user's own API key. Users enter their keys in the web interface (user menu > API Keys, or in the prompt that appears when a key is missing); the keys are stored Fernet-encrypted in `data/db/secrets.db`. `bin/user-secrets.py` manages the same store from the command line, e.g. for administrators or for agents that need a key in a script:
+Extractors and plugins that call services billed to the user (e.g. Claude) use the user's own API key. Users enter their keys in the web interface (user menu > API Keys, or in the prompt that appears when a key is missing); the keys are stored Fernet-encrypted in `data/db/secrets.db`. The "Remove all keys" button in the API Keys dialog removes all keys of the current user at once (after a confirmation), including keys of services that are no longer installed. `bin/user-secrets.py` manages the same store from the command line, e.g. for administrators or for agents that need a key in a script:
 
 ```bash
 uv run python bin/user-secrets.py list --user alice                # services with a stored key, no values

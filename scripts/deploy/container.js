@@ -229,6 +229,11 @@ async function buildImage(tag, noCache) {
       buildArgs.push('--no-cache');
     }
 
+    // Plugins to install (optional dependency names, see PTE_PLUGIN_EXTRAS in the Dockerfile)
+    if (process.env.PTE_PLUGIN_EXTRAS !== undefined) {
+      buildArgs.push('--build-arg', `PTE_PLUGIN_EXTRAS=${process.env.PTE_PLUGIN_EXTRAS}`);
+    }
+
     buildArgs.push('-t', fullTag);
 
     if (tag !== 'latest') {
@@ -1406,7 +1411,7 @@ async function handleDeploy(options) {
 
   console.log();
   console.log('[INFO] See .env.production for available environment variables');
-  console.log('[INFO] Key variables: GEMINI_API_KEY, GROBID_SERVER_URL, KISSKI_API_KEY, LOG_LEVEL');
+  console.log('[INFO] Key variables: LOG_LEVEL; plugins document their own variables in their READMEs');
   console.log();
 
   if (!options.yes) {
@@ -1752,10 +1757,9 @@ Environment Variables:
     --env FOO=bar     Set FOO to "bar" in container
 
   Key variables include:
-    - GEMINI_API_KEY, GROBID_SERVER_URL, KISSKI_API_KEY (AI/ML features)
     - LOG_LEVEL, LOG_CATEGORIES (logging)
-    - WEBDAV_ENABLED, WEBDAV_BASE_URL (WebDAV integration)
     - DOCS_FROM_GITHUB (documentation source)
+    - Plugin settings (extractor servers, API keys, sync backends): see each plugin's README
 
 Notes:
   - Requires sudo for nginx and SSL setup

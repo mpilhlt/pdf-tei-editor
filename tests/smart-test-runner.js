@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import madge from 'madge';
 import { logger } from './api/helpers/test-logger.js';
+import { STAGED_PREFIX, isPluginTestFile, listPluginTests, stagedPathOf } from './lib/plugin-tests.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname); // Go up from tests to project root
@@ -162,27 +163,29 @@ class SmartTestRunner {
       pyTests.push(...pluginPyFiles.map(makeRelative));
     }
 
-    // Discover API tests in tests/api/ (backend API integration tests)
-    // NOTE: Plugin integration tests (*.test.js in fastapi_app/plugins/**/tests/) are NOT included
+    // Discover API tests in tests/api/ (backend API integration tests) and in the
+    // plugins' tests/api/ directories (see tests/lib/plugin-tests.js)
+    // NOTE: Other plugin integration tests (*.test.js directly in fastapi_app/plugins/**/tests/) are NOT included
     // because they require custom .env.test configuration and should be run manually
-    const apiTests = [];
+    const apiTests = [...listPluginTests('api')];
     if (existsSync(testsDir)) {
       const apiDir = join(testsDir, 'api');
       if (existsSync(apiDir)) {
         const apiPattern = normalizeGlobPattern(join(apiDir, '**/*.test.js'));
         const apiFiles = await glob(apiPattern);
-        apiTests.push(...apiFiles.map(makeRelative));
+        apiTests.push(...apiFiles.map(makeRelative).filter(f => !f.split('/').at(-1).startsWith(STAGED_PREFIX)));
       }
     }
 
-    // Discover E2E tests in tests/e2e/ (Playwright frontend E2E tests)
-    const e2eTests = [];
+    // Discover E2E tests in tests/e2e/ (Playwright frontend E2E tests) and in the
+    // plugins' tests/e2e/ directories (see tests/lib/plugin-tests.js)
+    const e2eTests = [...listPluginTests('e2e')];
     if (existsSync(testsDir)) {
       const e2eDir = join(testsDir, 'e2e');
       if (existsSync(e2eDir)) {
         const e2ePattern = normalizeGlobPattern(join(e2eDir, '**/*.spec.js'));
         const e2eFiles = await glob(e2ePattern);
-        e2eTests.push(...e2eFiles.map(makeRelative));
+        e2eTests.push(...e2eFiles.map(makeRelative).filter(f => !f.split('/').at(-1).startsWith(STAGED_PREFIX)));
       }
     }
 
@@ -733,7 +736,7 @@ class SmartTestRunner {
     if (testsToRun.api && testsToRun.api.length > 0) {
       // Convert test file paths to grep pattern
       const testNames = testsToRun.api.map(f =>
-        f.replace('tests/api/v1/', '').replace('.test.js', '')
+        (isPluginTestFile(f, 'api') ? stagedPathOf(f, 'api') : f).replace('tests/api/v1/', '').replace('.test.js', '')
       ).join('|');
       const grepArg = `--grep "${testNames}"`;
 

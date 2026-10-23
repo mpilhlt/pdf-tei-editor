@@ -22,6 +22,9 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 | `kisski` | `kisski` | KISSKI | `KISSKI_API_KEY` | `plugin.kisski.api.key` (+ `.api.url`) |
 | `google_llm` | `google` | Google Gemini | `GEMINI_API_KEY` | `plugin.google-llm.api.key` |
 | `anthropic_llm` | `anthropic` | Anthropic Claude | `ANTHROPIC_API_KEY` (+ `ANTHROPIC_API_URL`) | `plugin.anthropic-llm.api.key` (+ `.api.url`) |
+| `inference-endpoints` | `endpoint-<id>` | as entered | none (keys in the secret store) | none (endpoints in `data/db/inference-endpoints.json`) |
+
+The [inference-endpoints](https://github.com/mpilhlt/pte-plugins/tree/main/plugins/inference-endpoints#readme) plugin registers one provider per OpenAI-compatible endpoint (e.g. Ollama) that an administrator adds in its management page; it is registered in testing mode too, since it has no endpoints until one is added.
 
 The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
 
@@ -63,7 +66,7 @@ LLMProviderRegistry.get_instance().unregister("my-provider")
 
 Consumers query the registry lazily, inside route handlers, and never declare the provider plugin as a plugin dependency; registration order therefore does not matter. Use `get_provider(id)` (raises `KeyError`) or `list_providers(available_only=True)`.
 
-See `fastapi_app/plugins/anthropic_llm/plugin.py` for a complete example. For OpenAI-compatible endpoints, use `OpenAICompatibleProvider` instead of writing a new class (see `fastapi_app/plugins/kisski/`).
+See `pte-plugins/plugins/anthropic-llm/src/pte_plugin_anthropic_llm/plugin.py` for a complete example. For OpenAI-compatible endpoints, use `OpenAICompatibleProvider` instead of writing a new class (see `pte-plugins/plugins/kisski/src/pte_plugin_kisski/`).
 
 ## Model filter
 
@@ -93,7 +96,7 @@ A model is free if its provider sets `LLMModel.free`, or if its `<Provider label
 
 `GET /api/v1/llm/providers` lists only the models the current user may use, so non-admins never see models they cannot pick.
 
-Consuming routes must call it before invoking a provider; see `fastapi_app/plugins/annotation_review/routes.py`.
+Consuming routes must call it before invoking a provider; see `pte-plugins/plugins/annotation-review/src/pte_plugin_annotation_review/routes.py`.
 
 ## HTTP API
 

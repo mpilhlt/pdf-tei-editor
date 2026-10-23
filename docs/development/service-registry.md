@@ -154,7 +154,7 @@ The test plugin provides endpoints to test service registry functionality:
 The KISSKI plugin registers an extraction service:
 
 ```python
-# fastapi_app/plugins/kisski/service.py
+# pte-plugins/plugins/kisski/src/pte_plugin_kisski/service.py
 class KisskiService(ExtractionService):
     def __init__(self):
         super().__init__(
