@@ -79,6 +79,7 @@ A stored mark whose fingerprint matches no unit in the document is an orphan. Wh
   <teiHeader>…</teiHeader>
   <standOff>
     <listAnnotation type="line-review" subtype="fp-sha256-8-v1">
+      <note type="unit-xpath">.//listBibl/bibl</note>
       <note type="summary">units=184 ok=112 not-ok=8 disputed=1</note>
       <annotation xml:id="lr-cboulanger" motivation="assessing" target="#xpath(//text)" resp="#cboulanger">
         <revisionDesc><change when="2026-10-23T18:02:11Z"/></revisionDesc>
@@ -107,6 +108,7 @@ A stored mark whose fingerprint matches no unit in the document is an orphan. Wh
   - `note[@type="final-ok"]` / `note[@type="final-not-ok"]`: final reviews, only in final-reviewer mode, in the same forms.
   - `note[@type="was-ok"]` / `note[@type="was-not-ok"]`: marks carried over after an edit in the editor (see [Non-matching fingerprints](#non-matching-fingerprints)).
 - An LLM reviewer has no user account, so its annotation has no `@resp` but a `respStmt` naming the model. Its id is `lr-llm-<provider>-<model>`, so each model is a reviewer of its own.
+- `note[@type="unit-xpath"]` records which elements were fingerprinted (the variant's review-unit XPath, relative to `text`). The document's schema doesn't change while it is edited, so this documents the units rather than guarding against a change. If the configured XPath ever differs from the recorded one, the editor keeps using the recorded one for that document and shows a warning. A reviewer can switch the document to the new definition, which resets the marks that no longer match.
 - `listAnnotation/@subtype` names the fingerprint algorithm. If the canonical form ever has to change, a new version can recompute the old fingerprints on load instead of losing all marks. The reviewer's `persName` is added to `respStmt` the way it is done for annotators. The `change` inside the annotation dates that reviewer's last marking. It is nested in the annotation and does not affect the document's `revisionDesc`.
 - `note[@type="summary"]` holds the combined counts, written on every save. The backend reads it with a simple key=value parse for the dashboard's review queue and the file drawer (P4), so it never has to compute fingerprints. `note` is allowed in `listAnnotation` (model.annotationLike).
 - `text` stays untouched. The training export can drop `standOff` or keep it as provenance.
@@ -213,4 +215,4 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
 
 ## Open questions
 
-- If a variant's review-unit XPath changes, the units are different elements and old marks would look like orphans. Proposal: store the XPath in use in `listAnnotation`, keep using it for documents that have it, and let a reviewer switch a document to the new definition explicitly (which resets the marks that no longer match). Awaiting confirmation.
+None at the moment. Possible later refinement: a minimum number of votes in majority mode.
