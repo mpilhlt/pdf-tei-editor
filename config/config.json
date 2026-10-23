@@ -116,5 +116,12 @@
   "backend-plugins.open-target": "tab",
   "backend-plugins.open-target.description": "How backend plugin pages opened via 'Open in new window'-style links are displayed: as a new browser tab, or a separate popup window",
   "backend-plugins.open-target.type": "string",
-  "backend-plugins.open-target.values": ["tab", "window"]
+  "backend-plugins.open-target.values": ["tab", "window"],
+  "unit-review.mode": "majority",
+  "unit-review.mode.description": "How the review marks of several reviewers are combined in unit review mode: majority (each review counts as one vote, a tie is disputed and needs another reviewer) or final (a reviewer can set a final review that overrides all others)",
+  "unit-review.mode.type": "string",
+  "unit-review.mode.values": ["majority", "final"],
+  "unit-review.llm-vote": true,
+  "unit-review.llm-vote.description": "Count the marks of the LLM Reviewer as votes in unit review mode. If false, LLM marks are only shown for units that no person has reviewed yet.",
+  "unit-review.llm-vote.type": "boolean"
 }

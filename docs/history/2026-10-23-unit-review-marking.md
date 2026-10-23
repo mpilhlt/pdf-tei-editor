@@ -216,6 +216,18 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
   - config: `unit-review.mode` (`majority` or `final`) and `unit-review.llm-vote` (boolean).
   - backend: parse `note[@type="summary"]` into file metadata for P4.
 
+## Implementation notes
+
+Implemented on 2026-10-23 (pdf-tei-editor, fossil and pte-plugins branches `claude/project-thread-5ozykr`). Differences from the plan above:
+
+- The path recorded in `note[@type="unit-xpath"]` is the path the units were found with. For the automatic default, that is the path the heuristic resolved to (e.g. `./listBibl/*`), not `auto`. A recorded path takes precedence over the variant's path, so the units stay the same for all reviewers.
+- The LLM Reviewer records marks only while review mode is on, so that running a review does not add a `standOff` to documents nobody reviews unit by unit. To know which units a chunk covered, the review endpoint returns the chunk's position (`chunk_start`, `chunk_end`, UTF-16 offsets in the submitted text).
+- The diagnostics of the `unit-review` source are merged with `applyMergedDiagnostics()` like the LLM Reviewer's, not registered through `addLinter()`. "Propose fix" and "OK anyway" for LLM findings are not added; the LLM Reviewer's own diagnostics keep "Propose fix".
+- Orphaned marks (units changed outside the editor) are dropped the next time marks are written, not on every save.
+- The approval warning (workflow step 7) is a confirmation after the Save Revision dialog, based on the summary stored in the document.
+- Not implemented yet: P4 (counts in the review queue and the file drawer), which needs the backend to parse `note[@type="summary"]` into the file metadata.
+- User documentation: `docs/user-manual/unit-review.md`.
+
 ## Open questions
 
 None at the moment. Possible later refinement: a minimum number of votes in majority mode.

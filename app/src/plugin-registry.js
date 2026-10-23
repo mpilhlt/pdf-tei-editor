@@ -42,6 +42,7 @@ export { default as TeiToolsPlugin } from './plugins/tei-tools.js';
 export { default as TeiValidationPlugin } from './plugins/tei-validation.js';
 export { default as ToolbarPlugin } from './plugins/toolbar.js';
 export { default as ToolsPlugin } from './plugins/tools.js';
+export { default as UnitReviewPlugin } from './plugins/unit-review.js';
 export { default as UrlHashStatePlugin } from './plugins/url-hash-state.js';
 export { default as UserAccountPlugin } from './plugins/user-account.js';
 export { default as XmlAnnotationPlugin } from './plugins/xml-annotation.js';
@@ -85,6 +86,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   "tei-validation": import('./plugins/tei-validation.js').default,
  *   toolbar: import('./plugins/toolbar.js').default,
  *   tools: import('./plugins/tools.js').default,
+ *   "unit-review": import('./plugins/unit-review.js').default,
  *   "url-hash-state": import('./plugins/url-hash-state.js').default,
  *   "user-account": import('./plugins/user-account.js').default,
  *   "xml-annotation": import('./plugins/xml-annotation.js').default,

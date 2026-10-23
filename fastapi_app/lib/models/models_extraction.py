@@ -141,6 +141,10 @@ class ExtractorInfo(BaseModel):
         default_factory=dict,
         description="Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu"
     )
+    reviewUnits: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Per-variant path of the review units below TEI/text for unit review mode (e.g. './/listBibl/bibl'), keyed by variant_id; 'auto' or a missing entry uses the automatic heuristic"
+    )
 
 
 class ListExtractorsResponse(BaseModel):
