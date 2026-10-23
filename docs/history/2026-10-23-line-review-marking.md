@@ -1,4 +1,4 @@
-# Line review marking (concept)
+# Unit review marking (concept)
 
 Status: concept agreed, not implemented. Mockups: `line-review-marking/*.png` in the project files folder (rendered from `mockups.html`). Mockups 1–5 also show alternatives that were rejected. 6–8 show the agreed design. The decisions below take precedence.
 
@@ -11,22 +11,23 @@ Reviewers go through a document and mark each part of it as **unreviewed**, **re
 | Question | Decision |
 | --- | --- |
 | Review unit | An element (a "review unit"), not a line. In formatted documents one unit is one line in most cases. |
+| Naming | `unit-review` for the TEI `@type`, the `xml:id` prefix (`ur-`), the config keys and the plugin name, since units are reviewed, not lines. |
 | Identifying units | A fingerprint (content hash) of each unit, stored stand-off. No `xml:id` on the units. |
-| Storage | `standOff/listAnnotation[@type="line-review"]` with one `annotation[@motivation="assessing"]` per reviewer (option S1) |
+| Storage | `standOff/listAnnotation[@type="unit-review"]` with one `annotation[@motivation="assessing"]` per reviewer (option S1) |
 | Gutter | Status strip left of the line numbers (variant A), plus an "uncertain" colour |
 | Progress | Status bar meter (P1) and counts in document lists (P4) |
-| Several reviewers | Only a combined view. Hovering a "not OK" line shows who disagrees. How marks are combined is set by the admin (`line-review.mode`): majority or final reviewer. |
+| Several reviewers | Only a combined view. Hovering a "not OK" line shows who disagrees. How marks are combined is set by the admin (`unit-review.mode`): majority or final reviewer. |
 | Comments | A not-OK mark can carry a short comment. |
 | New versions | Keep the marks. |
 | LLM | The LLM Reviewer plugin acts as one more reviewer. Its findings become not-OK marks with comments. |
 
 ## Context in the code base
 
-- `XMLEditor.createExtensionSlot()` (`app/src/modules/xmleditor.js`) gives a plugin its own reconfigurable compartment. A `line-review` plugin adds a `gutter()` with `GutterMarker`s and a `StateField` there, as `xml-annotation` does.
+- `XMLEditor.createExtensionSlot()` (`app/src/modules/xmleditor.js`) gives a plugin its own reconfigurable compartment. A `unit-review` plugin adds a `gutter()` with `GutterMarker`s and a `StateField` there, as `xml-annotation` does.
 - Lines marked not OK can be fed into the diagnostics drawer (`app/src/plugins/diagnostics-drawer.js`) as `info` diagnostics through `XMLEditor.addLinter()`.
 - The XML editor status bar (`app/src/modules/panels/status-bar.js`, `status-*` widgets) takes the progress meter.
 - Reviewers are identified the way annotators already are: `respStmt/persName/@xml:id` holds the user id, and pointers like `#cboulanger` refer to it.
-- The document status (`annotation.lifecycle.order`) is read from the **last** `revisionDesc/change` (`@status`, `@when` and `note[@type="label"]`, see `fastapi_app/lib/utils/tei_utils.py`). Line review must therefore **not** append `change` elements of its own: that would overwrite the status, the label and the revision date. The review summary goes into `standOff` instead (see below).
+- The document status (`annotation.lifecycle.order`) is read from the **last** `revisionDesc/change` (`@status`, `@when` and `note[@type="label"]`, see `fastapi_app/lib/utils/tei_utils.py`). Unit review must therefore **not** append `change` elements of its own: that would overwrite the status, the label and the revision date. The review summary goes into `standOff` instead (see below).
 - The fossil schemas are strict. `TEI` allows only `teiHeader` and `text`, and no unit element allows `@xml:id`. The storage below needs a fossil schema change to allow `standOff`.
 
 ## TEI practice (summary of the research)
@@ -78,10 +79,10 @@ A stored mark whose fingerprint matches no unit in the document is an orphan. Wh
 <TEI>
   <teiHeader>…</teiHeader>
   <standOff>
-    <listAnnotation type="line-review" subtype="fp-sha256-8-v1">
+    <listAnnotation type="unit-review" subtype="fp-sha256-8-v1">
       <note type="unit-xpath">.//listBibl/bibl</note>
       <note type="summary">units=184 ok=112 not-ok=8 disputed=1</note>
-      <annotation xml:id="lr-cboulanger" motivation="assessing" target="#xpath(//text)" resp="#cboulanger">
+      <annotation xml:id="ur-cboulanger" motivation="assessing" target="#xpath(//text)" resp="#cboulanger">
         <revisionDesc><change when="2026-10-23T18:02:11Z"/></revisionDesc>
         <note type="ok">3f9c2e1a 0b77d4a2 9e01c3f4 0b77d4a2.2 …</note>
         <note type="not-ok" n="c41a07de">Label "8" belongs to the previous footnote</note>
@@ -89,7 +90,7 @@ A stored mark whose fingerprint matches no unit in the document is an orphan. Wh
         <note type="final-ok">77e2b910</note>
         <note type="was-not-ok" n="a0c4f1d2">Label "8" belongs to the previous footnote</note>
       </annotation>
-      <annotation xml:id="lr-llm-kisski-llama-3.3" motivation="assessing" target="#xpath(//text)">
+      <annotation xml:id="ur-llm-kisski-llama-3.3" motivation="assessing" target="#xpath(//text)">
         <respStmt><resp>LLM Reviewer</resp><name type="software">KISSKI / Llama 3.3</name></respStmt>
         <revisionDesc><change when="2026-10-23T19:52:40Z"/></revisionDesc>
         <note type="ok">3f9c2e1a 9e01c3f4 …</note>
@@ -101,13 +102,13 @@ A stored mark whose fingerprint matches no unit in the document is an orphan. Wh
 </TEI>
 ```
 
-- There is one `annotation` per reviewer (`@resp`, `@xml:id="lr-<userid>"`), so marks are always attributable and never overwrite each other.
+- There is one `annotation` per reviewer (`@resp`, `@xml:id="ur-<userid>"`), so marks are always attributable and never overwrite each other.
 - The notes inside an annotation:
   - `note[@type="ok"]`: a space-separated list of fingerprints.
   - `note[@type="not-ok"]`: one per unit, with the fingerprint in `@n` and the optional comment as content.
   - `note[@type="final-ok"]` / `note[@type="final-not-ok"]`: final reviews, only in final-reviewer mode, in the same forms.
   - `note[@type="was-ok"]` / `note[@type="was-not-ok"]`: marks carried over after an edit in the editor (see [Non-matching fingerprints](#non-matching-fingerprints)).
-- An LLM reviewer has no user account, so its annotation has no `@resp` but a `respStmt` naming the model. Its id is `lr-llm-<provider>-<model>`, so each model is a reviewer of its own.
+- An LLM reviewer has no user account, so its annotation has no `@resp` but a `respStmt` naming the model. Its id is `ur-llm-<provider>-<model>`, so each model is a reviewer of its own.
 - `note[@type="unit-xpath"]` records which elements were fingerprinted (the variant's review-unit XPath, relative to `text`). The document's schema doesn't change while it is edited, so this documents the units rather than guarding against a change. If the configured XPath ever differs from the recorded one, the editor keeps using the recorded one for that document and shows a warning. A reviewer can switch the document to the new definition, which resets the marks that no longer match.
 - `listAnnotation/@subtype` names the fingerprint algorithm. If the canonical form ever has to change, a new version can recompute the old fingerprints on load instead of losing all marks. The reviewer's `persName` is added to `respStmt` the way it is done for annotators. The `change` inside the annotation dates that reviewer's last marking. It is nested in the annotation and does not affect the document's `revisionDesc`.
 - `note[@type="summary"]` holds the combined counts, written on every save. The backend reads it with a simple key=value parse for the dashboard's review queue and the file drawer (P4), so it never has to compute fingerprints. `note` is allowed in `listAnnotation` (model.annotationLike).
@@ -127,11 +128,11 @@ Stable ids assigned once (`xml:id="b12"`, with the hash kept stand-off) would be
 
 ## Combining reviews
 
-The gutter shows one combined state per unit. How it is computed is set by the admin in `line-review.mode`:
+The gutter shows one combined state per unit. How it is computed is set by the admin in `unit-review.mode`:
 
 ### Mode `majority`
 
-- Every reviewer's mark is a vote. The LLM Reviewer votes too if `line-review.llm-vote` is `true`, and is advisory only otherwise.
+- Every reviewer's mark is a vote. The LLM Reviewer votes too if `unit-review.llm-vote` is `true`, and is advisory only otherwise.
 - More not-OK than OK votes → **not OK**. More OK than not-OK → **OK**. A tie (e.g. 1 : 1) → **disputed**, which counts as open until another reviewer votes. No votes → unreviewed.
 - A single vote decides while no one disagrees. There is no minimum number of votes. Projects that want to avoid ties use an odd number of reviewers. A minimum can be added in a later iteration.
 
@@ -150,16 +151,16 @@ The gutter shows one combined state per unit. How it is computed is set by the a
 
 ## LLM Reviewer integration
 
-The LLM Reviewer plugin (`annotation-review` in pte-plugins) already reviews the document chunk by chunk. Its chunks are cut at element boundaries, so units are not split. Each finding quotes the text it applies to (`old`) and comes with a rationale and a proposed fix. When the `line-review` plugin is installed, the LLM Reviewer additionally records its result as marks:
+The LLM Reviewer plugin (`annotation-review` in pte-plugins) already reviews the document chunk by chunk. Its chunks are cut at element boundaries, so units are not split. Each finding quotes the text it applies to (`old`) and comes with a rationale and a proposed fix. When the `unit-review` plugin is installed, the LLM Reviewer additionally records its result as marks:
 
-- The `line-review` plugin offers an API through `getDependency('line-review')`:
+- The `unit-review` plugin offers an API through `getDependency('unit-review')`:
   - `getUnits()` returns the fingerprint and range of every unit.
   - `setMarks(reviewer, marks)` takes a reviewer descriptor (id and display name) and a list of `{fingerprint, state, comment}`.
 - After each chunk that completed successfully, the extension assigns each located finding to the unit that contains its range. Units with at least one finding are marked **not OK**, with the rationales joined as the comment. All other units fully inside the chunk are marked **OK**. The model has seen them and found nothing, so the prompt does not need to change.
 - Chunks that failed, were cut off or were cancelled produce no marks. When the review is limited to one node (navigation mode), only the units in that node are marked.
-- The findings stay in the diagnostics drawer as they are now, with "Propose fix". The `line-review` plugin adds no second diagnostic for a unit that already has an LLM finding. After a reload, when the LLM plugin's session cache is gone, the LLM's not-OK marks from the file show up as line-review diagnostics, with the comment but without "Propose fix".
+- The findings stay in the diagnostics drawer as they are now, with "Propose fix". The `unit-review` plugin adds no second diagnostic for a unit that already has an LLM finding. After a reload, when the LLM plugin's session cache is gone, the LLM's not-OK marks from the file show up as unit-review diagnostics, with the comment but without "Propose fix".
 - Applying a proposed fix changes the unit, so the LLM's not-OK mark becomes `was-not-ok`, and a human (or a new LLM run) reviews the unit again.
-- Whether the LLM's marks count as votes is set by `line-review.llm-vote`. An LLM can never set a final review.
+- Whether the LLM's marks count as votes is set by `unit-review.llm-vote`. An LLM can never set a final review.
 - The LLM's marks, OK as well as not OK, count as reviewed in the progress meter.
 
 The reverse direction works through the diagnostics drawer as well. Not-OK and disputed units appear there as `info` diagnostics, registered with `XMLEditor.addLinter()`, with these actions:
@@ -169,7 +170,7 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
 
 ## Workflow
 
-1. A reviewer opens a document (normally in status `in-review`) and turns on **Review lines** in the XML editor toolbar. This shows the strip and enables the shortcuts and menu entries. Nothing changes for users who don't review.
+1. A reviewer opens a document (normally in status `in-review`) and turns on **Review** (labelled "Review lines" in the mockups) in the XML editor toolbar. This shows the strip and enables the shortcuts and menu entries. Nothing changes for users who don't review.
 2. The reviewer moves through the document. The PDF viewer follows the cursor as it does now (Autosearch).
 3. Marking. Every action applies to the units under the cursor line, or to every unit the selection touches:
    - `Ctrl/⌘+Enter`: mark OK, then jump to the next unreviewed unit.
@@ -209,8 +210,8 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
   - GROBID: a review-unit XPath per variant.
   - annotation-review: record chunk results through `setMarks()`.
 - pdf-tei-editor:
-  - frontend `line-review` plugin: gutter, state field, fingerprinting, keymap, context menu entries, comment field and review popover, status bar widget, linter source for the diagnostics drawer, and the `getUnits()` / `setMarks()` API.
-  - config: `line-review.mode` (`majority` or `final`) and `line-review.llm-vote` (boolean).
+  - frontend `unit-review` plugin: gutter, state field, fingerprinting, keymap, context menu entries, comment field and review popover, status bar widget, linter source for the diagnostics drawer, and the `getUnits()` / `setMarks()` API.
+  - config: `unit-review.mode` (`majority` or `final`) and `unit-review.llm-vote` (boolean).
   - backend: parse `note[@type="summary"]` into file metadata for P4.
 
 ## Open questions
