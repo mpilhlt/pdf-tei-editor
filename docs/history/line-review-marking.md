@@ -131,7 +131,7 @@ The gutter shows one combined state per unit. How it is computed is set by the a
 
 - Every reviewer's mark is a vote. The LLM Reviewer votes too if `line-review.llm-vote` is `true`, and is advisory only otherwise.
 - More not-OK than OK votes → **not OK**. More OK than not-OK → **OK**. A tie (e.g. 1 : 1) → **disputed**, which counts as open until another reviewer votes. No votes → unreviewed.
-- A single vote decides while no one disagrees.
+- A single vote decides while no one disagrees. There is no minimum number of votes. Projects that want to avoid ties use an odd number of reviewers. A minimum can be added in a later iteration.
 
 ### Mode `final`
 
@@ -158,6 +158,7 @@ The LLM Reviewer plugin (`annotation-review` in pte-plugins) already reviews the
 - The findings stay in the diagnostics drawer as they are now, with "Propose fix". The `line-review` plugin adds no second diagnostic for a unit that already has an LLM finding. After a reload, when the LLM plugin's session cache is gone, the LLM's not-OK marks from the file show up as line-review diagnostics, with the comment but without "Propose fix".
 - Applying a proposed fix changes the unit, so the LLM's not-OK mark becomes `was-not-ok`, and a human (or a new LLM run) reviews the unit again.
 - Whether the LLM's marks count as votes is set by `line-review.llm-vote`. An LLM can never set a final review.
+- The LLM's marks, OK as well as not OK, count as reviewed in the progress meter.
 
 The reverse direction works through the diagnostics drawer as well. Not-OK and disputed units appear there as `info` diagnostics, registered with `XMLEditor.addLinter()`, with these actions:
 - **OK** / **Not OK**: sets your own vote.
@@ -212,6 +213,4 @@ The reverse direction works through the diagnostics drawer as well. Not-OK and d
 
 ## Open questions
 
-- Should majority mode have a minimum number of votes (e.g. 2) before a unit counts as OK?
-- Should the LLM's OK marks count towards "reviewed" in the progress meter, or only its not-OK marks?
-- Should the fingerprint algorithm be bumped when the review-unit XPath of a variant changes? A changed XPath changes which units exist, so their marks would become orphans.
+- If a variant's review-unit XPath changes, the units are different elements and old marks would look like orphans. Proposal: store the XPath in use in `listAnnotation`, keep using it for documents that have it, and let a reviewer switch a document to the new definition explicitly (which resets the marks that no longer match). Awaiting confirmation.
