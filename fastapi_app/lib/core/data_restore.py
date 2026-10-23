@@ -40,6 +40,10 @@ RESERVED_NAMES = frozenset({STAGING_DIR, PREVIOUS_DIR, LOCK_FILE, APPLIED_FILE, 
 # (see fastapi_app.lib.plugins.plugin_site)
 KEPT_PATH = ("plugins", "site")
 
+# Version manifest at the top level of a backup (written by the backup-restore plugin);
+# it describes the backup and is not extracted
+BACKUP_MANIFEST = "backup-manifest.json"
+
 _PAYLOAD = "data"
 _READY = "ready"
 _ARCHIVE = "archive"
@@ -96,7 +100,7 @@ def _member_path(name: str, strip_prefix: str | None) -> PurePosixPath | None:
 
     Returns:
         None for members that are not extracted (directories, members outside ``strip_prefix``,
-        reserved names)
+        reserved names, the backup manifest)
 
     Raises:
         RestoreError: If the member's path leaves the payload directory
@@ -110,7 +114,7 @@ def _member_path(name: str, strip_prefix: str | None) -> PurePosixPath | None:
         if len(path.parts) < 2 or path.parts[0] != strip_prefix:
             return None
         path = PurePosixPath(*path.parts[1:])
-    if path.parts[0] in RESERVED_NAMES:
+    if path.parts[0] in RESERVED_NAMES or path.parts == (BACKUP_MANIFEST,):
         return None
     return path
 

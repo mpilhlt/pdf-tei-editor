@@ -14,6 +14,29 @@ A backup contains the two directories that hold all persistent data:
 
 It does not contain caches, temporary files or plugin working data. These are rebuilt by the application.
 
+It also contains the file `backup-manifest.json`, which records the version of the PDF-TEI-Editor that made the backup:
+
+```json
+{
+  "format": 1,
+  "pte_version": "0.76.0",
+  "created_at": "2026-10-23T08:00:00+00:00"
+}
+```
+
+## Version compatibility
+
+A backup can only be restored into a compatible version of the PDF-TEI-Editor, because the structure of the data may change between versions:
+
+| Version of the server | Restores backups made by |
+| --- | --- |
+| before 1.0.0, e.g. `0.76.2` | the same minor version: any `0.76.x` |
+| 1.0.0 or later, e.g. `1.4.0` | the same major version: any `1.x.x` |
+
+A backup of another version is refused with a message that names both versions, and nothing is changed. To move data to a newer version, restore the backup into an installation of the backup's version and upgrade that installation; the upgrade migrates the data.
+
+Backups without `backup-manifest.json` (made before backups recorded their version, or packed by hand) are refused too, since their compatibility cannot be checked. If you know which version made such a backup, add a `backup-manifest.json` with that version at the top level of the ZIP (next to `db/` and `files/`) and upload it again. Only do this if you are sure: restoring data of an incompatible version can leave the application unusable.
+
 A backup contains password hashes and configuration values such as API keys. Store backups as carefully as the live data.
 
 ## Roles
@@ -57,7 +80,7 @@ Restoring replaces **all** current data with the contents of the backup. Changes
 1. Make a fresh backup of the current state first, unless you are sure you do not need it.
 2. Tell users to save their work. They will be interrupted.
 3. Open the plugin and click **Upload & Restore**.
-4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`. A missing `db/metadata.db` only produces a warning.
+4. Select the backup ZIP file. The file must contain at least `db/users.json` and `db/config.json`, and a `backup-manifest.json` of a compatible version (see [Version compatibility](#version-compatibility)). A missing `db/metadata.db` only produces a warning.
 5. The server checks the file and unpacks it into `data/.restore/`, then:
    - On a server started with `bin/start-prod` (this includes the Docker image), it switches all open sessions to a maintenance screen and, after about 10 seconds, replaces its worker processes one after the other. The first new worker applies the restore before it opens any database; the server stays reachable throughout. All open pages reload by themselves once the restored data is active and show a message about the restore.
    - On a server that runs under another supervisor (systemd and similar), it switches all open sessions to a maintenance screen and restarts itself after about 10 seconds.
@@ -79,6 +102,8 @@ If the server stops while the restore is applied, the next start completes it.
 | "Another backup is already in progress" | Another download is running. Try again shortly. |
 | "Invalid ZIP file" | The file is damaged or not a backup. Download or copy it again. |
 | "ZIP is missing required files" | The ZIP was not created by this plugin, or is incomplete. |
+| "This backup was made with version ... and cannot be restored into version ..." | The backup is from an incompatible version. See [Version compatibility](#version-compatibility). |
+| "The backup has no backup-manifest.json" | The backup was made before backups recorded their version, or by hand. See [Version compatibility](#version-compatibility). |
 | "Invalid or expired session" | Log in again and reopen the plugin. |
 
 ---
@@ -216,7 +241,7 @@ The script is a thin client for these endpoints. You can call them from other to
 | --- | --- | --- |
 | `POST /api/v1/auth/login` | none | Log in; body `{"username": "...", "passwd_hash": "<SHA-256 hex of the password>"}`; returns `sessionId` |
 | `GET /api/plugins/backup-restore/download` | `backup` | Download the backup ZIP |
-| `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore |
+| `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore; 400 if the backup is invalid or of an incompatible version |
 | `POST /api/v1/auth/logout` | session | End the session |
 
 Send the session id in the `X-Session-ID` header. The download response contains these headers for verification: `Content-Length` and `X-Content-SHA256` (hex SHA-256 of the ZIP). The download returns 403 if the user lacks the `backup` role and 409 if another backup is running.
