@@ -373,6 +373,7 @@
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
  * @property {Object<string, any>=} annotationTagsCutoff - Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu
+ * @property {Object<string, string>=} reviewUnits - Per-variant path of the review units below TEI/text for unit review mode, keyed by variant_id
  */
 
 /**

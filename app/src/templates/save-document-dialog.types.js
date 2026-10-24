@@ -20,6 +20,12 @@
  * @typedef {object} saveToNewCopySectionPart
  * @property {import('../ui.js').SlCheckbox} saveToNewCopy
  * @property {import('../ui.js').SlInput} copyLabel
+ * @property {HTMLDivElement & clearReviewsSectionPart} clearReviewsSection
+ */
+
+/**
+ * @typedef {object} clearReviewsSectionPart
+ * @property {import('../ui.js').SlCheckbox} clearReviews
  */
 
 /**

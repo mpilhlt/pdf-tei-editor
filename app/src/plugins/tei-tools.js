@@ -15,7 +15,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
-import { foldEffect, unfoldEffect } from '@codemirror/language'
+import { foldEffect, unfoldEffect, syntaxTree, foldInside } from '@codemirror/language'
 import ui from '../ui.js'
 
 // Register templates
@@ -78,6 +78,7 @@ class TeiToolsPlugin extends Plugin {
     this.#xmlEditorApi.on('editorAfterLoad', async () => {
       await this.#xmlEditorApi.whenReady()
       this.#updateTeiHeaderToggle()
+      this.#foldStandOff()
       this.#updateRevisionHistoryButton()
     })
 
@@ -93,6 +94,11 @@ class TeiToolsPlugin extends Plugin {
         (tr) => tr.effects.some((effect) => effect.is(foldEffect) || effect.is(unfoldEffect))
       )
       if (foldChanged) this.#syncHeaderFoldToggleFromEditor()
+      // folding the teiHeader (toggle or gutter) also folds the standOff
+      const headerFolded = update.transactions.some((tr) => tr.effects.some((effect) =>
+        effect.is(foldEffect) && /<teiHeader\b[^>]*>$/.test(tr.startState.doc.sliceString(Math.max(0, effect.value.from - 200), effect.value.from))
+      ))
+      if (headerFolded) setTimeout(() => this.#foldStandOff(), 0)
     })
   }
 
@@ -170,6 +176,23 @@ class TeiToolsPlugin extends Plugin {
     // the toggle is hidden for them, but the gutter fold marker still works.
     if (!userIsAnnotatorOnly(this.state.user)) {
       this.uiStorage.set('teiHeaderVisible', visible)
+    }
+  }
+
+  /**
+   * Folds `TEI/standOff`, which holds machine data only (e.g. unit review marks). It is folded on
+   * load and together with the teiHeader; a manual unfold is not remembered.
+   */
+  #foldStandOff() {
+    // uses the syntax tree, not the DOM tree, which is synced with a delay after edits
+    const view = this.#xmlEditorApi.getView()
+    const state = view.state
+    const root = syntaxTree(state).topNode.getChild('Element')
+    for (const child of root?.getChildren('Element') ?? []) {
+      const nameNode = child.getChild('OpenTag')?.getChild('TagName')
+      if (!nameNode || state.doc.sliceString(nameNode.from, nameNode.to).split(':').pop() !== 'standOff') continue
+      const range = foldInside(child)
+      if (range) view.dispatch({ effects: foldEffect.of(range) })
     }
   }
 

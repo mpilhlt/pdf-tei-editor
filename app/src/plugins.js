@@ -51,6 +51,7 @@ import {
   ApiKeysPlugin,
   XmlEditorPlugin,
   XmlAnnotationPlugin,
+  UnitReviewPlugin,
   XslViewerPlugin,
 } from './plugin-registry.js'
 
@@ -88,6 +89,7 @@ const plugins = [
   PdfViewerPlugin,
   XmlEditorPlugin,
   XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
+  UnitReviewPlugin,       // review marks in the XML editor gutter — depends on XmlEditorPlugin
   XslViewerPlugin,
   TeiToolsPlugin,
   TeiHeaderEditorPlugin,  // Edit header metadata (fileDesc) from the XML editor toolbar

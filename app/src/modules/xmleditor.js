@@ -496,14 +496,20 @@ export class XMLEditor extends EventEmitter {
    *   matched element's own opening/closing tags (via `foldInside`) - e.g. with `whitelist` this
    *   allows editing a `<text>` element's content while still rejecting edits to `<text>`'s own
    *   attributes or closing tag.
+   * @param {boolean} [options.allowUndo=false] - When true, undo and redo pass the guard, e.g. so
+   *   that programmatic changes inside the guarded element (which are never intercepted) can be
+   *   undone by the user.
    */
-  setEditGuardXpath(xpath, { mode = 'blacklist', contentOnly = false } = {}) {
+  setEditGuardXpath(xpath, { mode = 'blacklist', contentOnly = false, allowUndo = false } = {}) {
     if (!xpath) {
       this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure([]) });
       return;
     }
     const filter = EditorState.transactionFilter.of(tr => {
       if (!tr.docChanged || tr.annotation(Transaction.userEvent) === undefined) {
+        return tr;
+      }
+      if (allowUndo && (tr.isUserEvent('undo') || tr.isUserEvent('redo'))) {
         return tr;
       }
       let referenceNode;

@@ -556,6 +556,50 @@ sl-menu[name="pluginsMenu"] small {
   background-color: #1976d2;
 }
 
+/* Unit review row of the XML editor context menu */
+.unit-review-menu-row {
+  border-bottom: solid 1px var(--sl-color-neutral-200);
+}
+
+.unit-review-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  color: white;
+}
+
+.unit-review-menu-btn[hidden] {
+  display: none;
+}
+
+.unit-review-menu-btn--ok {
+  background-color: #2f9e57;
+  border-color: #267f46;
+}
+
+.unit-review-menu-btn--ok:hover:not(:disabled) {
+  background-color: #267f46;
+}
+
+.unit-review-menu-btn--not-ok {
+  background-color: #d64545;
+  border-color: #b33636;
+}
+
+.unit-review-menu-btn--not-ok:hover:not(:disabled) {
+  background-color: #b33636;
+}
+
+.unit-review-menu-btn--ok-outline {
+  color: #2f9e57;
+  border-color: #2f9e57;
+}
+
+.unit-review-menu-btn--remove,
+.unit-review-menu-btn--nav {
+  color: var(--sl-color-neutral-700);
+}
+
 .xml-editor-context-menu__shortcut {
   font-size: var(--sl-font-size-x-small);
   color: var(--sl-color-neutral-500);
