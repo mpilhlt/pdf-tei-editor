@@ -133,6 +133,9 @@ class UnitReviewPlugin extends Plugin {
 
   #writing = false
 
+  /** True while this plugin dispatches its own diagnostics */
+  #renderingDiagnostics = false
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -278,7 +281,7 @@ class UnitReviewPlugin extends Plugin {
       this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh({ persistCarry: true }), REFRESH_DELAY_MS)
-    } else if (replacesDiagnostics(update) && this.#diagnosticsKey) {
+    } else if (replacesDiagnostics(update) && this.#diagnosticsKey && !this.#renderingDiagnostics) {
       // another source replaced the diagnostics: merge ours in again (not from inside the update)
       this.#diagnosticsKey = ''
       setTimeout(() => this.#updateDiagnostics(), 0)
@@ -450,7 +453,8 @@ class UnitReviewPlugin extends Plugin {
       return false
     }
     if (!this.#xmlEditor.getXmlTree()) return fail('The XML is not well-formed: fix it before reviewing.')
-    if (this.#xmlEditor.isReadOnly() || this.state?.editorReadOnly) return fail('The document is read-only.')
+    // not the editor's own read-only flag: annotation mode sets it to block typing only
+    if (this.state?.editorReadOnly) return fail('The document is read-only.')
     if (this.#xmlEditor.isMergeViewActive()) return fail('Close the comparison view before reviewing.')
     if (!this.#scan.complete) return fail('The document is still being parsed, try again in a moment.')
     return true
@@ -1002,7 +1006,14 @@ class UnitReviewPlugin extends Plugin {
     if (key === this.#diagnosticsKey) return
     this.#diagnosticsKey = key
     // not from inside a dispatch
-    setTimeout(() => applyMergedDiagnostics(view, SOURCE, own), 0)
+    setTimeout(() => {
+      this.#renderingDiagnostics = true
+      try {
+        applyMergedDiagnostics(view, SOURCE, own)
+      } finally {
+        this.#renderingDiagnostics = false
+      }
+    }, 0)
   }
 
   /**

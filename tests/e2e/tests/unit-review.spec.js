@@ -188,6 +188,18 @@ test.describe('Unit review', () => {
           .filter((/** @type {any} */ d) => d.source === 'unit-review').map((/** @type {any} */ d) => d.message);
       })).toEqual([expect.stringContaining('wrong year')]);
 
+      // the drawer's actions open the review and mark the unit
+      const drawerItem = page.locator('.diagnostics-drawer-item', { hasText: 'wrong year' });
+      await drawerItem.locator('.diagnostics-drawer-action', { hasText: 'Open review' }).click();
+      await expect(page.getByTestId('unit-review-popover')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('unit-review-popover')).toHaveCount(0);
+      await drawerItem.locator('.diagnostics-drawer-action', { hasText: 'OK' }).first().click();
+      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 0 not OK · 1 open');
+      await cursorTo(page, 'Gamma');
+      await page.keyboard.press('ControlOrMeta+z');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+
       // a click on the strip opens the popover; mark the third unit OK there
       await cursorTo(page, 'Gamma');
       const point = await page.evaluate(() => {
