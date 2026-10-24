@@ -21,11 +21,12 @@
  * @import { Unit, UnitScan, ReviewData, CombinedUnit, ReviewSummary, MarkState, Mark, Reviewer } from '../modules/unit-review.js'
  * @import { LineMark, LineMarkState } from '../modules/codemirror/unit-review-gutter.js'
  * @import { PopoverReview } from '../modules/unit-review-popover.js'
+ * @import { MentionCandidate } from '../modules/mention-autocomplete.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { keymap } from '@codemirror/view'
+import { keymap, EditorView as View } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
@@ -40,6 +41,8 @@ import {
 } from '../modules/unit-review.js'
 import { unitReviewGutter, buildUnitReviewMarkers, setUnitReviewMarkersEffect } from '../modules/codemirror/unit-review-gutter.js'
 import { openReviewPopover, openCommentPrompt, closePopover, formatWhen } from '../modules/unit-review-popover.js'
+import { mentionCandidates } from '../modules/mention-autocomplete.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 
 /** Diagnostic source tag of this plugin's diagnostics */
 const SOURCE = 'unit-review'
@@ -589,7 +592,15 @@ class UnitReviewPlugin extends Plugin {
       this.#refresh()
       const fp = this.#scan.units[index]?.fingerprint ?? current.fingerprint
       this.markUnits([fp], 'not-ok', { comment, final }).then(() => this.goToNext('open', this.#lineAfter(current)))
-    })
+    }, { mentions: this.#mentionCandidates() })
+  }
+
+  /**
+   * The persons that can be mentioned in a mark's comment.
+   * @returns {MentionCandidate[]}
+   */
+  #mentionCandidates() {
+    return mentionCandidates(this.#xmlEditor.getXmlTree(), getFileDataById(this.state?.xml)?.item?.created_by ?? null)
   }
 
   /**
@@ -838,11 +849,30 @@ class UnitReviewPlugin extends Plugin {
       combined: `Combined: ${this.#describe(combined)}`,
       note: units.length > 1 ? `${units.length} units share this line; your review applies to all of them.` : undefined,
       readOnly,
+      mentions: this.#mentionCandidates(),
       onSave: ({ state, comment, final }) => {
         const fps = this.#unitsOnLines(line, line).map(u => u.fingerprint)
         this.markUnits(fps, state, { comment, final }).then(() => view.focus())
       }
     })
+  }
+
+  /**
+   * Scrolls to the unit with a fingerprint and opens its review popover (used by the Messages
+   * dialog). Review mode must be on.
+   * @param {string} fingerprint
+   * @returns {Promise<boolean>} False if the document has no unit with this fingerprint
+   */
+  async openReviewAtUnit(fingerprint) {
+    this.#refresh()
+    const unit = this.#scan.units.find(u => u.fingerprint === fingerprint)
+    if (!unit) return false
+    const view = this.#view()
+    view.dispatch({ selection: { anchor: unit.from }, effects: View.scrollIntoView(unit.from, { y: 'center' }) })
+    // the popover is placed at the line's screen position, which is known after the scroll
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    this.openReview(view.state.doc.lineAt(unit.from).number)
+    return true
   }
 
   // ── Meter, diagnostics, context menu ───────────────────────────────

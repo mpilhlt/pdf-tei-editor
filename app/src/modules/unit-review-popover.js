@@ -4,7 +4,11 @@
  *
  * Both are plain DOM, positioned fixed below a screen coordinate and closed by Escape, a click
  * outside, or their buttons. Only one popover is open at a time.
+ *
+ * @import { MentionCandidate } from './mention-autocomplete.js'
  */
+
+import { attachMentionAutocomplete, renderWithMentions } from './mention-autocomplete.js';
 
 /**
  * One review as shown in the popover
@@ -30,6 +34,7 @@
  * @property {string} combined - Description of the combined result
  * @property {string} [note] - Extra hint, e.g. that several units share the line
  * @property {boolean} readOnly - Show only, no editing
+ * @property {MentionCandidate[]} [mentions] - Persons offered when typing `@` in the comment
  * @property {(result: {state: 'ok'|'not-ok'|null, comment: string, final: boolean}) => void} onSave
  */
 
@@ -196,6 +201,7 @@ export function openReviewPopover(options) {
   comment.placeholder = 'Optional short comment';
   comment.disabled = options.readOnly;
   comment.dataset.testid = 'unit-review-comment';
+  if (!options.readOnly) attachMentionAutocomplete(comment, options.mentions ?? []);
   const commentRow = el('div', 'ur-row');
   commentRow.append(el('span', 'ur-label', 'Comment'), comment);
   body.append(stateRow, commentRow);
@@ -210,6 +216,7 @@ export function openReviewPopover(options) {
   }
 
   if (options.others.length) {
+    const names = new Map((options.mentions ?? []).map(m => [m.id, m.name]));
     const others = el('div', 'ur-others');
     others.appendChild(el('div', 'ur-h', 'Other reviews'));
     for (const review of options.others) {
@@ -220,7 +227,9 @@ export function openReviewPopover(options) {
       text.textContent = (review.was ? 'before the last edit: ' : '') + (review.final ? 'final · ' : '') + meta;
       if (review.comment) {
         text.appendChild(document.createElement('br'));
-        text.appendChild(document.createTextNode(`“${review.comment}”`));
+        const quoted = el('span');
+        renderWithMentions(quoted, `“${review.comment}”`, names);
+        text.appendChild(quoted);
       }
       row.appendChild(text);
       others.appendChild(row);
@@ -262,7 +271,7 @@ export function openReviewPopover(options) {
  * @param {string} label - e.g. "Not OK · line 78"
  * @param {string} initial - Current comment
  * @param {(comment: string|null) => void} onDone - Called with the comment, or null if skipped
- * @param {{placeholder?: string, hint?: string, testid?: string}} [options] - Defaults are those of the review comment
+ * @param {{placeholder?: string, hint?: string, testid?: string, mentions?: MentionCandidate[]}} [options] - Defaults are those of the review comment; `mentions` are offered when typing `@`
  */
 export function openCommentPrompt(at, label, initial, onDone, options = {}) {
   const root = el('div', 'ur-pop ur-prompt');
@@ -273,6 +282,7 @@ export function openCommentPrompt(at, label, initial, onDone, options = {}) {
   input.type = 'text';
   input.value = initial;
   input.placeholder = options.placeholder ?? 'Optional short comment';
+  attachMentionAutocomplete(input, options.mentions ?? []);
   body.appendChild(input);
   body.appendChild(el('div', 'ur-hint', options.hint ?? 'Enter: save and go to the next unit · Esc: no comment'));
   root.appendChild(body);
@@ -289,4 +299,5 @@ export function openCommentPrompt(at, label, initial, onDone, options = {}) {
     }
   });
   input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
 }

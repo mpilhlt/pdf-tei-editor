@@ -89,6 +89,15 @@ class TestMergeForeignComments(unittest.TestCase):
         merged = merge_foreign_comments(self.xml, incoming, "owner")
         self.assertIn("uc-aaa112", threads_of(merged)["uc-aaa111"][0])
 
+    def test_restores_the_resp_stmt_of_a_new_commenter(self) -> None:
+        stored = add_reply(self.xml, "uc-aaa111", "newuser", "New User", "Hi").xml
+        # the editor merged the reply live, but its header has no respStmt for the new user
+        start = stored.index("<respStmt>\n          <persName xml:id=\"newuser\"")
+        end = stored.index("</respStmt>", start) + len("</respStmt>")
+        incoming = stored[:start] + stored[end:]
+        merged = merge_foreign_comments(stored, incoming, "owner")
+        self.assertEqual(resp_persons(etree.fromstring(merged.encode("utf-8")))["newuser"], "New User")
+
     def test_restores_the_list_when_the_incoming_text_has_none(self) -> None:
         start = self.xml.index('<listAnnotation type="unit-comment"')
         end = self.xml.index("</listAnnotation>", start) + len("</listAnnotation>")

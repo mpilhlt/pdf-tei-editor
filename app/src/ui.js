@@ -38,6 +38,8 @@ import SlTree from '@shoelace-style/shoelace/dist/components/tree/tree.js';
 import SlTreeItem from '@shoelace-style/shoelace/dist/components/tree-item/tree-item.js';
 import SlSplitPanel from '@shoelace-style/shoelace/dist/components/split-panel/split-panel.js';
 import SlBadge from '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import SlRadioGroup from '@shoelace-style/shoelace/dist/components/radio-group/radio-group.js';
+import SlRadioButton from '@shoelace-style/shoelace/dist/components/radio-button/radio-button.js';
 import SlTabGroup from '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js'
 import SlTab from '@shoelace-style/shoelace/dist/components/tab/tab.js'
 import SlTabPanel from '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js'
@@ -56,6 +58,7 @@ import './modules/panels/index.js';
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {annotationGuideDrawerPart} from './plugins/annotation-guide.js'
  * @import {loginDialog} from './plugins/authentication.js'
+ * @import {messagesDialogPart} from './templates/messages-dialog.types.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
@@ -98,6 +101,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, saveDocumentDialogPart>} saveDocumentDialog - Save revision dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
+ * @property {UIPart<SlDialog, messagesDialogPart>} [messagesDialog] - Messages dialog (added by messages plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
  * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
  * @property {UIPart<SlDialog, teiHeaderEditorDialogPart>} [teiHeaderEditorDialog] - TEI header editor dialog (added by tei-header-editor plugin)
@@ -128,7 +132,7 @@ export {
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer,
   SlTree, SlTreeItem, SlIconButton, SlProgressBar, SlSplitPanel, SlBadge,
-  SlTabGroup, SlTab, SlTabPanel
+  SlTabGroup, SlTab, SlTabPanel, SlRadioGroup, SlRadioButton
 }
 export default ui;
 

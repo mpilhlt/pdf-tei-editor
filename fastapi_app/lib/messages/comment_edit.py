@@ -18,7 +18,16 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from .standoff_reader import COMMENT_LIST_TYPE, XML_ID, child_elements, find_standoff_list, read_comments, thread_status
+from .standoff_reader import (
+    COMMENT_LIST_TYPE,
+    XML_ID,
+    UnitComment,
+    child_elements,
+    find_standoff_list,
+    read_comments,
+    resp_persons,
+    thread_status,
+)
 from .store import now_iso
 
 FP_ALGORITHM = "fp-sha256-8-v1"
@@ -166,7 +175,8 @@ def merge_foreign_comments(stored: str, incoming: str, username: str) -> str:
     Puts back into `incoming` the unit comments of `stored` that `incoming` lacks and that were
     written by somebody other than `username` (users can only delete their own comments, so these
     were added by others while `username` was editing). Each goes after the comment that precedes
-    it in `stored`, or at the start of the list.
+    it in `stored`, or at the start of the list. Authors of comments in the result who have a
+    respStmt in `stored` but not in `incoming` get it back.
 
     Args:
         stored: The file as stored
@@ -188,9 +198,36 @@ def merge_foreign_comments(stored: str, incoming: str, username: str) -> str:
         c for c in stored_comments
         if c.id not in incoming_ids and c.author != username and (c.reply_to or c.id) not in deleted_threads
     ]
-    if not missing:
-        return incoming
+    if missing:
+        incoming = _insert_comments(stored, incoming, incoming_root, stored_comments, incoming_ids, missing)
+    return _restore_resp_stmts(stored_root, incoming)
 
+
+def _restore_resp_stmts(stored_root: etree._Element, incoming: str) -> str:  # type: ignore[name-defined]
+    """Adds respStmts of `stored_root` for comment authors that `incoming` has no respStmt for."""
+    try:
+        incoming_root = etree.fromstring(incoming.encode("utf-8"))
+    except etree.XMLSyntaxError:
+        return incoming
+    stored_persons = resp_persons(stored_root)
+    incoming_persons = resp_persons(incoming_root)
+    authors = {c.author for c in read_comments(find_standoff_list(incoming_root, COMMENT_LIST_TYPE))}
+    for author in sorted(authors):
+        if author in stored_persons and author not in incoming_persons:
+            incoming = _ensure_resp_stmt(incoming, incoming_root, author, stored_persons[author], "Commenter")
+            incoming_root = etree.fromstring(incoming.encode("utf-8"))
+    return incoming
+
+
+def _insert_comments(
+    stored: str,
+    incoming: str,
+    incoming_root: etree._Element,  # type: ignore[name-defined]
+    stored_comments: list[UnitComment],
+    incoming_ids: set[str],
+    missing: list[UnitComment],
+) -> str:
+    """Inserts the `missing` comments of `stored` into `incoming`, each after its predecessor in `stored`."""
     if find_standoff_list(incoming_root, COMMENT_LIST_TYPE) is None:
         incoming = _add_empty_comment_list(incoming, incoming_root)
         if find_standoff_list(etree.fromstring(incoming.encode("utf-8")), COMMENT_LIST_TYPE) is None:
