@@ -41,6 +41,23 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
+# Dependency manifests for the install layers. semantic-release bumps "version" in
+# package.json and package-lock.json on every release; neutralizing it here keeps the
+# dependency layers cached across releases. The real files arrive later with `COPY . .`.
+# playwright-version lets the browser layer depend on the Playwright version only.
+FROM base AS deps-manifest
+WORKDIR /deps
+COPY package.json package-lock.json pyproject.toml uv.lock ./
+RUN node -e ' \
+      const fs = require("fs"); \
+      const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")); \
+      const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8")); \
+      pkg.version = lock.version = lock.packages[""].version = "0.0.0"; \
+      fs.writeFileSync("package.json", JSON.stringify(pkg, null, 4) + "\n"); \
+      fs.writeFileSync("package-lock.json", JSON.stringify(lock, null, 4) + "\n"); \
+      fs.writeFileSync("playwright-version", lock.packages["node_modules/playwright"].version + "\n"); \
+    '
+
 # Stage 2: Build stage (includes all dependencies temporarily)
 FROM base AS builder
 
@@ -49,9 +66,8 @@ FROM base AS builder
 # "all" for all of them, or empty for none
 ARG PTE_PLUGIN_EXTRAS=default
 
-# Copy dependency files first
-COPY package.json package-lock.json* ./
-COPY pyproject.toml uv.lock ./
+# Copy dependency files first (version-neutralized, see deps-manifest)
+COPY --from=deps-manifest /deps/package.json /deps/package-lock.json /deps/pyproject.toml /deps/uv.lock ./
 
 # Install all dependencies (both prod and dev) - this layer is cached unless deps change
 RUN uv sync --frozen $(extras="$(echo "$PTE_PLUGIN_EXTRAS" | tr ',' ' ')"; \
@@ -122,16 +138,17 @@ ENTRYPOINT ["/entrypoint.sh"]
 # Stage 4: CI test runner (runs tests internally, not as a server)
 FROM base AS ci
 
-# Copy dependency files first
-COPY package.json package-lock.json* ./
-COPY pyproject.toml uv.lock ./
+# Install Playwright browsers first: this large layer only depends on the Playwright
+# version, not on other dependency changes
+COPY --from=deps-manifest /deps/playwright-version /tmp/playwright-version
+RUN npx -y "playwright@$(cat /tmp/playwright-version)" install --with-deps \
+    && rm -rf /root/.npm/_npx
+
+# Copy dependency files (version-neutralized, see deps-manifest)
+COPY --from=deps-manifest /deps/package.json /deps/package-lock.json /deps/pyproject.toml /deps/uv.lock ./
 
 # Install ALL dependencies (including dev dependencies for testing)
 RUN uv sync --frozen --all-extras && npm install --ignore-scripts --no-audit --no-fund
-
-# Install Playwright browsers immediately after dependencies for early caching
-# This creates a separate layer that will be cached unless dependencies change
-RUN npx playwright install --with-deps
 
 # Copy source code and tests
 COPY . .
