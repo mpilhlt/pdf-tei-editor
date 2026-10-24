@@ -197,7 +197,7 @@ class TeiToolsPlugin extends Plugin {
   }
 
   #updateRevisionHistoryButton() {
-    const hasRevisionDesc = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:revisionDesc')
+    const hasRevisionDesc = !!this.#xmlEditorApi.getDomNodeByXpath('//tei:teiHeader/tei:revisionDesc')
     this.#revisionHistoryBtn.style.display = hasRevisionDesc ? 'inline-flex' : 'none'
   }
 
@@ -229,7 +229,7 @@ class TeiToolsPlugin extends Plugin {
       return
     }
 
-    const changeNodes = Array.from(xmlTree.querySelectorAll('revisionDesc change'))
+    const changeNodes = Array.from(xmlTree.querySelectorAll('teiHeader > revisionDesc > change'))
     if (changeNodes.length === 0) {
       this.getDependency('logger').debug('No revision history found')
       return

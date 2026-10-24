@@ -335,7 +335,7 @@ class DocumentActionsPlugin extends Plugin {
         let currentStatus = 'draft'
         let lastChangeDesc = ''
         if (xmlDoc) {
-          const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
+          const lastChange = xmlDoc.querySelector('teiHeader > revisionDesc > change:last-of-type')
           if (lastChange) {
             currentStatus = lastChange.getAttribute('status') || 'draft'
             const descEl = lastChange.querySelector('desc')

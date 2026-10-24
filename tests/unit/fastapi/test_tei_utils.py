@@ -333,6 +333,65 @@ class TestExtractChangeSignatures(unittest.TestCase):
         self.assertEqual(len(signatures), 0)
 
 
+class TestHeaderChangesIgnoreStandOff(unittest.TestCase):
+    """Readers of the document history must ignore the revisionDesc/change elements of stand-off annotations."""
+
+    XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <revisionDesc>
+      <change when="2026-10-01T10:00:00Z" who="#anna" status="in-review"><note type="label">v1</note></change>
+    </revisionDesc>
+  </teiHeader>
+  <text><body><p>x</p></body></text>
+  <standOff>
+    <listAnnotation type="unit-comment">
+      <annotation xml:id="uc-000001" motivation="commenting" target="#xpath(/TEI/text/body/p)" resp="#ben">
+        <revisionDesc>
+          <change when="2026-10-24T09:00:00Z" who="#ben"/>
+          <change when="2026-10-24T09:30:00Z" who="#ben" status="resolved"><note type="label">stand-off</note></change>
+        </revisionDesc>
+        <note type="comment">ok</note>
+      </annotation>
+    </listAnnotation>
+  </standOff>
+</TEI>"""
+
+    def test_last_revision_status(self):
+        from fastapi_app.lib.utils.tei_utils import extract_last_revision_status
+        self.assertEqual(extract_last_revision_status(self.XML), "in-review")
+
+    def test_revision_timestamp(self):
+        from fastapi_app.lib.utils.tei_utils import extract_revision_timestamp
+        self.assertEqual(extract_revision_timestamp(self.XML), "2026-10-01T10:00:00Z")
+
+    def test_change_signatures(self):
+        from fastapi_app.lib.utils.tei_utils import extract_change_signatures
+        self.assertEqual(extract_change_signatures(self.XML), [("#anna", "2026-10-01T10:00:00Z", "in-review")])
+
+    def test_tei_metadata(self):
+        metadata = extract_tei_metadata(etree.fromstring(self.XML))
+        self.assertEqual(metadata.get("status"), "in-review")
+        self.assertEqual(metadata.get("last_revision"), "2026-10-01T10:00:00Z")
+        self.assertEqual(metadata.get("edition_title"), "v1")
+
+    def test_artifact_label(self):
+        from fastapi_app.lib.utils.tei_utils import get_artifact_label
+        self.assertEqual(get_artifact_label(etree.fromstring(self.XML)), "v1")
+
+    def test_add_revision_change_without_header_revision_desc(self):
+        """A document whose header has no revisionDesc gets one there, not in standOff."""
+        from fastapi_app.lib.utils.tei_utils import add_revision_change, get_header_changes
+        root = etree.fromstring(self.XML)
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+        header_rd = root.find("tei:teiHeader/tei:revisionDesc", ns)
+        header_rd.getparent().remove(header_rd)
+        add_revision_change(root, when="2026-10-25T08:00:00Z", status="draft", who="anna", desc="Edited")
+        self.assertEqual([c.get("status") for c in get_header_changes(root)], ["draft"])
+        standoff_changes = root.findall(".//tei:standOff//tei:revisionDesc/tei:change", ns)
+        self.assertEqual(len(standoff_changes), 2)
+
+
 class TestBuildVersionAncestryChains(unittest.TestCase):
     """Test build_version_ancestry_chains function."""
 
