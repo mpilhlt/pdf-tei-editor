@@ -1,0 +1,227 @@
+{
+  "units_auto": {
+    "path": "./back/listBibl/*",
+    "fingerprints": [
+      "1f14d510",
+      "de7bf13a",
+      "07c1a1b4",
+      "a5cc5d33",
+      "a5cc5d33.2"
+    ]
+  },
+  "units_explicit": {
+    "path": "./back/listBibl/*",
+    "fingerprints": [
+      "1f14d510",
+      "de7bf13a",
+      "07c1a1b4",
+      "a5cc5d33",
+      "a5cc5d33.2"
+    ]
+  },
+  "review": {
+    "unitPath": "./back/listBibl/*",
+    "reviewers": [
+      {
+        "id": "asmith",
+        "name": null,
+        "isLlm": false,
+        "when": "2026-10-20T10:00:00Z",
+        "marks": {
+          "1f14d510": {
+            "state": "ok",
+            "comment": "",
+            "final": false
+          },
+          "a5cc5d33.2": {
+            "state": "not-ok",
+            "comment": "",
+            "final": false
+          },
+          "de7bf13a": {
+            "state": "not-ok",
+            "comment": "@jdoe the year is missing & the title",
+            "final": false
+          }
+        },
+        "was": {
+          "07c1a1b4": {
+            "state": "not-ok",
+            "comment": "Wrong page",
+            "final": false
+          }
+        }
+      },
+      {
+        "id": "bkim",
+        "name": null,
+        "isLlm": false,
+        "when": "2026-10-21T10:00:00Z",
+        "marks": {
+          "a5cc5d33.2": {
+            "state": "ok",
+            "comment": "",
+            "final": true
+          }
+        },
+        "was": {}
+      },
+      {
+        "id": "llm-openai-gpt",
+        "name": "GPT (OpenAI)",
+        "isLlm": true,
+        "when": "2026-10-22T08:30:00Z",
+        "marks": {
+          "a5cc5d33": {
+            "state": "not-ok",
+            "comment": "Duplicate entry",
+            "final": false
+          },
+          "de7bf13a": {
+            "state": "not-ok",
+            "comment": "Missing year",
+            "final": false
+          }
+        },
+        "was": {}
+      }
+    ]
+  },
+  "comments": [
+    {
+      "id": "uc-aaa111",
+      "replyTo": null,
+      "author": "asmith",
+      "text": "@jdoe is \"ibid.\" correct here? Mail me at a@b.org, not @nobody.",
+      "path": "/TEI/text/back/listBibl/bibl[2]",
+      "fingerprint": "de7bf13a",
+      "changes": [
+        {
+          "who": "asmith",
+          "when": "2026-10-23T09:00:00Z",
+          "status": null
+        }
+      ]
+    },
+    {
+      "id": "uc-aaa112",
+      "replyTo": "uc-aaa111",
+      "author": "jdoe",
+      "text": "Yes, it points to the previous entry. @bkim?",
+      "path": null,
+      "fingerprint": null,
+      "changes": [
+        {
+          "who": "jdoe",
+          "when": "2026-10-23T09:30:00Z",
+          "status": null
+        },
+        {
+          "who": "jdoe",
+          "when": "2026-10-23T09:40:00Z",
+          "status": "edited"
+        }
+      ]
+    },
+    {
+      "id": "uc-aaa113",
+      "replyTo": "uc-aaa111",
+      "author": "bkim",
+      "text": "Agreed.",
+      "path": null,
+      "fingerprint": null,
+      "changes": [
+        {
+          "who": "bkim",
+          "when": "2026-10-23T10:00:00Z",
+          "status": null
+        }
+      ]
+    },
+    {
+      "id": "uc-bbb221",
+      "replyTo": null,
+      "author": "jdoe",
+      "text": "Check the <title>, @asmith.",
+      "path": "/TEI/text/back/listBibl/bibl[4]",
+      "fingerprint": "a5cc5d33",
+      "changes": [
+        {
+          "who": "jdoe",
+          "when": "2026-10-23T11:00:00Z",
+          "status": null
+        },
+        {
+          "who": "asmith",
+          "when": "2026-10-23T12:00:00Z",
+          "status": "resolved"
+        }
+      ]
+    },
+    {
+      "id": "uc-ccc331",
+      "replyTo": "uc-missing",
+      "author": "jdoe",
+      "text": "Orphan reply",
+      "path": null,
+      "fingerprint": null,
+      "changes": [
+        {
+          "who": "jdoe",
+          "when": "2026-10-23T13:00:00Z",
+          "status": null
+        }
+      ]
+    }
+  ],
+  "threads": [
+    {
+      "id": "uc-aaa111",
+      "replies": [
+        "uc-aaa112",
+        "uc-aaa113"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "uc-bbb221",
+      "replies": [],
+      "status": "resolved"
+    }
+  ],
+  "mentions": [
+    [
+      "@jdoe is \"ibid.\" correct here?",
+      [
+        "jdoe"
+      ]
+    ],
+    [
+      "Mail me at a@b.org, not @nobody.",
+      [
+        "nobody"
+      ]
+    ],
+    [
+      "Ask @j.doe-2, @x and @a_b. (@c)",
+      [
+        "j.doe-2",
+        "x",
+        "a_b",
+        "c"
+      ]
+    ],
+    [
+      "@@double @-dash @trailing. @trailing-",
+      [
+        "trailing"
+      ]
+    ],
+    [
+      "Check the @type attribute and email@host",
+      [
+        "type"
+      ]
+    ]
+  ]
+}

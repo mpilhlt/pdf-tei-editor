@@ -784,6 +784,16 @@ async function maintenanceReload(baseUrl, sessionId) {
 }
 
 /**
+ * Rebuild the message index from all TEI files
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ */
+async function maintenanceRebuildMessages(baseUrl, sessionId) {
+  const result = await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/messages/rebuild');
+  console.log(`Message index rebuilt from ${result.files} TEI files.`);
+}
+
+/**
  * Repopulate database fields from TEI documents
  * @param {string} baseUrl - API base URL
  * @param {string} sessionId - Session ID
@@ -1245,6 +1255,13 @@ Examples:
     await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
       maintenanceRepopulate(baseUrl, sessionId, fields)
     );
+  });
+
+maintenanceCmd
+  .command('rebuild-messages')
+  .description('Rebuild the message index (reviews and comments addressed to users) from all TEI files')
+  .action(async () => {
+    await runAuthenticated(getGlobalOptions(), maintenanceRebuildMessages);
   });
 
 // --- Plugin Commands ---
