@@ -21,6 +21,8 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 import { removeUnitReviews, parseSummary, LIST_TYPE as UNIT_REVIEW_LIST_TYPE } from '../modules/unit-review.js'
+import { LIST_TYPE as UNIT_COMMENT_LIST_TYPE } from '../modules/unit-comments.js'
+import { removeStandOffLists } from '../modules/standoff-list.js'
 
 
 // Register templates
@@ -317,10 +319,14 @@ class DocumentActionsPlugin extends Plugin {
         const canClearReviews = userHasRole(userData, ["admin", "reviewer"])
           && new RegExp(`<listAnnotation\\s[^>]*type="${UNIT_REVIEW_LIST_TYPE}"`).test(this.#xmlEditor.getView().state.doc.toString())
         dlg.options.saveToNewCopySection.clearReviewsSection.clearReviews.checked = false
+        // "Keep comments" is offered for a new version of a document with unit comments
+        const hasComments = new RegExp(`<listAnnotation\\s[^>]*type="${UNIT_COMMENT_LIST_TYPE}"`).test(this.#xmlEditor.getView().state.doc.toString())
+        dlg.options.saveToNewCopySection.keepCommentsSection.keepComments.checked = true
         const updateCopyLabelVisibility = () => {
           const checked = dlg.options.saveToNewCopySection.saveToNewCopy.checked
           dlg.options.saveToNewCopySection.copyLabel.style.display = checked ? '' : 'none'
           dlg.options.saveToNewCopySection.clearReviewsSection.style.display = checked && canClearReviews ? '' : 'none'
+          dlg.options.saveToNewCopySection.keepCommentsSection.style.display = checked && hasComments ? '' : 'none'
         }
         updateCopyLabelVisibility()
         dlg.options.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
@@ -437,6 +443,9 @@ class DocumentActionsPlugin extends Plugin {
     const clearReviews = saveToNewCopy
       && dlg.options.saveToNewCopySection.clearReviewsSection.style.display !== 'none'
       && dlg.options.saveToNewCopySection.clearReviewsSection.clearReviews.checked
+    const clearComments = saveToNewCopy
+      && dlg.options.saveToNewCopySection.keepCommentsSection.style.display !== 'none'
+      && !dlg.options.saveToNewCopySection.keepCommentsSection.keepComments.checked
 
     /** @type {RespStmt} */
     const respStmt = {
@@ -466,11 +475,12 @@ class DocumentActionsPlugin extends Plugin {
 
         await this.addTeiHeaderInfo(respStmt, /** @type {Edition} */ ({ title: undefined, note: undefined }), revisionChange)
 
-        if (sourceVariant || clearReviews) {
+        if (sourceVariant || clearReviews || clearComments) {
           const xmlDoc = this.#xmlEditor.getXmlTree()
           if (xmlDoc) {
             if (sourceVariant) tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
             if (clearReviews && removeUnitReviews(xmlDoc)) testLog('UNIT_REVIEWS_CLEARED', { fileId: currentFileId })
+            if (clearComments && removeStandOffLists(xmlDoc, UNIT_COMMENT_LIST_TYPE)) testLog('UNIT_COMMENTS_CLEARED', { fileId: currentFileId })
             await this.#xmlEditor.updateEditorFromXmlTree()
           }
         }

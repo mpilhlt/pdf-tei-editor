@@ -67,7 +67,7 @@ const CSS = `
 .ur-prompt .ur-hint { color: var(--sl-color-neutral-500, #888); font-size: 12px; }
 `;
 
-function ensureStyle() {
+export function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ID;
@@ -82,7 +82,7 @@ function ensureStyle() {
  * @param {string} [text]
  * @returns {HTMLElement}
  */
-function el(tag, className, text) {
+export function el(tag, className, text) {
   const element = document.createElement(tag);
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
@@ -108,7 +108,7 @@ export function formatWhen(when) {
  * @param {() => void} [onClose]
  * @returns {() => void} Closes the popover
  */
-function show(element, at, onClose) {
+export function show(element, at, onClose) {
   closePopover();
   ensureStyle();
   document.body.appendChild(element);
@@ -257,23 +257,24 @@ export function openReviewPopover(options) {
 }
 
 /**
- * Opens the small comment field shown after marking a unit "not OK".
+ * Opens a small comment field: after marking a unit "not OK", or for a new unit comment.
  * @param {{left: number, bottom: number}} at
  * @param {string} label - e.g. "Not OK · line 78"
  * @param {string} initial - Current comment
  * @param {(comment: string|null) => void} onDone - Called with the comment, or null if skipped
+ * @param {{placeholder?: string, hint?: string, testid?: string}} [options] - Defaults are those of the review comment
  */
-export function openCommentPrompt(at, label, initial, onDone) {
+export function openCommentPrompt(at, label, initial, onDone, options = {}) {
   const root = el('div', 'ur-pop ur-prompt');
-  root.dataset.testid = 'unit-review-comment-prompt';
+  root.dataset.testid = options.testid ?? 'unit-review-comment-prompt';
   const body = el('div', 'ur-pop-bd');
   body.appendChild(el('div', '', label));
   const input = /** @type {HTMLInputElement} */ (el('input'));
   input.type = 'text';
   input.value = initial;
-  input.placeholder = 'Optional short comment';
+  input.placeholder = options.placeholder ?? 'Optional short comment';
   body.appendChild(input);
-  body.appendChild(el('div', 'ur-hint', 'Enter: save and go to the next unit · Esc: no comment'));
+  body.appendChild(el('div', 'ur-hint', options.hint ?? 'Enter: save and go to the next unit · Esc: no comment'));
   root.appendChild(body);
   let submitted = false;
   const close = show(root, at, () => {
