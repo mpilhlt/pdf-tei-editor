@@ -40,21 +40,29 @@ const TEXT = `<text>
     </listBibl>
   </text>`;
 
+const STAND_OFF = `<standOff>
+    <listAnnotation type="unit-review" subtype="fp-sha256-8-v1">
+      <note type="unit-xpath">./listBibl/*</note>
+    </listAnnotation>
+  </standOff>`;
+
 /**
  * Loads an editable copy of the first document with the test <text>.
  * @param {Page} page
+ * @param {string} [standOff] - Inserted after the teiHeader
  * @returns {Promise<string>} The stable id of the copy
  */
-async function loadReviewDocument(page, text = TEXT) {
-  const stableId = await page.evaluate(async (text) => {
+async function loadReviewDocument(page, standOff = '') {
+  const stableId = await page.evaluate(async ({ text, standOff }) => {
     const w = /** @type {any} */ (window);
     const xml = w.app.getDependency('xmleditor').getXML()
       .replace(/<standOff[\s\S]*?<\/standOff>\s*/, '')
-      .replace(/<text[\s>][\s\S]*<\/text>/, text);
+      .replace(/<text[\s>][\s\S]*<\/text>/, text)
+      .replace('</teiHeader>', `</teiHeader>${standOff}`);
     const res = await w.client.apiClient.filesSave({ xml_string: xml, file_id: 'unit-review-probe', new_version: true });
     await w.app.getDependency('services').load({ xml: res.file_id });
     return res.file_id;
-  }, text);
+  }, { text: TEXT, standOff });
   await page.waitForFunction((expectedXml) => {
     const app = /** @type {any} */ (window).app;
     return app.getCurrentState().xml === expectedXml && app.getCurrentState().editorReadOnly === false;
@@ -133,7 +141,34 @@ test.describe('Unit review', () => {
       expect(lines.cursor).toBe(lines.beta);
       await expect(page.locator('.cm-ur-ok')).toHaveCount(1);
 
+      // the new standOff is folded; a manual unfold lasts until the header is folded
+      const content = page.locator('#codemirror-container .cm-content');
+      await expect(content).not.toContainText('unit-xpath');
+      await expect.poll(() => page.evaluate(() => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        // unfoldByXpath works on the DOM tree, which is synced with a delay after edits
+        if (!xmleditor.getXmlTree()?.querySelector('standOff > listAnnotation')) return false;
+        try { xmleditor.unfoldByXpath('/tei:TEI/tei:standOff'); } catch { return false; }
+        return !xmleditor.isFoldedByXpath('/tei:TEI/tei:standOff');
+      })).toBe(true);
+      await expect(content).toContainText('unit-xpath');
+      const headerToggle = page.locator('[name="headerFoldToggle"]');
+      await headerToggle.click();
+      await headerToggle.click();
+      await expect(content).not.toContainText('unit-xpath');
+
+      // typing inside the standOff is rejected for non-admins
+      const typed = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const before = view.state.doc.toString();
+        const pos = before.indexOf('<note type="summary">') + '<note type="summary">'.length;
+        view.dispatch({ changes: { from: pos, insert: 'x' }, userEvent: 'input.type' });
+        return view.state.doc.toString() === before;
+      });
+      expect(typed).toBe(true);
+
       // Mod-Shift-Enter marks it not OK and asks for a comment
+      await cursorTo(page, 'Beta');
       await page.keyboard.press('ControlOrMeta+Shift+Enter');
       const prompt = page.getByTestId('unit-review-comment-prompt');
       await expect(prompt).toBeVisible();
@@ -228,13 +263,16 @@ test.describe('Unit review', () => {
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
-      await loadReviewDocument(page);
+      await loadReviewDocument(page, STAND_OFF);
+      // standOff is folded on load
+      await expect(page.locator('#codemirror-container .cm-content')).toContainText('Alpha 2001');
+      await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('unit-xpath');
       await page.locator('[name="unitReviewToggle"]').click();
       await expect(page.getByTestId('unit-review-meter')).toContainText('3 open');
       await cursorTo(page, 'Alpha');
       await page.keyboard.press('ControlOrMeta+Enter');
       await expect(page.locator('sl-alert', { hasText: 'Only reviewers can mark units.' })).toHaveCount(1);
-      expect(await editorText(page)).not.toContain('unit-review');
+      expect(await editorText(page)).not.toContain('<annotation');
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);

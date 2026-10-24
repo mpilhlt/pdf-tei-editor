@@ -198,21 +198,27 @@ function findTextElement(top, read) {
 }
 
 /**
- * Default units: step down from `<text>` while the element has exactly one child element and no
- * text of its own, then take that element's child elements.
+ * Default units: step down from `<text>` while the element has exactly one non-empty child element
+ * and no text of its own, then take that element's child elements.
  * @param {SyntaxNode} text
  * @param {(from: number, to: number) => string} read
  * @returns {{nodes: SyntaxNode[], path: string}} The units and the path they are found with
  */
 function autoUnits(text, read) {
+  /** @param {SyntaxNode} node */
+  const hasOwnText = node => node.getChildren('Text').some(t => read(t.from, t.to).trim() !== '');
+  /** @param {SyntaxNode} node */
+  const isEmpty = node => childElements(node).length === 0 && !hasOwnText(node);
   let current = text;
   /** @type {string[]} */
   const chain = [];
   for (;;) {
     const children = childElements(current);
-    const hasOwnText = current.getChildren('Text').some(t => read(t.from, t.to).trim() !== '');
-    if (children.length === 1 && !hasOwnText && childElements(/** @type {SyntaxNode} */ (children[0])).length > 0) {
-      current = /** @type {SyntaxNode} */ (children[0]);
+    // empty elements such as <front/> or <body/> in a reference list do not count
+    const filled = children.filter(child => !isEmpty(child));
+    const only = filled.length === 1 ? /** @type {SyntaxNode} */ (filled[0]) : null;
+    if (only && !hasOwnText(current) && childElements(only).length > 0) {
+      current = only;
       chain.push(elementName(current, read) ?? '*');
     } else {
       return { nodes: children, path: ['.', ...chain, '*'].join('/') };

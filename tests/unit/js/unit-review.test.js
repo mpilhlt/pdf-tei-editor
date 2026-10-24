@@ -93,6 +93,13 @@ describe('findUnits', () => {
     assert.deepStrictEqual(findUnits(makeState(REFS), autoScan.path).units.map(u => u.fingerprint), byPath);
   });
 
+  it('skips empty siblings when stepping down automatically', () => {
+    const doc = REFS.replace('<text>\n    <listBibl>', '<text>\n    <front/>\n    <body/>\n    <back>\n    <listBibl>').replace('</listBibl>\n  </text>', '</listBibl>\n    </back>\n  </text>');
+    const scan = findUnits(makeState(doc), null);
+    assert.strictEqual(scan.units.length, 3);
+    assert.strictEqual(scan.path, './back/listBibl/*');
+  });
+
   it('ignores re-indentation but not changes to text or attributes', () => {
     const base = findUnits(makeState(REFS), null).units[1].fingerprint;
     const reindented = REFS.replace('<bibl><label>8</label><lb/> See Jain JP</bibl>',

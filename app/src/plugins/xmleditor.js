@@ -254,7 +254,8 @@ class XmlEditorPlugin extends Plugin {
   /** @type {string|null} */
   #lastLoadedStableId = null;
   /** @type {boolean} */
-  #annotatorEditGuardActive = false;
+  /** @type {'text-only'|'no-standoff'|null} The active edit guard */
+  #editGuard = null;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
@@ -1014,10 +1015,21 @@ class XmlEditorPlugin extends Plugin {
     // leading processing instructions; contentOnly further excludes <text>'s own tags
     // (e.g. its xml:lang attribute), so only its children are editable. Does not affect
     // the whole-document read-only state above and never blocks programmatic writes.
-    const shouldGuardToTextOnly = userIsAnnotatorOnly(state.user);
-    if (shouldGuardToTextOnly !== this.#annotatorEditGuardActive) {
-      this.#xmlEditor.setEditGuardXpath(shouldGuardToTextOnly ? '//tei:text' : null, { mode: 'whitelist', contentOnly: true });
-      this.#annotatorEditGuardActive = shouldGuardToTextOnly;
+    // Users other than admins may not edit TEI/standOff by hand: it holds machine data
+    // (e.g. unit review marks), written by plugins through programmatic transactions, which the
+    // guard never blocks; undo and redo of those stay possible.
+    const editGuard = userIsAnnotatorOnly(state.user)
+      ? 'text-only'
+      : (state.user && !userHasRole(state.user, ['admin']) ? 'no-standoff' : null);
+    if (editGuard !== this.#editGuard) {
+      if (editGuard === 'text-only') {
+        this.#xmlEditor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+      } else if (editGuard === 'no-standoff') {
+        this.#xmlEditor.setEditGuardXpath('/tei:TEI/tei:standOff', { mode: 'blacklist', allowUndo: true });
+      } else {
+        this.#xmlEditor.setEditGuardXpath(null);
+      }
+      this.#editGuard = editGuard;
     }
 
     this.#updateDiffButtons();

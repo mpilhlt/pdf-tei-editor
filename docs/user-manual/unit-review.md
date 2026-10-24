@@ -14,7 +14,7 @@ The setting is remembered in the browser. Only users with the *reviewer* or *adm
 
 ## Review units
 
-A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each section (`<front>`, `<body>`, `<listBibl>`, …). For other documents the editor steps down from `<text>` while there is only one child element and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
+A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each section (`<front>`, `<body>`, `<listBibl>`, …). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
 
 When several units share a line, the strip shows the line in amber if their states differ. Pretty-print the document (TEI Wizard) to put each unit on its own line.
 
@@ -70,6 +70,9 @@ When saving a revision to a new personal version, reviewers and admins can check
 When a revision is saved with the status *approved* and the document's review has units that are not OK, disputed or not reviewed, the editor asks for confirmation first.
 
 ## How the marks are stored
+
+The `<standOff>` element holds no human-readable data. It is folded when a document is loaded, when it is created, and whenever the TEI header is folded; you can unfold it temporarily. Only admins can edit it by hand; the marks are changed through review mode.
+
 
 The marks are stored in the document in `TEI/standOff/listAnnotation[@type="unit-review"]`, with one `<annotation motivation="assessing">` per reviewer. Units are identified by a short fingerprint of their content, so `<text>` itself is not changed. The `<note type="summary">` of the list holds the counts shown in the progress meter.
 

@@ -28,7 +28,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { keymap } from '@codemirror/view'
 import { Prec, Transaction } from '@codemirror/state'
-import { syntaxTree } from '@codemirror/language'
+import { syntaxTree, foldInside, foldedRanges, foldEffect } from '@codemirror/language'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
@@ -522,14 +522,33 @@ class UnitReviewPlugin extends Plugin {
       }
     }
     if (!change) return
+    // a new standOff starts folded (it holds no human-readable data), a folded one stays folded
+    const keepFolded = !located.standOff || this.#isFolded(state, located.standOff)
     this.#writing = true
     try {
       view.dispatch({ changes: change, annotations: Transaction.addToHistory.of(addToHistory) })
+      const standOff = this.#locate(view.state).standOff
+      const range = standOff && keepFolded ? foldInside(standOff) : null
+      if (range && !this.#isFolded(view.state, standOff)) view.dispatch({ effects: foldEffect.of(range) })
     } finally {
       this.#writing = false
     }
     this.#refresh()
     testLog('UNIT_REVIEW_WRITTEN', { ...this.#summary })
+  }
+
+  /**
+   * Whether the content of an element is folded.
+   * @param {EditorState} state
+   * @param {SyntaxNode} node
+   * @returns {boolean}
+   */
+  #isFolded(state, node) {
+    const range = foldInside(node)
+    if (!range) return false
+    let folded = false
+    foldedRanges(state).between(range.from, range.to, () => { folded = true; return false })
+    return folded
   }
 
   /**
