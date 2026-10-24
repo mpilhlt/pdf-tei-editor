@@ -37,11 +37,12 @@ class FakeFiles:
         self.files: dict[str, FileMetadata] = {}
         self.contents: dict[str, bytes] = {}
 
-    def put(self, stable_id: str, xml: bytes, created_by: str | None = "owner", minutes: int = 0, doc_id: str = "doc1") -> None:
+    def put(self, stable_id: str, xml: bytes, created_by: str | None = "owner", minutes: int = 0, doc_id: str = "doc1",
+            parent: str | None = None) -> None:
         self.files[stable_id] = FileMetadata(
             id=f"hash-{stable_id}-{minutes}", stable_id=stable_id, filename=f"{stable_id}.tei.xml", doc_id=doc_id,
             file_type="tei", file_size=len(xml), variant="grobid", created_by=created_by,
-            updated_at=BASE_TIME + timedelta(minutes=minutes),
+            updated_at=BASE_TIME + timedelta(minutes=minutes), parent_stable_id=parent,
         )
         self.contents[self.files[stable_id].id] = xml
 
@@ -137,6 +138,24 @@ class TestRecipients(IndexerTestCase):
         self.files.put("f1", self.xml, created_by="asmith")
         self.indexer.index_file("f1")
         self.assertFalse([k for k in self.messages("asmith") if k.startswith("r:doc1:grobid:asmith:")])
+
+    def test_marks_in_reviewers_own_copy_go_to_the_owner_of_the_copied_version(self) -> None:
+        self.files.put("f1", b"<TEI xmlns='http://www.tei-c.org/ns/1.0'/>", created_by="owner")
+        self.files.put("f2", self.xml, created_by="asmith", minutes=5, parent="f1")
+        self.files.put("f3", self.xml, created_by="asmith", minutes=10, parent="f2")
+        self.indexer.index_file("f3")
+        message = self.store.get_message("r:doc1:grobid:asmith:de7bf13a", "owner")
+        assert message is not None
+        self.assertEqual(message.stable_id, "f3")
+        self.assertFalse([k for k in self.messages("asmith") if k.startswith("r:doc1:grobid:asmith:")])
+        # The LLM reviewer's marks go to the copy's owner
+        self.assertIn("r:doc1:grobid:llm-openai-gpt:run-2026-10-22T08:30:00Z", self.messages("asmith"))
+
+    def test_lineage_with_a_cycle_ends(self) -> None:
+        self.files.put("f1", self.xml, created_by="asmith", parent="f2")
+        self.files.put("f2", self.xml, created_by="asmith", parent="f1")
+        self.indexer.index_file("f1")
+        self.assertEqual(self.messages("owner"), {})
 
 
 class TestCopiesAndSettling(IndexerTestCase):

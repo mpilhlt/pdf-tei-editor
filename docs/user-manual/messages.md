@@ -2,7 +2,7 @@
 
 Messages tell you about feedback on your work without having to open each document. You receive a message when:
 
-- a reviewer marks a unit of a document you own as **not OK** (see [Unit Review](unit-review.md)),
+- a reviewer marks a unit of your work as **not OK** (see [Unit Review](unit-review.md)): either in a document you own, or in the reviewer's own version of a document you own (when only owners can edit, reviewers review in a copy). The message goes to the nearest owner in the version history who is not the reviewer,
 - someone **mentions** you in a [unit comment](unit-comments.md) with `@yourname`,
 - someone replies to a comment thread you started, or to a thread in which you were mentioned earlier.
 

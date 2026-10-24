@@ -294,6 +294,7 @@ Deviations and additions:
 
 | Topic | Spec | Implemented |
 | --- | --- | --- |
+| Review recipient | Owner of the file | Nearest owner in the version lineage (`parent_stable_id` chain) who is not the reviewer, so marks a reviewer sets in their own copy (owner-based and granular access control) reach the owner of the copied version |
 | Storage | `message` table with the data, `occurrence` with key and file only | `occurrence` holds the data columns per key, recipient and file, plus `settled_note`; `message` is derived from the newest occurrence and keeps the first `created_at` |
 | Settling | `settled` flag | A mark that disappears from a re-saved file stays as a settled occurrence with the note `changed-to-ok`, `unit-edited` or `superseded` (LLM run); a resolved thread settles its comments (`resolved`). The dialog shows the note |
 | Mention token | `[A-Za-z0-9_][\w.-]*[\w]` (at least two characters) | `[A-Za-z0-9_](?:[\w.-]*\w)?`, so one-character user names work; Python uses `re.ASCII` to match JS |

@@ -4,8 +4,10 @@ the message index (`store.py`) up to date (see docs/user-manual/messages.md).
 
 Who receives what:
 
-- The owner (`created_by`) of a file receives each current not-OK mark of another reviewer
-  (`r:` keys). All not-OK marks of one LLM reviewer in a file are one message.
+- Each current not-OK mark (`r:` keys) goes to the nearest owner (`created_by`) in the file's version
+  lineage (the file, its parent, the parent's parent, ...) who is not the reviewer: the file's owner when
+  the mark was set in place, the owner of the copied version when a reviewer marked their own copy
+  (owner-based access control). All not-OK marks of one LLM reviewer in a file are one message.
 - Users mentioned in a not-OK mark's comment receive it as a mention.
 - A comment (`c:` keys) addresses the users mentioned in it, and, for replies, the thread's
   author and the users mentioned earlier in the thread. Nobody receives their own comment or mark.
@@ -97,7 +99,12 @@ def _overridden_by_final_ok(reviewers: list[Reviewer], reviewer: Reviewer, finge
     return False
 
 
-def extract_occurrences(root: etree._Element, file: FileMetadata, context: IndexContext) -> list[Occurrence]:  # type: ignore[name-defined]
+def extract_occurrences(
+    root: etree._Element,  # type: ignore[name-defined]
+    file: FileMetadata,
+    context: IndexContext,
+    lineage_owners: list[str] | None = None,
+) -> list[Occurrence]:
     """
     The current message sources of a TEI file.
 
@@ -105,6 +112,7 @@ def extract_occurrences(root: etree._Element, file: FileMetadata, context: Index
         root: Parsed TEI document
         file: The file's metadata (owner, doc_id, variant, updated_at)
         context: Users and review mode
+        lineage_owners: Owners of the file and its ancestors, nearest first; defaults to the file's owner
 
     Returns:
         One occurrence per (key, recipient)
@@ -112,7 +120,11 @@ def extract_occurrences(root: etree._Element, file: FileMetadata, context: Index
     persons = resp_persons(root)
     usernames = set(context.users)
     known = mentionable_ids(set(persons), file.created_by, usernames)
-    owner = file.created_by if file.created_by in usernames else None
+    owners = [o for o in (lineage_owners if lineage_owners is not None else [file.created_by]) if o in usernames]
+
+    def owner_for(reviewer_id: str) -> str | None:
+        return next((o for o in owners if o != reviewer_id), None)
+
     file_time = _file_time(file)
     found: dict[tuple[str, str], Occurrence] = {}
 
@@ -152,6 +164,7 @@ def extract_occurrences(root: etree._Element, file: FileMetadata, context: Index
             if not not_ok:
                 continue
             author_name = reviewer.name or display_name(reviewer.id)
+            owner = owner_for(reviewer.id)
             if reviewer.is_llm:
                 if owner:
                     first_fp = not_ok[0][0]
@@ -257,7 +270,7 @@ class MessageIndexer:
             logger.warning("Cannot index messages of %s: %s", stable_id, e)
             return set()
         context = context or self.context_provider()
-        current = extract_occurrences(root, file, context)
+        current = extract_occurrences(root, file, context, self._lineage_owners(file))
         current_ids = {(o.key, o.recipient) for o in current}
 
         # review marks that are gone stay as settled occurrences
@@ -273,6 +286,19 @@ class MessageIndexer:
 
         touched = current_ids | {(o.key, o.recipient) for o in previous}
         return self._refresh(touched)
+
+    def _lineage_owners(self, file: FileMetadata) -> list[str]:
+        """Owners of the file and its ancestors (`parent_stable_id`), nearest first, without repeats."""
+        owners: list[str] = []
+        seen: set[str] = set()
+        current: FileMetadata | None = file
+        while current is not None and current.stable_id not in seen:
+            seen.add(current.stable_id)
+            if current.created_by and current.created_by not in owners:
+                owners.append(current.created_by)
+            parent = current.parent_stable_id
+            current = self.file_repo.get_file_by_stable_id(parent, include_deleted=True) if parent else None
+        return owners
 
     def remove_file(self, stable_id: str) -> set[str]:
         """
