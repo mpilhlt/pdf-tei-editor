@@ -1,6 +1,6 @@
 # Unit comments: proposal
 
-Status: proposal, not implemented (2026-10-24).
+Status: proposal, open questions decided, not implemented (2026-10-24).
 
 ## Goal
 
@@ -47,12 +47,13 @@ Let any user who can edit a document, annotators included, attach comments to el
 
 ## User interface
 
-- **Add a comment**: a separate **Comment…** item in the right-click menu (not in the Review row), and a keyboard shortcut. It opens the comment prompt below the element. Candidate shortcut: `Ctrl+Shift+M` (`Cmd+Shift+M`), to be checked against browser shortcuts (Firefox's responsive design mode uses it with devtools open).
+- **Add a comment**: a separate **Comment…** item in the right-click menu (not in the Review row), and the shortcut `Ctrl+Shift+M` (`Cmd+Shift+M`). It opens the comment prompt below the element. Comments attach to elements only, not to text ranges.
 - **Indicator**: a speech bubble in the gutter strip column on the element's first line (blue when open, grey when resolved), next to or instead of the review colour. If both apply to the same line, the strip shows the review colour and a small bubble overlay. The element's start tag gets a light underline while its thread is open.
 - **Thread popover**: clicking the bubble opens the thread (author, time, text), a reply field, and **Resolve** / **Reopen**. Authors can edit or delete their own comments; admins can delete any.
 - **Diagnostics drawer**: every open thread is an `info` diagnostic of source `unit-comment` with the first comment as message and the actions **Reply** and **Resolve**. Detached threads appear too, marked as such. `F8` (next diagnostic) already reaches them. No hover tooltip in the text, so as not to repeat the popover's buttons (as for reviews now).
 - **Status bar**: "3 open comments"; clicking it goes to the next open thread.
-- **Save Revision dialog**: a **Clear resolved comments** option next to **Clear reviews** for new versions.
+- **Save Revision dialog**: a **Keep comments** checkbox, checked by default, next to **Clear reviews** for new versions. Unchecked, the new version starts without comments.
+- **Converting XML comments**: a TEI Wizard command turns the XML comments inside `<text>` into unit comments on their parent element (the commenter is the current user) and removes them from the text.
 
 ## Shared machinery
 
@@ -69,9 +70,9 @@ Adding a comment changes the document, so it needs the same write access as any 
 
 On documents the user cannot write (for example a gold version without lock), the **Comment…** item is disabled with the tooltip "Create your own version to comment".
 
-## Questions for Christian
+## Decisions (Christian, 2026-10-24)
 
-1. Elements only, or also text ranges inside an element (with character offsets in the anchor)? Elements keep the anchors simple and robust; ranges can be added later.
-2. Should existing XML comments be convertible into unit comments (one-off command in the TEI Wizard)?
-3. Keep comments of a new version by default (proposed), or start without them like a clean copy?
-4. Shortcut: `Ctrl+Shift+M`, or another proposal?
+1. Comments attach to elements only.
+2. Existing XML comments can be converted into unit comments (TEI Wizard command).
+3. New versions: separate **Keep comments** checkbox in the Save Revision dialog, checked by default.
+4. Shortcut: `Ctrl+Shift+M` (`Cmd+Shift+M`).
