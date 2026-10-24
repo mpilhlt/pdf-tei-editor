@@ -2,7 +2,7 @@
 
 Messages tell you about feedback on your work without having to open each document. You receive a message when:
 
-- a reviewer marks a unit of your work as **not OK** (see [Unit Review](unit-review.md)): either in a document you own, or in the reviewer's own version of a document you own (when only owners can edit, reviewers review in a copy). The message goes to the nearest owner in the version history who is not the reviewer,
+- a reviewer marks a unit of a document you own as **not OK** (see [Unit Review](unit-review.md)). If the reviewer marks their own copy of your version instead, the message still reaches you: it goes to the nearest owner in the version history who is not the reviewer,
 - someone **mentions** you in a [unit comment](unit-comments.md) with `@yourname`,
 - someone replies to a comment thread you started, or to a thread in which you were mentioned earlier.
 
@@ -31,7 +31,7 @@ A message with a grey note is **settled**: the comment thread was resolved, the 
 
 ### Replying
 
-- **To a comment**: your reply is added to the comment thread. You can reply in documents you cannot edit (for example someone else's version or a gold file), as long as you can see the document and have the *annotator* or *reviewer* role. Replying to a resolved thread reopens it. If the document is open in someone else's editor, the reply appears there right away.
+- **To a comment**: your reply is added to the comment thread, also in documents you cannot edit, as long as you have the *annotator* or *reviewer* role and the version is not superseded. Replying to a resolved thread reopens it. If the document is open in someone else's editor, the reply appears there right away.
 - **To a review**: you start a new comment thread on the reviewed unit that mentions the reviewer, so the reviewer receives your answer as a message.
 
 ## Mentions

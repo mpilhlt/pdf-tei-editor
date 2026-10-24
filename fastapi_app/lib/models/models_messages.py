@@ -68,3 +68,16 @@ class ReplyResponse(BaseModel):
     thread_id: str
     comment_id: str
     annotation_xml: str
+
+
+class StandOffSaveRequest(BaseModel):
+    """The text of the editor of a user who adds review marks or comments to a file they cannot edit."""
+
+    xml_string: Annotated[str, Field(min_length=1)]
+
+
+class StandOffSaveResponse(BaseModel):
+    """Result of saving review marks and comments."""
+
+    stable_id: str
+    status: Literal["saved", "unchanged"]

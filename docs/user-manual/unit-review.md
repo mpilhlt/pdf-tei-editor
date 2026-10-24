@@ -22,6 +22,8 @@ When several units share a line, the strip shows the line in amber if their stat
 
 ## Marking units
 
+Reviewers mark units in every document they can see, also in documents they cannot edit (for example an annotator's version when only owners can edit): the text stays read-only, and the server saves only your own marks into the document. Superseded versions cannot be reviewed. See [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit) for the workflow.
+
 The keyboard shortcuts act on the units at the cursor or in the selection. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
 
 | Action | How |
@@ -37,7 +39,7 @@ The keyboard shortcuts act on the units at the cursor or in the selection. The b
 
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review.
 
-A not-OK mark is sent as a [message](messages.md) to the owner of the document, or, if you review in your own version of it, to the owner of the version you copied. Type `@` in the comment of the mark to mention someone else, too.
+A not-OK mark is sent as a [message](messages.md) to the owner of the document (if you review in your own copy of it, to the owner of the version you copied). Type `@` in the comment of the mark to mention someone else, too.
 
 Marks are part of the document: they are saved with it, can be undone with `Ctrl+Z`, and are kept when a new version is created.
 
@@ -61,7 +63,7 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 ## LLM reviewer
 
-When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin), the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
 
 ## Edited units
 

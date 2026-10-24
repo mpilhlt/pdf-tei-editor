@@ -1,5 +1,6 @@
 /**
- * API tests for messages (reviews and comments addressed to users) and replies to comment threads
+ * API tests for messages (reviews and comments addressed to users), replies to comment threads and
+ * reviews and comments saved into files the user cannot edit
  * @testCovers fastapi_app/routers/messages.py
  * @testCovers fastapi_app/routers/files_comments.py
  * @testCovers fastapi_app/routers/files_save.py
@@ -153,6 +154,39 @@ describe('Messages API tests', () => {
     assert.strictEqual(missing.status, 404);
     const user = await login('user', 'user', BASE_URL);
     const forbidden = await authenticatedRequest(user.sessionId, `/files/${state.fileId}/comments/uc-msg001/replies`, 'POST', { text: 'x' }, BASE_URL);
+    assert.strictEqual(forbidden.status, 403);
+  });
+
+  test('an annotator saves only their own comments into a file they cannot edit', async () => {
+    const stored = await authenticatedApiCall(annotator.sessionId, `/api/files/${state.fileId}`, 'GET', null, BASE_URL);
+    const comment = `<annotation xml:id="uc-ann001" motivation="commenting" target="#xpath(/TEI/text/body/listBibl/bibl[2])" resp="#annotator">
+        <revisionDesc>
+          <change when="2026-10-24T11:00:00Z" who="#annotator"/>
+        </revisionDesc>
+        <note type="comment">@reviewer is Doe right?</note>
+      </annotation>
+    </listAnnotation>
+  </standOff>`;
+    const review = `<annotation xml:id="ur-annotator2" motivation="assessing" target="#xpath(//text)" resp="#annotator">
+        <revisionDesc><change when="2026-10-24T11:00:00Z"/></revisionDesc>
+        <note type="ok">0badc0de</note>
+      </annotation>
+    </listAnnotation>`;
+    const editorText = stored
+      .replace(/<\/listAnnotation>\s*<\/standOff>/, comment)
+      .replace('Doe 2020', 'Tampered 2020')
+      .replace(/<\/listAnnotation>/, review);
+    const response = await authenticatedApiCall(annotator.sessionId, `/files/${state.fileId}/standoff`, 'PUT', { xml_string: editorText }, BASE_URL);
+    assert.strictEqual(response.status, 'saved');
+    const xml = await authenticatedApiCall(reviewer.sessionId, `/api/files/${state.fileId}`, 'GET', null, BASE_URL);
+    assert.ok(xml.includes('xml:id="uc-ann001"'), 'own comment saved');
+    assert.ok(!xml.includes('Tampered'), 'text unchanged');
+    assert.ok(!xml.includes('ur-annotator2'), 'annotators set no review marks');
+
+    const again = await authenticatedApiCall(annotator.sessionId, `/files/${state.fileId}/standoff`, 'PUT', { xml_string: editorText }, BASE_URL);
+    assert.strictEqual(again.status, 'unchanged');
+    const user = await login('user', 'user', BASE_URL);
+    const forbidden = await authenticatedRequest(user.sessionId, `/files/${state.fileId}/standoff`, 'PUT', { xml_string: editorText }, BASE_URL);
     assert.strictEqual(forbidden.status, 403);
   });
 

@@ -8,7 +8,9 @@
  * docs/user-manual/unit-review.md for the user documentation.
  *
  * The marks are part of the document text: marking a unit edits the `standOff` element, so undo,
- * saving and versions work as for any other edit.
+ * saving and versions work as for any other edit. Reviewers also review documents they cannot edit
+ * (unless the version is frozen): the save sends the text to the server, which takes only the
+ * reviewer's own review from it (`PUT /api/v1/files/{stable_id}/standoff`).
  *
  * Other plugins (e.g. the LLM Reviewer) record reviews with {@link UnitReviewPlugin#setMarks} and
  * read the units with {@link UnitReviewPlugin#getUnits}.
@@ -30,7 +32,7 @@ import { keymap, EditorView as View } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
-import { userHasRole } from '../modules/acl-utils.js'
+import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt } from '../modules/standoff-list.js'
@@ -147,6 +149,10 @@ class UnitReviewPlugin extends Plugin {
   async install(state) {
     await super.install(state)
     this.#slot = this.#xmlEditor.createExtensionSlot([])
+    // the review diagnostics are listed in the diagnostics drawer and the strip shows the state, also
+    // while review mode is off: no hover tooltip, which would repeat the context menu's review
+    // buttons, and no lint gutter marker
+    this.#xmlEditor.createExtensionSlot(drawerOnlyDiagnostics(SOURCE))
 
     this.#toggle = PanelUtils.createToggleButton({
       name: 'unitReviewToggle',
@@ -240,6 +246,11 @@ class UnitReviewPlugin extends Plugin {
   async setMarks(reviewer, marks) {
     this.#refresh()
     if (!this.#canWrite(false)) return false
+    // the server keeps only the user's own review in documents the user cannot edit
+    if (this.state?.editorReadOnly && reviewer.id !== this.state.user?.username) {
+      notify('Reviews by other reviewers (e.g. the LLM Reviewer) need edit access to the document. Create your own version first.', 'warning', 'exclamation-triangle')
+      return false
+    }
     const who = { id: reviewer.id, name: reviewer.name ?? null, isLlm: reviewer.id.startsWith('llm-') }
     const current = new Set(this.#scan.units.map(u => u.fingerprint))
     const data = this.#readData(this.#view().state)
@@ -268,9 +279,6 @@ class UnitReviewPlugin extends Plugin {
         mousedown: (view, line, event) => this.#onStripMouseDown(view, line, event),
         mouseover: (view, line) => this.#onStripMouseOver(view, line)
       }),
-      // the review diagnostics are listed in the diagnostics drawer and the strip shows the state:
-      // no hover tooltip, which would repeat the context menu's review buttons, and no lint gutter marker
-      drawerOnlyDiagnostics(SOURCE),
       Prec.high(keymap.of([
         { key: 'Mod-Enter', run: () => this.#markAtCursor('ok', false) },
         { key: 'Mod-Shift-Enter', run: () => this.#markAtCursor('not-ok', false) },
@@ -418,8 +426,11 @@ class UnitReviewPlugin extends Plugin {
       return false
     }
     if (!this.#xmlEditor.getXmlTree()) return fail('The XML is not well-formed: fix it before reviewing.')
-    // not the editor's own read-only flag: annotation mode sets it to block typing only
-    if (this.state?.editorReadOnly) return fail('The document is read-only.')
+    // not the editor's own read-only flag: annotation mode sets it to block typing only. In
+    // documents they cannot edit, reviewers still review (saved by the server)
+    if (this.state?.editorReadOnly && (this.state.connectionLost || !standOffContributions(this.state.user, this.state.xml).reviews)) {
+      return fail(isFrozenFile(this.state.xml) ? 'This version is superseded by a newer version and cannot be reviewed.' : 'The document is read-only.')
+    }
     if (this.#xmlEditor.isMergeViewActive()) return fail('Close the comparison view before reviewing.')
     if (!this.#scan.complete) return fail('The document is still being parsed, try again in a moment.')
     return true

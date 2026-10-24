@@ -86,8 +86,8 @@ export function buildUnitCommentMarkers(doc, marks) {
 }
 
 const theme = View.baseTheme({
-  '.cm-unit-comment-gutter .cm-gutterElement': { cursor: 'pointer', display: 'flex', alignItems: 'center' },
-  '.cm-unit-comment-gutter': { minWidth: '14px' },
+  '.cm-unit-comment-gutter .cm-gutterElement': { cursor: 'pointer', display: 'flex', alignItems: 'center', paddingLeft: '3px' },
+  '.cm-unit-comment-gutter': { minWidth: '17px' },
   '.cm-uc-bubble': { position: 'relative', width: '12px', lineHeight: '0' },
   '.cm-uc-open': { color: '#0b6bcb' },
   '.cm-uc-resolved': { color: '#a0a6ae' },

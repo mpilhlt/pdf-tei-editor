@@ -10,9 +10,11 @@
  * Like the review marks, the comments are part of the document text: commenting edits the
  * `standOff` element, so undo, saving and versions work as for any other edit.
  *
- * Users who can view but not edit a document can still reply to its threads: the reply is sent
- * to the server, which adds it to the stored file. A reply that arrives while the document is
- * open for editing is merged into the editor (SSE event `commentReplyAdded`).
+ * Annotators and reviewers also comment in documents they cannot edit (unless the version is frozen):
+ * the editor stays read-only for typing, the comments are written into its text as usual, and the
+ * save sends them to the server, which takes only the user's own comments from it
+ * (`PUT /api/v1/files/{stable_id}/standoff`). A reply that arrives while the document is open for
+ * editing is merged into the editor (SSE event `commentReplyAdded`).
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
@@ -45,7 +47,7 @@ import { openCommentPrompt, closePopover } from '../modules/unit-review-popover.
 import { openThreadPopover } from '../modules/unit-comment-popover.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { mentionCandidates } from '../modules/mention-autocomplete.js'
-import { isFrozenFile } from '../modules/acl-utils.js'
+import { isFrozenFile, standOffContributions } from '../modules/acl-utils.js'
 
 /** Diagnostic source tag of this plugin's diagnostics */
 const SOURCE = 'unit-comment'
@@ -414,8 +416,11 @@ class UnitCommentsPlugin extends Plugin {
     }
     if (!this.state?.user) return fail('Log in to comment.')
     if (!this.#xmlEditor.getXmlTree()) return fail('The XML is not well-formed: fix it before commenting.')
-    // not the editor's own read-only flag: annotation mode sets it to block typing only
-    if (this.state.editorReadOnly) return fail('The document is read-only. Create your own version to comment.')
+    // not the editor's own read-only flag: annotation mode sets it to block typing only. In
+    // documents they cannot edit, annotators and reviewers still comment (saved by the server)
+    if (this.state.editorReadOnly && (this.state.connectionLost || !standOffContributions(this.state.user, this.state.xml).comments)) {
+      return fail(isFrozenFile(this.state.xml) ? 'This version is superseded by a newer version and cannot be commented.' : 'The document is read-only. Create your own version to comment.')
+    }
     if (this.#xmlEditor.isMergeViewActive()) return fail('Close the comparison view before commenting.')
     return true
   }

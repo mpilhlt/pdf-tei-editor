@@ -34,7 +34,7 @@ from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.core.locking import acquire_lock, release_lock
 from ..lib.utils.revision_hash import stamp_revision_hashes
-from ..lib.messages.comment_edit import merge_foreign_comments
+from ..lib.messages.standoff_merge import merge_foreign_standoff
 from ..lib.utils.logging_utils import get_logger
 from ..lib.permissions.user_utils import user_has_collection_access
 from ..config import get_settings
@@ -312,10 +312,10 @@ async def save_file(
             reference_xml = reference_bytes.decode('utf-8') if reference_bytes else None
         xml_string = stamp_revision_hashes(xml_string, reference_xml)
 
-        # Saving over a file keeps the comments others added meanwhile (replies to comment threads
-        # arrive in the stored file while its owner edits it). Admins may delete others' comments.
+        # Saving over a file keeps the comments and review marks others added in place meanwhile
+        # (users who cannot edit a file still review and comment it). Admins may delete others' comments.
         if existing_file and not request.new_version and reference_xml and not _user_has_role(user, 'admin'):
-            xml_string = merge_foreign_comments(reference_xml, xml_string, user.get('username') or '')
+            xml_string = merge_foreign_standoff(reference_xml, xml_string, user.get('username') or '')
 
         # Refresh existing_gold after resolving doc_id
         if existing_file:

@@ -9,7 +9,8 @@ from pathlib import Path
 
 from lxml import etree
 
-from fastapi_app.lib.messages.comment_edit import ThreadNotFoundError, add_reply, merge_foreign_comments
+from fastapi_app.lib.messages.comment_edit import ThreadNotFoundError, add_reply
+from fastapi_app.lib.messages.standoff_merge import merge_foreign_standoff as merge_foreign_comments
 from fastapi_app.lib.messages.standoff_reader import (
     COMMENT_LIST_TYPE,
     build_threads,

@@ -222,7 +222,8 @@ class MessagesPlugin extends Plugin {
     this.getDependency('toolbar').setMenuButtonBadge(this.#unread)
     if (this.#menuBadge) {
       this.#menuBadge.textContent = this.#unread > 99 ? '99+' : String(this.#unread)
-      this.#menuBadge.hidden = this.#unread === 0
+      // not `hidden`: the sl-badge host sets `display`
+      this.#menuBadge.style.display = this.#unread === 0 ? 'none' : ''
     }
   }
 

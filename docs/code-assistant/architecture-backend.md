@@ -114,7 +114,8 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `store.py` | `MessageStore` over `data/db/messages.db` (occurrences, messages, read state) |
 | `indexer.py` | `extract_occurrences`, `MessageIndexer` (index, settle, remove, rebuild) |
 | `service.py` | Store singletons, `document.saved`/`file.deleted` hooks, access filtering, `messagesChanged` SSE notification |
-| `comment_edit.py` | Reply endpoint text edit (`add_reply`) and merge of other users' comments on save (`merge_foreign_comments`) |
+| `comment_edit.py` | Reply endpoint text edit (`add_reply`) |
+| `standoff_merge.py` | Text-level merge of the review and comment lists: contributions of users who cannot edit a file (`apply_contribution`, `PUT /files/{stable_id}/standoff`) and other users' changes kept when a file is saved over (`merge_foreign_standoff`) |
 
 The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messages/rebuild`, `manage-remote maintenance rebuild-messages`); it is built in the background at startup when `messages.db` is missing.
 

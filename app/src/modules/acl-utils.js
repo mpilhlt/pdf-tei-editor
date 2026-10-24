@@ -364,3 +364,16 @@ export function canEditFile(user, fileId) {
     return true
   }
 }
+/**
+ * What a user may add to a document they cannot edit: reviewers set review marks and comment,
+ * annotators comment. The server takes only the user's own review annotation and comments from the
+ * editor's text (`PUT /api/v1/files/{stable_id}/standoff`). Frozen versions take no contributions.
+ * @param {UserData|null} user - Current user object
+ * @param {string|null|undefined} fileId - The file identifier
+ * @returns {{reviews: boolean, comments: boolean}}
+ */
+export function standOffContributions(user, fileId) {
+  if (!user || !fileId || !getFileDataById(fileId) || isFrozenFile(fileId)) return { reviews: false, comments: false }
+  const reviews = userHasReviewerRole(user) || userIsAdmin(user)
+  return { reviews, comments: reviews || userHasAnnotatorRole(user) }
+}

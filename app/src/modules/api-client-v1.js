@@ -783,6 +783,17 @@
  */
 
 /**
+ * @typedef {Object} StandOffSaveRequest
+ * @property {string} xml_string - The text of the user's editor
+ */
+
+/**
+ * @typedef {Object} StandOffSaveResponse
+ * @property {string} stable_id
+ * @property {('saved'|'unchanged')} status
+ */
+
+/**
  * @typedef {Object} QueryResourceRequest
  * @property {string} kind
  * @property {string} url
@@ -1992,6 +2003,19 @@ export class ApiClientV1 {
   async filesCommentReply(stable_id, thread_id, requestBody) {
     const endpoint = `/files/${encodeURIComponent(stable_id)}/comments/${encodeURIComponent(thread_id)}/replies`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Saves the user's review marks and comments in a file they cannot edit: the server takes the
+   * user's own review annotation and comments from the text and ignores everything else.
+   *
+   * @param {string} stable_id
+   * @param {StandOffSaveRequest} requestBody
+   * @returns {Promise<StandOffSaveResponse>}
+   */
+  async filesSaveStandOff(stable_id, requestBody) {
+    const endpoint = `/files/${encodeURIComponent(stable_id)}/standoff`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**
