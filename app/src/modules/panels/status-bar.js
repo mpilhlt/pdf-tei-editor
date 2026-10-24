@@ -17,6 +17,7 @@ class StatusBar extends HTMLElement {
     this.hiddenWidgets = new Set();
     this.resizeObserver = null;
     this.measurementCache = new Map();
+    this.overflowCheckScheduled = false;
     
     this.render();
     this.setupEventListeners();
@@ -104,11 +105,9 @@ class StatusBar extends HTMLElement {
 
   setupOverflowDetection() {
     if (typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver(entries => {
-        for (const entry of entries) {
-          this.checkAndResolveOverflow();
-        }
-      });
+      // Observes the bar and each widget, so that a widget which appears or grows
+      // (e.g. switches from display:none or changes its text) triggers a check
+      this.resizeObserver = new ResizeObserver(() => this.scheduleOverflowCheck());
     }
 
     // Also check overflow when widgets are added or modified
@@ -131,6 +130,51 @@ class StatusBar extends HTMLElement {
     }
   }
 
+  /**
+   * Runs checkAndResolveOverflow() once in the next animation frame,
+   * coalescing multiple resize notifications
+   */
+  scheduleOverflowCheck() {
+    if (this.overflowCheckScheduled) return;
+    this.overflowCheckScheduled = true;
+    requestAnimationFrame(() => {
+      this.overflowCheckScheduled = false;
+      this.checkAndResolveOverflow();
+    });
+  }
+
+  /**
+   * Whether the element is a separator, which is not hidden by priority but
+   * together with the widget before it
+   * @param {Element} element
+   * @returns {boolean}
+   */
+  isSeparator(element) {
+    return element.tagName === 'STATUS-SEPARATOR';
+  }
+
+  /**
+   * Hides each separator whose preceding widget in the same slot is hidden
+   * (or which has no preceding widget), and shows the others
+   */
+  syncSeparators() {
+    this.shadowRoot.querySelectorAll('slot').forEach(slot => {
+      let previous = null;
+      for (const element of slot.assignedElements()) {
+        if (!this.isSeparator(element)) {
+          previous = element;
+          continue;
+        }
+        const previousHidden = !previous || previous.hasAttribute('data-overflow-hidden') || previous.getBoundingClientRect().width === 0;
+        if (previousHidden) {
+          element.setAttribute('data-overflow-hidden', '');
+        } else {
+          element.removeAttribute('data-overflow-hidden');
+        }
+      }
+    });
+  }
+
   checkAndResolveOverflow() {
     const containerRect = this.getBoundingClientRect();
     const availableWidth = containerRect.width;
@@ -139,6 +183,8 @@ class StatusBar extends HTMLElement {
 
     // First, check and hide title widgets that are too narrow to be useful
     this.checkTitleWidgetMinimumWidth();
+
+    this.syncSeparators();
 
     // Get all widgets with their measurements
     const allWidgets = this.getAllWidgetsWithPriority();
@@ -230,7 +276,7 @@ class StatusBar extends HTMLElement {
           // They are excluded from normal priority-based hiding
           if (!widget.classList.contains('title-widget')) {
             const priority = parseInt(widget.dataset.priority) || 0;
-            widgets.push({ element: widget, priority, slot: slot.name });
+            widgets.push({ element: widget, priority, slot: slot.name, separator: this.isSeparator(widget) });
           }
         });
       }
@@ -291,7 +337,7 @@ class StatusBar extends HTMLElement {
   hideWidgetsToFit(allWidgets, availableWidth) {
     // Sort by priority (lowest first) for hiding
     const sortedWidgets = allWidgets
-      .filter(w => !w.element.hasAttribute('data-overflow-hidden'))
+      .filter(w => !w.separator && !w.element.hasAttribute('data-overflow-hidden'))
       .sort((a, b) => a.priority - b.priority);
     
     let currentWidth = this.calculateTotalWidth(allWidgets);
@@ -302,6 +348,7 @@ class StatusBar extends HTMLElement {
       // Hide this widget
       widget.element.setAttribute('data-overflow-hidden', '');
       this.hiddenWidgets.add(widget.element);
+      this.syncSeparators();
       
       // Recalculate width
       currentWidth = this.calculateTotalWidth(allWidgets);
@@ -320,6 +367,7 @@ class StatusBar extends HTMLElement {
     for (const widget of hiddenWidgets) {
       // Temporarily show the widget to measure
       widget.element.removeAttribute('data-overflow-hidden');
+      this.syncSeparators();
       const testWidth = this.calculateTotalWidth(allWidgets);
       
       if (testWidth <= availableWidth) {
@@ -328,6 +376,7 @@ class StatusBar extends HTMLElement {
       } else {
         // Hide it again
         widget.element.setAttribute('data-overflow-hidden', '');
+        this.syncSeparators();
         break;
       }
     }
@@ -396,6 +445,7 @@ class StatusBar extends HTMLElement {
     this.positions[position].sort((a, b) => b.priority - a.priority);
     
     this.appendChild(widget);
+    this.resizeObserver?.observe(widget);
     
     // Check for overflow after adding
     setTimeout(() => this.checkAndResolveOverflow(), 0);
@@ -416,6 +466,7 @@ class StatusBar extends HTMLElement {
     
     // Remove from hidden widgets set
     this.hiddenWidgets.delete(element);
+    this.resizeObserver?.unobserve(element);
     
     if (element.parentNode === this) {
       this.removeChild(element);
@@ -434,6 +485,7 @@ class StatusBar extends HTMLElement {
    */
   clearWidgets() {
     this.widgets.forEach((widget) => {
+      this.resizeObserver?.unobserve(widget.element);
       if (widget.element.parentNode === this) {
         this.removeChild(widget.element);
       }

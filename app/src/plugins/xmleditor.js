@@ -312,10 +312,13 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
+    // Indentation (and its separator) and cursor position go first when space is short,
+    // before the centre navigation (0) and the review/comment meters
     const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right');
+    const statusbarRightPriorities = [-2, -2, -1]; // indentation, separator, cursor position
     statusbarRightWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        this.#statusbar.add(widget, 'right', index + 1);
+        this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
       }
     });
 
