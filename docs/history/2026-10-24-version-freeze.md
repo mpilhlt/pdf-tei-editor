@@ -1,6 +1,6 @@
 # Frozen versions and a text hash chain (discussion for #207)
 
-Status: discussion, 2026-10-24. Not implemented.
+Status: implemented, 2026-10-24. See [Implementation](#implementation) for what differs from the proposal.
 
 ## How history works today
 
@@ -79,3 +79,19 @@ The unit-review and unit-comment annotations have their own `revisionDesc/change
 - `app/src/plugins/tei-tools.js:232` (`querySelectorAll('revisionDesc change')`), `app/src/modules/tei-utils.js:186` (labels), and the fallback at line 142, which appends to the stand-off `revisionDesc` when the header has none.
 
 The save path (`extract_tei_metadata()`) is not affected; it takes the first `revisionDesc`. Fix: one helper per language returning `/TEI/teiHeader/revisionDesc/change`, used everywhere. This must come before the hash chain.
+
+## Implementation
+
+- `fastapi_app/lib/utils/revision_hash.py`: canonical text (C14N without comments, whitespace runs collapsed, whitespace next to tags removed), `h(n) = sha256(h(n-1) + "\n" + canon(text))[:16]`, and `stamp_revision_hashes()`.
+- Stamping, in `files_save.py`: the editor buffer never holds the hash ids, so they are copied back from the reference file (the stored file, or the source of a new version) by matching `(who, when, status)`. Only the last header change gets a new hash, and only if it is not in the reference file. Ids are inserted with a regex, so the rest of the document is unchanged. When the number of `change` start tags in the header differs from the parsed changes (`listChange`), nothing is stamped.
+- `files.parent_stable_id` (migration m010) is set when a new version is saved from a file of the same document. For existing files, m010 derives it from the longest proper prefix of the change signatures within (doc_id, variant), leaving ambiguous cases unset.
+- Frozen = a non-deleted file has `parent_stable_id` equal to the file's stable_id. The file list returns `parent_id` and `is_frozen` per artifact. Saves to frozen files return 409, locks 403, and the document-rules refresh refuses them.
+- Frontend: `isFrozenFile()` in `acl-utils.js`; `canEditFile()` returns false for frozen files, for admins too. The access-control plugin sets the editor read-only with the status text *Read-only (superseded by a newer version)*, also when the open file becomes frozen by "save to new version". The revision dialog forces *Save to a new personal version* for frozen files.
+- The XML dropdown and the file drawer hide frozen versions, except gold and the open file.
+
+Differences from the proposal:
+
+- No "Show history" toggle and no "Open latest" button. The diff dropdown keeps listing frozen versions, which is the way to look at them.
+- The migration does not stamp hashes into existing files. Legacy files get a hash with their next revision; older changes stay without one.
+- `parent_stable_id` is taken from the save request's source file, not from the hash chain. The hash chain is not yet used for ancestry or to report diverged files.
+- Version counts in document lists are unchanged.

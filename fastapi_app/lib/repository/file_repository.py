@@ -794,6 +794,51 @@ class FileRepository:
                 return self._row_to_model(row)
             return None
 
+    def get_child_stable_ids(self, stable_id: str) -> list[str]:
+        """
+        Get the stable_ids of the non-deleted files copied from a file (see `parent_stable_id`).
+
+        Args:
+            stable_id: Stable ID of the parent file
+
+        Returns:
+            List of stable IDs, empty if the file has no descendants
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT stable_id FROM files WHERE parent_stable_id = ? AND deleted = 0 ORDER BY created_at",
+                (stable_id,)
+            )
+            return [row['stable_id'] for row in cursor.fetchall()]
+
+    def is_frozen(self, stable_id: str) -> bool:
+        """
+        Check whether a file is frozen: another version was copied from it, so it is part of the
+        history and must not change (see docs/history/2026-10-24-version-freeze.md).
+
+        Args:
+            stable_id: Stable ID of the file
+
+        Returns:
+            True if a non-deleted file has this file as its parent
+        """
+        return bool(self.get_child_stable_ids(stable_id))
+
+    def get_frozen_stable_ids(self) -> set[str]:
+        """
+        Get the stable_ids of all frozen files (files that a non-deleted file was copied from).
+
+        Returns:
+            Set of stable IDs
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT DISTINCT parent_stable_id FROM files WHERE parent_stable_id IS NOT NULL AND deleted = 0"
+            )
+            return {row['parent_stable_id'] for row in cursor.fetchall()}
+
     def get_gold_standard(self, doc_id: str) -> Optional[FileMetadata]:
         """
         Get gold standard file for a document.

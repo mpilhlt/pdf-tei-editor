@@ -332,7 +332,8 @@ The RBAC Manager integrates with the backend API endpoints to provide real-time 
    - Reject if no access
 4. System validates role permissions:
    - Check if user can edit gold/versions
-5. System saves file
+5. System rejects saves to frozen (superseded) versions with 409, for all roles
+6. System stamps the revision hash into the last teiHeader change and saves the file
 ```
 
 ## Security Considerations

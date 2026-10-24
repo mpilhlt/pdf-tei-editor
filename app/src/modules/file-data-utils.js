@@ -42,7 +42,9 @@
  *   is_gold_standard: boolean,
  *   is_locked: boolean,
  *   metadata?: { access_control: AccessControl | null },
- *   created_by: string|null
+ *   created_by: string|null,
+ *   parent_id?: string|null,
+ *   is_frozen?: boolean
  * }} Artifact
  */
 

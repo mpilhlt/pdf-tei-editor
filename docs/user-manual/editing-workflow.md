@@ -137,6 +137,14 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
 
+### Superseded versions
+
+As soon as a new version is saved from a version, the source version is superseded and becomes read-only for everyone, including administrators. This also applies to the Gold Standard. The status bar shows *Read-only (superseded by a newer version)*. To change a superseded version, use **Save revision** with *Save to a new personal version*, which is preselected for such versions. Deleting the newer version makes the source version editable again.
+
+The XML version dropdown and the file drawer list only the latest version of each line of versions. The diff dropdown still lists superseded versions, so they can be compared with the current one.
+
+Each saved revision records a short hash of the document text in its `<change xml:id="h-…">`, chained to the hash of the previous revision. This makes it possible to check that the text of a recorded revision has not been changed afterwards.
+
 ---
 
 ## Revision History

@@ -19,7 +19,7 @@ import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
-import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { userHasRole, isGoldFile, isFrozenFile } from '../modules/acl-utils.js'
 import { removeUnitReviews, parseSummary, LIST_TYPE as UNIT_REVIEW_LIST_TYPE } from '../modules/unit-review.js'
 import { LIST_TYPE as UNIT_COMMENT_LIST_TYPE } from '../modules/unit-comments.js'
 import { removeStandOffLists } from '../modules/standoff-list.js'
@@ -307,7 +307,8 @@ class DocumentActionsPlugin extends Plugin {
         const isOwnerBasedMode = this.getDependency('access-control').getMode() === 'owner-based'
         const fileData = getFileDataById(state.xml, state.fileData)
         const isOwner = fileData?.item?.created_by === userData.username
-        const forceCopy = isOwnerBasedMode && !isOwner
+        // a superseded (frozen) version can only be continued in a new version
+        const forceCopy = (isOwnerBasedMode && !isOwner) || isFrozenFile(state.xml)
         dlg.options.saveToNewCopySection.saveToNewCopy.checked = forceCopy
         dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 

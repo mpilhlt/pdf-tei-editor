@@ -42,6 +42,8 @@ class ArtifactModel(FileItemModel):
     is_locked: bool                            # Lock status
     access_control: Optional[Dict[str, Any]] = None  # Access control rules or null
     created_by: Optional[str] = None           # Username of user who created this file
+    parent_id: Optional[str] = None            # Stable ID of the version this file was copied from
+    is_frozen: bool = False                    # True if a version was copied from this file (read-only history)
 
 
 class DocumentGroupModel(BaseModel):

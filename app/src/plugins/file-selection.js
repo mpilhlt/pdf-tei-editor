@@ -453,6 +453,8 @@ class FileSelectionPlugin extends Plugin {
 
               const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
               const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+              /** @param {Artifact} a */
+              const isListedVersion = a => !a.is_frozen || a.id === state.xml;
 
               if (goldToShow.length > 0) {
                 await createHtmlElements(`<small>Gold</small>`, this.#xml);
@@ -475,13 +477,13 @@ class FileSelectionPlugin extends Plugin {
                 });
 
                 if (versionsToShow.length > 0) {
-                  this.#xml.appendChild(new SlDivider());
+                  if (versionsToShow.some(isListedVersion)) this.#xml.appendChild(new SlDivider());
                   this.#diff.appendChild(new SlDivider());
                 }
               }
 
               if (versionsToShow.length > 0) {
-                await createHtmlElements(`<small>Versions</small>`, this.#xml);
+                if (versionsToShow.some(isListedVersion)) await createHtmlElements(`<small>Versions</small>`, this.#xml);
                 await createHtmlElements(`<small>Versions</small>`, this.#diff);
 
                 versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
@@ -493,7 +495,9 @@ class FileSelectionPlugin extends Plugin {
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  this.#xml.appendChild(opt);
+                  // superseded (frozen) versions are history: offered for comparison only,
+                  // unless one is open
+                  if (isListedVersion(version)) this.#xml.appendChild(opt);
                   opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
