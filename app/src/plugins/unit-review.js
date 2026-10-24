@@ -54,6 +54,14 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
 /** Delay after the last edit before units are recomputed */
 const REFRESH_DELAY_MS = 250
 
+const IS_MAC = /Mac/.test(navigator.userAgent)
+
+/** @param {string} shortcut */
+const key = shortcut => IS_MAC ? shortcut.replace('Ctrl+', '⌘').replace('Alt+', '⌥') : shortcut
+
+/** Tooltip of the toolbar toggle */
+const REVIEW_TOOLTIP = `Review: mark units as OK or not OK. Right-click an element to review it, or use the shortcuts: ${key('Ctrl+Enter')} OK · ${key('Ctrl+Shift+Enter')} not OK with comment · ${key('Ctrl+Alt+Enter')} / ${key('Ctrl+Alt+Shift+Enter')} final OK / not OK · ${key('Ctrl+Shift+Backspace')} remove my review · F7 / Shift+F7 next unreviewed / not-OK unit`
+
 /**
  * A mark set through {@link UnitReviewPlugin#setMarks}
  * @typedef {object} ExternalMark
@@ -144,7 +152,7 @@ class UnitReviewPlugin extends Plugin {
     this.#toggle = PanelUtils.createToggleButton({
       name: 'unitReviewToggle',
       icon: 'clipboard-check',
-      tooltip: 'Review: mark units as OK or not OK'
+      tooltip: REVIEW_TOOLTIP
     })
     this.#toggle.addEventListener('widget-change', () => this.setEnabled(Boolean(this.#toggle.checked)))
     this.#xmlEditor.addToolbarWidget(this.#toggle, 93)
@@ -169,7 +177,7 @@ class UnitReviewPlugin extends Plugin {
    * Extension point handler for `ep.xmlEditor.contextMenuItems`.
    * Called by the XmlEditorPlugin during start() to collect context menu contributions.
    * Delegates to {@link UnitReviewPlugin#getContextMenuItems}.
-   * @returns {Array<{element: HTMLElement, onBeforeShow?: (ctx: {readOnly: boolean}) => void}>}
+   * @returns {Array<{element: HTMLElement, row: boolean, onBeforeShow: (ctx: {readOnly: boolean, pos: number}) => void}>}
    */
   [ep.xmlEditor.contextMenuItems]() { return this.getContextMenuItems() }
 
@@ -613,6 +621,27 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
+   * Returns the unit containing a position, or the units on its line if none contains it.
+   * @param {number} pos
+   * @returns {Unit[]}
+   */
+  #unitsAt(pos) {
+    const containing = this.#scan.units.filter(u => u.from <= pos && u.to >= pos)
+    if (containing.length) return containing.slice(-1)
+    const line = this.#view().state.doc.lineAt(Math.min(pos, this.#view().state.doc.length)).number
+    return this.#unitsOnLines(line, line)
+  }
+
+  /**
+   * Whether a position lies inside a non-empty selection range.
+   * @param {number} pos
+   * @returns {boolean}
+   */
+  #inSelection(pos) {
+    return this.#view().state.selection.ranges.some(r => !r.empty && r.from <= pos && r.to >= pos)
+  }
+
+  /**
    * Returns the units touched by the selection, or on the cursor line.
    * @returns {Unit[]}
    */
@@ -631,14 +660,15 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Keyboard command: marks the selected units and moves on.
+   * Keyboard and context menu command: marks the selected units, or the unit at `pos`, and moves on.
    * @param {MarkState|null} state
    * @param {boolean} final
+   * @param {number} [pos] - The right-clicked position; ignored when it lies inside the selection
    * @returns {boolean}
    */
-  #markAtCursor(state, final) {
+  #markAtCursor(state, final, pos) {
     this.#refresh()
-    const units = this.#selectedUnits()
+    const units = pos === undefined || this.#inSelection(pos) ? this.#selectedUnits() : this.#unitsAt(pos)
     if (!units.length) {
       notify('There is no review unit here.', 'primary', 'info-circle')
       return true
@@ -1017,44 +1047,66 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Context menu items of review mode.
-   * @returns {Array<{element: HTMLElement, onBeforeShow?: (ctx: {readOnly: boolean}) => void}>}
+   * Context menu row of review mode: coloured icon buttons that act on the right-clicked unit
+   * (or on the selected units, if the click was inside the selection).
+   * @returns {Array<{element: HTMLElement, row: boolean, onBeforeShow: (ctx: {readOnly: boolean, pos: number}) => void}>}
    */
   getContextMenuItems() {
-    /**
-     * @param {string} label
-     * @param {() => void} run
-     * @returns {HTMLElement}
-     */
-    const item = (label, run) => {
-      const el = document.createElement('sl-menu-item')
-      el.textContent = label
-      el.addEventListener('click', run)
-      return el
-    }
-    const divider = document.createElement('sl-divider')
-    const items = [
-      divider,
-      item('Mark as OK', () => this.#markAtCursor('ok', false)),
-      item('Mark as not OK…', () => this.#markAtCursor('not-ok', false)),
-      item('Remove my review', () => this.#markAtCursor(null, false)),
-      item('Mark everything above as OK', () => this.#markAbove()),
-      item('Next unreviewed unit', () => this.goToNext('open'))
+    let pos = 0
+    /** @type {Array<{icon: string, cls: string, title: string, run: () => void, final?: boolean, nav?: boolean}>} */
+    const specs = [
+      { icon: 'check-lg', cls: 'ok', title: `Mark as OK and go to the next unit (${key('Ctrl+Enter')})`, run: () => this.#markAtCursor('ok', false, pos) },
+      { icon: 'x-lg', cls: 'not-ok', title: `Mark as not OK, with a short comment (${key('Ctrl+Shift+Enter')})`, run: () => this.#markAtCursor('not-ok', false, pos) },
+      { icon: 'patch-check', cls: 'ok', final: true, title: `Final review: OK, overrides all other marks (${key('Ctrl+Alt+Enter')})`, run: () => this.#markAtCursor('ok', true, pos) },
+      { icon: 'patch-exclamation', cls: 'not-ok', final: true, title: `Final review: not OK, overrides all other marks (${key('Ctrl+Alt+Shift+Enter')})`, run: () => this.#markAtCursor('not-ok', true, pos) },
+      { icon: 'eraser', cls: 'remove', title: `Remove my review (${key('Ctrl+Shift+Backspace')})`, run: () => this.#markAtCursor(null, false, pos) },
+      { icon: 'check2-all', cls: 'ok-outline', title: 'Mark everything above as OK (only the units you have not marked yet)', run: () => this.#markAbove(pos) },
+      { icon: 'arrow-down-circle', cls: 'nav', nav: true, title: 'Go to the next unit you have not reviewed (F7)', run: () => this.goToNext('open', this.#view().state.doc.lineAt(pos).number) },
+      { icon: 'exclamation-circle', cls: 'nav', nav: true, title: 'Go to the next unit that is not OK or disputed (Shift+F7)', run: () => this.goToNext('not-ok', this.#view().state.doc.lineAt(pos).number) }
     ]
-    const onBeforeShow = () => {
-      for (const el of items) el.hidden = !this.#enabled || (el !== divider && !this.#isReviewer() && !el.textContent?.startsWith('Next'))
+    const row = document.createElement('div')
+    row.className = 'xml-editor-context-menu__history-row unit-review-menu-row'
+    row.dataset.testid = 'unit-review-menu-row'
+    const label = document.createElement('span')
+    label.className = 'xml-editor-context-menu__history-label'
+    label.textContent = 'Review'
+    row.append(label)
+    const buttons = specs.map(spec => {
+      const btn = document.createElement('button')
+      btn.className = `xml-editor-context-menu__history-btn unit-review-menu-btn unit-review-menu-btn--${spec.cls}`
+      btn.title = spec.title
+      btn.setAttribute('aria-label', spec.title)
+      btn.dataset.testid = `unit-review-menu-${spec.icon}`
+      const icon = document.createElement('sl-icon')
+      icon.setAttribute('name', spec.icon)
+      btn.append(icon)
+      btn.addEventListener('click', () => spec.run())
+      row.append(btn)
+      return { btn, spec }
+    })
+    /** @param {{readOnly: boolean, pos: number}} ctx */
+    const onBeforeShow = ctx => {
+      pos = ctx.pos
+      row.style.display = this.#enabled ? '' : 'none'
+      if (!this.#enabled) return
+      const canMark = this.#isReviewer() && this.#canWrite(true)
+      for (const { btn, spec } of buttons) {
+        btn.hidden = Boolean(spec.final) && this.#mode !== 'final'
+        btn.disabled = !spec.nav && !canMark
+      }
     }
-    return items.map(element => ({ element, onBeforeShow }))
+    return [{ element: row, row: true, onBeforeShow }]
   }
 
   /**
    * Marks all units the current user has not marked, from the start of the document up to the
-   * cursor line, as OK.
+   * given position (default: the cursor), as OK.
+   * @param {number} [pos]
    */
-  #markAbove() {
+  #markAbove(pos) {
     this.#refresh()
     const view = this.#view()
-    const line = view.state.doc.lineAt(view.state.selection.main.head).number
+    const line = view.state.doc.lineAt(Math.min(pos ?? view.state.selection.main.head, view.state.doc.length)).number
     const me = this.state?.user?.username ?? ''
     const units = this.#unitsOnLines(1, line).filter(u => !this.#data.reviewers.get(me)?.marks.has(u.fingerprint))
     if (units.length) this.markUnits(units.map(u => u.fingerprint), 'ok')

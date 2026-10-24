@@ -894,10 +894,14 @@ class XmlEditorPlugin extends Plugin {
     for (const results of (contributions || [])) {
       const items = (results || []).filter(item => item?.element instanceof HTMLElement);
       // Prepend items in reverse so they appear in declaration order at the top of the menu
-      for (const item of [...items].filter(i => i.prepend).reverse()) {
+      // Rows go above the "History" row, in declaration order
+      for (const item of [...items].filter(i => i.row).reverse()) {
+        this.#contextMenu.prependRow(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
+      }
+      for (const item of [...items].filter(i => i.prepend && !i.row).reverse()) {
         this.#contextMenu.prependItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
-      for (const item of items.filter(i => !i.prepend)) {
+      for (const item of items.filter(i => !i.prepend && !i.row)) {
         this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
     }

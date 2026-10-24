@@ -4,6 +4,7 @@
  * Builds its own DOM, wires all event listeners, and exposes a minimal API:
  * - `mount(parent)` — attach to the editor panel once
  * - `addItem(element)` — append a contributed <sl-menu-item> or <sl-divider>
+ * - `prependRow(element)` — add a contributed button row above the "History" row
  *
  * No dependency on the template system or navigable-element infrastructure.
  *
@@ -67,7 +68,7 @@ export class XmlEditorContextMenu {
   #unwrapItem = null;
   /** @type {number} */
   #clickDocPos = 0;
-  /** @type {Array<(ctx: {readOnly: boolean}) => void>} */
+  /** @type {Array<(ctx: {readOnly: boolean, pos: number}) => void>} */
   #beforeShowCallbacks = [];
 
   /**
@@ -194,7 +195,7 @@ export class XmlEditorContextMenu {
    * Append a contributed item (sl-menu-item or sl-divider) to the plugin section.
    * Automatically reveals the section divider on first call.
    * @param {HTMLElement} element
-   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean}) => void }} [options]
+   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean, pos: number}) => void }} [options]
    */
   addItem(element, options) {
     this.#menu?.appendChild(element);
@@ -205,10 +206,25 @@ export class XmlEditorContextMenu {
   /**
    * Prepend a contributed item before all other menu items.
    * @param {HTMLElement} element
-   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean}) => void }} [options]
+   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean, pos: number}) => void }} [options]
    */
   prependItem(element, options) {
     if (this.#menu) this.#menu.insertBefore(element, this.#menu.firstChild);
+    if (options?.onBeforeShow) this.#beforeShowCallbacks.push(options.onBeforeShow);
+  }
+
+  /**
+   * Add a contributed row (e.g. a row of icon buttons, styled like the "History" row with the
+   * `xml-editor-context-menu__history-row` class) above the "History" row. Clicking a button in
+   * it closes the menu.
+   * @param {HTMLElement} element
+   * @param {{ onBeforeShow?: (ctx: {readOnly: boolean, pos: number}) => void }} [options]
+   */
+  prependRow(element, options) {
+    if (this.#overlay) this.#overlay.insertBefore(element, this.#overlay.firstChild);
+    element.addEventListener('click', evt => {
+      if (/** @type {HTMLElement} */ (evt.target).closest('button')) this.#hide();
+    });
     if (options?.onBeforeShow) this.#beforeShowCallbacks.push(options.onBeforeShow);
   }
 
@@ -221,11 +237,11 @@ export class XmlEditorContextMenu {
     const hasSelection = from !== to;
     const readOnly     = this.#editor.isReadOnly();
 
-    // Give contributed items a chance to update themselves before the menu appears
-    for (const cb of this.#beforeShowCallbacks) cb({ readOnly });
-
     // Record click position for deferred commands (unwrap, accept/reject)
     this.#clickDocPos = view.posAtCoords({ x, y }, false) ?? view.state.selection.main.head;
+
+    // Give contributed items a chance to update themselves before the menu appears
+    for (const cb of this.#beforeShowCallbacks) cb({ readOnly, pos: this.#clickDocPos });
 
     if (this.#undoBtn)   this.#undoBtn.disabled   = undoDepth(view.state) === 0;
     if (this.#redoBtn)   this.#redoBtn.disabled   = redoDepth(view.state) === 0;

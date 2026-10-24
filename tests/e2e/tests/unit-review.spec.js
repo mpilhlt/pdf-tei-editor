@@ -221,6 +221,24 @@ test.describe('Unit review', () => {
       await page.keyboard.press('ControlOrMeta+z');
       await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
 
+      // the context menu row marks the right-clicked unit, not the one at the cursor
+      await cursorTo(page, 'Alpha');
+      const gammaPoint = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const coords = view.coordsAtPos(view.state.doc.toString().indexOf('Gamma') + 2);
+        return { x: coords.left, y: (coords.top + coords.bottom) / 2 };
+      });
+      await page.mouse.click(gammaPoint.x, gammaPoint.y, { button: 'right' });
+      const menuRow = page.getByTestId('unit-review-menu-row');
+      await expect(menuRow).toBeVisible();
+      await expect(menuRow.getByTestId('unit-review-menu-patch-check')).toBeHidden();
+      await menuRow.getByTestId('unit-review-menu-check-lg').click();
+      await expect(menuRow).toBeHidden();
+      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 1 not OK · 0 open');
+      await cursorTo(page, 'Gamma');
+      await page.keyboard.press('ControlOrMeta+z');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+
       // editing a reviewed unit keeps its marks as was- marks: the unit is stale
       await page.evaluate(() => {
         const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
@@ -285,6 +303,18 @@ test.describe('Unit review', () => {
       await page.keyboard.press('ControlOrMeta+Enter');
       await expect(page.locator('sl-alert', { hasText: 'Only reviewers can mark units.' })).toHaveCount(1);
       expect(await editorText(page)).not.toContain('<annotation');
+      // the context menu row offers only navigation
+      const betaPoint = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const coords = view.coordsAtPos(view.state.doc.toString().indexOf('Beta') + 2);
+        return { x: coords.left, y: (coords.top + coords.bottom) / 2 };
+      });
+      await page.mouse.click(betaPoint.x, betaPoint.y, { button: 'right' });
+      const menuRow = page.getByTestId('unit-review-menu-row');
+      await expect(menuRow).toBeVisible();
+      await expect(menuRow.getByTestId('unit-review-menu-check-lg')).toBeDisabled();
+      await expect(menuRow.getByTestId('unit-review-menu-arrow-down-circle')).toBeEnabled();
+      await page.keyboard.press('Escape');
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);

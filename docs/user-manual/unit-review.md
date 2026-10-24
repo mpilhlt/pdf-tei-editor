@@ -8,7 +8,9 @@ Click the **Review** button (clipboard icon) in the XML editor toolbar. Review m
 
 - the status strip left of the line numbers,
 - a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed,
-- review commands in the editor's context menu and keyboard shortcuts.
+- a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
+
+Hover over the **Review** button to see the list of shortcuts.
 
 The setting is remembered in the browser. Only users with the *reviewer* or *admin* role can set marks; everyone else sees the strip and the marks read-only.
 
@@ -20,16 +22,18 @@ When several units share a line, the strip shows the line in amber if their stat
 
 ## Marking units
 
+The keyboard shortcuts act on the units at the cursor or in the selection. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
+
 | Action | How |
 | --- | --- |
-| Mark as OK and go to the next unit | `Ctrl+Enter` (`Cmd+Enter` on macOS), or context menu **Mark as OK** |
-| Mark as not OK, with a short comment | `Ctrl+Shift+Enter`, then type the comment and press `Enter` (`Esc` keeps the mark without a comment) |
-| Remove your mark | `Ctrl+Shift+Backspace`, or context menu **Remove my review** |
+| Mark as OK and go to the next unit | `Ctrl+Enter` (`Cmd+Enter` on macOS), or the green ✓ button |
+| Mark as not OK, with a short comment | `Ctrl+Shift+Enter`, then type the comment and press `Enter` (`Esc` keeps the mark without a comment), or the red ✕ button |
+| Remove your mark | `Ctrl+Shift+Backspace`, or the eraser button |
 | Mark several units as OK | Select them and press `Ctrl+Enter`, or drag over the strip (hold `Alt` while dragging to mark them not OK) |
-| Mark all units above the cursor as OK | Context menu **Mark everything above as OK** (only units you have not marked yet) |
+| Mark all units above as OK | The double-check button (only units you have not marked yet) |
 | Open the review of a line | Click the strip: shows your mark and comment, the other reviewers' marks, and the combined result |
-| Next unit you have not reviewed / next not-OK unit | `F7` / `Shift+F7`, or click the progress meter |
-| Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), or the **Final review** box in the popover |
+| Next unit you have not reviewed / next not-OK unit | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
+| Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review.
 

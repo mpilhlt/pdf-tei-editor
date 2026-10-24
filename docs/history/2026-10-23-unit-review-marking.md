@@ -225,6 +225,7 @@ Implemented on 2026-10-23 (pdf-tei-editor, fossil and pte-plugins branches `clau
 - The diagnostics of the `unit-review` source are merged with `applyMergedDiagnostics()` like the LLM Reviewer's, not registered through `addLinter()`. "Propose fix" and "OK anyway" for LLM findings are not added; the LLM Reviewer's own diagnostics keep "Propose fix".
 - Orphaned marks (units changed outside the editor) are dropped the next time marks are written, not on every save.
 - The approval warning (workflow step 7) is a confirmation after the Save Revision dialog, based on the summary stored in the document.
+- The context menu contribution is one row of coloured icon buttons above the "History" row (`row: true` in `ep.xmlEditor.contextMenuItems`, added with `XmlEditorContextMenu.prependRow()`). The buttons act on the right-clicked unit (`pos` in the `onBeforeShow` context), or on the selection when the click lies inside it.
 - Not implemented yet: P4 (counts in the review queue and the file drawer), which needs the backend to parse `note[@type="summary"]` into the file metadata.
 - User documentation: `docs/user-manual/unit-review.md`.
 
