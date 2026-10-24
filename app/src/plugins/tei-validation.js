@@ -5,10 +5,10 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-import { EditorView, ViewUpdate } from '@codemirror/view';
-import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
+import { EditorView } from '@codemirror/view';
+import { linter, lintGutter, setDiagnostics } from "@codemirror/lint";
 import Plugin from '../modules/plugin-base.js';
-import { addDismissListener } from '../modules/lint-utils.js';
+import { addDismissListener, clearDiagnosticsOnChange, collectDiagnostics } from '../modules/lint-utils.js';
 import ep from '../extension-points.js';
 
 class TeiValidationPlugin extends Plugin {
@@ -44,9 +44,15 @@ class TeiValidationPlugin extends Plugin {
     this.#logger.debug(`Installing plugin "${this.name}"`);
     this.#xmlEditor.addLinter([
       linter(this.#lintSource.bind(this), { delay: 2000, needsRefresh: () => false }),
-      lintGutter()
+      lintGutter(),
+      clearDiagnosticsOnChange()
     ]);
-    this.#xmlEditor.on('editorUpdateDelayed', (update) => this.#removeDiagnosticsInChangedRanges(update));
+    // keep the remembered diagnostics in line with the edited document: positions are mapped and
+    // diagnostics in changed ranges are removed by clearDiagnosticsOnChange(). Only our own are
+    // remembered: an explicit `source` marks a diagnostic owned by another plugin, which re-applies it itself
+    this.#xmlEditor.addUpdateListener(update => {
+      if (update.docChanged) this.#lastDiagnostics = collectDiagnostics(update.state).filter(d => !d.source);
+    });
     // forget dismissed diagnostics, so the lint source does not return them again until the next validation
     addDismissListener(dismissed => {
       this.#lastDiagnostics = this.#lastDiagnostics.filter(d => !dismissed.some(x =>
@@ -260,43 +266,6 @@ class TeiValidationPlugin extends Plugin {
     return this.#validationInProgress && this.#validationPromise
       ? this.#validationPromise
       : Promise.resolve([]);
-  }
-
-  /**
-   * @param {ViewUpdate} update
-   */
-  #removeDiagnosticsInChangedRanges(update) {
-    const viewState = this.#xmlEditor.getView().state;
-    /** @type {Diagnostic[]} */
-    const diagnostics = [];
-    // @ts-ignore — changedRanges is not in the types but exists at runtime
-    const changedRangeValues = Object.values(update.changedRanges[0]);
-    const minRange = Math.min(...changedRangeValues);
-    const maxRange = Math.max(...changedRangeValues);
-    // the callback's from/to are mapped through document changes; d.from/d.to are not
-    forEachDiagnostic(viewState, (d, from, to) => {
-      if (from > maxRange || to < minRange) {
-        const docLength = viewState.doc.length;
-        const validFrom = Math.max(0, Math.min(from, docLength - 1));
-        const validTo = Math.min(Math.max(validFrom + 1, to), docLength);
-        if (validFrom < validTo && validFrom < docLength) {
-          diagnostics.push({ ...d, from: validFrom, to: validTo });
-        }
-      } else {
-        this.#logger.debug('Removing diagnostic ' + JSON.stringify(d));
-      }
-    });
-    // the full merged set is dispatched, but only our own diagnostics are remembered:
-    // an explicit `source` marks a diagnostic owned by another plugin, which re-applies it itself
-    this.#lastDiagnostics = diagnostics.filter(d => !d.source);
-    try {
-      this.#xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
-    } catch (error) {
-      this.#logger.warn('Error setting diagnostics after range change:' + String(error));
-      this.#xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
-      this.#lastDiagnostics = [];
-    }
-
   }
 }
 

@@ -162,22 +162,23 @@ test.describe('Diagnostics drawer', () => {
       // the drawer stays open permanently, which must not hide the help icon
       await expect(page.locator('div[name="helpIcon"]')).toBeVisible();
 
-      let state = await drawerState(page);
-      expect(state.empty).toBe(false);
-      expect(state.retracted).toBe(false);
-      expect(state.panelVisible).toBe(true);
-      expect(state.buttonVisible).toBe(false);
+      // polled: whenever the diagnostic set is replaced (e.g. by a validation run), the injected
+      // diagnostics are missing until they are re-merged, like a plugin's own diagnostics
+      await expect.poll(async () => {
+        const { empty, retracted, panelVisible, buttonVisible } = await drawerState(page);
+        return { empty, retracted, panelVisible, buttonVisible };
+      }).toEqual({ empty: false, retracted: false, panelVisible: true, buttonVisible: false });
 
       // focus in the PDF viewer slides the drawer out, the floating button brings it back
       const box = await page.locator('#pdf-viewer-wrapper').boundingBox();
       await page.mouse.click(box.x + box.width - 20, box.y + box.height / 2);
       await expect.poll(async () => (await drawerState(page)).retracted).toBe(true);
       await expect.poll(async () => (await drawerState(page)).panelVisible).toBe(false);
-      expect((await drawerState(page)).buttonVisible).toBe(true);
+      await expect.poll(async () => (await drawerState(page)).buttonVisible).toBe(true);
       await expect(page.locator('.diagnostics-drawer-button sl-badge')).toHaveText('3');
       await page.locator('.diagnostics-drawer-button').click();
       await expect.poll(async () => (await drawerState(page)).panelVisible).toBe(true);
-      expect((await drawerState(page)).buttonVisible).toBe(false);
+      await expect.poll(async () => (await drawerState(page)).buttonVisible).toBe(false);
 
       // clicking a diagnostic selects its text in the editor
       await page.locator('.diagnostics-drawer-item', { hasText: 'fix B' }).locator('.diagnostics-drawer-message').click();
@@ -205,7 +206,13 @@ test.describe('Diagnostics drawer', () => {
       });
       await check(page, 'fix A');
       await check(page, 'no fix C');
-      await page.locator('sl-button[name="applyBtn"]').click();
+      // click Apply right after the diagnostic set was replaced (as a validation run does), before
+      // the injected diagnostics are re-merged: the checked diagnostics must still be applied
+      await page.evaluate((source) => {
+        const app = /** @type {any} */ (window).app;
+        app.getDependency('lint-utils').applyMergedDiagnostics(app.getDependency('xmleditor').getView(), source, []);
+        /** @type {HTMLElement} */ (document.querySelector('sl-button[name="applyBtn"]')).click();
+      }, SOURCE);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix B']);
       const afterApply = await page.evaluate(() => {
         const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');

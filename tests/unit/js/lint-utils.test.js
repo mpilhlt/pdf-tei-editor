@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { EditorState } from '@codemirror/state';
 import { setDiagnostics } from '@codemirror/lint';
 import {
-  addDismissListener, applyMergedDiagnostics, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges,
+  addDismissListener, applyMergedDiagnostics, clearDiagnosticsOnChange, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges,
   mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
 } from '../../../app/src/modules/lint-utils.js';
 
@@ -164,5 +164,50 @@ describe('fixChanges', () => {
     ]);
     assert.deepStrictEqual(changes, [{ from: 6, to: 11, insert: 'BRAVE' }, { from: 12, to: 15, insert: 'NEW' }]);
     assert.deepStrictEqual(applied.map(d => d.message), ['a', 'b']);
+  });
+});
+
+describe('clearDiagnosticsOnChange', () => {
+  const brave = { from: 6, to: 11, severity: 'info', message: 'brave', source: 'annotation-review' };
+  const world = { from: 16, to: 21, severity: 'warning', message: 'world' };
+
+  /** @param {Diagnostic[]} diagnostics */
+  function editorWith(diagnostics) {
+    const base = EditorState.create({ doc: DOC, extensions: [clearDiagnosticsOnChange()] });
+    return base.update(setDiagnostics(base, diagnostics)).state;
+  }
+
+  it('removes the diagnostics touched by a change in the same transaction and maps the others', () => {
+    const tr = editorWith([validation, brave, world]).update({ changes: { from: 7, to: 9, insert: 'XYZ' } });
+    assert.strictEqual(replacesDiagnostics({ transactions: [tr] }), true);
+    const kept = collectDiagnostics(tr.state);
+    assert.deepStrictEqual(kept.map(d => [d.message, d.from, d.to]), [['schema error', 0, 5], ['world', 17, 22]]);
+    assert.strictEqual(tr.state.doc.sliceString(kept[1].from, kept[1].to), 'world');
+  });
+
+  it('keeps the fields of the remaining diagnostics', () => {
+    const action = { name: 'x', apply() {} };
+    const tr = editorWith([validation, { ...world, source: 's', actions: [action] }]).update({ changes: { from: 1, insert: 'h' } });
+    const [d] = collectDiagnostics(tr.state);
+    assert.strictEqual(d.source, 's');
+    assert.strictEqual(d.actions[0].name, 'x');
+  });
+
+  it('removes all diagnostics when the whole document is replaced', () => {
+    const state = editorWith([validation, brave, world]);
+    const tr = state.update({ changes: { from: 0, to: state.doc.length, insert: 'new document' } });
+    assert.deepStrictEqual(collectDiagnostics(tr.state), []);
+  });
+
+  it('leaves a change that touches no diagnostic alone', () => {
+    const tr = editorWith([brave]).update({ changes: { from: DOC.length, insert: '!' } });
+    assert.strictEqual(replacesDiagnostics({ transactions: [tr] }), false);
+    assert.deepStrictEqual(collectDiagnostics(tr.state).map(d => d.message), ['brave']);
+  });
+
+  it('leaves a transaction alone that sets the diagnostics itself', () => {
+    const state = editorWith([brave]);
+    const tr = state.update({ changes: { from: 7, insert: 'x' }, ...setDiagnostics(state, [{ ...brave, from: 6, to: 12 }]) });
+    assert.deepStrictEqual(collectDiagnostics(tr.state).map(d => [d.message, d.from, d.to]), [['brave', 6, 12]]);
   });
 });
