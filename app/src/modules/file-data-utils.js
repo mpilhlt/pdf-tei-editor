@@ -390,3 +390,47 @@ export function findCorrespondingPdf(fileData, xmlHash) {
   }
   return null;
 }
+/**
+ * A lineage group of versions: the current (non-frozen) versions that share a parent, followed by
+ * that parent and its ancestors
+ * @typedef {object} VersionLineage
+ * @property {Artifact[]} leaves - Non-frozen versions with the same parent, sorted by version number
+ * @property {Artifact[]} ancestors - Frozen ancestors, nearest first
+ */
+
+/**
+ * Groups versions by lineage. Ancestors that are not in `versions` (such as gold, which is listed
+ * separately) end the chain. Frozen versions that are no ancestor of a listed leaf form a last
+ * group without leaves, so that no version is lost.
+ * @param {Artifact[]} versions - Versions of one document (without gold)
+ * @returns {VersionLineage[]}
+ */
+export function groupVersionsByLineage(versions) {
+  const byId = new Map(versions.map(v => [v.id, v]));
+  const byVersion = (/** @type {Artifact} */ a, /** @type {Artifact} */ b) => (a.version || 0) - (b.version || 0);
+
+  /** @type {Map<string, Artifact[]>} */
+  const leavesByParent = new Map();
+  for (const leaf of versions.filter(v => !v.is_frozen).sort(byVersion)) {
+    const key = leaf.parent_id && byId.has(leaf.parent_id) ? leaf.parent_id : '';
+    leavesByParent.set(key, [...(leavesByParent.get(key) || []), leaf]);
+  }
+
+  const shown = new Set();
+  /** @type {VersionLineage[]} */
+  const groups = [];
+  for (const [parentId, leaves] of leavesByParent) {
+    const ancestors = [];
+    const seen = new Set();
+    for (let id = parentId; id && byId.has(id) && !seen.has(id); id = byId.get(id)?.parent_id || '') {
+      seen.add(id);
+      ancestors.push(/** @type {Artifact} */ (byId.get(id)));
+    }
+    leaves.concat(ancestors).forEach(v => shown.add(v.id));
+    groups.push({ leaves, ancestors });
+  }
+
+  const rest = versions.filter(v => !shown.has(v.id)).sort(byVersion);
+  if (rest.length > 0) groups.push({ leaves: [], ancestors: rest });
+  return groups;
+}
