@@ -18,6 +18,8 @@ import {
   decodeXmlIdToFileId,
   getEditorialDeclGuides,
   isInTeiText,
+  addRevisionChange,
+  getRevisionLabel,
 } from '../../../app/src/modules/tei-utils.js';
 
 describe('getEditorialDeclGuides', () => {
@@ -507,5 +509,46 @@ describe('isInTeiText', () => {
     assert.strictEqual(isInTeiText(doc.getElementsByTagName('title')[0]), false);
     assert.strictEqual(isInTeiText(doc.getElementsByTagName('teiHeader')[0]), false);
     assert.strictEqual(isInTeiText(doc.documentElement), false);
+  });
+});
+
+describe('document history ignores stand-off revisionDesc', () => {
+  const xml = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc><titleStmt><title>T</title></titleStmt></fileDesc>
+    <revisionDesc>
+      <change when="2026-10-01T10:00:00Z" who="#anna" status="in-review"><note type="label">v1</note></change>
+    </revisionDesc>
+  </teiHeader>
+  <text><body><p>x</p></body></text>
+  <standOff>
+    <listAnnotation type="unit-comment">
+      <annotation xml:id="uc-000001" motivation="commenting" target="#xpath(/TEI/text/body/p)" resp="#ben">
+        <revisionDesc>
+          <change when="2026-10-24T09:30:00Z" who="#ben" status="resolved"><note type="label">stand-off</note></change>
+        </revisionDesc>
+        <note type="comment">ok</note>
+      </annotation>
+    </listAnnotation>
+  </standOff>
+</TEI>`;
+
+  /** @param {string} source */
+  function parse(source) {
+    return new JSDOM(source, { contentType: 'text/xml' }).window.document;
+  }
+
+  it('getRevisionLabel reads the header only', () => {
+    assert.strictEqual(getRevisionLabel(parse(xml)), 'v1');
+  });
+
+  it('addRevisionChange creates the header revisionDesc instead of using a stand-off one', () => {
+    const doc = parse(xml.replace(/<revisionDesc>\s*<change when="2026-10-01[\s\S]*?<\/revisionDesc>/, ''));
+    addRevisionChange(doc, { status: 'draft', persId: 'anna', desc: 'Edited' });
+    const headerChanges = doc.querySelectorAll('teiHeader > revisionDesc > change');
+    assert.strictEqual(headerChanges.length, 1);
+    assert.strictEqual(headerChanges[0].getAttribute('status'), 'draft');
+    assert.strictEqual(doc.querySelectorAll('standOff revisionDesc > change').length, 1);
   });
 });
