@@ -17,7 +17,6 @@
  * @import { ApplicationState } from '../state.js'
  * @import { EditorView, BlockInfo, ViewUpdate } from '@codemirror/view'
  * @import { ChangeSet, EditorState } from '@codemirror/state'
- * @import { SyntaxNode } from '@lezer/common'
  * @import { Diagnostic } from '@codemirror/lint'
  * @import { Unit, UnitScan, ReviewData, CombinedUnit, ReviewSummary, MarkState, Mark, Reviewer } from '../modules/unit-review.js'
  * @import { LineMark, LineMarkState } from '../modules/codemirror/unit-review-gutter.js'
@@ -27,16 +26,14 @@
 import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { keymap } from '@codemirror/view'
-import { Prec, Transaction } from '@codemirror/state'
-import { syntaxTree, foldInside, foldedRanges, foldEffect } from '@codemirror/language'
-import { linter, lintGutter } from '@codemirror/lint'
+import { Prec } from '@codemirror/state'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
-import { prettyPrintXmlDom } from '../modules/xml-utils.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics } from '../modules/lint-utils.js'
+import { readStandOffList, writeStandOffList, ensureUserRespStmt } from '../modules/standoff-list.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
   setMark, reconcileReviewData, emptyReviewData
@@ -50,17 +47,8 @@ const SOURCE = 'unit-review'
 /** Source tag of the LLM Reviewer's diagnostics (pte-plugins annotation-review) */
 const LLM_REVIEW_SOURCE = 'annotation-review'
 
-const TEI_NS = 'http://www.tei-c.org/ns/1.0'
-
 /** Delay after the last edit before units are recomputed */
 const REFRESH_DELAY_MS = 250
-
-/**
- * Lint filter that drops the diagnostics of this plugin.
- * @param {readonly Diagnostic[]} diagnostics
- * @returns {Diagnostic[]}
- */
-const withoutReviews = diagnostics => diagnostics.filter(d => d.source !== SOURCE)
 
 const IS_MAC = /Mac/.test(navigator.userAgent)
 
@@ -279,8 +267,7 @@ class UnitReviewPlugin extends Plugin {
       }),
       // the review diagnostics are listed in the diagnostics drawer and the strip shows the state:
       // no hover tooltip, which would repeat the context menu's review buttons, and no lint gutter marker
-      linter(null, { tooltipFilter: withoutReviews }),
-      lintGutter({ markerFilter: withoutReviews, tooltipFilter: withoutReviews }),
+      drawerOnlyDiagnostics(SOURCE),
       Prec.high(keymap.of([
         { key: 'Mod-Enter', run: () => this.#markAtCursor('ok', false) },
         { key: 'Mod-Shift-Enter', run: () => this.#markAtCursor('not-ok', false) },
@@ -301,8 +288,10 @@ class UnitReviewPlugin extends Plugin {
       this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh({ persistCarry: true }), REFRESH_DELAY_MS)
-    } else if (replacesDiagnostics(update) && this.#diagnosticsKey && !this.#renderingDiagnostics) {
-      // another source replaced the diagnostics: merge ours in again (not from inside the update)
+    } else if (replacesDiagnostics(update) && this.#diagnosticsKey && !this.#renderingDiagnostics
+      && !collectDiagnostics(update.state).some(d => d.source === SOURCE)) {
+      // another source replaced the diagnostics without ours: merge ours in again (not from inside
+      // the update); a merge that kept them needs nothing, or two plugins would re-merge in turn
       this.#diagnosticsKey = ''
       setTimeout(() => this.#updateDiagnostics(), 0)
     }
@@ -349,60 +338,13 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Finds `TEI/standOff/listAnnotation[@type="unit-review"]` and related nodes in the syntax tree.
-   * @param {EditorState} state
-   * @returns {{root: SyntaxNode|null, teiHeader: SyntaxNode|null, standOff: SyntaxNode|null, list: SyntaxNode|null}}
-   */
-  #locate(state) {
-    const read = (/** @type {number} */ from, /** @type {number} */ to) => state.doc.sliceString(from, to)
-    /** @param {SyntaxNode} el */
-    const nameOf = el => {
-      const tag = el.getChild('OpenTag') ?? el.getChild('SelfClosingTag')
-      const nameNode = tag?.getChild('TagName')
-      return nameNode ? read(nameNode.from, nameNode.to).split(':').pop() : null
-    }
-    /** @param {SyntaxNode} el @param {string} attr */
-    const attrOf = (el, attr) => {
-      const tag = el.getChild('OpenTag') ?? el.getChild('SelfClosingTag')
-      for (const a of tag?.getChildren('Attribute') ?? []) {
-        const n = a.getChild('AttributeName')
-        const v = a.getChild('AttributeValue')
-        if (n && v && read(n.from, n.to) === attr) return read(v.from, v.to).replace(/^["']|["']$/g, '')
-      }
-      return null
-    }
-    const result = { root: /** @type {SyntaxNode|null} */ (null), teiHeader: null, standOff: null, list: null }
-    const root = syntaxTree(state).topNode.getChild('Element')
-    if (!root) return result
-    result.root = root
-    for (const child of root.getChildren('Element')) {
-      const name = nameOf(child)
-      if (name === 'teiHeader') result.teiHeader = /** @type {any} */ (child)
-      if (name === 'standOff' && !result.list) {
-        result.standOff = /** @type {any} */ (child)
-        for (const list of child.getChildren('Element')) {
-          if (nameOf(list) === 'listAnnotation' && attrOf(list, 'type') === LIST_TYPE) {
-            result.list = /** @type {any} */ (list)
-            break
-          }
-        }
-      }
-    }
-    return result
-  }
-
-  /**
    * Reads the review data stored in the document (a fresh copy that may be modified).
    * @param {EditorState} state
    * @returns {ReviewData}
    */
   #readData(state) {
-    const { list } = this.#locate(state)
-    if (!list) return emptyReviewData()
-    const text = state.doc.sliceString(list.from, list.to)
-    const doc = new DOMParser().parseFromString(`<standOff xmlns="${TEI_NS}">${text}</standOff>`, 'application/xml')
-    if (doc.getElementsByTagName('parsererror').length) return emptyReviewData()
-    return readReviewData(doc.documentElement.firstElementChild)
+    const list = readStandOffList(state, LIST_TYPE)
+    return list ? readReviewData(list) : emptyReviewData()
   }
 
   /**
@@ -494,66 +436,13 @@ class UnitReviewPlugin extends Plugin {
    * @param {boolean} addToHistory - False for automatic changes the user should not undo separately
    */
   #write(data, addToHistory) {
-    const view = this.#view()
-    const state = view.state
     reconcileReviewData(data, this.#scan.units, this.#carry)
     // record the path the units were found with, so that the units stay the same for all reviewers
     if (!data.unitPath || data.unitPath === DEFAULT_UNIT_PATH) data.unitPath = this.#scan.path ?? this.#unitPath
     const { summary } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
-    const located = this.#locate(state)
-    const indentOf = (/** @type {number} */ pos) => {
-      const line = state.doc.lineAt(pos)
-      return /^\s*/.exec(line.text)?.[0] ?? ''
-    }
-    const unit = '  '
-    const empty = data.reviewers.size === 0
-    /** @type {{from: number, to?: number, insert: string}|null} */
-    let change = null
-    if (located.list) {
-      if (empty) {
-        // remove the list, or the whole standOff if nothing else is in it
-        const standOff = /** @type {SyntaxNode} */ (located.standOff)
-        const onlyChild = standOff.getChildren('Element').length === 1
-        const node = onlyChild ? standOff : located.list
-        const lineStart = state.doc.lineAt(node.from).from
-        const before = state.doc.sliceString(lineStart, node.from)
-        const from = /^\s*$/.test(before) ? Math.max(0, lineStart - 1) : node.from
-        change = { from, to: node.to, insert: '' }
-      } else {
-        const indent = indentOf(located.list.from)
-        const text = serializeReviewData(data, summary, indent, unit).slice(indent.length)
-        change = { from: located.list.from, to: located.list.to, insert: text }
-      }
-    } else if (!empty) {
-      if (located.standOff) {
-        const close = located.standOff.getChild('CloseTag')
-        const indent = indentOf(located.standOff.from) + unit
-        const at = close ? close.from : located.standOff.to
-        change = { from: at, insert: serializeReviewData(data, summary, indent, unit) + '\n' + indentOf(located.standOff.from) }
-        // the close tag is usually preceded by the indentation of its own line
-        const lineStart = state.doc.lineAt(at).from
-        if (/^\s*$/.test(state.doc.sliceString(lineStart, at))) {
-          change = { from: lineStart, to: at, insert: serializeReviewData(data, summary, indent, unit) + '\n' + indentOf(located.standOff.from) }
-        }
-      } else {
-        const anchor = located.teiHeader ?? located.root?.getChild('OpenTag')
-        if (!anchor) return
-        const indent = located.teiHeader ? indentOf(located.teiHeader.from) : unit
-        change = {
-          from: anchor.to,
-          insert: `\n${indent}<standOff>\n${serializeReviewData(data, summary, indent + unit, unit)}\n${indent}</standOff>`
-        }
-      }
-    }
-    if (!change) return
-    // a new standOff starts folded (it holds no human-readable data), a folded one stays folded
-    const keepFolded = !located.standOff || this.#isFolded(state, located.standOff)
     this.#writing = true
     try {
-      view.dispatch({ changes: change, annotations: Transaction.addToHistory.of(addToHistory) })
-      const standOff = this.#locate(view.state).standOff
-      const range = standOff && keepFolded ? foldInside(standOff) : null
-      if (range && !this.#isFolded(view.state, standOff)) view.dispatch({ effects: foldEffect.of(range) })
+      writeStandOffList(this.#view(), LIST_TYPE, (indent, unit) => data.reviewers.size ? serializeReviewData(data, summary, indent, unit) : null, addToHistory)
     } finally {
       this.#writing = false
     }
@@ -562,33 +451,10 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Whether the content of an element is folded.
-   * @param {EditorState} state
-   * @param {SyntaxNode} node
-   * @returns {boolean}
-   */
-  #isFolded(state, node) {
-    const range = foldInside(node)
-    if (!range) return false
-    let folded = false
-    foldedRanges(state).between(range.from, range.to, () => { folded = true; return false })
-    return folded
-  }
-
-  /**
    * Makes sure the current user has a respStmt in the header, so `@resp` points somewhere.
    */
   async #ensureRespStmt() {
-    const user = this.state?.user
-    if (!user) return
-    // the DOM tree is synced with a delay: bring it up to date, since it replaces the editor content
-    await this.#xmlEditor.sync()
-    const xmlDoc = this.#xmlEditor.getXmlTree()
-    if (!xmlDoc || tei_utils.getRespStmtById(xmlDoc, user.username)) return
-    tei_utils.ensureRespStmtForUser(xmlDoc, user.username, user.fullname || user.username, 'Reviewer')
-    prettyPrintXmlDom(xmlDoc, 'teiHeader')
-    await this.#xmlEditor.updateEditorFromXmlTree()
-    this.#refresh()
+    if (await ensureUserRespStmt(this.#xmlEditor, this.state?.user, 'Reviewer')) this.#refresh()
   }
 
   /**

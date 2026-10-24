@@ -1021,13 +1021,14 @@ class XmlEditorPlugin extends Plugin {
     // the whole-document read-only state above and never blocks programmatic writes.
     // Users other than admins may not edit TEI/standOff by hand: it holds machine data
     // (e.g. unit review marks), written by plugins through programmatic transactions, which the
-    // guard never blocks; undo and redo of those stay possible.
+    // guard never blocks; undo and redo of those stay possible (for annotators too, who add unit
+    // comments to the standOff and the respStmt to the header).
     const editGuard = userIsAnnotatorOnly(state.user)
       ? 'text-only'
       : (state.user && !userHasRole(state.user, ['admin']) ? 'no-standoff' : null);
     if (editGuard !== this.#editGuard) {
       if (editGuard === 'text-only') {
-        this.#xmlEditor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true });
+        this.#xmlEditor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true, allowUndo: true });
       } else if (editGuard === 'no-standoff') {
         this.#xmlEditor.setEditGuardXpath('/tei:TEI/tei:standOff', { mode: 'blacklist', allowUndo: true });
       } else {

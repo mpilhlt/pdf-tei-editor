@@ -18,12 +18,12 @@
  * range when the user applies its fix from the drawer.
  *
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { EditorState, StateEffectType } from '@codemirror/state'
+ * @import { EditorState, StateEffectType, Extension } from '@codemirror/state'
  * @import { EditorView, ViewUpdate } from '@codemirror/view'
  */
 
-import { forEachDiagnostic, setDiagnostics, setDiagnosticsEffect } from '@codemirror/lint';
-import { StateEffect } from '@codemirror/state';
+import { forEachDiagnostic, setDiagnostics, setDiagnosticsEffect, linter, lintGutter } from '@codemirror/lint';
+import { StateEffect, Facet } from '@codemirror/state';
 
 /**
  * A diagnostic that may carry an automatically applicable fix.
@@ -36,6 +36,40 @@ import { StateEffect } from '@codemirror/state';
  * @type {StateEffectType<null>}
  */
 export const revealDiagnosticsEffect = StateEffect.define();
+
+/**
+ * Sources whose diagnostics are listed in the diagnostics drawer only, without a hover tooltip
+ * or a marker in the lint gutter.
+ * @type {Facet<string, Set<string>>}
+ */
+const drawerOnlySources = Facet.define({ combine: values => new Set(values) });
+
+/**
+ * @param {readonly Diagnostic[]} diagnostics
+ * @param {EditorState} state
+ * @returns {Diagnostic[]}
+ */
+const withoutDrawerOnly = (diagnostics, state) => {
+  const hidden = state.facet(drawerOnlySources);
+  return hidden.size ? diagnostics.filter(d => !hidden.has(d.source ?? '')) : [...diagnostics];
+};
+
+// one shared instance: lint gutter configurations with filters cannot be combined
+const drawerOnlyConfig = [
+  linter(null, { tooltipFilter: withoutDrawerOnly }),
+  lintGutter({ markerFilter: withoutDrawerOnly, tooltipFilter: withoutDrawerOnly })
+];
+
+/**
+ * Editor extension that lists the diagnostics of a source in the diagnostics drawer only: no hover
+ * tooltip in the text and no lint gutter marker, for plugins that show the diagnostics' state and
+ * actions in their own UI.
+ * @param {string} source
+ * @returns {Extension}
+ */
+export function drawerOnlyDiagnostics(source) {
+  return [drawerOnlySources.of(source), drawerOnlyConfig];
+}
 
 /** @type {Set<(dismissed: Diagnostic[]) => void>} */
 const dismissListeners = new Set();

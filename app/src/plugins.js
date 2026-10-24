@@ -52,6 +52,7 @@ import {
   XmlEditorPlugin,
   XmlAnnotationPlugin,
   UnitReviewPlugin,
+  UnitCommentsPlugin,
   XslViewerPlugin,
 } from './plugin-registry.js'
 
@@ -90,6 +91,7 @@ const plugins = [
   XmlEditorPlugin,
   XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
   UnitReviewPlugin,       // review marks in the XML editor gutter — depends on XmlEditorPlugin
+  UnitCommentsPlugin,     // comments on elements, stored stand-off — depends on XmlEditorPlugin
   XslViewerPlugin,
   TeiToolsPlugin,
   TeiHeaderEditorPlugin,  // Edit header metadata (fileDesc) from the XML editor toolbar

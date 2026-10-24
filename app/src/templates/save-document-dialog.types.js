@@ -21,11 +21,17 @@
  * @property {import('../ui.js').SlCheckbox} saveToNewCopy
  * @property {import('../ui.js').SlInput} copyLabel
  * @property {HTMLDivElement & clearReviewsSectionPart} clearReviewsSection
+ * @property {HTMLDivElement & keepCommentsSectionPart} keepCommentsSection
  */
 
 /**
  * @typedef {object} clearReviewsSectionPart
  * @property {import('../ui.js').SlCheckbox} clearReviews
+ */
+
+/**
+ * @typedef {object} keepCommentsSectionPart
+ * @property {import('../ui.js').SlCheckbox} keepComments
  */
 
 /**

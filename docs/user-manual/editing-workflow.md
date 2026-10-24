@@ -27,7 +27,7 @@ Left side: the XML / Visual annotation mode toggle (only visible for variants th
 | **Header** switch | When document has a `<teiHeader>` | Fold or unfold the TEI header section |
 | Validate (✓ icon) | Always | Trigger a schema validation run and show errors inline |
 | Undo / Redo | Always | Undo or redo editor changes |
-| TEI Wizard (wand icon) | Always | Run TEI-specific utilities (currently: pretty-print) |
+| TEI Wizard (wand icon) | Always | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
 | Review (clipboard icon) | Always | Switch [unit review](unit-review.md) mode on or off |
 | Revision history (clock icon) | When document has `<revisionDesc>` | Open the revision history panel |
 | XSL viewer | When XSL viewer plugin is active | Preview the document rendered via XSLT |
@@ -134,6 +134,7 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Status** — the annotation lifecycle stage (e.g. *draft*, *annotation*, *review*, *done*). Available options depend on your role.
 - **Save to a new personal version** — creates a copy so you can work without touching the original. Required if you are not the document owner in owner-based access control mode.
 - **Clear reviews** — shown with *Save to a new personal version* to reviewers when the document has [unit review](unit-review.md) marks; the new version starts without them.
+- **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
 
 ---

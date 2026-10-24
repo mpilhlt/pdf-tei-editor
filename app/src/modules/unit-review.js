@@ -165,7 +165,7 @@ function matchesSteps(steps, chain) {
  * @param {(from: number, to: number) => string} read
  * @returns {string|null}
  */
-function elementName(element, read) {
+export function elementName(element, read) {
   const tag = element.getChild('OpenTag') ?? element.getChild('SelfClosingTag');
   const nameNode = tag?.getChild('TagName');
   if (!nameNode) return null;
