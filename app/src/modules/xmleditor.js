@@ -107,6 +107,8 @@ export class XMLEditor extends EventEmitter {
   #view // the EditorView instance
 
   #documentVersion = 0 // internal counter to track changes in the document
+  #changeCount = 0 // content changes, counted at once
+  #syncedChangeCount = 0 // the change count of the content last synced into the DOM tree
 
   /**
    * Encapsulates DOM <-> syntax tree synchronisation and preserves the last-known
@@ -195,6 +197,7 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+  #cursorAllowed = false
   #editGuardCompartment = new Compartment()
 
   #xmlTagSyncCompartment = new Compartment()
@@ -457,20 +460,38 @@ export class XMLEditor extends EventEmitter {
    * a merge view's built-in per-chunk accept/reject controls, which dispatch transactions
    * programmatically (tagged "accept"/"revert") rather than through DOM input. A
    * transactionFilter is added to block those transactions outright while read-only.
+   *
+   * With `allowCursor`, the content stays focusable (cursor, selection, keyboard shortcuts), and the
+   * filter rejects every change made by the user instead, except undo and redo: plugins still write
+   * programmatically, e.g. review marks and comments of users who cannot edit the document.
    * @param {Boolean} value
+   * @param {{allowCursor?: boolean}} [options]
    */
-  async setReadOnly(value) {
+  async setReadOnly(value, { allowCursor = false } = {}) {
     this.#editorIsReadOnly = Boolean(value)
-    const extensions = [EditorView.editable.of(!this.#editorIsReadOnly)];
+    this.#cursorAllowed = this.#editorIsReadOnly && allowCursor
+    const cursorAllowed = this.#cursorAllowed
+    const extensions = [EditorView.editable.of(!this.#editorIsReadOnly || cursorAllowed)];
     if (this.#editorIsReadOnly) {
-      extensions.push(EditorState.transactionFilter.of(
-        tr => (tr.isUserEvent("accept") || tr.isUserEvent("revert")) ? [] : tr
-      ));
+      extensions.push(EditorState.transactionFilter.of(tr => {
+        if (tr.isUserEvent("accept") || tr.isUserEvent("revert")) return []
+        if (cursorAllowed && tr.docChanged && tr.annotation(Transaction.userEvent) !== undefined
+          && !tr.isUserEvent("undo") && !tr.isUserEvent("redo")) return []
+        return tr
+      }));
     }
     this.#view.dispatch({
       effects: [this.#readOnlyCompartment.reconfigure(extensions)]
     });
     await this.emit("editorReadOnly", this.#editorIsReadOnly)
+  }
+
+  /**
+   * Returns true if the editor is read-only but keeps the cursor (see {@link setReadOnly}).
+   * @returns {boolean}
+   */
+  isCursorAllowed() {
+    return this.#cursorAllowed
   }
 
   /**
@@ -891,6 +912,25 @@ export class XMLEditor extends EventEmitter {
    */
   getDocumentVersion() {
     return this.#documentVersion;
+  }
+
+  /**
+   * Returns the number of content changes since the document was loaded. Unlike
+   * {@link getDocumentVersion}, which counts the delayed syncs, it changes with every change at
+   * once, so that a save can tell whether the content changed while it was in flight.
+   * @returns {number}
+   */
+  getChangeCount() {
+    return this.#changeCount;
+  }
+
+  /**
+   * Syncs the DOM tree with the editor content if the content changed since the last sync (which
+   * happens 1 s after a change), e.g. before the DOM tree is serialized for saving.
+   * @returns {Promise<void>}
+   */
+  async syncIfChanged() {
+    if (this.#syncedChangeCount !== this.#changeCount) await this.sync();
   }
 
   /**
@@ -1489,7 +1529,9 @@ export class XMLEditor extends EventEmitter {
    */
   async sync() {
     try {
+      const changeCount = this.#changeCount;
       const result = await this.#domSync.sync(this.#view);
+      this.#syncedChangeCount = changeCount;
 
       if (result.status === 'wellFormed') {
         this.#logger.debug("Document was updated and is well-formed.")
@@ -1650,6 +1692,7 @@ export class XMLEditor extends EventEmitter {
     }
 
     this.#editorIsDirty = true;
+    this.#changeCount += 1;
 
     // inform the listeners
     await this.emit("editorUpdate", update)

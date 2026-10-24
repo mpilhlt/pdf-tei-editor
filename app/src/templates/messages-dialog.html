@@ -1,0 +1,21 @@
+<sl-dialog name="messagesDialog" label="Messages" class="messages-dialog" style="--width: 760px;">
+  <div class="messages-toolbar">
+    <sl-radio-group name="statusFilter" size="small" value="unread">
+      <sl-radio-button value="unread">Unread</sl-radio-button>
+      <sl-radio-button value="all">All</sl-radio-button>
+    </sl-radio-group>
+    <sl-select name="kindFilter" size="small" value="any" style="width: 150px;">
+      <sl-option value="any">Reviews and comments</sl-option>
+      <sl-option value="review">Reviews</sl-option>
+      <sl-option value="comment">Comments</sl-option>
+    </sl-select>
+    <sl-button name="markAllBtn" size="small">
+      <sl-icon slot="prefix" name="envelope-open"></sl-icon>
+      Mark all as read
+    </sl-button>
+  </div>
+  <div name="messageList" class="messages-list" data-testid="messages-list"></div>
+  <div name="emptyNote" class="messages-empty">No messages.</div>
+  <sl-button name="loadMoreBtn" size="small" class="messages-more">Load more</sl-button>
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>

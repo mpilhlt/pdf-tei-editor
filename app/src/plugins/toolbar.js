@@ -149,6 +149,27 @@ class ToolbarPlugin extends Plugin {
   }
 
   /**
+   * Shows a count (e.g. of unread messages) as a badge on the toolbar menu button.
+   * @param {number} count - Removed at 0, shown as `99+` above 99
+   */
+  setMenuButtonBadge(count) {
+    let badge = this.#menuUi.menuBtn.querySelector('sl-badge')
+    // removed, not hidden: the `hidden` attribute does not hide an sl-badge (its host sets `display`)
+    if (count <= 0) {
+      badge?.remove()
+      return
+    }
+    if (!badge) {
+      badge = document.createElement('sl-badge')
+      badge.setAttribute('variant', 'danger')
+      badge.setAttribute('pill', '')
+      badge.dataset.testid = 'toolbar-menu-badge'
+      this.#menuUi.menuBtn.appendChild(badge)
+    }
+    badge.textContent = count > 99 ? '99+' : String(count)
+  }
+
+  /**
    * Add a widget to the toolbar. Use this for dynamic toolbar items
    * that are added or removed at runtime based on application state.
    * For static items that exist for the life of the app, use the

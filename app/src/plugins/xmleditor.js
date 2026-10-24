@@ -27,7 +27,7 @@ import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
-import { isGoldFile, userHasRole, userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import { isGoldFile, standOffContributions, userHasRole, userIsAnnotatorOnly } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { THEMES, getTheme } from '../modules/codemirror/editor-themes.js'
 import { notify } from '../modules/sl-utils.js'
@@ -312,10 +312,13 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
+    // Indentation (and its separator) and cursor position go first when space is short,
+    // before the centre navigation (0) and the review/comment meters
     const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right');
+    const statusbarRightPriorities = [-2, -2, -1]; // indentation, separator, cursor position
     statusbarRightWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        this.#statusbar.add(widget, 'right', index + 1);
+        this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
       }
     });
 
@@ -1008,9 +1011,12 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // update the editor read-only state
-    if (state.editorReadOnly !== this.#xmlEditor.isReadOnly()) {
-      this.#xmlEditor.setReadOnly(state.editorReadOnly);
-      this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    // users who cannot edit a document may still review and comment it: keep the cursor
+    const contributions = standOffContributions(state.user, state.xml);
+    const allowCursor = state.editorReadOnly && !state.connectionLost && (contributions.reviews || contributions.comments);
+    if (state.editorReadOnly !== this.#xmlEditor.isReadOnly() || allowCursor !== this.#xmlEditor.isCursorAllowed()) {
+      this.#xmlEditor.setReadOnly(state.editorReadOnly, { allowCursor });
+      this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly} (cursor: ${allowCursor})`);
     }
 
     // Soft, UI-only guard restricting pure annotators to editing <text>'s content
@@ -1292,6 +1298,9 @@ class XmlEditorPlugin extends Plugin {
    *   - On save errors the user is notified via toast AND the persistent widget.
    */
   async #saveIfDirty() {
+    // the DOM tree, which is saved, lags behind the editor content by up to 1 s. Synced before the
+    // file is determined: another save (e.g. of a new version) may change it in the meantime
+    if (this.#xmlEditor.isDirty() && this.state?.xml !== this.#hashBeingSaved) await this.#xmlEditor.syncIfChanged();
     const fileHash = this.state?.xml;
     const isHashBeingSaved = fileHash === this.#hashBeingSaved;
     const hasXmlTree = !!this.#xmlEditor.getXmlTree();
@@ -1331,6 +1340,7 @@ class XmlEditorPlugin extends Plugin {
     // during the await and avoid the race where we would otherwise mark a dirty editor
     // clean (dropping unsaved keystrokes).
     const versionAtStart = this.#xmlEditor.getDocumentVersion();
+    const changesAtStart = this.#xmlEditor.getChangeCount();
 
     try {
       this.#hashBeingSaved = fileHash;
@@ -1351,7 +1361,8 @@ class XmlEditorPlugin extends Plugin {
       }
 
       const versionAtEnd = this.#xmlEditor.getDocumentVersion();
-      if (versionAtEnd === versionAtStart) {
+      // the version only advances 1 s after a change: compare the change count too
+      if (versionAtEnd === versionAtStart && this.#xmlEditor.getChangeCount() === changesAtStart) {
         // No edits happened during the save — safe to mark clean.
         this.#xmlEditor.markAsClean();
         // Server has an authoritative copy; drop the local draft to avoid stale restore prompts.

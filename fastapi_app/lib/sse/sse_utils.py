@@ -294,3 +294,31 @@ def broadcast_to_other_sessions(
         exclude_session_id=current_session_id,
         logger=logger
     )
+
+
+def send_to_user_sessions(
+    sse_service: SSEService,
+    session_manager: SessionManager,
+    username: str,
+    event_type: str,
+    data: dict[str, Any],
+) -> int:
+    """
+    Send an SSE event to all sessions of one user (e.g. several browser tabs).
+
+    Args:
+        sse_service: SSE service instance
+        session_manager: Session manager instance
+        username: The user whose sessions receive the event
+        event_type: SSE event type
+        data: Event data dictionary (will be JSON-serialized)
+
+    Returns:
+        Number of sessions notified
+    """
+    count = 0
+    for session_dict in session_manager.get_all_sessions():
+        if session_dict['username'] == username:
+            sse_service.send_message(client_id=session_dict['session_id'], event_type=event_type, data=json.dumps(data))
+            count += 1
+    return count

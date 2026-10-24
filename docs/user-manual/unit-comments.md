@@ -1,6 +1,6 @@
 # Unit Comments
 
-Unit comments let you attach a comment to an element of the document (for example a `<bibl>`), instead of writing an XML comment into the text. Other users can reply, and anyone who can edit the document can resolve the comment when it is dealt with. Annotators can comment too.
+Unit comments let you attach a comment to an element of the document (for example a `<bibl>`), instead of writing an XML comment into the text. Other users can reply, and resolve the comment when it is dealt with. Annotators and reviewers can comment in every document they can see, also in documents they cannot edit (see below).
 
 Comments are stored in the document, so they are saved with it, can be undone with `Ctrl+Z` and are kept when a new version is created (unless you choose otherwise, see below).
 
@@ -10,7 +10,9 @@ Right-click an element and choose **Comment…** at the top of the context menu,
 
 The comment belongs to the innermost element at the position you clicked: right-clicking the text of a `<title>` inside a `<bibl>` comments on the `<title>`. Click on the `<bibl>` tag itself to comment on the whole entry. Comments can only be attached to elements, not to parts of a text.
 
-You need write access to the document: on a read-only document (for example a gold version you do not own), create your own version first.
+You do not need write access: in a document you cannot edit (for example someone else's version or a gold file), annotators and reviewers comment, reply, resolve, and edit or delete their own comments as usual, while the text stays read-only. The server saves only your own comments and status changes into the document (see [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit)). Superseded versions cannot be commented.
+
+Type `@` to mention someone: the people listed in the document's `respStmt` and its owner are offered for completion. A mentioned user receives the comment as a [message](messages.md).
 
 ## Seeing comments
 
@@ -28,6 +30,8 @@ Click the bubble to open the comment. The popover shows the comment and its repl
 | Resolve / reopen | **Resolve** or **Reopen** |
 | Edit your comment | **Edit** next to it, change the text, `Enter` |
 | Delete | **Delete** next to a comment; deleting the first comment deletes the replies too. You can delete your own comments, admins any comment. |
+
+Replies reach the author of the thread and the users mentioned earlier in it as [messages](messages.md). When someone replies to a document you have open, the reply appears in your editor without a reload. If you save your copy afterwards, other users' comments and replies that are missing from it are kept (administrators' saves are taken as they are).
 
 ## When the element changes
 

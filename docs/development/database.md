@@ -611,6 +611,20 @@ def test_file_operations():
         # ...
 ```
 
+## Messages Database
+
+`data/db/messages.db` holds the index behind the [messages](../user-manual/messages.md) feature (`fastapi_app/lib/messages/`). Like `metadata.db` it can be reconstructed: everything except the read state is derived from the stand-off lists of the TEI files.
+
+| Table | Content |
+| --- | --- |
+| `occurrence` | One row per message key, recipient and file (`stable_id`) in which the source was found, with the message data (kind, author, text, excerpt, unit path or thread id, timestamps, `settled_note`) |
+| `message` | One row per key and recipient, derived from its newest occurrence (by file `updated_at`); keeps the first `created_at` |
+| `read_state` | Keys a recipient has read; survives a rebuild |
+
+Message keys identify a message across copies of a document: `c:<doc_id>:<comment xml:id>` for comments, `r:<doc_id>:<variant>:<reviewer>:<fingerprint>` for review marks, and `r:<doc_id>:<variant>:<llm reviewer>:run-<when>` for the collapsed marks of one LLM review run. A mark that disappears from a re-saved file stays as a settled occurrence.
+
+The index is updated by `document.saved` and `file.deleted` event handlers, built at startup when the file is missing, and rebuilt with `POST /api/v1/messages/rebuild`.
+
 ## Related Documentation
 
 - [Architecture Overview](architecture.md) - Complete system architecture

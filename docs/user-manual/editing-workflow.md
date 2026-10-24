@@ -147,6 +147,29 @@ Each saved revision records a short hash of the document text in its `<change xm
 
 ---
 
+## Reviewing and Commenting Documents You Cannot Edit
+
+Reviews and comments do not need edit access, so that nobody has to make a copy just to give feedback:
+
+| Role | In a document they can see but not edit |
+| --- | --- |
+| Annotator | Add [unit comments](unit-comments.md), reply to them, edit and delete their own comments |
+| Reviewer | The same, and set [unit review](unit-review.md) marks |
+| Admin | Everything (admins can edit every document that is not superseded) |
+
+The text itself stays read-only: you can place the cursor, select and use the review and comment shortcuts, but not type. Your marks and comments are saved as usual; the server takes only your own marks and comments from the document and leaves everything else as it is. The owner and other users keep theirs: when the owner saves the document, the marks and comments that others added meanwhile are kept.
+
+Only the current version of a document can be reviewed and commented. A superseded version (see [Superseded versions](#superseded-versions)) takes no reviews or comments, so that feedback always goes to the version that is being worked on.
+
+The workflow between an annotator and a reviewer:
+
+1. The annotator works on their version.
+2. The reviewer opens it, marks units as not OK and comments, in the annotator's version. The annotator gets a [message](messages.md) for each not-OK mark and each comment addressed to them.
+3. The annotator corrects the units and answers the comments, again in the same version.
+4. When the reviewer is satisfied, or wants to take over for the final polishing, the reviewer saves the document to a new personal version (Save Revision → *Save to a new personal version*), which supersedes the annotator's version.
+
+The LLM Reviewer records its marks only in documents you can edit.
+
 ## Revision History
 
 Click the clock icon in the toolbar to open the revision history panel. It lists all `<change>` entries from the TEI `<revisionDesc>` in reverse chronological order, showing date, description, status, and the responsible person. The button is hidden when the document has no `<revisionDesc>`.

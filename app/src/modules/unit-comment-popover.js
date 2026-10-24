@@ -4,9 +4,12 @@
  *
  * Uses the popover mechanics of the unit review (one popover at a time, closed by Escape or a
  * click outside).
+ *
+ * @import { MentionCandidate } from './mention-autocomplete.js'
  */
 
 import { show, el, ensureStyle, formatWhen } from './unit-review-popover.js';
+import { attachMentionAutocomplete, renderWithMentions } from './mention-autocomplete.js';
 
 /**
  * One comment as shown in the popover
@@ -29,6 +32,8 @@ import { show, el, ensureStyle, formatWhen } from './unit-review-popover.js';
  * @property {string} [note] - Extra hint, e.g. that the element was not found
  * @property {PopoverComment[]} comments - The first comment, then the replies
  * @property {boolean} canWrite - Whether the user may reply and resolve
+ * @property {boolean} [canReply] - Whether the user may reply without being able to edit the document (the reply is sent to the server)
+ * @property {MentionCandidate[]} [mentions] - Persons offered when typing `@`; their mentions are shown as chips
  * @property {(text: string) => void} onReply
  * @property {(status: 'open'|'resolved') => void} onStatus
  * @property {(id: string, text: string) => void} onEdit
@@ -89,6 +94,8 @@ export function openThreadPopover(options) {
   const body = el('div', 'ur-pop-bd');
   if (options.note) body.appendChild(el('div', 'ur-note', options.note));
 
+  const mentions = options.mentions ?? [];
+  const names = new Map(mentions.map(m => [m.id, m.name]));
   const list = el('div', 'uc-list');
   for (const comment of options.comments) {
     const item = el('div', 'uc-item');
@@ -96,13 +103,15 @@ export function openThreadPopover(options) {
     const meta = el('div', 'uc-meta');
     meta.append(el('b', '', comment.who), el('span', '', formatWhen(comment.when) + (comment.edited ? ' · edited' : '')));
     const actions = el('span', 'uc-act');
-    const text = el('div', 'uc-text', comment.text);
+    const text = el('div', 'uc-text');
+    renderWithMentions(text, comment.text, names);
     if (comment.canEdit) {
       const edit = button('Edit');
       edit.addEventListener('click', () => {
         const input = /** @type {HTMLInputElement} */ (el('input'));
         input.type = 'text';
         input.value = comment.text;
+        attachMentionAutocomplete(input, mentions);
         text.replaceWith(input);
         edit.remove();
         input.focus();
@@ -136,7 +145,11 @@ export function openThreadPopover(options) {
   reply.type = 'text';
   reply.placeholder = 'Reply';
   reply.dataset.testid = 'unit-comment-reply';
-  if (options.canWrite) body.appendChild(reply);
+  const canReply = options.canWrite || Boolean(options.canReply);
+  if (canReply) {
+    attachMentionAutocomplete(reply, mentions);
+    body.appendChild(reply);
+  }
 
   const footer = el('div', 'ur-ft');
   const closeButton = button('Close');
@@ -146,7 +159,8 @@ export function openThreadPopover(options) {
   statusButton.dataset.testid = 'unit-comment-status';
   const replyButton = button('Reply', 'ur-primary');
   replyButton.dataset.testid = 'unit-comment-reply-save';
-  if (options.canWrite) footer.append(statusButton, replyButton);
+  if (options.canWrite) footer.append(statusButton);
+  if (canReply) footer.append(replyButton);
   root.append(header, body, footer);
 
   const close = show(root, options.at);
@@ -168,5 +182,5 @@ export function openThreadPopover(options) {
       submit();
     }
   });
-  (options.canWrite ? reply : closeButton).focus();
+  (canReply ? reply : closeButton).focus();
 }

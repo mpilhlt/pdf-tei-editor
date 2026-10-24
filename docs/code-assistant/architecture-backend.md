@@ -105,12 +105,26 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `manager.py` | Extractor management |
 | `http_utils.py` | HTTP utilities |
 
+### `messages/` — Messages for reviews and comments
+
+| File | Purpose |
+| --- | --- |
+| `standoff_reader.py` | Reads the unit review and unit comment stand-off lists; fingerprints mirror `app/src/modules/standoff-list.js` (checked against the shared fixture `tests/unit/fixtures/standoff/messages-sample.*`) |
+| `mentions.py` | `@id` mention rule, same pattern as `app/src/modules/mentions.js` |
+| `store.py` | `MessageStore` over `data/db/messages.db` (occurrences, messages, read state) |
+| `indexer.py` | `extract_occurrences`, `MessageIndexer` (index, settle, remove, rebuild) |
+| `service.py` | Store singletons, `document.saved`/`file.deleted` hooks, access filtering, `messagesChanged` SSE notification |
+| `comment_edit.py` | Reply endpoint text edit (`add_reply`) |
+| `standoff_merge.py` | Text-level merge of the review and comment lists: contributions of users who cannot edit a file (`apply_contribution`, `PUT /files/{stable_id}/standoff`) and other users' changes kept when a file is saved over (`merge_foreign_standoff`) |
+
+The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messages/rebuild`, `manage-remote maintenance rebuild-messages`); it is built in the background at startup when `messages.db` is missing.
+
 ### `sse/` — Server-Sent Events
 
 | File | Purpose |
 |------|---------|
 | `sse_service.py` | SSE service |
-| `sse_utils.py` | SSE utilities (`ProgressBar`, `send_notification`) |
+| `sse_utils.py` | SSE utilities (`ProgressBar`, `send_notification`, `send_to_user_sessions`) |
 | `sse_log_handler.py` | Log streaming |
 | `event_bus.py` | Event bus |
 

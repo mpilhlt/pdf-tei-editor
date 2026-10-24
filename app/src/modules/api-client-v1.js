@@ -727,6 +727,73 @@
  */
 
 /**
+ * @typedef {Object} MessageItem
+ * @property {string} key - Message key: `c:<doc_id>:<comment id>` or `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`
+ * @property {'review'|'comment'|'mention'} kind
+ * @property {'owner'|'mention'|'thread-author'|'thread-mention'} reason - Why the user receives it
+ * @property {string} doc_id
+ * @property {string} stable_id - The file of the newest occurrence, which the message opens
+ * @property {string} doc_label
+ * @property {string} author - User name or LLM reviewer id
+ * @property {string|null=} author_name
+ * @property {string} text - Comment text or the mark's comment (may be empty)
+ * @property {string|null=} excerpt - Text of the commented element or reviewed unit
+ * @property {string|null=} thread_id - Comment thread id (comments)
+ * @property {string|null=} fingerprint - Unit fingerprint (reviews) or element fingerprint (comments)
+ * @property {boolean} settled - The thread was resolved, or the mark is gone
+ * @property {string|null=} settled_note - `resolved`, `unit-edited`, `changed-to-ok` or `superseded`
+ * @property {boolean} read
+ * @property {string} created_at
+ */
+
+/**
+ * @typedef {Object} MessageListResponse
+ * @property {Array<MessageItem>} items
+ * @property {number} total - Number of messages matching the filter
+ * @property {number} unread - Unread messages of the user
+ */
+
+/**
+ * @typedef {Object} MessageCountResponse
+ * @property {number} unread
+ */
+
+/**
+ * @typedef {Object} MarkReadRequest
+ * @property {Array<string>} keys
+ * @property {boolean=} read - Default true
+ */
+
+/**
+ * @typedef {Object} MessageRebuildResponse
+ * @property {number} files - Number of indexed TEI files
+ */
+
+/**
+ * @typedef {Object} ReplyRequest
+ * @property {string} text
+ */
+
+/**
+ * @typedef {Object} ReplyResponse
+ * @property {string} stable_id
+ * @property {string} thread_id
+ * @property {string} comment_id
+ * @property {string} annotation_xml - The added `annotation` element
+ */
+
+/**
+ * @typedef {Object} StandOffSaveRequest
+ * @property {string} xml_string - The text of the user's editor
+ */
+
+/**
+ * @typedef {Object} StandOffSaveResponse
+ * @property {string} stable_id
+ * @property {('saved'|'unchanged')} status
+ */
+
+/**
  * @typedef {Object} QueryResourceRequest
  * @property {string} kind
  * @property {string} url
@@ -1871,6 +1938,84 @@ export class ApiClientV1 {
   async secretsDeleteAll() {
     const endpoint = `/secrets`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * The number of unread messages of the current user.
+   *
+   * @returns {Promise<MessageCountResponse>}
+   */
+  async messagesCount() {
+    const endpoint = `/messages/count`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * The messages of the current user (reviews and comments addressed to them), newest first.
+   *
+   * @param {{status?: 'unread'|'all', kind?: 'review'|'comment', limit?: number, offset?: number}} [params]
+   * @returns {Promise<MessageListResponse>}
+   */
+  async messagesList(params = {}) {
+    const endpoint = `/messages`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * Marks messages of the current user as read or unread.
+   *
+   * @param {MarkReadRequest} requestBody
+   * @returns {Promise<MessageCountResponse>}
+   */
+  async messagesMarkRead(requestBody) {
+    const endpoint = `/messages/read`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Marks all messages of the current user as read.
+   *
+   * @returns {Promise<MessageCountResponse>}
+   */
+  async messagesMarkAllRead() {
+    const endpoint = `/messages/read-all`
+    return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Rebuilds the message index from all TEI files (admin).
+   *
+   * @returns {Promise<MessageRebuildResponse>}
+   */
+  async messagesRebuild() {
+    const endpoint = `/messages/rebuild`
+    return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Adds a reply to a comment thread of a file the user can view but not necessarily edit.
+   *
+   * @param {string} stable_id
+   * @param {string} thread_id
+   * @param {ReplyRequest} requestBody
+   * @returns {Promise<ReplyResponse>}
+   */
+  async filesCommentReply(stable_id, thread_id, requestBody) {
+    const endpoint = `/files/${encodeURIComponent(stable_id)}/comments/${encodeURIComponent(thread_id)}/replies`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Saves the user's review marks and comments in a file they cannot edit: the server takes the
+   * user's own review annotation and comments from the text and ignores everything else.
+   *
+   * @param {string} stable_id
+   * @param {StandOffSaveRequest} requestBody
+   * @returns {Promise<StandOffSaveResponse>}
+   */
+  async filesSaveStandOff(stable_id, requestBody) {
+    const endpoint = `/files/${encodeURIComponent(stable_id)}/standoff`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**

@@ -201,6 +201,7 @@ Requires admin privileges. Broadcasts commands to all connected browser clients 
 | `maintenance on [--message <text>]` | Show a blocking spinner on all clients (default: "System maintenance in progress, please wait...") |
 | `maintenance off [--message <text>]` | Remove the spinner and resume normal operation. If `--message` is given, show it in an info dialog |
 | `maintenance reload` | Force all clients to reload the page |
+| `maintenance rebuild-messages` | Rebuild the [messages](messages.md) index from all documents; read states are kept |
 
 When maintenance mode is active, the heartbeat mechanism is paused and the UI is blocked.
 

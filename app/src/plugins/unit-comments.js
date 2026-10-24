@@ -10,6 +10,12 @@
  * Like the review marks, the comments are part of the document text: commenting edits the
  * `standOff` element, so undo, saving and versions work as for any other edit.
  *
+ * Annotators and reviewers also comment in documents they cannot edit (unless the version is frozen):
+ * the editor stays read-only for typing, the comments are written into its text as usual, and the
+ * save sends them to the server, which takes only the user's own comments from it
+ * (`PUT /api/v1/files/{stable_id}/standoff`). A reply that arrives while the document is open for
+ * editing is merged into the editor (SSE event `commentReplyAdded`).
+ *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { EditorView, BlockInfo, ViewUpdate } from '@codemirror/view'
@@ -18,6 +24,7 @@
  * @import { UnitComment, CommentThread, ThreadStatus } from '../modules/unit-comments.js'
  * @import { AnchoredElement } from '../modules/node-anchor.js'
  * @import { CommentLineMark } from '../modules/codemirror/unit-comment-gutter.js'
+ * @import { MentionCandidate } from '../modules/mention-autocomplete.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -29,15 +36,18 @@ import { userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
-import { readStandOffList, writeStandOffList, ensureUserRespStmt } from '../modules/standoff-list.js'
+import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import {
   LIST_TYPE, readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus,
-  editComment, deleteComment
+  editComment, deleteComment, threadStatus
 } from '../modules/unit-comments.js'
 import { elementAt, elementPath, resolveAnchor, FingerprintCache } from '../modules/node-anchor.js'
 import { unitCommentGutter, buildUnitCommentMarkers, setUnitCommentMarkersEffect } from '../modules/codemirror/unit-comment-gutter.js'
 import { openCommentPrompt, closePopover } from '../modules/unit-review-popover.js'
 import { openThreadPopover } from '../modules/unit-comment-popover.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
+import { mentionCandidates } from '../modules/mention-autocomplete.js'
+import { isFrozenFile, standOffContributions } from '../modules/acl-utils.js'
 
 /** Diagnostic source tag of this plugin's diagnostics */
 const SOURCE = 'unit-comment'
@@ -71,10 +81,11 @@ const SHORTCUT = IS_MAC ? '⌘Shift+M' : 'Ctrl+Shift+M'
 class UnitCommentsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'unit-comments', deps: ['xmleditor', 'logger'] })
+    super(context, { name: 'unit-comments', deps: ['xmleditor', 'logger', 'client', 'sse', 'services'] })
   }
 
   get #xmlEditor() { return this.getDependency('xmleditor') }
+  get #client() { return this.getDependency('client') }
 
   /** @type {{ reconfigure: (ext: any) => void }|null} */
   #slot = null
@@ -118,6 +129,13 @@ class UnitCommentsPlugin extends Plugin {
     this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 5)
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
+    this.getDependency('sse').addEventListener('commentReplyAdded', (/** @type {MessageEvent} */ event) => {
+      try {
+        this.#onReplyAdded(JSON.parse(event.data))
+      } catch (error) {
+        this.getDependency('logger').warn('Cannot merge a comment reply: ' + String(error))
+      }
+    })
   }
 
   async start() {
@@ -159,8 +177,9 @@ class UnitCommentsPlugin extends Plugin {
   /**
    * Asks for a comment on the element at a position and adds it as a new thread.
    * @param {number} [pos] - Defaults to the cursor
+   * @param {string} [initialText] - Text the prompt starts with, e.g. a mention
    */
-  addComment(pos) {
+  addComment(pos, initialText = '') {
     this.#refresh()
     if (!this.#canWrite(false)) return
     const view = this.#view()
@@ -176,21 +195,23 @@ class UnitCommentsPlugin extends Plugin {
     const coords = view.coordsAtPos(node.from)
     if (!coords) return
     const line = view.state.doc.lineAt(node.from).number
-    openCommentPrompt({ left: coords.left, bottom: coords.bottom }, `Comment on <${name}> · line ${line}`, '', text => {
+    openCommentPrompt({ left: coords.left, bottom: coords.bottom }, `Comment on <${name}> · line ${line}`, initialText, text => {
       view.focus()
       if (!text) return
       this.#addThread(anchor, text)
-    }, { placeholder: 'Comment', hint: 'Enter: save · Esc: cancel', testid: 'unit-comment-prompt' })
+    }, { placeholder: 'Comment', hint: 'Enter: save · Esc: cancel · @: mention', testid: 'unit-comment-prompt', mentions: this.getMentionCandidates() })
   }
 
   /**
-   * Opens the popover of a thread.
+   * Opens the popover of a thread, scrolling its element into view.
    * @param {string} threadId
+   * @returns {boolean} False if the document has no such thread
    */
   openThread(threadId) {
     this.#refresh()
     const placed = this.#placed.find(p => p.thread.root.id === threadId)
-    if (!placed) return
+    if (!placed) return false
+    if (placed.element) this.#view().dispatch({ effects: View.scrollIntoView(placed.element.from, { y: 'center' }) })
     const view = this.#view()
     const { thread, element } = placed
     const editorRect = view.dom.getBoundingClientRect()
@@ -199,6 +220,7 @@ class UnitCommentsPlugin extends Plugin {
     const me = this.state?.user?.username ?? ''
     const isAdmin = userHasRole(this.state?.user ?? null, ['admin'])
     const canWrite = this.#canWrite(true)
+    const canReply = !canWrite && this.#canReplyRemotely()
     const text = element ? view.state.doc.sliceString(element.tagTo, Math.min(element.to, element.tagTo + 200)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''
     openThreadPopover({
       at,
@@ -216,33 +238,82 @@ class UnitCommentsPlugin extends Plugin {
         canDelete: canWrite && (c.author === me || isAdmin)
       })),
       canWrite,
-      onReply: text => this.#change(comments => { addReply(comments, threadId, { author: me, text }) }, threadId, true),
+      canReply,
+      mentions: this.getMentionCandidates(),
+      onReply: text => canWrite
+        ? this.#change(comments => { addReply(comments, threadId, { author: me, text }) }, threadId, true)
+        : this.#replyRemotely(threadId, text),
       onStatus: status => this.#change(comments => { setThreadStatus(comments, threadId, status, { who: me }) }, threadId),
       onEdit: (id, text) => this.#change(comments => { editComment(comments, id, text, { who: me }) }, threadId),
       onDelete: id => this.#change(comments => deleteComment(comments, id), threadId)
     })
+    return true
   }
 
   /**
-   * Moves the cursor to the next element with an open comment thread, wrapping around.
+   * The persons that can be mentioned in the current document: its respStmt persons and its
+   * owner. Only those that are users receive messages (checked by the server).
+   * @returns {MentionCandidate[]}
+   */
+  getMentionCandidates() {
+    return mentionCandidates(this.#xmlEditor.getXmlTree(), getFileDataById(this.state?.xml)?.item?.created_by ?? null)
+  }
+
+  // ── Replies without edit access ────────────────────────────────────
+
+  /**
+   * Whether the user may reply to threads of the document via the server although they cannot edit it.
    * @returns {boolean}
    */
-  goToNextOpen() {
-    this.#refresh()
-    const view = this.#view()
-    const head = view.state.selection.main.head
-    const open = this.#placed
-      .filter(p => p.thread.status === 'open' && p.element)
-      .map(p => /** @type {AnchoredElement} */ (p.element).from)
-      .sort((a, b) => a - b)
-    const target = open.find(from => from > head) ?? open[0]
-    if (target === undefined) {
-      notify('There are no open comments.', 'success', 'check-circle')
-      return true
+  #canReplyRemotely() {
+    const xml = this.state?.xml
+    if (!this.state?.user || !xml || isFrozenFile(xml)) return false
+    if (this.#xmlEditor.isMergeViewActive()) return false
+    return userHasRole(this.state.user, ['annotator', 'reviewer', 'admin'])
+  }
+
+  /**
+   * Sends a reply to the server and reloads the document (it stays read-only).
+   * @param {string} threadId
+   * @param {string} text
+   */
+  async #replyRemotely(threadId, text) {
+    const xml = this.state?.xml
+    if (!xml) return
+    try {
+      await this.#client.apiClient.filesCommentReply(xml, threadId, { text })
+    } catch (error) {
+      notify(`The reply could not be saved: ${String(error)}`, 'danger', 'exclamation-octagon')
+      return
     }
-    view.dispatch({ selection: { anchor: target + 1 }, scrollIntoView: true })
-    view.focus()
-    return true
+    testLog('UNIT_COMMENT_REPLY_SENT', { threadId })
+    await this.getDependency('services').load({ xml })
+    this.openThread(threadId)
+  }
+
+  /**
+   * Merges a reply that another user sent to the server into the open document.
+   * @param {{stable_id: string, thread_id: string, comment_id: string, annotation_xml: string, author: string, author_name: string}} data
+   */
+  #onReplyAdded(data) {
+    if (data.stable_id !== this.state?.xml || this.state?.editorReadOnly) return
+    if (!this.#canWrite(true)) return
+    this.#refresh()
+    if (this.#comments.some(c => c.id === data.comment_id)) return
+    const parsed = new DOMParser().parseFromString(
+      `<listAnnotation xmlns="${TEI_NS}" xmlns:xml="http://www.w3.org/XML/1998/namespace">${data.annotation_xml}</listAnnotation>`,
+      'application/xml'
+    )
+    const reply = readComments(parsed.documentElement)[0]
+    const root = this.#comments.find(c => c.id === data.thread_id && !c.replyTo)
+    if (!reply || !root) return
+    let last = this.#comments.indexOf(root)
+    this.#comments.forEach((c, i) => { if (c.replyTo === data.thread_id) last = i })
+    this.#comments.splice(last + 1, 0, reply)
+    if (threadStatus(root) === 'resolved') root.changes.push({ who: reply.author, when: reply.changes[0]?.when ?? new Date().toISOString(), status: 'open' })
+    this.#write(false)
+    notify(`${data.author_name || data.author} replied to a comment.`, 'primary', 'chat-left-text')
+    testLog('UNIT_COMMENT_REPLY_MERGED', { id: reply.id, threadId: data.thread_id })
   }
 
   // ── Editor integration ─────────────────────────────────────────────
@@ -345,8 +416,11 @@ class UnitCommentsPlugin extends Plugin {
     }
     if (!this.state?.user) return fail('Log in to comment.')
     if (!this.#xmlEditor.getXmlTree()) return fail('The XML is not well-formed: fix it before commenting.')
-    // not the editor's own read-only flag: annotation mode sets it to block typing only
-    if (this.state.editorReadOnly) return fail('The document is read-only. Create your own version to comment.')
+    // not the editor's own read-only flag: annotation mode sets it to block typing only. In
+    // documents they cannot edit, annotators and reviewers still comment (saved by the server)
+    if (this.state.editorReadOnly && (this.state.connectionLost || !standOffContributions(this.state.user, this.state.xml).comments)) {
+      return fail(isFrozenFile(this.state.xml) ? 'This version is superseded by a newer version and cannot be commented.' : 'The document is read-only. Create your own version to comment.')
+    }
     if (this.#xmlEditor.isMergeViewActive()) return fail('Close the comparison view before commenting.')
     return true
   }
