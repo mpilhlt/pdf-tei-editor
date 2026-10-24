@@ -278,7 +278,7 @@ CodeMirror keeps one global diagnostic set, and `setDiagnostics` replaces it who
 | `replacesDiagnostics(update)` | True if a view update replaced the diagnostic set |
 | `addDismissListener(listener)` | Called with the diagnostics the user dismissed in the diagnostics drawer; returns a function removing the listener |
 
-Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal:
+Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. An edit also replaces the set: it removes the diagnostics whose range it touches, in the same transaction, so your handler can restore those that still apply. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal:
 
 ```js
 xmleditor.addUpdateListener(update => {

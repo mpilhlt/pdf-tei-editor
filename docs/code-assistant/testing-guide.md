@@ -424,7 +424,8 @@ npm run test:container -- --all
 - Tests run inside container using `docker/entrypoint-ci.sh`
 - All fixtures and test code baked into image at build time
 - Real-time streaming via `PYTHONUNBUFFERED=1` and `stdio: 'inherit'`
-- Playwright browsers installed early for optimal layer caching
+- Playwright browsers are installed in a layer that depends only on the Playwright version, before the other dependencies
+- The dependency layers see `package.json`/`package-lock.json` with `"version"` neutralized (`deps-manifest` stage in the `Dockerfile`), so semantic-release version bumps do not invalidate them; only real dependency changes do
 - Exit code matches test results (0 = success, non-zero = failure)
 
 ## Test Filtering with --grep

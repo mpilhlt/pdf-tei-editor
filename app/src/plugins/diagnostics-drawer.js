@@ -124,6 +124,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    * @param {ApplicationState} _state
    */
   async onStateUpdate(changedKeys, _state) {
+    if (changedKeys.includes('xml')) this.#checked.clear()
     if (changedKeys.includes('editorReadOnly')) this.#updateFooter()
   }
 
@@ -140,6 +141,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
   async applyChecked() {
     if (this.state?.editorReadOnly) return
     await this.#switchOffMergeView()
+    await this.#pendingRemerges()
     const view = this.#xmlEditor.getView()
     const checked = this.#checkedDiagnostics(view)
     const { changes, applied } = fixChanges(checked)
@@ -172,6 +174,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   async dismissChecked() {
     await this.#switchOffMergeView()
+    await this.#pendingRemerges()
     const view = this.#xmlEditor.getView()
     dismissDiagnostics(view, this.#checkedDiagnostics(view))
     this.#checked.clear()
@@ -240,8 +243,8 @@ class DiagnosticsDrawerPlugin extends Plugin {
       }))
       .sort((a, b) => a.diagnostic.from - b.diagnostic.from
         || SEVERITY_ORDER[a.diagnostic.severity] - SEVERITY_ORDER[b.diagnostic.severity])
-    const keys = new Set(this.#entries.map(e => e.key))
-    this.#checked = new Set([...this.#checked].filter(k => keys.has(k)))
+    // checks are kept for diagnostics that are not listed: replacing the diagnostic set (e.g. a
+    // validation run) removes the diagnostics of other sources until they re-merge them
     this.#render()
   }
 
@@ -326,7 +329,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #updateFooter() {
     const { selectAll, applyBtn, dismissBtn } = this.#ui.footer
-    const count = this.#checked.size
+    const count = this.#entries.filter(e => this.#checked.has(e.key)).length
     selectAll.checked = count > 0 && count === this.#entries.length
     selectAll.indeterminate = count > 0 && count < this.#entries.length
     selectAll.disabled = this.#entries.length === 0
@@ -381,6 +384,16 @@ class DiagnosticsDrawerPlugin extends Plugin {
     if (this.#xmlEditor.isMergeViewActive()) {
       await this.getDependency('services').removeMergeView()
     }
+  }
+
+  /**
+   * Waits for the plugins to re-merge their diagnostics after the diagnostic set was replaced
+   * (e.g. by a validation run), which they defer with `setTimeout`: until then, their checked
+   * diagnostics are missing from the editor state
+   * @returns {Promise<void>}
+   */
+  #pendingRemerges() {
+    return new Promise(resolve => setTimeout(resolve, 0))
   }
 }
 
