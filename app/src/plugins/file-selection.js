@@ -13,7 +13,7 @@ import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName, groupVersionsByLineage } from '../modules/file-data-utils.js'
 import { getActiveProjects, getArchivedCollectionIds } from '../modules/collection-utils.js'
 
 // Register templates
@@ -453,6 +453,8 @@ class FileSelectionPlugin extends Plugin {
 
               const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
               const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+              /** @param {Artifact} a */
+              const isListedVersion = a => !a.is_frozen || a.id === state.xml;
 
               if (goldToShow.length > 0) {
                 await createHtmlElements(`<small>Gold</small>`, this.#xml);
@@ -475,31 +477,42 @@ class FileSelectionPlugin extends Plugin {
                 });
 
                 if (versionsToShow.length > 0) {
-                  this.#xml.appendChild(new SlDivider());
+                  if (versionsToShow.some(isListedVersion)) this.#xml.appendChild(new SlDivider());
                   this.#diff.appendChild(new SlDivider());
                 }
               }
 
               if (versionsToShow.length > 0) {
-                await createHtmlElements(`<small>Versions</small>`, this.#xml);
+                if (versionsToShow.some(isListedVersion)) await createHtmlElements(`<small>Versions</small>`, this.#xml);
                 await createHtmlElements(`<small>Versions</small>`, this.#diff);
 
                 versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
 
-                versionsToShow.forEach(version => {
+                /**
+                 * @param {Artifact} version
+                 * @param {boolean} [frozen] - show greyed out as superseded
+                 */
+                const createOption = (version, frozen = false) => {
                   const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
-                  let opt = new SlOption();
+                  const opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  this.#xml.appendChild(opt);
-                  opt = new SlOption();
-                  // @ts-ignore
-                  opt.size = "small";
-                  opt.value = version.id;
-                  opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  this.#diff.appendChild(opt);
+                  if (frozen) opt.classList.add("frozen-version");
+                  return opt;
+                };
+
+                // superseded (frozen) versions are history: offered for comparison only,
+                // unless one is open
+                versionsToShow.filter(isListedVersion).forEach(version => this.#xml.appendChild(createOption(version)));
+
+                // compare menu: one group per lineage, current versions first, then their
+                // superseded ancestors greyed out
+                groupVersionsByLineage(versionsToShow).forEach((group, index) => {
+                  if (index > 0) this.#diff.appendChild(new SlDivider());
+                  group.leaves.forEach(version => this.#diff.appendChild(createOption(version)));
+                  group.ancestors.forEach(version => this.#diff.appendChild(createOption(version, true)));
                 });
               }
             }

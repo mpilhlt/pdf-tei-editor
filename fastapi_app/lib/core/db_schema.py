@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS files (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    -- Note: created_by column is added by migration 007
+    -- Note: created_by column is added by migration 007, parent_stable_id by migration 010
 
     -- Document-level metadata (populated only for PDF files, inherited by TEI files)
     -- NULL for TEI files - use JOIN to get from PDF when needed
@@ -82,7 +82,7 @@ CREATE_INDEXES = [
     # idx_status is created by migration 005
     "CREATE INDEX IF NOT EXISTS idx_created_at ON files(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_is_gold ON files(is_gold_standard) WHERE is_gold_standard = 1",
-    # idx_created_by is created by migration 007
+    # idx_created_by is created by migration 007, idx_parent_stable_id by migration 010
 
     # Sync-related indexes
     "CREATE INDEX IF NOT EXISTS idx_sync_status ON files(sync_status) WHERE sync_status != 'synced'",

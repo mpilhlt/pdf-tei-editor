@@ -146,6 +146,7 @@ class FakeProvider:
 class TestResolveRefreshTarget(unittest.TestCase):
     def setUp(self):
         self.file_repo = mock.MagicMock()
+        self.file_repo.is_frozen.return_value = False
         self.file_storage = mock.MagicMock()
         self.user = {"username": "reviewer1"}
 
@@ -182,6 +183,15 @@ class TestResolveRefreshTarget(unittest.TestCase):
 
         target = resolve_refresh_target(self.file_repo, self.file_storage, "tei-1", self.user)
         self.assertEqual(target.file_meta, meta)
+
+    @mock.patch("fastapi_app.lib.doc_rules.rules_refresh.check_file_access", return_value=True)
+    def test_raises_when_version_is_frozen(self, _mock_access):
+        meta, content = make_tei_file(TEI_NO_PROVENANCE)
+        self.file_repo.get_file_by_stable_id.return_value = meta
+        self.file_storage.read_file.return_value = content
+        self.file_repo.is_frozen.return_value = True
+        with self.assertRaises(RefreshPreconditionError):
+            resolve_refresh_target(self.file_repo, self.file_storage, "tei-1", self.user)
 
     @mock.patch("fastapi_app.lib.doc_rules.rules_refresh.check_file_access", return_value=True)
     def test_raises_precondition_error_on_non_utf8_content(self, _mock_access):

@@ -33,6 +33,7 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.core.locking import acquire_lock, release_lock
+from ..lib.utils.revision_hash import stamp_revision_hashes
 from ..lib.utils.logging_utils import get_logger
 from ..lib.permissions.user_utils import user_has_collection_access
 from ..config import get_settings
@@ -261,6 +262,7 @@ async def save_file(
         # - For new versions (new_version=True): Find the source file to extract doc_id
         #   (the source file_id is needed to determine which document this version belongs to)
         existing_file = None
+        source_file = None
 
         if not request.new_version and len(request.file_id) >= 5:
             # UPDATE operation: Resolve file_id to find the file to update
@@ -299,6 +301,15 @@ async def save_file(
         # Encode XML entities if configured
         from ..lib.utils.xml_utils import apply_entity_encoding_from_config
         xml_string = apply_entity_encoding_from_config(xml_string)
+
+        # Record the revision hash chain in the header changes. The stored file (update) or the
+        # source file (new version) supplies hashes the editor's copy does not have yet.
+        reference_file = existing_file or source_file
+        reference_xml = None
+        if reference_file and reference_file.file_type == 'tei':
+            reference_bytes = file_storage.read_file(reference_file.id, 'tei')
+            reference_xml = reference_bytes.decode('utf-8') if reference_bytes else None
+        xml_string = stamp_revision_hashes(xml_string, reference_xml)
 
         # Refresh existing_gold after resolving doc_id
         if existing_file:
@@ -341,6 +352,13 @@ async def save_file(
                 )
 
         # Acquire lock for existing file (using stable_id, not content hash)
+            # Versions that other versions were copied from are part of the history and frozen
+            if file_repo.is_frozen(existing_file.stable_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail="This version is superseded by a newer version and cannot be changed. Save a new version to edit it."
+                )
+
             if not acquire_lock(existing_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
@@ -509,7 +527,8 @@ async def save_file(
                 doc_metadata={},
                 file_metadata={},
                 file_size=file_size,
-                created_by=user.get('username')  # Track file creator for access control
+                created_by=user.get('username'),  # Track file creator for access control
+                parent_stable_id=source_file.stable_id if source_file and source_file.doc_id == doc_id else None
             ))
 
         # Now acquire lock using stable_id

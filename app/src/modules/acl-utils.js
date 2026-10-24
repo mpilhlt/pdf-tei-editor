@@ -195,6 +195,18 @@ export function isGoldFile(hash) {
 }
 
 /**
+ * Checks if a file is frozen: another version was copied from it, so it is part of the
+ * history and read-only for everyone (see docs/history/2026-10-24-version-freeze.md)
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+export function isFrozenFile(hash) {
+  if (!hash) return false
+  const fileData = getFileDataById(hash)
+  return fileData?.type === 'artifact' && fileData.item.is_frozen === true
+}
+
+/**
  * Checks if a file hash represents a version file
  * @param {string} hash - The file hash identifier
  * @returns {boolean}
@@ -300,6 +312,11 @@ export function canViewDocumentWithPermissions(user, permissions) {
 export function canEditFile(user, fileId) {
   try {
     if (!user) {
+      return false
+    }
+
+    // Frozen versions are read-only for everyone
+    if (isFrozenFile(fileId)) {
       return false
     }
 

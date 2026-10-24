@@ -143,6 +143,13 @@ def acquire_lock_endpoint(
             detail="Access denied: You don't have permission to edit this document"
         )
 
+    # Frozen versions (other versions were copied from them) cannot be edited
+    if repo.is_frozen(file_metadata.stable_id):
+        raise HTTPException(
+            status_code=403,
+            detail="This version is superseded by a newer version and cannot be changed"
+        )
+
     # Acquire lock
     settings = get_settings()
     if acquire_lock(file_metadata.stable_id, session_id, settings.db_dir, logger):

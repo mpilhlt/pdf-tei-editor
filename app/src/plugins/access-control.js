@@ -25,6 +25,7 @@ import {
   userHasAnnotatorRole,
   isGoldFile,
   isVersionFile,
+  isFrozenFile,
   canEditDocumentWithPermissions,
   canViewDocumentWithPermissions,
   canEditFile as canEditFileFromUtils,
@@ -87,6 +88,9 @@ class AccessControlPlugin extends Plugin {
   /** @type {string | null} */
   #xmlCache = null
 
+  /** Whether the loaded document was frozen at the last state update */
+  #frozenCache = false
+
 
   /**
    * @param {ApplicationState} _state
@@ -138,7 +142,10 @@ class AccessControlPlugin extends Plugin {
       return
     }
 
+    const frozen = isFrozenFile(state.xml)
     if (state.xml === this.#xmlCache) {
+      if (frozen && !this.#frozenCache) this.#onDocumentFrozen(state.xml)
+      this.#frozenCache = frozen
       // Update dropdown disabled state based on editorReadOnly
       if (this.#permissionsDropdown) {
         const triggerButton = this.#permissionsDropdown.querySelector('sl-icon-button')
@@ -148,6 +155,7 @@ class AccessControlPlugin extends Plugin {
     }
 
     this.#xmlCache = state.xml
+    this.#frozenCache = frozen
     this.getDependency('logger').debug(`Access control: Updating for document: ${state.xml}`)
 
     try {
@@ -173,6 +181,22 @@ class AccessControlPlugin extends Plugin {
   }
 
   /**
+   * Called when a newer version was copied from the open document (by this user or another),
+   * which makes it read-only.
+   * @param {string} fileId
+   */
+  #onDocumentFrozen(fileId) {
+    // Deferred, and skipped if another document is being loaded meanwhile: after "save to new
+    // version", the file list is reloaded (which freezes the source) right before the copy loads.
+    setTimeout(() => {
+      if (this.state?.xml !== fileId || this.state.editorReadOnly) return
+      this.dispatchStateChange({ editorReadOnly: true })
+        .then(() => this.#updateReadOnlyContext(true, true))
+        .catch(err => this.getDependency('logger').error(`Failed to make the superseded document read-only: ${err}`))
+    }, 0)
+  }
+
+  /**
    * Gets current document permissions
    * @returns {DocumentPermissions}
    */
@@ -189,6 +213,7 @@ class AccessControlPlugin extends Plugin {
     const mode = this.#accessControlConfig?.mode || 'role-based'
     const fileId = this.state?.xml || undefined
 
+    if (fileId && isFrozenFile(fileId)) return false
     if (userIsAdmin(user)) return true
 
     if (fileId) {
@@ -491,7 +516,9 @@ class AccessControlPlugin extends Plugin {
     const currentUser = this.getDependency('authentication').getUser()
     let contextText = 'Read-only'
     if (this.state?.xml) {
-      if (isGoldFile(this.state.xml) && !userHasReviewerRole(currentUser)) {
+      if (isFrozenFile(this.state.xml)) {
+        contextText = 'Read-only (superseded by a newer version) — save a new version to edit'
+      } else if (isGoldFile(this.state.xml) && !userHasReviewerRole(currentUser)) {
         contextText = 'Read-only (gold file - reviewer role required)'
       } else if (isVersionFile(this.state.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
         contextText = 'Read-only (version file - annotator role required)'
