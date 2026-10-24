@@ -343,11 +343,6 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
-/* superseded versions in the compare menu: shown greyed out, still selectable */
-sl-option.frozen-version::part(label) {
-  color: var(--sl-color-neutral-400);
-}
-
 sl-button-group[label] {
   position: relative;
   /* To contain the absolute positioning of the :before pseudo-element */

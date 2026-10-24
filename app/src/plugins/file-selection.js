@@ -106,6 +106,17 @@ class FileSelectionPlugin extends Plugin {
         select.closest('tool-bar')?.classList.add('dropdown-open');
       });
 
+      // Without a diff, sl-select highlights the first option on open, which looks like a
+      // selection. Clear the highlight after sl-select has set it (in the next animation frame).
+      if (select === this.#diff) {
+        select.addEventListener('sl-show', () => {
+          if (select.value) return;
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            select.querySelectorAll('sl-option').forEach(option => { /** @type {SlOption} */ (option).current = false; });
+          }));
+        });
+      }
+
       select.addEventListener('sl-change', async () => {
         if (!this.#userOpenedDropdown.has(select)) return;
         this.#userOpenedDropdown.delete(select);
@@ -490,16 +501,17 @@ class FileSelectionPlugin extends Plugin {
 
                 /**
                  * @param {Artifact} version
-                 * @param {boolean} [frozen] - show greyed out as superseded
+                 * @param {boolean} [ancestor] - mark as an ancestor of the versions above it
                  */
-                const createOption = (version, frozen = false) => {
+                const createOption = (version, ancestor = false) => {
                   const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
                   const opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  if (frozen) opt.classList.add("frozen-version");
+                  // the prefix slot keeps the arrow out of the label shown in the closed select
+                  if (ancestor) opt.insertAdjacentHTML("afterbegin", `<span slot="prefix">↳</span>`);
                   return opt;
                 };
 
@@ -508,7 +520,7 @@ class FileSelectionPlugin extends Plugin {
                 versionsToShow.filter(isListedVersion).forEach(version => this.#xml.appendChild(createOption(version)));
 
                 // compare menu: one group per lineage, current versions first, then their
-                // superseded ancestors greyed out
+                // superseded ancestors marked with an arrow
                 groupVersionsByLineage(versionsToShow).forEach((group, index) => {
                   if (index > 0) this.#diff.appendChild(new SlDivider());
                   group.leaves.forEach(version => this.#diff.appendChild(createOption(version)));
