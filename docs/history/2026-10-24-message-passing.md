@@ -1,6 +1,6 @@
 # Messages for reviews and comments: specification
 
-Status: spec, not implemented (2026-10-24). Builds on unit review (#620) and unit comments (#621), both on `devel`.
+Status: implemented (2026-10-24), see [Implementation](#implementation) for the deviations from this spec. Builds on unit review (#620) and unit comments (#621), both on `devel`.
 
 ## Goal
 
@@ -285,6 +285,26 @@ Right-hand widgets and their priorities today: indent (1), separator (2), cursor
 8. Docs: user manual page `docs/user-manual/messages.md`, updates to `unit-comments.md`, `unit-review` docs, `docs/code-assistant/architecture-backend.md` (messages.db), and `docs/history/<date>-messages.md` on the implementing branch.
 
 Tests: Python unit tests for the reader (against the JS fixtures), indexer (dedup, settle, ownership), reply endpoint (permissions, byte-stability outside standOff, merge-on-save); JS unit tests for the mention regex and status-bar priorities; E2E: user A comments mentioning B, B sees the badge without reload, opens the message, replies in A's document, A sees the reply in the open editor.
+
+## Implementation
+
+Branch `claude/message-passing-spec` (PR #623), stacked on the version freeze (#622). The open questions were answered with the recommended options: replies reach the thread author and earlier mentions, the owner is always mentionable, LLM marks are collapsed per run, owners answer a review with a new comment thread mentioning the reviewer, users with view access and the `annotator` or `reviewer` role reply (gold files included), messages are kept, no e-mail. The save endpoint ownership gap is left for a separate change.
+
+Deviations and additions:
+
+| Topic | Spec | Implemented |
+| --- | --- | --- |
+| Storage | `message` table with the data, `occurrence` with key and file only | `occurrence` holds the data columns per key, recipient and file, plus `settled_note`; `message` is derived from the newest occurrence and keeps the first `created_at` |
+| Settling | `settled` flag | A mark that disappears from a re-saved file stays as a settled occurrence with the note `changed-to-ok`, `unit-edited` or `superseded` (LLM run); a resolved thread settles its comments (`resolved`). The dialog shows the note |
+| Mention token | `[A-Za-z0-9_][\w.-]*[\w]` (at least two characters) | `[A-Za-z0-9_](?:[\w.-]*\w)?`, so one-character user names work; Python uses `re.ASCII` to match JS |
+| LLM marks | One message per file | One message per LLM review run, key `r:<doc_id>:<variant>:<llm id>:run-<when>`; a new run supersedes the old one |
+| Reply in the dialog | Inline field for comments | Comments: inline field (opens the document instead when it is the one open in the editor); reviews: **Reply** opens the document with a comment prompt prefilled with `@reviewer` |
+| Merge on save | Re-insert other users' comments | Also restores missing `respStmt` entries of comment authors; deleting one's own thread is respected; admins' saves are not merged |
+| Rebuild | CLI and maintenance endpoint | `POST /api/v1/messages/rebuild` (admin) and `manage-remote maintenance rebuild-messages`; the index is also built in the background at startup when `messages.db` is missing, which replaces the one-off migration |
+| SSE | `messagesChanged` | `messagesChanged` `{unread}` to all sessions of a recipient (`send_to_user_sessions`); without SSE the client polls the count every 60 seconds |
+| Status bar | Priority hiding | `ResizeObserver` per widget triggers the overflow check, and separators are hidden together with their neighbour |
+
+Not done: indexing files that arrive by sync or by a move (a rebuild picks them up), the dashboard box, and an E2E test of the full mention and reply round trip (covered by API and unit tests and a manual check).
 
 ## Open questions
 

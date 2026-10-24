@@ -37,6 +37,8 @@ The keyboard shortcuts act on the units at the cursor or in the selection. The b
 
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review.
 
+A not-OK mark on a document someone else owns is sent to the owner as a [message](messages.md). Type `@` in the comment of the mark to mention someone else, too.
+
 Marks are part of the document: they are saved with it, can be undone with `Ctrl+Z`, and are kept when a new version is created.
 
 ## Colours of the strip

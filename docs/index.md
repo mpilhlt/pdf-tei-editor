@@ -10,6 +10,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Editing Workflow](user-manual/editing-workflow.md)** - Editing and validating TEI
 - **[Unit Review](user-manual/unit-review.md)** - Marking the units of a document as reviewed OK or not OK
 - **[Unit Comments](user-manual/unit-comments.md)** - Commenting on elements of a document, with replies
+- **[Messages](user-manual/messages.md)** - Not-OK reviews of your documents and comments addressed to you
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
 

@@ -10,7 +10,9 @@ Right-click an element and choose **Comment…** at the top of the context menu,
 
 The comment belongs to the innermost element at the position you clicked: right-clicking the text of a `<title>` inside a `<bibl>` comments on the `<title>`. Click on the `<bibl>` tag itself to comment on the whole entry. Comments can only be attached to elements, not to parts of a text.
 
-You need write access to the document: on a read-only document (for example a gold version you do not own), create your own version first.
+You need write access to the document to start a comment: on a read-only document (for example a gold version you do not own), create your own version first. Replying works without write access, see below.
+
+Type `@` to mention someone: the people listed in the document's `respStmt` and its owner are offered for completion. A mentioned user receives the comment as a [message](messages.md).
 
 ## Seeing comments
 
@@ -25,9 +27,12 @@ Click the bubble to open the comment. The popover shows the comment and its repl
 | Action | How |
 | --- | --- |
 | Reply | Type in the reply field and press `Enter` or **Reply**. Replying to a resolved comment reopens it. |
+| Reply in a read-only document | With view access and the *annotator* or *reviewer* role you can reply in documents you cannot edit, such as someone else's version or a gold file. The reply is saved to the document right away. |
 | Resolve / reopen | **Resolve** or **Reopen** |
 | Edit your comment | **Edit** next to it, change the text, `Enter` |
 | Delete | **Delete** next to a comment; deleting the first comment deletes the replies too. You can delete your own comments, admins any comment. |
+
+Replies reach the author of the thread and the users mentioned earlier in it as [messages](messages.md). When someone replies to a document you have open, the reply appears in your editor without a reload. If you save your copy afterwards, other users' comments and replies that are missing from it are kept (administrators' saves are taken as they are).
 
 ## When the element changes
 
