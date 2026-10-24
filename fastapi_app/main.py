@@ -198,39 +198,6 @@ app.add_middleware(
 # Added last, so it is the outermost user middleware and sees the CancelledError of every route
 app.add_middleware(CancelledRequestMiddleware)
 
-
-# DEBUG (temporary, PR #622 CI investigation): report when metadata.db-shm vanishes while the
-# server is running, with the requests before it
-import collections as _debug_collections
-import threading as _debug_threading
-import time as _debug_time
-_debug_shm_state: dict[str, bool] = {"seen": False, "exists": False}
-_debug_shm_history: "_debug_collections.deque[str]" = _debug_collections.deque(maxlen=40)
-
-
-@app.middleware("http")
-async def _debug_shm_watch(request: Request, call_next):
-    shm = Path(get_settings().db_dir) / "metadata.db-shm"
-    label = f"{request.method} {request.url.path}"
-
-    def check(when: str) -> None:
-        exists = shm.exists()
-        _debug_shm_history.append(f"{_debug_time.strftime('%H:%M:%S')} {when} {label} shm={exists} threads={_debug_threading.active_count()}")
-        if exists:
-            _debug_shm_state["seen"] = True
-        elif _debug_shm_state["seen"] and _debug_shm_state["exists"]:
-            history = "\n".join(_debug_shm_history)
-            try:
-                raise RuntimeError(f"DEBUG shm vanished ({when} {label}); recent requests:\n{history}")
-            except RuntimeError:
-                logger.exception("DEBUG shm vanished")
-        _debug_shm_state["exists"] = exists
-
-    check("before")
-    response = await call_next(request)
-    check("after")
-    return response
-
 # Import API routers
 from .api import auth, config
 from .routers import (

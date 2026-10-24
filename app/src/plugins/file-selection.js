@@ -501,17 +501,16 @@ class FileSelectionPlugin extends Plugin {
 
                 /**
                  * @param {Artifact} version
-                 * @param {boolean} [ancestor] - mark as an ancestor of the versions above it
+                 * @param {string[]} [classes] - CSS classes of the option
                  */
-                const createOption = (version, ancestor = false) => {
+                const createOption = (version, classes = []) => {
                   const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
                   const opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  // the prefix slot keeps the arrow out of the label shown in the closed select
-                  if (ancestor) opt.insertAdjacentHTML("afterbegin", `<span slot="prefix">↳</span>`);
+                  opt.classList.add(...classes);
                   return opt;
                 };
 
@@ -520,11 +519,21 @@ class FileSelectionPlugin extends Plugin {
                 versionsToShow.filter(isListedVersion).forEach(version => this.#xml.appendChild(createOption(version)));
 
                 // compare menu: one group per lineage, current versions first, then their
-                // superseded ancestors marked with an arrow
+                // superseded ancestors, connected to them by lines drawn in CSS (app.css)
                 groupVersionsByLineage(versionsToShow).forEach((group, index) => {
                   if (index > 0) this.#diff.appendChild(new SlDivider());
                   group.leaves.forEach(version => this.#diff.appendChild(createOption(version)));
-                  group.ancestors.forEach(version => this.#diff.appendChild(createOption(version, true)));
+                  if (group.leaves.length > 0 && group.ancestors.length > 0) {
+                    const arrow = document.createElement("div");
+                    arrow.className = "lineage-arrow";
+                    arrow.setAttribute("aria-hidden", "true");
+                    this.#diff.appendChild(arrow);
+                  }
+                  group.ancestors.forEach((version, i) => {
+                    const classes = ["lineage-ancestor"];
+                    if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
+                    this.#diff.appendChild(createOption(version, classes));
+                  });
                 });
               }
             }
