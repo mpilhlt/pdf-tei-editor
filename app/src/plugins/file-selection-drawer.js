@@ -451,7 +451,8 @@ class FileSelectionDrawerPlugin extends Plugin {
         artifactsToShow = artifactsToShow.filter(a => a.variant === state.variant);
       }
       const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
-      const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+      // superseded (frozen) versions are history and not listed, unless one is open
+      const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard && (!a.is_frozen || a.id === state.xml));
 
       const pdfItem = document.createElement('sl-tree-item');
       pdfItem.expanded = shouldExpandPdf(file);

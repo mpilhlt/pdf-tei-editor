@@ -81,6 +81,8 @@
  * @property {string=} status
  * @property {boolean} is_locked
  * @property {Object<string, any>=} access_control
+ * @property {string=} parent_id - Stable ID of the version this file was copied from
+ * @property {boolean=} is_frozen - True if a version was copied from this file (read-only history)
  */
 
 /**

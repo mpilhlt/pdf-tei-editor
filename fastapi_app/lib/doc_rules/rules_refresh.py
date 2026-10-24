@@ -100,6 +100,9 @@ def resolve_refresh_target(
     if not check_file_access(file_meta, user, "edit"):
         raise RefreshPreconditionError("You don't have permission to edit this document.")
 
+    if file_repo.is_frozen(file_meta.stable_id):
+        raise RefreshPreconditionError("This version is superseded by a newer version and cannot be changed.")
+
     content_bytes = file_storage.read_file(file_meta.id, "tei")
     if not content_bytes:
         raise RefreshPreconditionError("File content not found.")
