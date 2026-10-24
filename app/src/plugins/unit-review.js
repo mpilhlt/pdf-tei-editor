@@ -29,6 +29,7 @@ import ep from '../extension-points.js'
 import { keymap } from '@codemirror/view'
 import { Prec, Transaction } from '@codemirror/state'
 import { syntaxTree, foldInside, foldedRanges, foldEffect } from '@codemirror/language'
+import { linter, lintGutter } from '@codemirror/lint'
 import { PanelUtils } from '../modules/panels/index.js'
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
@@ -53,6 +54,13 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
 
 /** Delay after the last edit before units are recomputed */
 const REFRESH_DELAY_MS = 250
+
+/**
+ * Lint filter that drops the diagnostics of this plugin.
+ * @param {readonly Diagnostic[]} diagnostics
+ * @returns {Diagnostic[]}
+ */
+const withoutReviews = diagnostics => diagnostics.filter(d => d.source !== SOURCE)
 
 const IS_MAC = /Mac/.test(navigator.userAgent)
 
@@ -269,6 +277,10 @@ class UnitReviewPlugin extends Plugin {
         mousedown: (view, line, event) => this.#onStripMouseDown(view, line, event),
         mouseover: (view, line) => this.#onStripMouseOver(view, line)
       }),
+      // the review diagnostics are listed in the diagnostics drawer and the strip shows the state:
+      // no hover tooltip, which would repeat the context menu's review buttons, and no lint gutter marker
+      linter(null, { tooltipFilter: withoutReviews }),
+      lintGutter({ markerFilter: withoutReviews, tooltipFilter: withoutReviews }),
       Prec.high(keymap.of([
         { key: 'Mod-Enter', run: () => this.#markAtCursor('ok', false) },
         { key: 'Mod-Shift-Enter', run: () => this.#markAtCursor('not-ok', false) },

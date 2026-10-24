@@ -188,6 +188,16 @@ test.describe('Unit review', () => {
           .filter((/** @type {any} */ d) => d.source === 'unit-review').map((/** @type {any} */ d) => d.message);
       })).toEqual([expect.stringContaining('wrong year')]);
 
+      // hovering the unit shows no lint tooltip: the context menu row has the review buttons
+      const betaHover = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const coords = view.coordsAtPos(view.state.doc.toString().indexOf('Beta') + 2);
+        return { x: coords.left, y: (coords.top + coords.bottom) / 2 };
+      });
+      await page.mouse.move(betaHover.x, betaHover.y);
+      await page.waitForTimeout(800);
+      await expect(page.locator('.cm-tooltip-lint')).toHaveCount(0);
+
       // the drawer's actions open the review and mark the unit
       const drawerItem = page.locator('.diagnostics-drawer-item', { hasText: 'wrong year' });
       await drawerItem.locator('.diagnostics-drawer-action', { hasText: 'Open review' }).click();
