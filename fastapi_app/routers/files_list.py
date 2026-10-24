@@ -138,6 +138,12 @@ def list_files(
 
     logger.debug(f"Grouped into {len(documents_map)} documents")
 
+    # Versions that a (non-deleted) version was copied from are frozen
+    frozen_ids = {f.parent_stable_id for f in all_files if f.parent_stable_id}
+    for doc_group in documents_map.values():
+        for artifact in doc_group.artifacts:
+            artifact.is_frozen = artifact.id in frozen_ids
+
     # Apply variant filtering if specified
     if variant is not None:
         documents_map = _apply_variant_filtering(documents_map, variant)
@@ -266,7 +272,8 @@ def _build_artifact(file_metadata) -> ArtifactModel:
         status=file_metadata.status,
         is_locked=False,  # Will be updated later
         access_control=None,  # Will be updated later if needed
-        created_by=file_metadata.created_by  # Owner for access control
+        created_by=file_metadata.created_by,  # Owner for access control
+        parent_id=file_metadata.parent_stable_id
     )
 
     # Store content hash as private attribute for internal use (e.g., locking)

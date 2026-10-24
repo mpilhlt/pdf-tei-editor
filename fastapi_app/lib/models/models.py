@@ -48,6 +48,7 @@ class FileMetadata(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     created_by: Optional[str] = None  # Username of user who created this file
+    parent_stable_id: Optional[str] = None  # stable_id of the version this file was copied from
 
     @field_validator('file_type')
     @classmethod
@@ -93,6 +94,7 @@ class FileCreate(BaseModel):
     doc_metadata: dict = Field(default_factory=dict)
     file_metadata: dict = Field(default_factory=dict)
     created_by: Optional[str] = None  # Username of user who created this file
+    parent_stable_id: Optional[str] = None  # stable_id of the version this file was copied from
 
     @field_validator('file_type')
     @classmethod

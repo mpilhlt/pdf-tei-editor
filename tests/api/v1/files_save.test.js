@@ -494,13 +494,14 @@ describe('Files Save API E2E Tests', () => {
   test('POST /api/files/save should resolve stable_id to file', async () => {
     const xmlContent = createTeiXml(testState.docId, 'Content updated via stable ID');
 
-    // Use the stable ID (short form) instead of content hash
+    // Use the stable ID (short form) instead of content hash. The gold file is frozen by now
+    // (versions were copied from it), so the first version, which has no copies, is used.
     const response = await authenticatedApiCall(
       reviewerSession.sessionId,
       '/files/save',
       'POST',
       {
-        file_id: testState.goldFileId, // This is the stable_id
+        file_id: testState.versionFileId, // This is the stable_id
         xml_string: xmlContent,
         new_version: false
       },
@@ -509,7 +510,7 @@ describe('Files Save API E2E Tests', () => {
 
     assert.ok(response, 'Should receive response');
     assert.strictEqual(response.status, 'saved', 'Should update file');
-    assert.strictEqual(response.file_id, testState.goldFileId, 'Should return same stable_id');
+    assert.strictEqual(response.file_id, testState.versionFileId, 'Should return same stable_id');
 
     logger.success('Stable ID resolution works correctly');
 
@@ -528,7 +529,7 @@ describe('Files Save API E2E Tests', () => {
     const xmlContent = createTeiXml(testState.docId, 'Content updated via abbreviated ID');
 
     // Use abbreviated stable ID (first 6 characters)
-    const abbreviatedId = testState.goldFileId.substring(0, 6);
+    const abbreviatedId = testState.versionFileId.substring(0, 6);
 
     const response = await authenticatedApiCall(
       reviewerSession.sessionId,
@@ -544,7 +545,7 @@ describe('Files Save API E2E Tests', () => {
 
     assert.ok(response, 'Should receive response');
     assert.strictEqual(response.status, 'saved', 'Should update file');
-    assert.strictEqual(response.file_id, testState.goldFileId, 'Should return full stable_id');
+    assert.strictEqual(response.file_id, testState.versionFileId, 'Should return full stable_id');
 
     logger.success(`Abbreviated ID ${abbreviatedId} resolved correctly`);
 
@@ -595,7 +596,7 @@ describe('Files Save API E2E Tests', () => {
       '/files/save',
       'POST',
       {
-        file_id: testState.goldFileId,
+        file_id: testState.versionFileId,
         xml_string: base64Content,
         encoding: 'base64',
         new_version: false
