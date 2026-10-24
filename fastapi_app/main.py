@@ -248,7 +248,9 @@ from .routers import (
     users,
     groups,
     roles,
-    projects
+    projects,
+    messages,
+    files_comments
 )
 
 # Versioned API router (v1)
@@ -280,6 +282,8 @@ api_v1.include_router(files_export.router)  # Export endpoint
 api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(files_metadata.router)  # Metadata update endpoint
 api_v1.include_router(files_permissions.router)  # Document permissions (granular mode)
+api_v1.include_router(files_comments.router)  # Replies to comment threads; before files_serve (catch-all)
+api_v1.include_router(messages.router)  # Messages for reviews and comments
 api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
 api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router
