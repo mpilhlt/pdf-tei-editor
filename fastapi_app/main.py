@@ -198,6 +198,33 @@ app.add_middleware(
 # Added last, so it is the outermost user middleware and sees the CancelledError of every route
 app.add_middleware(CancelledRequestMiddleware)
 
+
+# DEBUG (temporary, PR #622 CI investigation): log when metadata.db-shm appears or vanishes
+_debug_shm_state: dict[str, bool] = {}
+
+
+@app.middleware("http")
+async def _debug_shm_watch(request: Request, call_next):
+    shm = Path(get_settings().db_dir) / "metadata.db-shm"
+    label = f"{request.method} {request.url.path}"
+
+    def check(when: str) -> None:
+        exists = shm.exists()
+        if _debug_shm_state.get("exists", True) != exists:
+            logger.warning(f"DEBUG shm {'appeared' if exists else 'VANISHED'} ({when} {label})")
+            if not exists:
+                # a traceback makes the CI test runner print the preceding server log lines
+                try:
+                    raise RuntimeError(f"DEBUG shm vanished ({when} {label})")
+                except RuntimeError:
+                    logger.exception("DEBUG shm vanished")
+        _debug_shm_state["exists"] = exists
+
+    check("before")
+    response = await call_next(request)
+    check("after")
+    return response
+
 # Import API routers
 from .api import auth, config
 from .routers import (
