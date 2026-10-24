@@ -343,8 +343,9 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
-/* "Compare with version" menu: superseded ancestors of a lineage are connected to the current
-   versions above them by a line with an arrow pointing up (see file-selection.js) */
+/* "Target XML" and "Compare with version" menus: superseded ancestors of a lineage are connected
+   to the current versions above them by a line with an arrow pointing up (see file-selection.js) */
+#toolbar sl-select[name="xml"],
 #toolbar sl-select[name="diff"] {
   --lineage-x: 2em;
   --lineage-color: var(--sl-color-neutral-400);

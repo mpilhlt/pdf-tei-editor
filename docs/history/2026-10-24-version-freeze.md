@@ -87,8 +87,8 @@ The save path (`extract_tei_metadata()`) is not affected; it takes the first `re
 - `files.parent_stable_id` (migration m010) is set when a new version is saved from a file of the same document. For existing files, m010 derives it from the longest proper prefix of the change signatures within (doc_id, variant), leaving ambiguous cases unset.
 - Frozen = a non-deleted file has `parent_stable_id` equal to the file's stable_id. The file list returns `parent_id` and `is_frozen` per artifact. Saves to frozen files return 409, locks 403, and the document-rules refresh refuses them.
 - Frontend: `isFrozenFile()` in `acl-utils.js`; `canEditFile()` returns false for frozen files, for admins too. The access-control plugin sets the editor read-only with the status text *Read-only (superseded by a newer version)*, also when the open file becomes frozen by "save to new version". The revision dialog forces *Save to a new personal version* for frozen files.
-- The XML dropdown and the file drawer hide frozen versions, except gold and the open file.
-- The "Compare with version" menu groups versions by lineage (Christian, 2026-10-24): the current versions that share a parent, then their frozen ancestors, joined to them by a CSS-drawn line with an arrow pointing up (classes `lineage-ancestor`, `lineage-ancestor-last`, `lineage-arrow` in `app.css`), then a divider before the next lineage (`groupVersionsByLineage()` in `file-data-utils.js`).
+- The file drawer hides frozen versions, except gold and the open file. The "Target XML" menu first did the same; Christian then asked for it to list all versions like the compare menu, so that old versions can be opened and copied (2026-10-24).
+- The "Target XML" and "Compare with version" menus group versions by lineage (Christian, 2026-10-24): the current versions that share a parent, then their frozen ancestors, joined to them by a CSS-drawn line with an arrow pointing up (classes `lineage-ancestor`, `lineage-ancestor-last`, `lineage-arrow` in `app.css`), then a divider before the next lineage (`groupVersionsByLineage()` in `file-data-utils.js`).
 
 Differences from the proposal:
 

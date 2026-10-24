@@ -464,9 +464,6 @@ class FileSelectionPlugin extends Plugin {
 
               const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
               const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
-              /** @param {Artifact} a */
-              const isListedVersion = a => !a.is_frozen || a.id === state.xml;
-
               if (goldToShow.length > 0) {
                 await createHtmlElements(`<small>Gold</small>`, this.#xml);
                 await createHtmlElements(`<small>Gold</small>`, this.#diff);
@@ -488,13 +485,13 @@ class FileSelectionPlugin extends Plugin {
                 });
 
                 if (versionsToShow.length > 0) {
-                  if (versionsToShow.some(isListedVersion)) this.#xml.appendChild(new SlDivider());
+                  this.#xml.appendChild(new SlDivider());
                   this.#diff.appendChild(new SlDivider());
                 }
               }
 
               if (versionsToShow.length > 0) {
-                if (versionsToShow.some(isListedVersion)) await createHtmlElements(`<small>Versions</small>`, this.#xml);
+                await createHtmlElements(`<small>Versions</small>`, this.#xml);
                 await createHtmlElements(`<small>Versions</small>`, this.#diff);
 
                 versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
@@ -514,27 +511,26 @@ class FileSelectionPlugin extends Plugin {
                   return opt;
                 };
 
-                // superseded (frozen) versions are history: offered for comparison only,
-                // unless one is open
-                versionsToShow.filter(isListedVersion).forEach(version => this.#xml.appendChild(createOption(version)));
-
-                // compare menu: one group per lineage, current versions first, then their
-                // superseded ancestors, connected to them by lines drawn in CSS (app.css)
-                groupVersionsByLineage(versionsToShow).forEach((group, index) => {
-                  if (index > 0) this.#diff.appendChild(new SlDivider());
-                  group.leaves.forEach(version => this.#diff.appendChild(createOption(version)));
-                  if (group.leaves.length > 0 && group.ancestors.length > 0) {
-                    const arrow = document.createElement("div");
-                    arrow.className = "lineage-arrow";
-                    arrow.setAttribute("aria-hidden", "true");
-                    this.#diff.appendChild(arrow);
-                  }
-                  group.ancestors.forEach((version, i) => {
-                    const classes = ["lineage-ancestor"];
-                    if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
-                    this.#diff.appendChild(createOption(version, classes));
+                // one group per lineage, current versions first, then their superseded (frozen)
+                // ancestors, connected to them by lines drawn in CSS (app.css). Ancestors open
+                // read-only; they can be compared or copied into a new version.
+                for (const select of [this.#xml, this.#diff]) {
+                  groupVersionsByLineage(versionsToShow).forEach((group, index) => {
+                    if (index > 0) select.appendChild(new SlDivider());
+                    group.leaves.forEach(version => select.appendChild(createOption(version)));
+                    if (group.leaves.length > 0 && group.ancestors.length > 0) {
+                      const arrow = document.createElement("div");
+                      arrow.className = "lineage-arrow";
+                      arrow.setAttribute("aria-hidden", "true");
+                      select.appendChild(arrow);
+                    }
+                    group.ancestors.forEach((version, i) => {
+                      const classes = ["lineage-ancestor"];
+                      if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
+                      select.appendChild(createOption(version, classes));
+                    });
                   });
-                });
+                }
               }
             }
           }
