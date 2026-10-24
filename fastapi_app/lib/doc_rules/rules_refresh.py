@@ -164,11 +164,11 @@ def _add_revision_change(root: etree._Element, who: Optional[str]) -> None:
     """Append a <change> entry to revisionDesc noting the rules refresh, in place on the already-parsed root."""
     ns = {"tei": TEI_NS}
 
-    revision_desc = root.find(".//tei:revisionDesc", ns)
+    tei_header = root.find(".//tei:teiHeader", ns)
+    if tei_header is None:
+        raise RuntimeError("Document has no teiHeader; cannot record the refresh as a revision.")
+    revision_desc = tei_header.find("tei:revisionDesc", ns)
     if revision_desc is None:
-        tei_header = root.find(".//tei:teiHeader", ns)
-        if tei_header is None:
-            raise RuntimeError("Document has no teiHeader; cannot record the refresh as a revision.")
         revision_desc = etree.SubElement(tei_header, f"{{{TEI_NS}}}revisionDesc")
 
     change = etree.SubElement(revision_desc, f"{{{TEI_NS}}}change")
