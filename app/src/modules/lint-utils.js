@@ -18,12 +18,12 @@
  * range when the user applies its fix from the drawer.
  *
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { EditorState, StateEffectType, Extension } from '@codemirror/state'
+ * @import { StateEffectType, Extension } from '@codemirror/state'
  * @import { EditorView, ViewUpdate } from '@codemirror/view'
  */
 
 import { forEachDiagnostic, setDiagnostics, setDiagnosticsEffect, linter, lintGutter } from '@codemirror/lint';
-import { StateEffect, Facet } from '@codemirror/state';
+import { EditorState, StateEffect, Facet } from '@codemirror/state';
 
 /**
  * A diagnostic that may carry an automatically applicable fix.
@@ -69,6 +69,31 @@ const drawerOnlyConfig = [
  */
 export function drawerOnlyDiagnostics(source) {
   return [drawerOnlySources.of(source), drawerOnlyConfig];
+}
+
+/**
+ * Editor extension that removes the diagnostics whose range a document change touches, in the
+ * transaction making the change; the other diagnostics keep their (mapped) positions and fields.
+ * Doing this within the transaction, instead of in a later dispatch, never removes diagnostics
+ * that were added after the change. Like any replacement of the diagnostic set, it makes the
+ * plugins owning diagnostics re-merge theirs (see {@link replacesDiagnostics}).
+ * @returns {Extension}
+ */
+export function clearDiagnosticsOnChange() {
+  return EditorState.transactionExtender.of(tr => {
+    if (!tr.docChanged || tr.effects.some(e => e.is(setDiagnosticsEffect))) return null;
+    /** @type {Diagnostic[]} */
+    const kept = [];
+    let removed = false;
+    forEachDiagnostic(tr.startState, (d, from, to) => {
+      if (tr.changes.touchesRange(from, to)) {
+        removed = true;
+      } else {
+        kept.push({ ...d, from: tr.changes.mapPos(from), to: tr.changes.mapPos(to) });
+      }
+    });
+    return removed ? { effects: setDiagnosticsEffect.of(kept) } : null;
+  });
 }
 
 /** @type {Set<(dismissed: Diagnostic[]) => void>} */
