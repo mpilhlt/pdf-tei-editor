@@ -624,7 +624,7 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Returns the units touched by the selection, or on the cursor line.
+   * Returns the units touched by the selection, or the unit at the cursor (see {@link #unitsAt}).
    * @returns {Unit[]}
    */
   #selectedUnits() {
@@ -632,9 +632,10 @@ class UnitReviewPlugin extends Plugin {
     /** @type {Unit[]} */
     const result = []
     for (const range of state.selection.ranges) {
-      const first = state.doc.lineAt(range.from).number
-      const last = state.doc.lineAt(range.to).number
-      for (const unit of this.#unitsOnLines(first, last)) {
+      const units = range.empty
+        ? this.#unitsAt(range.head)
+        : this.#unitsOnLines(state.doc.lineAt(range.from).number, state.doc.lineAt(range.to).number)
+      for (const unit of units) {
         if (!result.includes(unit)) result.push(unit)
       }
     }
@@ -666,7 +667,7 @@ class UnitReviewPlugin extends Plugin {
       if (state === 'not-ok' && units.length === 1) {
         this.#promptComment(last, final)
       } else if (state !== null) {
-        this.goToNext('open', this.#lineAfter(last))
+        this.goToNext('open', undefined, this.#endOf(last))
       }
     })
     return true
@@ -692,7 +693,7 @@ class UnitReviewPlugin extends Plugin {
       if (comment === null) return
       this.#refresh()
       const fp = this.#scan.units[index]?.fingerprint ?? current.fingerprint
-      this.markUnits([fp], 'not-ok', { comment, final }).then(() => this.goToNext('open', this.#lineAfter(current)))
+      this.markUnits([fp], 'not-ok', { comment, final }).then(() => this.goToNext('open', undefined, this.#endOf(current)))
     }, { mentions: this.#mentionCandidates() })
   }
 
@@ -705,13 +706,12 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Returns the last line of a unit, found again in the current unit list by its fingerprint.
+   * Returns the end position of a unit, found again in the current unit list by its fingerprint.
    * @param {Unit} unit
    * @returns {number}
    */
-  #lineAfter(unit) {
-    const current = this.#scan.units[this.#indexOfUnit(unit)] ?? unit
-    return this.#view().state.doc.lineAt(Math.min(current.to, this.#view().state.doc.length)).number
+  #endOf(unit) {
+    return (this.#scan.units[this.#indexOfUnit(unit)] ?? unit).to
   }
 
   /**
@@ -730,9 +730,11 @@ class UnitReviewPlugin extends Plugin {
    * wrapping around.
    * @param {'open'|'not-ok'} kind
    * @param {number} [afterLine] - Defaults to the cursor line
+   * @param {number} [afterPos] - Instead of a line: the units starting at or after this position,
+   *   e.g. the end of the unit just marked, which may share its line with the next unit
    * @returns {boolean}
    */
-  goToNext(kind, afterLine) {
+  goToNext(kind, afterLine, afterPos) {
     this.#refresh()
     const view = this.#view()
     const doc = view.state.doc
@@ -745,7 +747,7 @@ class UnitReviewPlugin extends Plugin {
       return !this.#data.reviewers.get(me)?.marks.has(unit.fingerprint)
     }
     const units = this.#scan.units
-    const after = units.filter(u => doc.lineAt(u.from).number > line && wanted(u))
+    const after = units.filter(u => (afterPos === undefined ? doc.lineAt(u.from).number > line : u.from >= afterPos) && wanted(u))
     const target = after[0] ?? units.find(wanted)
     if (!target) {
       notify(kind === 'open' ? 'All units are reviewed.' : 'No units are marked not OK.', 'success', 'check-circle')

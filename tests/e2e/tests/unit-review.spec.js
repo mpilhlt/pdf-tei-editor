@@ -488,6 +488,54 @@ test.describe('Unit review', () => {
     }
   });
 
+  test('marks only the unit at the cursor when units share a line', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, '', `<text>
+    <listBibl>
+      <bibl>Alpha 2001</bibl> <bibl>Beta 2002</bibl>
+      <bibl>Gamma 2003</bibl>
+      <bibl>Delta 2004</bibl>
+    </listBibl>
+  </text>`);
+      await page.locator('[name="unitReviewToggle"]').click();
+      await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 4 open');
+
+      // the cursor is in the first unit of the line: only it is marked, the cursor moves to the
+      // second unit on the same line
+      await cursorTo(page, 'Alpha');
+      await page.keyboard.press('ControlOrMeta+Enter');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 3 open');
+      const cursor = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return { head: view.state.selection.main.head, beta: view.state.doc.toString().indexOf('<bibl>Beta') };
+      });
+      expect(cursor.head).toBe(cursor.beta);
+
+      // a selection marks all units it touches
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const text = view.state.doc.toString();
+        view.dispatch({ selection: { anchor: text.indexOf('Gamma'), head: text.indexOf('Delta') } });
+        view.focus();
+      });
+      await page.keyboard.press('ControlOrMeta+Enter');
+      // Alpha, Gamma and Delta: Beta is still open
+      await expect(page.getByTestId('unit-review-meter')).toContainText('3 OK · 0 not OK · 1 open');
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
   test('marks units with the keyboard in visual mode', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
