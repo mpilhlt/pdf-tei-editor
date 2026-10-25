@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from fastapi_app.lib.utils.xml_utils import parse_untrusted_xml
+
 from .standoff_reader import (
     COMMENT_LIST_TYPE,
     XML_ID,
@@ -130,7 +132,7 @@ def add_reply(xml: str, thread_id: str, author: str, fullname: str, text: str, w
     Raises:
         ThreadNotFoundError: If the file has no thread with this id
     """
-    root = etree.fromstring(xml.encode("utf-8"))
+    root = parse_untrusted_xml(xml)
     comments = read_comments(find_standoff_list(root, COMMENT_LIST_TYPE))
     thread_root = next((c for c in comments if c.id == thread_id and not c.reply_to), None)
     if thread_root is None:

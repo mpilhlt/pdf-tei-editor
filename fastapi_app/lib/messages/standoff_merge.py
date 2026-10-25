@@ -24,6 +24,8 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from fastapi_app.lib.utils.xml_utils import parse_untrusted_xml
+
 from .comment_edit import (
     DEFAULT_INDENT_UNIT,
     _element_span,
@@ -79,7 +81,7 @@ def _items(root: etree._Element, list_type: str) -> list[_Item]:  # type: ignore
 
 
 def _parse(xml: str) -> etree._Element:  # type: ignore[name-defined]
-    return etree.fromstring(xml.encode("utf-8"))
+    return parse_untrusted_xml(xml)
 
 
 def _list_span(xml: str, list_type: str) -> tuple[int, int, int] | None:

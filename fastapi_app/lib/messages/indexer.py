@@ -34,6 +34,7 @@ from lxml import etree
 from fastapi_app.lib.models.models import FileMetadata
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.utils.xml_utils import parse_untrusted_xml
 
 from .mentions import find_mentions, mentionable_ids
 from .standoff_reader import (
@@ -312,7 +313,7 @@ class MessageIndexer:
         if content is None:
             return self.remove_file(stable_id)
         try:
-            root = etree.fromstring(content)
+            root = parse_untrusted_xml(content)
         except etree.XMLSyntaxError as e:
             logger.warning("Cannot index messages of %s: %s", stable_id, e)
             return set()
