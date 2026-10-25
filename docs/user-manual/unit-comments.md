@@ -19,7 +19,7 @@ Web addresses starting with `http://` or `https://` become clickable links in th
 ## Seeing comments
 
 - A **speech bubble** left of the line numbers marks the first line of each commented element: blue while the comment is open, grey when it is resolved. A small number shows how many comments start on that line. Hover over the bubble to read them.
-- The **status bar** shows the number of open comments. Click it to show them in the diagnostics drawer.
+- The **status bar** shows the number of open comments. Click it to go to the next open comment; this also shows the open comments in the diagnostics drawer.
 - Open comments are listed in the **diagnostics drawer**, with the buttons **Reply** and **Resolve**. `F8` jumps to the next entry there.
 
 ## Replying, resolving, editing
