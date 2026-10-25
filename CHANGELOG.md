@@ -2,6 +2,26 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.79.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.78.0...v0.79.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **access-control:** defer owner check until file data index is loaded ([c26230d](https://github.com/mpilhlt/pdf-tei-editor/commit/c26230dfe0e32c32822404833d373090aa76975e)), closes [#646](https://github.com/mpilhlt/pdf-tei-editor/issues/646)
+* **diagnostics:** do not expand the drawer when the XML editor is focused ([2b4349e](https://github.com/mpilhlt/pdf-tei-editor/commit/2b4349e64f53236b0dcd60e58bb3fd0d61f67c63)), closes [#642](https://github.com/mpilhlt/pdf-tei-editor/issues/642)
+* **diagnostics:** stop endless re-merging of diagnostics between sources ([dac945f](https://github.com/mpilhlt/pdf-tei-editor/commit/dac945f4a181143ff8bea0b8fc6facec1f1bb5d0)), closes [#647](https://github.com/mpilhlt/pdf-tei-editor/issues/647)
+* **document-rules:** editor and overrides target the machine rules ([097fff0](https://github.com/mpilhlt/pdf-tei-editor/commit/097fff0530527a1bce0b99db25b240d6482c93cc)), closes [#645](https://github.com/mpilhlt/pdf-tei-editor/issues/645)
+* **statusbar:** review meter and comments counter only show the diagnostics drawer ([8b75156](https://github.com/mpilhlt/pdf-tei-editor/commit/8b75156139f0e850b267d0004961835afcb89b28))
+* **unit-comments:** restore goToNextOpen for the status-bar meter ([30647bd](https://github.com/mpilhlt/pdf-tei-editor/commit/30647bd082c76c51252f8d86578e7cda5c9038da)), closes [#644](https://github.com/mpilhlt/pdf-tei-editor/issues/644)
+* **unit-comments:** the open comments counter also goes to the next open comment ([fa5c755](https://github.com/mpilhlt/pdf-tei-editor/commit/fa5c755ffbf63bf1e552dd68982b883d02dd17b1)), closes [#650](https://github.com/mpilhlt/pdf-tei-editor/issues/650) [#651](https://github.com/mpilhlt/pdf-tei-editor/issues/651) [#650](https://github.com/mpilhlt/pdf-tei-editor/issues/650) [#651](https://github.com/mpilhlt/pdf-tei-editor/issues/651) [#644](https://github.com/mpilhlt/pdf-tei-editor/issues/644)
+* **unit-review:** keyboard shortcuts mark only the unit at the cursor ([98612ca](https://github.com/mpilhlt/pdf-tei-editor/commit/98612ca373ca2a142288d691a6743c43a674182d)), closes [#641](https://github.com/mpilhlt/pdf-tei-editor/issues/641)
+* **xml-annotation:** keep keyboard shortcuts working in visual mode ([b1ed356](https://github.com/mpilhlt/pdf-tei-editor/commit/b1ed3568ece128da3201a2c4088b7529430de206)), closes [#641](https://github.com/mpilhlt/pdf-tei-editor/issues/641)
+
+
+### Features
+
+* make URLs in comments clickable ([1326efe](https://github.com/mpilhlt/pdf-tei-editor/commit/1326efe7c80668235897fb04bebf21889640e8c3)), closes [#643](https://github.com/mpilhlt/pdf-tei-editor/issues/643)
+
 # [0.78.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.77.2...v0.78.0) (2026-10-25)
 
 
