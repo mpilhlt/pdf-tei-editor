@@ -18,6 +18,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     fetch_rule_excerpt,
     is_line_range_fragment,
     resolve_forge_permalink,
+    splice_line_range,
     translate_anchor_to_line_range,
 )
 
@@ -318,6 +319,61 @@ class TestDerelativizeMarkdownUrls(unittest.TestCase):
     def test_returns_text_unchanged_when_base_url_is_not_a_recognized_forge(self):
         text = "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/img/foo.png)"
         self.assertEqual(derelativize_markdown_urls(text, "https://pad.gwdg.de/s/abc/notes.md"), text)
+
+
+class TestSpliceLineRange(unittest.TestCase):
+    """splice_line_range() is fetch_rule_excerpt()'s line-range slicing in reverse."""
+
+    def _lines(self, text: str) -> list[str]:
+        return text.splitlines()
+
+    def test_replaces_exactly_the_inclusive_range(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L5-L7", "A\nB"))
+        self.assertEqual(result[:4], ["line 1", "line 2", "line 3", "line 4"])
+        self.assertEqual(result[4:6], ["A", "B"])
+        self.assertEqual(result[6], "line 8")
+        self.assertEqual(len(result), 19)
+
+    def test_range_starting_at_first_line(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L1-L2", "X"))
+        self.assertEqual(result[:2], ["X", "line 3"])
+        self.assertEqual(len(result), 19)
+
+    def test_range_ending_at_last_line(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L19-L20", "X"))
+        self.assertEqual(result[-2:], ["line 18", "X"])
+        self.assertEqual(len(result), 19)
+
+    def test_single_line_fragment(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L3", "X"))
+        self.assertEqual(result[1:4], ["line 2", "X", "line 4"])
+        self.assertEqual(len(result), 20)
+
+    def test_gitlab_style_fragment(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L3-4", "X"))
+        self.assertEqual(result[1:4], ["line 2", "X", "line 5"])
+
+    def test_end_beyond_file_is_clamped(self):
+        result = self._lines(splice_line_range(SAMPLE_TEXT, "L19-L99", "X"))
+        self.assertEqual(result[-2:], ["line 18", "X"])
+
+    def test_unchanged_excerpt_round_trips(self):
+        full = SAMPLE_TEXT + "\n"
+        with patch("fastapi_app.lib.utils.annotation_rules_utils.requests.get") as mock_get:
+            mock_get.return_value = MagicMock(text=full, headers={"Content-Type": "text/plain"})
+            cache = MagicMock()
+            cache.get_text.return_value = None
+            for fragment in ("L1-L1", "L1-L20", "L5-L7", "L20-L20", "L3"):
+                excerpt = fetch_rule_excerpt(f"https://example.com/rules.txt#{fragment}", cache)
+                self.assertEqual(splice_line_range(full, fragment, excerpt), full, fragment)
+
+    def test_preserves_trailing_newline(self):
+        self.assertEqual(splice_line_range("a\nb\nc\n", "L2", "X"), "a\nX\nc\n")
+        self.assertEqual(splice_line_range("a\nb\nc", "L2", "X"), "a\nX\nc")
+
+    def test_non_line_range_fragment_returns_excerpt_as_whole_file(self):
+        self.assertEqual(splice_line_range(SAMPLE_TEXT, "intro", "X"), "X")
+        self.assertEqual(splice_line_range(SAMPLE_TEXT, "", "X"), "X")
 
 
 class TestIsLineRangeFragment(unittest.TestCase):
