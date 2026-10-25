@@ -729,8 +729,8 @@
 /**
  * @typedef {Object} MessageItem
  * @property {string} key - Message key: `c:<doc_id>:<comment id>` or `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`
- * @property {'review'|'comment'|'mention'} kind
- * @property {'owner'|'mention'|'thread-author'|'thread-mention'} reason - Why the user receives it
+ * @property {'review'|'comment'|'mention'|'review-request'} kind
+ * @property {'owner'|'mention'|'thread-author'|'thread-mention'|'reviewer'} reason - Why the user receives it
  * @property {string} doc_id
  * @property {string} stable_id - The file of the newest occurrence, which the message opens
  * @property {string} doc_label

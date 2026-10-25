@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 DB_FILE_NAME = "messages.db"
 
-MessageKind = Literal["review", "comment", "mention"]
-MessageReason = Literal["owner", "mention", "thread-author", "thread-mention"]
+MessageKind = Literal["review", "comment", "mention", "review-request"]
+MessageReason = Literal["owner", "mention", "thread-author", "thread-mention", "reviewer"]
 
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS occurrence (
@@ -255,7 +255,7 @@ class MessageStore:
         if unread_only:
             conditions.append("m.settled = 0 AND r.read_at IS NULL")
         if kind == "review":
-            conditions.append("m.key LIKE 'r:%'")
+            conditions.append("(m.key LIKE 'r:%' OR m.key LIKE 'q:%')")
         elif kind == "comment":
             conditions.append("m.key LIKE 'c:%'")
         elif kind is not None:

@@ -15,6 +15,7 @@ from typing import cast
 from fastapi_app.lib.messages.indexer import (
     SETTLED_CHANGED_TO_OK,
     SETTLED_RESOLVED,
+    SETTLED_STATUS_CHANGED,
     SETTLED_UNIT_EDITED,
     IndexContext,
     MessageIndexer,
@@ -72,6 +73,55 @@ class IndexerTestCase(unittest.TestCase):
 
     def messages(self, recipient: str) -> dict[str, tuple[str, str, bool]]:
         return {m.key: (m.kind, m.reason, m.settled) for m in self.store.list_messages(recipient)}
+
+
+def with_revisions(xml: bytes, *changes: tuple[str, str, str]) -> bytes:
+    """The file with a revisionDesc of (when, who, status) changes in its header."""
+    entries = "".join(f'<change when="{when}" who="#{who}" status="{status}"><desc>rev {when}</desc></change>' for when, who, status in changes)
+    return xml.replace(b"</teiHeader>", f"<revisionDesc>{entries}</revisionDesc></teiHeader>".encode(), 1)
+
+
+class TestReviewRequests(IndexerTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.context.users = {
+            **USERS,
+            "rev1": UserInfo(username="rev1", fullname="Rita Reviewer", roles=["reviewer"]),
+            "rev2": UserInfo(username="rev2", fullname=None, roles=["annotator", "reviewer"]),
+            "ann": UserInfo(username="ann", fullname=None, roles=["annotator", "reviewer"]),
+        }
+
+    def requests(self, recipient: str) -> dict[str, tuple[str, str, bool]]:
+        return {k: v for k, v in self.messages(recipient).items() if k.startswith("q:")}
+
+    def test_reviewers_receive_a_request_while_the_status_is_in_review(self) -> None:
+        self.files.put("f1", with_revisions(self.xml, ("2026-10-25T09:00:00Z", "ann", "draft"), ("2026-10-25T10:00:00Z", "ann", "in-review")))
+        self.indexer.index_file("f1")
+        key = "q:doc1:grobid:2026-10-25T10:00:00Z"
+        self.assertEqual(self.requests("rev1"), {key: ("review-request", "reviewer", False)})
+        self.assertEqual(self.requests("rev2"), {key: ("review-request", "reviewer", False)})
+        self.assertEqual(self.requests("ann"), {})  # not for its author
+        self.assertEqual(self.requests("jdoe"), {})  # not a reviewer
+        message = self.store.get_message(key, "rev1")
+        assert message is not None
+        self.assertEqual((message.author, message.text), ("ann", "rev 2026-10-25T10:00:00Z"))
+
+    def test_later_revisions_keep_the_request_and_another_status_settles_it(self) -> None:
+        first = ("2026-10-25T10:00:00Z", "ann", "in-review")
+        self.files.put("f1", with_revisions(self.xml, first))
+        self.indexer.index_file("f1")
+        self.files.put("f1", with_revisions(self.xml, first, ("2026-10-25T11:00:00Z", "ann", "in-review")), minutes=1)
+        self.indexer.index_file("f1")
+        self.assertEqual(set(self.requests("rev1")), {"q:doc1:grobid:2026-10-25T10:00:00Z"})
+        self.files.put("f1", with_revisions(self.xml, first, ("2026-10-25T12:00:00Z", "rev1", "draft")), minutes=2)
+        self.indexer.index_file("f1")
+        message = self.store.get_message("q:doc1:grobid:2026-10-25T10:00:00Z", "rev2")
+        assert message is not None
+        self.assertEqual((message.settled, message.settled_note), (True, SETTLED_STATUS_CHANGED))
+        # a new request is a new message
+        self.files.put("f1", with_revisions(self.xml, first, ("2026-10-25T12:00:00Z", "rev1", "draft"), ("2026-10-25T13:00:00Z", "ann", "in-review")), minutes=3)
+        self.indexer.index_file("f1")
+        self.assertEqual(self.requests("rev2")["q:doc1:grobid:2026-10-25T13:00:00Z"], ("review-request", "reviewer", False))
 
 
 class TestRecipients(IndexerTestCase):

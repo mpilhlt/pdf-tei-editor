@@ -11,10 +11,13 @@ Who receives what:
 - Users mentioned in a not-OK mark's comment receive it as a mention.
 - A comment (`c:` keys) addresses the users mentioned in it, and, for replies, the thread's
   author and the users mentioned earlier in the thread. Nobody receives their own comment or mark.
+- A review request (`q:` keys): while the last `revisionDesc/change` of a file has the status
+  `in-review`, all users with the reviewer role receive a message from the person who saved the
+  revision that set it. Further revisions that keep the status belong to the same request.
 
 Settling: a resolved thread settles its comments. A not-OK mark that disappears from a file that
-is saved again (unit edited, mark changed to OK) stays in the index as a settled occurrence, so
-the message stays in the recipient's list.
+is saved again (unit edited, mark changed to OK), and a review request whose status was changed,
+stay in the index as settled occurrences, so the message stays in the recipient's list.
 
 The same comment or mark in several files (copies of a document) is one message, whose newest
 occurrence decides its data.
@@ -24,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from lxml import etree
 
@@ -36,6 +39,7 @@ from .mentions import find_mentions, mentionable_ids
 from .standoff_reader import (
     COMMENT_LIST_TYPE,
     REVIEW_LIST_TYPE,
+    TEI_NS,
     Reviewer,
     build_threads,
     element_by_path,
@@ -55,6 +59,10 @@ SETTLED_RESOLVED = "resolved"
 SETTLED_UNIT_EDITED = "unit-edited"
 SETTLED_CHANGED_TO_OK = "changed-to-ok"
 SETTLED_SUPERSEDED = "superseded"
+SETTLED_STATUS_CHANGED = "status-changed"
+
+# Revision status that asks the reviewers to review a document
+REVIEW_REQUEST_STATUS = "in-review"
 
 # Suffix of the key of the collapsed message of an LLM reviewer
 LLM_RUN_PREFIX = "run-"
@@ -66,6 +74,7 @@ class UserInfo:
 
     username: str
     fullname: str | None
+    roles: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +88,29 @@ class IndexContext:
 def review_key(doc_id: str, variant: str | None, reviewer_id: str, fingerprint: str) -> str:
     """Message key of a review mark."""
     return f"r:{doc_id}:{variant or ''}:{reviewer_id}:{fingerprint}"
+
+
+def review_request_key(doc_id: str, variant: str | None, when: str) -> str:
+    """Message key of a review request: the time of the revision that set the status."""
+    return f"q:{doc_id}:{variant or ''}:{when}"
+
+
+def _review_request(root: etree._Element) -> tuple[str, str, str] | None:  # type: ignore[name-defined]
+    """
+    The open review request of a TEI file, as (time, author id, revision description) of the
+    revision that set the `in-review` status, or None if the last revision has another status.
+    """
+    changes = root.findall(f"{{{TEI_NS}}}teiHeader/{{{TEI_NS}}}revisionDesc/{{{TEI_NS}}}change")
+    first = None
+    for change in reversed(changes):
+        if change.get("status") != REVIEW_REQUEST_STATUS:
+            break
+        first = change
+    if first is None:
+        return None
+    desc = first.find(f"{{{TEI_NS}}}desc")
+    text = " ".join("".join(desc.itertext()).split()) if desc is not None else ""
+    return first.get("when") or "", (first.get("who") or "").lstrip("#"), text
 
 
 def comment_key(doc_id: str, comment_id: str) -> str:
@@ -183,6 +215,16 @@ def extract_occurrences(
                     add(key, mentioned, "mention", "mention", reviewer.id, author_name, mark.comment,
                         excerpts.get(fp), None, fp, False, None, None)
 
+    # ── review request
+    request = _review_request(root)
+    if request:
+        when, author, text = request
+        key = review_request_key(file.doc_id, file.variant, when)
+        for user in context.users.values():
+            if "reviewer" in user.roles:
+                add(key, user.username, "review-request", "reviewer", author, display_name(author), text, None,
+                    None, None, False, None, when or None)
+
     # ── comments
     for thread in build_threads(read_comments(find_standoff_list(root, COMMENT_LIST_TYPE))):
         element = element_by_path(root, thread.root.path) if thread.root.path else None
@@ -207,8 +249,13 @@ def extract_occurrences(
 
 
 def _settle(occurrence: Occurrence, file_time: str, reviewer_ok: set[tuple[str, str]]) -> Occurrence:
-    """A review occurrence whose mark has gone from the file, turned into a settled one."""
+    """A review mark or request occurrence that has gone from the file, turned into a settled one."""
     if occurrence.settled:
+        return occurrence
+    if occurrence.key.startswith("q:"):
+        occurrence.settled = True
+        occurrence.settled_note = SETTLED_STATUS_CHANGED
+        occurrence.file_updated_at = file_time
         return occurrence
     # r:<doc_id>:<variant>:<reviewer id>:<fingerprint>; the doc_id may contain colons
     parts = occurrence.key.rsplit(":", 2)
@@ -273,14 +320,14 @@ class MessageIndexer:
         current = extract_occurrences(root, file, context, self._lineage_owners(file))
         current_ids = {(o.key, o.recipient) for o in current}
 
-        # review marks that are gone stay as settled occurrences
+        # review marks and requests that are gone stay as settled occurrences
         review = read_review_data(find_standoff_list(root, REVIEW_LIST_TYPE))
         reviewer_ok = {(r.id, fp) for r in review.reviewers.values() for fp, m in r.marks.items() if m.state == "ok"}
         previous = self.store.occurrences_of_file(stable_id)
         kept = [
             _settle(o, _file_time(file), reviewer_ok)
             for o in previous
-            if (o.key, o.recipient) not in current_ids and o.key.startswith("r:")
+            if (o.key, o.recipient) not in current_ids and o.key.startswith(("r:", "q:"))
         ]
         self.store.replace_file_occurrences(stable_id, current + kept)
 

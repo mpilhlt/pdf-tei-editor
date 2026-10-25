@@ -35,7 +35,8 @@ const SETTLED_NOTES = {
   resolved: 'resolved',
   'unit-edited': 'unit edited',
   'changed-to-ok': 'changed to OK',
-  superseded: 'superseded by a newer review'
+  superseded: 'superseded by a newer review',
+  'status-changed': 'status changed'
 }
 
 const CSS = `
@@ -52,6 +53,7 @@ const CSS = `
 .message-row .message-kind { font-size: 15px; line-height: 1.2; }
 .message-row .message-kind.review { color: var(--sl-color-danger-600); }
 .message-row .message-kind.comment { color: var(--sl-color-primary-600); }
+.message-row .message-kind.request { color: var(--sl-color-warning-600); }
 .message-row .message-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .message-row .message-head { display: flex; gap: 6px; align-items: baseline; font-size: 13px; }
 .message-row .message-head b { font-weight: 600; }
@@ -205,6 +207,10 @@ class MessagesPlugin extends Plugin {
     if (item.key.startsWith('c:') && item.thread_id) {
       found = this.getDependency('unit-comments').openThread(item.thread_id)
       if (!found) notify('The comment is no longer attached to an element. Detached comments are listed in the diagnostics drawer.', 'warning', 'exclamation-triangle')
+    } else if (item.key.startsWith('q:')) {
+      // a review request opens the document in review mode
+      const review = this.getDependency('unit-review')
+      if (!review.isEnabled()) await review.setEnabled(true)
     } else if (item.fingerprint) {
       const review = this.getDependency('unit-review')
       if (!review.isEnabled()) await review.setEnabled(true)
@@ -272,6 +278,7 @@ class MessagesPlugin extends Plugin {
    */
   #row(item) {
     const isReview = item.key.startsWith('r:')
+    const isRequest = item.key.startsWith('q:')
     const unread = !item.read && !item.settled
     const row = document.createElement('div')
     row.className = `message-row${unread ? ' unread' : ''}${item.settled ? ' settled' : ''}`
@@ -281,9 +288,9 @@ class MessagesPlugin extends Plugin {
     const dot = document.createElement('span')
     dot.className = 'message-dot'
     const kind = document.createElement('sl-icon')
-    kind.className = `message-kind ${isReview ? 'review' : 'comment'}`
-    kind.setAttribute('name', isReview ? 'x-circle-fill' : 'chat-left-text')
-    kind.setAttribute('label', isReview ? 'Review' : 'Comment')
+    kind.className = `message-kind ${isRequest ? 'request' : isReview ? 'review' : 'comment'}`
+    kind.setAttribute('name', isRequest ? 'clipboard-check' : isReview ? 'x-circle-fill' : 'chat-left-text')
+    kind.setAttribute('label', isRequest ? 'Review request' : isReview ? 'Review' : 'Comment')
 
     const main = document.createElement('div')
     main.className = 'message-main'
@@ -337,7 +344,7 @@ class MessagesPlugin extends Plugin {
       })
       actions.appendChild(toggle)
     }
-    const canReply = !item.settled && (isReview ? item.reason === 'owner' && !item.author.startsWith('llm-') : Boolean(item.thread_id))
+    const canReply = !item.settled && !isRequest && (isReview ? item.reason === 'owner' && !item.author.startsWith('llm-') : Boolean(item.thread_id))
     if (canReply) {
       const reply = document.createElement('sl-icon-button')
       reply.setAttribute('name', 'reply')
@@ -365,6 +372,7 @@ class MessagesPlugin extends Plugin {
   #reasonText(item) {
     switch (item.reason) {
       case 'owner': return 'marked a unit not OK'
+      case 'reviewer': return 'asks for a review of'
       case 'thread-author': return 'replied to your comment'
       case 'thread-mention': return 'replied in a thread you were mentioned in'
       default: return item.kind === 'mention' ? 'mentioned you in a review' : 'mentioned you'
