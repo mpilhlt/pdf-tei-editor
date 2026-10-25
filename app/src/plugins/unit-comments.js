@@ -39,7 +39,7 @@ import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawer
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import {
   LIST_TYPE, readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus,
-  editComment, deleteComment, threadStatus
+  editComment, deleteComment, threadStatus, mergeAuthorComments
 } from '../modules/unit-comments.js'
 import { elementAt, elementPath, resolveAnchor, FingerprintCache } from '../modules/node-anchor.js'
 import { unitCommentGutter, buildUnitCommentMarkers, setUnitCommentMarkersEffect } from '../modules/codemirror/unit-comment-gutter.js'
@@ -99,6 +99,9 @@ class UnitCommentsPlugin extends Plugin {
   /** @type {UnitComment[]} Comments read at the last refresh (a fresh copy that may be modified) */
   #comments = []
 
+  /** @type {Map<string, string>} Names of authors whose comments arrived through SSE, by user name */
+  #liveNames = new Map()
+
   /** @type {PlacedThread[]} */
   #placed = []
 
@@ -129,6 +132,13 @@ class UnitCommentsPlugin extends Plugin {
     this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 5)
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
+    this.getDependency('sse').addEventListener('commentsChanged', (/** @type {MessageEvent} */ event) => {
+      try {
+        this.#onCommentsChanged(JSON.parse(event.data))
+      } catch (error) {
+        this.getDependency('logger').warn('Cannot merge comments: ' + String(error))
+      }
+    })
     this.getDependency('sse').addEventListener('commentReplyAdded', (/** @type {MessageEvent} */ event) => {
       try {
         this.#onReplyAdded(JSON.parse(event.data))
@@ -314,6 +324,38 @@ class UnitCommentsPlugin extends Plugin {
     this.#write(false)
     notify(`${data.author_name || data.author} replied to a comment.`, 'primary', 'chat-left-text')
     testLog('UNIT_COMMENT_REPLY_MERGED', { id: reply.id, threadId: data.thread_id })
+  }
+
+  /**
+   * Takes over the comments that another user saved into the open document from a document they
+   * cannot edit (new threads, edits, deletions, resolving and reopening), without reloading it.
+   * Read-only documents are reloaded instead (XML editor plugin).
+   * @param {{stable_id: string, author: string, author_name: string, list_xml: string|null}} data
+   */
+  #onCommentsChanged(data) {
+    if (data.stable_id !== this.state?.xml || this.state?.editorReadOnly) return
+    if (!this.#canWrite(true)) return
+    this.#refresh()
+    let remote = /** @type {UnitComment[]} */ ([])
+    if (data.list_xml) {
+      const parsed = new DOMParser().parseFromString(
+        `<standOff xmlns="${TEI_NS}" xmlns:xml="http://www.w3.org/XML/1998/namespace">${data.list_xml}</standOff>`,
+        'application/xml'
+      )
+      const list = parsed.documentElement.firstElementChild
+      if (!list || parsed.getElementsByTagName('parsererror').length) return
+      remote = readComments(list)
+    }
+    const { comments, changed } = mergeAuthorComments(this.#comments, remote, data.author)
+    if (!changed) return
+    const before = new Set(this.#comments.map(c => c.id))
+    this.#comments = comments
+    this.#liveNames.set(data.author, data.author_name || data.author)
+    this.#write(false)
+    if (comments.some(c => !c.replyTo && c.author === data.author && !before.has(c.id))) {
+      notify(`${data.author_name || data.author} commented on the document.`, 'primary', 'chat-left-text')
+    }
+    testLog('UNIT_COMMENTS_MERGED', { author: data.author, threads: this.#placed.length })
   }
 
   // ── Editor integration ─────────────────────────────────────────────
@@ -511,7 +553,7 @@ class UnitCommentsPlugin extends Plugin {
     if (user && id === user.username) return user.fullname || user.username
     const xmlDoc = this.#xmlEditor.getXmlTree()
     const respStmt = xmlDoc ? tei_utils.getRespStmtById(xmlDoc, id) : null
-    return respStmt?.getElementsByTagName('persName')[0]?.textContent?.trim() || id
+    return respStmt?.getElementsByTagName('persName')[0]?.textContent?.trim() || this.#liveNames.get(id) || id
   }
 
   // ── Gutter, meter, diagnostics, context menu ───────────────────────

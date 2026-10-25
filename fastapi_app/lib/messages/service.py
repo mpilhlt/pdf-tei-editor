@@ -53,7 +53,7 @@ def reset_message_stores() -> None:
 def default_index_context(db_dir: Path | None = None) -> IndexContext:
     """The current users and review mode."""
     users = {
-        u["username"]: UserInfo(username=u["username"], fullname=u.get("fullname") or None)
+        u["username"]: UserInfo(username=u["username"], fullname=u.get("fullname") or None, roles=list(u.get("roles") or []))
         for u in list_users(Path(db_dir or get_settings().db_dir))
         if u.get("username")
     }

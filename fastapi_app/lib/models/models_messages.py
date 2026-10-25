@@ -11,8 +11,8 @@ class MessageItem(BaseModel):
     """A review mark or comment addressed to the current user."""
 
     key: str
-    kind: Literal["review", "comment", "mention"]
-    reason: Literal["owner", "mention", "thread-author", "thread-mention"]
+    kind: Literal["review", "comment", "mention", "review-request"]
+    reason: Literal["owner", "mention", "thread-author", "thread-mention", "reviewer"]
     doc_id: str
     stable_id: str
     doc_label: str

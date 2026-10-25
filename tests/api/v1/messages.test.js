@@ -203,6 +203,38 @@ describe('Messages API tests', () => {
     assert.strictEqual(comment.read, true);
   });
 
+  test('saving a revision with status in-review sends reviewers a review request', async () => {
+    const requestDocId = `${docId}-request`;
+    const withStatus = (...changes) => createTei(requestDocId).replace('</teiHeader>', `<revisionDesc>${changes.join('')}</revisionDesc></teiHeader>`);
+    const first = '<change when="2026-10-25T09:00:00Z" who="#annotator" status="in-review"><desc>Please review</desc></change>';
+    const gold = await authenticatedApiCall(reviewer.sessionId, '/files/save', 'POST', {
+      file_id: requestDocId, xml_string: withStatus(), new_version: false
+    }, BASE_URL);
+    await authenticatedApiCall(reviewer.sessionId, '/files/release_lock', 'POST', { file_id: gold.file_id }, BASE_URL);
+    const saved = await authenticatedApiCall(annotator.sessionId, '/files/save', 'POST', {
+      file_id: gold.file_id, xml_string: withStatus(first), new_version: true
+    }, BASE_URL);
+    const key = `q:${requestDocId}::2026-10-25T09:00:00Z`;
+    const forReviewer = await waitForMessages(reviewer.sessionId, items => items.some(m => m.key === key));
+    const request = forReviewer.items.find(m => m.key === key);
+    assert.ok(request, 'review request for the reviewer');
+    assert.strictEqual(request.kind, 'review-request');
+    assert.strictEqual(request.reason, 'reviewer');
+    assert.strictEqual(request.author, 'annotator');
+    assert.strictEqual(request.text, 'Please review');
+    assert.strictEqual(request.stable_id, saved.file_id);
+    const own = await authenticatedApiCall(annotator.sessionId, '/messages', 'GET', null, BASE_URL);
+    assert.ok(!own.items.some(m => m.key === key), 'the author gets no request');
+
+    const done = '<change when="2026-10-25T10:00:00Z" who="#reviewer" status="approved"/>';
+    await authenticatedApiCall(annotator.sessionId, '/files/save', 'POST', {
+      file_id: saved.file_id, xml_string: withStatus(first, done), new_version: false
+    }, BASE_URL);
+    await authenticatedApiCall(annotator.sessionId, '/files/release_lock', 'POST', { file_id: saved.file_id }, BASE_URL);
+    const settled = await waitForMessages(reviewer.sessionId, items => items.some(m => m.key === key && m.settled));
+    assert.strictEqual(settled.items.find(m => m.key === key)?.settled_note, 'status-changed');
+  });
+
   test('read-all marks everything read', async () => {
     const result = await authenticatedApiCall(reviewer.sessionId, '/messages/read-all', 'POST', {}, BASE_URL);
     assert.strictEqual(result.unread, 0);

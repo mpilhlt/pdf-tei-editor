@@ -14,6 +14,7 @@
  * @testCovers app/src/modules/codemirror/unit-review-gutter.js
  * @testCovers app/src/plugins/document-actions.js
  * @testCovers app/src/plugins/xmleditor.js
+ * @testCovers app/src/plugins/unit-comments.js
  * @testCovers app/src/templates/save-document-dialog.html
  */
 
@@ -344,7 +345,7 @@ test.describe('Unit review', () => {
     }
   });
 
-  test('a reviewer\'s read-only view follows the annotator\'s changes', async ({ page, browser }) => {
+  test('a reviewer\'s read-only view follows the annotator\'s changes, and the annotator\'s copy the reviewer\'s', async ({ page, browser }) => {
     test.setTimeout(90000);
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
@@ -419,6 +420,21 @@ test.describe('Unit review', () => {
       });
       await expect.poll(async () => (await summaryNow()).ok, { timeout: 10000 }).toBe(1);
       expect((await summaryNow()).notOk).toBe(0);
+      expect(consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length).toBe(loadsBefore);
+
+      // so does a new comment thread of the reviewer
+      await reviewerPage.evaluate(() => {
+        const app = (/** @type {any} */ (window)).app;
+        const view = app.getDependency('xmleditor').getView();
+        app.getDependency('unit-comments').addComment(view.state.doc.toString().indexOf('Beta 2002'));
+      });
+      const prompt = reviewerPage.getByTestId('unit-comment-prompt');
+      await expect(prompt).toBeVisible();
+      await prompt.locator('input').fill('Check the year');
+      await prompt.locator('input').press('Enter');
+      await reviewerPage.evaluate(async () => (/** @type {any} */ (window)).app.getDependency('xmleditor').saveIfDirty());
+      const threadsNow = async () => page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-comments').getThreads());
+      await expect.poll(async () => (await threadsNow()).map((/** @type {any} */ t) => t.text), { timeout: 10000 }).toEqual(['Check the year']);
       expect(consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length).toBe(loadsBefore);
     } finally {
       await releaseAllLocks(reviewerPage).catch(() => {});
