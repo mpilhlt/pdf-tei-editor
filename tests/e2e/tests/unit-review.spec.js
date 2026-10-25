@@ -52,9 +52,10 @@ const STAND_OFF = `<standOff>
  * Loads an editable copy of the first document with the test <text>.
  * @param {Page} page
  * @param {string} [standOff] - Inserted after the teiHeader
+ * @param {string} [text] - The <text> element
  * @returns {Promise<string>} The stable id of the copy
  */
-async function loadReviewDocument(page, standOff = '') {
+async function loadReviewDocument(page, standOff = '', text = TEXT) {
   const stableId = await page.evaluate(async ({ text, standOff }) => {
     const w = /** @type {any} */ (window);
     const xml = w.app.getDependency('xmleditor').getXML()
@@ -64,7 +65,7 @@ async function loadReviewDocument(page, standOff = '') {
     const res = await w.client.apiClient.filesSave({ xml_string: xml, file_id: 'unit-review-probe', new_version: true });
     await w.app.getDependency('services').load({ xml: res.file_id });
     return res.file_id;
-  }, { text: TEXT, standOff });
+  }, { text, standOff });
   await page.waitForFunction((expectedXml) => {
     const app = /** @type {any} */ (window).app;
     return app.getCurrentState().xml === expectedXml && app.getCurrentState().editorReadOnly === false;
@@ -423,6 +424,41 @@ test.describe('Unit review', () => {
       await releaseAllLocks(reviewerPage).catch(() => {});
       await performLogout(reviewerPage).catch(() => {});
       await reviewerContext.close();
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('keeps a mark with its unit when an identical unit before it is edited', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF, TEXT.replace('<bibl>Beta 2002</bibl>', '<bibl>Ibid.</bibl>').replace('<bibl>Gamma 2003</bibl>', '<bibl>Ibid.</bibl>'));
+      // a not-OK mark on the first <bibl>Ibid.</bibl>
+      await page.evaluate(async () => {
+        const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+        const units = review.getUnits();
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: units[1].fingerprint, state: 'not-ok', comment: 'Tag it' }]);
+      });
+      const firstIbid = await cursorTo(page, 'Ibid.');
+      expect((await summary(page)).notOk).toBe(1);
+
+      // the annotator tags it: the mark must not move to the second <bibl>Ibid.</bibl>
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const pos = view.state.doc.toString().indexOf('Ibid.');
+        view.dispatch({ changes: [{ from: pos, insert: '<ref type="precedingWork">' }, { from: pos + 'Ibid.'.length, insert: '</ref>' }] });
+      });
+      await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(0);
+      const entry = page.locator('.diagnostics-drawer-list', { hasText: 'Changed after a not-OK review' });
+      await expect(entry).toContainText(`Line ${firstIbid}`);
+      await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
+    } finally {
       await releaseAllLocks(page);
       await performLogout(page);
       stopErrorMonitoring();

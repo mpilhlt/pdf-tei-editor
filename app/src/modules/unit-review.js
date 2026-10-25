@@ -635,6 +635,49 @@ export function setMark(data, who, fingerprint, state, options = {}) {
 }
 
 /**
+ * Moves marks to the new fingerprints of units whose content did not change but whose duplicate
+ * suffix did, because an identical unit before them was edited, removed or inserted (`.2` becomes
+ * the bare fingerprint when the first of two `<bibl>Ibid.</bibl>` is edited). Carries whose
+ * original fingerprint is reused by another unit are carried over as `was-` marks first, and
+ * removed from `carry`.
+ * @param {ReviewData} data
+ * @param {Map<string, string>} renames - New fingerprint by old fingerprint
+ * @param {Map<string, string>} carry - Old fingerprint by new fingerprint, for units edited in the editor
+ */
+export function renumberMarks(data, renames, carry) {
+  const touched = new Set([...renames.keys(), ...renames.values()]);
+  for (const [newFp, oldFp] of [...carry]) {
+    if (!touched.has(oldFp)) continue;
+    for (const reviewer of data.reviewers.values()) {
+      const mark = reviewer.marks.get(oldFp) ?? reviewer.was.get(oldFp);
+      if (mark && !reviewer.marks.has(newFp)) reviewer.was.set(newFp, { state: mark.state, comment: mark.comment, final: false });
+    }
+    carry.delete(newFp);
+  }
+  for (const reviewer of data.reviewers.values()) {
+    for (const map of [reviewer.marks, reviewer.was]) {
+      /** @type {Map<string, Mark>} */
+      const moved = new Map();
+      for (const [from, to] of renames) {
+        const mark = map.get(from);
+        if (mark) moved.set(to, mark);
+      }
+      for (const fp of touched) map.delete(fp);
+      for (const [fp, mark] of moved) map.set(fp, mark);
+    }
+  }
+}
+
+/**
+ * Returns a fingerprint without its duplicate suffix.
+ * @param {string} fingerprint
+ * @returns {string}
+ */
+export function baseFingerprint(fingerprint) {
+  return fingerprint.split('.')[0] ?? fingerprint;
+}
+
+/**
  * Carries marks over from edited units to their new fingerprints as `was-` marks and drops
  * marks whose unit no longer exists and was not carried over.
  * @param {ReviewData} data

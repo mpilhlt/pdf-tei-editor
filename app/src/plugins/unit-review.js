@@ -39,7 +39,7 @@ import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from 
 import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
-  setMark, reconcileReviewData, emptyReviewData
+  setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
 } from '../modules/unit-review.js'
 import { unitReviewGutter, buildUnitReviewMarkers, setUnitReviewMarkersEffect } from '../modules/codemirror/unit-review-gutter.js'
 import { openReviewPopover, openCommentPrompt, closePopover, formatWhen } from '../modules/unit-review-popover.js'
@@ -444,7 +444,7 @@ class UnitReviewPlugin extends Plugin {
       scan = { units: [], looseText: [], complete: true, path: null }
     }
     if (this.#fpCache.size > 5000) this.#fpCache = new Map()
-    this.#updateCarry(scan)
+    const renames = this.#updateCarry(scan)
     this.#scan = scan
     this.#data = data
     const { byFingerprint, summary } = combineReviews(scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
@@ -453,6 +453,13 @@ class UnitReviewPlugin extends Plugin {
     this.#updateStrip(view)
     this.#updateMeter()
     this.#updateDiagnostics()
+    if (renames.size && data.reviewers.size && this.#canWrite(true)) {
+      // at once: the marks would otherwise apply to another unit with the same content
+      const copy = this.#readData(state)
+      renumberMarks(copy, renames, this.#carry)
+      this.#write(copy, false)
+      return
+    }
     if (options.persistCarry && this.#carry.size && data.reviewers.size && this.#canWrite(true)) {
       const copy = this.#readData(state)
       if (reconcileReviewData(copy, scan.units, this.#carry)) this.#write(copy, false)
@@ -463,20 +470,29 @@ class UnitReviewPlugin extends Plugin {
    * Maps the units of the previous scan through the changes since then and records, for each unit
    * whose content changed, which fingerprint it had before.
    * @param {UnitScan} scan
+   * @returns {Map<string, string>} New fingerprint by old fingerprint of the units whose content is
+   *   unchanged but whose duplicate suffix changed
    */
   #updateCarry(scan) {
+    /** @type {Map<string, string>} */
+    const renames = new Map()
     const changes = this.#pendingChanges
     this.#pendingChanges = null
-    if (!changes || !this.#scan.units.length) return
+    if (!changes || !this.#scan.units.length) return renames
     const byStart = new Map(scan.units.map(u => [u.from, u]))
     for (const old of this.#scan.units) {
       const from = changes.mapPos(old.from, 1)
       let unit = byStart.get(from)
       if (!unit) unit = scan.units.find(u => u.from <= from && from < u.to)
       if (!unit || unit.fingerprint === old.fingerprint) continue
+      if (baseFingerprint(unit.fingerprint) === baseFingerprint(old.fingerprint)) {
+        renames.set(old.fingerprint, unit.fingerprint)
+        continue
+      }
       const root = this.#carry.get(old.fingerprint) ?? old.fingerprint
       if (root !== unit.fingerprint) this.#carry.set(unit.fingerprint, root)
     }
+    return renames
   }
 
   /**

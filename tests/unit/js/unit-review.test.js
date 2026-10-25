@@ -15,7 +15,7 @@ import { xml } from '@codemirror/lang-xml';
 import { sha256Hex } from '../../../app/src/modules/sha256.js';
 import {
   parseUnitPath, findUnits, readReviewData, serializeReviewData, combineReviews, setMark,
-  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, LIST_TYPE
+  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, renumberMarks, LIST_TYPE
 } from '../../../app/src/modules/unit-review.js';
 
 const REFS = `<TEI xmlns="http://www.tei-c.org/ns/1.0">
@@ -226,5 +226,33 @@ describe('reconcileReviewData', () => {
     reconcileReviewData(data, [{ fingerprint: 'new', from: 0, to: 1, name: 'bibl' }], new Map([['new', 'old']]));
     setMark(data, { id: 'b' }, 'new', 'ok');
     assert.strictEqual(data.reviewers.get('a')?.was.size, 0);
+  });
+});
+
+describe('renumberMarks', () => {
+  it('keeps the marks with their units when a duplicate before them is edited', () => {
+    // two <bibl>Ibid.</bibl> (dup, dup.2); the first is edited (now new), the second becomes dup
+    const data = emptyReviewData();
+    setMark(data, { id: 'a' }, 'dup', 'not-ok', { comment: 'tag it' });
+    setMark(data, { id: 'b' }, 'dup.2', 'ok');
+    const carry = new Map([['new', 'dup']]);
+    renumberMarks(data, new Map([['dup.2', 'dup']]), carry);
+    assert.strictEqual(carry.size, 0);
+    assert.deepStrictEqual(data.reviewers.get('a')?.was.get('new'), { state: 'not-ok', comment: 'tag it', final: false });
+    assert.ok(!data.reviewers.get('a')?.marks.has('dup'));
+    assert.strictEqual(data.reviewers.get('b')?.marks.get('dup')?.state, 'ok');
+    assert.ok(!data.reviewers.get('b')?.marks.has('dup.2'));
+    const units = [{ fingerprint: 'new', from: 0, to: 1, name: 'bibl' }, { fingerprint: 'dup', from: 2, to: 3, name: 'bibl' }];
+    const { byFingerprint } = combineReviews(units, data, { mode: 'majority', llmVote: true });
+    assert.strictEqual(byFingerprint.get('new')?.state, 'stale');
+    assert.strictEqual(byFingerprint.get('dup')?.state, 'ok');
+  });
+
+  it('moves the marks of the later duplicates when a unit is inserted before them', () => {
+    const data = emptyReviewData();
+    setMark(data, { id: 'a' }, 'dup', 'not-ok');
+    renumberMarks(data, new Map([['dup', 'dup.2']]), new Map());
+    assert.ok(!data.reviewers.get('a')?.marks.has('dup'));
+    assert.strictEqual(data.reviewers.get('a')?.marks.get('dup.2')?.state, 'not-ok');
   });
 });

@@ -15,6 +15,8 @@ Requested by Christian after the merge of #623.
 
 - **Live review marks in the owner's editor.** When the stand-off endpoint stores a change of the user's own review annotation, it sends `reviewMarksChanged` (`stable_id`, `reviewer`, `reviewer_name`, `annotation_xml`, null when the review was removed) to the other sessions. The unit review plugin of an editor that has the document open and can edit it replaces that reviewer's annotation in the document (not in the undo history), so the strip, the meter and the diagnostics update without a reload, and switches review mode on if it is off. The owner's next save keeps the annotation (`merge_foreign_standoff`). The reviewer's name comes from the event until the owner's document has the reviewer's `respStmt`.
 
+- **Marks of identical units.** Units with identical content are told apart by a suffix (`.2`, `.3`, …) in the order they appear. Editing, removing or inserting one of them renumbers the later ones, and their marks stayed on the old fingerprints: after the first of two `<bibl>Ibid.</bibl>` marked not OK was tagged, the second one showed the not-OK mark. The plugin now moves the marks of renumbered units with them (`renumberMarks()`, applied right after the scan that found the renumbering), after carrying the edited unit's mark over as `was-` mark (Christian, 2026-10-25).
+
 ## Not done
 
 - New comment threads of other users are not merged live into the owner's editor; only replies are (`commentReplyAdded`).
