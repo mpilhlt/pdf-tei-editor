@@ -190,6 +190,10 @@ Resolve the comment threads that have been dealt with (**Resolve**). `Shift+F7` 
 
 ![The reviewer's view after the correction: the changed unit with the buttons OK and Not OK, and the reply in the comment thread](../images/review-workflow-11-reviewer-recheck.png)
 
+A resolved thread is no longer listed in the diagnostics drawer, but it stays with the unit: click the comment icon left of the line number to read the discussion again.
+
+![A resolved comment thread, opened from the comment icon next to the unit](../images/review-workflow-14-comment-view.png)
+
 ## 7. Approving
 
 *Reviewer*

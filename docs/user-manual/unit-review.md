@@ -7,7 +7,7 @@ Unit review lets reviewers go through a document unit by unit (for example each 
 Click the **Review** button (clipboard icon) in the XML editor toolbar. Review mode adds:
 
 - the status strip left of the line numbers,
-- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed,
+- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it shows the diagnostics drawer,
 - a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
 
 Hover over the **Review** button to see the list of shortcuts.
@@ -26,7 +26,7 @@ When several units share a line, the strip shows the line in amber if their stat
 
 Reviewers mark units in every document they can see, also in documents they cannot edit (for example an annotator's version when only owners can edit): the text stays read-only, and the server saves only your own marks into the document. Superseded versions cannot be reviewed. See [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit) for the workflow.
 
-The keyboard shortcuts act on the units at the cursor or in the selection. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
+The keyboard shortcuts act on the unit at the cursor (also when other units share its line) or on all units in the selection, in the XML view as well as in the visual annotation mode. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
 
 | Action | How |
 | --- | --- |
@@ -36,7 +36,7 @@ The keyboard shortcuts act on the units at the cursor or in the selection. The b
 | Mark several units as OK | Select them and press `Ctrl+Enter`, or drag over the strip (hold `Alt` while dragging to mark them not OK) |
 | Mark all units above as OK | The double-check button (only units you have not marked yet) |
 | Open the review of a line | Click the strip: shows your mark and comment, the other reviewers' marks, and the combined result |
-| Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
+| Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, or the arrow / exclamation mark button |
 | Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to open the review and, for reviewers, to mark them OK or not OK. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.
@@ -66,6 +66,14 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 ## LLM reviewer
 
 When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+
+### Adjusting the rules the model uses
+
+**Tools → Edit document rules** lists the rule categories the document links to. Each entry opens the rules text that the LLM reviewer receives. Where the annotation guide has a machine-readable version, this is that version (a condensed excerpt), not the full guide that people read in the Annotation Guide drawer. Click **New override** to write your own version and select it: from then on, your reviews of this document use your text. Other users are not affected.
+
+**Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the excerpt. The rest of the file stays unchanged.
+
+Before this change, the editor showed the full annotation guide, and overrides were saved for it. Overrides created that way are no longer used or shown. To keep one, create a new override.
 
 ## Edited units
 

@@ -15,6 +15,7 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 - **Access control** with role-based permissions and collection management
 - **Collection organization** for managing document sets
 - **Revision tracking** with detailed change documentation
+- **Review and comments** - reviewers mark XML units as OK or not OK and discuss them in comment threads, also in documents they cannot edit; review requests, replies and mentions arrive as in-app messages that open the document at the right place
 - **Modular architecture** - easily add new features and behavior with frontend and backend plugins
 - **Mature and agent-ready** - extensive developer documentation and test coverage, so humans and agents can contribute new code easily and safely
 

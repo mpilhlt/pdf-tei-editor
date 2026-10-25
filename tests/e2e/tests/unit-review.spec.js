@@ -6,7 +6,7 @@
  * checks the stand-off storage, the status bar meter, the diagnostics and undo, the
  * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
  * dialog, the automatic review mode for documents with not-OK units, and the reload of a
- * read-only document after another user saved it.
+ * read-only document after another user saved it, and the keyboard shortcuts in visual mode.
  *
  * @testCovers app/src/plugins/unit-review.js
  * @testCovers app/src/modules/unit-review.js
@@ -15,6 +15,7 @@
  * @testCovers app/src/plugins/document-actions.js
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/plugins/unit-comments.js
+ * @testCovers app/src/plugins/xml-annotation.js
  * @testCovers app/src/templates/save-document-dialog.html
  */
 
@@ -481,6 +482,113 @@ test.describe('Unit review', () => {
       await expect(entry).toContainText(`Line ${firstIbid}`);
       await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
     } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('marks only the unit at the cursor when units share a line', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, '', `<text>
+    <listBibl>
+      <bibl>Alpha 2001</bibl> <bibl>Beta 2002</bibl>
+      <bibl>Gamma 2003</bibl>
+      <bibl>Delta 2004</bibl>
+    </listBibl>
+  </text>`);
+      await page.locator('[name="unitReviewToggle"]').click();
+      await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 4 open');
+
+      // the cursor is in the first unit of the line: only it is marked, the cursor moves to the
+      // second unit on the same line
+      await cursorTo(page, 'Alpha');
+      await page.keyboard.press('ControlOrMeta+Enter');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 3 open');
+      const cursor = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return { head: view.state.selection.main.head, beta: view.state.doc.toString().indexOf('<bibl>Beta') };
+      });
+      expect(cursor.head).toBe(cursor.beta);
+
+      // a selection marks all units it touches
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const text = view.state.doc.toString();
+        view.dispatch({ selection: { anchor: text.indexOf('Gamma'), head: text.indexOf('Delta') } });
+        view.focus();
+      });
+      await page.keyboard.press('ControlOrMeta+Enter');
+      // Alpha, Gamma and Delta: Beta is still open
+      await expect(page.getByTestId('unit-review-meter')).toContainText('3 OK · 0 not OK · 1 open');
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('marks units with the keyboard in visual mode', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    // visual mode needs annotation tags for the variant: no extractor of the test setup has any
+    await page.route('**/api/v1/extract/list', async route => {
+      const response = await route.fetch();
+      const extractors = await response.json();
+      if (!Array.isArray(extractors)) return route.fulfill({ response });
+      const tags = [{ tag: 'bibl', label: 'Bibl', color: '#cc6600' }];
+      // the variant of the test documents
+      const variant = 'grobid.training.segmentation';
+      extractors[0].variants = [...(extractors[0].variants ?? []), variant];
+      extractors[0].annotationTags = { ...extractors[0].annotationTags, [variant]: tags };
+      await route.fulfill({ response, json: extractors });
+    });
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page);
+      await page.locator('[name="unitReviewToggle"]').click();
+      await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE');
+      await expect(page.locator('[name="annotationModeSwitch"]')).toBeVisible();
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation').dispatchStateChange({ view: 'annotation' }));
+      await page.waitForFunction(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').isReadOnly());
+
+      // a click puts the cursor into the unit and the keyboard focus into the editor
+      const alpha = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const coords = view.coordsAtPos(view.state.doc.toString().indexOf('Alpha') + 2);
+        return { x: coords.left, y: (coords.top + coords.bottom) / 2 };
+      });
+      await page.mouse.click(alpha.x, alpha.y);
+      await page.keyboard.press('ControlOrMeta+Enter');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 2 open');
+      const lines = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return {
+          cursor: view.state.doc.lineAt(view.state.selection.main.head).number,
+          beta: view.state.doc.lineAt(view.state.doc.toString().indexOf('Beta')).number
+        };
+      });
+      expect(lines.cursor).toBe(lines.beta);
+
+      // the text cannot be edited with the keyboard
+      const before = await editorText(page);
+      for (const key of ['Backspace', 'Delete', 'Enter', 'Tab']) await page.keyboard.press(key);
+      expect(await editorText(page)).toBe(before);
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
       await performLogout(page);
       stopErrorMonitoring();

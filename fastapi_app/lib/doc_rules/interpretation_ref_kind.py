@@ -20,20 +20,21 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 def representative_ref(refs: list[AnnotationRuleRefTarget]) -> Optional[AnnotationRuleRefTarget]:
     """
     The one ref of an interpretation entry that represents it as a single
-    editable resource: its "human" ref (the whole section a person edits)
-    if present, else its sole "machine" ref (a topic configured with only
-    a pre-set line-range fragment and no heading anchor). A "machine" ref
-    alongside a "human" one is auto-derived from it (see
-    grobid/annotation_rules.py's _build_refs_for_guide) and is never
-    treated as a second, independently editable resource. Exported (not
-    module-private) so other consumers of editorialDecl (e.g.
-    annotation_review/review_logic.py) can compute the same resource key
-    this kind's discover() reports, when they need to look up an override
-    by a different ref of the same entry (e.g. a "machine" ref used for a
-    narrower fetch) - see that module's gather_rule_excerpts().
+    editable resource: its "machine" ref (the text the LLM annotation
+    reviewer consumes - a line-range excerpt of the human section or of a
+    separate condensed, LLM-only document) if present, else its sole
+    "human" ref (a whole document or an HTML section, for which no machine
+    excerpt could be derived - see grobid/annotation_rules.py's
+    _build_refs_for_guide). Document rules overrides are layered on the
+    machine rules, not the human-readable guide (issue #645): the
+    resource's original text, its override key and the reviewer's override
+    lookup all derive from this ref. Exported (not module-private) so other
+    consumers of editorialDecl (e.g. annotation_review/review_logic.py's
+    gather_rule_excerpts()) compute the same resource key this kind's
+    discover() reports.
     """
     for ref in refs:
-        if ref["subtype"] == "human":
+        if ref["subtype"] == "machine":
             return ref
     return refs[0] if refs else None
 

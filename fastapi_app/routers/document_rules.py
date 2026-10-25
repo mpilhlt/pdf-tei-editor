@@ -34,7 +34,12 @@ from ..lib.doc_rules.rules_refresh import (
 from ..lib.doc_rules.storage import DocumentRulesStore
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
-from ..lib.utils.annotation_rules_utils import derelativize_markdown_urls
+from ..lib.utils.annotation_rules_utils import (
+    derelativize_markdown_urls,
+    fetch_rule_excerpt,
+    is_line_range_fragment,
+    splice_line_range,
+)
 from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
     ListResourcesRequest,
@@ -310,9 +315,23 @@ async def propose_change_url(
     form in the actual upstream file. The response's `text` field carries
     this rewritten text back to the frontend, which must copy it (not its
     own original text) to the clipboard.
+
+    A line-range `url` (e.g. a machine-rules excerpt "#L10-L40") is first
+    spliced back into the full upstream file at that range (see
+    splice_line_range()), since the forge edit page replaces the whole
+    file - so `text` in the response is then the whole file's new content.
     """
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
-    text = derelativize_markdown_urls(request.text, request.url)
+    text = request.text
+    base_url, _, fragment = request.url.partition("#")
+    if fragment and is_line_range_fragment(fragment):
+        try:
+            full_text = fetch_rule_excerpt(base_url, cache)
+        except Exception as e:
+            logger.error(f"Could not fetch {base_url} to splice the edited excerpt into: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail=f"Could not fetch the upstream file: {e}")
+        text = splice_line_range(full_text, fragment, text)
+    text = derelativize_markdown_urls(text, request.url)
     for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
         try:
             target = adapter.build_propose_change_url(request.url, text, cache)

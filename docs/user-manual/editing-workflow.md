@@ -120,7 +120,7 @@ Click the **Validate** button to run a full schema validation against the TEI sc
 
 ## Diagnostics drawer
 
-While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is fully shown while you work in the XML editor; when you click into the PDF viewer it slides out so the whole PDF is visible, leaving a **Diagnostics** button with the number of diagnostics in the top-left corner. Click the button to show the drawer again.
+While the document has diagnostics, they are listed in a drawer on the left side, over the PDF. The drawer is shown when a document is loaded. When you click into the PDF viewer it slides out so the whole PDF is visible, leaving a **Diagnostics** button with the number of diagnostics in the top-left corner. It stays retracted while you edit the XML. To show it again, click the **Diagnostics** button, or the review progress meter or the open comments counter in the XML editor's status bar.
 
 - Click a diagnostic to select the text it applies to in the XML editor.
 - **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
@@ -208,7 +208,7 @@ The annotation mode toggle only appears in the editor statusbar when the active 
 Click the **XML / Visual** toggle switch in the bottom-left of the XML editor statusbar. When it switches to **Visual**:
 
 - Raw XML tags are replaced by colored inline badges (e.g. `AUTHOR`, `TITLE[A]`).
-- Direct text editing is disabled — the editor is read-only for free-form changes.
+- Direct text editing is disabled — the editor is read-only for free-form changes. The cursor and the keyboard shortcuts that do not change the text, such as the [review shortcuts](unit-review.md#marking-units), still work.
 - The XPath navigation header is hidden to keep the view clean.
 - The editor scrolls to the start of the `<text>` element.
 

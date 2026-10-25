@@ -380,6 +380,31 @@ class TestProposeChangeUrlEndpoint(DocumentRulesRouterTestCase):
         self.assertIsNone(body["url"])
         self.assertFalse(body["content_prefilled"])
 
+    @patch("fastapi_app.routers.document_rules.fetch_rule_excerpt")
+    def test_splices_a_line_range_excerpt_into_the_full_upstream_file(self, mock_fetch):
+        """A machine-rules excerpt (#Lx-Ly) is proposed as the whole file with only that range replaced."""
+        mock_fetch.return_value = "line 1\nline 2\nline 3\nline 4\n"
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            json={"url": "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md#L2-L3", "text": "edited"},
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_fetch.assert_called_once()
+        self.assertEqual(mock_fetch.call_args.args[0], "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md")
+        body = response.json()
+        self.assertEqual(body["text"], "line 1\nedited\nline 4\n")
+        self.assertIn("line+1%0Aedited%0Aline+4", body["url"])
+
+    @patch("fastapi_app.routers.document_rules.fetch_rule_excerpt")
+    def test_returns_502_when_the_full_file_cannot_be_fetched_for_splicing(self, mock_fetch):
+        mock_fetch.side_effect = RuntimeError("network down")
+        with self.assertLogs("fastapi_app.routers.document_rules", level="ERROR"):
+            response = self.client.post(
+                "/document-rules/propose-change-url",
+                json={"url": "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md#L2-L3", "text": "x"},
+            )
+        self.assertEqual(response.status_code, 502)
+
     @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
     def test_returns_502_when_an_adapter_fails_unexpectedly(self, mock_get):
         mock_get.side_effect = RuntimeError("network down")
