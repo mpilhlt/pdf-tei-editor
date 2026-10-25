@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from fastapi_app.lib.messages.standoff_merge import apply_contribution, merge_foreign_standoff, review_annotation
+from fastapi_app.lib.messages.standoff_merge import apply_contribution, comment_list, merge_foreign_standoff, review_annotation
 from fastapi_app.lib.messages.standoff_reader import (
     COMMENT_LIST_TYPE,
     REVIEW_LIST_TYPE,
@@ -138,6 +138,17 @@ class TestReviewAnnotation(unittest.TestCase):
         xml = xml.replace('      <annotation xml:id="ur-llm-openai-gpt"', CDOE_REVIEW + '      <annotation xml:id="ur-llm-openai-gpt"', 1)
         self.assertEqual(review_annotation(xml, "cdoe"), CDOE_REVIEW.strip())
         self.assertIsNone(review_annotation(xml, "nobody"))
+
+
+class TestCommentList(unittest.TestCase):
+    def test_returns_the_comment_list(self) -> None:
+        xml = FIXTURE.read_text(encoding="utf-8")
+        markup = comment_list(xml)
+        assert markup is not None
+        self.assertTrue(markup.startswith('<listAnnotation type="unit-comment"'))
+        self.assertTrue(markup.endswith("</listAnnotation>"))
+        self.assertIn("uc-aaa111", markup)
+        self.assertIsNone(comment_list(xml.replace(markup, "")))
 
 
 class TestMergeForeignStandoff(unittest.TestCase):

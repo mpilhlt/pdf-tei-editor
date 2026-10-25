@@ -272,3 +272,69 @@ export function editComment(comments, id, text, options) {
 export function deleteComment(comments, id) {
   return comments.filter(c => c.id !== id && c.replyTo !== id);
 }
+
+/**
+ * Takes over into `local` (the comments of an open document) what `author` changed in `remote`
+ * (the comments stored after the author saved): the author's comments are added, replaced or
+ * removed, the author's status changes on other comments are added, and replies whose thread the
+ * author removed go with it. Other comments of `local` stay as they are.
+ * @param {UnitComment[]} local
+ * @param {UnitComment[]} remote
+ * @param {string} author - User id
+ * @returns {{comments: UnitComment[], changed: boolean}}
+ */
+export function mergeAuthorComments(local, remote, author) {
+  const remoteById = new Map(remote.map(c => [c.id, c]));
+  const changeKey = (/** @type {CommentChange} */ c) => `${c.who}\u0000${c.when}\u0000${c.status ?? ''}`;
+  let changed = false;
+  /** @type {UnitComment[]} */
+  const result = [];
+  for (const comment of local) {
+    const theirs = remoteById.get(comment.id);
+    if (comment.author === author) {
+      if (!theirs) {
+        changed = true;
+        continue;
+      }
+      if (JSON.stringify(theirs) !== JSON.stringify(comment)) changed = true;
+      result.push(theirs);
+      continue;
+    }
+    const known = new Set(comment.changes.map(changeKey));
+    const added = (theirs?.changes ?? []).filter(c => c.who === author && !known.has(changeKey(c)));
+    if (added.length) {
+      changed = true;
+      result.push({ ...comment, changes: [...comment.changes, ...added].sort((a, b) => a.when.localeCompare(b.when)) });
+    } else {
+      result.push(comment);
+    }
+  }
+  // the author's new comments: replies at the end of their thread, threads after the comment that
+  // precedes them in the stored list
+  const present = new Set(result.map(c => c.id));
+  remote.forEach((comment, index) => {
+    if (comment.author !== author || present.has(comment.id)) return;
+    let at = result.length;
+    if (comment.replyTo) {
+      const last = result.findLastIndex(c => c.id === comment.replyTo || c.replyTo === comment.replyTo);
+      if (last === -1) return;
+      at = last + 1;
+    } else {
+      for (let i = index - 1; i >= 0; i--) {
+        const before = result.findIndex(c => c.id === remote[i]?.id);
+        if (before !== -1) {
+          at = before + 1;
+          while (at < result.length && result[at]?.replyTo) at++;
+          break;
+        }
+      }
+    }
+    result.splice(at, 0, comment);
+    present.add(comment.id);
+    changed = true;
+  });
+  const roots = new Set(result.filter(c => !c.replyTo).map(c => c.id));
+  const kept = result.filter(c => !c.replyTo || roots.has(c.replyTo) || !local.some(l => l.id === c.replyTo));
+  if (kept.length !== result.length) changed = true;
+  return { comments: kept, changed };
+}

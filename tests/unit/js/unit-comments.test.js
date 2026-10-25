@@ -13,7 +13,7 @@ import { EditorState } from '@codemirror/state';
 import { xml } from '@codemirror/lang-xml';
 import {
   readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus, editComment,
-  deleteComment, newCommentId, threadStatus, LIST_TYPE
+  deleteComment, newCommentId, threadStatus, mergeAuthorComments, LIST_TYPE
 } from '../../../app/src/modules/unit-comments.js';
 import {
   elementAt, elementPath, elementByPath, resolveAnchor, FingerprintCache
@@ -155,5 +155,47 @@ describe('element anchors', () => {
     // the unit removed and the path gone: detached
     const removed = makeState(DOC.replace(/\s*<bibl>Gamma 2003<\/bibl>/, '').replace(/\s*<bibl>Beta 2002<\/bibl>/, ''));
     assert.strictEqual(resolveAnchor(removed, anchor, cache), null);
+  });
+});
+
+describe('mergeAuthorComments', () => {
+  /** @returns {import('../../../app/src/modules/unit-comments.js').UnitComment[]} */
+  const base = () => {
+    /** @type {import('../../../app/src/modules/unit-comments.js').UnitComment[]} */
+    const comments = [];
+    const own = addThread(comments, { author: 'owner', text: 'mine', path: '/TEI/text/body', fingerprint: null, when: '2026-10-25T09:00:00Z' });
+    const theirs = addThread(comments, { author: 'rev', text: 'theirs', path: '/TEI/text/body', fingerprint: null, when: '2026-10-25T09:01:00Z' });
+    addReply(comments, theirs.id, { author: 'owner', text: 'my reply', when: '2026-10-25T09:02:00Z' });
+    addReply(comments, own.id, { author: 'rev', text: 'their reply', when: '2026-10-25T09:03:00Z' });
+    return comments;
+  };
+
+  it('takes over new, edited and deleted comments and status changes of the author', () => {
+    const local = base();
+    let remote = structuredClone(local);
+    const own = /** @type {any} */ (remote[0]);
+    const theirs = /** @type {any} */ (remote.find(c => c.text === 'theirs'));
+    // the author resolves the owner's thread, edits their thread, deletes their reply and adds a thread
+    setThreadStatus(remote, own.id, 'resolved', { who: 'rev', when: '2026-10-25T10:00:00Z' });
+    editComment(remote, theirs.id, 'theirs, edited', { who: 'rev', when: '2026-10-25T10:01:00Z' });
+    remote = deleteComment(remote, /** @type {any} */ (remote.find(c => c.text === 'their reply')).id);
+    const added = addThread(remote, { author: 'rev', text: 'new thread', path: '/TEI/text/back', fingerprint: null, when: '2026-10-25T10:02:00Z' });
+    // meanwhile the owner edited their own comment locally: kept
+    editComment(local, /** @type {any} */ (local[0]).id, 'mine, edited', { who: 'owner', when: '2026-10-25T10:03:00Z' });
+
+    const { comments, changed } = mergeAuthorComments(local, remote, 'rev');
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(comments.map(c => c.text), ['mine, edited', 'theirs, edited', 'my reply', 'new thread']);
+    const threads = buildThreads(comments);
+    assert.strictEqual(threads[0]?.status, 'resolved');
+    assert.strictEqual(comments.find(c => c.id === added.id)?.author, 'rev');
+  });
+
+  it('removes the replies of a thread the author deleted, and reports no change otherwise', () => {
+    const local = base();
+    assert.strictEqual(mergeAuthorComments(local, structuredClone(local), 'rev').changed, false);
+    const remote = local.filter(c => c.text !== 'theirs' && c.text !== 'my reply');
+    const { comments } = mergeAuthorComments(local, remote, 'rev');
+    assert.deepStrictEqual(comments.map(c => c.text), ['mine', 'their reply']);
   });
 });

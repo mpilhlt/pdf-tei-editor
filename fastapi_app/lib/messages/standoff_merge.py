@@ -355,6 +355,12 @@ def apply_contribution(stored: str, incoming: str, username: str, fullname: str,
     return xml
 
 
+def comment_list(xml: str) -> str | None:
+    """The markup of the unit comment list (`listAnnotation[@type="unit-comment"]`), or None."""
+    span = _list_span(xml, COMMENT_LIST_TYPE)
+    return xml[span[0]:span[2]] if span else None
+
+
 def review_annotation(xml: str, username: str) -> str | None:
     """
     The markup of a user's review annotation (`annotation[@resp="#username"]` of the unit review

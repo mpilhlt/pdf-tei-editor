@@ -10,7 +10,7 @@ Right-click an element and choose **Comment…** at the top of the context menu,
 
 The comment belongs to the innermost element at the position you clicked: right-clicking the text of a `<title>` inside a `<bibl>` comments on the `<title>`. Click on the `<bibl>` tag itself to comment on the whole entry. Comments can only be attached to elements, not to parts of a text.
 
-You do not need write access: in a document you cannot edit (for example someone else's version or a gold file), annotators and reviewers comment, reply, resolve, and edit or delete their own comments as usual, while the text stays read-only. The server saves only your own comments and status changes into the document (see [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit)). Superseded versions cannot be commented.
+You do not need write access: in a document you cannot edit (for example someone else's version or a gold file), annotators and reviewers comment, reply, resolve, and edit or delete their own comments as usual, while the text stays read-only. The server saves only your own comments and status changes into the document (see [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit)). Superseded versions cannot be commented. If the owner has the document open, your comments appear in their editor right away, without a reload.
 
 Type `@` to mention someone: the people listed in the document's `respStmt` and its owner are offered for completion. A mentioned user receives the comment as a [message](messages.md).
 

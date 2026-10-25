@@ -31,7 +31,7 @@ from ..lib.core.dependencies import (
 )
 from ..lib.core.sessions import SessionManager
 from ..lib.messages.comment_edit import ThreadNotFoundError, _element_span, add_reply
-from ..lib.messages.standoff_merge import apply_contribution, review_annotation
+from ..lib.messages.standoff_merge import apply_contribution, comment_list, review_annotation
 from ..lib.messages.standoff_reader import COMMENT_LIST_TYPE, UnitComment, find_standoff_list, read_comments
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_messages import ReplyRequest, ReplyResponse, StandOffSaveRequest, StandOffSaveResponse
@@ -123,6 +123,8 @@ async def save_standoff_contribution(
         replies = _new_replies(stored, merged)
         review = review_annotation(merged, username)
         review_changed = review != review_annotation(stored, username)
+        comments_xml = comment_list(merged)
+        comments_changed = comments_xml != comment_list(stored)
 
     events: list[tuple[str, dict]] = [("fileDataChanged", {"reason": "standoff", "stable_id": stable_id})]
     if review_changed:
@@ -138,6 +140,13 @@ async def save_standoff_contribution(
         })
         for thread_id, comment_id, markup in replies
     ]
+    if comments_changed:
+        # editors that have the file open take the user's comments over without reloading it; after
+        # the replies, which they announce
+        events.append(("commentsChanged", {
+            "stable_id": stable_id, "author": username, "author_name": user.get("fullname") or username,
+            "list_xml": comments_xml,
+        }))
     for event_type, data in events:
         broadcast_to_other_sessions(
             sse_service=sse_service, session_manager=session_manager, current_session_id=session_id or "",
