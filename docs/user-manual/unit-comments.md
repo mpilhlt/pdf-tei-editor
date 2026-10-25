@@ -17,7 +17,7 @@ Type `@` to mention someone: the people listed in the document's `respStmt` and 
 ## Seeing comments
 
 - A **speech bubble** left of the line numbers marks the first line of each commented element: blue while the comment is open, grey when it is resolved. A small number shows how many comments start on that line. Hover over the bubble to read them.
-- The **status bar** shows the number of open comments. Click it to go to the next one.
+- The **status bar** shows the number of open comments. Click it to show them in the diagnostics drawer.
 - Open comments are listed in the **diagnostics drawer**, with the buttons **Reply** and **Resolve**. `F8` jumps to the next entry there.
 
 ## Replying, resolving, editing

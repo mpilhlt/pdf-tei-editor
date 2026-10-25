@@ -2,9 +2,10 @@
  * Diagnostics drawer end-to-end tests
  *
  * Injects diagnostics into the XML editor and checks that the drawer over the
- * PDF viewer lists them, slides out (leaving a floating button) and back in
- * depending on the focus, selects
- * the text of a clicked diagnostic, and applies or dismisses the checked
+ * PDF viewer lists them, slides out (leaving a floating button) when the PDF
+ * viewer is focused, stays retracted when the XML editor is focused, and is
+ * expanded by loading a document, the floating button and the statusbar
+ * meters; selects the text of a clicked diagnostic, and applies or dismisses the checked
  * diagnostics (switching off the merge view). Also checks that the drawer,
  * which stays open permanently, does not hide the help icon.
  *
@@ -154,7 +155,13 @@ test.describe('Diagnostics drawer', () => {
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
+
+      // loading a document expands a retracted drawer
+      const pdfBox = await page.locator('#pdf-viewer-wrapper').boundingBox();
+      await page.mouse.click(pdfBox.x + pdfBox.width - 20, pdfBox.y + pdfBox.height / 2);
+      await expect.poll(async () => (await drawerState(page)).retracted).toBe(true);
       await loadEditableVersion(page);
+      await expect.poll(async () => (await drawerState(page)).retracted).toBe(false);
 
       await injectDiagnostics(page);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix A', 'fix B']);
@@ -178,6 +185,21 @@ test.describe('Diagnostics drawer', () => {
       await expect(page.locator('.diagnostics-drawer-button sl-badge')).toHaveText('3');
       await page.locator('.diagnostics-drawer-button').click();
       await expect.poll(async () => (await drawerState(page)).panelVisible).toBe(true);
+      await expect.poll(async () => (await drawerState(page)).buttonVisible).toBe(false);
+
+      // focus in the XML editor does not expand the retracted drawer
+      await page.mouse.click(box.x + box.width - 20, box.y + box.height / 2);
+      await expect.poll(async () => (await drawerState(page)).retracted).toBe(true);
+      await page.locator('#codemirror-container .cm-content').first().click();
+      await page.waitForTimeout(300);
+      expect((await drawerState(page)).retracted).toBe(true);
+      expect((await drawerState(page)).buttonVisible).toBe(true);
+
+      // clicking a statusbar meter expands it (the meter is hidden without review data)
+      await page.evaluate(() => {
+        /** @type {HTMLElement} */ (document.querySelector('[data-testid="unit-comment-meter"]')).click();
+      });
+      await expect.poll(async () => (await drawerState(page)).retracted).toBe(false);
       await expect.poll(async () => (await drawerState(page)).buttonVisible).toBe(false);
 
       // clicking a diagnostic selects its text in the editor
