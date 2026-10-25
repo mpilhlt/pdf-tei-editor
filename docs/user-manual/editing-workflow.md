@@ -2,6 +2,8 @@
 
 The right panel of the PDF-TEI Editor contains a CodeMirror-based XML editor. This page describes the editor UI and the main editing workflows.
 
+For the recommended division of labour between annotators and reviewers, from the extraction to the approval of a document, see [Review Workflow](review-workflow.md).
+
 ## Editor Layout
 
 The XML editor panel has three chrome areas around the editing surface:
@@ -161,7 +163,7 @@ The text itself stays read-only: you can place the cursor, select and use the re
 
 Only the current version of a document can be reviewed and commented. A superseded version (see [Superseded versions](#superseded-versions)) takes no reviews or comments, so that feedback always goes to the version that is being worked on.
 
-The workflow between an annotator and a reviewer:
+The workflow between an annotator and a reviewer (see [Review Workflow](review-workflow.md) for a detailed, step-by-step version with screenshots):
 
 1. The annotator works on their version.
 2. The reviewer opens it, marks units as not OK and comments, in the annotator's version. The annotator gets a [message](messages.md) for each not-OK mark and each comment addressed to them.
