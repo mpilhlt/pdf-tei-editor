@@ -27,7 +27,7 @@ import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
-import { isGoldFile, userHasRole, userIsAnnotatorOnly } from '../modules/acl-utils.js'
+import { isGoldFile, standOffContributions, userHasRole, userIsAnnotatorOnly } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { THEMES, getTheme } from '../modules/codemirror/editor-themes.js'
 import { notify } from '../modules/sl-utils.js'
@@ -120,6 +120,12 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {UIPart<HTMLDivElement, xslViewerOverlayPart>} xslViewerOverlay - XSL transformation overlay (added by xsl-viewer plugin)
  */
 
+/** Reasons of `fileDataChanged` events after which a read-only document is reloaded */
+const FOLLOWED_SAVES = ['file_saved', 'standoff', 'comment_reply'];
+
+/** Delay before a read-only document follows a save, so that a series of autosaves reloads it once */
+const FOLLOW_DELAY_MS = 2000;
+
 class XmlEditorPlugin extends Plugin {
   static extensionPoints = [ep.validation.inProgress];
 
@@ -136,7 +142,7 @@ class XmlEditorPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'xmleditor',
-      deps: ['logger', 'client']
+      deps: ['logger', 'client', 'sse']
     });
     this.#xmlEditor = new NavXmlEditor('codemirror-container');
     this.#draftStore = new XmlEditorDraftStore({ logger: console });
@@ -227,6 +233,9 @@ class XmlEditorPlugin extends Plugin {
   /** Whether node navigation is on, i.e. an xpath is selected. Focus mode only works then */
   #navigationActive = false;
 
+  /** @type {ReturnType<typeof setTimeout>|undefined} Pending reload after another user's save */
+  #followTimer = undefined;
+
   // State for node navigation
   /** @type {string|null} */
   #currentVariant = null;
@@ -254,7 +263,8 @@ class XmlEditorPlugin extends Plugin {
   /** @type {string|null} */
   #lastLoadedStableId = null;
   /** @type {boolean} */
-  #annotatorEditGuardActive = false;
+  /** @type {'text-only'|'no-standoff'|null} The active edit guard */
+  #editGuard = null;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the NavXmlEditor API.
@@ -311,10 +321,13 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
+    // Indentation (and its separator) and cursor position go first when space is short,
+    // before the centre navigation (0) and the review/comment meters
     const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right');
+    const statusbarRightPriorities = [-2, -2, -1]; // indentation, separator, cursor position
     statusbarRightWidgets.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        this.#statusbar.add(widget, 'right', index + 1);
+        this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
       }
     });
 
@@ -820,6 +833,15 @@ class XmlEditorPlugin extends Plugin {
     // save dirty editor content after an update
     this.#xmlEditor.on('editorUpdateDelayed', async () => await this.#saveIfDirty());
 
+    // a document the user cannot edit follows the saves of other users
+    this.getDependency('sse').addEventListener('fileDataChanged', (/** @type {MessageEvent} */ event) => {
+      try {
+        this.#onFileDataChanged(JSON.parse(event.data));
+      } catch (error) {
+        this.#logger.warn('Cannot handle fileDataChanged: ' + String(error));
+      }
+    });
+
     // xml validation events - consolidated from start.js
     this.#xmlEditor.on('editorXmlNotWellFormed', diagnostics => {
       this.#logger.debug('XML is not well-formed', diagnostics);
@@ -893,10 +915,14 @@ class XmlEditorPlugin extends Plugin {
     for (const results of (contributions || [])) {
       const items = (results || []).filter(item => item?.element instanceof HTMLElement);
       // Prepend items in reverse so they appear in declaration order at the top of the menu
-      for (const item of [...items].filter(i => i.prepend).reverse()) {
+      // Rows go above the "History" row, in declaration order
+      for (const item of [...items].filter(i => i.row).reverse()) {
+        this.#contextMenu.prependRow(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
+      }
+      for (const item of [...items].filter(i => i.prepend && !i.row).reverse()) {
         this.#contextMenu.prependItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
-      for (const item of items.filter(i => !i.prepend)) {
+      for (const item of items.filter(i => !i.prepend && !i.row)) {
         this.#contextMenu.addItem(item.element, item.onBeforeShow ? { onBeforeShow: item.onBeforeShow } : undefined);
       }
     }
@@ -1003,9 +1029,12 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // update the editor read-only state
-    if (state.editorReadOnly !== this.#xmlEditor.isReadOnly()) {
-      this.#xmlEditor.setReadOnly(state.editorReadOnly);
-      this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    // users who cannot edit a document may still review and comment it: keep the cursor
+    const contributions = standOffContributions(state.user, state.xml);
+    const allowCursor = state.editorReadOnly && !state.connectionLost && (contributions.reviews || contributions.comments);
+    if (state.editorReadOnly !== this.#xmlEditor.isReadOnly() || allowCursor !== this.#xmlEditor.isCursorAllowed()) {
+      this.#xmlEditor.setReadOnly(state.editorReadOnly, { allowCursor });
+      this.#logger.debug(`Setting editor read-only state to ${state.editorReadOnly} (cursor: ${allowCursor})`);
     }
 
     // Soft, UI-only guard restricting pure annotators to editing <text>'s content
@@ -1014,10 +1043,22 @@ class XmlEditorPlugin extends Plugin {
     // leading processing instructions; contentOnly further excludes <text>'s own tags
     // (e.g. its xml:lang attribute), so only its children are editable. Does not affect
     // the whole-document read-only state above and never blocks programmatic writes.
-    const shouldGuardToTextOnly = userIsAnnotatorOnly(state.user);
-    if (shouldGuardToTextOnly !== this.#annotatorEditGuardActive) {
-      this.#xmlEditor.setEditGuardXpath(shouldGuardToTextOnly ? '//tei:text' : null, { mode: 'whitelist', contentOnly: true });
-      this.#annotatorEditGuardActive = shouldGuardToTextOnly;
+    // Users other than admins may not edit TEI/standOff by hand: it holds machine data
+    // (e.g. unit review marks), written by plugins through programmatic transactions, which the
+    // guard never blocks; undo and redo of those stay possible (for annotators too, who add unit
+    // comments to the standOff and the respStmt to the header).
+    const editGuard = userIsAnnotatorOnly(state.user)
+      ? 'text-only'
+      : (state.user && !userHasRole(state.user, ['admin']) ? 'no-standoff' : null);
+    if (editGuard !== this.#editGuard) {
+      if (editGuard === 'text-only') {
+        this.#xmlEditor.setEditGuardXpath('//tei:text', { mode: 'whitelist', contentOnly: true, allowUndo: true });
+      } else if (editGuard === 'no-standoff') {
+        this.#xmlEditor.setEditGuardXpath('/tei:TEI/tei:standOff', { mode: 'blacklist', allowUndo: true });
+      } else {
+        this.#xmlEditor.setEditGuardXpath(null);
+      }
+      this.#editGuard = editGuard;
     }
 
     this.#updateDiffButtons();
@@ -1274,7 +1315,69 @@ class XmlEditorPlugin extends Plugin {
    *     editor is NOT marked clean, so the next delayed-update cycle will save again.
    *   - On save errors the user is notified via toast AND the persistent widget.
    */
+  /**
+   * Schedules an update of the open document when another user saved it while it is read-only for
+   * this user, e.g. when an annotator changed the text in response to a review.
+   * @param {{reason?: string, stable_id?: string}} data - Payload of the `fileDataChanged` event
+   */
+  #onFileDataChanged(data) {
+    if (!data.stable_id || !FOLLOWED_SAVES.includes(data.reason ?? '')) return;
+    if (data.stable_id !== this.state?.xml || !this.state.editorReadOnly) return;
+    clearTimeout(this.#followTimer);
+    const stableId = data.stable_id;
+    this.#followTimer = setTimeout(() => this.#followSave(stableId), FOLLOW_DELAY_MS);
+  }
+
+  /**
+   * Updates the open read-only document from the server: applies the changed ranges, or reloads it
+   * keeping the cursor line and the scroll position. The user's own reviews and comments are saved
+   * first; the server keeps them.
+   * @param {string} stableId
+   */
+  async #followSave(stableId) {
+    if (stableId !== this.state?.xml || !this.state.editorReadOnly || this.#xmlEditor.isMergeViewActive()) return;
+    // not while the user types into a field, e.g. a review comment: it would be closed
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.matches('input, textarea') && !active.closest('.cm-editor')) {
+      this.#followTimer = setTimeout(() => this.#followSave(stableId), FOLLOW_DELAY_MS);
+      return;
+    }
+    await this.#saveIfDirty();
+    if (stableId !== this.state?.xml || this.#xmlEditor.isDirty()) return;
+    let xml;
+    try {
+      const response = await fetch(`/api/files/${stableId}`, { cache: 'no-store' });
+      if (!response.ok) return;
+      xml = await response.text();
+    } catch (error) {
+      this.#logger.warn('Cannot reload the document: ' + String(error));
+      return;
+    }
+    if (stableId !== this.state?.xml || this.#xmlEditor.isDirty() || xml === this.#xmlEditor.getEditorContent()) return;
+    clearTimeout(this.#draftSaveTimeout ?? undefined);
+    this.#draftSaveTimeout = null;
+    this.#draftStore.clearDraft(stableId);
+    // only the changed ranges, so that folds, popovers and the scroll position stay
+    if (await this.#xmlEditor.applyRemoteContent(xml)) {
+      notify('The document was updated by another user.', 'primary', 'arrow-clockwise');
+      testLog('XML_EDITOR_FOLLOWED_SAVE', { stableId, incremental: true });
+      return;
+    }
+    const view = this.#xmlEditor.getView();
+    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+    const scrollTop = view.scrollDOM.scrollTop;
+    await this.#xmlEditor.loadXml(xml);
+    const target = view.state.doc.line(Math.min(line, view.state.doc.lines));
+    view.dispatch({ selection: { anchor: target.from } });
+    view.scrollDOM.scrollTop = scrollTop;
+    notify('The document was updated by another user.', 'primary', 'arrow-clockwise');
+    testLog('XML_EDITOR_FOLLOWED_SAVE', { stableId, incremental: false });
+  }
+
   async #saveIfDirty() {
+    // the DOM tree, which is saved, lags behind the editor content by up to 1 s. Synced before the
+    // file is determined: another save (e.g. of a new version) may change it in the meantime
+    if (this.#xmlEditor.isDirty() && this.state?.xml !== this.#hashBeingSaved) await this.#xmlEditor.syncIfChanged();
     const fileHash = this.state?.xml;
     const isHashBeingSaved = fileHash === this.#hashBeingSaved;
     const hasXmlTree = !!this.#xmlEditor.getXmlTree();
@@ -1314,6 +1417,7 @@ class XmlEditorPlugin extends Plugin {
     // during the await and avoid the race where we would otherwise mark a dirty editor
     // clean (dropping unsaved keystrokes).
     const versionAtStart = this.#xmlEditor.getDocumentVersion();
+    const changesAtStart = this.#xmlEditor.getChangeCount();
 
     try {
       this.#hashBeingSaved = fileHash;
@@ -1334,7 +1438,8 @@ class XmlEditorPlugin extends Plugin {
       }
 
       const versionAtEnd = this.#xmlEditor.getDocumentVersion();
-      if (versionAtEnd === versionAtStart) {
+      // the version only advances 1 s after a change: compare the change count too
+      if (versionAtEnd === versionAtStart && this.#xmlEditor.getChangeCount() === changesAtStart) {
         // No edits happened during the save — safe to mark clean.
         this.#xmlEditor.markAsClean();
         // Server has an authoritative copy; drop the local draft to avoid stale restore prompts.
@@ -1420,7 +1525,10 @@ class XmlEditorPlugin extends Plugin {
    */
   #flushDraftNow() {
     const stableId = this.#lastLoadedStableId ?? this.state?.xml ?? null;
-    if (!stableId) return;
+    // only unsaved work, not a document that is still loading (the editor counts as dirty until
+    // it is ready): a draft of the loaded content would be offered for restore when the server
+    // content changes, e.g. when a read-only document follows another user's save
+    if (!stableId || !this.#xmlEditor.isReady() || !this.#xmlEditor.isDirty()) return;
     try {
       const content = this.#xmlEditor.getEditorContent();
       if (!content) return;

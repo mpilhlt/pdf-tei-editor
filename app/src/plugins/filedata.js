@@ -17,7 +17,7 @@ import ep from '../extension-points.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { userIsAdmin } from '../modules/acl-utils.js'
+import { standOffContributions, userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
 
 // Register templates
@@ -316,7 +316,9 @@ class FiledataPlugin extends Plugin {
    * If `state.editorReadOnly` is true and `saveAsNewVersion` is not set, this method throws
    * a {@link ReadOnlyDocumentError} instead of overwriting the document (issue #420). Saving
    * as a new version is still allowed while read-only, since it creates a separate file
-   * rather than modifying the read-only one.
+   * rather than modifying the read-only one. Users who may review or comment the read-only
+   * document (see `standOffContributions()`) save their review marks and comments instead: the
+   * server takes only those from the text.
    *
    * @param {string} fileHash The hash identifying the XML file on the server
    * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
@@ -327,8 +329,13 @@ class FiledataPlugin extends Plugin {
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
     this.#logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+    let standOffOnly = false;
     if (this.state?.editorReadOnly && !saveAsNewVersion) {
-      throw new ReadOnlyDocumentError('Cannot save: the document is read-only.');
+      const contributions = standOffContributions(this.state.user, fileHash);
+      if (this.state.connectionLost || !(contributions.reviews || contributions.comments)) {
+        throw new ReadOnlyDocumentError('Cannot save: the document is read-only.');
+      }
+      standOffOnly = true;
     }
     if (!this.#xmlEditor.getXmlTree()) {
       throw new NoValidXmlError(
@@ -341,6 +348,10 @@ class FiledataPlugin extends Plugin {
         this.getDependency('xmleditor').addHeaderbarWidget(this.savingStatusWidget, 'right', 3);
       }
       const xmlContent = this.#xmlEditor.getXML()
+      if (standOffOnly) {
+        const response = await this.#client.apiClient.filesSaveStandOff(fileHash, { xml_string: xmlContent });
+        return { file_id: response.stable_id, status: response.status };
+      }
       const result = await this.#client.saveXml(xmlContent, fileHash, saveAsNewVersion);
       return /** @type {{file_id: string, status: string}} */ (result);
     } finally {

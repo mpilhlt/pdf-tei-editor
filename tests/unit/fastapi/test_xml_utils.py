@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.utils.xml_utils import encode_xml_entities, EncodeOptions, strip_namespaces
+from fastapi_app.lib.utils.xml_utils import encode_xml_entities, EncodeOptions, strip_namespaces, parse_untrusted_xml
 
 
 class TestXmlEntityEncoding(unittest.TestCase):
@@ -227,6 +227,24 @@ class TestStripNamespaces(unittest.TestCase):
         self.assertIn('<p>First paragraph</p>', result)
         self.assertNotIn('xmlns:', result)
         self.assertNotIn('<tei:', result)
+
+
+class TestParseUntrustedXml(unittest.TestCase):
+    """Parsing user-supplied XML without external entity expansion."""
+
+    def test_external_entity_is_not_resolved(self):
+        secret = Path(__file__).parent / "xxe-probe.txt"
+        secret.write_text("SECRET", encoding="utf-8")
+        try:
+            xml = f'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "{secret.as_uri()}">]><r>&x;</r>'
+            root = parse_untrusted_xml(xml)
+            self.assertNotIn("SECRET", "".join(root.itertext()))
+        finally:
+            secret.unlink()
+
+    def test_parses_str_and_bytes(self):
+        self.assertEqual(parse_untrusted_xml("<r><a/></r>").tag, "r")
+        self.assertEqual(parse_untrusted_xml("<r>ä</r>".encode("utf-8")).text, "ä")
 
 
 if __name__ == '__main__':

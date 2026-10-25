@@ -1,6 +1,7 @@
 /**
  * @file Frontend Extension: Dashboard
- * Shows a two-column dashboard in a dialog after login (once per login session, not on page
+ * Shows a two-column dashboard in a dialog after login (once per login session, not when the
+ * page was opened with a link to a backend plugin view, not on page
  * reloads). Other plugins contribute boxes through the `dashboard.contributions` extension
  * point; the dashboard is only shown if at least one box is contributed. An info button in
  * the toolbar, after the file drawer button, reopens it.
@@ -181,6 +182,7 @@ export function isValidContribution(item) {
 export default class DashboardExtension extends FrontendExtensionPlugin {
   constructor(/** @type {PluginContext} */ context) {
     super(context, { name: 'dashboard', deps: ['config'] });
+    this.#openedWithPluginLink = new URLSearchParams(window.location.hash.slice(1)).has('plugin');
   }
 
   static extensionPoints = ['toolbar.contentItems'];
@@ -199,6 +201,13 @@ export default class DashboardExtension extends FrontendExtensionPlugin {
 
   /** Whether `ready()` has run, so later session changes are logins */
   #isReady = false;
+
+  /**
+   * Whether the page was opened with a link to a backend plugin view (`#plugin=...`, see
+   * backend-plugins.js), which the dashboard must not cover. Read on construction, before
+   * backend-plugins removes the parameter from the URL hash.
+   */
+  #openedWithPluginLink = false;
 
   /**
    * @param {Object} state - Initial application state
@@ -271,6 +280,11 @@ export default class DashboardExtension extends FrontendExtensionPlugin {
   async #showAfterLogin() {
     const sessionId = this.state?.sessionId;
     if (!sessionId || this.uiStorage.get('shownForSession') === sessionId) {
+      return;
+    }
+    if (this.#openedWithPluginLink) {
+      // the linked plugin view is shown instead; don't show the dashboard on reloads either
+      this.uiStorage.set('shownForSession', sessionId);
       return;
     }
     const showOnLogin = await this.getDependency('config').get('plugin.dashboard.show-on-login', true);

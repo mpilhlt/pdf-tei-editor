@@ -111,6 +111,8 @@ When a document is read-only, you'll see an indicator in the status bar explaini
 - "Read-only (version file - annotator role required)" - You need annotator role to edit versions
 - "Read-only (owned by [username])" - The document's editability is set to owner-only
 
+Read-only does not prevent reviews and comments: annotators comment and reviewers review documents they cannot edit, unless the version is superseded (see [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit)).
+
 ### Creating Your Own Version
 
 If you cannot edit a document due to permissions, you can create your own version:

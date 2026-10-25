@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Sample</title>
+        <respStmt>
+          <persName xml:id="jdoe">Jane Doe</persName>
+          <resp>Annotator</resp>
+        </respStmt>
+        <respStmt>
+          <persName xml:id="asmith">Anna Smith</persName>
+          <resp>Reviewer</resp>
+        </respStmt>
+        <respStmt>
+          <persName xml:id="bkim">Bo Kim</persName>
+          <resp>Commenter</resp>
+        </respStmt>
+      </titleStmt>
+    </fileDesc>
+  </teiHeader>
+  <standOff>
+    <listAnnotation type="unit-review" subtype="fp-sha256-8-v1">
+      <note type="unit-xpath">./back/listBibl/*</note>
+      <note type="summary">units=5 ok=1 not-ok=2 disputed=0 open=2</note>
+      <annotation xml:id="ur-asmith" motivation="assessing" target="#xpath(//text)" resp="#asmith">
+        <revisionDesc><change when="2026-10-20T10:00:00Z"/></revisionDesc>
+        <note type="ok">1f14d510</note>
+        <note type="not-ok" n="de7bf13a">@jdoe the year is missing &amp; the title</note>
+        <note type="not-ok" n="a5cc5d33.2"/>
+        <note type="was-not-ok" n="07c1a1b4">Wrong page</note>
+      </annotation>
+      <annotation xml:id="ur-bkim" motivation="assessing" target="#xpath(//text)" resp="#bkim">
+        <revisionDesc><change when="2026-10-21T10:00:00Z"/></revisionDesc>
+        <note type="final-ok">a5cc5d33.2</note>
+      </annotation>
+      <annotation xml:id="ur-llm-openai-gpt" motivation="assessing" target="#xpath(//text)">
+        <respStmt><resp>LLM Reviewer</resp><name type="software">GPT (OpenAI)</name></respStmt>
+        <revisionDesc><change when="2026-10-22T08:30:00Z"/></revisionDesc>
+        <note type="not-ok" n="de7bf13a">Missing year</note>
+        <note type="not-ok" n="a5cc5d33">Duplicate entry</note>
+      </annotation>
+    </listAnnotation>
+    <listAnnotation type="unit-comment" subtype="fp-sha256-8-v1">
+      <annotation xml:id="uc-aaa111" motivation="commenting" target="#xpath(/TEI/text/back/listBibl/bibl[2])" resp="#asmith">
+        <revisionDesc>
+          <change when="2026-10-23T09:00:00Z" who="#asmith"/>
+        </revisionDesc>
+        <note type="fingerprint">de7bf13a</note>
+        <note type="comment">@jdoe is "ibid." correct here? Mail me at a@b.org, not @nobody.</note>
+      </annotation>
+      <annotation xml:id="uc-aaa112" motivation="replying" target="#uc-aaa111" resp="#jdoe">
+        <revisionDesc>
+          <change when="2026-10-23T09:30:00Z" who="#jdoe"/>
+          <change when="2026-10-23T09:40:00Z" who="#jdoe" status="edited"/>
+        </revisionDesc>
+        <note type="comment">Yes, it points to the previous entry. @bkim?</note>
+      </annotation>
+      <annotation xml:id="uc-aaa113" motivation="replying" target="#uc-aaa111" resp="#bkim">
+        <revisionDesc>
+          <change when="2026-10-23T10:00:00Z" who="#bkim"/>
+        </revisionDesc>
+        <note type="comment">Agreed.</note>
+      </annotation>
+      <annotation xml:id="uc-bbb221" motivation="commenting" target="#xpath(/TEI/text/back/listBibl/bibl[4])" resp="#jdoe">
+        <revisionDesc>
+          <change when="2026-10-23T11:00:00Z" who="#jdoe"/>
+          <change when="2026-10-23T12:00:00Z" who="#asmith" status="resolved"/>
+        </revisionDesc>
+        <note type="fingerprint">a5cc5d33</note>
+        <note type="comment">Check the &lt;title&gt;, @asmith.</note>
+      </annotation>
+      <annotation xml:id="uc-ccc331" motivation="replying" target="#uc-missing" resp="#jdoe">
+        <revisionDesc>
+          <change when="2026-10-23T13:00:00Z" who="#jdoe"/>
+        </revisionDesc>
+        <note type="comment">Orphan reply</note>
+      </annotation>
+    </listAnnotation>
+  </standOff>
+  <text>
+    <front/>
+    <back>
+      <listBibl>
+        <bibl type="journal"   n="1">Smith, A. (2019). <title level="a">On  things</title>. <!-- remark -->J. Stuff &amp; More, 12.</bibl>
+        <bibl>Ibid., p.
+          12.</bibl>
+        <bibl><author>Kim</author>, <date when="2001">2001</date></bibl>
+        <bibl>Doe 2020</bibl>
+        <bibl>Doe 2020</bibl>
+      </listBibl>
+    </back>
+  </text>
+</TEI>

@@ -404,6 +404,10 @@ LOG_LEVEL=INFO
       tracebacks.push({ start, end });
       start = end;
     }
+    if (this.dbWatchEvents?.length) {
+      console.error('\n[DEBUG] Changes of SQLite files while the server ran:');
+      for (const event of this.dbWatchEvents) console.error(`  ${event}`);
+    }
     if (tracebacks.length === 0) return;
     const { start, end } = tracebacks[0];
     console.error(`\n[ERROR] ${tracebacks.length} tracebacks in the server log, the first one with the 20 log lines before it:`);
@@ -517,6 +521,7 @@ LOG_LEVEL=INFO
       cleanDb = true,
       verbose = false,
       env = {},
+      beforeStart,
     } = options;
 
     // Step 0: Resolve ports
@@ -547,6 +552,11 @@ LOG_LEVEL=INFO
     // Apply any additional environment variables to test runner process
     Object.assign(process.env, env);
 
+    // Step 2.5: e.g. import fixture files, with the server's environment. Not after the start:
+    // closing the last connection of another process deletes the -wal and -shm files that the
+    // server has mapped, and the server's connections then fail with "disk I/O error"
+    if (beforeStart) await beforeStart();
+
     // Step 3: Start server
     await this.startServerProcess(verbose);
 
@@ -564,7 +574,73 @@ LOG_LEVEL=INFO
       throw new Error('Server health check failed');
     }
 
+    this.startDbWatch();
     return this.serverUrl;
+  }
+
+  /**
+   * DEBUG: records when SQLite files in the database directory are removed, created or replaced
+   * while the server runs, to find what causes "disk I/O error" in CI (the -shm file of
+   * metadata.db disappears). Printed with the server tracebacks.
+   */
+  startDbWatch() {
+    /** @type {Map<string, number>} inode by file name */
+    const known = new Map();
+    /** @type {string[]} */
+    this.dbWatchEvents = [];
+    const scan = async () => {
+      let names;
+      try {
+        names = (await fs.readdir(this.dbDir)).filter(n => /\.db(-wal|-shm)?$/.test(n));
+      } catch {
+        return;
+      }
+      /** @type {Map<string, number>} */
+      const current = new Map();
+      for (const name of names) {
+        try {
+          current.set(name, (await fs.stat(join(this.dbDir, name))).ino);
+        } catch {
+          // removed in between
+        }
+      }
+      /** @type {string[]} */
+      const changes = [];
+      for (const [name, ino] of known) {
+        if (!current.has(name)) changes.push(`${name} removed (inode ${ino})`);
+        else if (current.get(name) !== ino) changes.push(`${name} replaced (inode ${ino} -> ${current.get(name)})`);
+      }
+      for (const [name, ino] of current) {
+        if (!known.has(name)) changes.push(`${name} created (inode ${ino})`);
+      }
+      known.clear();
+      for (const [name, ino] of current) known.set(name, ino);
+      if (!changes.length || this.dbWatchFirstScan) {
+        this.dbWatchFirstScan = false;
+        return;
+      }
+      let lastLogLine = '';
+      try {
+        const log = (await fs.readFile(this.logFile, 'utf-8')).trimEnd().split('\n');
+        lastLogLine = log[log.length - 1] ?? '';
+      } catch {
+        // no log yet
+      }
+      this.dbWatchEvents.push(`${new Date().toISOString()} ${changes.join(', ')}; last server log line: ${lastLogLine}`);
+    };
+    let busy = false;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        await scan();
+      } finally {
+        busy = false;
+      }
+    };
+    this.dbWatchFirstScan = true;
+    tick();
+    this.dbWatchTimer = setInterval(tick, 100);
   }
 
   /**
@@ -581,6 +657,7 @@ LOG_LEVEL=INFO
     }
 
     logger.info('Cleaning up...');
+    clearInterval(this.dbWatchTimer);
 
     // Stop FastAPI server
     if (this.serverProcess) {

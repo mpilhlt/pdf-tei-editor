@@ -699,6 +699,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
  * @property {string} [description] - Optional description shown as tooltip
  * @property {string[]} state_params - Required frontend state fields to pass as parameters
  * @property {string} [icon] - Optional Shoelace/Bootstrap icon name shown as the menu item's prefix icon
+ * @property {boolean} [url_openable] - If true, the endpoint can be opened from a link (`#plugin=<plugin-id>/<name>`)
  */
 
 /**

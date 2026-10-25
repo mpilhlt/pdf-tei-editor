@@ -8,8 +8,27 @@ No Flask or FastAPI dependencies.
 import re
 
 import xml.sax.saxutils as saxutils
+from lxml import etree
 from html import unescape
 from typing import TypedDict, Optional
+
+
+def parse_untrusted_xml(xml: str | bytes) -> etree._Element:
+    """
+    Parses XML that users supplied, without resolving entities, loading DTDs or network access
+    (no XML external entity expansion).
+
+    Args:
+        xml: The XML document
+
+    Returns:
+        The root element
+
+    Raises:
+        etree.XMLSyntaxError: If the XML is not well-formed
+    """
+    parser = etree.XMLParser(resolve_entities=False, load_dtd=False, no_network=True)
+    return etree.fromstring(xml.encode("utf-8") if isinstance(xml, str) else xml, parser)
 
 
 class EncodeOptions(TypedDict, total=False):

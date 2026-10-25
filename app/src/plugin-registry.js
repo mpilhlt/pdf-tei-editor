@@ -29,6 +29,7 @@ export { default as InferenceSettingsPlugin } from './plugins/inference-settings
 export { default as InfoPlugin } from './plugins/info.js';
 export { default as LayoutPlugin } from './plugins/layout.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
+export { default as MessagesPlugin } from './plugins/messages.js';
 export { default as MoveFilesPlugin } from './plugins/move-files.js';
 export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
 export { default as PluginAdminPlugin } from './plugins/plugin-admin.js';
@@ -42,6 +43,8 @@ export { default as TeiToolsPlugin } from './plugins/tei-tools.js';
 export { default as TeiValidationPlugin } from './plugins/tei-validation.js';
 export { default as ToolbarPlugin } from './plugins/toolbar.js';
 export { default as ToolsPlugin } from './plugins/tools.js';
+export { default as UnitCommentsPlugin } from './plugins/unit-comments.js';
+export { default as UnitReviewPlugin } from './plugins/unit-review.js';
 export { default as UrlHashStatePlugin } from './plugins/url-hash-state.js';
 export { default as UserAccountPlugin } from './plugins/user-account.js';
 export { default as XmlAnnotationPlugin } from './plugins/xml-annotation.js';
@@ -72,6 +75,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   info: import('./plugins/info.js').default,
  *   layout: import('./plugins/layout.js').default,
  *   logger: import('./plugins/logger.js').default,
+ *   messages: import('./plugins/messages.js').default,
  *   "move-files": import('./plugins/move-files.js').default,
  *   pdfviewer: import('./plugins/pdfviewer.js').default,
  *   "plugin-admin": import('./plugins/plugin-admin.js').default,
@@ -85,6 +89,8 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   "tei-validation": import('./plugins/tei-validation.js').default,
  *   toolbar: import('./plugins/toolbar.js').default,
  *   tools: import('./plugins/tools.js').default,
+ *   "unit-comments": import('./plugins/unit-comments.js').default,
+ *   "unit-review": import('./plugins/unit-review.js').default,
  *   "url-hash-state": import('./plugins/url-hash-state.js').default,
  *   "user-account": import('./plugins/user-account.js').default,
  *   "xml-annotation": import('./plugins/xml-annotation.js').default,

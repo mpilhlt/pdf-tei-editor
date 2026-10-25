@@ -43,8 +43,8 @@
  * @property {(message: any) => void} error
  */
 
-import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
+import { EditorState, EditorSelection, Compartment, Transaction, StateEffect, Annotation } from "@codemirror/state";
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk, diff } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
@@ -85,6 +85,21 @@ import { focusModeExtension, focusRangeField, setFocusRangeEffect, focusActionsF
  * @fires XMLEditor#editorShowMergeView - Fired when the merge view is shown
  * @fires XMLEditor#editorHideMergeView - Fired when the merge view is removed
  */
+/** Marks transactions that apply another user's saved changes (see {@link XMLEditor#applyRemoteContent}) */
+export const remoteChange = Annotation.define();
+
+/**
+ * Whether an editor update applies another user's saved changes, which are not the user's own edits.
+ * @param {ViewUpdate} update
+ * @returns {boolean}
+ */
+export function isRemoteUpdate(update) {
+  return update.transactions.some(tr => tr.annotation(remoteChange) === true);
+}
+
+/** Above this share of changed characters, {@link XMLEditor#applyRemoteContent} gives up */
+const REMOTE_CHANGE_MAX_SHARE = 0.5;
+
 export class XMLEditor extends EventEmitter {
 
   // Event name constants, no longer needed with the typed EventEmitter but kept for backwards compatibility
@@ -107,6 +122,8 @@ export class XMLEditor extends EventEmitter {
   #view // the EditorView instance
 
   #documentVersion = 0 // internal counter to track changes in the document
+  #changeCount = 0 // content changes, counted at once
+  #syncedChangeCount = 0 // the change count of the content last synced into the DOM tree
 
   /**
    * Encapsulates DOM <-> syntax tree synchronisation and preserves the last-known
@@ -195,6 +212,7 @@ export class XMLEditor extends EventEmitter {
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
   #readOnlyCompartment = new Compartment()
+  #cursorAllowed = false
   #editGuardCompartment = new Compartment()
 
   #xmlTagSyncCompartment = new Compartment()
@@ -457,20 +475,38 @@ export class XMLEditor extends EventEmitter {
    * a merge view's built-in per-chunk accept/reject controls, which dispatch transactions
    * programmatically (tagged "accept"/"revert") rather than through DOM input. A
    * transactionFilter is added to block those transactions outright while read-only.
+   *
+   * With `allowCursor`, the content stays focusable (cursor, selection, keyboard shortcuts), and the
+   * filter rejects every change made by the user instead, except undo and redo: plugins still write
+   * programmatically, e.g. review marks and comments of users who cannot edit the document.
    * @param {Boolean} value
+   * @param {{allowCursor?: boolean}} [options]
    */
-  async setReadOnly(value) {
+  async setReadOnly(value, { allowCursor = false } = {}) {
     this.#editorIsReadOnly = Boolean(value)
-    const extensions = [EditorView.editable.of(!this.#editorIsReadOnly)];
+    this.#cursorAllowed = this.#editorIsReadOnly && allowCursor
+    const cursorAllowed = this.#cursorAllowed
+    const extensions = [EditorView.editable.of(!this.#editorIsReadOnly || cursorAllowed)];
     if (this.#editorIsReadOnly) {
-      extensions.push(EditorState.transactionFilter.of(
-        tr => (tr.isUserEvent("accept") || tr.isUserEvent("revert")) ? [] : tr
-      ));
+      extensions.push(EditorState.transactionFilter.of(tr => {
+        if (tr.isUserEvent("accept") || tr.isUserEvent("revert")) return []
+        if (cursorAllowed && tr.docChanged && tr.annotation(Transaction.userEvent) !== undefined
+          && !tr.isUserEvent("undo") && !tr.isUserEvent("redo")) return []
+        return tr
+      }));
     }
     this.#view.dispatch({
       effects: [this.#readOnlyCompartment.reconfigure(extensions)]
     });
     await this.emit("editorReadOnly", this.#editorIsReadOnly)
+  }
+
+  /**
+   * Returns true if the editor is read-only but keeps the cursor (see {@link setReadOnly}).
+   * @returns {boolean}
+   */
+  isCursorAllowed() {
+    return this.#cursorAllowed
   }
 
   /**
@@ -496,14 +532,20 @@ export class XMLEditor extends EventEmitter {
    *   matched element's own opening/closing tags (via `foldInside`) - e.g. with `whitelist` this
    *   allows editing a `<text>` element's content while still rejecting edits to `<text>`'s own
    *   attributes or closing tag.
+   * @param {boolean} [options.allowUndo=false] - When true, undo and redo pass the guard, e.g. so
+   *   that programmatic changes inside the guarded element (which are never intercepted) can be
+   *   undone by the user.
    */
-  setEditGuardXpath(xpath, { mode = 'blacklist', contentOnly = false } = {}) {
+  setEditGuardXpath(xpath, { mode = 'blacklist', contentOnly = false, allowUndo = false } = {}) {
     if (!xpath) {
       this.#view.dispatch({ effects: this.#editGuardCompartment.reconfigure([]) });
       return;
     }
     const filter = EditorState.transactionFilter.of(tr => {
       if (!tr.docChanged || tr.annotation(Transaction.userEvent) === undefined) {
+        return tr;
+      }
+      if (allowUndo && (tr.isUserEvent('undo') || tr.isUserEvent('redo'))) {
         return tr;
       }
       let referenceNode;
@@ -615,6 +657,31 @@ export class XMLEditor extends EventEmitter {
     } finally {
       this.#view.dom.style.visibility = '';
     }
+  }
+
+  /**
+   * Applies another user's version of the document as changes to the changed ranges only, so that
+   * folds, popovers and the scroll position stay. The change is not the user's own edit: it does not
+   * make the editor dirty and cannot be undone. Gives up when the editor is dirty, the new text is
+   * not well-formed or most of the document changed; the caller then loads the document instead.
+   * @param {string} xml - The new content
+   * @returns {Promise<boolean>} Whether the changes were applied
+   */
+  async applyRemoteContent(xml) {
+    if (this.#editorIsDirty || this.isMergeViewActive()) return false;
+    const parsed = new DOMParser().parseFromString(xml, "application/xml");
+    if (parsed.getElementsByTagName("parsererror").length) return false;
+    const current = this.#view.state.doc.toString();
+    if (current === xml) return true;
+    const changes = diff(current, xml, { scanLimit: 10000, timeout: 200 });
+    const changed = changes.reduce((sum, c) => sum + Math.max(c.toA - c.fromA, c.toB - c.fromB), 0);
+    if (changed > REMOTE_CHANGE_MAX_SHARE * Math.max(current.length, xml.length)) return false;
+    this.#view.dispatch({
+      changes: changes.map(c => ({ from: c.fromA, to: c.toA, insert: xml.slice(c.fromB, c.toB) })),
+      annotations: [remoteChange.of(true), Transaction.addToHistory.of(false)]
+    });
+    await this.syncIfChanged();
+    return true;
   }
 
   /**
@@ -885,6 +952,25 @@ export class XMLEditor extends EventEmitter {
    */
   getDocumentVersion() {
     return this.#documentVersion;
+  }
+
+  /**
+   * Returns the number of content changes since the document was loaded. Unlike
+   * {@link getDocumentVersion}, which counts the delayed syncs, it changes with every change at
+   * once, so that a save can tell whether the content changed while it was in flight.
+   * @returns {number}
+   */
+  getChangeCount() {
+    return this.#changeCount;
+  }
+
+  /**
+   * Syncs the DOM tree with the editor content if the content changed since the last sync (which
+   * happens 1 s after a change), e.g. before the DOM tree is serialized for saving.
+   * @returns {Promise<void>}
+   */
+  async syncIfChanged() {
+    if (this.#syncedChangeCount !== this.#changeCount) await this.sync();
   }
 
   /**
@@ -1483,7 +1569,9 @@ export class XMLEditor extends EventEmitter {
    */
   async sync() {
     try {
+      const changeCount = this.#changeCount;
       const result = await this.#domSync.sync(this.#view);
+      this.#syncedChangeCount = changeCount;
 
       if (result.status === 'wellFormed') {
         this.#logger.debug("Document was updated and is well-formed.")
@@ -1643,7 +1731,9 @@ export class XMLEditor extends EventEmitter {
       return
     }
 
-    this.#editorIsDirty = true;
+    // another user's saved changes leave the editor as clean as it was
+    if (!isRemoteUpdate(update)) this.#editorIsDirty = true;
+    this.#changeCount += 1;
 
     // inform the listeners
     await this.emit("editorUpdate", update)

@@ -18,6 +18,18 @@
         <p class="help-text">Creates a personal version copy and records the revision there instead of in the original. Required when you do not own this document. Otherwise, select ony if you want to create an separate version.</p>
         <sl-input name="copyLabel" label="Label" size="small" style="margin-top: 6px;"
           help-text="A short label that identifies this version in the document list (e.g. 'v1 janedoe')."></sl-input>
+        <div name="clearReviewsSection" style="margin-top: 6px;">
+          <sl-checkbox name="clearReviews">
+            Clear reviews
+          </sl-checkbox>
+          <p class="help-text">Removes all unit review marks from the new version, so that its review starts from scratch. The original keeps its marks.</p>
+        </div>
+        <div name="keepCommentsSection" style="margin-top: 6px;">
+          <sl-checkbox name="keepComments" checked>
+            Keep comments
+          </sl-checkbox>
+          <p class="help-text">Copies the comments on elements into the new version. Uncheck to start the new version without comments. The original keeps its comments.</p>
+        </div>
       </div>
 
       <sl-divider style="margin: 0;"></sl-divider>

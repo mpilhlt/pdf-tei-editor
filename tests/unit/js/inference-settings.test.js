@@ -90,7 +90,51 @@ describe('InferenceSettingsPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
     assert.strictEqual(plugin.name, 'inference-settings');
-    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'api-keys']);
+    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'api-keys', 'dialog']);
+  });
+});
+
+describe('InferenceSettingsPlugin admin confirmation', () => {
+  beforeEach(() => { notifyCalls.length = 0; });
+
+  /**
+   * @param {boolean} confirmed
+   */
+  function makeAdminPlugin(confirmed) {
+    const plugin = makePlugin();
+    plugin._submenu = document.createElement('sl-menu');
+    const providers = [{ id: 'kisski', label: 'KISSKI', models: [{ id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }] }];
+    plugin._providers = providers;
+    plugin._populateSubmenu(providers);
+    plugin._isAdmin = () => true;
+    const confirm = mock.fn(async () => confirmed);
+    const llmUpdateDefaultModel = mock.fn(async () => {});
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm };
+      if (name === 'client') return { apiClient: { llmUpdateDefaultModel } };
+      return undefined;
+    };
+    return { plugin, confirm, llmUpdateDefaultModel, item: plugin._submenu.querySelector('sl-menu-item') };
+  }
+
+  it('asks before setting the default for all users and sets it when confirmed', async () => {
+    const { plugin, confirm, llmUpdateDefaultModel, item } = makeAdminPlugin(true);
+
+    await plugin._onSelect({ detail: { item } });
+
+    assert.strictEqual(confirm.mock.calls[0].arguments[0], 'Set KISSKI/Gemma 3 as default model for all users?');
+    assert.deepStrictEqual(llmUpdateDefaultModel.mock.calls[0].arguments[0], { provider_id: 'kisski', model_id: 'gemma-3' });
+    assert.strictEqual(notifyCalls[0][0], 'Default inference model is now: KISSKI/Gemma 3');
+  });
+
+  it('leaves the default unchanged when cancelled', async () => {
+    const { plugin, llmUpdateDefaultModel, item } = makeAdminPlugin(false);
+
+    await plugin._onSelect({ detail: { item } });
+
+    assert.strictEqual(llmUpdateDefaultModel.mock.calls.length, 0);
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.strictEqual(item.checked, false);
   });
 });
 
@@ -830,6 +874,7 @@ describe('InferenceSettingsPlugin default vs session model', () => {
           ? { provider_id: opts.configured.providerId, model_id: opts.configured.modelId } : null,
         llmUpdateDefaultModel: async (body) => { updates.push(body); if (opts.updateImpl) return opts.updateImpl(body); },
       } };
+      if (name === 'dialog') return { confirm: async () => true };
       throw new Error(`unexpected dependency: ${name}`);
     };
     plugin._populateSubmenu(providers);

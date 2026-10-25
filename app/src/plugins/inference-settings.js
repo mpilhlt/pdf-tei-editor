@@ -5,8 +5,8 @@
  * LLM-consuming plugin can read via getDefaultModel() and fall back to
  * unless it has its own explicit per-call override.
  *
- * Two levels: the installation-wide default, which only admins can set (it
- * is stored in the server config, GET/PUT /api/v1/llm/default-model), and a
+ * Two levels: the installation-wide default, which only admins can set,
+ * after confirming (it is stored in the server config, GET/PUT /api/v1/llm/default-model), and a
  * per-session choice any user can make - e.g. when the default is busy -
  * kept in sessionStorage and taking precedence over the default. The server
  * only lists the models the current user may use (for non-admins: free
@@ -55,12 +55,13 @@ const SESSION_MODEL_KEY = 'inference-settings.sessionModel';
 export class InferenceSettingsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'inference-settings', deps: ['client', 'tools', 'api-keys'] });
+    super(context, { name: 'inference-settings', deps: ['client', 'tools', 'api-keys', 'dialog'] });
   }
 
   get #client() { return this.getDependency('client') }
   get #tools() { return this.getDependency('tools') }
   get #apiKeys() { return this.getDependency('api-keys') }
+  get #dialog() { return this.getDependency('dialog') }
 
   /**
    * Last successful GET /api/v1/llm/providers result. Empty until the
@@ -391,6 +392,10 @@ export class InferenceSettingsPlugin extends Plugin {
     if (!this._isAdmin()) {
       this.setSessionModel(providerId, modelId);
       notify(`Inference model for this session is now: ${name}`);
+      return;
+    }
+    if (!await this.#dialog.confirm(`Set ${name} as default model for all users?`, 'Default Model')) {
+      this._afterSelectionChange();
       return;
     }
     try {

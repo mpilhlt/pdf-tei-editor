@@ -23,6 +23,7 @@ class FakeFrontendExtensionPlugin {
   }
 }
 global.FrontendExtensionPlugin = FakeFrontendExtensionPlugin;
+global.window = { location: { hash: '' } };
 
 const { default: DashboardExtension } = await import('../extensions/dashboard.js');
 
@@ -74,5 +75,22 @@ describe('DashboardExtension automatic opening', () => {
     const empty = buildExtension('session-1', false);
     await empty.ready();
     assert.strictEqual(empty.uiStorage.get('shownForSession'), undefined);
+  });
+
+  it('does not open when the page was opened with a link to a plugin view', async () => {
+    global.window.location.hash = '#plugin=annotation-progress/show_progress&collection=c1';
+    try {
+      const ext = buildExtension('session-1');
+      await ext.ready();
+      assert.strictEqual(ext.opened, 0);
+      // nor on a reload within the same login session
+      global.window.location.hash = '';
+      const reloaded = buildExtension('session-1');
+      reloaded.uiStorage = ext.uiStorage;
+      await reloaded.ready();
+      assert.strictEqual(reloaded.opened, 0);
+    } finally {
+      global.window.location.hash = '';
+    }
   });
 });

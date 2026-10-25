@@ -381,6 +381,9 @@ def delete_user_endpoint(
         # Save to file
         save_entity_data(settings.db_dir, 'users', users_data)
 
+        from ..lib.messages.service import get_message_store
+        get_message_store(settings.db_dir).delete_recipient(username)
+
         logger.info(f"User '{username}' deleted by admin '{current_user.get('username')}'")
 
         return {"success": True, "message": f"User '{username}' deleted successfully"}

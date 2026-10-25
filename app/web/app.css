@@ -343,6 +343,79 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
+/* "Target XML" and "Compare with version" menus: superseded ancestors of a lineage are connected
+   to the current versions above them by a line with an arrow pointing up (see file-selection.js) */
+#toolbar sl-select[name="xml"],
+#toolbar sl-select[name="diff"] {
+  --lineage-x: 2em;
+  --lineage-color: var(--sl-color-neutral-400);
+}
+
+sl-option.lineage-ancestor {
+  position: relative;
+}
+
+/* indent the label past the line; the check mark moves to the end of the row */
+sl-option.lineage-ancestor::part(base) {
+  padding-inline-start: calc(var(--lineage-x) + 1em);
+}
+
+sl-option.lineage-ancestor::part(checked-icon) {
+  order: 1;
+  padding-inline-start: var(--sl-spacing-2x-small);
+}
+
+/* vertical line, ending in the middle of the last ancestor */
+sl-option.lineage-ancestor::before {
+  z-index: 1;
+  content: "";
+  position: absolute;
+  left: var(--lineage-x);
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--lineage-color);
+}
+
+sl-option.lineage-ancestor-last::before {
+  bottom: 50%;
+}
+
+/* horizontal tick towards the label */
+sl-option.lineage-ancestor::after {
+  z-index: 1;
+  content: "";
+  position: absolute;
+  left: var(--lineage-x);
+  top: 50%;
+  width: 0.8em;
+  border-top: 1px solid var(--lineage-color);
+}
+
+/* row between the current versions and their ancestors: the line's upper end with an arrowhead */
+.lineage-arrow {
+  position: relative;
+  height: 0.9em;
+}
+
+.lineage-arrow::before {
+  content: "";
+  position: absolute;
+  left: var(--lineage-x);
+  top: 0.15em;
+  bottom: 0;
+  border-left: 1px solid var(--lineage-color);
+}
+
+.lineage-arrow::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--lineage-x) - 0.25em + 0.5px);
+  top: 0;
+  border: 0.25em solid transparent;
+  border-top: 0;
+  border-bottom: 0.35em solid var(--lineage-color);
+}
+
 sl-button-group[label] {
   position: relative;
   /* To contain the absolute positioning of the :before pseudo-element */
@@ -554,6 +627,50 @@ sl-menu[name="pluginsMenu"] small {
 
 .xml-editor-context-menu__history-btn--reject:hover:not(:disabled) {
   background-color: #1976d2;
+}
+
+/* Unit review row of the XML editor context menu */
+.unit-review-menu-row {
+  border-bottom: solid 1px var(--sl-color-neutral-200);
+}
+
+.unit-review-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  color: white;
+}
+
+.unit-review-menu-btn[hidden] {
+  display: none;
+}
+
+.unit-review-menu-btn--ok {
+  background-color: #2f9e57;
+  border-color: #267f46;
+}
+
+.unit-review-menu-btn--ok:hover:not(:disabled) {
+  background-color: #267f46;
+}
+
+.unit-review-menu-btn--not-ok {
+  background-color: #d64545;
+  border-color: #b33636;
+}
+
+.unit-review-menu-btn--not-ok:hover:not(:disabled) {
+  background-color: #b33636;
+}
+
+.unit-review-menu-btn--ok-outline {
+  color: #2f9e57;
+  border-color: #2f9e57;
+}
+
+.unit-review-menu-btn--remove,
+.unit-review-menu-btn--nav {
+  color: var(--sl-color-neutral-700);
 }
 
 .xml-editor-context-menu__shortcut {

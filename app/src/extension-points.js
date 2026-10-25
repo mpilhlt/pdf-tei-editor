@@ -137,7 +137,8 @@ const extensionPoints = {
     /**
      * Contribute items to the XML editor right-click context menu.
      * Called by XmlEditorPlugin.start() on all plugins that declare this extension point.
-     * Function signature: () => Array<{element: HTMLElement, group?: string}>
+     * Function signature: () => Array<{element: HTMLElement, prepend?: boolean, row?: boolean, onBeforeShow?: (ctx: {readOnly: boolean, pos: number}) => void}>
+     * `row: true` adds the element as a row above the "History" row (see XmlEditorContextMenu.prependRow)
      */
     contextMenuItems: "xmlEditor.contextMenuItems",
   },

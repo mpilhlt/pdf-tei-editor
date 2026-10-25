@@ -19,7 +19,10 @@ import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
-import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { userHasRole, isGoldFile, isFrozenFile } from '../modules/acl-utils.js'
+import { removeUnitReviews, parseSummary, LIST_TYPE as UNIT_REVIEW_LIST_TYPE } from '../modules/unit-review.js'
+import { LIST_TYPE as UNIT_COMMENT_LIST_TYPE } from '../modules/unit-comments.js'
+import { removeStandOffLists } from '../modules/standoff-list.js'
 
 
 // Register templates
@@ -304,7 +307,8 @@ class DocumentActionsPlugin extends Plugin {
         const isOwnerBasedMode = this.getDependency('access-control').getMode() === 'owner-based'
         const fileData = getFileDataById(state.xml, state.fileData)
         const isOwner = fileData?.item?.created_by === userData.username
-        const forceCopy = isOwnerBasedMode && !isOwner
+        // a superseded (frozen) version can only be continued in a new version
+        const forceCopy = (isOwnerBasedMode && !isOwner) || isFrozenFile(state.xml)
         dlg.options.saveToNewCopySection.saveToNewCopy.checked = forceCopy
         dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 
@@ -312,8 +316,18 @@ class DocumentActionsPlugin extends Plugin {
           .filter(a => !a.is_gold_standard && a.variant === state.variant).length
         dlg.options.saveToNewCopySection.copyLabel.value = `v${nonGoldCount + 1} (${userData.username})`
 
+        // "Clear reviews" is offered to reviewers only, and only for a new version of a document with review marks
+        const canClearReviews = userHasRole(userData, ["admin", "reviewer"])
+          && new RegExp(`<listAnnotation\\s[^>]*type="${UNIT_REVIEW_LIST_TYPE}"`).test(this.#xmlEditor.getView().state.doc.toString())
+        dlg.options.saveToNewCopySection.clearReviewsSection.clearReviews.checked = false
+        // "Keep comments" is offered for a new version of a document with unit comments
+        const hasComments = new RegExp(`<listAnnotation\\s[^>]*type="${UNIT_COMMENT_LIST_TYPE}"`).test(this.#xmlEditor.getView().state.doc.toString())
+        dlg.options.saveToNewCopySection.keepCommentsSection.keepComments.checked = true
         const updateCopyLabelVisibility = () => {
-          dlg.options.saveToNewCopySection.copyLabel.style.display = dlg.options.saveToNewCopySection.saveToNewCopy.checked ? '' : 'none'
+          const checked = dlg.options.saveToNewCopySection.saveToNewCopy.checked
+          dlg.options.saveToNewCopySection.copyLabel.style.display = checked ? '' : 'none'
+          dlg.options.saveToNewCopySection.clearReviewsSection.style.display = checked && canClearReviews ? '' : 'none'
+          dlg.options.saveToNewCopySection.keepCommentsSection.style.display = checked && hasComments ? '' : 'none'
         }
         updateCopyLabelVisibility()
         dlg.options.saveToNewCopySection.saveToNewCopy.addEventListener('sl-change', updateCopyLabelVisibility, { once: false })
@@ -322,7 +336,7 @@ class DocumentActionsPlugin extends Plugin {
         let currentStatus = 'draft'
         let lastChangeDesc = ''
         if (xmlDoc) {
-          const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
+          const lastChange = xmlDoc.querySelector('teiHeader > revisionDesc > change:last-of-type')
           if (lastChange) {
             currentStatus = lastChange.getAttribute('status') || 'draft'
             const descEl = lastChange.querySelector('desc')
@@ -417,7 +431,22 @@ class DocumentActionsPlugin extends Plugin {
 
     dlg.hide()
 
+    if (dlg.status.value === 'approved' && !(await this.#confirmOpenReviews())) {
+      this.#logger.info("User cancelled: open unit reviews")
+      return
+    }
+
+    // the DOM tree is synced with a delay after each edit; the header changes below are made on the
+    // tree and replace the editor content, so bring it up to date first
+    await this.#xmlEditor.sync()
+
     const saveToNewCopy = dlg.options.saveToNewCopySection.saveToNewCopy.checked
+    const clearReviews = saveToNewCopy
+      && dlg.options.saveToNewCopySection.clearReviewsSection.style.display !== 'none'
+      && dlg.options.saveToNewCopySection.clearReviewsSection.clearReviews.checked
+    const clearComments = saveToNewCopy
+      && dlg.options.saveToNewCopySection.keepCommentsSection.style.display !== 'none'
+      && !dlg.options.saveToNewCopySection.keepCommentsSection.keepComments.checked
 
     /** @type {RespStmt} */
     const respStmt = {
@@ -447,10 +476,12 @@ class DocumentActionsPlugin extends Plugin {
 
         await this.addTeiHeaderInfo(respStmt, /** @type {Edition} */ ({ title: undefined, note: undefined }), revisionChange)
 
-        if (sourceVariant) {
+        if (sourceVariant || clearReviews || clearComments) {
           const xmlDoc = this.#xmlEditor.getXmlTree()
           if (xmlDoc) {
-            tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
+            if (sourceVariant) tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
+            if (clearReviews && removeUnitReviews(xmlDoc)) testLog('UNIT_REVIEWS_CLEARED', { fileId: currentFileId })
+            if (clearComments && removeStandOffLists(xmlDoc, UNIT_COMMENT_LIST_TYPE)) testLog('UNIT_COMMENTS_CLEARED', { fileId: currentFileId })
             await this.#xmlEditor.updateEditorFromXmlTree()
           }
         }
@@ -511,6 +542,28 @@ class DocumentActionsPlugin extends Plugin {
     } finally {
       this.#ui.documentActions.saveRevision.disabled = false
     }
+  }
+
+  /**
+   * Asks for confirmation if the unit review summary stored in the document reports units that
+   * are not OK, disputed or not reviewed yet.
+   * @returns {Promise<boolean>} True if there are none or the user confirms
+   */
+  async #confirmOpenReviews() {
+    const match = new RegExp(`<listAnnotation\\s[^>]*type="${UNIT_REVIEW_LIST_TYPE}"[\\s\\S]*?<note type="summary">([^<]*)</note>`).exec(this.#xmlEditor.getView().state.doc.toString())
+    const summary = match ? parseSummary(match[1] ?? '') : null
+    if (!summary) return true
+    const problems = [
+      summary.notOk && `${summary.notOk} not OK`,
+      summary.disputed && `${summary.disputed} disputed`,
+      summary.open && `${summary.open} not reviewed`
+    ].filter(Boolean)
+    if (!problems.length) return true
+    testLog('UNIT_REVIEW_APPROVAL_WARNING', { ...summary })
+    return this.getDependency('dialog').confirm(
+      `The unit review of this document has units that are ${problems.join(', ')}. Set the status to "approved" anyway?`,
+      'Open reviews'
+    )
   }
 
   /**

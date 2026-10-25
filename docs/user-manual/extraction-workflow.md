@@ -27,7 +27,7 @@ Choose the extractor, which in most cases will be "Grobid" or "Llamore". This wi
 
 - The "Grobid" extractor has different extraction models ("segmentation", "reference", etc.), which each constitute a variant. You can also select a custom "flavour", tied to a particular type of training data.
 - the "LLamore" extractor lets you select "Instructions" which are added to th prompt and can be edited by clicking on the third button in the button group. 
-- The "LLamore" extractor uses the LLM model shown in the dialog, which is the one selected under Tools > Default Model. Administrators set the default model for everyone; other users can pick another permitted model for their session.
+- The "LLamore" extractor uses the LLM model shown in the dialog, which is the one selected under Tools > Default Model. Administrators set the default model for everyone (the app asks them to confirm this); other users can pick another permitted model for their session.
 
 Then, click on "Extract", this starts the extraction and produces a first version of the "gold" file, which refers to the "gold standard" dataset with the corrected and reviewed annotation data.
 

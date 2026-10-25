@@ -195,6 +195,18 @@ export function isGoldFile(hash) {
 }
 
 /**
+ * Checks if a file is frozen: another version was copied from it, so it is part of the
+ * history and read-only for everyone (see docs/history/2026-10-24-version-freeze.md)
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+export function isFrozenFile(hash) {
+  if (!hash) return false
+  const fileData = getFileDataById(hash)
+  return fileData?.type === 'artifact' && fileData.item.is_frozen === true
+}
+
+/**
  * Checks if a file hash represents a version file
  * @param {string} hash - The file hash identifier
  * @returns {boolean}
@@ -303,6 +315,11 @@ export function canEditFile(user, fileId) {
       return false
     }
 
+    // Frozen versions are read-only for everyone
+    if (isFrozenFile(fileId)) {
+      return false
+    }
+
     // Admin users can edit everything
     if (userIsAdmin(user)) {
       return true
@@ -346,4 +363,17 @@ export function canEditFile(user, fileId) {
     // Default to allowing edit on error to avoid breaking functionality
     return true
   }
+}
+/**
+ * What a user may add to a document they cannot edit: reviewers set review marks and comment,
+ * annotators comment. The server takes only the user's own review annotation and comments from the
+ * editor's text (`PUT /api/v1/files/{stable_id}/standoff`). Frozen versions take no contributions.
+ * @param {UserData|null} user - Current user object
+ * @param {string|null|undefined} fileId - The file identifier
+ * @returns {{reviews: boolean, comments: boolean}}
+ */
+export function standOffContributions(user, fileId) {
+  if (!user || !fileId || !getFileDataById(fileId) || isFrozenFile(fileId)) return { reviews: false, comments: false }
+  const reviews = userHasReviewerRole(user) || userIsAdmin(user)
+  return { reviews, comments: reviews || userHasAnnotatorRole(user) }
 }

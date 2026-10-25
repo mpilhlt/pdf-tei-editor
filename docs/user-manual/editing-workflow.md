@@ -2,6 +2,8 @@
 
 The right panel of the PDF-TEI Editor contains a CodeMirror-based XML editor. This page describes the editor UI and the main editing workflows.
 
+For the recommended division of labour between annotators and reviewers, from the extraction to the approval of a document, see [Review Workflow](review-workflow.md).
+
 ## Editor Layout
 
 The XML editor panel has three chrome areas around the editing surface:
@@ -27,7 +29,8 @@ Left side: the XML / Visual annotation mode toggle (only visible for variants th
 | **Header** switch | When document has a `<teiHeader>` | Fold or unfold the TEI header section |
 | Validate (✓ icon) | Always | Trigger a schema validation run and show errors inline |
 | Undo / Redo | Always | Undo or redo editor changes |
-| TEI Wizard (wand icon) | Always | Run TEI-specific utilities (currently: pretty-print) |
+| TEI Wizard (wand icon) | Always | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
+| Review (clipboard icon) | Always | Switch [unit review](unit-review.md) mode on or off |
 | Revision history (clock icon) | When document has `<revisionDesc>` | Open the revision history panel |
 | XSL viewer | When XSL viewer plugin is active | Preview the document rendered via XSLT |
 | Save revision (floppy disk) | Document loaded, annotator role | Record the current state in the document's revision history |
@@ -132,9 +135,42 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Change description** — a short note describing what changed or the current annotation state. This is stored in the TEI `<revisionDesc>`.
 - **Status** — the annotation lifecycle stage (e.g. *draft*, *annotation*, *review*, *done*). Available options depend on your role.
 - **Save to a new personal version** — creates a copy so you can work without touching the original. Required if you are not the document owner in owner-based access control mode.
+- **Clear reviews** — shown with *Save to a new personal version* to reviewers when the document has [unit review](unit-review.md) marks; the new version starts without them.
+- **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
 
+### Superseded versions
+
+As soon as a new version is saved from a version, the source version is superseded and becomes read-only for everyone, including administrators. This also applies to the Gold Standard. The status bar shows *Read-only (superseded by a newer version)*. To change a superseded version, use **Save revision** with *Save to a new personal version*, which is preselected for such versions. Deleting the newer version makes the source version editable again.
+
+The **Target XML** and **Compare with version** menus group the versions by line: the current versions that were copied from the same version come first, followed by the superseded versions they descend from, joined to them by a line with an arrow pointing up, and a divider separates one line from the next. Superseded versions can be opened (read-only), compared with the current one, or copied into a new version. The file drawer lists only the latest version of each line.
+
+Each saved revision records a short hash of the document text in its `<change xml:id="h-…">`, chained to the hash of the previous revision. This makes it possible to check that the text of a recorded revision has not been changed afterwards.
+
 ---
+
+## Reviewing and Commenting Documents You Cannot Edit
+
+Reviews and comments do not need edit access, so that nobody has to make a copy just to give feedback:
+
+| Role | In a document they can see but not edit |
+| --- | --- |
+| Annotator | Add [unit comments](unit-comments.md), reply to them, edit and delete their own comments |
+| Reviewer | The same, and set [unit review](unit-review.md) marks |
+| Admin | Everything (admins can edit every document that is not superseded) |
+
+The text itself stays read-only: you can place the cursor, select and use the review and comment shortcuts, but not type. Your marks and comments are saved as usual; the server takes only your own marks and comments from the document and leaves everything else as it is. The owner and other users keep theirs: when the owner saves the document, the marks and comments that others added meanwhile are kept.
+
+Only the current version of a document can be reviewed and commented. A superseded version (see [Superseded versions](#superseded-versions)) takes no reviews or comments, so that feedback always goes to the version that is being worked on.
+
+The workflow between an annotator and a reviewer (see [Review Workflow](review-workflow.md) for a detailed, step-by-step version with screenshots):
+
+1. The annotator works on their version.
+2. The reviewer opens it, marks units as not OK and comments, in the annotator's version. The annotator gets a [message](messages.md) for each not-OK mark and each comment addressed to them.
+3. The annotator corrects the units and answers the comments, again in the same version. A reviewer who has the version open sees the changes a few seconds after each save: when another user saves a document you cannot edit, the changed parts are updated in place, so the scroll position, folded sections and open popovers stay (your own unsaved marks and comments are saved first; if most of the document changed, it is reloaded instead). In the other direction, the reviewer's marks and comments appear in the annotator's open version right away, without a reload: a unit turns green as soon as the reviewer marks it OK, and new, edited, deleted, resolved and reopened comment threads show up as well.
+4. When the reviewer is satisfied, or wants to take over for the final polishing, the reviewer saves the document to a new personal version (Save Revision → *Save to a new personal version*), which supersedes the annotator's version.
+
+The LLM Reviewer records its marks only in documents you can edit.
 
 ## Revision History
 

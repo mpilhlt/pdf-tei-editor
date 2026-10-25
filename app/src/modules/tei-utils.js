@@ -139,14 +139,12 @@ export function addRevisionChange(xmlDoc, revisionChange) {
   }
 
   const currentDateString = new Date().toISOString();
-  let revisionDescElements = xmlDoc.getElementsByTagName('revisionDesc');
-  let revisionDescElement;
-  if (!revisionDescElements.length) {
+  // Stand-off annotations have revisionDesc elements of their own, so look in teiHeader only
+  let revisionDescElement = xmlDoc.querySelector('teiHeader > revisionDesc');
+  if (!revisionDescElement) {
     const teiHeader = getTeiHeader(xmlDoc);
     revisionDescElement = xmlDoc.createElementNS(teiNamespaceURI, 'revisionDesc');
     teiHeader.appendChild(revisionDescElement);
-  } else {
-    revisionDescElement = revisionDescElements[0];
   }
 
   // Create the <change> element
@@ -183,7 +181,7 @@ export function addRevisionChange(xmlDoc, revisionChange) {
  * @returns {string|null}
  */
 export function getRevisionLabel(xmlDoc) {
-  const notes = xmlDoc.querySelectorAll('revisionDesc change note[type="label"]')
+  const notes = xmlDoc.querySelectorAll('teiHeader > revisionDesc > change > note[type="label"]')
   if (notes.length) {
     return notes[notes.length - 1].textContent.trim() || null
   }
@@ -653,9 +651,9 @@ export function getDocumentMetadata(xmlDoc) {
     doi: '//tei:teiHeader//tei:idno[@type="DOI"]',
     fileref: '//tei:teiHeader/tei:fileDesc/@xml:id',
     variant_id: '//tei:application[@type="extractor"]//tei:label[@type="variant-id"]',
-    last_update: '//tei:revisionDesc/tei:change[@when][last()]/@when',
-    last_updated_by: '//tei:revisionDesc/tei:change[@who][last()]/@who',
-    last_status: '//tei:revisionDesc/tei:change[@status][last()]/@status',
+    last_update: '//tei:teiHeader/tei:revisionDesc/tei:change[@when][last()]/@when',
+    last_updated_by: '//tei:teiHeader/tei:revisionDesc/tei:change[@who][last()]/@who',
+    last_status: '//tei:teiHeader/tei:revisionDesc/tei:change[@status][last()]/@status',
     // Additional metadata for extraction options
     extractor_id: '//tei:application[@type="extractor"]/@ident',
     extractor_version: '//tei:application[@type="extractor"]/@version',

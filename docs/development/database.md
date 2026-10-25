@@ -104,6 +104,7 @@ CREATE TABLE files (
     file_metadata TEXT,                 -- JSON object: file-specific metadata
     variant_id TEXT,                    -- Variant identifier (e.g., "translation-fr")
     is_gold_standard INTEGER DEFAULT 0, -- Boolean: 1 for gold standard TEI files
+    parent_stable_id TEXT,              -- stable_id of the version this TEI file was copied from
 
     -- Filesystem location
     storage_path TEXT NOT NULL,         -- Relative path in data directory
@@ -128,7 +129,10 @@ CREATE INDEX idx_files_file_type ON files(file_type);
 CREATE INDEX idx_files_deleted ON files(deleted);
 CREATE INDEX idx_files_sync_status ON files(sync_status);
 CREATE INDEX idx_files_stable_id ON files(stable_id);
+CREATE INDEX idx_parent_stable_id ON files(parent_stable_id);
 ```
+
+A TEI file is **frozen** (superseded, read-only) while a non-deleted file has its `stable_id` as `parent_stable_id`. The state is derived, never stored: deleting the copy unfreezes the source. See `FileRepository.is_frozen()` / `get_frozen_stable_ids()` and [docs/history/2026-10-24-version-freeze.md](../history/2026-10-24-version-freeze.md).
 
 ### Sync Metadata Table
 
@@ -268,6 +272,9 @@ def get_gold_standard(self, doc_id: str) -> Optional[FileMetadata]:
 
 def get_all_versions(self, doc_id: str) -> List[FileMetadata]:
     """Get all TEI versions (excludes gold standard and deleted)."""
+
+def is_frozen(self, stable_id: str) -> bool:
+    """True if a non-deleted file was copied from this file."""
 ```
 
 #### Metadata Inheritance
@@ -603,6 +610,20 @@ def test_file_operations():
         # Test operations in isolation
         # ...
 ```
+
+## Messages Database
+
+`data/db/messages.db` holds the index behind the [messages](../user-manual/messages.md) feature (`fastapi_app/lib/messages/`). Like `metadata.db` it can be reconstructed: everything except the read state is derived from the stand-off lists of the TEI files.
+
+| Table | Content |
+| --- | --- |
+| `occurrence` | One row per message key, recipient and file (`stable_id`) in which the source was found, with the message data (kind, author, text, excerpt, unit path or thread id, timestamps, `settled_note`) |
+| `message` | One row per key and recipient, derived from its newest occurrence (by file `updated_at`); keeps the first `created_at` |
+| `read_state` | Keys a recipient has read; survives a rebuild |
+
+Message keys identify a message across copies of a document: `c:<doc_id>:<comment xml:id>` for comments, `r:<doc_id>:<variant>:<reviewer>:<fingerprint>` for review marks, and `r:<doc_id>:<variant>:<llm reviewer>:run-<when>` for the collapsed marks of one LLM review run. A mark that disappears from a re-saved file stays as a settled occurrence.
+
+The index is updated by `document.saved` and `file.deleted` event handlers, built at startup when the file is missing, and rebuilt with `POST /api/v1/messages/rebuild`.
 
 ## Related Documentation
 

@@ -36,6 +36,27 @@ class ExtractedTeiMetadata(BibliographicMetadata, total=False):
     label: Optional[str]
 
 
+# The document history is teiHeader/revisionDesc. Stand-off annotations (unit reviews, unit
+# comments) have revisionDesc/change elements of their own, so never query `//revisionDesc`.
+HEADER_REVISION_DESC_PATH = ".//tei:teiHeader/tei:revisionDesc"
+HEADER_CHANGE_PATH = HEADER_REVISION_DESC_PATH + "/tei:change"
+
+
+def get_header_changes(root: etree._Element) -> list[etree._Element]:  # type: ignore[name-defined]
+    """
+    Return the change elements of the document history (teiHeader/revisionDesc), in document order.
+
+    Excludes the revisionDesc/change elements of stand-off annotations.
+
+    Args:
+        root: TEI root element
+
+    Returns:
+        List of change elements
+    """
+    return root.findall(HEADER_CHANGE_PATH, {"tei": "http://www.tei-c.org/ns/1.0"})
+
+
 def create_tei_document() -> etree._Element:  # type: ignore[name-defined]
     """
     Create a TEI document root element
@@ -800,14 +821,12 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     # Extract status and timestamp from last revision change
     last_status = None
     last_revision = None
-    revision_desc = tei_root.find('.//tei:revisionDesc', ns)
-    if revision_desc is not None:
-        changes = revision_desc.findall('tei:change', ns)
-        if changes:
-            # Get status and timestamp from last change element
-            last_change = changes[-1]
-            last_status = last_change.get('status')
-            last_revision = last_change.get('when')
+    changes = get_header_changes(tei_root)
+    if changes:
+        # Get status and timestamp from last change element
+        last_change = changes[-1]
+        last_status = last_change.get('status')
+        last_revision = last_change.get('when')
 
     if last_status:
         metadata['status'] = last_status  # type: ignore[assignment]
@@ -825,7 +844,7 @@ def extract_tei_metadata(tei_root: etree._Element) -> ExtractedTeiMetadata:  # t
     metadata['is_gold_standard'] = is_gold  # type: ignore[assignment]
 
     # Extract label: priority 1 — last revisionDesc/change/note[@type="label"]
-    change_label_elems = tei_root.findall('.//tei:revisionDesc/tei:change/tei:note[@type="label"]', ns)
+    change_label_elems = tei_root.findall(HEADER_CHANGE_PATH + '/tei:note[@type="label"]', ns)
     if change_label_elems and change_label_elems[-1].text:
         metadata['edition_title'] = change_label_elems[-1].text.strip()
     else:
@@ -1069,9 +1088,7 @@ def get_artifact_label(tei_root: etree._Element) -> Optional[str]:  # type: igno
         Label string, or ``None`` if none is present.
     """
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-    change_label_elems = tei_root.findall(
-        './/tei:revisionDesc/tei:change/tei:note[@type="label"]', ns
-    )
+    change_label_elems = tei_root.findall(HEADER_CHANGE_PATH + '/tei:note[@type="label"]', ns)
     if change_label_elems and change_label_elems[-1].text:
         return change_label_elems[-1].text.strip()
     edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
@@ -1200,10 +1217,8 @@ def extract_revision_timestamp(content: bytes | etree._Element) -> Optional[str]
         else:
             root = content
 
-        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-
         # Get all change elements and take the last one
-        changes = root.xpath("//tei:revisionDesc/tei:change", namespaces=ns)
+        changes = get_header_changes(root)
         if isinstance(changes, list) and len(changes) > 0:
             last_change = changes[-1]
             if isinstance(last_change, etree._Element):  # type: ignore[name-defined]
@@ -1233,10 +1248,8 @@ def extract_last_revision_status(content: bytes | etree._Element) -> Optional[st
         else:
             root = content
 
-        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-
         # Get all change elements and take the last one
-        changes = root.xpath("//tei:revisionDesc/tei:change", namespaces=ns)
+        changes = get_header_changes(root)
         if isinstance(changes, list) and len(changes) > 0:
             last_change = changes[-1]
             if isinstance(last_change, etree._Element):  # type: ignore[name-defined]
@@ -1358,7 +1371,7 @@ def add_revision_change(
     if tei_header is None:
         raise ValueError("teiHeader not found")
 
-    revision_desc = tei_header.find('.//tei:revisionDesc', ns)
+    revision_desc = tei_header.find('tei:revisionDesc', ns)
     if revision_desc is None:
         revision_desc = etree.SubElement(tei_header, "{http://www.tei-c.org/ns/1.0}revisionDesc")
 
@@ -1397,9 +1410,7 @@ def extract_change_signatures(content: bytes | etree._Element) -> list[tuple[str
         else:
             root = content
 
-        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-
-        change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
+        change_elements = get_header_changes(root)
         signatures = []
 
         for change in change_elements:

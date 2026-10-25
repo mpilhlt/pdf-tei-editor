@@ -13,7 +13,7 @@ import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName, groupVersionsByLineage } from '../modules/file-data-utils.js'
 import { getActiveProjects, getArchivedCollectionIds } from '../modules/collection-utils.js'
 
 // Register templates
@@ -105,6 +105,17 @@ class FileSelectionPlugin extends Plugin {
         this.#userOpenedDropdown.add(select);
         select.closest('tool-bar')?.classList.add('dropdown-open');
       });
+
+      // Without a diff, sl-select highlights the first option on open, which looks like a
+      // selection. Clear the highlight after sl-select has set it (in the next animation frame).
+      if (select === this.#diff) {
+        select.addEventListener('sl-show', () => {
+          if (select.value) return;
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            select.querySelectorAll('sl-option').forEach(option => { /** @type {SlOption} */ (option).current = false; });
+          }));
+        });
+      }
 
       select.addEventListener('sl-change', async () => {
         if (!this.#userOpenedDropdown.has(select)) return;
@@ -453,7 +464,6 @@ class FileSelectionPlugin extends Plugin {
 
               const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
               const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
-
               if (goldToShow.length > 0) {
                 await createHtmlElements(`<small>Gold</small>`, this.#xml);
                 await createHtmlElements(`<small>Gold</small>`, this.#diff);
@@ -486,21 +496,41 @@ class FileSelectionPlugin extends Plugin {
 
                 versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
 
-                versionsToShow.forEach(version => {
+                /**
+                 * @param {Artifact} version
+                 * @param {string[]} [classes] - CSS classes of the option
+                 */
+                const createOption = (version, classes = []) => {
                   const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
-                  let opt = new SlOption();
+                  const opt = new SlOption();
                   // @ts-ignore
                   opt.size = "small";
                   opt.value = version.id;
                   opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  this.#xml.appendChild(opt);
-                  opt = new SlOption();
-                  // @ts-ignore
-                  opt.size = "small";
-                  opt.value = version.id;
-                  opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  this.#diff.appendChild(opt);
-                });
+                  opt.classList.add(...classes);
+                  return opt;
+                };
+
+                // one group per lineage, current versions first, then their superseded (frozen)
+                // ancestors, connected to them by lines drawn in CSS (app.css). Ancestors open
+                // read-only; they can be compared or copied into a new version.
+                for (const select of [this.#xml, this.#diff]) {
+                  groupVersionsByLineage(versionsToShow).forEach((group, index) => {
+                    if (index > 0) select.appendChild(new SlDivider());
+                    group.leaves.forEach(version => select.appendChild(createOption(version)));
+                    if (group.leaves.length > 0 && group.ancestors.length > 0) {
+                      const arrow = document.createElement("div");
+                      arrow.className = "lineage-arrow";
+                      arrow.setAttribute("aria-hidden", "true");
+                      select.appendChild(arrow);
+                    }
+                    group.ancestors.forEach((version, i) => {
+                      const classes = ["lineage-ancestor"];
+                      if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
+                      select.appendChild(createOption(version, classes));
+                    });
+                  });
+                }
               }
             }
           }
