@@ -378,6 +378,8 @@ test.describe('Unit review', () => {
           && app.getDependency('xmleditor').getView().state.doc.toString().includes('Alpha 2001');
       }, stableId, { timeout: 20000 });
 
+      const reviewerLoads = () => reviewerLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length;
+      const reviewerLoadsBefore = reviewerLoads();
       await page.evaluate(async () => {
         const xmlEditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
         const view = xmlEditor.getView();
@@ -386,8 +388,12 @@ test.describe('Unit review', () => {
         await xmlEditor.saveIfDirty();
       });
 
-      await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
+      const followed = await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
       expect(await editorText(reviewerPage)).toContain('Alpha 2011');
+      // only the changed range was applied, the document was not reloaded
+      expect(followed.value?.incremental).toBe(true);
+      expect(reviewerLoads()).toBe(reviewerLoadsBefore);
+      expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').isDirty())).toBe(false);
       // no offer to restore a local draft: the reviewer had no unsaved work
       expect(reviewerDialogs).toEqual([]);
       expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().editorReadOnly)).toBe(true);

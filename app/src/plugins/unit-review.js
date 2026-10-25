@@ -45,6 +45,7 @@ import { unitReviewGutter, buildUnitReviewMarkers, setUnitReviewMarkersEffect } 
 import { openReviewPopover, openCommentPrompt, closePopover, formatWhen } from '../modules/unit-review-popover.js'
 import { mentionCandidates } from '../modules/mention-autocomplete.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
+import { isRemoteUpdate } from '../modules/xmleditor.js'
 
 /** Diagnostic source tag of this plugin's diagnostics */
 const SOURCE = 'unit-review'
@@ -319,7 +320,15 @@ class UnitReviewPlugin extends Plugin {
    * @param {ViewUpdate} update
    */
   #onEditorUpdate(update) {
-    if (update.docChanged) {
+    if (update.docChanged && isRemoteUpdate(update)) {
+      // another user's saved text already holds their marks, carried over or renumbered: read
+      // them as after a reload
+      this.#pendingChanges = null
+      this.#carry = new Map()
+      this.#scan = { units: [], looseText: [], complete: true, path: null }
+      clearTimeout(this.#timer)
+      this.#timer = setTimeout(() => this.#refresh(), REFRESH_DELAY_MS)
+    } else if (update.docChanged) {
       this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh({ persistCarry: true }), REFRESH_DELAY_MS)
@@ -335,7 +344,7 @@ class UnitReviewPlugin extends Plugin {
   /**
    * Takes over the review marks that another user saved into the open document (from a document
    * they cannot edit, SSE event `reviewMarksChanged`), without reloading it. Read-only documents
-   * are reloaded instead (XML editor plugin).
+   * take over the saved text instead (XML editor plugin).
    * @param {{stable_id: string, reviewer: string, reviewer_name: string, annotation_xml: string|null}} event
    */
   #onReviewMarksChanged(event) {
