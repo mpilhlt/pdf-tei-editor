@@ -7,7 +7,7 @@ Unit review lets reviewers go through a document unit by unit (for example each 
 Click the **Review** button (clipboard icon) in the XML editor toolbar. Review mode adds:
 
 - the status strip left of the line numbers,
-- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed,
+- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed and shows the diagnostics drawer,
 - a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
 
 Hover over the **Review** button to see the list of shortcuts.
