@@ -6,6 +6,7 @@
  */
 
 import { mentionQueryAt, splitMentions } from './mentions.js';
+import { linkifyNodes } from './linkify.js';
 
 /**
  * A person that can be mentioned
@@ -156,19 +157,22 @@ export function attachMentionAutocomplete(input, candidates) {
 }
 
 /**
- * Fills an element with a text in which the mentions of known persons are chips with their name.
+ * Fills an element with a text in which the mentions of known persons are chips with their name
+ * and http(s) URLs are links opening in a new tab. URLs are split off first, so that an `@` in a
+ * URL is not taken as a mention.
  * @param {HTMLElement} element
  * @param {string} text
  * @param {Map<string, string>} names - Full name by id
  */
 export function renderWithMentions(element, text, names) {
   ensureMentionStyle();
-  element.replaceChildren(...splitMentions(text, new Set(names.keys())).map(part => {
+  const known = new Set(names.keys());
+  element.replaceChildren(...linkifyNodes(text, plain => splitMentions(plain, known).map(part => {
     if (!part.id) return document.createTextNode(part.text);
     const chip = document.createElement('span');
     chip.className = 'mention-chip';
     chip.textContent = names.get(part.id) ?? part.text;
     chip.title = part.text;
     return chip;
-  }));
+  })));
 }

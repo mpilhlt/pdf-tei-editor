@@ -14,6 +14,8 @@ You do not need write access: in a document you cannot edit (for example someone
 
 Type `@` to mention someone: the people listed in the document's `respStmt` and its owner are offered for completion. A mentioned user receives the comment as a [message](messages.md).
 
+Web addresses starting with `http://` or `https://` become clickable links in the comment popover, the diagnostics drawer and the Messages dialog. They open in a new tab.
+
 ## Seeing comments
 
 - A **speech bubble** left of the line numbers marks the first line of each commented element: blue while the comment is open, grey when it is resolved. A small number shows how many comments start on that line. Hover over the bubble to read them.
