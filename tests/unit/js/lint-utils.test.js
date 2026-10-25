@@ -125,6 +125,30 @@ describe('applyMergedDiagnostics', () => {
     assert.deepStrictEqual(updates.map(u => revealsDiagnostics(u)), [false, true]);
     assert.strictEqual(collectDiagnostics(view.state).length, 1);
   });
+
+  it('does not dispatch a merge that leaves the diagnostics unchanged', () => {
+    const view = fakeView(stateWith([validation]));
+    const own = [{ from: 6, to: 11, severity: 'info', message: 'm', actions: [{ name: 'Propose fix', apply() {} }] }];
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', own);
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', own.map(d => ({ ...d, actions: [{ name: 'Propose fix', apply() {} }] })));
+    applyMergedDiagnostics(/** @type {any} */ (view), 'other', []);
+    assert.strictEqual(view.dispatched.length, 1);
+    // a changed fix or action list is dispatched
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', own.map(d => ({ ...d, replacement: 'x' })));
+    applyMergedDiagnostics(/** @type {any} */ (view), 's', own.map(d => ({ ...d, replacement: 'x', actions: [] })));
+    assert.strictEqual(view.dispatched.length, 3);
+  });
+
+  it('ends the re-merging of two sources that re-merge after every replacement (#647)', () => {
+    const view = fakeView(stateWith([validation]));
+    const own = { a: [{ from: 6, to: 11, severity: 'info', message: 'a' }], b: [] };
+    // each replacement makes the other source re-merge: a, b, a, b, ...
+    for (let i = 0; i < 10; i++) {
+      const source = i % 2 ? 'b' : 'a';
+      applyMergedDiagnostics(/** @type {any} */ (view), source, own[source]);
+    }
+    assert.strictEqual(view.dispatched.length, 1);
+  });
 });
 
 describe('diagnosticKey', () => {

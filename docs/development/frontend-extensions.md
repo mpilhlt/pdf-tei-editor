@@ -274,11 +274,11 @@ CodeMirror keeps one global diagnostic set, and `setDiagnostics` replaces it who
 | --- | --- |
 | `collectDiagnostics(state)` | Diagnostics currently stored in the editor state |
 | `mergeDiagnostics(state, source, own)` | Current diagnostics with those of `source` replaced by `own` |
-| `applyMergedDiagnostics(view, source, own, options)` | Merge and dispatch in one step; `options.openPanel` (default `false`) expands the diagnostics drawer |
+| `applyMergedDiagnostics(view, source, own, options)` | Merge and dispatch in one step, skipped if the merge leaves the diagnostics unchanged; `options.openPanel` (default `false`) expands the diagnostics drawer |
 | `replacesDiagnostics(update)` | True if a view update replaced the diagnostic set |
 | `addDismissListener(listener)` | Called with the diagnostics the user dismissed in the diagnostics drawer; returns a function removing the listener |
 
-Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. An edit also replaces the set: it removes the diagnostics whose range it touches, in the same transaction, so your handler can restore those that still apply. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal:
+Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. An edit also replaces the set: it removes the diagnostics whose range it touches, in the same transaction, so your handler can restore those that still apply. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal. `applyMergedDiagnostics()` does not dispatch a merge that changes nothing, so sources re-applying after every replacement do not replace the set in turn forever; if you dispatch the merged set yourself, do the same, or re-apply only while your diagnostics are missing:
 
 ```js
 xmleditor.addUpdateListener(update => {
