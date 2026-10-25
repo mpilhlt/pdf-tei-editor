@@ -399,6 +399,21 @@ test.describe('Unit review', () => {
       });
       // the badge on the user menu updates live
       await expect(page.getByTestId('toolbar-menu-badge')).toHaveText(String(unreadBefore + 1), { timeout: 10000 });
+
+      // the reviewer's marks reach the annotator's open (editable) copy without a reload
+      const summaryNow = async () => summary(page);
+      await expect.poll(async () => (await summaryNow()).notOk, { timeout: 10000 }).toBe(1);
+      const loadsBefore = consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length;
+      await reviewerPage.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.markUnits([unit.fingerprint], 'ok');
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      await expect.poll(async () => (await summaryNow()).ok, { timeout: 10000 }).toBe(1);
+      expect((await summaryNow()).notOk).toBe(0);
+      expect(consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length).toBe(loadsBefore);
     } finally {
       await releaseAllLocks(reviewerPage).catch(() => {});
       await performLogout(reviewerPage).catch(() => {});

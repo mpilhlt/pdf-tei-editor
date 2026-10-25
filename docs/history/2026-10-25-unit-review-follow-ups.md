@@ -13,6 +13,8 @@ Requested by Christian after the merge of #623.
 - **Diagnostics drawer flicker.** A source replacing the diagnostic set (e.g. a validation run) removes the diagnostics of the other sources, which re-merge them in a `setTimeout(0)`. The drawer refreshed in an animation frame, which often came in between and showed the list without them for a frame. It now refreshes 100 ms after a change.
 - **Draft restore prompt in a reloaded read-only document.** `#flushDraftNow` wrote a draft whenever its timer fired, also while a document was loading (the editor counts as dirty until it is ready). When a read-only document then followed another user's save, the draft of the old content differed from the new server content and the restore prompt appeared. Drafts are now written only for unsaved work in a ready editor, and following a save clears the draft first.
 
+- **Live review marks in the owner's editor.** When the stand-off endpoint stores a change of the user's own review annotation, it sends `reviewMarksChanged` (`stable_id`, `reviewer`, `reviewer_name`, `annotation_xml`, null when the review was removed) to the other sessions. The unit review plugin of an editor that has the document open and can edit it replaces that reviewer's annotation in the document (not in the undo history), so the strip, the meter and the diagnostics update without a reload, and switches review mode on if it is off. The owner's next save keeps the annotation (`merge_foreign_standoff`). The reviewer's name comes from the event until the owner's document has the reviewer's `respStmt`.
+
 ## Not done
 
-- The owner's editable editor still does not merge other users' stand-off changes live, except comment replies.
+- New comment threads of other users are not merged live into the owner's editor; only replies are (`commentReplyAdded`).

@@ -35,7 +35,7 @@ import { notify } from '../modules/sl-utils.js'
 import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
-import { readStandOffList, writeStandOffList, ensureUserRespStmt } from '../modules/standoff-list.js'
+import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
@@ -89,7 +89,7 @@ const REVIEW_TOOLTIP = `Review: mark units as OK or not OK. Right-click an eleme
 class UnitReviewPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'unit-review', deps: ['xmleditor', 'logger'] })
+    super(context, { name: 'unit-review', deps: ['xmleditor', 'logger', 'sse'] })
   }
 
   get #xmlEditor() { return this.getDependency('xmleditor') }
@@ -153,6 +153,9 @@ class UnitReviewPlugin extends Plugin {
 
   #writing = false
 
+  /** @type {Map<string, string>} Names of reviewers whose marks arrived through SSE, by user name */
+  #liveNames = new Map()
+
   /** True while this plugin dispatches its own diagnostics */
   #renderingDiagnostics = false
 
@@ -179,6 +182,13 @@ class UnitReviewPlugin extends Plugin {
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
     document.addEventListener('mouseup', () => this.#endDrag())
+    this.getDependency('sse').addEventListener('reviewMarksChanged', (/** @type {MessageEvent} */ event) => {
+      try {
+        this.#onReviewMarksChanged(JSON.parse(event.data))
+      } catch (error) {
+        this.#logger.warn('Cannot merge review marks: ' + String(error))
+      }
+    })
   }
 
   async start() {
@@ -320,6 +330,36 @@ class UnitReviewPlugin extends Plugin {
       this.#diagnosticsKey = ''
       setTimeout(() => this.#updateDiagnostics(), 0)
     }
+  }
+
+  /**
+   * Takes over the review marks that another user saved into the open document (from a document
+   * they cannot edit, SSE event `reviewMarksChanged`), without reloading it. Read-only documents
+   * are reloaded instead (XML editor plugin).
+   * @param {{stable_id: string, reviewer: string, reviewer_name: string, annotation_xml: string|null}} event
+   */
+  #onReviewMarksChanged(event) {
+    if (event.stable_id !== this.state?.xml || this.state?.editorReadOnly || !this.#canWrite(true)) return
+    this.#refresh()
+    const data = this.#readData(this.#view().state)
+    if (event.annotation_xml) {
+      const parsed = new DOMParser().parseFromString(
+        `<listAnnotation xmlns="${TEI_NS}" xmlns:xml="http://www.w3.org/XML/1998/namespace">${event.annotation_xml}</listAnnotation>`,
+        'application/xml'
+      )
+      const reviewer = readReviewData(parsed.documentElement).reviewers.get(event.reviewer)
+      if (!reviewer) return
+      data.reviewers.set(event.reviewer, reviewer)
+    } else if (!data.reviewers.delete(event.reviewer)) {
+      return
+    }
+    this.#liveNames.set(event.reviewer, event.reviewer_name || event.reviewer)
+    this.#write(data, false)
+    if (!this.#enabled) {
+      this.setEnabled(true, { remember: false })
+      this.#autoEnabled = true
+    }
+    testLog('UNIT_REVIEW_MARKS_MERGED', { reviewer: event.reviewer, ...this.#summary })
   }
 
   #onDocumentLoaded() {
@@ -707,7 +747,7 @@ class UnitReviewPlugin extends Plugin {
     const xmlDoc = this.#xmlEditor.getXmlTree()
     const respStmt = xmlDoc ? tei_utils.getRespStmtById(xmlDoc, reviewer.id) : null
     const persName = respStmt?.getElementsByTagName('persName')[0]?.textContent?.trim()
-    return persName || reviewer.id
+    return persName || this.#liveNames.get(reviewer.id) || reviewer.id
   }
 
   /**

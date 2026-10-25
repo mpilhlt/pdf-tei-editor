@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from fastapi_app.lib.messages.standoff_merge import apply_contribution, merge_foreign_standoff
+from fastapi_app.lib.messages.standoff_merge import apply_contribution, merge_foreign_standoff, review_annotation
 from fastapi_app.lib.messages.standoff_reader import (
     COMMENT_LIST_TYPE,
     REVIEW_LIST_TYPE,
@@ -130,6 +130,14 @@ class TestApplyContribution(unittest.TestCase):
 
     def test_nothing_to_contribute(self) -> None:
         self.assertEqual(apply_contribution(self.xml, self.xml, "cdoe", "Cy Doe", reviews=True, comments=True), self.xml)
+
+
+class TestReviewAnnotation(unittest.TestCase):
+    def test_returns_the_users_review_annotation(self) -> None:
+        xml = FIXTURE.read_text(encoding="utf-8")
+        xml = xml.replace('      <annotation xml:id="ur-llm-openai-gpt"', CDOE_REVIEW + '      <annotation xml:id="ur-llm-openai-gpt"', 1)
+        self.assertEqual(review_annotation(xml, "cdoe"), CDOE_REVIEW.strip())
+        self.assertIsNone(review_annotation(xml, "nobody"))
 
 
 class TestMergeForeignStandoff(unittest.TestCase):
