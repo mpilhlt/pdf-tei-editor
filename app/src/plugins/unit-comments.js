@@ -44,6 +44,7 @@ import {
 import { elementAt, elementPath, resolveAnchor, FingerprintCache } from '../modules/node-anchor.js'
 import { unitCommentGutter, buildUnitCommentMarkers, setUnitCommentMarkersEffect } from '../modules/codemirror/unit-comment-gutter.js'
 import { openCommentPrompt, closePopover } from '../modules/unit-review-popover.js'
+import { isRemoteUpdate } from '../modules/xmleditor.js'
 import { openThreadPopover } from '../modules/unit-comment-popover.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { mentionCandidates } from '../modules/mention-autocomplete.js'
@@ -329,7 +330,7 @@ class UnitCommentsPlugin extends Plugin {
   /**
    * Takes over the comments that another user saved into the open document from a document they
    * cannot edit (new threads, edits, deletions, resolving and reopening), without reloading it.
-   * Read-only documents are reloaded instead (XML editor plugin).
+   * Read-only documents take over the saved text instead (XML editor plugin).
    * @param {{stable_id: string, author: string, author_name: string, list_xml: string|null}} data
    */
   #onCommentsChanged(data) {
@@ -387,7 +388,9 @@ class UnitCommentsPlugin extends Plugin {
       this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
       if (this.#writing) return
       clearTimeout(this.#timer)
-      this.#timer = setTimeout(() => this.#refresh({ persistAnchors: true }), REFRESH_DELAY_MS)
+      // another user's saved text already holds the anchors they changed
+      const persistAnchors = !isRemoteUpdate(update)
+      this.#timer = setTimeout(() => this.#refresh({ persistAnchors }), REFRESH_DELAY_MS)
     } else if (replacesDiagnostics(update) && this.#diagnosticsKey && !this.#renderingDiagnostics
       && !collectDiagnostics(update.state).some(d => d.source === SOURCE)) {
       // another source replaced the diagnostics without ours: merge ours in again

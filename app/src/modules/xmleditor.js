@@ -43,8 +43,8 @@
  * @property {(message: any) => void} error
  */
 
-import { EditorState, EditorSelection, Compartment, Transaction, StateEffect } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
+import { EditorState, EditorSelection, Compartment, Transaction, StateEffect, Annotation } from "@codemirror/state";
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk, diff } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
@@ -85,6 +85,21 @@ import { focusModeExtension, focusRangeField, setFocusRangeEffect, focusActionsF
  * @fires XMLEditor#editorShowMergeView - Fired when the merge view is shown
  * @fires XMLEditor#editorHideMergeView - Fired when the merge view is removed
  */
+/** Marks transactions that apply another user's saved changes (see {@link XMLEditor#applyRemoteContent}) */
+export const remoteChange = Annotation.define();
+
+/**
+ * Whether an editor update applies another user's saved changes, which are not the user's own edits.
+ * @param {ViewUpdate} update
+ * @returns {boolean}
+ */
+export function isRemoteUpdate(update) {
+  return update.transactions.some(tr => tr.annotation(remoteChange) === true);
+}
+
+/** Above this share of changed characters, {@link XMLEditor#applyRemoteContent} gives up */
+const REMOTE_CHANGE_MAX_SHARE = 0.5;
+
 export class XMLEditor extends EventEmitter {
 
   // Event name constants, no longer needed with the typed EventEmitter but kept for backwards compatibility
@@ -642,6 +657,31 @@ export class XMLEditor extends EventEmitter {
     } finally {
       this.#view.dom.style.visibility = '';
     }
+  }
+
+  /**
+   * Applies another user's version of the document as changes to the changed ranges only, so that
+   * folds, popovers and the scroll position stay. The change is not the user's own edit: it does not
+   * make the editor dirty and cannot be undone. Gives up when the editor is dirty, the new text is
+   * not well-formed or most of the document changed; the caller then loads the document instead.
+   * @param {string} xml - The new content
+   * @returns {Promise<boolean>} Whether the changes were applied
+   */
+  async applyRemoteContent(xml) {
+    if (this.#editorIsDirty || this.isMergeViewActive()) return false;
+    const parsed = new DOMParser().parseFromString(xml, "application/xml");
+    if (parsed.getElementsByTagName("parsererror").length) return false;
+    const current = this.#view.state.doc.toString();
+    if (current === xml) return true;
+    const changes = diff(current, xml, { scanLimit: 10000, timeout: 200 });
+    const changed = changes.reduce((sum, c) => sum + Math.max(c.toA - c.fromA, c.toB - c.fromB), 0);
+    if (changed > REMOTE_CHANGE_MAX_SHARE * Math.max(current.length, xml.length)) return false;
+    this.#view.dispatch({
+      changes: changes.map(c => ({ from: c.fromA, to: c.toA, insert: xml.slice(c.fromB, c.toB) })),
+      annotations: [remoteChange.of(true), Transaction.addToHistory.of(false)]
+    });
+    await this.syncIfChanged();
+    return true;
   }
 
   /**
@@ -1691,7 +1731,8 @@ export class XMLEditor extends EventEmitter {
       return
     }
 
-    this.#editorIsDirty = true;
+    // another user's saved changes leave the editor as clean as it was
+    if (!isRemoteUpdate(update)) this.#editorIsDirty = true;
     this.#changeCount += 1;
 
     // inform the listeners

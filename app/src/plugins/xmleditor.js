@@ -1316,7 +1316,7 @@ class XmlEditorPlugin extends Plugin {
    *   - On save errors the user is notified via toast AND the persistent widget.
    */
   /**
-   * Schedules a reload of the open document when another user saved it while it is read-only for
+   * Schedules an update of the open document when another user saved it while it is read-only for
    * this user, e.g. when an annotator changed the text in response to a review.
    * @param {{reason?: string, stable_id?: string}} data - Payload of the `fileDataChanged` event
    */
@@ -1329,8 +1329,9 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Reloads the open read-only document from the server, keeping the cursor line and the scroll
-   * position. The user's own reviews and comments are saved first; the server keeps them.
+   * Updates the open read-only document from the server: applies the changed ranges, or reloads it
+   * keeping the cursor line and the scroll position. The user's own reviews and comments are saved
+   * first; the server keeps them.
    * @param {string} stableId
    */
   async #followSave(stableId) {
@@ -1353,18 +1354,24 @@ class XmlEditorPlugin extends Plugin {
       return;
     }
     if (stableId !== this.state?.xml || this.#xmlEditor.isDirty() || xml === this.#xmlEditor.getEditorContent()) return;
-    const view = this.#xmlEditor.getView();
-    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
-    const scrollTop = view.scrollDOM.scrollTop;
     clearTimeout(this.#draftSaveTimeout ?? undefined);
     this.#draftSaveTimeout = null;
     this.#draftStore.clearDraft(stableId);
+    // only the changed ranges, so that folds, popovers and the scroll position stay
+    if (await this.#xmlEditor.applyRemoteContent(xml)) {
+      notify('The document was updated by another user.', 'primary', 'arrow-clockwise');
+      testLog('XML_EDITOR_FOLLOWED_SAVE', { stableId, incremental: true });
+      return;
+    }
+    const view = this.#xmlEditor.getView();
+    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+    const scrollTop = view.scrollDOM.scrollTop;
     await this.#xmlEditor.loadXml(xml);
     const target = view.state.doc.line(Math.min(line, view.state.doc.lines));
     view.dispatch({ selection: { anchor: target.from } });
     view.scrollDOM.scrollTop = scrollTop;
     notify('The document was updated by another user.', 'primary', 'arrow-clockwise');
-    testLog('XML_EDITOR_FOLLOWED_SAVE', { stableId });
+    testLog('XML_EDITOR_FOLLOWED_SAVE', { stableId, incremental: false });
   }
 
   async #saveIfDirty() {
