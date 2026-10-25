@@ -13,7 +13,7 @@ import { EditorState } from '@codemirror/state';
 import { xml } from '@codemirror/lang-xml';
 import {
   readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus, editComment,
-  deleteComment, newCommentId, threadStatus, mergeAuthorComments, LIST_TYPE
+  deleteComment, newCommentId, threadStatus, mergeAuthorComments, nextOpenThreadPosition, LIST_TYPE
 } from '../../../app/src/modules/unit-comments.js';
 import {
   elementAt, elementPath, elementByPath, resolveAnchor, FingerprintCache
@@ -197,5 +197,31 @@ describe('mergeAuthorComments', () => {
     const remote = local.filter(c => c.text !== 'theirs' && c.text !== 'my reply');
     const { comments } = mergeAuthorComments(local, remote, 'rev');
     assert.deepStrictEqual(comments.map(c => c.text), ['mine', 'their reply']);
+  });
+});
+
+describe('nextOpenThreadPosition', () => {
+  /** @type {Array<{status: 'open'|'resolved', from: number|null}>} */
+  const threads = [
+    { status: 'open', from: 300 },
+    { status: 'resolved', from: 150 },
+    { status: 'open', from: 100 },
+    { status: 'open', from: null }
+  ];
+
+  it('returns the next open element after the position', () => {
+    assert.strictEqual(nextOpenThreadPosition(threads, 0), 100);
+    assert.strictEqual(nextOpenThreadPosition(threads, 100), 300);
+    assert.strictEqual(nextOpenThreadPosition(threads, 120), 300);
+  });
+
+  it('wraps around to the first open element', () => {
+    assert.strictEqual(nextOpenThreadPosition(threads, 300), 100);
+    assert.strictEqual(nextOpenThreadPosition(threads, 999), 100);
+  });
+
+  it('returns null without open threads that have an element', () => {
+    assert.strictEqual(nextOpenThreadPosition([], 0), null);
+    assert.strictEqual(nextOpenThreadPosition([{ status: 'resolved', from: 10 }, { status: 'open', from: null }], 0), null);
   });
 });

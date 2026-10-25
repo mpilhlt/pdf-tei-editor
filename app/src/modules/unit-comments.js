@@ -170,6 +170,21 @@ export function buildThreads(comments) {
 }
 
 /**
+ * Returns the start of the next element with an open thread after a position, wrapping around
+ * to the first one. Threads whose element was not found are skipped.
+ * @param {Array<{status: ThreadStatus, from: number|null}>} threads - Status and element start of each thread
+ * @param {number} head - The position to search from, usually the cursor
+ * @returns {number|null} Null if there is no open thread with an element
+ */
+export function nextOpenThreadPosition(threads, head) {
+  const open = threads
+    .filter(t => t.status === 'open' && t.from !== null)
+    .map(t => /** @type {number} */ (t.from))
+    .sort((a, b) => a - b);
+  return open.find(from => from > head) ?? open[0] ?? null;
+}
+
+/**
  * Returns a new comment id not in use.
  * @param {Iterable<string>} existing
  * @param {() => number} [random]

@@ -131,6 +131,14 @@ test.describe('Unit comments', () => {
       await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('check the year');
       await expect(page.getByTestId('unit-comment-meter')).toHaveText('💬 1 open comment');
       await expect(page.locator('.cm-uc-open')).toHaveCount(1);
+
+      // clicking the meter moves the cursor to the element with the open comment
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().dispatch({ selection: { anchor: 0 } }));
+      await page.getByTestId('unit-comment-meter').click();
+      await expect.poll(async () => page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return view.state.doc.toString().indexOf('<bibl>Beta') + 1 === view.state.selection.main.head;
+      })).toBe(true);
       await expect.poll(async () => page.evaluate(() => {
         const app = /** @type {any} */ (window).app;
         const view = app.getDependency('xmleditor').getView();
