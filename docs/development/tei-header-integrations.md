@@ -168,6 +168,8 @@ See [2026-09-28-grobid-schema-fragment-refs-design.md](../superpowers/specs/2026
 
 **To hook in a new consumer** (e.g. an annotation validation plugin that checks output against category-specific rules): call the reader above, find your category by `category ===` your rule's name, and use the `machine` ref's line-range target with `fetch_rule_excerpt(url, cache)` (same module) to fetch just the relevant slice of the guide document rather than the whole file — this is precisely what the machine ref exists for.
 
+**Document rules overrides** ("Edit document rules", `InterpretationRefKind` in [interpretation_ref_kind.py](../../fastapi_app/lib/doc_rules/interpretation_ref_kind.py)) target the machine rules: `representative_ref()` picks an entry's `machine` ref when present and falls back to its sole `human` ref otherwise. The editor's original text, the override key (`normalize_resource_key()` of that ref, line-range fragment included) and a consumer's override lookup (e.g. the LLM reviewer's `gather_rule_excerpts()`) all derive from that ref, so a consumer must call `representative_ref()` rather than pick a subtype itself. Because the key keeps the `#Lx-Ly` fragment, an upstream change that shifts the line range also changes the key. "Propose change upstream" splices an edited line-range excerpt back into the full upstream file (`splice_line_range()` in [annotation_rules_utils.py](../../fastapi_app/lib/utils/annotation_rules_utils.py)), since the forge edit page replaces the whole file.
+
 ## Schema location
 
 Declares the RelaxNG schema a document validates against. Two forms, in precedence order — an existing PI stays authoritative if a document somehow has both:

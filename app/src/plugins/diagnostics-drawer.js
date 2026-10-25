@@ -4,10 +4,14 @@
  * Lists the XML editor's diagnostics (validation errors, annotation review
  * suggestions, ...) in a drawer on the left side, over the PDF viewer,
  * instead of CodeMirror's lint panel below the editor. The drawer is shown
- * while there are diagnostics. It is fully expanded while the focus is in the
- * XML editor and slides out while the focus is in the PDF viewer, leaving a
- * floating "Diagnostics" button with the count; clicking it expands the drawer
- * again.
+ * while there are diagnostics. It slides out while the focus is in the PDF
+ * viewer, leaving a floating "Diagnostics" button with the count. Focusing the
+ * XML editor does not expand it again (so that the XML can be edited while the
+ * whole PDF is visible); it is expanded when a document is loaded, when the
+ * floating button is clicked, when a diagnostics source asks for it (see
+ * `applyMergedDiagnostics()` in lint-utils.js) and when a statusbar widget of
+ * the XML editor marked with the `data-reveals-diagnostics` attribute (e.g.
+ * the unit review and comment meters) is clicked.
  *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
  * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
@@ -28,6 +32,7 @@ import { EditorView } from '@codemirror/view'
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { registerTemplate, createFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
+import { linkifyNodes } from '../modules/linkify.js'
 import {
   collectDiagnostics,
   diagnosticKey,
@@ -102,14 +107,19 @@ class DiagnosticsDrawerPlugin extends Plugin {
 
     this.#button.addEventListener('click', () => this.#setExpanded(true))
 
-    // focus-dependent expansion
+    // focus in the PDF viewer retracts the drawer; focus in the XML editor does not expand it
     for (const type of ['focusin', 'pointerdown']) {
-      ui.xmlEditor.addEventListener(type, () => this.#setExpanded(true))
       ui.pdfViewer.addEventListener(type, event => {
         const target = /** @type {Node} */ (event.target)
         if (!this.#ui.contains(target) && !this.#button.contains(target)) this.#setExpanded(false)
       })
     }
+
+    // statusbar widgets related to the diagnostics expand the drawer when clicked
+    ui.xmlEditor.statusbar.addEventListener('click', event => {
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-reveals-diagnostics]')) this.#setExpanded(true)
+    })
 
     this.#ui.footer.selectAll.addEventListener('sl-change', () => {
       const checked = this.#ui.footer.selectAll.checked
@@ -124,10 +134,14 @@ class DiagnosticsDrawerPlugin extends Plugin {
 
   /**
    * @param {(keyof ApplicationState)[]} changedKeys
-   * @param {ApplicationState} _state
+   * @param {ApplicationState} state
    */
-  async onStateUpdate(changedKeys, _state) {
-    if (changedKeys.includes('xml')) this.#checked.clear()
+  async onStateUpdate(changedKeys, state) {
+    if (changedKeys.includes('xml')) {
+      this.#checked.clear()
+      // a newly loaded document shows its diagnostics
+      if (state.xml) this.#setExpanded(true)
+    }
     if (changedKeys.includes('editorReadOnly')) this.#updateFooter()
   }
 
@@ -299,7 +313,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     body.className = 'diagnostics-drawer-item-body'
     const message = document.createElement('span')
     message.className = 'diagnostics-drawer-message'
-    message.textContent = diagnostic.message
+    message.replaceChildren(...linkifyNodes(diagnostic.message))
     body.append(message)
 
     // source on the left, actions on the right

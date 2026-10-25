@@ -1,3 +1,4 @@
+import { splitUrls } from './linkify.js'
 
 /**
  * "Mini-jquery" - monkey-patches the element identified by the selector with some convenience methods.
@@ -233,14 +234,15 @@ export function escapeHtml(text) {
  * Escapes the given plain text and turns any bare http(s) URLs it contains into
  * clickable links that open in a new tab. Use this instead of assigning raw text
  * to `innerHTML` whenever the text may contain a URL that should be clickable.
+ * Prefer `linkifyNodes()` from linkify.js, which builds DOM nodes instead of markup.
  * @param {string} text
  * @returns {string} HTML-safe markup with URLs replaced by `<a>` tags
  */
 export function linkifyUrls(text) {
-  const escaped = escapeHtml(text);
-  return escaped.replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]]/g, url =>
-    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-  );
+  return splitUrls(text).map(part => part.url
+    ? `<a href="${escapeHtml(part.url).replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">${escapeHtml(part.text)}</a>`
+    : escapeHtml(part.text)
+  ).join('');
 }
 
 /**

@@ -127,7 +127,24 @@ export function mergeDiagnostics(state, source, own) {
 }
 
 /**
- * Merges `own` into the view's diagnostics and dispatches the result.
+ * True if both lists contain the same diagnostics (source, severity, message, range, fix and action
+ * names), in any order.
+ * @param {FixableDiagnostic[]} a
+ * @param {FixableDiagnostic[]} b
+ * @returns {boolean}
+ */
+function sameDiagnostics(a, b) {
+  if (a.length !== b.length) return false;
+  /** @param {FixableDiagnostic} d */
+  const key = d => JSON.stringify([d.source ?? '', d.severity, d.message, d.from, d.to, d.replacement ?? null, (d.actions ?? []).map(action => action.name)]);
+  const keysA = a.map(key).sort();
+  const keysB = b.map(key).sort();
+  return keysA.every((k, i) => k === keysB[i]);
+}
+
+/**
+ * Merges `own` into the view's diagnostics and dispatches the result, unless
+ * that leaves them unchanged.
  * With `options.openPanel`, the diagnostics drawer is expanded even if the
  * focus is outside the XML editor; pass it only for results the user just
  * asked for.
@@ -137,7 +154,12 @@ export function mergeDiagnostics(state, source, own) {
  * @param {{openPanel?: boolean}} [options]
  */
 export function applyMergedDiagnostics(view, source, own, options = {}) {
-  const spec = setDiagnostics(view.state, mergeDiagnostics(view.state, source, own));
+  const merged = mergeDiagnostics(view.state, source, own);
+  // a merge that changes nothing is not dispatched: every replacement of the diagnostic set makes
+  // the plugins owning diagnostics re-merge theirs, so two plugins re-merging unconditionally would
+  // otherwise replace the set in turn forever (and the drawer and lint gutter re-render each time)
+  if (!options.openPanel && sameDiagnostics(collectDiagnostics(view.state), merged)) return;
+  const spec = setDiagnostics(view.state, merged);
   if (options.openPanel) {
     spec.effects = [...[spec.effects ?? []].flat(), revealDiagnosticsEffect.of(null)];
   }

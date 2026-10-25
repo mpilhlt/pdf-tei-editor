@@ -7,7 +7,7 @@ Unit review lets reviewers go through a document unit by unit (for example each 
 Click the **Review** button (clipboard icon) in the XML editor toolbar. Review mode adds:
 
 - the status strip left of the line numbers,
-- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed,
+- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed and shows the diagnostics drawer,
 - a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
 
 Hover over the **Review** button to see the list of shortcuts.
@@ -66,6 +66,14 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 ## LLM reviewer
 
 When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+
+### Adjusting the rules the model uses
+
+**Tools → Edit document rules** lists the rule categories the document links to. Each entry opens the rules text that the LLM reviewer receives. Where the annotation guide has a machine-readable version, this is that version (a condensed excerpt), not the full guide that people read in the Annotation Guide drawer. Click **New override** to write your own version and select it: from then on, your reviews of this document use your text. Other users are not affected.
+
+**Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the excerpt. The rest of the file stays unchanged.
+
+Before this change, the editor showed the full annotation guide, and overrides were saved for it. Overrides created that way are no longer used or shown. To keep one, create a new override.
 
 ## Edited units
 
