@@ -78,6 +78,14 @@ With b), agree on how annotators claim a document. The simplest rule is: whoever
 
 *Annotator*
 
+### Before you start: get to know the annotation guide
+
+Before your first document, read the annotation guide of the variant you work on. Open a document of the variant, click the help icon (**?**) in the lower right corner and choose **Annotation Guide**. The guide opens in a drawer next to the PDF; **Contents** lists its sections, and **Open in new window** shows it in a window of its own, which you can keep open next to the editor.
+
+![The annotation guide with its table of contents](../images/review-workflow-02b-annotation-guide.png)
+
+Nobody remembers all the rules after one reading, and you do not have to. The goal of this first reading is an overview: which rules exist, which cases they cover and where to find them again. When you are unsure later, look the rule up instead of guessing. The reviewers will refer to the same guide in their comments.
+
 ### Make your own copy
 
 Open the document from the link you received, or from the Annotation Progress view. The extraction belongs to the reviewer who ran it, so it is read-only for you (lock icon and *Read-only* in the top right corner of the editor).
@@ -91,6 +99,14 @@ You are now editing your own copy. The extraction is superseded by your copy and
 ### Annotate
 
 Work in your copy as described in [Document Editing](editing-workflow.md). Your changes are saved automatically. Use **Save revision** only for milestones that you want to see in the revision history, for example at the end of a working day, with status *draft*. Do not make a new personal version for each session: one annotator, one version.
+
+**Work unit by unit in focus mode.** Choose the unit element (for example `<bibl>`) in the XPath dropdown in the status bar of the editor, and step through the units with **‹** and **›**. Focus mode (magnifier button next to the counter) is on by default: the current unit is centred and everything else is dimmed, so you can concentrate on one unit at a time. `Esc` turns focus mode off. See [Node Navigation](editing-workflow.md#xpath-navigation) and [Focus Mode](editing-workflow.md#focus-mode).
+
+![Focus mode: the current <bibl> is highlighted, the rest of the document is dimmed. The "LLM Review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
+
+**Let the LLM Reviewer suggest corrections (if configured).** If your installation has the [LLM Reviewer](https://github.com/mpilhlt/pte-plugins/blob/main/plugins/annotation-review/README.md) and the document links to machine-readable annotation rules, click **LLM Review** in the bottom right corner of the focused unit (or **Tools → Review Annotations** for the whole document). The model checks the unit against the rules, and its suggestions appear in the **Diagnostics** drawer and as highlights in the editor. **Propose fix** on a suggestion shows the change in the merge view: accept it with **Incoming**, or keep your text with **Current**. To apply several suggestions at once, check them in the drawer and click **Apply**. Treat the suggestions as a draft: check each one against the PDF and the annotation guide before you accept it, and dismiss the ones that are wrong. See [LLM reviewer](unit-review.md#llm-reviewer) and [Diagnostics drawer](editing-workflow.md#diagnostics-drawer).
+
+**Ask when you are unsure.** If the guide does not answer a question about a unit, add a [unit comment](unit-comments.md) to it (`Ctrl+Shift+M`, or **Comment…** in the context menu) and mention a reviewer with `@`. Comments are the channel for questions and discussions in both directions: everybody can reply, and every reply notifies the others in the thread. Review marks, in contrast, go only one way, from the reviewer to you.
 
 ### Submit for review
 
@@ -148,7 +164,12 @@ The not-OK units and open comments are listed in the **Diagnostics** drawer on t
 
 Correct the unit in your version, as you annotated it in step 3. You do not need to save a revision or change the status: the document stays *in-review* until the reviewer approves it. Your edit is saved automatically, and the unit is shown with grey dashes until the reviewer has looked at it again. In the diagnostics drawer, it is now listed as *Changed after a not-OK review … please check again*.
 
-Answer the reviewer's comments with **Reply**, either in the diagnostics drawer or in the comment popover. The reviewer is notified of the reply. If you disagree with a not-OK mark, do not just leave the unit as it is: say why in a comment that mentions the reviewer.
+A not-OK mark is a one-way notice: you cannot reply to the mark itself. To answer it, ask a question about it or disagree with it, use a comment, which works in both directions:
+
+- Answer the reviewer's comments with **Reply**, either in the diagnostics drawer or in the comment popover. The reviewer is notified of the reply.
+- To answer a not-OK mark, click **Reply** on its message in the Messages dialog. This starts a comment thread on the unit that mentions the reviewer. You can also add a comment to the unit yourself and mention the reviewer with `@`.
+
+If you disagree with a not-OK mark, do not just leave the unit as it is: say why in a comment.
 
 ![The corrected unit ("Changed after a not-OK review") and a reply to the reviewer's comment](../images/review-workflow-10-correction-reply.png)
 
@@ -158,7 +179,7 @@ Do not make a new version to answer the feedback, and do not mark units as OK yo
 
 *Reviewer*
 
-If you have the annotator's version open, it is reloaded a few seconds after the annotator saved a change. Otherwise, open it again from the dashboard or from the annotator's reply in your inbox.
+If you have the annotator's version open, the annotator's changes appear a few seconds after they were saved. Only the changed parts are updated, so your scroll position, folded sections and open popovers stay as they are. Otherwise, open it again from the dashboard or from the annotator's reply in your inbox.
 
 Corrected units are listed in the **Diagnostics** drawer as *Changed after a not-OK review*. For each of them, decide again:
 
@@ -189,6 +210,8 @@ The approved version replaces the annotator's version in the review queue (which
 
 **For annotators**
 
+- When in doubt, look the rule up in the annotation guide. If the guide does not answer your question, ask in a comment on the unit and mention a reviewer.
+- LLM suggestions are drafts. Accept a fix only after you have checked it against the PDF and the guide.
 - One document, one personal version. Make it once, at the start, and do all your work in it, including the corrections after the review.
 - Set *in-review* only when you have finished the whole document.
 - Do not leave a not-OK mark unanswered: either correct the unit or explain in a comment why it is correct.
