@@ -2,6 +2,53 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.78.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.77.2...v0.78.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* diagnostics drawer flicker, draft prompt after a read-only document reloads ([6f4dcd2](https://github.com/mpilhlt/pdf-tei-editor/commit/6f4dcd206ea054100d8404c48bec8cc3a7b56ffb))
+* **diagnostics:** keep checked diagnostics across replacements of the diagnostic set ([519f504](https://github.com/mpilhlt/pdf-tei-editor/commit/519f5044cf5557131ceaa91b9f5db732e7550b20))
+* hide status bar widgets when they appear or grow, separators with their neighbour ([bcd3321](https://github.com/mpilhlt/pdf-tei-editor/commit/bcd3321f186b2f74eec83c61a56447b7bdc888ae))
+* mark ancestor versions with an arrow, no highlight without diff ([da9cfb6](https://github.com/mpilhlt/pdf-tei-editor/commit/da9cfb6618934d05f3f6d2da57b83382c1312d9c))
+* read the document history from teiHeader/revisionDesc only ([eccc5d4](https://github.com/mpilhlt/pdf-tei-editor/commit/eccc5d47e0ab9241a9433be682bcc71ac5f213bd))
+* **security:** parse user XML without entity expansion, harden flagged regexes ([6ec4253](https://github.com/mpilhlt/pdf-tei-editor/commit/6ec4253c129e32e2eb695abdfe425de07a6cbac2)), closes [#634](https://github.com/mpilhlt/pdf-tei-editor/issues/634)
+* send review messages to the nearest owner in the version lineage who is not the reviewer ([31648f6](https://github.com/mpilhlt/pdf-tei-editor/commit/31648f6e3850355267b798ed72c72fd3823b8641))
+* **tests:** import fixture files before the server starts ([50db5de](https://github.com/mpilhlt/pdf-tei-editor/commit/50db5dea2a2d2151acaa37d1e29e9053aedaa372)), closes [#636](https://github.com/mpilhlt/pdf-tei-editor/issues/636)
+* **unit-review:** diagnostics re-render loop, marking in annotation mode ([f193594](https://github.com/mpilhlt/pdf-tei-editor/commit/f19359411b8fb681fb66d7aae5d52130d073ba90))
+* **unit-review:** fold and protect standOff, skip empty elements when finding units ([9e55e76](https://github.com/mpilhlt/pdf-tei-editor/commit/9e55e76c9761527fd476625c96812cfc2b870af7))
+* **unit-review:** keep marks with their units when identical units are renumbered ([e3e1cd2](https://github.com/mpilhlt/pdf-tei-editor/commit/e3e1cd290a490dba90f4536a4834e259fc550371))
+* **unit-review:** no lint hover tooltip for review diagnostics ([c604433](https://github.com/mpilhlt/pdf-tei-editor/commit/c604433bbf3dfb1ffc537c9ca270c903b21a8bc0))
+* **unit-review:** offer annotators only "Open review" on review diagnostics ([5225199](https://github.com/mpilhlt/pdf-tei-editor/commit/5225199d48c827017e2dd99ce6782fcc0a671c3f))
+
+
+### Features
+
+* **backend-plugins:** open url_openable plugin endpoints from a link ([55fd5b9](https://github.com/mpilhlt/pdf-tei-editor/commit/55fd5b9edb587eecf3400af2de79387b8c4cdef7))
+* draw the version lineage in the compare menu with CSS ([c2c40dd](https://github.com/mpilhlt/pdf-tei-editor/commit/c2c40dddf431ea6e1eab19d2d1fdcabd044096a2))
+* freeze superseded versions and chain revision hashes ([2c4c147](https://github.com/mpilhlt/pdf-tei-editor/commit/2c4c147ca0bdf5c115af889268ab3174ccad06e3)), closes [#207](https://github.com/mpilhlt/pdf-tei-editor/issues/207)
+* group compare menu versions by lineage ([f163cad](https://github.com/mpilhlt/pdf-tei-editor/commit/f163cad2ce39e11e4f5914839a195a464453d6cd))
+* **inference:** confirm before an admin changes the default model for all users ([3defaf9](https://github.com/mpilhlt/pdf-tei-editor/commit/3defaf92724b67f1f67a576bb92cbbf04e8a5357))
+* list all versions as a lineage tree in the Target XML menu ([ed4d504](https://github.com/mpilhlt/pdf-tei-editor/commit/ed4d504d7502fce31f2643d3bada4d78270b23be))
+* message index of reviews and comments addressed to users ([91ffdcf](https://github.com/mpilhlt/pdf-tei-editor/commit/91ffdcf4dbb98fc3042c4aa7f65bb7f7cf1d97d1))
+* messages API, replies to comment threads without edit access, merge on save ([08c7d08](https://github.com/mpilhlt/pdf-tei-editor/commit/08c7d0873f47e05b162beed5ea34fe89e8b79bb1))
+* messages menu, dialog and badge, mention autocomplete, replies in the comment popover ([3c82d56](https://github.com/mpilhlt/pdf-tei-editor/commit/3c82d5694561a443c1e4efdca9870c49c7e9bc6c))
+* **messages:** notify reviewers when a revision is saved with status in-review ([d04920c](https://github.com/mpilhlt/pdf-tei-editor/commit/d04920cf12309ca50ef6d59306fd34b7ef248c5d))
+* review and comment documents without edit access; badge, gutter and popover fixes ([91d0533](https://github.com/mpilhlt/pdf-tei-editor/commit/91d053362301517f27be07ce7a6ead279313774d))
+* unit review mode for marking document units as reviewed OK or not OK ([b0dabc9](https://github.com/mpilhlt/pdf-tei-editor/commit/b0dabc9acf22b2ff14fd05d621b3bc8ea9dd076f))
+* **unit-comments:** comments on elements, stored stand-off ([952135f](https://github.com/mpilhlt/pdf-tei-editor/commit/952135f2de89799b3ed1e6179acd9988ebb67021))
+* **unit-comments:** show other users' comment threads live in the owner's open copy ([e9f5249](https://github.com/mpilhlt/pdf-tei-editor/commit/e9f5249542ab43c8d8f94c6344fb521b1081c669))
+* **unit-review:** ask to check units again that were changed after a not-OK review ([0ccc450](https://github.com/mpilhlt/pdf-tei-editor/commit/0ccc4509a2f3df28d8eb1086beda3b08661ac1ae))
+* **unit-review:** automatic review mode, reviews-only popover for annotators, read-only view follows saves ([b11f189](https://github.com/mpilhlt/pdf-tei-editor/commit/b11f189a1c366f4080c73af20fbb73b191cc5b89))
+* **unit-review:** review button row in the editor context menu ([8db5f73](https://github.com/mpilhlt/pdf-tei-editor/commit/8db5f73e8037139840bd95f8c10b6f56eff1d7e7))
+* **unit-review:** show other reviewers' marks live in the owner's open copy ([d981040](https://github.com/mpilhlt/pdf-tei-editor/commit/d981040aae1b2dcfe5371e747652eb0be1e36722))
+* **xmleditor:** update read-only documents in place after other users' saves ([da591fc](https://github.com/mpilhlt/pdf-tei-editor/commit/da591fc09f419bfb3903ddc3dc4cbcc6d62f5e41))
+
+
+### Performance Improvements
+
+* **docker:** keep dependency layers cached across releases ([2f0cc03](https://github.com/mpilhlt/pdf-tei-editor/commit/2f0cc0359c5d154749e7d55a68b9b190818b0024))
+
 ## [0.77.2](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.77.1...v0.77.2) (2026-10-23)
 
 
