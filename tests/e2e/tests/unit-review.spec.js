@@ -5,13 +5,15 @@
  * <bibl> units, marks them with the keyboard, the comment prompt and the review popover,
  * checks the stand-off storage, the status bar meter, the diagnostics and undo, the
  * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
- * dialog.
+ * dialog, the automatic review mode for documents with not-OK units, and the reload of a
+ * read-only document after another user saved it.
  *
  * @testCovers app/src/plugins/unit-review.js
  * @testCovers app/src/modules/unit-review.js
  * @testCovers app/src/modules/unit-review-popover.js
  * @testCovers app/src/modules/codemirror/unit-review-gutter.js
  * @testCovers app/src/plugins/document-actions.js
+ * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/templates/save-document-dialog.html
  */
 
@@ -50,9 +52,10 @@ const STAND_OFF = `<standOff>
  * Loads an editable copy of the first document with the test <text>.
  * @param {Page} page
  * @param {string} [standOff] - Inserted after the teiHeader
+ * @param {string} [text] - The <text> element
  * @returns {Promise<string>} The stable id of the copy
  */
-async function loadReviewDocument(page, standOff = '') {
+async function loadReviewDocument(page, standOff = '', text = TEXT) {
   const stableId = await page.evaluate(async ({ text, standOff }) => {
     const w = /** @type {any} */ (window);
     const xml = w.app.getDependency('xmleditor').getXML()
@@ -62,7 +65,7 @@ async function loadReviewDocument(page, standOff = '') {
     const res = await w.client.apiClient.filesSave({ xml_string: xml, file_id: 'unit-review-probe', new_version: true });
     await w.app.getDependency('services').load({ xml: res.file_id });
     return res.file_id;
-  }, { text: TEXT, standOff });
+  }, { text, standOff });
   await page.waitForFunction((expectedXml) => {
     const app = /** @type {any} */ (window).app;
     return app.getCurrentState().xml === expectedXml && app.getCurrentState().editorReadOnly === false;
@@ -289,6 +292,173 @@ test.describe('Unit review', () => {
       await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('opens documents with units marked not OK in review mode, showing annotators only the reviews', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      const stableId = await loadReviewDocument(page, STAND_OFF);
+      // a not-OK mark of the LLM Reviewer (an annotator's save keeps only their own and LLM marks)
+      await page.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: unit.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+        await review.setEnabled(false);
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(false);
+
+      await page.evaluate(async (xml) => (/** @type {any} */ (window)).app.getDependency('services').load({ xml }), stableId);
+      await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE_AUTO', 15000);
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(true);
+
+      const line = await cursorTo(page, 'Alpha');
+      await page.evaluate((line) => (/** @type {any} */ (window)).app.getDependency('unit-review').openReview(line), line);
+      const popover = page.getByTestId('unit-review-popover');
+      await expect(popover).toBeVisible();
+      await expect(popover).toContainText('Wrong year');
+      await expect(popover).not.toContainText('Your review');
+      await expect(popover.getByTestId('unit-review-comment')).toHaveCount(0);
+      await expect(popover.getByTestId('unit-review-save')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      // the diagnostic offers annotators only to open the review
+      const entry = page.locator('.diagnostics-drawer-list', { hasText: 'Marked not OK' });
+      await expect(entry.getByText('Open review')).toHaveCount(1);
+      await expect(entry.getByText('✓ OK')).toHaveCount(0);
+      await expect(entry.getByText('✕ Not OK')).toHaveCount(0);
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('a reviewer\'s read-only view follows the annotator\'s changes', async ({ page, browser }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const reviewerContext = await browser.newContext();
+    const reviewerPage = await reviewerContext.newPage();
+    const reviewerLogs = setupTestConsoleCapture(reviewerPage);
+    /** @type {string[]} */
+    const reviewerDialogs = [];
+    reviewerPage.on('dialog', dialog => { reviewerDialogs.push(dialog.message()); dialog.dismiss(); });
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      const stableId = await loadReviewDocument(page, STAND_OFF);
+      await page.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: unit.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+
+      // the annotator holds the lock, so the document is read-only for the reviewer
+      await navigateAndLogin(reviewerPage, 'testreviewer', 'reviewerpass');
+      await reviewerPage.evaluate(async (xml) => (/** @type {any} */ (window)).app.getDependency('services').load({ xml }), stableId);
+      await reviewerPage.waitForFunction((xml) => {
+        const app = /** @type {any} */ (window).app;
+        return app.getCurrentState().xml === xml && app.getCurrentState().editorReadOnly === true
+          && app.getDependency('xmleditor').getView().state.doc.toString().includes('Alpha 2001');
+      }, stableId, { timeout: 20000 });
+
+      await page.evaluate(async () => {
+        const xmlEditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        const view = xmlEditor.getView();
+        const pos = view.state.doc.toString().indexOf('Alpha 2001');
+        view.dispatch({ changes: { from: pos, to: pos + 'Alpha 2001'.length, insert: 'Alpha 2011' } });
+        await xmlEditor.saveIfDirty();
+      });
+
+      await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
+      expect(await editorText(reviewerPage)).toContain('Alpha 2011');
+      // no offer to restore a local draft: the reviewer had no unsaved work
+      expect(reviewerDialogs).toEqual([]);
+      expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().editorReadOnly)).toBe(true);
+      // the corrected unit asks the reviewer to check it again
+      await expect(reviewerPage.getByText('Changed after a not-OK review (Probe LLM: Wrong year), please check again')).toBeVisible({ timeout: 10000 });
+      expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(true);
+
+      // the reviewer marks the corrected unit not OK again: the annotator gets a new message
+      const unreadBefore = await page.evaluate(async () => (await (/** @type {any} */ (window)).client.apiClient.messagesCount()).unread);
+      await reviewerPage.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.markUnits([unit.fingerprint], 'not-ok', { comment: 'Still wrong' });
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      // the badge on the user menu updates live
+      await expect(page.getByTestId('toolbar-menu-badge')).toHaveText(String(unreadBefore + 1), { timeout: 10000 });
+
+      // the reviewer's marks reach the annotator's open (editable) copy without a reload
+      const summaryNow = async () => summary(page);
+      await expect.poll(async () => (await summaryNow()).notOk, { timeout: 10000 }).toBe(1);
+      const loadsBefore = consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length;
+      await reviewerPage.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.markUnits([unit.fingerprint], 'ok');
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      await expect.poll(async () => (await summaryNow()).ok, { timeout: 10000 }).toBe(1);
+      expect((await summaryNow()).notOk).toBe(0);
+      expect(consoleLogs.filter(l => l.message === 'XML_EDITOR_DOCUMENT_LOADED').length).toBe(loadsBefore);
+    } finally {
+      await releaseAllLocks(reviewerPage).catch(() => {});
+      await performLogout(reviewerPage).catch(() => {});
+      await reviewerContext.close();
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('keeps a mark with its unit when an identical unit before it is edited', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF, TEXT.replace('<bibl>Beta 2002</bibl>', '<bibl>Ibid.</bibl>').replace('<bibl>Gamma 2003</bibl>', '<bibl>Ibid.</bibl>'));
+      // a not-OK mark on the first <bibl>Ibid.</bibl>
+      await page.evaluate(async () => {
+        const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+        const units = review.getUnits();
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: units[1].fingerprint, state: 'not-ok', comment: 'Tag it' }]);
+      });
+      const firstIbid = await cursorTo(page, 'Ibid.');
+      expect((await summary(page)).notOk).toBe(1);
+
+      // the annotator tags it: the mark must not move to the second <bibl>Ibid.</bibl>
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const pos = view.state.doc.toString().indexOf('Ibid.');
+        view.dispatch({ changes: [{ from: pos, insert: '<ref type="precedingWork">' }, { from: pos + 'Ibid.'.length, insert: '</ref>' }] });
+      });
+      await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(0);
+      const entry = page.locator('.diagnostics-drawer-list', { hasText: 'Changed after a not-OK review' });
+      await expect(entry).toContainText(`Line ${firstIbid}`);
+      await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
+    } finally {
       await releaseAllLocks(page);
       await performLogout(page);
       stopErrorMonitoring();

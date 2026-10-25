@@ -355,6 +355,18 @@ def apply_contribution(stored: str, incoming: str, username: str, fullname: str,
     return xml
 
 
+def review_annotation(xml: str, username: str) -> str | None:
+    """
+    The markup of a user's review annotation (`annotation[@resp="#username"]` of the unit review
+    list), or None if the user has not reviewed the file.
+
+    Raises:
+        etree.XMLSyntaxError: If the text is not well-formed
+    """
+    item = next((i for i in _items(_parse(xml), REVIEW_LIST_TYPE) if i.author == username), None)
+    return _block(xml, item.id)[2] if item else None
+
+
 def merge_foreign_standoff(stored: str, incoming: str, username: str) -> str:
     """
     Keeps, in the text `incoming` that `username` saves over `stored`, what other users changed in
