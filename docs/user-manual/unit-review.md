@@ -39,7 +39,7 @@ The keyboard shortcuts act on the units at the cursor or in the selection. The b
 | Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
 | Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
-Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.
+Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to open the review and, for reviewers, to mark them OK or not OK. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.
 
 A not-OK mark is sent as a [message](messages.md) to the owner of the document (if you review in your own copy of it, to the owner of the version you copied). Type `@` in the comment of the mark to mention someone else, too.
 

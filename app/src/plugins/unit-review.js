@@ -995,6 +995,7 @@ class UnitReviewPlugin extends Plugin {
     const llmRanges = collectDiagnostics(state).filter(d => d.source === LLM_REVIEW_SOURCE)
     /** @type {Diagnostic[]} */
     const own = []
+    const reviewer = this.#isReviewer()
     for (const unit of this.#scan.units) {
       if (unit.to > state.doc.length) continue
       const combined = this.#combined.get(unit.fingerprint)
@@ -1013,14 +1014,17 @@ class UnitReviewPlugin extends Plugin {
         to: Math.min(unit.to, line.to),
         severity: 'info',
         message: `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`,
+        // only reviewers can mark units
         actions: [
-          { name: '✓ OK', apply: () => { this.markUnits([fp], 'ok') } },
-          { name: '✕ Not OK', apply: () => { this.markUnits([fp], 'not-ok') } },
-          { name: 'Open review', apply: (v, from) => { this.openReview(v.state.doc.lineAt(from).number) } }
+          ...(reviewer ? [
+            { name: '✓ OK', apply: () => { this.markUnits([fp], 'ok') } },
+            { name: '✕ Not OK', apply: () => { this.markUnits([fp], 'not-ok') } }
+          ] : []),
+          { name: 'Open review', apply: (/** @type {EditorView} */ v, /** @type {number} */ from) => { this.openReview(v.state.doc.lineAt(from).number) } }
         ]
       })
     }
-    const key = own.map(d => `${d.from}:${d.to}:${d.message}`).join('|')
+    const key = `${reviewer}|` + own.map(d => `${d.from}:${d.to}:${d.message}`).join('|')
     if (key === this.#diagnosticsKey) return
     this.#diagnosticsKey = key
     // not from inside a dispatch

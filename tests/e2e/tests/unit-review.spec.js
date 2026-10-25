@@ -330,6 +330,11 @@ test.describe('Unit review', () => {
       await expect(popover.getByTestId('unit-review-comment')).toHaveCount(0);
       await expect(popover.getByTestId('unit-review-save')).toHaveCount(0);
       await page.keyboard.press('Escape');
+      // the diagnostic offers annotators only to open the review
+      const entry = page.locator('.diagnostics-drawer-list', { hasText: 'Marked not OK' });
+      await expect(entry.getByText('Open review')).toHaveCount(1);
+      await expect(entry.getByText('✓ OK')).toHaveCount(0);
+      await expect(entry.getByText('✕ Not OK')).toHaveCount(0);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
