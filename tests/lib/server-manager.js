@@ -14,6 +14,7 @@ export class ServerManager {
    * @param {boolean} [options.cleanDb=true] - Whether to wipe database before starting
    * @param {boolean} [options.verbose=false] - Whether to show server output
    * @param {Object.<string, string>} [options.env={}] - Environment variables to set
+   * @param {() => Promise<void>} [options.beforeStart] - Runs after the database is wiped and before the server starts, e.g. to import fixture files: no other process may write to the SQLite databases while the server has them open
    * @returns {Promise<string>} The base URL of the started server (E2E_BASE_URL)
    * @throws {Error} If server fails to start or health check fails
    */

@@ -410,19 +410,13 @@ async function main() {
       verbose: options.verbose,
       noRebuild: options.noRebuild,
       env: options.env,
+      // Step 4.5: Import fixture files before the server opens the databases (local mode only)
+      beforeStart: mode === 'local' && fixtureFilesPath
+        ? () => importFixtureFiles(fixtureFilesPath, resolve(projectRoot, runtimeDir), projectRoot, cliOptions.verbose)
+        : undefined,
     };
 
     const baseUrl = await serverManager.start(startOptions);
-
-    // Step 4.5: Import fixture files after server is ready (local mode only)
-    if (mode === 'local' && fixtureFilesPath) {
-      await importFixtureFiles(
-        fixtureFilesPath,
-        resolve(projectRoot, runtimeDir),
-        projectRoot,
-        cliOptions.verbose
-      );
-    }
 
     // Step 5: Run tests
     exitCode = await runTests(filteredTests, baseUrl, options.timeout);

@@ -521,6 +521,7 @@ LOG_LEVEL=INFO
       cleanDb = true,
       verbose = false,
       env = {},
+      beforeStart,
     } = options;
 
     // Step 0: Resolve ports
@@ -550,6 +551,11 @@ LOG_LEVEL=INFO
 
     // Apply any additional environment variables to test runner process
     Object.assign(process.env, env);
+
+    // Step 2.5: e.g. import fixture files, with the server's environment. Not after the start:
+    // closing the last connection of another process deletes the -wal and -shm files that the
+    // server has mapped, and the server's connections then fail with "disk I/O error"
+    if (beforeStart) await beforeStart();
 
     // Step 3: Start server
     await this.startServerProcess(verbose);
