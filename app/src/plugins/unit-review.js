@@ -52,6 +52,14 @@ const SOURCE = 'unit-review'
 /** Source tag of the LLM Reviewer's diagnostics (pte-plugins annotation-review) */
 const LLM_REVIEW_SOURCE = 'annotation-review'
 
+/**
+ * Whether a unit was edited after it was marked not OK and has no current mark: the reviewer
+ * should check whether the edit fixed it.
+ * @param {CombinedUnit|undefined} combined
+ * @returns {boolean}
+ */
+const needsRecheck = combined => combined?.state === 'stale' && combined.was.some(r => r.mark.state === 'not-ok')
+
 /** Delay after the last edit before units are recomputed */
 const REFRESH_DELAY_MS = 250
 
@@ -325,6 +333,7 @@ class UnitReviewPlugin extends Plugin {
     // a document with units marked not OK opens in review mode, to show the reviewers' feedback;
     // the next document without such units closes it again
     const notOk = this.#summary.notOk + this.#summary.disputed
+      + this.#scan.units.filter(u => needsRecheck(this.#combined.get(u.fingerprint))).length
     if (!this.#enabled && notOk) {
       this.setEnabled(true, { remember: false })
       this.#autoEnabled = true
@@ -652,7 +661,8 @@ class UnitReviewPlugin extends Plugin {
 
   /**
    * Moves the cursor to the next unit the current user has not marked (`open`) or the next unit
-   * whose combined state is not OK or disputed (`not-ok`), wrapping around.
+   * whose combined state is not OK or disputed, or that were changed after a not-OK review (`not-ok`),
+   * wrapping around.
    * @param {'open'|'not-ok'} kind
    * @param {number} [afterLine] - Defaults to the cursor line
    * @returns {boolean}
@@ -666,7 +676,7 @@ class UnitReviewPlugin extends Plugin {
     /** @param {Unit} unit */
     const wanted = unit => {
       const combined = this.#combined.get(unit.fingerprint)
-      if (kind === 'not-ok') return combined?.state === 'not-ok' || combined?.state === 'disputed'
+      if (kind === 'not-ok') return combined?.state === 'not-ok' || combined?.state === 'disputed' || needsRecheck(combined)
       return !this.#data.reviewers.get(me)?.marks.has(unit.fingerprint)
     }
     const units = this.#scan.units
@@ -948,19 +958,21 @@ class UnitReviewPlugin extends Plugin {
     for (const unit of this.#scan.units) {
       if (unit.to > state.doc.length) continue
       const combined = this.#combined.get(unit.fingerprint)
-      if (!combined || (combined.state !== 'not-ok' && combined.state !== 'disputed')) continue
+      const recheck = needsRecheck(combined)
+      if (!combined || (combined.state !== 'not-ok' && combined.state !== 'disputed' && !recheck)) continue
       const humanNotOk = combined.reviews.some(r => !r.reviewer.isLlm && r.mark.state === 'not-ok')
       if (!humanNotOk && combined.state === 'not-ok' && llmRanges.some(d => d.from < unit.to && d.to > unit.from)) continue
-      const comments = combined.reviews
+      const comments = (recheck ? combined.was : combined.reviews)
         .filter(r => r.mark.state === 'not-ok')
         .map(r => `${this.#reviewerName(r.reviewer)}${r.mark.comment ? `: ${r.mark.comment}` : ''}`)
+      const what = recheck ? 'Changed after a not-OK review' : combined.state === 'disputed' ? 'Review disputed' : 'Marked not OK'
       const line = state.doc.lineAt(unit.from)
       const fp = unit.fingerprint
       own.push({
         from: unit.from,
         to: Math.min(unit.to, line.to),
         severity: 'info',
-        message: `${combined.state === 'disputed' ? 'Review disputed' : 'Marked not OK'} (${comments.join('; ')})`,
+        message: `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`,
         actions: [
           { name: '✓ OK', apply: () => { this.markUnits([fp], 'ok') } },
           { name: '✕ Not OK', apply: () => { this.markUnits([fp], 'not-ok') } },
@@ -998,7 +1010,7 @@ class UnitReviewPlugin extends Plugin {
       { icon: 'eraser', cls: 'remove', title: `Remove my review (${key('Ctrl+Shift+Backspace')})`, run: () => this.#markAtCursor(null, false, pos) },
       { icon: 'check2-all', cls: 'ok-outline', title: 'Mark everything above as OK (only the units you have not marked yet)', run: () => this.#markAbove(pos) },
       { icon: 'arrow-down-circle', cls: 'nav', nav: true, title: 'Go to the next unit you have not reviewed (F7)', run: () => this.goToNext('open', this.#view().state.doc.lineAt(pos).number) },
-      { icon: 'exclamation-circle', cls: 'nav', nav: true, title: 'Go to the next unit that is not OK or disputed (Shift+F7)', run: () => this.goToNext('not-ok', this.#view().state.doc.lineAt(pos).number) }
+      { icon: 'exclamation-circle', cls: 'nav', nav: true, title: 'Go to the next unit that is not OK, disputed or changed after a not-OK review (Shift+F7)', run: () => this.goToNext('not-ok', this.#view().state.doc.lineAt(pos).number) }
     ]
     const row = document.createElement('div')
     row.className = 'xml-editor-context-menu__history-row unit-review-menu-row'

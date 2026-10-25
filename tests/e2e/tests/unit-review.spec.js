@@ -351,6 +351,13 @@ test.describe('Unit review', () => {
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
       const stableId = await loadReviewDocument(page, STAND_OFF);
+      await page.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: unit.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
 
       // the annotator holds the lock, so the document is read-only for the reviewer
       await navigateAndLogin(reviewerPage, 'testreviewer', 'reviewerpass');
@@ -372,6 +379,9 @@ test.describe('Unit review', () => {
       await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
       expect(await editorText(reviewerPage)).toContain('Alpha 2011');
       expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().editorReadOnly)).toBe(true);
+      // the corrected unit asks the reviewer to check it again
+      await expect(reviewerPage.getByText('Changed after a not-OK review (Probe LLM: Wrong year), please check again')).toBeVisible({ timeout: 10000 });
+      expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(true);
     } finally {
       await releaseAllLocks(reviewerPage).catch(() => {});
       await performLogout(reviewerPage).catch(() => {});

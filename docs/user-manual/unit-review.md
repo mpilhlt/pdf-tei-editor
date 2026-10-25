@@ -12,7 +12,7 @@ Click the **Review** button (clipboard icon) in the XML editor toolbar. Review m
 
 Hover over the **Review** button to see the list of shortcuts.
 
-The setting is remembered in the browser. A document that has units marked not OK (or disputed) turns review mode on when it is loaded, so that the feedback is visible; it is turned off again when you load a document without such units, unless you switched it on yourself.
+The setting is remembered in the browser. A document that has units marked not OK, disputed units, or units changed after a not-OK review turns review mode on when it is loaded, so that the feedback is visible; it is turned off again when you load a document without such units, unless you switched it on yourself.
 
 Only users with the *reviewer* or *admin* role can set marks; everyone else sees the strip and the marks read-only. For them, the review popover shows only the reviews and the combined result.
 
@@ -36,10 +36,10 @@ The keyboard shortcuts act on the units at the cursor or in the selection. The b
 | Mark several units as OK | Select them and press `Ctrl+Enter`, or drag over the strip (hold `Alt` while dragging to mark them not OK) |
 | Mark all units above as OK | The double-check button (only units you have not marked yet) |
 | Open the review of a line | Click the strip: shows your mark and comment, the other reviewers' marks, and the combined result |
-| Next unit you have not reviewed / next not-OK unit | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
+| Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
 | Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
-Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review.
+Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to mark them OK or not OK and to open the review. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.
 
 A not-OK mark is sent as a [message](messages.md) to the owner of the document (if you review in your own copy of it, to the owner of the version you copied). Type `@` in the comment of the mark to mention someone else, too.
 
@@ -69,7 +69,7 @@ When review mode is on and you run **Review Annotations** (Tools menu, LLM Revie
 
 ## Edited units
 
-A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
+A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
 
 ## Starting a version without reviews
 
