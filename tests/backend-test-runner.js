@@ -438,6 +438,7 @@ async function main() {
       }
       if (options.mode === 'local') {
         logger.info(`Server log: ${serverManager.logFile}`);
+        await serverManager.printServerTracebacks();
       }
     } else {
       logger.success('All tests PASSED!');
