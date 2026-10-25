@@ -20,6 +20,7 @@ from typing import Optional
 from lxml import etree
 
 from fastapi_app.lib.utils.tei_utils import get_header_changes
+from fastapi_app.lib.utils.xml_utils import parse_untrusted_xml
 
 TEI_NS = "http://www.tei-c.org/ns/1.0"
 XML_ID = "{http://www.w3.org/XML/1998/namespace}id"
@@ -46,7 +47,8 @@ def canonical_text(root: etree._Element) -> bytes:  # type: ignore[name-defined]
         return b""
     canon = etree.tostring(text, method="c14n", with_comments=False)
     canon = re.sub(rb"\s+", b" ", canon)
-    return re.sub(rb"\s*(<|>)\s*", rb"\1", canon).strip()
+    # whitespace runs are single spaces now
+    return re.sub(rb" ?([<>]) ?", rb"\1", canon).strip()
 
 
 def chain_hash(previous: str, canon: bytes) -> str:
@@ -124,7 +126,7 @@ def stamp_revision_hashes(xml_string: str, reference_xml: Optional[str] = None) 
         changes cannot be located in the source text
     """
     try:
-        root = etree.fromstring(xml_string.encode("utf-8"))
+        root = parse_untrusted_xml(xml_string)
     except etree.XMLSyntaxError:
         return xml_string
     changes = get_header_changes(root)
@@ -135,7 +137,7 @@ def stamp_revision_hashes(xml_string: str, reference_xml: Optional[str] = None) 
     reference_signatures: set[ChangeSignature] = set()
     if reference_xml:
         try:
-            reference_root = etree.fromstring(reference_xml.encode("utf-8"))
+            reference_root = parse_untrusted_xml(reference_xml)
             for change in get_header_changes(reference_root):
                 signature = _signature(change)
                 reference_signatures.add(signature)

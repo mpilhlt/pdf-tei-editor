@@ -86,7 +86,11 @@ describe('convert-xml-comments enhancement', () => {
   });
 
   it('leaves documents without comments unchanged', () => {
-    const text = INPUT.replace(/<!--[^>]*-->/g, '');
+    let text = INPUT;
+    for (let previous = ''; previous !== text;) {
+      previous = text;
+      text = text.replace(/<!--[^>]*-->/g, '');
+    }
     const doc = parse(text);
     execute(doc, {}, new Map());
     assert.strictEqual(new XMLSerializer().serializeToString(doc), new XMLSerializer().serializeToString(parse(text)));

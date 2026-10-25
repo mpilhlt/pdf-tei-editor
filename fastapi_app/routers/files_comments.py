@@ -41,6 +41,7 @@ from ..lib.sse.event_bus import get_event_bus
 from ..lib.sse.sse_service import SSEService
 from ..lib.sse.sse_utils import broadcast_to_other_sessions
 from ..lib.storage.file_storage import FileStorage
+from ..lib.utils.xml_utils import parse_untrusted_xml
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -78,7 +79,7 @@ def _store(file: FileMetadata, xml: str, file_repo: FileRepository, file_storage
 def _new_replies(before: str, after: str) -> list[tuple[str, str, str]]:
     """Replies in `after` that `before` lacks, as (thread id, comment id, annotation markup)."""
     def comments(xml: str) -> list[UnitComment]:
-        return read_comments(find_standoff_list(etree.fromstring(xml.encode("utf-8")), COMMENT_LIST_TYPE))
+        return read_comments(find_standoff_list(parse_untrusted_xml(xml), COMMENT_LIST_TYPE))
 
     known = {c.id for c in comments(before)}
     found: list[tuple[str, str, str]] = []
