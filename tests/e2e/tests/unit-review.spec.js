@@ -5,13 +5,15 @@
  * <bibl> units, marks them with the keyboard, the comment prompt and the review popover,
  * checks the stand-off storage, the status bar meter, the diagnostics and undo, the
  * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
- * dialog.
+ * dialog, the automatic review mode for documents with not-OK units, and the reload of a
+ * read-only document after another user saved it.
  *
  * @testCovers app/src/plugins/unit-review.js
  * @testCovers app/src/modules/unit-review.js
  * @testCovers app/src/modules/unit-review-popover.js
  * @testCovers app/src/modules/codemirror/unit-review-gutter.js
  * @testCovers app/src/plugins/document-actions.js
+ * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/templates/save-document-dialog.html
  */
 
@@ -289,6 +291,91 @@ test.describe('Unit review', () => {
       await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('opens documents with units marked not OK in review mode, showing annotators only the reviews', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      const stableId = await loadReviewDocument(page, STAND_OFF);
+      // a not-OK mark of the LLM Reviewer (an annotator's save keeps only their own and LLM marks)
+      await page.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: unit.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+        await review.setEnabled(false);
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(false);
+
+      await page.evaluate(async (xml) => (/** @type {any} */ (window)).app.getDependency('services').load({ xml }), stableId);
+      await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE_AUTO', 15000);
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(true);
+
+      const line = await cursorTo(page, 'Alpha');
+      await page.evaluate((line) => (/** @type {any} */ (window)).app.getDependency('unit-review').openReview(line), line);
+      const popover = page.getByTestId('unit-review-popover');
+      await expect(popover).toBeVisible();
+      await expect(popover).toContainText('Wrong year');
+      await expect(popover).not.toContainText('Your review');
+      await expect(popover.getByTestId('unit-review-comment')).toHaveCount(0);
+      await expect(popover.getByTestId('unit-review-save')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('a reviewer\'s read-only view follows the annotator\'s changes', async ({ page, browser }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const reviewerContext = await browser.newContext();
+    const reviewerPage = await reviewerContext.newPage();
+    const reviewerLogs = setupTestConsoleCapture(reviewerPage);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      const stableId = await loadReviewDocument(page, STAND_OFF);
+
+      // the annotator holds the lock, so the document is read-only for the reviewer
+      await navigateAndLogin(reviewerPage, 'testreviewer', 'reviewerpass');
+      await reviewerPage.evaluate(async (xml) => (/** @type {any} */ (window)).app.getDependency('services').load({ xml }), stableId);
+      await reviewerPage.waitForFunction((xml) => {
+        const app = /** @type {any} */ (window).app;
+        return app.getCurrentState().xml === xml && app.getCurrentState().editorReadOnly === true
+          && app.getDependency('xmleditor').getView().state.doc.toString().includes('Alpha 2001');
+      }, stableId, { timeout: 20000 });
+
+      await page.evaluate(async () => {
+        const xmlEditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        const view = xmlEditor.getView();
+        const pos = view.state.doc.toString().indexOf('Alpha 2001');
+        view.dispatch({ changes: { from: pos, to: pos + 'Alpha 2001'.length, insert: 'Alpha 2011' } });
+        await xmlEditor.saveIfDirty();
+      });
+
+      await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
+      expect(await editorText(reviewerPage)).toContain('Alpha 2011');
+      expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().editorReadOnly)).toBe(true);
+    } finally {
+      await releaseAllLocks(reviewerPage).catch(() => {});
+      await performLogout(reviewerPage).catch(() => {});
+      await reviewerContext.close();
       await releaseAllLocks(page);
       await performLogout(page);
       stopErrorMonitoring();

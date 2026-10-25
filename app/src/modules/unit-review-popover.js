@@ -34,6 +34,7 @@ import { attachMentionAutocomplete, renderWithMentions } from './mention-autocom
  * @property {string} combined - Description of the combined result
  * @property {string} [note] - Extra hint, e.g. that several units share the line
  * @property {boolean} readOnly - Show only, no editing
+ * @property {boolean} [hideOwn] - Leave out the current user's review and comment, for users who cannot review
  * @property {MentionCandidate[]} [mentions] - Persons offered when typing `@` in the comment
  * @property {(result: {state: 'ok'|'not-ok'|null, comment: string, final: boolean}) => void} onSave
  */
@@ -59,6 +60,7 @@ const CSS = `
 .ur-seg button.ur-on[data-state=""] { background: var(--sl-color-neutral-200, #e5e5e5); }
 .ur-pop input[type="text"] { flex: 1; font: inherit; padding: 5px 8px; border: 1px solid var(--sl-color-neutral-400, #bbb); border-radius: 5px; min-width: 0; }
 .ur-others { border-top: 1px solid var(--sl-color-neutral-200, #eee); padding-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.ur-pop-bd > .ur-others:first-child { border-top: 0; padding-top: 0; }
 .ur-others .ur-h { color: var(--sl-color-neutral-500, #888); font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .ur-rev { display: flex; gap: 6px; font-size: 12.5px; }
 .ur-rev .ur-ok { color: #2f9e57; } .ur-rev .ur-not-ok { color: #d64545; }
@@ -204,12 +206,12 @@ export function openReviewPopover(options) {
   if (!options.readOnly) attachMentionAutocomplete(comment, options.mentions ?? []);
   const commentRow = el('div', 'ur-row');
   commentRow.append(el('span', 'ur-label', 'Comment'), comment);
-  body.append(stateRow, commentRow);
+  if (!options.hideOwn) body.append(stateRow, commentRow);
 
   const finalBox = /** @type {HTMLInputElement} */ (el('input'));
   finalBox.type = 'checkbox';
   finalBox.checked = options.final;
-  if (options.canFinal) {
+  if (options.canFinal && !options.hideOwn) {
     const finalRow = el('label', 'ur-row');
     finalRow.append(el('span', 'ur-label'), finalBox, el('span', '', 'Final review (overrides all others)'));
     body.appendChild(finalRow);
@@ -218,7 +220,7 @@ export function openReviewPopover(options) {
   if (options.others.length) {
     const names = new Map((options.mentions ?? []).map(m => [m.id, m.name]));
     const others = el('div', 'ur-others');
-    others.appendChild(el('div', 'ur-h', 'Other reviews'));
+    others.appendChild(el('div', 'ur-h', options.hideOwn ? 'Reviews' : 'Other reviews'));
     for (const review of options.others) {
       const row = el('div', 'ur-rev' + (review.was ? ' ur-was' : ''));
       row.appendChild(el('span', review.state === 'ok' ? 'ur-ok' : 'ur-not-ok', review.state === 'ok' ? '✓' : '✕'));

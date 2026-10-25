@@ -12,7 +12,9 @@ Click the **Review** button (clipboard icon) in the XML editor toolbar. Review m
 
 Hover over the **Review** button to see the list of shortcuts.
 
-The setting is remembered in the browser. Only users with the *reviewer* or *admin* role can set marks; everyone else sees the strip and the marks read-only.
+The setting is remembered in the browser. A document that has units marked not OK (or disputed) turns review mode on when it is loaded, so that the feedback is visible; it is turned off again when you load a document without such units, unless you switched it on yourself.
+
+Only users with the *reviewer* or *admin* role can set marks; everyone else sees the strip and the marks read-only. For them, the review popover shows only the reviews and the combined result.
 
 ## Review units
 

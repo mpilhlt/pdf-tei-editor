@@ -93,6 +93,9 @@ class UnitReviewPlugin extends Plugin {
   /** Review mode: strip, shortcuts and menu entries are active */
   #enabled = false
 
+  /** Review mode was switched on because the loaded document has units marked not OK */
+  #autoEnabled = false
+
   /** @type {any} */
   #toggle = null
 
@@ -199,11 +202,14 @@ class UnitReviewPlugin extends Plugin {
   /**
    * Switches review mode on or off.
    * @param {boolean} enabled
+   * @param {{remember?: boolean}} [options] - remember: false does not store the choice for later
+   *   sessions (default true)
    */
-  async setEnabled(enabled) {
+  async setEnabled(enabled, { remember = true } = {}) {
     this.#enabled = enabled
+    this.#autoEnabled = false
     if (this.#toggle) this.#toggle.checked = enabled
-    this.uiStorage.set('enabled', enabled)
+    if (remember) this.uiStorage.set('enabled', enabled)
     this.#slot?.reconfigure(enabled ? this.#extensions() : [])
     if (!enabled) closePopover()
     this.#refresh()
@@ -316,6 +322,16 @@ class UnitReviewPlugin extends Plugin {
     this.#scan = { units: [], looseText: [], complete: true, path: null }
     this.#fpCache = new Map()
     this.#refresh()
+    // a document with units marked not OK opens in review mode, to show the reviewers' feedback;
+    // the next document without such units closes it again
+    const notOk = this.#summary.notOk + this.#summary.disputed
+    if (!this.#enabled && notOk) {
+      this.setEnabled(true, { remember: false })
+      this.#autoEnabled = true
+      testLog('UNIT_REVIEW_MODE_AUTO', { notOk })
+    } else if (this.#autoEnabled && !notOk) {
+      this.setEnabled(false, { remember: false })
+    }
   }
 
   async #loadConfig() {
@@ -860,6 +876,7 @@ class UnitReviewPlugin extends Plugin {
       combined: `Combined: ${this.#describe(combined)}`,
       note: units.length > 1 ? `${units.length} units share this line; your review applies to all of them.` : undefined,
       readOnly,
+      hideOwn: !this.#isReviewer(),
       mentions: this.#mentionCandidates(),
       onSave: ({ state, comment, final }) => {
         const fps = this.#unitsOnLines(line, line).map(u => u.fingerprint)
