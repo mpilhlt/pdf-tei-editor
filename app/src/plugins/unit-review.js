@@ -1050,7 +1050,10 @@ class UnitReviewPlugin extends Plugin {
         ]
       })
     }
-    const key = `${reviewer}|` + own.map(d => `${d.from}:${d.to}:${d.message}`).join('|')
+    // empty without diagnostics: #onEditorUpdate() re-merges only while the key is set, and
+    // re-merging an empty set after every replacement by another source would make plugins that
+    // always re-merge (e.g. the LLM review) and this one replace the diagnostics in turn forever
+    const key = own.length ? `${reviewer}|` + own.map(d => `${d.from}:${d.to}:${d.message}`).join('|') : ''
     if (key === this.#diagnosticsKey) return
     this.#diagnosticsKey = key
     // not from inside a dispatch

@@ -166,6 +166,31 @@ test.describe('Diagnostics drawer', () => {
       await injectDiagnostics(page);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix A', 'fix B']);
 
+      // the injected source re-merges after every replacement of the diagnostic set: this must not
+      // make it and the other sources replace the set in turn forever (#647)
+      const replacements = await page.evaluate(async () => {
+        const app = /** @type {any} */ (window).app;
+        const lintUtils = app.getDependency('lint-utils');
+        let count = 0;
+        app.getDependency('xmleditor').addUpdateListener((/** @type {any} */ u) => { if (lintUtils.replacesDiagnostics(u)) count++; });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return count;
+      });
+      expect(replacements).toBeLessThan(5);
+
+      // the lint gutter tooltip opens next to its marker, not at the top left of the window (#647)
+      const marker = page.locator('#codemirror-container .cm-lint-marker').first();
+      await marker.scrollIntoViewIfNeeded();
+      const markerBox = await marker.boundingBox();
+      await page.mouse.move(markerBox.x + markerBox.width / 2, markerBox.y + markerBox.height / 2);
+      const tooltip = page.locator('#codemirror-container .cm-tooltip-lint');
+      await expect(tooltip).toBeVisible();
+      const tooltipBox = await tooltip.boundingBox();
+      expect(Math.abs(tooltipBox.x - markerBox.x)).toBeLessThan(50);
+      expect(Math.abs(tooltipBox.y - (markerBox.y + markerBox.height))).toBeLessThan(50);
+      await page.mouse.move(0, 0);
+      await expect(tooltip).toBeHidden();
+
       // the drawer stays open permanently, which must not hide the help icon
       await expect(page.locator('div[name="helpIcon"]')).toBeVisible();
 
