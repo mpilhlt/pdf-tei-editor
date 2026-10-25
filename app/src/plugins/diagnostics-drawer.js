@@ -28,6 +28,7 @@ import { EditorView } from '@codemirror/view'
 import { Plugin } from '../modules/plugin-base.js'
 import ui, { registerTemplate, createFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
+import { linkifyNodes } from '../modules/linkify.js'
 import {
   collectDiagnostics,
   diagnosticKey,
@@ -299,7 +300,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     body.className = 'diagnostics-drawer-item-body'
     const message = document.createElement('span')
     message.className = 'diagnostics-drawer-message'
-    message.textContent = diagnostic.message
+    message.replaceChildren(...linkifyNodes(diagnostic.message))
     body.append(message)
 
     // source on the left, actions on the right
