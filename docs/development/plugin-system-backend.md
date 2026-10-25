@@ -371,6 +371,12 @@ def metadata(self) -> dict[str, Any]:
 - `label` (required): Display label for menu item
 - `description` (optional): Tooltip text
 - `state_params` (required): List of state fields to pass as parameters (see [app/src/state.js](../../app/src/state.js))
+- `icon` (optional): Shoelace/Bootstrap icon name shown as the menu item's prefix icon
+- `url_openable` (optional): If `true`, the endpoint can be opened from a link (see below)
+
+**Opening an endpoint from a link:**
+
+A link to the app with `#plugin=<plugin-id>/<endpoint-name>` in the URL hash opens that endpoint once the plugins are loaded (after login, if the user is not logged in yet), if the endpoint sets `"url_openable": True`. Its `state_params` are taken from the URL hash, falling back to the current state, e.g. `https://host/#plugin=annotation-progress/show_progress&collection=batch-1&variant=grobid`. The `plugin` parameter is removed from the hash after opening, so that a reload does not open the endpoint again. Only mark endpoints without side effects as `url_openable`, since a link runs them without user interaction. A view can build such a link from `window.top.location` to offer a "share link" (see the `annotation-progress` plugin).
 
 **Available State Parameters:**
 

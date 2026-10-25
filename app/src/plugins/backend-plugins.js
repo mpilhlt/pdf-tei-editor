@@ -11,6 +11,7 @@ import ep from '../extension-points.js';
 import { notify } from '../modules/sl-utils.js';
 import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import { UrlHash } from '../modules/browser-utils.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -25,6 +26,9 @@ await registerTemplate('backend-plugins-result-dialog', 'backend-plugins-result-
 await registerTemplate('backend-plugins-dropdown', 'backend-plugins-dropdown.html');
 
 export class BackendPluginsPlugin extends Plugin {
+  /** URL hash parameter naming an endpoint to open on load, see {@link BackendPluginsPlugin#openFromUrlHash} */
+  static URL_HASH_PARAM = 'plugin';
+
   /**
    * Constructor
    * @param {PluginContext} context 
@@ -94,12 +98,54 @@ export class BackendPluginsPlugin extends Plugin {
     if (this.plugins.length > 0) {
       this.populateMenu();
     }
+
+    // Open an endpoint given in the URL hash, now or when it is added to the hash later
+    window.addEventListener('hashchange', () => this.openFromUrlHash());
+    await this.openFromUrlHash();
   }
 
   async onSessionIdChange() {
     await this.discoverPlugins();
     this._updateDropdownVisibility();
     this.populateMenu();
+    // the plugins of a link opened before login are only known now
+    await this.openFromUrlHash();
+  }
+
+  /**
+   * Opens the endpoint given in the URL hash as `plugin=<plugin-id>/<endpoint-name>`, if the
+   * endpoint allows it with `url_openable: true` in its metadata. Its `state_params` are taken
+   * from the URL hash (e.g. `collection=...&variant=...`), falling back to the current state.
+   * The `plugin` parameter is removed from the hash, so that a reload does not open the endpoint again.
+   * Nothing happens while the plugin is not available (e.g. before login).
+   */
+  async openFromUrlHash() {
+    const value = UrlHash.get(BackendPluginsPlugin.URL_HASH_PARAM);
+    if (!value) return;
+    const [pluginId, endpointName] = value.split('/');
+    const plugin = this.plugins.find(p => p.id === pluginId);
+    if (!plugin) return;
+    UrlHash.remove(BackendPluginsPlugin.URL_HASH_PARAM, false);
+
+    const endpoint = plugin.endpoints?.find(e => e.name === endpointName);
+    if (!endpoint?.url_openable) {
+      this.#logger.warn(`Endpoint '${endpointName}' of plugin '${pluginId}' cannot be opened from a URL`);
+      notify(`"${value}" cannot be opened from a link`, 'warning', 'exclamation-triangle');
+      return;
+    }
+
+    const urlParams = new URLSearchParams(window.location.hash.slice(1));
+    /** @type {Record<string, any>} */
+    const params = {};
+    for (const param of endpoint.state_params || []) {
+      const urlValue = urlParams.get(param);
+      if (urlValue !== null) {
+        params[param] = urlValue;
+      } else if (this.state[param] !== undefined) {
+        params[param] = this.state[param];
+      }
+    }
+    await this.executePlugin(plugin, endpointName, params);
   }
 
   /**

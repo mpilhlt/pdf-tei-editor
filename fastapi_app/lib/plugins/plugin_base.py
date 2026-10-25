@@ -114,6 +114,10 @@ class Plugin(ABC):
                 - state_params (list[str]): Required frontend state fields to pass as parameters
                 - icon (str): Optional Shoelace/Bootstrap icon name (e.g. "clock-history")
                   shown as the menu item's prefix icon. If omitted, no icon is shown.
+                - url_openable (bool): If True, the endpoint can be opened from a link to the app
+                  with `#plugin=<plugin-id>/<name>` in the URL hash; the state_params are taken
+                  from the hash as well (e.g. `&collection=...&variant=...`). Only set this for
+                  endpoints without side effects, since a link opens them without user interaction.
 
               If not specified, defaults to single menu item calling 'execute' endpoint.
               If empty list, plugin appears in list but adds no menu items.
