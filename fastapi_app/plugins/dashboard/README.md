@@ -1,6 +1,6 @@
 # Dashboard Plugin
 
-Shows a two-column dashboard in a dialog after login, once per login session (reloading the page does not show it again). Other plugins contribute boxes to it; the dashboard opens only if at least one box is contributed. An info button in the toolbar, between the file drawer and the search button, reopens it.
+Shows a two-column dashboard in a dialog after login, once per login session (reloading the page does not show it again, and neither does opening the app with a link to a backend plugin view, `#plugin=...`). Other plugins contribute boxes to it; the dashboard opens only if at least one box is contributed. An info button in the toolbar, between the file drawer and the search button, reopens it.
 
 ## Configuration
 
