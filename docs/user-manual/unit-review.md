@@ -7,7 +7,7 @@ Unit review lets reviewers go through a document unit by unit (for example each 
 Click the **Review** button (clipboard icon) in the XML editor toolbar. Review mode adds:
 
 - the status strip left of the line numbers,
-- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it jumps to the next unit you have not reviewed and shows the diagnostics drawer,
+- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it shows the diagnostics drawer,
 - a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
 
 Hover over the **Review** button to see the list of shortcuts.
@@ -36,7 +36,7 @@ The keyboard shortcuts act on the unit at the cursor (also when other units shar
 | Mark several units as OK | Select them and press `Ctrl+Enter`, or drag over the strip (hold `Alt` while dragging to mark them not OK) |
 | Mark all units above as OK | The double-check button (only units you have not marked yet) |
 | Open the review of a line | Click the strip: shows your mark and comment, the other reviewers' marks, and the combined result |
-| Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, the arrow / exclamation mark button, or click the progress meter |
+| Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, or the arrow / exclamation mark button |
 | Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to open the review and, for reviewers, to mark them OK or not OK. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.

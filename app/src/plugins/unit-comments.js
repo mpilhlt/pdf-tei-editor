@@ -39,7 +39,7 @@ import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawer
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import {
   LIST_TYPE, readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus,
-  editComment, deleteComment, threadStatus, mergeAuthorComments, nextOpenThreadPosition
+  editComment, deleteComment, threadStatus, mergeAuthorComments
 } from '../modules/unit-comments.js'
 import { elementAt, elementPath, resolveAnchor, FingerprintCache } from '../modules/node-anchor.js'
 import { unitCommentGutter, buildUnitCommentMarkers, setUnitCommentMarkersEffect } from '../modules/codemirror/unit-comment-gutter.js'
@@ -258,27 +258,6 @@ class UnitCommentsPlugin extends Plugin {
       onEdit: (id, text) => this.#change(comments => { editComment(comments, id, text, { who: me }) }, threadId),
       onDelete: id => this.#change(comments => deleteComment(comments, id), threadId)
     })
-    return true
-  }
-
-  /**
-   * Moves the cursor to the next element with an open comment thread, wrapping around.
-   * Called when the status-bar meter is clicked.
-   * @returns {boolean}
-   */
-  goToNextOpen() {
-    this.#refresh()
-    const view = this.#view()
-    const target = nextOpenThreadPosition(
-      this.#placed.map(({ thread, element }) => ({ status: thread.status, from: element?.from ?? null })),
-      view.state.selection.main.head
-    )
-    if (target === null) {
-      notify('There are no open comments.', 'success', 'check-circle')
-      return true
-    }
-    view.dispatch({ selection: { anchor: target + 1 }, scrollIntoView: true })
-    view.focus()
     return true
   }
 
@@ -626,11 +605,9 @@ class UnitCommentsPlugin extends Plugin {
   #createMeter() {
     const meter = document.createElement('span')
     meter.dataset.testid = 'unit-comment-meter'
-    // clicking it expands the diagnostics drawer, which lists the open comments, and moves the
-    // cursor to the next open comment
-    meter.dataset.revealsDiagnostics = ''
+    meter.dataset.revealsDiagnostics = '' // clicking it expands the diagnostics drawer, which lists the open comments
+    meter.title = 'Click to show the open comments in the diagnostics drawer.'
     meter.style.cssText = 'display:none;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:0 6px;white-space:nowrap;color:#0b6bcb'
-    meter.addEventListener('click', () => this.goToNextOpen())
     return meter
   }
 

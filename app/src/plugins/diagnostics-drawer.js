@@ -115,10 +115,12 @@ class DiagnosticsDrawerPlugin extends Plugin {
       })
     }
 
-    // statusbar widgets related to the diagnostics expand the drawer when clicked
+    // statusbar widgets related to the diagnostics expand the drawer when clicked, if there are any
     ui.xmlEditor.statusbar.addEventListener('click', event => {
       const target = event.target
-      if (target instanceof Element && target.closest('[data-reveals-diagnostics]')) this.#setExpanded(true)
+      if (target instanceof Element && target.closest('[data-reveals-diagnostics]') && this.#entries.length > 0) {
+        this.#setExpanded(true)
+      }
     })
 
     this.#ui.footer.selectAll.addEventListener('sl-change', () => {

@@ -989,9 +989,8 @@ class UnitReviewPlugin extends Plugin {
     meter.dataset.testid = 'unit-review-meter'
     meter.dataset.revealsDiagnostics = '' // clicking it expands the diagnostics drawer
     meter.style.cssText = 'display:none;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:0 6px;white-space:nowrap'
-    meter.title = 'Review progress. Click to go to the next unit you have not reviewed (F7) and to show the diagnostics drawer.'
+    meter.title = 'Review progress. Click to show the diagnostics drawer.'
     meter.innerHTML = '<span class="ur-bar" style="display:inline-flex;width:90px;height:7px;border-radius:4px;overflow:hidden;background:var(--sl-color-neutral-200,#e4e6ea)"><i style="background:#2f9e57"></i><i style="background:#d64545"></i><i style="background:#e0a020"></i></span><span class="ur-text"></span>'
-    meter.addEventListener('click', () => this.goToNext('open'))
     return meter
   }
 
