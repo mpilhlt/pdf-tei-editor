@@ -74,7 +74,7 @@ If the `-wal` file of a WAL-mode database is removed or replaced while a process
 
 `DatabaseManager.get_connection()` therefore treats SQLite I/O and corruption errors (`is_connection_broken()`) as fatal for the pool: it closes the failing connection and all idle pooled ones, retires connections still in use (they are closed on release), runs `gc.collect()` before the next connection is opened (a failed request leaves its cursor and connection in a reference cycle, and a connection with unfinalized statements stays open in SQLite), and logs a warning with the size and inode of the database files and the free disk space. The request that hit the error still fails, later ones work.
 
-Never delete or replace a database file or its `-wal`/`-shm` files while a server uses it. Test runners must stop the server before wiping `runtime/db`.
+Never delete or replace a database file or its `-wal`/`-shm` files while a server uses it. Test runners must stop the server before wiping `runtime/db`. They also import the fixture files before the server starts (`beforeStart` option of `LocalServerManager.start()`): in CI, the importer, a separate process, deleted the `-wal` and `-shm` files of `metadata.db` when it closed its connection right after the server had started, and the server's queries then failed with "disk I/O error" for the rest of the run.
 
 ## Best Practices for Code Assistants
 

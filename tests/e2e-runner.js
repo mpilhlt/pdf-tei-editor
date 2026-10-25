@@ -238,17 +238,11 @@ class PlaywrightRunner {
         verbose: options.verbose,
         env,
         needsWebdav: false, // Playwright tests don't need WebDAV
+        // Phase 2: Import fixture files before the server opens the databases
+        beforeStart: fixtureFilesPath
+          ? () => importFixtureFiles(fixtureFilesPath, resolve(projectRoot, runtimeDir), projectRoot, options.verbose)
+          : undefined,
       });
-
-      // Phase 2: Import fixture files after server is ready
-      if (fixtureFilesPath) {
-        await importFixtureFiles(
-          fixtureFilesPath,
-          resolve(projectRoot, runtimeDir),
-          projectRoot,
-          options.verbose
-        );
-      }
     } else {
       // Container mode removed - use `npm run test:container` instead
       throw new Error(
