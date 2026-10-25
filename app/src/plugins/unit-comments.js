@@ -626,9 +626,11 @@ class UnitCommentsPlugin extends Plugin {
   #createMeter() {
     const meter = document.createElement('span')
     meter.dataset.testid = 'unit-comment-meter'
-    // clicking it expands the diagnostics drawer, which lists the open comments
+    // clicking it expands the diagnostics drawer, which lists the open comments, and moves the
+    // cursor to the next open comment
     meter.dataset.revealsDiagnostics = ''
     meter.style.cssText = 'display:none;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding:0 6px;white-space:nowrap;color:#0b6bcb'
+    meter.addEventListener('click', () => this.goToNextOpen())
     return meter
   }
 
@@ -638,7 +640,7 @@ class UnitCommentsPlugin extends Plugin {
     const open = this.#placed.filter(p => p.thread.status === 'open').length
     meter.style.display = open ? 'inline-flex' : 'none'
     meter.textContent = `💬 ${open} open comment${open === 1 ? '' : 's'}`
-    meter.title = 'Click to show the open comments in the diagnostics drawer'
+    meter.title = 'Click to go to the next open comment and show all open comments in the diagnostics drawer'
   }
 
   /**
