@@ -142,6 +142,17 @@ class AccessControlPlugin extends Plugin {
       return
     }
 
+    if (state.xml !== this.#xmlCache && !this.#isOwnershipInfoAvailable(state.xml)) {
+      // On page reload, state.xml (and a stale state.fileData) are restored from sessionStorage
+      // before the file data lookup index is built from the server's file list. Computing
+      // permissions now would yield owner = null and cache that for this document (#646).
+      // The document is not cached, so permissions are computed on the next state update
+      // (the fileData update after the file list has been loaded).
+      this.getDependency('logger').debug(`Access control: ownership of ${state.xml} not known yet, deferring`)
+      this.#hideAccessControlWidgets()
+      return
+    }
+
     const frozen = isFrozenFile(state.xml)
     if (state.xml === this.#xmlCache) {
       if (frozen && !this.#frozenCache) this.#onDocumentFrozen(state.xml)
@@ -355,6 +366,20 @@ class AccessControlPlugin extends Plugin {
       notify(`Failed to update editability: ${String(error)}`, 'danger', 'exclamation-octagon')
       if (this.#editabilitySwitch) this.#editabilitySwitch.checked = this.#currentPermissions.editability === 'collection'
     }
+  }
+
+  /**
+   * Whether the ownership information needed to compute the permissions of a document is
+   * available. In owner-based mode, the owner is taken from the file data lookup index, which is
+   * empty until the file list has been loaded from the server. Granular mode fetches the
+   * permissions from the server and role-based mode does not depend on the owner.
+   * @param {string} fileId
+   * @returns {boolean}
+   */
+  #isOwnershipInfoAvailable(fileId) {
+    const mode = this.#accessControlConfig?.mode || 'role-based'
+    if (mode !== 'owner-based') return true
+    return getFileDataById(fileId) !== null
   }
 
   async #computeDocumentPermissions() {
