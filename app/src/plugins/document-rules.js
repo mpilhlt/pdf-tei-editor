@@ -858,8 +858,10 @@ class DocumentRulesPlugin extends Plugin {
         await this.#xmlEditor.saveIfDirty()
 
         if (refreshResult.refs.length > 0) {
-          const humanRef = refreshResult.refs.find((r) => r.subtype === 'human')
-          this._currentResource.url = (humanRef ?? refreshResult.refs[0]).target
+          // Same choice as representative_ref() (interpretation_ref_kind.py): the
+          // machine ref when present, since overrides target the machine rules
+          const machineRef = refreshResult.refs.find((r) => r.subtype === 'machine')
+          this._currentResource.url = (machineRef ?? refreshResult.refs[0]).target
           this._currentResource.related_urls = refreshResult.refs.map((r) => r.target)
         }
       }

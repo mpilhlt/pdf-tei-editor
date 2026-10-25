@@ -61,10 +61,12 @@ class TestInterpretationRefKindDiscover(unittest.TestCase):
         descriptors = self.kind.discover(XML_ONE_ENTRY_WITH_LABEL)
         self.assertEqual(descriptors[0].label, "Data correction")
 
-    def test_picks_human_ref_when_both_present(self):
+    def test_picks_machine_ref_when_both_present(self):
+        # Overrides target the machine rules the LLM reviewer consumes, not the human guide (#645)
         descriptors = self.kind.discover(XML_TWO_REFS_HUMAN_AND_MACHINE)
         self.assertEqual(len(descriptors), 1)
-        self.assertTrue(descriptors[0].url.endswith("#intro"))
+        self.assertTrue(descriptors[0].url.endswith("#L1-L10"))
+        self.assertTrue(descriptors[0].key.endswith("#L1-L10"))
 
     def test_related_urls_includes_both_human_and_machine_refs(self):
         descriptors = self.kind.discover(XML_TWO_REFS_HUMAN_AND_MACHINE)
@@ -72,7 +74,12 @@ class TestInterpretationRefKindDiscover(unittest.TestCase):
         self.assertTrue(any(u.endswith("#intro") for u in descriptors[0].related_urls))
         self.assertTrue(any(u.endswith("#L1-L10") for u in descriptors[0].related_urls))
 
-    def test_falls_back_to_machine_ref_when_no_human_ref(self):
+    def test_falls_back_to_human_ref_when_no_machine_ref(self):
+        descriptors = self.kind.discover(XML_ONE_ENTRY_WITH_LABEL)
+        self.assertEqual(len(descriptors), 1)
+        self.assertTrue(descriptors[0].url.endswith("/rules.md"))
+
+    def test_uses_sole_machine_ref(self):
         descriptors = self.kind.discover(XML_MACHINE_ONLY)
         self.assertEqual(len(descriptors), 1)
         self.assertTrue(descriptors[0].url.endswith("#L20-L30"))

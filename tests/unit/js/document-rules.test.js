@@ -867,6 +867,46 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.match(notifyCalls[0][0], /refreshed from upstream and removed all overrides/);
   });
 
+  it('_onReset (interpretation-ref with human and machine refs) switches to the refreshed machine ref, which overrides target', async () => {
+    const plugin = setup();
+    const oldHuman = 'https://github.com/o/r/blob/oldsha/docs/g.md#seg';
+    const oldMachine = 'https://github.com/o/r/blob/oldsha/docs/g.md#L3-L9';
+    const newHuman = 'https://github.com/o/r/blob/newsha/docs/g.md#seg';
+    const newMachine = 'https://github.com/o/r/blob/newsha/docs/g.md#L4-L10';
+    plugin._currentResource = {
+      kind: 'interpretation-ref', url: oldMachine, key: 'k', label: 'Guide',
+      format: 'markdown', related_urls: [oldHuman, oldMachine],
+    };
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    const { mock: xmleditorMock } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [makeRefElement(oldHuman)],
+      '//tei:editorialDecl//tei:ref[@subtype="machine"]': [makeRefElement(oldMachine)],
+    });
+    let queryCalledWith;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshResource: async () => ({
+          status: 'ok', changed: true,
+          refs: [
+            { target: newHuman, content_type: 'markdown', subtype: 'human' },
+            { target: newMachine, content_type: 'markdown', subtype: 'machine' },
+          ],
+          message: 'Resource refreshed from upstream.',
+        }),
+        documentRulesDeleteOverrides: async () => {},
+        documentRulesQuery: async (body) => { queryCalledWith = body; return { original_text: 't', overrides: [], selected_override_id: null }; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onReset();
+
+    assert.strictEqual(plugin._currentResource.url, newMachine);
+    assert.deepStrictEqual(queryCalledWith, { kind: 'interpretation-ref', url: newMachine });
+  });
+
   it('_onReset (interpretation-ref, changed=true, refs=[]) does not throw and leaves the url unchanged', async () => {
     const plugin = setup();
     plugin._currentResource = {

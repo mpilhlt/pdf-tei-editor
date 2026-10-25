@@ -194,6 +194,37 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
     return "\n".join(lines[start_idx:end_idx])
 
 
+def splice_line_range(full_text: str, fragment: str, excerpt: str) -> str:
+    """
+    Inverse of fetch_rule_excerpt()'s line-range slicing: replace the lines
+    `fragment` (e.g. "L10-L40" or GitLab's "L10-40") selects in `full_text`
+    with `excerpt`, keeping every line before and after it. Line numbers
+    are 1-based and inclusive and clamped exactly as fetch_rule_excerpt()
+    clamps them, so splicing back an unmodified excerpt reproduces
+    `full_text` (modulo a missing trailing newline, which is preserved from
+    `full_text`). Returns `excerpt` unchanged if `fragment` isn't a
+    recognized line range - the excerpt is then the whole file.
+
+    Used to propose an edited machine-rules excerpt upstream: the forge
+    edit page takes a whole file's content, not a line range.
+    """
+    match = _LINE_RANGE_RE.match(fragment) if fragment else None
+    if not match:
+        return excerpt
+
+    lines = full_text.splitlines()
+    start = max(1, int(match.group(1)))
+    end = int(match.group(2)) if match.group(2) else start
+    end = max(start, end)
+    start_idx = min(start - 1, len(lines))
+    end_idx = min(end, len(lines))
+    spliced = lines[:start_idx] + excerpt.splitlines() + lines[end_idx:]
+    result = "\n".join(spliced)
+    if full_text.endswith("\n") and result:
+        result += "\n"
+    return result
+
+
 def is_line_range_fragment(fragment: str) -> bool:
     """True if `fragment` matches a line-range anchor (GitHub's #L10-L50 or GitLab's #L10-50)."""
     return bool(_LINE_RANGE_RE.match(fragment))
