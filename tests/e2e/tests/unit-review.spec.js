@@ -345,6 +345,9 @@ test.describe('Unit review', () => {
     const reviewerContext = await browser.newContext();
     const reviewerPage = await reviewerContext.newPage();
     const reviewerLogs = setupTestConsoleCapture(reviewerPage);
+    /** @type {string[]} */
+    const reviewerDialogs = [];
+    reviewerPage.on('dialog', dialog => { reviewerDialogs.push(dialog.message()); dialog.dismiss(); });
 
     try {
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
@@ -378,10 +381,24 @@ test.describe('Unit review', () => {
 
       await waitForTestMessage(reviewerLogs, 'XML_EDITOR_FOLLOWED_SAVE', 20000);
       expect(await editorText(reviewerPage)).toContain('Alpha 2011');
+      // no offer to restore a local draft: the reviewer had no unsaved work
+      expect(reviewerDialogs).toEqual([]);
       expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().editorReadOnly)).toBe(true);
       // the corrected unit asks the reviewer to check it again
       await expect(reviewerPage.getByText('Changed after a not-OK review (Probe LLM: Wrong year), please check again')).toBeVisible({ timeout: 10000 });
       expect(await reviewerPage.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').isEnabled())).toBe(true);
+
+      // the reviewer marks the corrected unit not OK again: the annotator gets a new message
+      const unreadBefore = await page.evaluate(async () => (await (/** @type {any} */ (window)).client.apiClient.messagesCount()).unread);
+      await reviewerPage.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const unit = review.getUnits().find((/** @type {any} */ u) => u.name === 'bibl');
+        await review.markUnits([unit.fingerprint], 'not-ok', { comment: 'Still wrong' });
+        await app.getDependency('xmleditor').saveIfDirty();
+      });
+      // the badge on the user menu updates live
+      await expect(page.getByTestId('toolbar-menu-badge')).toHaveText(String(unreadBefore + 1), { timeout: 10000 });
     } finally {
       await releaseAllLocks(reviewerPage).catch(() => {});
       await performLogout(reviewerPage).catch(() => {});

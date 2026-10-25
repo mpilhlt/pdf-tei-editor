@@ -1356,6 +1356,9 @@ class XmlEditorPlugin extends Plugin {
     const view = this.#xmlEditor.getView();
     const line = view.state.doc.lineAt(view.state.selection.main.head).number;
     const scrollTop = view.scrollDOM.scrollTop;
+    clearTimeout(this.#draftSaveTimeout ?? undefined);
+    this.#draftSaveTimeout = null;
+    this.#draftStore.clearDraft(stableId);
     await this.#xmlEditor.loadXml(xml);
     const target = view.state.doc.line(Math.min(line, view.state.doc.lines));
     view.dispatch({ selection: { anchor: target.from } });
@@ -1515,7 +1518,10 @@ class XmlEditorPlugin extends Plugin {
    */
   #flushDraftNow() {
     const stableId = this.#lastLoadedStableId ?? this.state?.xml ?? null;
-    if (!stableId) return;
+    // only unsaved work, not a document that is still loading (the editor counts as dirty until
+    // it is ready): a draft of the loaded content would be offered for restore when the server
+    // content changes, e.g. when a read-only document follows another user's save
+    if (!stableId || !this.#xmlEditor.isReady() || !this.#xmlEditor.isDirty()) return;
     try {
       const content = this.#xmlEditor.getEditorContent();
       if (!content) return;

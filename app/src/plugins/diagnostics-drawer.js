@@ -48,6 +48,9 @@ import {
 /** @type {Record<string, number>} Order of severities in the list, most severe first */
 const SEVERITY_ORDER = { error: 0, warning: 1, info: 2, hint: 3 }
 
+/** Delay before the list is refreshed after the diagnostics changed */
+const REFRESH_DELAY_MS = 100
+
 await registerTemplate('diagnostics-drawer', 'diagnostics-drawer.html')
 
 class DiagnosticsDrawerPlugin extends Plugin {
@@ -219,15 +222,18 @@ class DiagnosticsDrawerPlugin extends Plugin {
   }
 
   /**
-   * Refreshes the list once per animation frame at most
+   * Refreshes the list after a short delay, once for several updates. A source replacing the
+   * diagnostic set (e.g. a validation run) removes those of other sources, which merge theirs in
+   * again right after (unit review, unit comments, LLM review): refreshing in between would empty
+   * the list for a moment and make it flicker.
    */
   #scheduleRefresh() {
     if (this.#refreshScheduled) return
     this.#refreshScheduled = true
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       this.#refreshScheduled = false
       this.#refresh()
-    })
+    }, REFRESH_DELAY_MS)
   }
 
   /**

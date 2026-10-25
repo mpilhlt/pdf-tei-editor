@@ -10,6 +10,9 @@ Requested by Christian after the merge of #623.
 
 - **Units changed after a not-OK review.** An edited unit whose carried-over (`was-`) marks include a not OK and that has no current mark gets an info diagnostic "Changed after a not-OK review (…), please check again" with the usual OK / not OK / open review actions. `Shift+F7` stops at these units, and they also turn review mode on. Edited units that were only marked OK keep their grey dashes without a diagnostic. Before, such units dropped out of the diagnostics and looked like any other open unit (Christian, 2026-10-25).
 
+- **Diagnostics drawer flicker.** A source replacing the diagnostic set (e.g. a validation run) removes the diagnostics of the other sources, which re-merge them in a `setTimeout(0)`. The drawer refreshed in an animation frame, which often came in between and showed the list without them for a frame. It now refreshes 100 ms after a change.
+- **Draft restore prompt in a reloaded read-only document.** `#flushDraftNow` wrote a draft whenever its timer fired, also while a document was loading (the editor counts as dirty until it is ready). When a read-only document then followed another user's save, the draft of the old content differed from the new server content and the restore prompt appeared. Drafts are now written only for unsaved work in a ready editor, and following a save clears the draft first.
+
 ## Not done
 
 - The owner's editable editor still does not merge other users' stand-off changes live, except comment replies.
