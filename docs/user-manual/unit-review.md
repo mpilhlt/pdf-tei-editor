@@ -26,7 +26,7 @@ When several units share a line, the strip shows the line in amber if their stat
 
 Reviewers mark units in every document they can see, also in documents they cannot edit (for example an annotator's version when only owners can edit): the text stays read-only, and the server saves only your own marks into the document. Superseded versions cannot be reviewed. See [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit) for the workflow.
 
-The keyboard shortcuts act on the units at the cursor or in the selection. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
+The keyboard shortcuts act on the unit at the cursor (also when other units share its line) or on all units in the selection, in the XML view as well as in the visual annotation mode. The buttons of the **Review** row in the context menu act on the unit you right-clicked, or on the selected units if you right-clicked inside the selection. Hover over a button to see what it does and its shortcut.
 
 | Action | How |
 | --- | --- |

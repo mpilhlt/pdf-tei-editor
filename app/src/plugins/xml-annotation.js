@@ -7,6 +7,7 @@
  * per-variant annotation tag definitions.
  *
  * @import { ApplicationState } from '../state.js'
+ * @import { Extension } from '@codemirror/state'
  */
 
 import Plugin from '../modules/plugin-base.js'
@@ -20,7 +21,7 @@ import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop }
 import { relocatePartialAnnotationTags } from '../modules/codemirror/xml-annotation-ops.js'
 import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
-import { EditorSelection } from '@codemirror/state'
+import { EditorSelection, EditorState } from '@codemirror/state'
 
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
@@ -106,6 +107,26 @@ class XmlAnnotationPlugin extends Plugin {
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
+  /**
+   * The CodeMirror extensions of annotation mode. Annotation mode makes the editor non-editable,
+   * which removes `contenteditable` and with it the focusability of the content: the `tabindex`
+   * keeps the content focusable, so that keyboard shortcuts (review marks, F7, search) still reach
+   * the editor. `EditorState.readOnly` then stops the built-in editing commands (Enter, Backspace,
+   * cut, paste) that would otherwise run on key presses; programmatic changes (annotation
+   * operations, review marks, comments) are not affected.
+   * @returns {Extension[]}
+   */
+  #annotationExtensions() {
+    return [
+      createAnnotationField(this.#tagDefs),
+      annotationTheme,
+      this.#navField,
+      EditorView.contentAttributes.of({ tabindex: '0' }),
+      EditorState.readOnly.of(true),
+      EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
+    ]
+  }
+
   async #enableAnnotationMode() {
     const xmlTree = this.#xmlEditor.getXmlTree?.()
     if (!xmlTree) {
@@ -125,12 +146,7 @@ class XmlAnnotationPlugin extends Plugin {
 
     this.#annotationMode = true
     if (this.#switch) this.#switch.checked = true
-    this.#slot?.reconfigure([
-      createAnnotationField(this.#tagDefs),
-      annotationTheme,
-      this.#navField,
-      EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
-    ])
+    this.#slot?.reconfigure(this.#annotationExtensions())
     this.#wasReadOnlyBeforeAnnotation = this.#xmlEditor.isReadOnly?.() ?? false
     if (!this.#wasReadOnlyBeforeAnnotation) {
       await this.#xmlEditor.setReadOnly?.(true)
@@ -219,12 +235,7 @@ class XmlAnnotationPlugin extends Plugin {
       return
     }
     // Rebuild decorations for the newly loaded document
-    this.#slot?.reconfigure([
-      createAnnotationField(this.#tagDefs),
-      annotationTheme,
-      this.#navField,
-      EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
-    ])
+    this.#slot?.reconfigure(this.#annotationExtensions())
     if (this.state?.xpath) {
       this.#scrollToXpath(this.state.xpath)
     } else {
@@ -529,12 +540,7 @@ class XmlAnnotationPlugin extends Plugin {
       if (!hasTagDefs) {
         await this.#disableAnnotationMode()
       } else {
-        this.#slot?.reconfigure([
-          createAnnotationField(this.#tagDefs),
-          annotationTheme,
-          this.#navField,
-          EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
-        ])
+        this.#slot?.reconfigure(this.#annotationExtensions())
       }
     } else if (hasTagDefs && this.state.view === 'annotation' && this.#xmlEditor.getXmlTree?.()) {
       // tagDefs just became available and the document is already loaded; activate now

@@ -208,7 +208,7 @@ The annotation mode toggle only appears in the editor statusbar when the active 
 Click the **XML / Visual** toggle switch in the bottom-left of the XML editor statusbar. When it switches to **Visual**:
 
 - Raw XML tags are replaced by colored inline badges (e.g. `AUTHOR`, `TITLE[A]`).
-- Direct text editing is disabled — the editor is read-only for free-form changes.
+- Direct text editing is disabled — the editor is read-only for free-form changes. The cursor and the keyboard shortcuts that do not change the text, such as the [review shortcuts](unit-review.md#marking-units), still work.
 - The XPath navigation header is hidden to keep the view clean.
 - The editor scrolls to the start of the `<text>` element.
 
