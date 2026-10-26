@@ -29,7 +29,7 @@ class TestMigration011(unittest.TestCase):
         Migration009DocumentRulesTables(self.logger).upgrade(self.conn)
         self._insert("heading", "https://x/g.md#b", WHOLE)
         self._insert("lines", "https://x/g.md#L1-L2", WHOLE)
-        self._insert("missing", "https://x/g.md#missing", WHOLE)
+        self._insert("missing", "https://x/g.md#missing", "intro\n## A\na1\n## B\nb1")
         self._insert("plain", "https://x/g.md", WHOLE)
         self.conn.execute(
             "INSERT INTO resource_selection (owner, kind, resource_key, override_id) "
@@ -76,3 +76,38 @@ class TestMigration011(unittest.TestCase):
         self.migration.upgrade(self.conn)
         after = self.conn.execute("SELECT * FROM resource_overrides ORDER BY id").fetchall()
         self.assertEqual(before, after)
+
+    def test_other_kind_and_gitlab_line_range_untouched(self):
+        self.conn.execute(
+            """INSERT INTO resource_overrides
+               (id, kind, resource_key, owner, note, text, format, base_url, base_hash, created_at, updated_at)
+               VALUES ('schema', 'schema', 'https://x/g.md#b', 'alice', '', ?, 'markdown', 'https://x', 'oldhash', 't', 't')""",
+            (WHOLE,),
+        )
+        self._insert("gitlab", "https://x/g.md#L1-2", WHOLE)
+        self.migration.upgrade(self.conn)
+        self.assertEqual(self._row("schema"), (WHOLE, "oldhash"))
+        self.assertEqual(self._row("gitlab"), (WHOLE, "oldhash"))
+
+    def test_runs_after_new_code_saved_sections(self):
+        """Skipped-then-run sequence: new-format section rows must survive unchanged."""
+        conn = sqlite3.connect(str(Path(self.temp_dir) / "fresh.db"))
+        self.addCleanup(conn.close)
+        migration = Migration011DocumentRulesSectionOverrides(self.logger)
+        self.assertTrue(migration.check_can_apply(conn))
+        migration.upgrade(conn)  # no table yet: no-op
+        Migration009DocumentRulesTables(self.logger).upgrade(conn)
+        for override_id, key, text in (
+            ("sec", "https://x/g.md#b", "## B\nb1"),
+            ("dup", "https://x/g.md#b-1", "## B\nb2"),
+            ("renamed", "https://x/g.md#b", "## Renamed\nb1"),
+        ):
+            conn.execute(
+                """INSERT INTO resource_overrides
+                   (id, kind, resource_key, owner, note, text, format, base_url, base_hash, created_at, updated_at)
+                   VALUES (?, 'interpretation-ref', ?, 'alice', '', ?, 'markdown', 'https://x', 'newhash', 't', 't')""",
+                (override_id, key, text),
+            )
+        before = conn.execute("SELECT * FROM resource_overrides ORDER BY id").fetchall()
+        migration.upgrade(conn)
+        self.assertEqual(conn.execute("SELECT * FROM resource_overrides ORDER BY id").fetchall(), before)
