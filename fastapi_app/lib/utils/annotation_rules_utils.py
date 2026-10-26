@@ -311,10 +311,21 @@ def translate_anchor_to_line_range(url: str, anchor: str, cache: UrlCache) -> Op
         logger.warning(f"Could not fetch {url} to translate anchor '{anchor}': {e}", exc_info=True)
         return None
 
+    range_ = markdown_section_range(text, anchor)
+    if range_ is None:
+        logger.warning(f"Heading anchor '{anchor}' not found in {url}; no machine-targeted ref generated")
+    return range_
+
+
+def markdown_section_range(text: str, anchor: str) -> Optional[tuple[int, int]]:
+    """
+    Find the 1-based, inclusive line range of the section whose heading slug
+    is `anchor`: from the heading line to the line before the next heading
+    at the same or shallower level (or end of text). Returns None if absent.
+    """
     headings = _scan_markdown_headings(text)
     matched_index = next((i for i, h in enumerate(headings) if h["slug"] == anchor), None)
     if matched_index is None:
-        logger.warning(f"Heading anchor '{anchor}' not found in {url}; no machine-targeted ref generated")
         return None
 
     matched = headings[matched_index]
@@ -325,6 +336,49 @@ def translate_anchor_to_line_range(url: str, anchor: str, cache: UrlCache) -> Op
             break
 
     return (matched["line"], end_line)
+
+
+def heading_anchor_at_line(text: str, line: int) -> Optional[str]:
+    """Return the anchor slug of the heading on exactly 1-based `line`, else None."""
+    return next((h["slug"] for h in _scan_markdown_headings(text) if h["line"] == line), None)
+
+
+def is_heading_anchor_fragment(fragment: str) -> bool:
+    """True if `fragment` is non-empty and not a line range, i.e. a heading anchor."""
+    return bool(fragment) and not is_line_range_fragment(fragment)
+
+
+def fetch_rule_section(url: str, cache: UrlCache) -> str:
+    """
+    Like fetch_rule_excerpt(), but a heading-anchor fragment (e.g. "#my-section")
+    selects that Markdown section. Line-range and absent fragments behave as in
+    fetch_rule_excerpt().
+
+    Raises:
+        RuleFetchError: if the heading anchor is not found in the document.
+    """
+    base_url, _, fragment = url.partition("#")
+    if not is_heading_anchor_fragment(fragment):
+        return fetch_rule_excerpt(url, cache)
+    text = fetch_rule_excerpt(base_url, cache)
+    range_ = markdown_section_range(text, fragment)
+    if range_ is None:
+        raise RuleFetchError(f"Heading #{fragment} not found in {base_url}")
+    return "\n".join(text.splitlines()[range_[0] - 1:range_[1]])
+
+
+def splice_heading_section(full_text: str, anchor: str, section: str) -> str:
+    """
+    Replace the lines of the section headed by `anchor` in `full_text` with
+    `section`, keeping everything else.
+
+    Raises:
+        RuleFetchError: if the heading anchor is not found in `full_text`.
+    """
+    range_ = markdown_section_range(full_text, anchor)
+    if range_ is None:
+        raise RuleFetchError(f"Heading #{anchor} not found")
+    return splice_line_range(full_text, f"L{range_[0]}-L{range_[1]}", section)
 
 
 TEI_NS = "http://www.tei-c.org/ns/1.0"

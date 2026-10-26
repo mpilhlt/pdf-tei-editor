@@ -14,6 +14,11 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     _scan_markdown_headings,
     _slugify_heading,
     derelativize_markdown_urls,
+    fetch_rule_section,
+    heading_anchor_at_line,
+    is_heading_anchor_fragment,
+    markdown_section_range,
+    splice_heading_section,
     extract_annotation_rule_refs,
     fetch_rule_excerpt,
     is_line_range_fragment,
@@ -662,3 +667,48 @@ class TestExtractAnnotationRuleRefsLabel(unittest.TestCase):
         </TEI>"""
         entries = extract_annotation_rule_refs(xml)
         self.assertNotIn("n", entries[0])
+
+
+class TestMarkdownSections(unittest.TestCase):
+    TEXT = "# T\n\n## A\na1\n### A.1\na2\n## B\nb1\n"
+    URL = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/g.md"
+
+    def test_section_range(self):
+        self.assertEqual(markdown_section_range(self.TEXT, "a"), (3, 6))
+        self.assertEqual(markdown_section_range(self.TEXT, "b"), (7, 8))
+        self.assertIsNone(markdown_section_range(self.TEXT, "missing"))
+
+    def test_section_range_ignores_fenced_heading(self):
+        text = "## B\n```\n## A\n```\n"
+        self.assertIsNone(markdown_section_range(text, "a"))
+
+    def test_heading_anchor_at_line(self):
+        self.assertEqual(heading_anchor_at_line(self.TEXT, 3), "a")
+        self.assertIsNone(heading_anchor_at_line(self.TEXT, 4))
+
+    def test_is_heading_anchor_fragment(self):
+        self.assertTrue(is_heading_anchor_fragment("a"))
+        self.assertFalse(is_heading_anchor_fragment("L3-L6"))
+        self.assertFalse(is_heading_anchor_fragment(""))
+
+    def test_splice_heading_section(self):
+        self.assertEqual(
+            splice_heading_section(self.TEXT, "a", "## A\nnew"),
+            "# T\n\n## A\nnew\n## B\nb1\n",
+        )
+        unchanged = "\n".join(self.TEXT.splitlines()[2:6])
+        self.assertEqual(splice_heading_section(self.TEXT, "a", unchanged), self.TEXT)
+        with self.assertRaises(RuleFetchError):
+            splice_heading_section(self.TEXT, "missing", "x")
+
+    def test_fetch_rule_section(self):
+        import tempfile
+        from pathlib import Path
+        from fastapi_app.lib.core.url_cache import UrlCache
+        with tempfile.TemporaryDirectory() as d:
+            cache = UrlCache(Path(d))
+            cache.set_text(self.URL, self.TEXT)
+            self.assertEqual(fetch_rule_section(f"{self.URL}#a", cache), "## A\na1\n### A.1\na2")
+            self.assertEqual(fetch_rule_section(f"{self.URL}#L7-L8", cache), "## B\nb1")
+            with self.assertRaises(RuleFetchError):
+                fetch_rule_section(f"{self.URL}#missing", cache)
