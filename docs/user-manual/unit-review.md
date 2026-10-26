@@ -76,6 +76,18 @@ When review mode is on and you run **Review Annotations** (Tools menu, LLM Revie
 
 Each tab has its own list of versions (**Original**, **Override 1**, ...) and its own selection: choosing an override on one tab does not change the other. Click **New override** to start from the text currently shown, edit it and click **Save**. Other users are not affected.
 
+When a category has both layers, a status line below the tabs shows whether the machine rules are up to date with the guide section. It compares the texts you currently have selected on both tabs (your override, or else the original) with the sync marker in the machine rules:
+
+| Status line | Meaning |
+| --- | --- |
+| In sync with the guide | Neither the guide section nor the machine rules changed since the last sync. |
+| Machine rules outdated: the guide changed since the last sync | The guide section changed; the machine rules still reflect the old text. |
+| Machine rules edited by hand since the last sync | The machine rules changed, the guide section did not. |
+| Machine rules outdated and edited by hand | Both changed. |
+| No sync marker | The machine rules carry no marker, so nothing can be compared. |
+
+When the guide changed and the guide is on GitHub or GitLab, the line also names the commit of the guide that the machine rules were last synced with, e.g. "(last sync: a1b2c3d)". The line is refreshed when you switch tabs, select a version or save.
+
 Which override the LLM reviewer uses: if the category has a separate machine version, your selected override on **Machine rules**; otherwise your selected override on **Guide (human)**.
 
 If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge.

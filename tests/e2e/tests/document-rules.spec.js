@@ -367,7 +367,7 @@ test.describe('Document rules registry', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     const ruleUrls = [
       `http://127.0.0.1:${TWO_LAYER_PORT}/guide.md#data-correction`,
-      `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L2`
+      `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L3`
     ];
 
     try {
@@ -440,6 +440,84 @@ test.describe('Document rules registry', () => {
       await dialog.locator('sl-button[name="closeBtn"]').click();
     } finally {
       // Same cleanup rationale as the first test: overrides have no TTL.
+      await page.evaluate(async (urls) => {
+        const client = /** @type {any} */ (window).client;
+        for (const url of urls) {
+          const query = await client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+          for (const override of query.overrides) {
+            await client.apiClient.documentRulesDeleteOverrides(override.id);
+          }
+        }
+      }, ruleUrls).catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+      server?.close();
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+    }
+  });
+
+  test('shows the sync status of a two-layer category', async ({ page }) => {
+    // Same local markdown server as the previous test. machine.md carries
+    // `<!-- sync: guide=... llm=... -->`; the hashes were computed with
+    // fastapi_app.lib.doc_rules.guide_sync: `human_section_hash(<guide.md
+    // "Data correction" section>, <guide url>)` and `section_hash(<machine.md
+    // without the marker line>)`. Edit the fixtures and the hashes together.
+    // The human url is not a forge url, so the synced-commit search returns null.
+    const TWO_LAYER_PORT = 38417;
+    const rulesDir = fileURLToPath(new URL('../fixtures/rules-markdown/', import.meta.url));
+    /** @type {http.Server | null} */
+    let server = null;
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const ruleUrls = [
+      `http://127.0.0.1:${TWO_LAYER_PORT}/guide.md#data-correction`,
+      `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L3`
+    ];
+
+    try {
+      server = http.createServer((req, res) => {
+        const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
+        if (name !== 'guide.md' && name !== 'machine.md') {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
+      });
+      await new Promise((resolve, reject) => {
+        server?.once('error', (err) => reject(new Error(`Could not start the rules markdown server on port ${TWO_LAYER_PORT}: ${err.message}`)));
+        server?.listen(TWO_LAYER_PORT, '127.0.0.1', () => resolve(undefined));
+      });
+
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+
+      await openToolsMenu(page);
+      const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+      await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+      await editMenuItem.hover();
+      await page.waitForTimeout(500);
+      const submenu = page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"]');
+      await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+
+      const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+      await expect(dialog).toHaveAttribute('open', '');
+      const status = dialog.locator('[name="syncStatus"]');
+      await expect(status).toBeVisible();
+      await expect(status).toContainText('In sync with the guide');
+
+      // A human override with changed text makes the machine rules outdated.
+      await dialog.locator('sl-tab[name="humanLayerTab"]').click();
+      await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+      const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+      await mdContent.click();
+      await page.keyboard.press('ControlOrMeta+End');
+      await page.keyboard.type(' Changed.');
+      await dialog.locator('sl-button[name="saveBtn"]').click();
+      await expect(dialog.locator('sl-tab[name="humanLayerTab"]')).toBeVisible();
+      await expect(status).toBeVisible();
+      await expect(status).toContainText('Machine rules outdated: the guide changed since the last sync');
+
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+    } finally {
       await page.evaluate(async (urls) => {
         const client = /** @type {any} */ (window).client;
         for (const url of urls) {
