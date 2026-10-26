@@ -55,6 +55,30 @@ class TestResolveCondensePrompt(unittest.TestCase):
         register_document_rules_provider("CONDENSE-TEST", "p", _PromptProvider(None))
         self.assertEqual(resolve_condense_prompt(TEI, GUIDE), DEFAULT_CONDENSE_PROMPT)
 
+    def test_default_when_provider_returns_empty_string(self):
+        register_document_rules_provider("CONDENSE-TEST", "p", _PromptProvider(""))
+        self.assertEqual(resolve_condense_prompt(TEI, GUIDE), DEFAULT_CONDENSE_PROMPT)
+
+    def test_default_when_method_not_callable(self):
+        provider = _PromptProvider("custom")
+        provider.get_condense_prompt = "nope"
+        register_document_rules_provider("CONDENSE-TEST", "p", provider)
+        self.assertEqual(resolve_condense_prompt(TEI, GUIDE), DEFAULT_CONDENSE_PROMPT)
+
+    def test_non_string_logs_warning_and_uses_default(self):
+        register_document_rules_provider("CONDENSE-TEST", "p", _PromptProvider(["x"]))
+        with self.assertLogs("fastapi_app.lib.doc_rules.condense_prompt", level="WARNING"):
+            self.assertEqual(resolve_condense_prompt(TEI, GUIDE), DEFAULT_CONDENSE_PROMPT)
+
+    def test_provider_exception_propagates(self):
+        class Boom:
+            def get_condense_prompt(self, guide_url: str) -> Optional[str]:
+                raise RuntimeError("boom")
+
+        register_document_rules_provider("CONDENSE-TEST", "p", Boom())
+        with self.assertRaises(RuntimeError):
+            resolve_condense_prompt(TEI, GUIDE)
+
 
 if __name__ == "__main__":
     unittest.main()
