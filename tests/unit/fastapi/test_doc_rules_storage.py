@@ -107,3 +107,40 @@ class TestDocumentRulesStore(unittest.TestCase):
         self.store.reset_selection("alice", [("interpretation-ref", "https://example.com/rules.md")])
         self.assertIsNone(self.store.get_selection("interpretation-ref", "https://example.com/rules.md", "alice"))
         self.assertIsNotNone(self.store.get_override(created["id"]))
+
+    def test_rekey_override_moves_override_and_its_selection(self):
+        old_key = "https://example.com/rules.md#L5-L8"
+        new_key = "https://example.com/rules.md#section-a"
+        first = self.store.create_override("interpretation-ref", old_key, "alice", "", "a", "markdown", old_key, "h")
+        second = self.store.create_override("interpretation-ref", old_key, "alice", "", "b", "markdown", old_key, "h")
+        self.store.set_selection("interpretation-ref", old_key, "alice", first["id"])
+
+        self.assertTrue(self.store.rekey_override(first["id"], new_key))
+
+        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", new_key, "alice")], [first["id"]])
+        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", old_key, "alice")], [second["id"]])
+        self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), first["id"])
+        self.assertIsNone(self.store.get_selection("interpretation-ref", old_key, "alice"))
+        self.assertFalse(self.store.rekey_override("no-such-id", new_key))
+
+    def test_rekey_override_to_its_current_key_keeps_selection(self):
+        # A second worker's startup migration may rekey a row another worker already moved
+        key = "https://example.com/rules.md#section-a"
+        override = self.store.create_override("interpretation-ref", key, "alice", "", "a", "markdown", key, "h")
+        self.store.set_selection("interpretation-ref", key, "alice", override["id"])
+        self.assertFalse(self.store.rekey_override(override["id"], key))
+        self.assertEqual(self.store.get_selection("interpretation-ref", key, "alice"), override["id"])
+
+    def test_rekey_override_keeps_existing_selection_under_new_key(self):
+        old_key = "https://example.com/rules.md#L5-L8"
+        new_key = "https://example.com/rules.md#section-a"
+        legacy = self.store.create_override("interpretation-ref", old_key, "alice", "", "old", "markdown", old_key, "h")
+        current = self.store.create_override("interpretation-ref", new_key, "alice", "", "new", "markdown", new_key, "h")
+        self.store.set_selection("interpretation-ref", old_key, "alice", legacy["id"])
+        self.store.set_selection("interpretation-ref", new_key, "alice", current["id"])
+
+        self.store.rekey_override(legacy["id"], new_key)
+
+        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], new_key)
+        self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), current["id"])
+        self.assertIsNone(self.store.get_selection("interpretation-ref", old_key, "alice"))

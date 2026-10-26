@@ -1,4 +1,11 @@
 <sl-dialog name="documentRulesEditorDialog" label="Resource" style="--width: 70vw;">
+  <sl-tab-group name="layerTabs" style="display: none; margin-bottom: 0.75rem;">
+    <sl-tab slot="nav" panel="human" name="humanLayerTab">Guide (human)</sl-tab>
+    <sl-tab slot="nav" panel="machine" name="machineLayerTab">Machine rules</sl-tab>
+    <sl-tab-panel name="human" style="--padding: 0;"></sl-tab-panel>
+    <sl-tab-panel name="machine" style="--padding: 0;"></sl-tab-panel>
+  </sl-tab-group>
+
   <div name="overrideRow" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;"></div>
 
   <sl-input name="noteInput" label="Note" placeholder="Note describing what this override changes" size="small" style="display: none; margin-bottom: 0.75rem;"></sl-input>

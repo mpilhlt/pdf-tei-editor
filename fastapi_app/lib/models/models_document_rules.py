@@ -7,7 +7,7 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-from fastapi_app.lib.doc_rules.kinds import ResourceFormat
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat, ResourceLayer
 
 
 class ResourceDescriptorModel(BaseModel):
@@ -22,6 +22,14 @@ class ResourceDescriptorModel(BaseModel):
         description="Every URL in the document referring to this same resource (including `url`); "
         "e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource "
         "but have different target URLs.",
+    )
+    layer: Optional[ResourceLayer] = Field(
+        default=None,
+        description="Which layer of a multi-layer resource this is (\"human\" guide or \"machine\" rules); null for kinds without layers.",
+    )
+    group: Optional[str] = Field(
+        default=None,
+        description="Resources sharing a group are layers of one rule category (e.g. \"interpretation-ref:primary\"); null for kinds without layers.",
     )
 
 
@@ -54,6 +62,10 @@ class OverrideModel(BaseModel):
     format: ResourceFormat
     created_at: str
     updated_at: str
+    outdated: bool = Field(
+        False,
+        description="True when the original has changed since this override was copied from it (set by /query only; overrides migrated without a base hash are never outdated).",
+    )
 
 
 class QueryResourceResponse(BaseModel):
@@ -73,9 +85,15 @@ class CreateOverrideRequest(BaseModel):
 
 
 class UpdateOverrideRequest(BaseModel):
-    """Request to update an override's note and/or text. Omitted fields are left unchanged."""
+    """
+    Request to update an override's note and/or text. Omitted fields are left
+    unchanged. `fragment_url`, the URL of the resource as currently shown,
+    rebases the override on that resource's current original, which clears
+    its `outdated` flag.
+    """
     note: Optional[str] = None
     text: Optional[str] = None
+    fragment_url: Optional[str] = None
 
 
 class SetSelectionRequest(BaseModel):
@@ -88,6 +106,11 @@ class SetSelectionRequest(BaseModel):
 class ResourceRef(BaseModel):
     kind: str
     url: str
+
+
+class SelectedOverrideResponse(BaseModel):
+    """The caller's selected override for one resource, or null if it currently uses the original."""
+    override: Optional[OverrideModel] = None
 
 
 class ResetSelectionRequest(BaseModel):
@@ -154,7 +177,7 @@ class RefreshResourceResponse(BaseModel):
     Response to POST /document-rules/refresh-resource.
 
     `status` meanings: "unavailable" (no provider for this document's
-    extractor), "not_found" (`url` isn't the representative target of any
+    extractor), "not_found" (`url` isn't a ref target of any
     current editorialDecl entry), "orphaned" (the entry's category no
     longer exists in a freshly-built entries list), "ok" (`refs`/`changed`
     populated). See plan_resource_refresh()'s docstring.

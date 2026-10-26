@@ -20,12 +20,15 @@
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { getEditorialDeclGuides } from '../modules/tei-utils.js'
+import { userHasRole } from '../modules/acl-utils.js'
 import { blobUrlToRawUrl } from '../modules/git-forge-urls.js'
 import {
   createMarkdownRenderer,
   extractHeadings,
   fetchMarkdown,
-  renderMarkdown
+  hasMarkdownSection,
+  renderMarkdown,
+  spliceMarkdownSection
 } from '../modules/markdown-utils.js'
 
 /**
@@ -137,7 +140,7 @@ class AnnotationGuidePlugin extends Plugin {
 
     const docGuide = this.#getDocumentPrimaryGuide()
     if (docGuide) {
-      await this.#renderGuide(docGuide.markdownUrl, docGuide.htmlUrl)
+      await this.#renderGuide(docGuide.markdownUrl, docGuide.htmlUrl, undefined, true)
       return
     }
 
@@ -258,6 +261,30 @@ class AnnotationGuidePlugin extends Plugin {
   }
 
   /**
+   * For reviewers/admins, replaces the guide's `anchor` section with their selected
+   * override of it and shows the "Personal version" badge. Returns `markdown`
+   * unchanged (and logs a warning on errors) if there is no override.
+   * @param {string} markdown - The fetched guide
+   * @param {string} markdownUrl - The guide URL including its heading anchor
+   * @param {string} anchor - Heading anchor of the section
+   * @returns {Promise<string>}
+   */
+  async #applyPersonalVersion(markdown, markdownUrl, anchor) {
+    if (!userHasRole(this.state?.user ?? null, ['reviewer', 'admin'])) return markdown
+    try {
+      const { override } = await this.#client.documentRulesSelectedOverride({ kind: 'interpretation-ref', url: markdownUrl })
+      if (!override) return markdown
+      if (!hasMarkdownSection(markdown, anchor)) return markdown
+      this.#ui.personalBadge.title = override.note
+      this.#ui.personalBadge.hidden = false
+      return spliceMarkdownSection(markdown, anchor, override.text)
+    } catch (error) {
+      this.getDependency('logger').warn(`Could not load the personal version of the annotation guide: ${error instanceof Error ? error.message : String(error)}`)
+      return markdown
+    }
+  }
+
+  /**
    * Renders a guide into the drawer: fetches and renders markdownUrl if
    * given, otherwise shows htmlUrl as an external-only link, otherwise
    * shows a "no guide" message. Applies the GitHub/GitLab blob-to-raw
@@ -266,8 +293,11 @@ class AnnotationGuidePlugin extends Plugin {
    * @param {string|undefined|null} markdownUrl
    * @param {string|undefined|null} htmlUrl
    * @param {string} [variantForMessage] - Used only in the "no guide" message text
+   * @param {boolean} [fromDocument=false] - Whether the guide is the open document's human ref, for which a
+   *   reviewer/admin's selected override of the heading-anchor section is shown as a "Personal version"
    */
-  async #renderGuide(markdownUrl, htmlUrl, variantForMessage) {
+  async #renderGuide(markdownUrl, htmlUrl, variantForMessage, fromDocument = false) {
+    this.#ui.personalBadge.hidden = true
     this.#currentGuideUrl = htmlUrl || markdownUrl || null
     this.#ui.openInNewWindowBtn.hidden = !this.#currentGuideUrl
 
@@ -303,7 +333,10 @@ class AnnotationGuidePlugin extends Plugin {
     try {
       const logger = this.getDependency('logger')
       logger.debug(`Loading annotation guide from: ${fetchUrl}`)
-      const markdown = await fetchMarkdown(fetchUrl, true)
+      let markdown = await fetchMarkdown(fetchUrl, true)
+      if (fromDocument && anchor && !/^L\d+(-L?\d+)?$/.test(anchor)) {
+        markdown = await this.#applyPersonalVersion(markdown, /** @type {string} */(markdownUrl), anchor)
+      }
 
       const html = renderMarkdown(/** @type {MarkdownIt} */(this.#md), markdown, {
         localLinkHandler: 'appAnnotationGuide.load',
