@@ -57,6 +57,8 @@ await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-di
 // #L10-50) - mirrors annotation_rules_utils.py's _LINE_RANGE_RE.
 const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
 
+const OUTDATED_OVERRIDE_TOOLTIP = 'Based on an older version of the original'
+
 /**
  * The URL fragment to scroll the markdown edit/preview panels to, or null
  * if there is none, or it's a recognized line-range fragment instead (e.g.
@@ -122,6 +124,14 @@ class DocumentRulesPlugin extends Plugin {
 
   /** Resource descriptor the dialog currently shows, or null if closed. @type {ResourceDescriptorModel|null} */
   _currentResource = null
+
+  /**
+   * All layers of the rule category `_currentResource` belongs to (see
+   * _resourceGroups()) - two descriptors ("human", "machine") for a
+   * two-layer interpretation-ref category, otherwise just `_currentResource`.
+   * @type {Array<ResourceDescriptorModel>}
+   */
+  _currentGroup = []
 
   /** @type {Array<OverrideModel>} */
   _currentOverrides = []
@@ -260,6 +270,9 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
     this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
+    this._editorDialogUi.layerTabs.addEventListener('sl-tab-show', (event) => {
+      this._onLayerTabShow(/** @type {CustomEvent} */(event).detail.name)
+    })
     this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', async (event) => {
       if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
         const previewPanel = this._editorDialogUi.textBody.textTabs.previewPanel
@@ -405,11 +418,44 @@ class DocumentRulesPlugin extends Plugin {
     await this._refreshOverrideIndicators()
   }
 
-  /** Rebuild the submenu's sl-menu-item children from `_resources`. */
+  /**
+   * `_resources` grouped into rule categories: descriptors sharing a `group`
+   * are the layers of one category (e.g. the "human" guide and the "machine"
+   * rules of one interpretation-ref category); a descriptor without a group
+   * is its own single-member group (keyed by its url). First-seen order.
+   * @returns {Array<Array<ResourceDescriptorModel>>}
+   */
+  _resourceGroups() {
+    /** @type {Map<string, Array<ResourceDescriptorModel>>} */
+    const groups = new Map()
+    for (const resource of this._resources) {
+      const key = resource.group ?? resource.url
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(resource)
+    }
+    return [...groups.values()]
+  }
+
+  /**
+   * The group (see _resourceGroups()) containing `resource`, or just
+   * `[resource]` if it isn't (or no longer is) in `_resources`.
+   * @param {ResourceDescriptorModel} resource
+   * @returns {Array<ResourceDescriptorModel>}
+   */
+  _groupOf(resource) {
+    return this._resourceGroups().find(group => group.includes(resource)) ?? [resource]
+  }
+
+  /**
+   * Rebuild the submenu's sl-menu-item children from `_resources`, one item
+   * per rule category (see _resourceGroups()) - its layers are reached via
+   * the editor dialog's layer tabs, not separate menu items.
+   */
   _populateSubmenu() {
     const submenu = this._editMenuItem.documentRulesEditSubmenu
     submenu.innerHTML = ''
-    for (const resource of this._resources) {
+    for (const group of this._resourceGroups()) {
+      const resource = group[0]
       const item = document.createElement('sl-menu-item')
       item.textContent = resource.label
       item.dataset.kind = resource.kind
@@ -502,14 +548,14 @@ class DocumentRulesPlugin extends Plugin {
    * are both decorated as clickable but share one resource, so the lookup
    * also matches against `related_urls`, not just each resource's own
    * representative `url`; schema resources have no related_urls, so this
-   * falls back to an exact `url` match for them.
+   * falls back to an exact `url` match for them. An exact `url` match wins
+   * over a `related_urls` one, so the machine `<ref>` of a two-layer category
+   * opens the machine layer even if the human descriptor also lists it.
    * @param {string} url
    */
   _onRefDecorationClick(url) {
-    const resource = this._resources.find(
-      r => (r.kind === 'interpretation-ref' || r.kind === 'schema') &&
-        (r.url === url || r.related_urls?.includes(url))
-    )
+    const candidates = this._resources.filter(r => r.kind === 'interpretation-ref' || r.kind === 'schema')
+    const resource = candidates.find(r => r.url === url) ?? candidates.find(r => r.related_urls?.includes(url))
     if (!resource) {
       this.#logger.warn(`document-rules: no resource found for clicked ref url: ${url}`)
       return
@@ -519,7 +565,10 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Query one resource's original text, overrides, and current selection,
-   * then render and show the editor dialog for it.
+   * then render and show the editor dialog for it. Also used to switch
+   * between the layers of a two-layer category (see _onLayerTabShow()) -
+   * the markdown/XML bodies and preview are shared across layers, so a
+   * switch is a re-query and re-render of the same dialog.
    * @param {ResourceDescriptorModel} resource
    * @returns {Promise<void>}
    */
@@ -529,9 +578,14 @@ class DocumentRulesPlugin extends Plugin {
       response = await this.#client.apiClient.documentRulesQuery({ kind: resource.kind, url: resource.url })
     } catch (error) {
       notify(`Could not load resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      // A failed layer switch leaves the previous layer's content showing -
+      // move the tab selection back to match it.
+      if (this._currentResource) this._renderLayerTabs()
       return
     }
     this._currentResource = resource
+    this._currentGroup = this._groupOf(resource)
+    this._renderLayerTabs()
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
@@ -566,6 +620,36 @@ class DocumentRulesPlugin extends Plugin {
       await tabs.editPanel.updateComplete
       this._scrollMarkdownBodyToAnchor(this._currentShownText())
     }
+  }
+
+  /**
+   * Show the "Guide (human)" / "Machine rules" tabs only when
+   * `_currentGroup` has more than one layer, with the tab of
+   * `_currentResource`'s layer selected. Selecting it programmatically emits
+   * `sl-tab-show`, which _onLayerTabShow() ignores because it names the
+   * layer already shown.
+   */
+  _renderLayerTabs() {
+    const layerTabs = this._editorDialogUi.layerTabs
+    if (this._currentGroup.length < 2 || !this._currentResource.layer) {
+      layerTabs.style.display = 'none'
+      return
+    }
+    layerTabs.style.display = ''
+    layerTabs.show(this._currentResource.layer)
+  }
+
+  /**
+   * `sl-tab-show` handler of the layer tabs: open the descriptor of the
+   * chosen layer in the same dialog. No-op for the layer already shown (the
+   * event also fires when _renderLayerTabs() selects a tab).
+   * @param {string} layer - the shown tab's panel name ("human"/"machine")
+   * @returns {Promise<void>}
+   */
+  async _onLayerTabShow(layer) {
+    if (!this._currentResource || layer === this._currentResource.layer) return
+    const resource = this._currentGroup.find(r => r.layer === layer)
+    if (resource) await this._openResourceEditor(resource)
   }
 
   /**
@@ -680,7 +764,11 @@ class DocumentRulesPlugin extends Plugin {
     return `Override ${this._currentOverrides.findIndex(o => o.id === overrideId) + 1}`
   }
 
-  /** Rebuild the "Original"/"Override N" button row. */
+  /**
+   * Rebuild the "Original"/"Override N" button row. An override copied from
+   * an older version of the original (`outdated`, see /query) is marked with
+   * a clock icon and a tooltip saying so, followed by its note if any.
+   */
   _renderOverrideRow() {
     const row = this._editorDialogUi.overrideRow
     row.innerHTML = ''
@@ -697,7 +785,15 @@ class DocumentRulesPlugin extends Plugin {
       btn.setAttribute('size', 'small')
       btn.textContent = this._overrideLabel(override.id)
       btn.variant = this._currentSelectedId === override.id ? 'primary' : 'default'
-      if (override.note) btn.title = override.note
+      if (override.outdated) {
+        const icon = document.createElement('sl-icon')
+        icon.setAttribute('name', 'clock-history')
+        icon.setAttribute('slot', 'suffix')
+        btn.appendChild(icon)
+        btn.title = override.note ? `${OUTDATED_OVERRIDE_TOOLTIP}\n${override.note}` : OUTDATED_OVERRIDE_TOOLTIP
+      } else if (override.note) {
+        btn.title = override.note
+      }
       btn.addEventListener('click', () => this._selectOverride(override.id))
       row.appendChild(btn)
     })
@@ -847,22 +943,32 @@ class DocumentRulesPlugin extends Plugin {
         return
       }
       if (refreshResult.changed) {
+        // Every layer of the category is refreshed together, so match the
+        // document's <ref>s against all layers' urls, not just the shown one's
+        const group = this._currentGroup.includes(this._currentResource) ? this._currentGroup : [this._currentResource]
+        const groupUrls = new Set(group.flatMap((r) => [r.url, ...(r.related_urls ?? [])]))
+        /** @type {Map<string, string>} old target -> refreshed target */
+        const replacedUrls = new Map()
         await this.#xmlEditor.saveIfDirty()
         for (const ref of refreshResult.refs) {
           const candidates = this.#xmlEditor.getDomNodesByXpath(`//tei:editorialDecl//tei:ref[@subtype="${ref.subtype}"]`)
-          const node = candidates.find((n) => this._currentResource.related_urls.includes(n.getAttribute('target')))
+          const node = candidates.find((n) => groupUrls.has(n.getAttribute('target')))
           if (!node) continue
+          replacedUrls.set(node.getAttribute('target'), ref.target)
           node.setAttribute('target', ref.target)
           await this.#xmlEditor.updateEditorFromNode(node)
         }
         await this.#xmlEditor.saveIfDirty()
 
         if (refreshResult.refs.length > 0) {
-          // Same choice as representative_ref() (interpretation_ref_kind.py): the
-          // machine ref when present, since overrides target the machine rules
-          const machineRef = refreshResult.refs.find((r) => r.subtype === 'machine')
-          this._currentResource.url = (machineRef ?? refreshResult.refs[0]).target
-          this._currentResource.related_urls = refreshResult.refs.map((r) => r.target)
+          for (const member of group) {
+            // A layerless descriptor keeps representative_ref()'s choice
+            // (interpretation_ref_kind.py): the machine ref when present
+            const layer = member.layer ?? 'machine'
+            const ref = refreshResult.refs.find((r) => r.subtype === layer) ?? (member.layer ? null : refreshResult.refs[0])
+            if (ref) member.url = ref.target
+            if (member.related_urls) member.related_urls = member.related_urls.map((u) => replacedUrls.get(u) ?? u)
+          }
         }
       }
     }

@@ -59,4 +59,18 @@ describe('document-rules-editor-dialog.html tab markup', () => {
     assert.strictEqual(root.textBody.textTabs.editPanel.getAttribute('name'), 'edit');
     assert.strictEqual(root.textBody.textTabs.previewPanel.getAttribute('name'), 'preview');
   });
+
+  it('exposes the "Guide (human)" / "Machine rules" layer tabs above the override row', () => {
+    const dom = new JSDOM(`<!DOCTYPE html><body>${templateHtml}</body>`);
+    const document = dom.window.document;
+    global.Node = dom.window.Node;
+    const root = createNavigableElement(document.querySelector('sl-dialog'));
+    assert.ok(root.layerTabs, 'layerTabs must resolve');
+    assert.strictEqual(root.layerTabs.humanLayerTab.getAttribute('panel'), 'human');
+    assert.strictEqual(root.layerTabs.humanLayerTab.textContent.trim(), 'Guide (human)');
+    assert.strictEqual(root.layerTabs.machineLayerTab.getAttribute('panel'), 'machine');
+    assert.strictEqual(root.layerTabs.machineLayerTab.textContent.trim(), 'Machine rules');
+    const following = root.layerTabs.compareDocumentPosition(root.overrideRow) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING;
+    assert.ok(following, 'layerTabs must come before overrideRow');
+  });
 });

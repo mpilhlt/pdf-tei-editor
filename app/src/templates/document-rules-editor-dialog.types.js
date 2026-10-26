@@ -3,6 +3,7 @@
 
 /**
  * @typedef {object} documentRulesEditorDialogPart
+ * @property {import('../ui.js').SlTabGroup & layerTabsPart} layerTabs
  * @property {HTMLDivElement} overrideRow
  * @property {import('../ui.js').SlInput} noteInput
  * @property {HTMLDivElement & textBodyPart} textBody
@@ -13,6 +14,12 @@
  * @property {import('../ui.js').SlButton} resetBtn
  * @property {import('../ui.js').SlButton} proposeUpstreamBtn
  * @property {import('../ui.js').SlButton} closeBtn
+ */
+
+/**
+ * @typedef {object} layerTabsPart
+ * @property {import('../ui.js').SlTab} humanLayerTab
+ * @property {import('../ui.js').SlTab} machineLayerTab
  */
 
 /**

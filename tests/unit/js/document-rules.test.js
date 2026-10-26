@@ -128,6 +128,15 @@ function makeDialogUi() {
     editPanel, previewPanel, show: () => {},
   });
   el.textBody = Object.assign(document.createElement('div'), { textTabs });
+  // Real <sl-tab-group>.show(panelName) emits `sl-tab-show` for the newly
+  // active tab - recorded here so tests can assert which layer tab
+  // _openResourceEditor() activates.
+  el.layerTabs = Object.assign(document.createElement('sl-tab-group'), {
+    humanLayerTab: document.createElement('sl-tab'),
+    machineLayerTab: document.createElement('sl-tab'),
+    shown: [],
+  });
+  el.layerTabs.show = (panel) => { el.layerTabs.shown.push(panel); };
   el.xmlBody = Object.assign(document.createElement('div'), { xmlContainer: document.createElement('div') });
   el.newOverrideBtn = document.createElement('sl-button');
   el.saveBtn = document.createElement('sl-button');
@@ -1647,5 +1656,163 @@ describe('DocumentRulesPlugin._onRefDecorationClick', () => {
     plugin._onRefDecorationClick('https://example.com/unknown.md');
     assert.strictEqual(opened, false);
     assert.strictEqual(warned, true);
+  });
+});
+
+describe('DocumentRulesPlugin layer tabs (Guide (human) / Machine rules)', () => {
+  const human = {
+    kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary',
+    format: 'markdown', layer: 'human', group: 'interpretation-ref:primary', related_urls: ['https://example.com/g.md#primary'],
+  };
+  const machine = {
+    kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary',
+    format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary', related_urls: ['https://example.com/rules.md'],
+  };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  /**
+   * @param {string[]} queried - receives every queried url
+   * @returns {InstanceType<typeof DocumentRulesPlugin>}
+   */
+  function setup(queried) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock('');
+    plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+    plugin._md = { render: (text) => text };
+    plugin._resources = [{ ...human }, { ...machine }, { ...schema }];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesQuery: async (body) => { queried.push(body.url); return { overrides: [], selected_override_id: null, original_text: `text of ${body.url}` }; },
+      } };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return plugin;
+  }
+
+  it('_resourceGroups groups by group (or url when null), in first-seen order', () => {
+    const plugin = setup([]);
+    const groups = plugin._resourceGroups();
+    assert.deepStrictEqual(groups.map(g => g.map(r => r.url)), [[human.url, machine.url], [schema.url]]);
+  });
+
+  it('_populateSubmenu shows one item for a two-layer group, opening its first descriptor', () => {
+    const plugin = setup([]);
+    plugin._editMenuItem = { documentRulesEditSubmenu: document.createElement('sl-menu') };
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._populateSubmenu();
+    const items = [...plugin._editMenuItem.documentRulesEditSubmenu.children];
+    assert.deepStrictEqual(items.map(i => i.textContent), ['Primary', 'Schema (RelaxNG)']);
+    items[0].dispatchEvent(new dom.window.Event('click'));
+    assert.strictEqual(opened, plugin._resources[0]);
+  });
+
+  it('opening a grouped resource shows layerTabs with the tab matching its layer', async () => {
+    const plugin = setup([]);
+    await plugin._openResourceEditor(plugin._resources[1]);
+    assert.strictEqual(plugin._editorDialogUi.layerTabs.style.display, '');
+    assert.deepStrictEqual(plugin._editorDialogUi.layerTabs.shown, ['machine']);
+    assert.deepStrictEqual(plugin._currentGroup, [plugin._resources[0], plugin._resources[1]]);
+  });
+
+  it('opening a single-layer resource hides layerTabs', async () => {
+    const plugin = setup([]);
+    await plugin._openResourceEditor(plugin._resources[2]);
+    assert.strictEqual(plugin._editorDialogUi.layerTabs.style.display, 'none');
+    assert.deepStrictEqual(plugin._editorDialogUi.layerTabs.shown, []);
+  });
+
+  it('switching to the other layer tab queries that layer\'s url', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    await plugin._openResourceEditor(plugin._resources[0]);
+    await plugin._onLayerTabShow('machine');
+    assert.deepStrictEqual(queried, [human.url, machine.url]);
+    assert.strictEqual(plugin._currentResource, plugin._resources[1]);
+    assert.strictEqual(plugin._currentOriginalText, `text of ${machine.url}`);
+  });
+
+  it('a tab-show for the already shown layer (programmatic select while opening) does not re-query', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    await plugin._openResourceEditor(plugin._resources[0]);
+    await plugin._onLayerTabShow('human');
+    assert.deepStrictEqual(queried, [human.url]);
+  });
+
+  it('_onRefDecorationClick on the machine url opens the machine descriptor', () => {
+    const plugin = setup([]);
+    // Even when the human descriptor's related_urls also lists the machine url
+    plugin._resources[0].related_urls = [human.url, machine.url];
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._onRefDecorationClick(machine.url);
+    assert.strictEqual(opened, plugin._resources[1]);
+  });
+
+  it('an outdated override button gets a clock icon and the outdated tooltip, with the note on a new line', () => {
+    const plugin = setup([]);
+    plugin._currentOverrides = [
+      { id: 'a', note: 'my note', text: '', format: 'markdown', created_at: '', updated_at: '', outdated: true },
+      { id: 'b', note: '', text: '', format: 'markdown', created_at: '', updated_at: '', outdated: false },
+    ];
+    plugin._currentSelectedId = null;
+    plugin._renderOverrideRow();
+    const [, outdatedBtn, freshBtn] = [...plugin._editorDialogUi.overrideRow.children];
+    const icon = outdatedBtn.querySelector('sl-icon');
+    assert.ok(icon);
+    assert.strictEqual(icon.getAttribute('name'), 'clock-history');
+    assert.strictEqual(icon.getAttribute('slot'), 'suffix');
+    assert.strictEqual(outdatedBtn.title, 'Based on an older version of the original\nmy note');
+    assert.strictEqual(freshBtn.querySelector('sl-icon'), null);
+    assert.strictEqual(freshBtn.title, '');
+  });
+
+  it('_onReset on the human layer switches to the refreshed human ref and updates both group members', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    const [h, m] = plugin._resources;
+    plugin._currentResource = h;
+    plugin._currentGroup = [h, m];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    const newHuman = 'https://example.com/g2.md#primary';
+    const newMachine = 'https://example.com/rules2.md';
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [makeRefElement(human.url)],
+      '//tei:editorialDecl//tei:ref[@subtype="machine"]': [makeRefElement(machine.url)],
+    });
+    const baseGetDependency = plugin.getDependency;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') {
+        const client = baseGetDependency('client');
+        client.apiClient.documentRulesRefreshResource = async () => ({
+          status: 'ok', changed: true, message: 'ok',
+          refs: [
+            { target: newHuman, content_type: 'markdown', subtype: 'human' },
+            { target: newMachine, content_type: 'markdown', subtype: 'machine' },
+          ],
+        });
+        client.apiClient.documentRulesDeleteOverrides = async () => {};
+        client.apiClient.documentRulesSelections = async () => ({ selections: [] });
+        return client;
+      }
+      return baseGetDependency(name);
+    };
+    await plugin._onReset();
+
+    // Both layers' <ref>s are rewritten, although each descriptor only lists its own url
+    assert.ok(xmlCalls.includes(`updateEditorFromNode:${newHuman}`));
+    assert.ok(xmlCalls.includes(`updateEditorFromNode:${newMachine}`));
+    assert.strictEqual(h.url, newHuman);
+    assert.deepStrictEqual(h.related_urls, [newHuman]);
+    assert.strictEqual(m.url, newMachine);
+    assert.deepStrictEqual(m.related_urls, [newMachine]);
+    assert.deepStrictEqual(queried, [newHuman]);
   });
 });
