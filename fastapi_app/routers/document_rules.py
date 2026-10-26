@@ -8,6 +8,7 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 
 import hashlib
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -22,7 +23,8 @@ from ..lib.core.dependencies import (
 )
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
-from ..lib.doc_rules.kinds import get_resource_kind, list_resources
+from ..lib.doc_rules.interpretation_ref_kind import legacy_resource_key
+from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
@@ -37,7 +39,9 @@ from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.annotation_rules_utils import (
     derelativize_markdown_urls,
     fetch_rule_excerpt,
+    is_heading_anchor_fragment,
     is_line_range_fragment,
+    splice_heading_section,
     splice_line_range,
 )
 from ..lib.models.models_document_rules import (
@@ -57,6 +61,8 @@ from ..lib.models.models_document_rules import (
     RefreshResourceResponse,
     ResetSelectionRequest,
     ResourceDescriptorModel,
+    ResourceRef,
+    SelectedOverrideResponse,
     SelectionInfo,
     SelectionsRequest,
     SelectionsResponse,
@@ -68,7 +74,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/document-rules", tags=["document-rules"])
 
 
-def _override_to_model(override: dict) -> OverrideModel:
+def _override_to_model(override: dict, original_hash: Optional[str] = None) -> OverrideModel:
+    """`original_hash` (sha256 of the current original) sets `outdated`; an empty base_hash (migrated override) is never outdated."""
+    base_hash = override["base_hash"]
     return OverrideModel(
         id=override["id"],
         note=override["note"],
@@ -76,7 +84,26 @@ def _override_to_model(override: dict) -> OverrideModel:
         format=override["format"],
         created_at=override["created_at"],
         updated_at=override["updated_at"],
+        outdated=original_hash is not None and base_hash != "" and base_hash != original_hash,
     )
+
+
+def _resource_key(kind: ResourceKind, url: str, store: DocumentRulesStore) -> str:
+    """
+    The key overrides of `url` are stored under. For interpretation-ref, rows
+    still stored under the pre-#666 line-range key are first moved to the
+    heading-anchor key (lazy migration, see DocumentRulesStore.migrate_resource_key()).
+    """
+    key = kind.resource_key(url)
+    if kind.name == "interpretation-ref":
+        store.migrate_resource_key(kind.name, legacy_resource_key(url), key)
+    return key
+
+
+def _resource_key_for(kind_name: str, url: str, store: DocumentRulesStore) -> str:
+    """_resource_key() for a kind given by name; an unregistered kind falls back to normalize_resource_key()."""
+    kind = get_resource_kind(kind_name)
+    return _resource_key(kind, url, store) if kind is not None else normalize_resource_key(url)
 
 
 @router.post("/list", response_model=ListResourcesResponse)
@@ -90,7 +117,7 @@ async def list_document_resources(
         resources=[
             ResourceDescriptorModel(
                 kind=r.kind, url=r.url, key=r.key, label=r.label, format=r.format,
-                related_urls=r.related_urls,
+                related_urls=r.related_urls, layer=r.layer, group=r.group,
             )
             for r in resources
         ]
@@ -114,16 +141,33 @@ async def query_resource(
         logger.error(f"Failed to resolve original text for {request.kind} {request.url}: {e}")
         raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
 
-    resource_key = normalize_resource_key(request.url)
+    resource_key = _resource_key(kind, request.url, store)
     owner = user["username"]
     overrides = store.list_overrides(request.kind, resource_key, owner)
     selected_override_id = store.get_selection(request.kind, resource_key, owner)
+    original_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
 
     return QueryResourceResponse(
         original_text=original_text,
-        overrides=[_override_to_model(o) for o in overrides],
+        overrides=[_override_to_model(o, original_hash) for o in overrides],
         selected_override_id=selected_override_id,
     )
+
+
+@router.post("/selected-override", response_model=SelectedOverrideResponse)
+async def get_selected_override(
+    request: ResourceRef,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> SelectedOverrideResponse:
+    """The caller's selected override for one resource, without fetching the original (so `outdated` is always false)."""
+    kind = get_resource_kind(request.kind)
+    if kind is None:
+        raise HTTPException(status_code=400, detail=f"Unknown resource kind: {request.kind}")
+    owner = user["username"]
+    override_id = store.get_selection(request.kind, _resource_key(kind, request.url, store), owner)
+    override = store.get_override(override_id) if override_id is not None else None
+    return SelectedOverrideResponse(override=_override_to_model(override) if override is not None else None)
 
 
 @router.post("/overrides", response_model=OverrideModel)
@@ -146,7 +190,7 @@ async def create_override(
     base_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
     override = store.create_override(
         kind=request.kind,
-        resource_key=normalize_resource_key(request.fragment_url),
+        resource_key=_resource_key(kind, request.fragment_url, store),
         owner=user["username"],
         note=request.note,
         text=request.text if request.text is not None else original_text,
@@ -191,7 +235,7 @@ async def set_selection(
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Select an override (or `null` for the original) for one resource."""
-    resource_key = normalize_resource_key(request.fragment_url)
+    resource_key = _resource_key_for(request.kind, request.fragment_url, store)
     if request.override_id is not None:
         override = store.get_override(request.override_id)
         if override is None or override["owner"] != user["username"]:
@@ -209,7 +253,7 @@ async def reset_selection(
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Clear the caller's selection for each listed resource, keeping all overrides."""
-    resources = [(r.kind, normalize_resource_key(r.url)) for r in request.resources]
+    resources = [(r.kind, _resource_key_for(r.kind, r.url, store)) for r in request.resources]
     store.reset_selection(user["username"], resources)
     return OkResponse()
 
@@ -231,7 +275,7 @@ async def get_selections(
         SelectionInfo(
             kind=r.kind,
             url=r.url,
-            selected=store.get_selection(r.kind, normalize_resource_key(r.url), owner) is not None,
+            selected=store.get_selection(r.kind, _resource_key_for(r.kind, r.url, store), owner) is not None,
         )
         for r in request.resources
     ]
@@ -320,17 +364,24 @@ async def propose_change_url(
     spliced back into the full upstream file at that range (see
     splice_line_range()), since the forge edit page replaces the whole
     file - so `text` in the response is then the whole file's new content.
+    A heading-anchor `url` on a Markdown file (a human-guide section) is
+    spliced the same way, replacing that heading's section.
     """
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
     text = request.text
     base_url, _, fragment = request.url.partition("#")
-    if fragment and is_line_range_fragment(fragment):
+    is_line_range = bool(fragment) and is_line_range_fragment(fragment)
+    is_section = is_heading_anchor_fragment(fragment) and infer_format(base_url) == "markdown"
+    if is_line_range or is_section:
         try:
             full_text = fetch_rule_excerpt(base_url, cache)
+            if is_line_range:
+                text = splice_line_range(full_text, fragment, text)
+            else:
+                text = splice_heading_section(full_text, fragment, text)
         except Exception as e:
-            logger.error(f"Could not fetch {base_url} to splice the edited excerpt into: {e}", exc_info=True)
-            raise HTTPException(status_code=502, detail=f"Could not fetch the upstream file: {e}")
-        text = splice_line_range(full_text, fragment, text)
+            logger.error(f"Could not splice the edited excerpt into {base_url}: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail=f"Could not splice the edit into the upstream file: {e}")
     text = derelativize_markdown_urls(text, request.url)
     for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
         try:

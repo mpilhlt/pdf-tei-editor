@@ -128,6 +128,45 @@ class DocumentRulesStore:
         for kind, resource_key in resources:
             self.set_selection(kind, resource_key, owner, None)
 
+    def migrate_resource_key(self, kind: str, old_key: str, new_key: str) -> int:
+        """
+        Move every owner's overrides and selection of `kind` from `old_key` to
+        `new_key`, skipping an owner who already has an override or selection
+        under `new_key` (their old-key rows are left as they are). A selection
+        whose override no longer exists is cleared rather than moved, since
+        foreign keys may not be enforced. Returns the number of rows moved;
+        a no-op when the keys are equal.
+        """
+        if old_key == new_key:
+            return 0
+        moved = 0
+        with self.db.transaction() as conn:
+            owners = [row[0] for row in conn.execute(
+                "SELECT owner FROM resource_overrides WHERE kind = ? AND resource_key = ? UNION SELECT owner FROM resource_selection WHERE kind = ? AND resource_key = ?",
+                (kind, old_key, kind, old_key),
+            ).fetchall()]
+            for owner in owners:
+                has_new_rows = conn.execute(
+                    "SELECT 1 FROM resource_overrides WHERE kind = ? AND resource_key = ? AND owner = ? UNION ALL SELECT 1 FROM resource_selection WHERE kind = ? AND resource_key = ? AND owner = ? LIMIT 1",
+                    (kind, new_key, owner, kind, new_key, owner),
+                ).fetchone()
+                if has_new_rows is not None:
+                    continue
+                params = (new_key, kind, old_key, owner)
+                moved += conn.execute(
+                    "UPDATE resource_overrides SET resource_key = ? WHERE kind = ? AND resource_key = ? AND owner = ?",
+                    params,
+                ).rowcount
+                moved += conn.execute(
+                    "UPDATE resource_selection SET resource_key = ? WHERE kind = ? AND resource_key = ? AND owner = ? AND override_id IN (SELECT id FROM resource_overrides)",
+                    params,
+                ).rowcount
+                conn.execute(
+                    "DELETE FROM resource_selection WHERE kind = ? AND resource_key = ? AND owner = ?",
+                    (kind, old_key, owner),
+                )
+        return moved
+
     def get_selected_override_text(self, kind: str, resource_key: str, owner: str) -> Optional[str]:
         """The selected override's text, or None if this resource currently uses the original."""
         override_id = self.get_selection(kind, resource_key, owner)

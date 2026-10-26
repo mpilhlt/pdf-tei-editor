@@ -62,6 +62,10 @@ class OverrideModel(BaseModel):
     format: ResourceFormat
     created_at: str
     updated_at: str
+    outdated: bool = Field(
+        False,
+        description="True when the original has changed since this override was copied from it (set by /query only; overrides migrated without a base hash are never outdated).",
+    )
 
 
 class QueryResourceResponse(BaseModel):
@@ -96,6 +100,11 @@ class SetSelectionRequest(BaseModel):
 class ResourceRef(BaseModel):
     kind: str
     url: str
+
+
+class SelectedOverrideResponse(BaseModel):
+    """The caller's selected override for one resource, or null if it currently uses the original."""
+    override: Optional[OverrideModel] = None
 
 
 class ResetSelectionRequest(BaseModel):
@@ -162,7 +171,7 @@ class RefreshResourceResponse(BaseModel):
     Response to POST /document-rules/refresh-resource.
 
     `status` meanings: "unavailable" (no provider for this document's
-    extractor), "not_found" (`url` isn't the representative target of any
+    extractor), "not_found" (`url` isn't a ref target of any
     current editorialDecl entry), "orphaned" (the entry's category no
     longer exists in a freshly-built entries list), "ok" (`refs`/`changed`
     populated). See plan_resource_refresh()'s docstring.

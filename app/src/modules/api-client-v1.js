@@ -598,6 +598,7 @@
  * @property {string} format
  * @property {string} created_at
  * @property {string} updated_at
+ * @property {boolean=} outdated - True when the original has changed since this override was copied from it (set by /query only; overrides migrated without a base hash are never outdated).
  */
 
 /**
@@ -893,6 +894,8 @@
  * @property {string} label
  * @property {string} format
  * @property {Array<string>=} related_urls - Every URL in the document referring to this same resource (including `url`); e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource but have different target URLs.
+ * @property {('human'|'machine'|null)=} layer - Which layer of a multi-layer resource this is ("human" guide or "machine" rules); null for kinds without layers.
+ * @property {string|null=} group - Resources sharing a group are layers of one rule category (e.g. "interpretation-ref:primary"); null for kinds without layers.
  */
 
 /**
@@ -934,6 +937,11 @@
  * @typedef {Object} SaveFileResponse
  * @property {string} status
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} SelectedOverrideResponse
+ * @property {OverrideModel|null=} override - The caller's selected override, or null if the resource currently uses the original.
  */
 
 /**
@@ -1756,6 +1764,17 @@ export class ApiClientV1 {
    */
   async documentRulesQuery(requestBody) {
     const endpoint = `/document-rules/query`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * The caller's selected override for one resource, without fetching the original (so `outdated` is always false).
+   *
+   * @param {ResourceRef} requestBody
+   * @returns {Promise<SelectedOverrideResponse>}
+   */
+  async documentRulesSelectedOverride(requestBody) {
+    const endpoint = `/document-rules/selected-override`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

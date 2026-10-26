@@ -4,6 +4,7 @@ Integration tests for the document rules REST router.
 @testCovers fastapi_app/routers/document_rules.py
 """
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,7 +15,9 @@ from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
+from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.routers.document_rules import get_db, router
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
@@ -50,6 +53,8 @@ class TestListEndpoint(DocumentRulesRouterTestCase):
         self.assertEqual(len(resources), 1)
         self.assertEqual(resources[0]["kind"], "interpretation-ref")
         self.assertEqual(resources[0]["label"], "Primary rules")
+        self.assertEqual(resources[0]["layer"], "human")
+        self.assertEqual(resources[0]["group"], "interpretation-ref:primary")
 
     def test_list_empty_document_returns_no_resources(self):
         response = self.client.post(
@@ -462,10 +467,122 @@ class TestRefreshResourceEndpoint(DocumentRulesRouterTestCase):
         self.assertEqual(response.json()["status"], "not_found")
 
 
+RULES_BASE = "https://github.com/mpilhlt/pdf-tei-editor/blob/main/rules.md"
+RULES_MARKDOWN = "# Title\n\nintro\n\n## Section A\n\nrule a\n\n## Section B\n\nrule b\n"
+
+
+class TestHeadingAnchorKeys(DocumentRulesRouterTestCase):
+    """Overrides keyed by file + heading anchor: lazy legacy-key migration, outdated flag, selected-override lookup."""
+
+    def setUp(self):
+        super().setUp()
+        self.store = DocumentRulesStore(self.db)
+        # resource_key() fetches the whole file; resolve_original() goes through fetch_rule_section()
+        self.kind_fetch = patch(
+            "fastapi_app.lib.doc_rules.interpretation_ref_kind.fetch_rule_excerpt", return_value=RULES_MARKDOWN
+        ).start()
+        self.utils_fetch = patch(
+            "fastapi_app.lib.utils.annotation_rules_utils.fetch_rule_excerpt", return_value=RULES_MARKDOWN
+        ).start()
+        self.addCleanup(patch.stopall)
+
+    def _create(self, url: str, base_hash: str, text: str = "override text") -> dict:
+        return self.store.create_override(
+            "interpretation-ref", normalize_resource_key(url), "alice", "", text, "markdown", url, base_hash
+        )
+
+    def _query(self, url: str):
+        return self.client.post("/document-rules/query", json={"kind": "interpretation-ref", "url": url})
+
+    def test_query_migrates_legacy_line_range_override(self):
+        url = f"{RULES_BASE}#L5-L8"
+        legacy = self._create(url, base_hash="")
+        self.store.set_selection("interpretation-ref", normalize_resource_key(url), "alice", legacy["id"])
+
+        response = self._query(url)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual([o["id"] for o in body["overrides"]], [legacy["id"]])
+        self.assertEqual(body["selected_override_id"], legacy["id"])
+        new_key = normalize_resource_key(f"{RULES_BASE}#section-a")
+        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], new_key)
+        self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), legacy["id"])
+
+    def test_query_marks_outdated_override(self):
+        url = f"{RULES_BASE}#section-a"
+        section = "## Section A\n\nrule a\n"
+        current = self._create(url, base_hash=hashlib.sha256(section.encode("utf-8")).hexdigest())
+        stale = self._create(url, base_hash=hashlib.sha256(b"older section").hexdigest())
+
+        body = self._query(url).json()
+
+        self.assertEqual(body["original_text"], section)
+        outdated = {o["id"]: o["outdated"] for o in body["overrides"]}
+        self.assertEqual(outdated, {current["id"]: False, stale["id"]: True})
+
+    def test_query_does_not_mark_migrated_override_outdated(self):
+        url = f"{RULES_BASE}#section-a"
+        migrated = self._create(url, base_hash="")
+        body = self._query(url).json()
+        self.assertEqual(body["overrides"][0]["id"], migrated["id"])
+        self.assertFalse(body["overrides"][0]["outdated"])
+
+    def test_query_unknown_heading_returns_502(self):
+        with self.assertLogs("fastapi_app.routers.document_rules", level="ERROR"):
+            response = self._query(f"{RULES_BASE}#no-such-heading")
+        self.assertEqual(response.status_code, 502)
+
+    def test_selected_override_returns_selected_text_without_fetch(self):
+        url = f"{RULES_BASE}#section-a"
+        override = self._create(url, base_hash="", text="my section")
+        self.store.set_selection("interpretation-ref", normalize_resource_key(url), "alice", override["id"])
+
+        response = self.client.post(
+            "/document-rules/selected-override", json={"kind": "interpretation-ref", "url": url}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["override"]["id"], override["id"])
+        self.assertEqual(body["override"]["text"], "my section")
+        self.assertFalse(body["override"]["outdated"])
+        self.kind_fetch.assert_not_called()
+        self.utils_fetch.assert_not_called()
+
+    def test_selected_override_is_null_without_selection(self):
+        response = self.client.post(
+            "/document-rules/selected-override", json={"kind": "interpretation-ref", "url": f"{RULES_BASE}#section-a"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["override"])
+
+    @patch("fastapi_app.routers.document_rules.fetch_rule_excerpt")
+    def test_propose_change_url_splices_heading_section(self, mock_fetch):
+        mock_fetch.return_value = RULES_MARKDOWN
+        response = self.client.post(
+            "/document-rules/propose-change-url",
+            # The section as /query returns it: up to the line before the next heading
+            json={"url": f"{RULES_BASE}#section-a", "text": "## Section A\n\nedited a\n\n"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_fetch.call_args.args[0], RULES_BASE)
+        self.assertEqual(
+            response.json()["text"],
+            "# Title\n\nintro\n\n## Section A\n\nedited a\n\n## Section B\n\nrule b\n",
+        )
+
+
 class TestNonReviewerCannotUseDocumentRulesRoutes(DocumentRulesRouterTestCase):
     def setUp(self):
         super().setUp()
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["user"]}
+
+    def test_selected_override_requires_reviewer_or_admin(self):
+        response = self.client.post(
+            "/document-rules/selected-override", json={"kind": "interpretation-ref", "url": "https://x"}
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_list_requires_reviewer_or_admin(self):
         response = self.client.post("/document-rules/list", json={"xml_string": XML_WITH_INTERPRETATION})
