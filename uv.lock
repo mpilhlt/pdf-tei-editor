@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.13.*"
 
 [manifest]
@@ -849,9 +849,9 @@ requires-dist = [
     { name = "pte-plugin-annotation-progress", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
     { name = "pte-plugin-annotation-progress", marker = "extra == 'annotation-progress'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
     { name = "pte-plugin-annotation-progress", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'annotation-review'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=28d6220e0d27cbb89abfa71935b1c6c82f4d2027" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'annotation-review'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=28d6220e0d27cbb89abfa71935b1c6c82f4d2027" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=28d6220e0d27cbb89abfa71935b1c6c82f4d2027" },
     { name = "pte-plugin-anthropic-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
     { name = "pte-plugin-anthropic-llm", marker = "extra == 'anthropic-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
     { name = "pte-plugin-anthropic-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" },
@@ -988,8 +988,8 @@ source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2F
 
 [[package]]
 name = "pte-plugin-annotation-review"
-version = "1.0.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=6d5c2724d9a2be3bd54274f6783dc6edcb7c604f#6d5c2724d9a2be3bd54274f6783dc6edcb7c604f" }
+version = "1.1.0"
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=28d6220e0d27cbb89abfa71935b1c6c82f4d2027#28d6220e0d27cbb89abfa71935b1c6c82f4d2027" }
 
 [[package]]
 name = "pte-plugin-anthropic-llm"
