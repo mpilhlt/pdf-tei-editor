@@ -7,6 +7,7 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
+from fastapi_app.lib.doc_rules.guide_sync import SyncStatus
 from fastapi_app.lib.doc_rules.kinds import ResourceFormat, ResourceLayer
 
 
@@ -208,3 +209,23 @@ class ProposeChangeUrlResponse(BaseModel):
     url: Optional[str] = None
     content_prefilled: bool = False
     text: str = ""
+
+
+class SyncStatusRequest(BaseModel):
+    """Request for the sync status of a human guideline section and its condensed machine section."""
+    human_url: str
+    machine_url: str
+
+
+class SyncStatusResponse(BaseModel):
+    """
+    `*_source` tells whether the layer text compared was the original or the
+    caller's selected override. `synced_commit` is the guide commit the machine
+    section was last synced with; only looked up for `machine_outdated` and
+    `both_changed`, and null if not found.
+    """
+    status: SyncStatus
+    human_source: Literal["original", "override"]
+    machine_source: Literal["original", "override"]
+    base: Optional[str] = None
+    synced_commit: Optional[str] = None

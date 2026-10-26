@@ -843,6 +843,21 @@
  */
 
 /**
+ * @typedef {Object} SyncStatusRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ */
+
+/**
+ * @typedef {Object} SyncStatusResponse
+ * @property {'in_sync'|'machine_outdated'|'machine_edited'|'both_changed'|'no_marker'} status
+ * @property {'original'|'override'} human_source
+ * @property {'original'|'override'} machine_source
+ * @property {string|null} [base]
+ * @property {string|null} [synced_commit]
+ */
+
+/**
  * @typedef {Object} RestartResult
  * @property {boolean} restarting
  */
@@ -1897,6 +1912,19 @@ export class ApiClientV1 {
    */
   async documentRulesRefreshResource(requestBody) {
     const endpoint = `/document-rules/refresh-resource`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Whether a human guideline section and its condensed machine section are
+   * in sync, per the sync marker in the machine section. Each layer's text
+   * is the caller's selected override if there is one, else the original.
+   *
+   * @param {SyncStatusRequest} requestBody
+   * @returns {Promise<SyncStatusResponse>}
+   */
+  async documentRulesSyncStatus(requestBody) {
+    const endpoint = `/document-rules/sync-status`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

@@ -18,7 +18,7 @@ from fastapi_app.lib.core.dependencies import get_file_storage, require_authenti
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
-from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError
+from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
 from fastapi_app.routers.document_rules import get_db, router
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
@@ -671,6 +671,83 @@ class TestNonReviewerCannotUseDocumentRulesRoutes(DocumentRulesRouterTestCase):
     def test_get_selections_requires_reviewer_or_admin(self):
         response = self.client.post("/document-rules/selections", json={"resources": []})
         self.assertEqual(response.status_code, 403)
+
+
+class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
+    HUMAN_URL = "https://github.com/mpilhlt/fossil/blob/eab669d4d093c54dd1990b4a0bf017d00f82d5a8/docs/guidelines.md#data-correction"
+    MACHINE_URL = "https://github.com/mpilhlt/fossil/blob/eab669d4d093c54dd1990b4a0bf017d00f82d5a8/docs/guidelines-llm.md#data-correction"
+
+    def setUp(self):
+        super().setUp()
+        fixtures = Path(__file__).parent / "fixtures" / "fossil"
+        raw_dir = "https://raw.githubusercontent.com/mpilhlt/fossil/eab669d4d093c54dd1990b4a0bf017d00f82d5a8/docs/"
+        self.human = _rewrite_relative_markdown_urls(
+            self._slice((fixtures / "guidelines.md").read_text(encoding="utf-8")), raw_dir
+        )
+        self.machine = self._slice((fixtures / "guidelines-llm.md").read_text(encoding="utf-8"))
+        self.texts = {self.HUMAN_URL: self.human, self.MACHINE_URL: self.machine}
+        for target, kwargs in (
+            ("resolve_original", {"side_effect": lambda url: self.texts[url]}),
+            ("resource_key", {"side_effect": lambda url, **kw: normalize_resource_key(url)}),
+        ):
+            patcher = patch(f"fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.{target}", **kwargs)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _slice(text: str) -> str:
+        start, end = markdown_section_range(text, "data-correction")
+        return "\n".join(text.splitlines()[start - 1:end])
+
+    def _post(self):
+        return self.client.post(
+            "/document-rules/sync-status", json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL}
+        )
+
+    def _select_override(self, url: str, text: str) -> None:
+        store = DocumentRulesStore(self.db)
+        key = normalize_resource_key(url)
+        override = store.create_override(
+            kind="interpretation-ref", resource_key=key, owner="alice", note="", text=text,
+            format="markdown", base_url=url, base_hash="",
+        )
+        store.set_selection("interpretation-ref", key, "alice", override["id"])
+
+    def test_in_sync_for_originals(self):
+        with patch("fastapi_app.routers.document_rules.find_synced_human_commit") as find:
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"status": "in_sync", "human_source": "original", "machine_source": "original", "base": None, "synced_commit": None},
+        )
+        find.assert_not_called()
+
+    def test_human_override_makes_machine_outdated(self):
+        self._select_override(self.HUMAN_URL, self.human + "\nAn extra rule.\n")
+        with patch("fastapi_app.routers.document_rules.find_synced_human_commit", return_value="abc123"):
+            response = self._post()
+        body = response.json()
+        self.assertEqual(body["status"], "machine_outdated")
+        self.assertEqual(body["human_source"], "override")
+        self.assertEqual(body["machine_source"], "original")
+        self.assertEqual(body["synced_commit"], "abc123")
+
+    def test_no_marker(self):
+        self.texts[self.MACHINE_URL] = "## Data correction\nNo marker here.\n"
+        with patch("fastapi_app.routers.document_rules.find_synced_human_commit") as find:
+            response = self._post()
+        self.assertEqual(response.json()["status"], "no_marker")
+        self.assertIsNone(response.json()["synced_commit"])
+        find.assert_not_called()
+
+    def test_resolve_failure_is_502(self):
+        self.texts.pop(self.MACHINE_URL)
+        self.assertEqual(self._post().status_code, 502)
+
+    def test_non_reviewer_is_forbidden(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
+        self.assertEqual(self._post().status_code, 403)
 
 
 if __name__ == "__main__":

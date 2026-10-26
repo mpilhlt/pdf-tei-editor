@@ -12,7 +12,7 @@ FastAPI runs them in its threadpool instead of on the event loop.
 
 import hashlib
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -27,6 +27,7 @@ from ..lib.core.dependencies import (
 )
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
+from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
@@ -71,6 +72,8 @@ from ..lib.models.models_document_rules import (
     SelectionsRequest,
     SelectionsResponse,
     SetSelectionRequest,
+    SyncStatusRequest,
+    SyncStatusResponse,
     UpdateOverrideRequest,
 )
 
@@ -458,4 +461,47 @@ def refresh_resource(
         refs=[RefTargetModel(**ref) for ref in outcome.refs],
         changed=outcome.changed,
         message=outcome.message,
+    )
+
+
+@router.post("/sync-status", response_model=SyncStatusResponse)
+def get_sync_status(
+    request: SyncStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> SyncStatusResponse:
+    """
+    Whether a human guideline section and its condensed machine section are
+    in sync, per the sync marker in the machine section. Each layer's text is
+    the caller's selected override if there is one, else the original.
+    """
+    kind = get_resource_kind("interpretation-ref")
+    if kind is None:
+        raise HTTPException(status_code=500, detail="Resource kind interpretation-ref is not registered")
+    owner = user["username"]
+
+    def layer_text(url: str) -> tuple[str, Literal["original", "override"]]:
+        override_text = store.get_selected_override_text(kind.name, _resource_key(kind, url), owner)
+        if override_text is not None:
+            return override_text, "override"
+        try:
+            return kind.resolve_original(url), "original"
+        except Exception as e:
+            logger.error(f"Failed to resolve original text for {url}: {e}")
+            raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+    human_text, human_source = layer_text(request.human_url)
+    machine_text, machine_source = layer_text(request.machine_url)
+    status = sync_status(human_text, machine_text, request.human_url)
+    marker = parse_sync_marker(machine_text)
+    synced_commit: Optional[str] = None
+    if marker is not None and status in ("machine_outdated", "both_changed"):
+        cache = UrlCache(get_settings().annotation_rules_cache_dir)
+        synced_commit = find_synced_human_commit(request.human_url, marker, cache)
+    return SyncStatusResponse(
+        status=status,
+        human_source=human_source,
+        machine_source=machine_source,
+        base=marker.base if marker is not None else None,
+        synced_commit=synced_commit,
     )
