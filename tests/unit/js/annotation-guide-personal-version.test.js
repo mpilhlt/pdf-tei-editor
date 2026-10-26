@@ -14,8 +14,8 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http:
 global.window = dom.window;
 global.document = dom.window.document;
 dom.window.Element.prototype.scrollIntoView = () => {};
-global.Node =dom.window.Node;
-global.CSS ={ escape: s => s };
+global.Node = dom.window.Node;
+global.CSS = { escape: s => s };
 
 const template = fs.readFileSync(new URL('../../../app/src/templates/annotation-guide-drawer.html', import.meta.url), 'utf8');
 /** The drawer element built from the real template by the mocked createSingleFromTemplate */
@@ -92,6 +92,11 @@ describe('AnnotationGuidePlugin personal version', () => {
     assert.ok(html.includes('other text'));
     assert.strictEqual(drawer.personalBadge.hidden, false);
     assert.strictEqual(drawer.personalBadge.title, 'my note');
+  });
+
+  it('shows the badge when the override text is identical to the original section', async () => {
+    await loadGuide({ roles: ['reviewer'] }, { override: { ...override, text: '## Rules\n\noriginal rules' } });
+    assert.strictEqual(drawer.personalBadge.hidden, false);
   });
 
   it('renders the original and hides the badge when no override is selected', async () => {

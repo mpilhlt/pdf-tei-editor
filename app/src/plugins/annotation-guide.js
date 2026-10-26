@@ -26,6 +26,7 @@ import {
   createMarkdownRenderer,
   extractHeadings,
   fetchMarkdown,
+  hasMarkdownSection,
   renderMarkdown,
   spliceMarkdownSection
 } from '../modules/markdown-utils.js'
@@ -273,11 +274,10 @@ class AnnotationGuidePlugin extends Plugin {
     try {
       const { override } = await this.#client.documentRulesSelectedOverride({ kind: 'interpretation-ref', url: markdownUrl })
       if (!override) return markdown
-      const spliced = spliceMarkdownSection(markdown, anchor, override.text)
-      if (spliced === markdown) return markdown
+      if (!hasMarkdownSection(markdown, anchor)) return markdown
       this.#ui.personalBadge.title = override.note
       this.#ui.personalBadge.hidden = false
-      return spliced
+      return spliceMarkdownSection(markdown, anchor, override.text)
     } catch (error) {
       this.getDependency('logger').warn(`Could not load the personal version of the annotation guide: ${error instanceof Error ? error.message : String(error)}`)
       return markdown

@@ -345,7 +345,7 @@ function scanHeadings(markdown) {
   /** @type {Map<string, number>} */
   const seen = new Map()
   let inFence = false
-  markdown.split('\n').forEach((line, i) => {
+  markdown.split(/\r?\n/).forEach((line, i) => {
     if (/^(`{3,}|~{3,})/.test(line.trim())) {
       inFence = !inFence
       return
@@ -396,13 +396,26 @@ export function spliceMarkdownSection(markdown, anchor, section) {
   const headings = scanHeadings(markdown)
   const index = headings.findIndex(h => h.anchor === anchor)
   if (index === -1) return markdown
-  const lines = markdown.split('\n')
+  const eol = markdown.includes('\r\n') ? '\r\n' : '\n'
+  const lines = markdown.split(/\r?\n/)
   const start = headings[index].line
   const next = headings.slice(index + 1).find(h => h.level <= headings[index].level)
   const end = next ? next.line - 1 : lines.length
-  const before = lines.slice(0, start - 1).map(l => `${l}\n`).join('')
-  const after = lines.slice(end).join('\n')
-  return `${before}${section.trimEnd()}\n${after ? `\n${after}` : ''}`
+  const before = lines.slice(0, start - 1).map(l => `${l}${eol}`).join('')
+  const after = lines.slice(end).join(eol)
+  const text = section.trimEnd().replace(/\r?\n/g, eol)
+  return `${before}${text}${eol}${after ? `${eol}${after}` : ''}`
+}
+
+/**
+ * Whether the document has a heading with the given anchor, i.e. whether
+ * spliceMarkdownSection() would find a section to replace.
+ * @param {string} markdown
+ * @param {string} anchor
+ * @returns {boolean}
+ */
+export function hasMarkdownSection(markdown, anchor) {
+  return findHeadingLineForAnchor(markdown, anchor) !== null
 }
 
 /**

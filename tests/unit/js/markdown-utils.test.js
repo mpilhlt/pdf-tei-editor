@@ -106,4 +106,17 @@ describe('spliceMarkdownSection', () => {
     const dup = '## X\n\none\n\n## X\n\ntwo\n';
     assert.strictEqual(findHeadingLineForAnchor(dup, 'x-1'), 5);
   });
+
+  it('preserves CRLF line endings and finds headings in CRLF documents', () => {
+    const crlf = '# Guide\r\n\r\n## A\r\n\r\nold\r\n\r\n## B\r\n\r\nkeep\r\n';
+    assert.strictEqual(findHeadingLineForAnchor(crlf, 'b'), 7);
+    assert.strictEqual(spliceMarkdownSection(crlf, 'a', '## A\n\nnew'), '# Guide\r\n\r\n## A\r\n\r\nnew\r\n\r\n## B\r\n\r\nkeep\r\n');
+  });
+
+  it('handles closing-hash headings and ~~~ fences', () => {
+    const doc = '## A ##\n\n~~~\n## fake\n~~~\n\n## B\n';
+    assert.strictEqual(findHeadingLineForAnchor(doc, 'a'), 1);
+    assert.strictEqual(findHeadingLineForAnchor(doc, 'fake'), null);
+    assert.strictEqual(spliceMarkdownSection(doc, 'a', '## A\n\nnew'), '## A\n\nnew\n\n## B\n');
+  });
 });
