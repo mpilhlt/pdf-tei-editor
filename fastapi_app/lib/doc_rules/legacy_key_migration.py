@@ -52,9 +52,9 @@ def migrate_legacy_override_keys(store: DocumentRulesStore) -> int:
             continue
         if _is_line_range_key(new_key):
             continue
-        store.rekey_override(row["id"], new_key)
-        logger.info(f"Moved override {row['id']} of {row['owner']} from {old_key} to {new_key}")
-        moved += 1
+        if store.rekey_override(row["id"], new_key):
+            logger.info(f"Moved override {row['id']} of {row['owner']} from {old_key} to {new_key}")
+            moved += 1
     return moved
 
 

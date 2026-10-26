@@ -164,7 +164,8 @@ class DocumentRulesStore:
         Move an override to `new_key`, together with its owner's selection
         pointing at it - unless the owner already has a selection under
         `new_key`, which then wins and the old selection is deleted. Returns
-        False if the override does not exist.
+        False if the override does not exist or is already under `new_key`
+        (e.g. moved by another worker's startup migration).
         """
         with self.db.transaction() as conn:
             row = conn.execute(
@@ -173,6 +174,8 @@ class DocumentRulesStore:
             if row is None:
                 return False
             kind, old_key, owner = row["kind"], row["resource_key"], row["owner"]
+            if old_key == new_key:
+                return False
             conn.execute("UPDATE resource_overrides SET resource_key = ? WHERE id = ?", (new_key, override_id))
             has_new_selection = conn.execute(
                 "SELECT 1 FROM resource_selection WHERE owner = ? AND kind = ? AND resource_key = ?",
