@@ -7,7 +7,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor } from '../../../app/src/modules/markdown-utils.js';
+import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor, spliceMarkdownSection } from '../../../app/src/modules/markdown-utils.js';
 
 const DOC = `# Guidelines
 
@@ -77,5 +77,33 @@ describe('extractHeadings', () => {
 
   it('returns an empty list for a document without headings', () => {
     assert.deepStrictEqual(extractHeadings(md, 'Just text.\n'), []);
+  });
+});
+
+describe('spliceMarkdownSection', () => {
+  const doc = '# Guide\n\n## A\n\nold a\n\n### A sub\n\nold sub\n\n## B\n\nkeep b\n';
+
+  it('replaces the section up to the next heading of the same or shallower level and keeps the rest', () => {
+    const out = spliceMarkdownSection(doc, 'a', '## A\n\nnew a');
+    assert.strictEqual(out, '# Guide\n\n## A\n\nnew a\n\n## B\n\nkeep b\n');
+  });
+
+  it('replaces the last section through the end of the text', () => {
+    assert.strictEqual(spliceMarkdownSection(doc, 'b', '## B\n\nnew b\n'), '# Guide\n\n## A\n\nold a\n\n### A sub\n\nold sub\n\n## B\n\nnew b\n');
+  });
+
+  it('returns the markdown unchanged when the anchor is missing', () => {
+    assert.strictEqual(spliceMarkdownSection(doc, 'nope', 'x'), doc);
+  });
+
+  it('ignores headings inside fenced code blocks, like the server', () => {
+    const fenced = '## A\n\n```bash\n## not a heading\n```\n\n## B\n\nkeep\n';
+    assert.strictEqual(spliceMarkdownSection(fenced, 'a', '## A\n\nnew'), '## A\n\nnew\n\n## B\n\nkeep\n');
+    assert.strictEqual(findHeadingLineForAnchor(fenced, 'not-a-heading'), null);
+  });
+
+  it('resolves de-duplicated anchors of repeated headings', () => {
+    const dup = '## X\n\none\n\n## X\n\ntwo\n';
+    assert.strictEqual(findHeadingLineForAnchor(dup, 'x-1'), 5);
   });
 });
