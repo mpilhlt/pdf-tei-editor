@@ -12,11 +12,20 @@ fossil's `scripts/check-llm-digest.py`, so markers written there stay valid.
 """
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls
+from fastapi_app.lib.core.git_forge_adapters import GitForgeAdapterRegistry
+from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.utils.annotation_rules_utils import (
+    derelativize_markdown_urls,
+    fetch_rule_excerpt,
+    markdown_section_range,
+)
+
+logger = logging.getLogger(__name__)
 
 SyncStatus = Literal["in_sync", "machine_outdated", "machine_edited", "both_changed", "no_marker"]
 
@@ -71,3 +80,32 @@ def sync_status(human_section: str, machine_section: str, human_url: str) -> Syn
     if edited:
         return "machine_edited"
     return "in_sync"
+
+
+def find_synced_human_commit(human_url: str, marker: SyncMarker, cache: UrlCache, limit: int = 50) -> Optional[str]:
+    """
+    Find the commit of the guide file whose section hashes to `marker.guide_hash`.
+
+    `human_url` is a heading-anchor blob URL. Commits are checked newest first,
+    stopping after `marker.base` if that commit is reached. Returns None if
+    nothing matches, the anchor is absent, no forge adapter handles the URL, or
+    a listing or fetch fails (logged as a warning).
+    """
+    base_url, _, anchor = human_url.partition("#")
+    adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
+    if adapter is None or not anchor:
+        return None
+    try:
+        for sha in adapter.list_file_commits(base_url, cache, limit):
+            commit_url = adapter.url_at_commit(base_url, sha)
+            lines = fetch_rule_excerpt(commit_url, cache).splitlines()
+            range_ = markdown_section_range("\n".join(lines), anchor)
+            if range_ is not None:
+                section = "\n".join(lines[range_[0] - 1:range_[1]])
+                if human_section_hash(section, commit_url) == marker.guide_hash:
+                    return sha
+            if sha == marker.base:
+                return None
+    except Exception as e:
+        logger.warning(f"Could not find the synced commit for {human_url}: {e}", exc_info=True)
+    return None

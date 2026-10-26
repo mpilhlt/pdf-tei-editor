@@ -3,12 +3,17 @@ Tests for fastapi_app/lib/doc_rules/guide_sync.py: sync-marker parsing and
 hashing, checked against real fossil guideline files.
 """
 
+from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
+from fastapi_app.lib.core.git_forge_adapters import GitHubAdapter
 from fastapi_app.lib.doc_rules.guide_sync import (
     SyncMarker,
+    find_synced_human_commit,
     format_sync_marker,
     human_section_hash,
     parse_sync_marker,
@@ -110,3 +115,65 @@ def test_human_hash_derelativizes_links() -> None:
     from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls
     section = "## H\n![img](img/a.png)\n"
     assert human_section_hash(section, HUMAN_URL) == section_hash(derelativize_markdown_urls(section, HUMAN_URL))
+
+
+# find_synced_human_commit
+
+SHAS = ["1" * 40, "2" * 40, "3" * 40, "4" * 40]
+BLOB_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#heading"
+
+
+def _file_at(sha: str) -> str:
+    return f"# Title\n\n## Heading\nVersion {SHAS.index(sha)}.\n\n## Other\nx\n"
+
+
+def _file_hash(sha: str) -> str:
+    return human_section_hash(f"## Heading\nVersion {SHAS.index(sha)}.", f"https://github.com/mpilhlt/fossil/blob/{sha}/docs/guidelines.md")
+
+
+def _patched(commits: "list[str] | Exception", files: dict[str, str]) -> ExitStack:
+    def fetch(url: str, cache: object, allow_redirects: bool = True) -> str:
+        assert "#" not in url
+        return files[url.split("/blob/")[1].split("/")[0]]
+
+    stack = ExitStack()
+    kwargs = {"side_effect": commits} if isinstance(commits, Exception) else {"return_value": commits}
+    stack.enter_context(patch.object(GitHubAdapter, "list_file_commits", **kwargs))
+    stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=fetch))
+    return stack
+
+
+def test_find_synced_commit_matches_second_newest() -> None:
+    marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, None)
+    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[1]
+
+
+def test_find_synced_commit_no_match() -> None:
+    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
+
+
+def test_find_synced_commit_stops_at_base() -> None:
+    marker = SyncMarker(_file_hash(SHAS[3]), HEX_B, SHAS[1])
+    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) is None
+
+
+def test_find_synced_commit_matches_base_itself() -> None:
+    marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, SHAS[1])
+    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[1]
+
+
+def test_find_synced_commit_listing_error_gives_none() -> None:
+    with _patched(requests.HTTPError("403"), {}):
+        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
+
+
+def test_find_synced_commit_skips_commit_without_anchor() -> None:
+    files = {s: _file_at(s) for s in SHAS}
+    files[SHAS[0]] = "# Title\n\nNo such section.\n"
+    marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+    with _patched(SHAS, files):
+        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[2]
