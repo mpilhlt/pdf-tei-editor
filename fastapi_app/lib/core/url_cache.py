@@ -43,14 +43,15 @@ def get_cache_info(url: str, cache_root: Path) -> Tuple[Path, Path, str]:
     """
     url_parts = url.split("/")[2:-1]
     url_parts = [re.sub(r'[<>:"|?*]', '_', part) for part in url_parts]
-    cache_dir = cache_root / Path(*url_parts)
     file_name = re.sub(r'[<>:"|?*]', '_', os.path.basename(url))
-    cache_file = cache_dir / file_name
-    root = cache_root.resolve()
-    resolved = cache_file.resolve()
-    if resolved == root or not resolved.is_relative_to(root):
+    # Normalized as a string, without touching the filesystem, and checked
+    # against the root before any path derived from the URL is used.
+    root = os.path.normpath(os.path.abspath(cache_root))
+    candidate = os.path.normpath(os.path.join(root, *url_parts, file_name))
+    if not candidate.startswith(root + os.sep):
         raise UncacheableUrlError(f"Cache path for {url} lies outside {cache_root}")
-    return cache_dir, cache_file, file_name
+    cache_file = Path(candidate)
+    return cache_file.parent, cache_file, file_name
 
 
 def is_cache_stale(cache_file: Path, ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> bool:
