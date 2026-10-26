@@ -30,6 +30,9 @@
  * @testCovers fastapi_app/lib/doc_rules/rules_refresh.py
  */
 
+import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, releaseAllLocks } from './helpers/login-helper.js';
@@ -346,6 +349,102 @@ test.describe('Document rules registry', () => {
           await /** @type {any} */ (window).client.apiClient.documentRulesDeleteOverrides(id);
         }, overrideId);
       }
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+    }
+  });
+
+  test('edits a human override and a machine override in separate tabs', async ({ page }) => {
+    // The fixture's refs point at a local HTTP server on this port (the
+    // backend fetches rule text server-side, so page.route() can't mock it,
+    // and the app server can't serve it to itself: its async handlers fetch
+    // synchronously). The files live next to the fixtures.
+    const TWO_LAYER_PORT = 38417;
+    const rulesDir = fileURLToPath(new URL('../fixtures/rules-markdown/', import.meta.url));
+    const server = http.createServer((req, res) => {
+      const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
+      if (name !== 'guide.md' && name !== 'machine.md') {
+        res.writeHead(404).end();
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
+    });
+    await new Promise((resolve) => server.listen(TWO_LAYER_PORT, '127.0.0.1', () => resolve(undefined)));
+
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const ruleUrls = [
+      `http://127.0.0.1:${TWO_LAYER_PORT}/guide.md#data-correction`,
+      `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L2`
+    ];
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+
+      await openToolsMenu(page);
+      const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+      await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+      await editMenuItem.hover();
+      await page.waitForTimeout(500);
+      const submenu = page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"]');
+      // One entry per rule category, not per layer.
+      await expect(submenu.locator('sl-menu-item')).toHaveCount(2); // category + schema
+      await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+
+      const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+      await expect(dialog).toHaveAttribute('open', '');
+      const humanTab = dialog.locator('sl-tab[name="humanLayerTab"]');
+      const machineTab = dialog.locator('sl-tab[name="machineLayerTab"]');
+      await expect(humanTab).toHaveText('Guide (human)');
+      await expect(machineTab).toHaveText('Machine rules');
+
+      const overrideRow = dialog.locator('[name="overrideRow"]');
+      const originalBtn = overrideRow.locator('sl-button:has-text("Original")');
+      const override1Btn = overrideRow.locator('sl-button:has-text("Override 1")');
+      const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+
+      // Human layer: create an override.
+      await humanTab.click();
+      await expect(originalBtn).toHaveAttribute('variant', 'primary');
+      await expect(mdContent).toContainText('Human guide text');
+      await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+      await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+      // Machine layer: starts on "Original" despite the human override.
+      await machineTab.click();
+      await expect(mdContent).toContainText('Machine rule text');
+      await expect(originalBtn).toHaveAttribute('variant', 'primary');
+      await expect(override1Btn).toHaveCount(0);
+      await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+      await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+      // Close, reopen: each layer keeps its own selection.
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+      await expect(dialog).not.toHaveAttribute('open', '');
+      await openToolsMenu(page);
+      await editMenuItem.hover();
+      await page.waitForTimeout(500);
+      await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+      await expect(dialog).toHaveAttribute('open', '');
+      await humanTab.click();
+      await expect(override1Btn).toHaveAttribute('variant', 'primary');
+      await machineTab.click();
+      await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+    } finally {
+      // Same cleanup rationale as the first test: overrides have no TTL.
+      await page.evaluate(async (urls) => {
+        const client = /** @type {any} */ (window).client;
+        for (const url of urls) {
+          const query = await client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+          for (const override of query.overrides) {
+            await client.apiClient.documentRulesDeleteOverrides(override.id);
+          }
+        }
+      }, ruleUrls).catch(() => {});
+      server.close();
       stopErrorMonitoring();
       await releaseAllLocks(page);
     }

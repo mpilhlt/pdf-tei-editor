@@ -69,11 +69,22 @@ When review mode is on and you run **Review Annotations** (Tools menu, LLM Revie
 
 ### Adjusting the rules the model uses
 
-**Tools → Edit document rules** lists the rule categories the document links to. Each entry opens the rules text that the LLM reviewer receives. Where the annotation guide has a machine-readable version, this is that version (a condensed excerpt), not the full guide that people read in the Annotation Guide drawer. Click **New override** to write your own version and select it: from then on, your reviews of this document use your text. Other users are not affected.
+**Tools → Edit document rules** lists the rule categories the document links to. Each category can have two layers, shown as tabs in the editor:
 
-**Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the excerpt. The rest of the file stays unchanged.
+- **Guide (human)**: the section of the annotation guide that people read in the Annotation Guide drawer. An override here replaces that section only, not the whole guide file.
+- **Machine rules**: the condensed text the LLM reviewer receives. Only shown when the category has a machine version in a separate file.
 
-Before this change, the editor showed the full annotation guide, and overrides were saved for it. Overrides created that way are no longer used or shown. To keep one, create a new override.
+Each tab has its own list of versions (**Original**, **Override 1**, ...) and its own selection: choosing an override on one tab does not change the other. Click **New override** to start from the text currently shown, edit it and click **Save**. Other users are not affected.
+
+Which override the LLM reviewer uses: if the category has a separate machine version, your selected override on **Machine rules**; otherwise your selected override on **Guide (human)**.
+
+If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge.
+
+An override that was written against an older version of the original is marked with a warning when the original has changed since ("Based on an older version of the original"). Review it against the current original and save it again to clear the marker.
+
+**Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
+
+Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. If their section can no longer be found, they are removed.
 
 ## Edited units
 
