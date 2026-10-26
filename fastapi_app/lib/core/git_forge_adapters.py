@@ -99,18 +99,19 @@ class BaseGitForgeAdapter(ABC):
         recognizes.
         """
 
-    @abstractmethod
     def list_file_commits(self, url: str, cache: UrlCache, limit: int = 20) -> "list[str]":
         """
         Return the full SHAs of the commits that touched the file `url`
         points to, newest first, on the URL's ref if that is a branch, else
         (SHA-pinned URL) on the repo's default branch. Cached with the normal
-        TTL. Raises on HTTP errors; callers handle them.
+        TTL. Raises on HTTP errors; callers handle them. Optional: the
+        default raises NotImplementedError.
         """
+        raise NotImplementedError(f"{type(self).__name__} does not support listing file commits")
 
-    @abstractmethod
     def url_at_commit(self, url: str, sha: str) -> str:
-        """Return the blob URL `url` with its ref replaced by `sha`, fragment preserved."""
+        """Return the blob URL `url` with its ref replaced by `sha`, fragment preserved. Optional: the default raises NotImplementedError."""
+        raise NotImplementedError(f"{type(self).__name__} does not support commit URLs")
 
 
 class GitHubAdapter(BaseGitForgeAdapter):

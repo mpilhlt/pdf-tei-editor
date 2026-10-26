@@ -41,12 +41,6 @@ class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
     def parse_repo_path(self, url: str):
         return None
 
-    def list_file_commits(self, url: str, cache, limit: int = 50):
-        return []
-
-    def url_at_commit(self, url: str, sha: str) -> str:
-        return url
-
 
 class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def matches(self, url: str) -> bool:
@@ -64,17 +58,20 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
     def is_sha_pinned(self, url: str) -> bool:
         raise AssertionError("should not be called")
 
-    def list_file_commits(self, url: str, cache, limit: int = 50):
-        raise AssertionError("should not be called")
-
-    def url_at_commit(self, url: str, sha: str) -> str:
-        raise AssertionError("should not be called")
-
     def build_propose_change_url(self, url: str, text: str, cache):
         raise AssertionError("should not be called")
 
     def parse_repo_path(self, url: str):
         raise AssertionError("should not be called")
+
+
+class TestOptionalHistoryMethods(unittest.TestCase):
+    def test_adapter_without_history_methods_instantiates_and_raises_not_implemented(self):
+        adapter = _AlwaysMatchesAdapter()
+        with self.assertRaises(NotImplementedError):
+            adapter.list_file_commits("https://x", MagicMock())
+        with self.assertRaises(NotImplementedError):
+            adapter.url_at_commit("https://x", "a" * 40)
 
 
 class TestGitForgeAdapterRegistry(unittest.TestCase):
