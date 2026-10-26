@@ -180,6 +180,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing plugin system: {e}")
         # Non-fatal - continue without plugins
 
+    # Move document rules overrides from pre-#666 line-range keys to heading-anchor keys.
+    # Fetches the rule files, so it runs in a background thread; idempotent, rows that
+    # cannot be fetched now are retried on the next start.
+    from .lib.core.dependencies import get_db
+    from .lib.doc_rules.legacy_key_migration import start_legacy_override_key_migration
+    from .lib.doc_rules.storage import DocumentRulesStore
+    start_legacy_override_key_migration(lambda: DocumentRulesStore(get_db()))
+
     # Log startup complete
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
 

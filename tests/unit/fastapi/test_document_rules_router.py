@@ -18,6 +18,7 @@ from fastapi_app.lib.core.dependencies import get_file_storage, require_authenti
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
+from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError
 from fastapi_app.routers.document_rules import get_db, router
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
@@ -472,7 +473,7 @@ RULES_MARKDOWN = "# Title\n\nintro\n\n## Section A\n\nrule a\n\n## Section B\n\n
 
 
 class TestHeadingAnchorKeys(DocumentRulesRouterTestCase):
-    """Overrides keyed by file + heading anchor: lazy legacy-key migration, outdated flag, selected-override lookup."""
+    """Overrides keyed by file + heading anchor: read routes never move legacy keys, strict keys on writes, outdated flag, selected-override lookup."""
 
     def setUp(self):
         super().setUp()
@@ -494,7 +495,8 @@ class TestHeadingAnchorKeys(DocumentRulesRouterTestCase):
     def _query(self, url: str):
         return self.client.post("/document-rules/query", json={"kind": "interpretation-ref", "url": url})
 
-    def test_query_migrates_legacy_line_range_override(self):
+    def test_query_does_not_move_legacy_line_range_override(self):
+        # Legacy rows are moved at startup (legacy_key_migration.py); read routes never write
         url = f"{RULES_BASE}#L5-L8"
         legacy = self._create(url, base_hash="")
         self.store.set_selection("interpretation-ref", normalize_resource_key(url), "alice", legacy["id"])
@@ -502,12 +504,33 @@ class TestHeadingAnchorKeys(DocumentRulesRouterTestCase):
         response = self._query(url)
 
         self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual([o["id"] for o in body["overrides"]], [legacy["id"]])
-        self.assertEqual(body["selected_override_id"], legacy["id"])
-        new_key = normalize_resource_key(f"{RULES_BASE}#section-a")
-        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], new_key)
-        self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), legacy["id"])
+        self.assertEqual(response.json()["overrides"], [])
+        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], normalize_resource_key(url))
+        self.assertEqual(self.store.get_selection("interpretation-ref", normalize_resource_key(url), "alice"), legacy["id"])
+
+    def test_selection_with_fetch_failure_returns_502(self):
+        url = f"{RULES_BASE}#L5-L8"
+        override = self._create(f"{RULES_BASE}#section-a", base_hash="")
+        self.kind_fetch.side_effect = RuleFetchError("boom")
+        with self.assertLogs("fastapi_app.routers.document_rules", level="ERROR"):
+            response = self.client.put(
+                "/document-rules/selection",
+                json={"kind": "interpretation-ref", "fragment_url": url, "override_id": override["id"]},
+            )
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Could not fetch", response.json()["detail"])
+
+    def test_selections_with_fetch_failure_falls_back_to_legacy_key(self):
+        url = f"{RULES_BASE}#L5-L8"
+        legacy = self._create(url, base_hash="")
+        self.store.set_selection("interpretation-ref", normalize_resource_key(url), "alice", legacy["id"])
+        self.kind_fetch.side_effect = RuleFetchError("boom")
+        with self.assertLogs("fastapi_app.lib.doc_rules.interpretation_ref_kind", level="WARNING"):
+            response = self.client.post(
+                "/document-rules/selections", json={"resources": [{"kind": "interpretation-ref", "url": url}]}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["selections"][0]["selected"])
 
     def test_query_marks_outdated_override(self):
         url = f"{RULES_BASE}#section-a"

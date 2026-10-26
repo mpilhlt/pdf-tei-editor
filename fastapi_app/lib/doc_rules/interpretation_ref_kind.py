@@ -19,6 +19,7 @@ from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.utils.annotation_rules_utils import (
     AnnotationRuleRef,
     AnnotationRuleRefTarget,
+    RuleFetchError,
     extract_annotation_rule_refs,
     fetch_rule_excerpt,
     fetch_rule_section,
@@ -101,14 +102,16 @@ class InterpretationRefKind(ResourceKind):
                 ))
         return descriptors
 
-    def resource_key(self, url: str, allow_redirects: bool = True) -> str:
+    def resource_key(self, url: str, strict: bool = False, allow_redirects: bool = True) -> str:
         """
         Key overrides by file + heading anchor, so a machine ref's line range
         shifting as the file is edited upstream doesn't orphan them: a
         line-range fragment whose start line is a Markdown heading maps to
         that heading's anchor. Falls back to legacy_resource_key() if the
-        start line isn't a heading or the file can't be fetched. `allow_redirects`
-        is passed to the fetch (False for untrusted URLs).
+        start line isn't a heading, or if the file can't be fetched - unless
+        `strict`, then a fetch failure raises RuleFetchError, so that it does
+        not pass for a different resource. `allow_redirects` is passed to the
+        fetch (False for untrusted URLs).
         """
         base, _, fragment = url.partition("#")
         start = line_range_start(fragment) if fragment else None
@@ -118,6 +121,8 @@ class InterpretationRefKind(ResourceKind):
         try:
             full_text = fetch_rule_excerpt(base, cache, allow_redirects=allow_redirects)
         except Exception as e:
+            if strict:
+                raise RuleFetchError(f"Could not fetch {base}: {e}") from e
             logger.warning(f"Could not fetch {base} to derive a heading-anchor resource key, using the line-range key: {e}")
             return legacy_resource_key(url)
         anchor = heading_anchor_at_line(full_text, start)
@@ -142,12 +147,12 @@ def selected_rule_override_text(
     layer, else "human" (a same-file machine excerpt is folded into it).
     None if the entry has no layer or the owner uses the original.
 
-    Side effects: deriving the layer's heading-anchor key may fetch the
-    layer's file (see InterpretationRefKind.resource_key()), and the layer's
-    pre-#666 line-range key is lazily migrated, which writes to `store`.
-    For entries from untrusted XML pass `is_safe_url`: a URL it rejects is
-    never fetched (its legacy key is used), and fetches of accepted URLs do
-    not follow redirects.
+    Deriving the layer's heading-anchor key may fetch the layer's file (see
+    InterpretationRefKind.resource_key()). Overrides stored under a pre-#666
+    line-range key are moved to the heading-anchor key at startup (see
+    legacy_key_migration.py), not here. For entries from untrusted XML pass
+    `is_safe_url`: a URL it rejects is never fetched (its legacy key is
+    used), and fetches of accepted URLs do not follow redirects.
     """
     layers = layer_refs(entry)
     ref = layers.get("machine") or layers.get("human")
@@ -159,5 +164,4 @@ def selected_rule_override_text(
         key = legacy_resource_key(url)
     else:
         key = kind.resource_key(url, allow_redirects=is_safe_url is None)
-        store.migrate_resource_key(kind.name, legacy_resource_key(url), key)
     return store.get_selected_override_text(kind.name, key, owner)

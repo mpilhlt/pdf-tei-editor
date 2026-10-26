@@ -8,9 +8,26 @@ not here.
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TypedDict, cast
 
 from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat
+
+
+class OverrideRow(TypedDict):
+    """A resource_overrides row (see migration 009)."""
+
+    id: str
+    kind: str
+    resource_key: str
+    owner: str
+    note: str
+    text: str
+    format: ResourceFormat
+    base_url: str
+    base_hash: str
+    created_at: str
+    updated_at: str
 
 
 class DocumentRulesStore:
@@ -19,16 +36,16 @@ class DocumentRulesStore:
     def __init__(self, db: DatabaseManager):
         self.db = db
 
-    def list_overrides(self, kind: str, resource_key: str, owner: str) -> list[dict]:
-        return self.db.execute_query(
+    def list_overrides(self, kind: str, resource_key: str, owner: str) -> list[OverrideRow]:
+        return cast(list[OverrideRow], self.db.execute_query(
             "SELECT * FROM resource_overrides WHERE kind = ? AND resource_key = ? AND owner = ? ORDER BY created_at",
             (kind, resource_key, owner),
-        )
+        ))
 
-    def get_override(self, override_id: str) -> Optional[dict]:
-        return self.db.execute_query(
+    def get_override(self, override_id: str) -> Optional[OverrideRow]:
+        return cast(Optional[OverrideRow], self.db.execute_query(
             "SELECT * FROM resource_overrides WHERE id = ?", (override_id,), fetch_one=True
-        )
+        ))
 
     def create_override(
         self,
@@ -37,10 +54,10 @@ class DocumentRulesStore:
         owner: str,
         note: str,
         text: str,
-        format: str,
+        format: ResourceFormat,
         base_url: str,
         base_hash: str,
-    ) -> dict:
+    ) -> OverrideRow:
         override_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         self.db.execute_update(
@@ -69,7 +86,7 @@ class DocumentRulesStore:
 
     def update_override(
         self, override_id: str, owner: str, note: Optional[str], text: Optional[str]
-    ) -> Optional[dict]:
+    ) -> Optional[OverrideRow]:
         """Update note and/or text (whichever is not None). Returns None if not found or not owned by `owner`."""
         existing = self.get_override(override_id)
         if existing is None or existing["owner"] != owner:
@@ -92,11 +109,11 @@ class DocumentRulesStore:
         return True
 
     def get_selection(self, kind: str, resource_key: str, owner: str) -> Optional[str]:
-        row = self.db.execute_query(
+        row = cast(Optional[dict[str, str]], self.db.execute_query(
             "SELECT override_id FROM resource_selection WHERE owner = ? AND kind = ? AND resource_key = ?",
             (owner, kind, resource_key),
             fetch_one=True,
-        )
+        ))
         return row["override_id"] if row else None
 
     def set_selection(self, kind: str, resource_key: str, owner: str, override_id: Optional[str]) -> None:
@@ -128,44 +145,43 @@ class DocumentRulesStore:
         for kind, resource_key in resources:
             self.set_selection(kind, resource_key, owner, None)
 
-    def migrate_resource_key(self, kind: str, old_key: str, new_key: str) -> int:
+    def list_overrides_of_kind(self, kind: str) -> list[OverrideRow]:
+        """Every owner's overrides of `kind`, oldest first."""
+        return cast(list[OverrideRow], self.db.execute_query(
+            "SELECT * FROM resource_overrides WHERE kind = ? ORDER BY created_at", (kind,)
+        ))
+
+    def rekey_override(self, override_id: str, new_key: str) -> bool:
         """
-        Move every owner's overrides and selection of `kind` from `old_key` to
-        `new_key`, skipping an owner who already has an override or selection
-        under `new_key` (their old-key rows are left as they are). A selection
-        whose override no longer exists is cleared rather than moved, since
-        foreign keys may not be enforced. Returns the number of rows moved;
-        a no-op when the keys are equal.
+        Move an override to `new_key`, together with its owner's selection
+        pointing at it - unless the owner already has a selection under
+        `new_key`, which then wins and the old selection is deleted. Returns
+        False if the override does not exist.
         """
-        if old_key == new_key:
-            return 0
-        moved = 0
         with self.db.transaction() as conn:
-            owners = [row[0] for row in conn.execute(
-                "SELECT owner FROM resource_overrides WHERE kind = ? AND resource_key = ? UNION SELECT owner FROM resource_selection WHERE kind = ? AND resource_key = ?",
-                (kind, old_key, kind, old_key),
-            ).fetchall()]
-            for owner in owners:
-                has_new_rows = conn.execute(
-                    "SELECT 1 FROM resource_overrides WHERE kind = ? AND resource_key = ? AND owner = ? UNION ALL SELECT 1 FROM resource_selection WHERE kind = ? AND resource_key = ? AND owner = ? LIMIT 1",
-                    (kind, new_key, owner, kind, new_key, owner),
-                ).fetchone()
-                if has_new_rows is not None:
-                    continue
-                params = (new_key, kind, old_key, owner)
-                moved += conn.execute(
-                    "UPDATE resource_overrides SET resource_key = ? WHERE kind = ? AND resource_key = ? AND owner = ?",
-                    params,
-                ).rowcount
-                moved += conn.execute(
-                    "UPDATE resource_selection SET resource_key = ? WHERE kind = ? AND resource_key = ? AND owner = ? AND override_id IN (SELECT id FROM resource_overrides)",
-                    params,
-                ).rowcount
+            row = conn.execute(
+                "SELECT kind, resource_key, owner FROM resource_overrides WHERE id = ?", (override_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            kind, old_key, owner = row["kind"], row["resource_key"], row["owner"]
+            conn.execute("UPDATE resource_overrides SET resource_key = ? WHERE id = ?", (new_key, override_id))
+            has_new_selection = conn.execute(
+                "SELECT 1 FROM resource_selection WHERE owner = ? AND kind = ? AND resource_key = ?",
+                (owner, kind, new_key),
+            ).fetchone()
+            params = (owner, kind, old_key, override_id)
+            if has_new_selection is None:
                 conn.execute(
-                    "DELETE FROM resource_selection WHERE kind = ? AND resource_key = ? AND owner = ?",
-                    (kind, old_key, owner),
+                    "UPDATE resource_selection SET resource_key = ? WHERE owner = ? AND kind = ? AND resource_key = ? AND override_id = ?",
+                    (new_key, *params),
                 )
-        return moved
+            else:
+                conn.execute(
+                    "DELETE FROM resource_selection WHERE owner = ? AND kind = ? AND resource_key = ? AND override_id = ?",
+                    params,
+                )
+        return True
 
     def get_selected_override_text(self, kind: str, resource_key: str, owner: str) -> Optional[str]:
         """The selected override's text, or None if this resource currently uses the original."""

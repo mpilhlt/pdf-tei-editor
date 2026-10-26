@@ -58,8 +58,13 @@ class ResourceKind(ABC):
     def resolve_original(self, url: str) -> str:
         """Fetch/read the resource's original text."""
 
-    def resource_key(self, url: str) -> str:
-        """The key overrides of the resource at `url` are stored under; defaults to normalize_resource_key(url)."""
+    def resource_key(self, url: str, strict: bool = False) -> str:
+        """
+        The key overrides of the resource at `url` are stored under; defaults
+        to normalize_resource_key(url). A kind whose key derivation can fail
+        (e.g. needs a fetch) raises RuleFetchError on failure if `strict`,
+        else falls back to a best-effort key.
+        """
         # Deferred import: resource_key.py imports ResourceFormat from this module.
         from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
         return normalize_resource_key(url)

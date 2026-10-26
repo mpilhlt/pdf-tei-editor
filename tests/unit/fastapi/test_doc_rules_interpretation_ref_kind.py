@@ -185,6 +185,12 @@ class TestInterpretationRefKindResourceKey(unittest.TestCase):
         self.assertEqual(key, legacy_resource_key(url))
         self.assertTrue(key.endswith("#L27-L53"))
 
+    def test_strict_resource_key_raises_on_fetch_failure(self):
+        url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines-llm.md#L28-L53"
+        with patch(_FETCH_EXCERPT, side_effect=ConnectionError("boom")):
+            with self.assertRaises(RuleFetchError):
+                self.kind.resource_key(url, strict=True)
+
     def test_resource_key_falls_back_to_legacy_on_fetch_failure(self):
         url = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines-llm.md#L28-L53"
         with patch(_FETCH_EXCERPT, side_effect=RuleFetchError("boom")):
@@ -283,18 +289,21 @@ class TestSelectedRuleOverrideText(unittest.TestCase):
         mock_fetch.assert_not_called()
         self.assertEqual(result, "legacy text")
 
-    def test_safe_line_range_url_is_fetched_without_redirects_and_migrates_legacy_override(self):
+    def test_safe_line_range_url_is_fetched_without_redirects_and_does_not_write(self):
         base = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines-llm.md"
         url = f"{base}#L28-L53"
         entry = self._entry((self.HUMAN, "human"), (url, "machine"))
         legacy_key = legacy_resource_key(url)
-        override = self.store.create_override(
+        legacy = self.store.create_override(
             kind="interpretation-ref", resource_key=legacy_key, owner="alice",
-            note="", text="migrated text", format="markdown", base_url=url, base_hash="h",
+            note="", text="legacy text", format="markdown", base_url=url, base_hash="h",
         )
-        self.store.set_selection("interpretation-ref", legacy_key, "alice", override["id"])
+        self.store.set_selection("interpretation-ref", legacy_key, "alice", legacy["id"])
         with patch(_FETCH_EXCERPT, return_value=GUIDELINES_LLM_TEXT) as mock_fetch:
+            self._select(url, "heading text")
             result = selected_rule_override_text(self.store, entry, "alice", is_safe_url=lambda u: True)
-        self.assertEqual(result, "migrated text")
+        self.assertEqual(result, "heading text")
         self.assertIs(mock_fetch.call_args.kwargs["allow_redirects"], False)
-        self.assertIsNone(self.store.get_selection("interpretation-ref", legacy_key, "alice"))
+        # Legacy rows are moved at startup (legacy_key_migration.py), not by a lookup
+        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], legacy_key)
+        self.assertEqual(self.store.get_selection("interpretation-ref", legacy_key, "alice"), legacy["id"])

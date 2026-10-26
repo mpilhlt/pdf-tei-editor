@@ -108,37 +108,31 @@ class TestDocumentRulesStore(unittest.TestCase):
         self.assertIsNone(self.store.get_selection("interpretation-ref", "https://example.com/rules.md", "alice"))
         self.assertIsNotNone(self.store.get_override(created["id"]))
 
-    def test_migrate_resource_key_moves_overrides_and_selection(self):
+    def test_rekey_override_moves_override_and_its_selection(self):
         old_key = "https://example.com/rules.md#L5-L8"
         new_key = "https://example.com/rules.md#section-a"
         first = self.store.create_override("interpretation-ref", old_key, "alice", "", "a", "markdown", old_key, "h")
-        self.store.create_override("interpretation-ref", old_key, "alice", "", "b", "markdown", old_key, "h")
-        self.store.create_override("interpretation-ref", old_key, "bob", "", "c", "markdown", old_key, "h")
+        second = self.store.create_override("interpretation-ref", old_key, "alice", "", "b", "markdown", old_key, "h")
         self.store.set_selection("interpretation-ref", old_key, "alice", first["id"])
 
-        moved = self.store.migrate_resource_key("interpretation-ref", old_key, new_key)
+        self.assertTrue(self.store.rekey_override(first["id"], new_key))
 
-        self.assertEqual(moved, 4)  # three overrides plus alice's selection
-        self.assertEqual(self.store.list_overrides("interpretation-ref", old_key, "alice"), [])
-        self.assertEqual(len(self.store.list_overrides("interpretation-ref", new_key, "alice")), 2)
-        self.assertEqual(len(self.store.list_overrides("interpretation-ref", new_key, "bob")), 1)
-        self.assertIsNone(self.store.get_selection("interpretation-ref", old_key, "alice"))
+        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", new_key, "alice")], [first["id"]])
+        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", old_key, "alice")], [second["id"]])
         self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), first["id"])
-        self.assertEqual(self.store.migrate_resource_key("interpretation-ref", old_key, new_key), 0)
-        self.assertEqual(self.store.migrate_resource_key("interpretation-ref", new_key, new_key), 0)
+        self.assertIsNone(self.store.get_selection("interpretation-ref", old_key, "alice"))
+        self.assertFalse(self.store.rekey_override("no-such-id", new_key))
 
-    def test_migrate_resource_key_skips_owner_who_already_has_new_key_rows(self):
+    def test_rekey_override_keeps_existing_selection_under_new_key(self):
         old_key = "https://example.com/rules.md#L5-L8"
         new_key = "https://example.com/rules.md#section-a"
         legacy = self.store.create_override("interpretation-ref", old_key, "alice", "", "old", "markdown", old_key, "h")
         current = self.store.create_override("interpretation-ref", new_key, "alice", "", "new", "markdown", new_key, "h")
+        self.store.set_selection("interpretation-ref", old_key, "alice", legacy["id"])
         self.store.set_selection("interpretation-ref", new_key, "alice", current["id"])
-        self.store.create_override("interpretation-ref", old_key, "bob", "", "bob's", "markdown", old_key, "h")
 
-        moved = self.store.migrate_resource_key("interpretation-ref", old_key, new_key)
+        self.store.rekey_override(legacy["id"], new_key)
 
-        self.assertEqual(moved, 1)  # only bob's override
-        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", old_key, "alice")], [legacy["id"]])
-        self.assertEqual([o["id"] for o in self.store.list_overrides("interpretation-ref", new_key, "alice")], [current["id"]])
+        self.assertEqual(self.store.get_override(legacy["id"])["resource_key"], new_key)
         self.assertEqual(self.store.get_selection("interpretation-ref", new_key, "alice"), current["id"])
-        self.assertEqual(len(self.store.list_overrides("interpretation-ref", new_key, "bob")), 1)
+        self.assertIsNone(self.store.get_selection("interpretation-ref", old_key, "alice"))

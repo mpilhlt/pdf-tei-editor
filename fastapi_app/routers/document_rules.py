@@ -4,6 +4,10 @@ overriding the resources a TEI document references (interpretation-ref
 prompt/rule fragments and its schema). See
 docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 ("REST API"). Write endpoints only ever touch the caller's own rows.
+
+Handlers that may fetch a rule file (blocking `requests` calls, e.g. via
+ResourceKind.resource_key() or resolve_original()) are plain `def`, so
+FastAPI runs them in its threadpool instead of on the event loop.
 """
 
 import hashlib
@@ -23,7 +27,6 @@ from ..lib.core.dependencies import (
 )
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
-from ..lib.doc_rules.interpretation_ref_kind import legacy_resource_key
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
@@ -33,10 +36,11 @@ from ..lib.doc_rules.rules_refresh import (
     preview_refresh,
     resolve_refresh_target,
 )
-from ..lib.doc_rules.storage import DocumentRulesStore
+from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.annotation_rules_utils import (
+    RuleFetchError,
     derelativize_markdown_urls,
     fetch_rule_excerpt,
     is_heading_anchor_fragment,
@@ -74,7 +78,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/document-rules", tags=["document-rules"])
 
 
-def _override_to_model(override: dict, original_hash: Optional[str] = None) -> OverrideModel:
+def _override_to_model(override: OverrideRow, original_hash: Optional[str] = None) -> OverrideModel:
     """`original_hash` (sha256 of the current original) sets `outdated`; an empty base_hash (migrated override) is never outdated."""
     base_hash = override["base_hash"]
     return OverrideModel(
@@ -88,26 +92,30 @@ def _override_to_model(override: dict, original_hash: Optional[str] = None) -> O
     )
 
 
-def _resource_key(kind: ResourceKind, url: str, store: DocumentRulesStore) -> str:
+def _resource_key(kind: ResourceKind, url: str, strict: bool = False) -> str:
     """
-    The key overrides of `url` are stored under. For interpretation-ref, rows
-    still stored under the pre-#666 line-range key are first moved to the
-    heading-anchor key (lazy migration, see DocumentRulesStore.migrate_resource_key()).
+    The key overrides of `url` are stored under (may fetch, see
+    InterpretationRefKind.resource_key()). Write and selection routes pass
+    `strict`: a fetch failure is then a 502 instead of a fallback key, which
+    would pass for a different resource; read routes keep the fallback.
     """
-    key = kind.resource_key(url)
-    if kind.name == "interpretation-ref":
-        store.migrate_resource_key(kind.name, legacy_resource_key(url), key)
-    return key
+    if not strict:
+        return kind.resource_key(url)
+    try:
+        return kind.resource_key(url, strict=True)
+    except RuleFetchError as e:
+        logger.error(f"Could not derive the resource key of {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch the resource to identify it: {e}")
 
 
-def _resource_key_for(kind_name: str, url: str, store: DocumentRulesStore) -> str:
+def _resource_key_for(kind_name: str, url: str, strict: bool = False) -> str:
     """_resource_key() for a kind given by name; an unregistered kind falls back to normalize_resource_key()."""
     kind = get_resource_kind(kind_name)
-    return _resource_key(kind, url, store) if kind is not None else normalize_resource_key(url)
+    return _resource_key(kind, url, strict) if kind is not None else normalize_resource_key(url)
 
 
 @router.post("/list", response_model=ListResourcesResponse)
-async def list_document_resources(
+def list_document_resources(
     request: ListResourcesRequest,
     user: dict = Depends(require_reviewer_or_admin),
 ) -> ListResourcesResponse:
@@ -125,7 +133,7 @@ async def list_document_resources(
 
 
 @router.post("/query", response_model=QueryResourceResponse)
-async def query_resource(
+def query_resource(
     request: QueryResourceRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -141,7 +149,7 @@ async def query_resource(
         logger.error(f"Failed to resolve original text for {request.kind} {request.url}: {e}")
         raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
 
-    resource_key = _resource_key(kind, request.url, store)
+    resource_key = _resource_key(kind, request.url)
     owner = user["username"]
     overrides = store.list_overrides(request.kind, resource_key, owner)
     selected_override_id = store.get_selection(request.kind, resource_key, owner)
@@ -155,7 +163,7 @@ async def query_resource(
 
 
 @router.post("/selected-override", response_model=SelectedOverrideResponse)
-async def get_selected_override(
+def get_selected_override(
     request: ResourceRef,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -165,13 +173,13 @@ async def get_selected_override(
     if kind is None:
         raise HTTPException(status_code=400, detail=f"Unknown resource kind: {request.kind}")
     owner = user["username"]
-    override_id = store.get_selection(request.kind, _resource_key(kind, request.url, store), owner)
+    override_id = store.get_selection(request.kind, _resource_key(kind, request.url), owner)
     override = store.get_override(override_id) if override_id is not None else None
     return SelectedOverrideResponse(override=_override_to_model(override) if override is not None else None)
 
 
 @router.post("/overrides", response_model=OverrideModel)
-async def create_override(
+def create_override(
     request: CreateOverrideRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -190,7 +198,7 @@ async def create_override(
     base_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
     override = store.create_override(
         kind=request.kind,
-        resource_key=_resource_key(kind, request.fragment_url, store),
+        resource_key=_resource_key(kind, request.fragment_url, strict=True),
         owner=user["username"],
         note=request.note,
         text=request.text if request.text is not None else original_text,
@@ -202,7 +210,7 @@ async def create_override(
 
 
 @router.put("/overrides/{override_id}", response_model=OverrideModel)
-async def update_override(
+def update_override(
     override_id: str,
     request: UpdateOverrideRequest,
     user: dict = Depends(require_reviewer_or_admin),
@@ -229,13 +237,13 @@ async def delete_override(
 
 
 @router.put("/selection", response_model=OkResponse)
-async def set_selection(
+def set_selection(
     request: SetSelectionRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Select an override (or `null` for the original) for one resource."""
-    resource_key = _resource_key_for(request.kind, request.fragment_url, store)
+    resource_key = _resource_key_for(request.kind, request.fragment_url, strict=True)
     if request.override_id is not None:
         override = store.get_override(request.override_id)
         if override is None or override["owner"] != user["username"]:
@@ -247,19 +255,19 @@ async def set_selection(
 
 
 @router.post("/selection/reset", response_model=OkResponse)
-async def reset_selection(
+def reset_selection(
     request: ResetSelectionRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Clear the caller's selection for each listed resource, keeping all overrides."""
-    resources = [(r.kind, _resource_key_for(r.kind, r.url, store)) for r in request.resources]
+    resources = [(r.kind, _resource_key_for(r.kind, r.url, strict=True)) for r in request.resources]
     store.reset_selection(user["username"], resources)
     return OkResponse()
 
 
 @router.post("/selections", response_model=SelectionsResponse)
-async def get_selections(
+def get_selections(
     request: SelectionsRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -275,7 +283,7 @@ async def get_selections(
         SelectionInfo(
             kind=r.kind,
             url=r.url,
-            selected=store.get_selection(r.kind, _resource_key_for(r.kind, r.url, store), owner) is not None,
+            selected=store.get_selection(r.kind, _resource_key_for(r.kind, r.url), owner) is not None,
         )
         for r in request.resources
     ]
@@ -293,7 +301,7 @@ def _outcome_response(outcome) -> RefreshOutcomeResponse:
 
 
 @router.post("/refresh/preview", response_model=RefreshOutcomeResponse)
-async def refresh_preview(
+def refresh_preview(
     request: RefreshRequest,
     # Only these two refresh endpoints are reviewer/admin-gated - the rest
     # of this router is intentionally open to any authenticated user (see
@@ -341,7 +349,7 @@ async def refresh_execute(
 
 
 @router.post("/propose-change-url", response_model=ProposeChangeUrlResponse)
-async def propose_change_url(
+def propose_change_url(
     request: ProposeChangeUrlRequest,
     user: dict = Depends(require_authenticated_user),
 ) -> ProposeChangeUrlResponse:
@@ -398,7 +406,7 @@ async def propose_change_url(
 
 
 @router.post("/refresh-resource", response_model=RefreshResourceResponse)
-async def refresh_resource(
+def refresh_resource(
     request: RefreshResourceRequest,
     # Same gate as /refresh/preview and /refresh/execute - this endpoint
     # exists purely to support the same reviewer/admin-only "Document
