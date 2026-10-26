@@ -14,6 +14,7 @@ fossil's `scripts/check-llm-digest.py`, so markers written there stay valid.
 import hashlib
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -82,21 +83,29 @@ def sync_status(human_section: str, machine_section: str, human_url: str) -> Syn
     return "in_sync"
 
 
-def find_synced_human_commit(human_url: str, marker: SyncMarker, cache: UrlCache, limit: int = 50) -> Optional[str]:
+def find_synced_human_commit(
+    human_url: str, marker: SyncMarker, cache: UrlCache, limit: int = 20, *, deadline_seconds: float = 20.0
+) -> Optional[str]:
     """
     Find the commit of the guide file whose section hashes to `marker.guide_hash`.
 
-    `human_url` is a heading-anchor blob URL. Commits are checked newest first,
-    stopping after `marker.base` if that commit is reached. Returns None if
-    nothing matches, the anchor is absent, no forge adapter handles the URL, or
-    a listing or fetch fails (logged as a warning).
+    `human_url` is a heading-anchor blob URL. At most `limit` commits are
+    checked, newest first, stopping after `marker.base` if that commit is
+    reached, or before the next fetch once `deadline_seconds` have passed.
+    Returns None if nothing matches, the anchor is absent, no forge adapter
+    handles the URL, the deadline passes, or a listing or fetch fails (logged
+    as a warning).
     """
     base_url, _, anchor = human_url.partition("#")
     adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
     if adapter is None or not anchor:
         return None
+    started = time.monotonic()
     try:
         for sha in adapter.list_file_commits(base_url, cache, limit):
+            if time.monotonic() - started > deadline_seconds:
+                logger.info(f"Gave up finding the synced commit for {human_url} after {deadline_seconds}s")
+                return None
             commit_url = adapter.url_at_commit(base_url, sha)
             lines = fetch_rule_excerpt(commit_url, cache).splitlines()
             range_ = markdown_section_range("\n".join(lines), anchor)

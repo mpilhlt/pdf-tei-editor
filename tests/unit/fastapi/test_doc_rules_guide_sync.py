@@ -177,3 +177,12 @@ def test_find_synced_commit_skips_commit_without_anchor() -> None:
     marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
     with _patched(SHAS, files):
         assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[2]
+
+
+def test_find_synced_commit_stops_at_deadline() -> None:
+    marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+    with _patched(SHAS, {s: _file_at(s) for s in SHAS}) as stack:
+        stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.time.monotonic", side_effect=[0.0, 0.0, 100.0]))
+        fetch = stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=lambda url, cache: _file_at(SHAS[0])))
+        assert find_synced_human_commit(BLOB_URL, marker, MagicMock(), deadline_seconds=20.0) is None
+    assert fetch.call_count == 1

@@ -557,6 +557,27 @@ class TestGitLabAdapterFileHistory(unittest.TestCase):
         self.assertEqual(result, ["3" * 40])
         self.assertEqual(mock_get.call_args.kwargs["params"]["ref_name"], "trunk")
 
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_drops_non_sha_ids_before_caching_and_returning(self, mock_get):
+        mock_get.return_value = _json_response(
+            [{"id": "1" * 40}, {"id": "../../evil"}, {"id": "ABC"}, {"id": 42}, {"id": "2" * 40}]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            url = "https://gitlab.example/group/project/-/blob/main/docs/guide.md"
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40, "2" * 40])
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40, "2" * 40])
+
+    def test_drops_non_sha_ids_from_cached_listing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            cache.set_text(
+                "https://gitlab.com/api/v4/projects/group%2Fproject/_file_commits/main/docs/guide.md",
+                '["' + "1" * 40 + '", "not-a-sha"]',
+            )
+            url = "https://gitlab.com/group/project/-/blob/main/docs/guide.md"
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40])
+
     def test_url_at_commit_branch_url(self):
         self.assertEqual(
             self.adapter.url_at_commit("https://gitlab.com/group/project/-/blob/main/docs/guide.md", "c" * 40),

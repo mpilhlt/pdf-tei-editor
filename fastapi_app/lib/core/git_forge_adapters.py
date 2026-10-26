@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 _SHA_RE = re.compile(r'^[0-9a-f]{40}$')
 
+
+def _full_shas(values: "list[object]") -> "list[str]":
+    """Keep only full 40-hex commit SHAs, so foreign listing values never reach URLs or cache keys."""
+    return [value for value in values if isinstance(value, str) and _SHA_RE.match(value)]
+
 # Conservative margin under common browser/proxy URL-length limits (~8KB) -
 # see BaseGitForgeAdapter.build_propose_change_url()'s docstring.
 _MAX_PROPOSE_URL_LENGTH = 7600
@@ -95,7 +100,7 @@ class BaseGitForgeAdapter(ABC):
         """
 
     @abstractmethod
-    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 20) -> "list[str]":
         """
         Return the full SHAs of the commits that touched the file `url`
         points to, newest first, on the URL's ref if that is a branch, else
@@ -223,7 +228,7 @@ class GitHubAdapter(BaseGitForgeAdapter):
             return None
         return f"{m['owner']}/{m['repo']}", m['path']
 
-    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 20) -> "list[str]":
         base_url, _, _ = url.partition("#")
         m = self._parse_any(base_url)
         owner, repo, ref, path = m['owner'], m['repo'], m['ref'], m['path']
@@ -235,7 +240,7 @@ class GitHubAdapter(BaseGitForgeAdapter):
         cache_key = f"{api_url}/_file_commits/{ref}/{path}"
         cached = cache.get_text(cache_key)
         if cached is not None:
-            return json.loads(cached)
+            return _full_shas(json.loads(cached))
         response = requests.get(
             f"{api_url}/commits",
             params={"path": path, "sha": ref, "per_page": limit},
@@ -243,7 +248,7 @@ class GitHubAdapter(BaseGitForgeAdapter):
             headers={"Accept": "application/vnd.github+json"},
         )
         response.raise_for_status()
-        shas = [commit["sha"] for commit in response.json()]
+        shas = _full_shas([commit["sha"] for commit in response.json()])
         cache.set_text(cache_key, json.dumps(shas))
         return shas
 
@@ -347,7 +352,7 @@ class GitLabAdapter(BaseGitForgeAdapter):
             return None
         return f"{origin}/{project_path}", file_path
 
-    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 20) -> "list[str]":
         base_url, _, _ = url.partition("#")
         origin, project_path, ref, file_path = self._split_any(base_url)
         if _SHA_RE.match(ref):
@@ -358,14 +363,14 @@ class GitLabAdapter(BaseGitForgeAdapter):
         cache_key = f"{api_url}/_file_commits/{ref}/{file_path}"
         cached = cache.get_text(cache_key)
         if cached is not None:
-            return json.loads(cached)
+            return _full_shas(json.loads(cached))
         response = requests.get(
             f"{api_url}/repository/commits",
             params={"path": file_path, "ref_name": ref, "per_page": limit},
             timeout=10,
         )
         response.raise_for_status()
-        shas = [commit["id"] for commit in response.json()]
+        shas = _full_shas([commit["id"] for commit in response.json()])
         cache.set_text(cache_key, json.dumps(shas))
         return shas
 
