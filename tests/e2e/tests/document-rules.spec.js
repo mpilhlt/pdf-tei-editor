@@ -361,16 +361,8 @@ test.describe('Document rules registry', () => {
     // synchronously). The files live next to the fixtures.
     const TWO_LAYER_PORT = 38417;
     const rulesDir = fileURLToPath(new URL('../fixtures/rules-markdown/', import.meta.url));
-    const server = http.createServer((req, res) => {
-      const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
-      if (name !== 'guide.md' && name !== 'machine.md') {
-        res.writeHead(404).end();
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
-    });
-    await new Promise((resolve) => server.listen(TWO_LAYER_PORT, '127.0.0.1', () => resolve(undefined)));
-
+    /** @type {http.Server | null} */
+    let server = null;
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     const ruleUrls = [
@@ -379,6 +371,19 @@ test.describe('Document rules registry', () => {
     ];
 
     try {
+      server = http.createServer((req, res) => {
+        const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
+        if (name !== 'guide.md' && name !== 'machine.md') {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
+      });
+      await new Promise((resolve, reject) => {
+        server?.once('error', (err) => reject(new Error(`Could not start the rules markdown server on port ${TWO_LAYER_PORT}: ${err.message}`)));
+        server?.listen(TWO_LAYER_PORT, '127.0.0.1', () => resolve(undefined));
+      });
+
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
       await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
 
@@ -443,8 +448,8 @@ test.describe('Document rules registry', () => {
             await client.apiClient.documentRulesDeleteOverrides(override.id);
           }
         }
-      }, ruleUrls).catch(() => {});
-      server.close();
+      }, ruleUrls).catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+      server?.close();
       stopErrorMonitoring();
       await releaseAllLocks(page);
     }

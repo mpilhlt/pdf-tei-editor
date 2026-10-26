@@ -84,7 +84,7 @@ An override that was written against an older version of the original is marked 
 
 **Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
 
-Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. If their section can no longer be found, they are removed.
+Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section.
 
 ## Edited units
 
