@@ -15,6 +15,7 @@ call GitForgeAdapterRegistry.get_instance().register(...) from anywhere,
 e.g. a plugin's initialize()).
 """
 
+import json
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -92,6 +93,19 @@ class BaseGitForgeAdapter(ABC):
         one is pinned to. Returns None if `url` isn't a shape this adapter
         recognizes.
         """
+
+    @abstractmethod
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+        """
+        Return the full SHAs of the commits that touched the file `url`
+        points to, newest first, on the URL's ref if that is a branch, else
+        (SHA-pinned URL) on the repo's default branch. Cached with the normal
+        TTL. Raises on HTTP errors; callers handle them.
+        """
+
+    @abstractmethod
+    def url_at_commit(self, url: str, sha: str) -> str:
+        """Return the blob URL `url` with its ref replaced by `sha`, fragment preserved."""
 
 
 class GitHubAdapter(BaseGitForgeAdapter):
@@ -209,6 +223,36 @@ class GitHubAdapter(BaseGitForgeAdapter):
             return None
         return f"{m['owner']}/{m['repo']}", m['path']
 
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+        base_url, _, _ = url.partition("#")
+        m = self._parse_any(base_url)
+        owner, repo, ref, path = m['owner'], m['repo'], m['ref'], m['path']
+        if _SHA_RE.match(ref):
+            ref = self._default_branch(owner, repo, cache)
+        api_url = f"https://api.github.com/repos/{owner}/{repo}"
+        # Distinct from the "/commits/{ref}" and "/_default_branch" keys above,
+        # so the cache path never doubles as both a file and a directory.
+        cache_key = f"{api_url}/_file_commits/{ref}/{path}"
+        cached = cache.get_text(cache_key)
+        if cached is not None:
+            return json.loads(cached)
+        response = requests.get(
+            f"{api_url}/commits",
+            params={"path": path, "sha": ref, "per_page": limit},
+            timeout=10,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        response.raise_for_status()
+        shas = [commit["sha"] for commit in response.json()]
+        cache.set_text(cache_key, json.dumps(shas))
+        return shas
+
+    def url_at_commit(self, url: str, sha: str) -> str:
+        base_url, _, fragment = url.partition("#")
+        m = self._parse(base_url)
+        resolved = f"https://github.com/{m['owner']}/{m['repo']}/blob/{sha}/{m['path']}"
+        return f"{resolved}#{fragment}" if fragment else resolved
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -302,6 +346,34 @@ class GitLabAdapter(BaseGitForgeAdapter):
         except ValueError:
             return None
         return f"{origin}/{project_path}", file_path
+
+    def list_file_commits(self, url: str, cache: UrlCache, limit: int = 50) -> "list[str]":
+        base_url, _, _ = url.partition("#")
+        origin, project_path, ref, file_path = self._split_any(base_url)
+        if _SHA_RE.match(ref):
+            ref = self._default_branch(origin, project_path, cache)
+        api_url = f"{origin}/api/v4/projects/{quote(project_path, safe='')}"
+        # Distinct from the "/repository/commits/{ref}" and "/_default_branch"
+        # keys above, so the cache path never doubles as both a file and a directory.
+        cache_key = f"{api_url}/_file_commits/{ref}/{file_path}"
+        cached = cache.get_text(cache_key)
+        if cached is not None:
+            return json.loads(cached)
+        response = requests.get(
+            f"{api_url}/repository/commits",
+            params={"path": file_path, "ref_name": ref, "per_page": limit},
+            timeout=10,
+        )
+        response.raise_for_status()
+        shas = [commit["id"] for commit in response.json()]
+        cache.set_text(cache_key, json.dumps(shas))
+        return shas
+
+    def url_at_commit(self, url: str, sha: str) -> str:
+        base_url, _, fragment = url.partition("#")
+        origin, project_path, _ref, file_path = self._split(base_url)
+        resolved = f"{origin}/{project_path}/-/blob/{sha}/{file_path}"
+        return f"{resolved}#{fragment}" if fragment else resolved
 
 
 class GitForgeAdapterRegistry:
