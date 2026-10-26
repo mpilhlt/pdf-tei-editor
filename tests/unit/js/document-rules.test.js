@@ -717,7 +717,7 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.deepStrictEqual(plugin._currentOverrides, [created]);
   });
 
-  it('_onSave persists the note and shown text for the selected override', async () => {
+  it('_onSave persists the note and shown text for the selected override, rebased on the shown resource', async () => {
     const plugin = setup();
     plugin._currentOverrides = [{ id: 'ov1', note: 'old note', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = 'ov1';
@@ -730,7 +730,7 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
       throw new Error(`unexpected dependency: ${name}`);
     };
     await plugin._onSave();
-    assert.deepStrictEqual(calls, [['ov1', { note: 'new note', text: 'new text' }]]);
+    assert.deepStrictEqual(calls, [['ov1', { note: 'new note', text: 'new text', fragment_url: 'https://example.com/a.md' }]]);
     assert.deepStrictEqual(plugin._currentOverrides[0], updated);
   });
 

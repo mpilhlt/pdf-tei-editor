@@ -544,6 +544,33 @@ class TestHeadingAnchorKeys(DocumentRulesRouterTestCase):
         outdated = {o["id"]: o["outdated"] for o in body["overrides"]}
         self.assertEqual(outdated, {current["id"]: False, stale["id"]: True})
 
+    def test_update_with_fragment_url_clears_outdated(self):
+        url = f"{RULES_BASE}#section-a"
+        stale = self._create(url, base_hash=hashlib.sha256(b"older section").hexdigest())
+        self.assertTrue(self._query(url).json()["overrides"][0]["outdated"])
+
+        response = self.client.put(f"/document-rules/overrides/{stale['id']}", json={"text": "edited", "fragment_url": url})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["outdated"])
+        override = self._query(url).json()["overrides"][0]
+        self.assertEqual(override["text"], "edited")
+        self.assertFalse(override["outdated"])
+
+    def test_update_without_fragment_url_keeps_outdated(self):
+        url = f"{RULES_BASE}#section-a"
+        stale = self._create(url, base_hash=hashlib.sha256(b"older section").hexdigest())
+        self.client.put(f"/document-rules/overrides/{stale['id']}", json={"text": "edited"})
+        self.assertTrue(self._query(url).json()["overrides"][0]["outdated"])
+
+    def test_update_with_fragment_url_of_another_resource_returns_400(self):
+        stale = self._create(f"{RULES_BASE}#section-a", base_hash="")
+        response = self.client.put(
+            f"/document-rules/overrides/{stale['id']}", json={"text": "edited", "fragment_url": f"{RULES_BASE}#section-b"}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.store.get_override(stale["id"])["text"], "override text")
+
     def test_query_does_not_mark_migrated_override_outdated(self):
         url = f"{RULES_BASE}#section-a"
         migrated = self._create(url, base_hash="")

@@ -271,7 +271,9 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
     this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
     this._editorDialogUi.layerTabs.addEventListener('sl-tab-show', (event) => {
-      this._onLayerTabShow(/** @type {CustomEvent} */(event).detail.name)
+      this._onLayerTabShow(/** @type {CustomEvent} */(event).detail.name).catch(error => {
+        this.#logger.warn('document-rules: could not switch layer: ' + String(error))
+      })
     })
     this._editorDialogUi.textBody.textTabs.addEventListener('sl-tab-show', async (event) => {
       if (/** @type {CustomEvent} */(event).detail.name === 'preview') {
@@ -849,16 +851,18 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Persist the currently selected override's note + shown text.
+   * Persist the currently selected override's note + shown text, rebased on
+   * the shown resource's current original (clears its "outdated" marker).
    * @returns {Promise<void>}
    */
   async _onSave() {
-    if (this._currentSelectedId === null) return
+    if (this._currentSelectedId === null || this._currentResource === null) return
     const note = this._editorDialogUi.noteInput.value
     const text = this._currentShownText()
+    const fragment_url = this._currentResource.url
     let updated
     try {
-      updated = await this.#client.apiClient.documentRulesUpdateOverrides(this._currentSelectedId, { note, text })
+      updated = await this.#client.apiClient.documentRulesUpdateOverrides(this._currentSelectedId, { note, text, fragment_url })
     } catch (error) {
       notify(`Could not save override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return

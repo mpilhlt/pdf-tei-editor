@@ -216,11 +216,34 @@ def update_override(
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OverrideModel:
-    """Update an override's note and/or text. Owner only."""
-    updated = store.update_override(override_id, user["username"], request.note, request.text)
+    """
+    Update an override's note and/or text. Owner only. With `fragment_url`
+    (the resource as currently shown), the override is rebased on that
+    resource's current original, which clears its `outdated` flag.
+    """
+    owner = user["username"]
+    base_hash: Optional[str] = None
+    if request.fragment_url is not None:
+        existing = store.get_override(override_id)
+        if existing is None or existing["owner"] != owner:
+            raise HTTPException(status_code=404, detail="Override not found or not owned by you")
+        kind = get_resource_kind(existing["kind"])
+        if kind is None:
+            raise HTTPException(status_code=400, detail=f"Unknown resource kind: {existing['kind']}")
+        if _resource_key(kind, request.fragment_url, strict=True) != existing["resource_key"]:
+            raise HTTPException(status_code=400, detail="Override does not belong to this resource")
+        try:
+            original_text = kind.resolve_original(request.fragment_url)
+        except Exception as e:
+            logger.error(f"Failed to resolve original text for {existing['kind']} {request.fragment_url}: {e}")
+            raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+        base_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
+    updated = store.update_override(
+        override_id, owner, request.note, request.text, base_url=request.fragment_url, base_hash=base_hash
+    )
     if updated is None:
         raise HTTPException(status_code=404, detail="Override not found or not owned by you")
-    return _override_to_model(updated)
+    return _override_to_model(updated, base_hash)
 
 
 @router.delete("/overrides/{override_id}", response_model=OkResponse)

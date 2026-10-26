@@ -85,9 +85,15 @@ class CreateOverrideRequest(BaseModel):
 
 
 class UpdateOverrideRequest(BaseModel):
-    """Request to update an override's note and/or text. Omitted fields are left unchanged."""
+    """
+    Request to update an override's note and/or text. Omitted fields are left
+    unchanged. `fragment_url`, the URL of the resource as currently shown,
+    rebases the override on that resource's current original, which clears
+    its `outdated` flag.
+    """
     note: Optional[str] = None
     text: Optional[str] = None
+    fragment_url: Optional[str] = None
 
 
 class SetSelectionRequest(BaseModel):

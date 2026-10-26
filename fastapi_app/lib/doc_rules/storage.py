@@ -85,18 +85,26 @@ class DocumentRulesStore:
         }
 
     def update_override(
-        self, override_id: str, owner: str, note: Optional[str], text: Optional[str]
+        self,
+        override_id: str,
+        owner: str,
+        note: Optional[str],
+        text: Optional[str],
+        base_url: Optional[str] = None,
+        base_hash: Optional[str] = None,
     ) -> Optional[OverrideRow]:
-        """Update note and/or text (whichever is not None). Returns None if not found or not owned by `owner`."""
+        """Update note, text, base_url and/or base_hash (whichever is not None). Returns None if not found or not owned by `owner`."""
         existing = self.get_override(override_id)
         if existing is None or existing["owner"] != owner:
             return None
         new_note = existing["note"] if note is None else note
         new_text = existing["text"] if text is None else text
+        new_base_url = existing["base_url"] if base_url is None else base_url
+        new_base_hash = existing["base_hash"] if base_hash is None else base_hash
         now = datetime.now(timezone.utc).isoformat()
         self.db.execute_update(
-            "UPDATE resource_overrides SET note = ?, text = ?, updated_at = ? WHERE id = ?",
-            (new_note, new_text, now, override_id),
+            "UPDATE resource_overrides SET note = ?, text = ?, base_url = ?, base_hash = ?, updated_at = ? WHERE id = ?",
+            (new_note, new_text, new_base_url, new_base_hash, now, override_id),
         )
         return self.get_override(override_id)
 

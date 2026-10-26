@@ -1014,6 +1014,7 @@
  * @typedef {Object} UpdateOverrideRequest
  * @property {string=} note
  * @property {string=} text
+ * @property {string=} fragment_url - The resource as currently shown; rebases the override on its current original, clearing `outdated`
  */
 
 /**
@@ -1790,7 +1791,8 @@ export class ApiClientV1 {
   }
 
   /**
-   * Update an override's note and/or text. Owner only.
+   * Update an override's note and/or text. Owner only. With `fragment_url`,
+   * the override is rebased on that resource's current original.
    *
    * @param {string} override_id
    * @param {UpdateOverrideRequest} requestBody
