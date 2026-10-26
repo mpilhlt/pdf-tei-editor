@@ -230,6 +230,12 @@ def is_line_range_fragment(fragment: str) -> bool:
     return bool(_LINE_RANGE_RE.match(fragment))
 
 
+def line_range_start(fragment: str) -> Optional[int]:
+    """The 1-based start line of a line-range fragment (e.g. 28 for "L28-L53"), or None if `fragment` isn't one."""
+    match = _LINE_RANGE_RE.match(fragment)
+    return int(match.group(1)) if match else None
+
+
 _ATX_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)(?:\s+#+)?$')
 _SLUG_STRIP_RE = re.compile(r'[^\w\s-]')
 _SLUG_WHITESPACE_RE = re.compile(r'\s')

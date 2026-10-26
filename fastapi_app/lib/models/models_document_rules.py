@@ -7,7 +7,7 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-from fastapi_app.lib.doc_rules.kinds import ResourceFormat
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat, ResourceLayer
 
 
 class ResourceDescriptorModel(BaseModel):
@@ -22,6 +22,14 @@ class ResourceDescriptorModel(BaseModel):
         description="Every URL in the document referring to this same resource (including `url`); "
         "e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource "
         "but have different target URLs.",
+    )
+    layer: Optional[ResourceLayer] = Field(
+        default=None,
+        description="Which layer of a multi-layer resource this is (\"human\" guide or \"machine\" rules); null for kinds without layers.",
+    )
+    group: Optional[str] = Field(
+        default=None,
+        description="Resources sharing a group are layers of one rule category (e.g. \"interpretation-ref:primary\"); null for kinds without layers.",
     )
 
 
