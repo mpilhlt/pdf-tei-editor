@@ -733,6 +733,28 @@ class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
         self.assertEqual(body["machine_source"], "original")
         self.assertEqual(body["synced_commit"], "abc123")
 
+    def test_machine_override_is_reported_as_machine_edited(self):
+        self._select_override(self.MACHINE_URL, self.machine + "\nAn extra machine rule.\n")
+        with patch("fastapi_app.routers.document_rules.find_synced_human_commit") as find:
+            response = self._post()
+        body = response.json()
+        self.assertEqual(body["status"], "machine_edited")
+        self.assertEqual(body["human_source"], "original")
+        self.assertEqual(body["machine_source"], "override")
+        find.assert_not_called()
+
+    def test_both_changed_returns_synced_commit(self):
+        self._select_override(self.HUMAN_URL, self.human + "\nAn extra rule.\n")
+        self._select_override(self.MACHINE_URL, self.machine + "\nAn extra machine rule.\n")
+        with patch("fastapi_app.routers.document_rules.find_synced_human_commit", return_value="abc123") as find:
+            response = self._post()
+        body = response.json()
+        self.assertEqual(body["status"], "both_changed")
+        self.assertEqual(body["human_source"], "override")
+        self.assertEqual(body["machine_source"], "override")
+        self.assertEqual(body["synced_commit"], "abc123")
+        find.assert_called_once()
+
     def test_no_marker(self):
         self.texts[self.MACHINE_URL] = "## Data correction\nNo marker here.\n"
         with patch("fastapi_app.routers.document_rules.find_synced_human_commit") as find:
