@@ -186,3 +186,17 @@ def test_find_synced_commit_stops_at_deadline() -> None:
         fetch = stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=lambda url, cache: _file_at(SHAS[0])))
         assert find_synced_human_commit(BLOB_URL, marker, MagicMock(), deadline_seconds=20.0) is None
     assert fetch.call_count == 1
+
+
+def test_find_synced_commit_http_error_logs_warning_without_traceback(caplog: pytest.LogCaptureFixture) -> None:
+    with _patched(requests.HTTPError("403"), {}), caplog.at_level("WARNING", logger="fastapi_app.lib.doc_rules.guide_sync"):
+        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
+    [record] = caplog.records
+    assert record.levelname == "WARNING" and record.exc_info is None
+
+
+def test_find_synced_commit_unexpected_error_logs_traceback(caplog: pytest.LogCaptureFixture) -> None:
+    with _patched(KeyError("sha"), {}), caplog.at_level("WARNING", logger="fastapi_app.lib.doc_rules.guide_sync"):
+        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
+    [record] = caplog.records
+    assert record.exc_info is not None

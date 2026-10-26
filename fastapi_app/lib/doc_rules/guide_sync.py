@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+import requests
+
 from fastapi_app.lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.utils.annotation_rules_utils import (
@@ -115,6 +117,8 @@ def find_synced_human_commit(
                     return sha
             if sha == marker.base:
                 return None
+    except requests.HTTPError as e:
+        logger.warning(f"Could not find the synced commit for {human_url}: {e}")
     except Exception as e:
         logger.warning(f"Could not find the synced commit for {human_url}: {e}", exc_info=True)
     return None
