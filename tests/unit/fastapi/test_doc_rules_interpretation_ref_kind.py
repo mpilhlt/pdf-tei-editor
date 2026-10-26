@@ -4,15 +4,20 @@ Unit tests for the "interpretation-ref" resource kind.
 @testCovers fastapi_app/lib/doc_rules/interpretation_ref_kind.py
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Literal
 from unittest.mock import patch
 
+from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import (
     InterpretationRefKind,
     layer_refs,
     legacy_resource_key,
+    selected_rule_override_text,
 )
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.utils.annotation_rules_utils import (
     AnnotationRuleRef,
@@ -221,3 +226,46 @@ class TestInterpretationRefKindResolveOriginal(unittest.TestCase):
         self.assertEqual(result, "## Citation model\nCite things.")
         mock_fetch.assert_called_once()
         self.assertEqual(mock_fetch.call_args[0][0], url)
+
+
+class TestSelectedRuleOverrideText(unittest.TestCase):
+    HUMAN = "https://example.com/rules/guide.md#citations"
+    MACHINE_SEPARATE = "https://example.com/rules/machine.md#citations"
+    MACHINE_FOLDED = "https://example.com/rules/guide.md#L10-L20"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.store = DocumentRulesStore(DatabaseManager(Path(self.temp_dir.name) / "test.db"))
+        self.kind = InterpretationRefKind()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _entry(*refs: tuple[str, Literal["human", "machine"]]) -> AnnotationRuleRef:
+        return {"category": "primary", "refs": [
+            {"target": t, "content_type": "markdown", "subtype": st} for t, st in refs
+        ]}
+
+    def _select(self, url: str, text: str) -> None:
+        override = self.store.create_override(
+            kind="interpretation-ref", resource_key=self.kind.resource_key(url), owner="alice",
+            note="", text=text, format="markdown", base_url=url, base_hash="h",
+        )
+        self.store.set_selection("interpretation-ref", self.kind.resource_key(url), "alice", override["id"])
+
+    def test_reviewer_uses_machine_layer_override_when_separate_file(self):
+        entry = self._entry((self.HUMAN, "human"), (self.MACHINE_SEPARATE, "machine"))
+        self._select(self.HUMAN, "human text")
+        self._select(self.MACHINE_SEPARATE, "machine text")
+        self.assertEqual(selected_rule_override_text(self.store, entry, "alice"), "machine text")
+
+    def test_reviewer_uses_human_layer_override_when_machine_folded(self):
+        entry = self._entry((self.HUMAN, "human"), (self.MACHINE_FOLDED, "machine"))
+        self._select(self.HUMAN, "human text")
+        self.assertEqual(selected_rule_override_text(self.store, entry, "alice"), "human text")
+
+    def test_reviewer_ignores_human_override_when_separate_machine_file(self):
+        entry = self._entry((self.HUMAN, "human"), (self.MACHINE_SEPARATE, "machine"))
+        self._select(self.HUMAN, "human text")
+        self.assertIsNone(selected_rule_override_text(self.store, entry, "alice"))

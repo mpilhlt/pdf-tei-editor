@@ -15,6 +15,7 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.doc_rules.kinds import ResourceDescriptor, ResourceKind, ResourceLayer
 from fastapi_app.lib.doc_rules.resource_key import infer_format, normalize_resource_key
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.utils.annotation_rules_utils import (
     AnnotationRuleRef,
     AnnotationRuleRefTarget,
@@ -126,3 +127,21 @@ class InterpretationRefKind(ResourceKind):
     def resolve_original(self, url: str) -> str:
         cache = UrlCache(get_settings().annotation_rules_cache_dir)
         return fetch_rule_section(url, cache)
+
+
+def selected_rule_override_text(store: DocumentRulesStore, entry: AnnotationRuleRef, owner: str) -> Optional[str]:
+    """
+    The text of `owner`'s selected override for the layer the annotation
+    reviewer reads from `entry`: "machine" if the entry has a separate machine
+    layer, else "human" (a same-file machine excerpt is folded into it).
+    Lazily migrates that layer's pre-#666 line-range key first. None if the
+    entry has no layer or the owner uses the original.
+    """
+    layers = layer_refs(entry)
+    ref = layers.get("machine") or layers.get("human")
+    if ref is None:
+        return None
+    kind = InterpretationRefKind()
+    key = kind.resource_key(ref["target"])
+    store.migrate_resource_key(kind.name, legacy_resource_key(ref["target"]), key)
+    return store.get_selected_override_text(kind.name, key, owner)
