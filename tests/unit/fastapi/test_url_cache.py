@@ -9,7 +9,7 @@ import time
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.core.url_cache import UrlCache, get_cache_info, is_cache_stale
+from fastapi_app.lib.core.url_cache import UncacheableUrlError, UrlCache, get_cache_info, is_cache_stale
 
 
 class TestGetCacheInfo(unittest.TestCase):
@@ -27,6 +27,17 @@ class TestGetCacheInfo(unittest.TestCase):
         _, cache_file, _ = get_cache_info("https://localhost:8000/a/file?.rng", cache_root)
         self.assertNotIn(":", str(cache_file.relative_to(cache_root)))
         self.assertNotIn("?", str(cache_file.relative_to(cache_root)))
+
+
+    def test_rejects_path_outside_cache_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(UncacheableUrlError):
+                get_cache_info("https://evil.example/../../../../tmp/x.md", Path(tmp))
+
+    def test_rejects_path_equal_to_cache_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(UncacheableUrlError):
+                get_cache_info("https://evil.example/..", Path(tmp))
 
 
 class TestIsCacheStale(unittest.TestCase):
@@ -85,3 +96,32 @@ class TestUrlCache(unittest.TestCase):
     def test_get_text_with_ignore_ttl_still_returns_none_when_never_cached(self):
         cache = UrlCache(self.cache_root)
         self.assertIsNone(cache.get_text("https://example.com/never/cached.txt", ignore_ttl=True))
+
+
+class TestUrlCacheTraversal(unittest.TestCase):
+    TRAVERSAL_URL = "https://evil.example/../../outside/x.md"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.cache_root = Path(self.temp_dir.name) / "a" / "b"
+        self.cache_root.mkdir(parents=True)
+        self.cache = UrlCache(self.cache_root)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_set_text_never_writes_outside_cache_root(self):
+        with self.assertLogs("fastapi_app.lib.core.url_cache", level="WARNING"):
+            self.cache.set_text(self.TRAVERSAL_URL, "payload")
+        written = [p for p in Path(self.temp_dir.name).rglob("*") if p.is_file()]
+        self.assertEqual(written, [])
+
+    def test_get_text_returns_none_for_traversal_url(self):
+        (Path(self.temp_dir.name) / "outside").mkdir()
+        (Path(self.temp_dir.name) / "outside" / "x.md").write_text("secret", encoding="utf-8")
+        with self.assertLogs("fastapi_app.lib.core.url_cache", level="WARNING"):
+            self.assertIsNone(self.cache.get_text(self.TRAVERSAL_URL))
+
+    def test_normal_url_still_round_trips(self):
+        self.cache.set_text("https://example.com/a/b/c.md", "hello")
+        self.assertEqual(self.cache.get_text("https://example.com/a/b/c.md"), "hello")

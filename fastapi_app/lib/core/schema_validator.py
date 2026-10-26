@@ -21,7 +21,7 @@ from lxml.etree import XMLSyntaxError
 import xmlschema
 import requests
 
-from fastapi_app.lib.core.url_cache import get_cache_info, is_cache_stale
+from fastapi_app.lib.core.url_cache import UncacheableUrlError, get_cache_info, is_cache_stale
 
 logger = logging.getLogger(__name__)
 
@@ -366,8 +366,14 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
 
     Returns:
         Tuple of (cache_dir, cache_file, filename)
+
+    Raises:
+        ValidationError: If the cache path would fall outside cache_root
     """
-    return get_cache_info(schema_location, cache_root)
+    try:
+        return get_cache_info(schema_location, cache_root)
+    except UncacheableUrlError as e:
+        raise ValidationError(f"Cannot cache schema {schema_location}: {e}")
 
 
 def is_schema_cache_stale(schema_cache_file: Path, ttl_seconds: int = SCHEMA_CACHE_TTL_SECONDS) -> bool:
