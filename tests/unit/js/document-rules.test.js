@@ -1686,6 +1686,7 @@ describe('DocumentRulesPlugin layer tabs (Guide (human) / Machine rules)', () =>
     plugin.getDependency = (name) => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async (body) => { queried.push(body.url); return { overrides: [], selected_override_id: null, original_text: `text of ${body.url}` }; },
+        documentRulesSyncStatus: async () => ({ status: 'in_sync', human_source: 'original', machine_source: 'original', base: null, synced_commit: null }),
       } };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
@@ -1912,6 +1913,43 @@ describe('DocumentRulesPlugin sync status line', () => {
     resolveFirst(response('no_marker'));
     await first;
     assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide');
+  });
+
+  /**
+   * A syncStatus stand-in that answers the first call with `in_sync` and
+   * leaves every later call pending.
+   * @returns {(body: any) => Promise<any>}
+   */
+  function firstResolvedThenPending() {
+    let call = 0;
+    return () => (++call === 1 ? Promise.resolve(response('in_sync')) : new Promise(() => {}));
+  }
+
+  it('hides the previous pair\'s status while the status of another pair loads', async () => {
+    const { plugin } = setup(firstResolvedThenPending());
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, '');
+    const otherHuman = { ...human, url: 'https://example.com/g.md#secondary', group: 'interpretation-ref:secondary' };
+    const otherMachine = { ...machine, url: 'https://example.com/rules2.md', group: 'interpretation-ref:secondary' };
+    plugin._currentResource = otherHuman;
+    plugin._currentGroup = [otherHuman, otherMachine];
+    plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+  });
+
+  it('keeps the line visible while a layer-tab switch within the same pair reloads it', async () => {
+    const { plugin } = setup(firstResolvedThenPending());
+    await plugin._refreshSyncStatus();
+    plugin._currentResource = machine;
+    plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, '');
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide');
+  });
+
+  it('shows the raw status when there is no copy for it', async () => {
+    const { plugin } = setup(async () => response('something_new'));
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'something_new');
   });
 
   it('hides the line and logs a warning when the request fails', async () => {

@@ -155,6 +155,13 @@ class DocumentRulesPlugin extends Plugin {
    */
   _syncStatusRequest = 0
 
+  /**
+   * Human and machine url of the pair the sync status line last described
+   * (newline-joined), or null when it described none.
+   * @type {string|null}
+   */
+  _syncStatusPair = null
+
   /** Selected override id, or null when "Original" is selected. @type {string|null} */
   _currentSelectedId = null
 
@@ -673,6 +680,11 @@ class DocumentRulesPlugin extends Plugin {
     const line = this._editorDialogUi.syncStatus
     const human = this._currentGroup.find(r => r.layer === 'human')
     const machine = this._currentGroup.find(r => r.layer === 'machine')
+    // Hide another pair's status while this one loads; a layer-tab switch
+    // within the same pair keeps the line, so it doesn't flicker
+    const pairKey = human && machine ? human.url + '\n' + machine.url : null
+    if (pairKey !== this._syncStatusPair) line.style.display = 'none'
+    this._syncStatusPair = pairKey
     if (!human || !machine) {
       line.style.display = 'none'
       return
@@ -691,7 +703,7 @@ class DocumentRulesPlugin extends Plugin {
     icon.setAttribute('name', response.status === 'in_sync' ? 'check-circle' : 'exclamation-triangle')
     icon.style.verticalAlign = '-0.125em'
     icon.style.marginRight = '0.25rem'
-    let text = SYNC_STATUS_TEXT[response.status]
+    let text = SYNC_STATUS_TEXT[response.status] ?? response.status
     if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
     line.replaceChildren(icon, document.createTextNode(text))
     line.style.display = ''
