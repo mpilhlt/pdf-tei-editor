@@ -137,6 +137,8 @@ function makeDialogUi() {
     shown: [],
   });
   el.layerTabs.show = (panel) => { el.layerTabs.shown.push(panel); };
+  el.syncStatus = document.createElement('div');
+  el.syncStatus.style.display = 'none';
   el.xmlBody = Object.assign(document.createElement('div'), { xmlContainer: document.createElement('div') });
   el.newOverrideBtn = document.createElement('sl-button');
   el.saveBtn = document.createElement('sl-button');
@@ -1814,5 +1816,110 @@ describe('DocumentRulesPlugin layer tabs (Guide (human) / Machine rules)', () =>
     assert.strictEqual(m.url, newMachine);
     assert.deepStrictEqual(m.related_urls, [newMachine]);
     assert.deepStrictEqual(queried, [newHuman]);
+  });
+});
+
+describe('DocumentRulesPlugin sync status line', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  /**
+   * @param {(body: any) => Promise<any>} syncStatus - stand-in for apiClient.documentRulesSyncStatus
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, requests: any[], warnings: string[] }}
+   */
+  function setup(syncStatus) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._currentResource = human;
+    plugin._currentGroup = [human, machine];
+    const requests = [];
+    const warnings = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesSyncStatus: async (body) => { requests.push(body); return syncStatus(body); } } };
+      if (name === 'logger') return { warn: (msg) => { warnings.push(msg); }, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, requests, warnings };
+  }
+
+  /** @param {string} status */
+  const response = (status, synced_commit = null) => ({ status, human_source: 'original', machine_source: 'original', base: null, synced_commit });
+
+  it('is hidden for a single-layer group, without a request', async () => {
+    const { plugin, requests } = setup(async () => response('in_sync'));
+    plugin._currentResource = schema;
+    plugin._currentGroup = [schema];
+    plugin._editorDialogUi.syncStatus.style.display = '';
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+    assert.deepStrictEqual(requests, []);
+  });
+
+  const cases = [
+    ['in_sync', 'In sync with the guide', 'check-circle'],
+    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync', 'exclamation-triangle'],
+    ['machine_edited', 'Machine rules edited by hand since the last sync', 'exclamation-triangle'],
+    ['both_changed', 'Machine rules outdated and edited by hand', 'exclamation-triangle'],
+    ['no_marker', 'No sync marker', 'exclamation-triangle'],
+  ];
+  for (const [status, text, icon] of cases) {
+    it(`shows "${text}" for ${status}`, async () => {
+      const { plugin, requests } = setup(async () => response(status));
+      await plugin._refreshSyncStatus();
+      const line = plugin._editorDialogUi.syncStatus;
+      assert.deepStrictEqual(requests, [{ human_url: human.url, machine_url: machine.url }]);
+      assert.strictEqual(line.style.display, '');
+      assert.strictEqual(line.querySelector('sl-icon').getAttribute('name'), icon);
+      assert.strictEqual(line.textContent.trim(), text);
+    });
+  }
+
+  it('appends the short hash of the last sync commit', async () => {
+    const { plugin } = setup(async () => response('in_sync', 'abc1234def5678'));
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide (last sync: abc1234)');
+  });
+
+  it('is refreshed after _selectOverride', async () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._setMarkdownContent = () => {};
+    plugin._scrollMarkdownBodyToAnchor = () => {};
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = human;
+    plugin._currentOriginalText = 'original text';
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    plugin.getDependency = () => ({ apiClient: { documentRulesSelection: async () => {} } });
+    let refreshed = 0;
+    plugin._refreshSyncStatus = async () => { refreshed++; };
+    await plugin._selectOverride('ov1');
+    assert.strictEqual(refreshed, 1);
+  });
+
+  it('ignores a response that arrives after a newer request', async () => {
+    let resolveFirst;
+    let call = 0;
+    const { plugin } = setup(() => {
+      call++;
+      if (call === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve(response('in_sync'));
+    });
+    const first = plugin._refreshSyncStatus();
+    await plugin._refreshSyncStatus();
+    resolveFirst(response('no_marker'));
+    await first;
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide');
+  });
+
+  it('hides the line and logs a warning when the request fails', async () => {
+    const { plugin, warnings } = setup(async () => { throw new Error('boom'); });
+    plugin._editorDialogUi.syncStatus.style.display = '';
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0], /boom/);
   });
 });

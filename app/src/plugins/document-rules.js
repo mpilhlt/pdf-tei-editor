@@ -28,7 +28,7 @@
  * @import { SlMenuItem, SlDialog } from '../ui.js'
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse } from '../modules/api-client-v1.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
 
@@ -58,6 +58,19 @@ await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-di
 const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
 
 const OUTDATED_OVERRIDE_TOOLTIP = 'Based on an older version of the original'
+
+/**
+ * Status-line copy for each sync status of a human/machine layer pair (see
+ * POST /document-rules/sync-status).
+ * @type {Readonly<Record<SyncStatusResponse['status'], string>>}
+ */
+const SYNC_STATUS_TEXT = Object.freeze({
+  in_sync: 'In sync with the guide',
+  machine_outdated: 'Machine rules outdated: the guide changed since the last sync',
+  machine_edited: 'Machine rules edited by hand since the last sync',
+  both_changed: 'Machine rules outdated and edited by hand',
+  no_marker: 'No sync marker'
+})
 
 /**
  * The URL fragment to scroll the markdown edit/preview panels to, or null
@@ -135,6 +148,12 @@ class DocumentRulesPlugin extends Plugin {
 
   /** @type {Array<OverrideModel>} */
   _currentOverrides = []
+
+  /**
+   * Number of _refreshSyncStatus() calls so far; a response is only shown
+   * if no newer call started while it was pending.
+   */
+  _syncStatusRequest = 0
 
   /** Selected override id, or null when "Original" is selected. @type {string|null} */
   _currentSelectedId = null
@@ -588,6 +607,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentResource = resource
     this._currentGroup = this._groupOf(resource)
     this._renderLayerTabs()
+    this._refreshSyncStatus()
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
@@ -639,6 +659,42 @@ class DocumentRulesPlugin extends Plugin {
     }
     layerTabs.style.display = ''
     layerTabs.show(this._currentResource.layer)
+  }
+
+  /**
+   * Show the sync status of `_currentGroup`'s human/machine layer pair below
+   * the layer tabs, or hide the line when the group is not such a pair or
+   * the request fails. The status describes the pair, so the line is the
+   * same on both tabs. Never rejects, so callers need not await it.
+   * @returns {Promise<void>}
+   */
+  async _refreshSyncStatus() {
+    const request = ++this._syncStatusRequest
+    const line = this._editorDialogUi.syncStatus
+    const human = this._currentGroup.find(r => r.layer === 'human')
+    const machine = this._currentGroup.find(r => r.layer === 'machine')
+    if (!human || !machine) {
+      line.style.display = 'none'
+      return
+    }
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesSyncStatus({ human_url: human.url, machine_url: machine.url })
+    } catch (error) {
+      if (request !== this._syncStatusRequest) return
+      line.style.display = 'none'
+      this.#logger.warn('document-rules: could not load sync status: ' + String(error))
+      return
+    }
+    if (request !== this._syncStatusRequest) return
+    const icon = document.createElement('sl-icon')
+    icon.setAttribute('name', response.status === 'in_sync' ? 'check-circle' : 'exclamation-triangle')
+    icon.style.verticalAlign = '-0.125em'
+    icon.style.marginRight = '0.25rem'
+    let text = SYNC_STATUS_TEXT[response.status]
+    if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
+    line.replaceChildren(icon, document.createTextNode(text))
+    line.style.display = ''
   }
 
   /**
@@ -824,6 +880,7 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._currentSelectedId = overrideId
     this._renderEditorDialog()
+    this._refreshSyncStatus()
     await this._refreshOverrideIndicators()
     notify(`${this._overrideLabel(overrideId)} selected for ${this._currentResource.label}.`, 'primary', 'info-circle')
   }
@@ -874,6 +931,7 @@ class DocumentRulesPlugin extends Plugin {
     // per-button tooltip (set from override.note at render time) would
     // otherwise stay stale until some other action forces a re-render.
     this._renderOverrideRow()
+    this._refreshSyncStatus()
     notify('Override saved.', 'success', 'check-circle')
   }
 
@@ -895,6 +953,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentOverrides = this._currentOverrides.filter(o => o.id !== id)
     this._currentSelectedId = null
     this._renderEditorDialog()
+    this._refreshSyncStatus()
     await this._refreshOverrideIndicators()
   }
 
@@ -997,6 +1056,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
     this._renderEditorDialog()
+    this._refreshSyncStatus()
     await this._refreshOverrideIndicators()
 
     const message = refreshResult
