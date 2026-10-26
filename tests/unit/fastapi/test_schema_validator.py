@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 from fastapi_app.lib.core.schema_validator import (
     SCHEMA_CACHE_TTL_SECONDS,
+    ValidationError,
+    get_schema_cache_info,
     extract_schema_locations,
     is_schema_cache_stale,
     register_bundled_schema,
@@ -252,6 +254,13 @@ class TestExtractSchemaLocationsSchemaRef(unittest.TestCase):
     def test_no_schema_declaration_at_all(self):
         xml = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader/></TEI>'
         self.assertEqual(extract_schema_locations(xml), [])
+
+
+class TestSchemaCacheInfoTraversal(unittest.TestCase):
+    def test_rejects_location_outside_cache_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValidationError):
+                get_schema_cache_info("https://evil.example/../../../../tmp/x.rng", Path(tmp))
 
 
 if __name__ == "__main__":

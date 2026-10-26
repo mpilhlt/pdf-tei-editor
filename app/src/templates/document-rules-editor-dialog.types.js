@@ -4,6 +4,7 @@
 /**
  * @typedef {object} documentRulesEditorDialogPart
  * @property {import('../ui.js').SlTabGroup & layerTabsPart} layerTabs
+ * @property {HTMLDivElement} syncStatus
  * @property {HTMLDivElement} overrideRow
  * @property {import('../ui.js').SlInput} noteInput
  * @property {HTMLDivElement & textBodyPart} textBody

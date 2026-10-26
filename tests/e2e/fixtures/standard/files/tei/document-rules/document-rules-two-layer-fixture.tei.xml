@@ -23,7 +23,7 @@
         <interpretation type="data-correction" n="Data correction">
           <p>
             <ref target="http://127.0.0.1:38417/guide.md#data-correction" subtype="human" type="markdown"/>
-            <ref target="http://127.0.0.1:38417/machine.md#L1-L2" subtype="machine" type="markdown"/>
+            <ref target="http://127.0.0.1:38417/machine.md#L1-L3" subtype="machine" type="markdown"/>
           </p>
         </interpretation>
       </editorialDecl>

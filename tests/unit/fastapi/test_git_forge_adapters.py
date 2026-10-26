@@ -65,6 +65,15 @@ class _NeverMatchesAdapter(BaseGitForgeAdapter):
         raise AssertionError("should not be called")
 
 
+class TestOptionalHistoryMethods(unittest.TestCase):
+    def test_adapter_without_history_methods_instantiates_and_raises_not_implemented(self):
+        adapter = _AlwaysMatchesAdapter()
+        with self.assertRaises(NotImplementedError):
+            adapter.list_file_commits("https://x", MagicMock())
+        with self.assertRaises(NotImplementedError):
+            adapter.url_at_commit("https://x", "a" * 40)
+
+
 class TestGitForgeAdapterRegistry(unittest.TestCase):
     def test_returns_none_when_no_adapter_registered(self):
         registry = GitForgeAdapterRegistry()
@@ -464,3 +473,116 @@ class TestDefaultBranchCacheKeyDoesNotCollideWithCommitsCache(unittest.TestCase)
             )
 
             self.assertEqual(target.url, "https://gitlab.com/group/project/-/edit/main/docs/guide.md")
+
+
+def _json_response(payload):
+    response = MagicMock()
+    response.json.return_value = payload
+    return response
+
+
+class TestGitHubAdapterFileHistory(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitHubAdapter()
+        self.sha_url = f"https://github.com/mpilhlt/fossil/blob/{'b' * 40}/docs/guide.md"
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_lists_commits_on_branch_ref_newest_first_and_caches(self, mock_get):
+        mock_get.return_value = _json_response([{"sha": "1" * 40}, {"sha": "2" * 40}])
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            url = "https://github.com/mpilhlt/fossil/blob/main/docs/guide.md#L1"
+            self.assertEqual(self.adapter.list_file_commits(url, cache, limit=7), ["1" * 40, "2" * 40])
+            self.assertEqual(self.adapter.list_file_commits(url, cache, limit=7), ["1" * 40, "2" * 40])
+        self.assertEqual(mock_get.call_count, 1)
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://api.github.com/repos/mpilhlt/fossil/commits")
+        self.assertEqual(kwargs["params"], {"path": "docs/guide.md", "sha": "main", "per_page": 7})
+        self.assertEqual(kwargs["timeout"], 10)
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_sha_pinned_url_lists_from_default_branch(self, mock_get):
+        mock_get.side_effect = [
+            _json_response({"default_branch": "trunk"}),
+            _json_response([{"sha": "3" * 40}]),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.adapter.list_file_commits(self.sha_url, UrlCache(Path(tmp)))
+        self.assertEqual(result, ["3" * 40])
+        self.assertEqual(mock_get.call_args.kwargs["params"]["sha"], "trunk")
+
+    def test_url_at_commit_branch_url(self):
+        self.assertEqual(
+            self.adapter.url_at_commit("https://github.com/mpilhlt/fossil/blob/main/docs/guide.md", "c" * 40),
+            f"https://github.com/mpilhlt/fossil/blob/{'c' * 40}/docs/guide.md",
+        )
+
+    def test_url_at_commit_sha_url_keeps_fragment(self):
+        self.assertEqual(
+            self.adapter.url_at_commit(self.sha_url + "#L1-L5", "c" * 40),
+            f"https://github.com/mpilhlt/fossil/blob/{'c' * 40}/docs/guide.md#L1-L5",
+        )
+
+
+class TestGitLabAdapterFileHistory(unittest.TestCase):
+    def setUp(self):
+        self.adapter = GitLabAdapter()
+        self.sha_url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guide.md"
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_lists_commits_on_branch_ref_newest_first_and_caches(self, mock_get):
+        mock_get.return_value = _json_response([{"id": "1" * 40}, {"id": "2" * 40}])
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            url = "https://gitlab.com/group/project/-/blob/main/docs/guide.md#L1"
+            self.assertEqual(self.adapter.list_file_commits(url, cache, limit=7), ["1" * 40, "2" * 40])
+            self.assertEqual(self.adapter.list_file_commits(url, cache, limit=7), ["1" * 40, "2" * 40])
+        self.assertEqual(mock_get.call_count, 1)
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://gitlab.com/api/v4/projects/group%2Fproject/repository/commits")
+        self.assertEqual(kwargs["params"], {"path": "docs/guide.md", "ref_name": "main", "per_page": 7})
+        self.assertEqual(kwargs["timeout"], 10)
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_sha_pinned_url_lists_from_default_branch(self, mock_get):
+        mock_get.side_effect = [
+            _json_response({"default_branch": "trunk"}),
+            _json_response([{"id": "3" * 40}]),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.adapter.list_file_commits(self.sha_url, UrlCache(Path(tmp)))
+        self.assertEqual(result, ["3" * 40])
+        self.assertEqual(mock_get.call_args.kwargs["params"]["ref_name"], "trunk")
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_drops_non_sha_ids_before_caching_and_returning(self, mock_get):
+        mock_get.return_value = _json_response(
+            [{"id": "1" * 40}, {"id": "../../evil"}, {"id": "ABC"}, {"id": 42}, {"id": "2" * 40}]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            url = "https://gitlab.example/group/project/-/blob/main/docs/guide.md"
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40, "2" * 40])
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40, "2" * 40])
+
+    def test_drops_non_sha_ids_from_cached_listing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            cache.set_text(
+                "https://gitlab.com/api/v4/projects/group%2Fproject/_file_commits/main/docs/guide.md",
+                '["' + "1" * 40 + '", "not-a-sha"]',
+            )
+            url = "https://gitlab.com/group/project/-/blob/main/docs/guide.md"
+            self.assertEqual(self.adapter.list_file_commits(url, cache), ["1" * 40])
+
+    def test_url_at_commit_branch_url(self):
+        self.assertEqual(
+            self.adapter.url_at_commit("https://gitlab.com/group/project/-/blob/main/docs/guide.md", "c" * 40),
+            f"https://gitlab.com/group/project/-/blob/{'c' * 40}/docs/guide.md",
+        )
+
+    def test_url_at_commit_sha_url_keeps_fragment(self):
+        self.assertEqual(
+            self.adapter.url_at_commit(self.sha_url + "#L1-L5", "c" * 40),
+            f"https://gitlab.com/group/project/-/blob/{'c' * 40}/docs/guide.md#L1-L5",
+        )
