@@ -17,8 +17,8 @@ from fastapi_app.lib.doc_rules.interpretation_ref_kind import (
     legacy_resource_key,
     selected_rule_override_text,
 )
-from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.utils.annotation_rules_utils import (
     AnnotationRuleRef,
     AnnotationRuleRefTarget,
@@ -269,3 +269,32 @@ class TestSelectedRuleOverrideText(unittest.TestCase):
         entry = self._entry((self.HUMAN, "human"), (self.MACHINE_SEPARATE, "machine"))
         self._select(self.HUMAN, "human text")
         self.assertIsNone(selected_rule_override_text(self.store, entry, "alice"))
+
+    def test_unsafe_url_is_not_fetched_and_uses_legacy_key(self):
+        url = "https://internal.example/machine.md#L28-L53"
+        entry = self._entry((self.HUMAN, "human"), (url, "machine"))
+        override = self.store.create_override(
+            kind="interpretation-ref", resource_key=legacy_resource_key(url), owner="alice",
+            note="", text="legacy text", format="markdown", base_url=url, base_hash="h",
+        )
+        self.store.set_selection("interpretation-ref", legacy_resource_key(url), "alice", override["id"])
+        with patch(_FETCH_EXCERPT) as mock_fetch:
+            result = selected_rule_override_text(self.store, entry, "alice", is_safe_url=lambda u: False)
+        mock_fetch.assert_not_called()
+        self.assertEqual(result, "legacy text")
+
+    def test_safe_line_range_url_is_fetched_without_redirects_and_migrates_legacy_override(self):
+        base = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines-llm.md"
+        url = f"{base}#L28-L53"
+        entry = self._entry((self.HUMAN, "human"), (url, "machine"))
+        legacy_key = legacy_resource_key(url)
+        override = self.store.create_override(
+            kind="interpretation-ref", resource_key=legacy_key, owner="alice",
+            note="", text="migrated text", format="markdown", base_url=url, base_hash="h",
+        )
+        self.store.set_selection("interpretation-ref", legacy_key, "alice", override["id"])
+        with patch(_FETCH_EXCERPT, return_value=GUIDELINES_LLM_TEXT) as mock_fetch:
+            result = selected_rule_override_text(self.store, entry, "alice", is_safe_url=lambda u: True)
+        self.assertEqual(result, "migrated text")
+        self.assertIs(mock_fetch.call_args.kwargs["allow_redirects"], False)
+        self.assertIsNone(self.store.get_selection("interpretation-ref", legacy_key, "alice"))
