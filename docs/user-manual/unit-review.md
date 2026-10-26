@@ -82,9 +82,11 @@ If you select an override of the guide section, the Annotation Guide drawer show
 
 An override that was written against an older version of the original is marked with a warning when the original has changed since ("Based on an older version of the original"). Review it against the current original and save it again to clear the marker.
 
+**Reset to original** reloads the rules of both tabs from their source, but removes only the overrides of the tab you are on. Overrides of the other tab are kept and may then be marked as based on an older version.
+
 **Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
 
-Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section.
+Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section. If you had selected such an override of the guide before the previous release, it now appears as an override of the guide section.
 
 ## Edited units
 
