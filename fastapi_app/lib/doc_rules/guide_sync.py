@@ -6,7 +6,7 @@ The machine section carries a marker comment
 
     <!-- sync: guide=<sha256> llm=<sha256> -->
 
-(optionally with ` base=<sha256>`) holding the hashes of the human and machine
+(optionally with ` base=<commit>`, a commit id) holding the hashes of the human and machine
 sections when they were last brought in sync. The hashing is the algorithm of
 fossil's `scripts/check-llm-digest.py`, so markers written there stay valid.
 """
