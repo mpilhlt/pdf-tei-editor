@@ -11,9 +11,11 @@ docs/superpowers/specs/2026-09-22-editorial-decl-annotation-rules-design.md
 import logging
 import os
 import re
+import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import BinaryIO, Iterator, Optional, Tuple
 
 DEFAULT_CACHE_TTL_SECONDS = 3600
 
@@ -74,6 +76,46 @@ def is_cache_stale(cache_file: Path, ttl_seconds: int = DEFAULT_CACHE_TTL_SECOND
     return age_seconds > ttl_seconds
 
 
+@contextmanager
+def atomic_write(target: Path) -> Iterator[BinaryIO]:
+    """
+    Open a binary file object whose content replaces `target` atomically on success.
+
+    Data is written to a temporary file in the same directory and moved onto
+    `target` with os.replace(), so concurrent readers never see a partially
+    written file. On any exception the temporary file is removed and `target`
+    is left untouched.
+
+    Args:
+        target: Final path of the file (its directory must exist)
+
+    Yields:
+        A binary file object to write to
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            yield f
+        os.replace(tmp_name, target)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def atomic_write_bytes(target: Path, data: bytes) -> None:
+    """Write `data` to `target` atomically (see atomic_write())."""
+    with atomic_write(target) as f:
+        f.write(data)
+
+
+def atomic_write_text(target: Path, text: str, encoding: str = "utf-8") -> None:
+    """Write `text` to `target` atomically (see atomic_write())."""
+    atomic_write_bytes(target, text.encode(encoding))
+
+
 class UrlCache:
     """A directory-backed, TTL-based text cache for fetched URL content."""
 
@@ -114,4 +156,4 @@ class UrlCache:
             logger.warning(f"Not writing to cache: {e}")
             return
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(content, encoding="utf-8")
+        atomic_write_text(cache_file, content)

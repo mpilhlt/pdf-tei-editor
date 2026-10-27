@@ -28,6 +28,7 @@ from ..lib.models.models_validation import (
     TeiHeaderAttributeModel,
     ChildCardinalityModel
 )
+from ..lib.core.url_cache import atomic_write_text
 from ..lib.core.schema_validator import validate, extract_schema_locations, get_schema_cache_info, ValidationError
 from ..lib.doc_rules.schema_override import build_schema_text_override
 from ..lib.doc_rules.storage import DocumentRulesStore
@@ -292,8 +293,7 @@ def generate_autocomplete_data(
 
             # Cache the generated data
             schema_cache_dir.mkdir(parents=True, exist_ok=True)
-            with open(autocomplete_cache_file, 'w', encoding='utf-8') as f:
-                json.dump(autocomplete_data, f, indent=2, ensure_ascii=False)
+            atomic_write_text(autocomplete_cache_file, json.dumps(autocomplete_data, indent=2, ensure_ascii=False))
 
             logger.debug(f"Cached autocomplete data to {autocomplete_cache_file}")
             return AutocompleteDataResponse(data=autocomplete_data)
