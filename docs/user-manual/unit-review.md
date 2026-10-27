@@ -98,6 +98,8 @@ An override that was written against an older version of the original is marked 
 
 **Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**). Nothing is saved until you click **Accept as new override**: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
 
+After you accept an update, the status line keeps showing that the machine rules are outdated until the change is synced upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
+
 The dialog works in one of two modes:
 
 - **Delta**: the guide commit that the machine rules were last synced with was found. The model sees the old and the new guide section and changes only what the change affects.

@@ -2153,6 +2153,37 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(plugin._updateDialogUi.notice.textContent.trim(), 'The guide section has not changed since the last sync.');
   });
 
+  it('_openUpdateDialog warns when the selected machine override was already updated from the guide, next to the other notices', async () => {
+    const { plugin } = setup({ api: {
+      documentRulesHumanChange: async () => ({ ...humanChange, unchanged: true }),
+    } });
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Updated from guide with Provider 1/Model 1', text: '# M', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    const lines = [...plugin._updateDialogUi.notice.children].map(line => line.textContent);
+    assert.deepStrictEqual(lines, [
+      'The guide section has not changed since the last sync.',
+      'The selected machine rules were already updated from the guide. Running the update again may apply the same change twice.',
+    ]);
+  });
+
+  it('_openUpdateDialog shows no repeat warning for an override not created from the guide', async () => {
+    const { plugin } = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Hand edit', text: '# M', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.style.display, 'none');
+  });
+
+  it('_openUpdateDialog reads the repeat warning from the machine layer, not from another shown layer', async () => {
+    const { plugin } = setup();
+    plugin._currentResource = human;
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Updated from guide with Provider 1/Model 1', text: '# G', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.style.display, 'none');
+  });
+
   it('_openUpdateDialog notifies and does not open the dialog when the request fails', async () => {
     const { plugin } = setup({ api: { documentRulesHumanChange: async () => { throw new Error('boom'); } } });
     await plugin._openUpdateDialog();

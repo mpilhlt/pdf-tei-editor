@@ -66,6 +66,10 @@ const OUTDATED_OVERRIDE_TOOLTIP = 'Based on an older version of the original'
 const ALIGN_MODE_NOTICE = 'No sync base found: the model compares the whole guide section with the machine rules.'
 const UNCHANGED_GUIDE_NOTICE = 'The guide section has not changed since the last sync.'
 const NO_MODEL_NOTICE = 'No language model is available. Update the machine rules by hand, using the change shown above.'
+const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated from the guide. Running the update again may apply the same change twice.'
+
+// Note of an override accepted in the "Update machine rules from guide" sub-dialog, followed by the model label
+const UPDATED_FROM_GUIDE_NOTE_PREFIX = 'Updated from guide with '
 
 /**
  * Markdown language support for the dialogs' CodeMirror views. GFM
@@ -1203,12 +1207,19 @@ class DocumentRulesPlugin extends Plugin {
    * shows as loading meanwhile and ignores further clicks; the sub-dialog
    * is not opened if, by the time the change arrives, the editor dialog was
    * closed, shows another rule category, or a newer request started.
+   * Warns if the machine layer's selected override was itself accepted
+   * from this dialog, since the sync marker stays unchanged until the
+   * change is proposed upstream.
    * @returns {Promise<void>}
    */
   async _openUpdateDialog() {
     const { human, machine } = this._currentPair()
     const btn = this._editorDialogUi.updateFromGuideBtn
     if (!human || !machine || btn.loading) return
+    // The overrides and selection are those of the shown layer, which is the machine layer when the button is clicked
+    const selectedMachineOverride = this._currentResource === machine
+      ? this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+      : null
     const request = ++this._updateDialogOpenRequest
     btn.loading = true
     btn.disabled = true
@@ -1235,6 +1246,7 @@ class DocumentRulesPlugin extends Plugin {
     } else if (change.unchanged) {
       notices.push(UNCHANGED_GUIDE_NOTICE)
     }
+    if (selectedMachineOverride?.note.startsWith(UPDATED_FROM_GUIDE_NOTE_PREFIX)) notices.push(REPEATED_UPDATE_NOTICE)
     if (this._updateModels.length === 0) notices.push(NO_MODEL_NOTICE)
     ui.notice.replaceChildren(...notices.map((text) => {
       const line = document.createElement('div')
@@ -1344,7 +1356,7 @@ class DocumentRulesPlugin extends Plugin {
       override = await this.#client.apiClient.documentRulesOverrides({
         kind: machine.kind,
         fragment_url: machine.url,
-        note: 'Updated from guide with ' + modelLabel,
+        note: UPDATED_FROM_GUIDE_NOTE_PREFIX + modelLabel,
         text: this._proposedMachineText
       })
     } catch (error) {
