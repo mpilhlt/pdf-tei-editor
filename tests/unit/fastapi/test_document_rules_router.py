@@ -1053,6 +1053,27 @@ class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
         body = self._post().json()
         self.assertEqual([f["path"] for f in body["files"]], ["docs/guidelines.md", "docs/guidelines-llm.md"])
         self.assertEqual(body["patch"].count("diff --git"), 2)
+        # The pinned originals carry an added rule the default branch lacks
+        self.assertEqual(body["upstream_changed"], ["docs/guidelines.md", "docs/guidelines-llm.md"])
+        self.assertTrue(body["in_sync"])
+
+    def test_human_only_is_not_in_sync(self):
+        body = self._post(include_machine=False).json()
+        self.assertFalse(body["in_sync"])
+        self.assertEqual(body["upstream_changed"], ["docs/guidelines.md"])
+
+    def test_default_branch_resolve_errors_are_502(self):
+        for error in (KeyError("default_branch"), NotImplementedError("no default branches")):
+            with self.subTest(error=type(error).__name__), patch.object(GitHubAdapter, "_default_branch", side_effect=error), self.assertLogs("fastapi_app.routers.document_rules", level="ERROR"):
+                response = self._post()
+                self.assertEqual(response.status_code, 502)
+                self.assertIn("Cannot resolve the default branch", response.json()["detail"])
+
+    def test_renamed_heading_is_422(self):
+        with patch("fastapi_app.lib.doc_rules.upstream_proposal.layer_text", return_value=("## Correcting data\n\nText.\n", "override")):
+            response = self._post(include_machine=False)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], 'The proposed text for docs/guidelines.md must start with the heading of the section "data-correction".')
 
     def test_no_layer_selected_is_422(self):
         response = self._post(include_human=False, include_machine=False)

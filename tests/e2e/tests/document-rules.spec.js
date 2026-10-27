@@ -620,7 +620,9 @@ test.describe('Document rules registry', () => {
               ],
               patch,
               filename: 'data-correction-rules.patch',
-              branch: 'main'
+              branch: 'main',
+              upstream_changed: [],
+              in_sync: true
             }
           });
         });

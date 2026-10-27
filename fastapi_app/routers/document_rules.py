@@ -623,6 +623,8 @@ def propose_patch(
         patch=proposal.patch,
         filename=proposal.filename,
         branch=proposal.branch,
+        upstream_changed=proposal.upstream_changed,
+        in_sync=proposal.in_sync,
     )
 
 

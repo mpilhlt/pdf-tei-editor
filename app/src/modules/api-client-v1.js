@@ -895,6 +895,8 @@
  * @property {string} patch
  * @property {string} filename
  * @property {string} branch
+ * @property {Array<string>} upstream_changed - Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes
+ * @property {boolean} in_sync - True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch
  */
 
 /**

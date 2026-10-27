@@ -109,14 +109,16 @@ The guide text and machine rules used are the ones you currently have selected o
 
 **Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
 
-For a category with both layers, **Propose upstream** (same button) proposes the guide section and the machine rules together as a patch. The dialog has the checkboxes **Guide section (human)** and **Machine rules**; a layer is checked when you have selected an override of it. It shows one diff per changed file, headed by the file's path in the guide repository, against the current default branch of the repository, so the patch applies even if the file changed since your override was based on it. Both files must be in the same repository.
+For a category with both layers, the same **Propose change upstream** button opens the **Propose upstream** dialog, which proposes the guide section and the machine rules together as a patch. The dialog has the checkboxes **Guide section (human)** and **Machine rules**; a layer is checked when you have selected an override of it, and if you have selected none, the layer of the tab you are on is checked. It shows one diff per changed file, headed by the file's path in the guide repository, against the current default branch of the repository. The section is found by its heading, even if it moved in the file since the version your override is based on. If the section's content changed upstream since then, the dialog warns you, because the patch replaces those changes. Both files must be in the same repository.
+
+The patch is built from your saved texts. If the editor shows changes you have not saved, the dialog says that they are not included; save them first.
 
 The patch updates the sync marker in the machine rules, depending on what you include:
 
 | Included | Effect on the sync marker |
 | --- | --- |
 | Guide section only | The machine rules are marked as outdated until they are updated from the guide. |
-| Machine rules (with or without the guide section) | The marker is updated: the machine rules are marked as in sync with the guide. |
+| Machine rules (with or without the guide section) | The marker records your current guide text (your override, or else the original) as the one the machine rules were derived from. If the guide section upstream after the patch is the same text, the machine rules are marked as in sync with the guide. If it differs, for example because you propose only the machine rules but have changed the guide section, the dialog warns that the machine rules will be marked as outdated. |
 
 Click **Download patch** to save `<category>-rules.patch`. To apply it, run `git apply <file>` in a clone of the guide repository, commit, and open a pull request. If the section no longer exists in the repository, or nothing would change, the dialog says so.
 

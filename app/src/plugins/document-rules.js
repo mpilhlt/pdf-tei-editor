@@ -73,6 +73,17 @@ const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated 
 // Notices of the "Propose upstream" sub-dialog, by the layers included in the proposal
 const GUIDE_ONLY_PROPOSAL_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.'
 const MACHINE_PROPOSAL_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.'
+const MACHINE_OUTDATED_PROPOSAL_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.'
+const UNSAVED_PROPOSAL_NOTICE = 'Unsaved changes in the editor are not included. Save them first.'
+
+/**
+ * The propose sub-dialog's notice for a file whose section changed upstream since the pinned version.
+ * @param {string} path - The file's repository path
+ * @returns {string}
+ */
+function upstreamChangedNotice(path) {
+  return `The section in ${path} changed upstream since your version; the patch replaces those changes.`
+}
 
 // Note of an override accepted in the "Update machine rules from guide" sub-dialog, followed by the model label
 const UPDATED_FROM_GUIDE_NOTE_PREFIX = 'Updated from guide with '
@@ -1256,7 +1267,7 @@ class DocumentRulesPlugin extends Plugin {
    */
   _installProposeDialogListeners() {
     const ui = this._proposeDialogUi
-    const refresh = () => { this._proposalPromise = this._refreshProposal() }
+    const refresh = () => { this._proposalPromise = this._refreshProposalSafely() }
     ui.includeHuman.addEventListener('sl-change', refresh)
     ui.includeMachine.addEventListener('sl-change', refresh)
     ui.downloadBtn.addEventListener('click', () => this._onDownloadPatch())
@@ -1298,16 +1309,45 @@ class DocumentRulesPlugin extends Plugin {
     }
     ui.includeHuman.checked = includeHuman
     ui.includeMachine.checked = includeMachine
-    this._proposalPromise = this._refreshProposal()
+    this._proposalPromise = this._refreshProposalSafely()
     await ui.show()
     await this._proposalPromise
   }
 
   /**
+   * Whether the editor shows text that differs from the shown layer's
+   * selected override, i.e. edits that are not saved and so are not part
+   * of a proposal, which is built from the stored texts. Without a selected
+   * override the editor is read-only and shows the original.
+   * @returns {boolean}
+   */
+  _hasUnsavedEdits() {
+    const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+    return selected !== null && this._currentShownText() !== selected.text
+  }
+
+  /**
+   * _refreshProposal() for event handlers: an unexpected error is logged
+   * and shown in the notice instead of becoming an unhandled rejection.
+   * @returns {Promise<void>}
+   */
+  async _refreshProposalSafely() {
+    try {
+      await this._refreshProposal()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.#logger.warn('document-rules: could not show the upstream proposal: ' + message)
+      this._setProposeNotices([message])
+    }
+  }
+
+  /**
    * Request the patch for the layers checked in the propose sub-dialog
    * (POST /document-rules/propose-patch) and show one diff per changed
-   * file, with notices on what the proposal does to the sync status.
-   * Download is disabled while the request is pending. An error (e.g.
+   * file, with notices on unsaved editor edits (not included), sections
+   * changed upstream (replaced by the patch), and what the proposal does to
+   * the sync status. The previous diffs are cleared and download is
+   * disabled while the request is pending. An error (e.g.
    * nothing selected, nothing to change, a fetch failure) is shown in the
    * notice instead of the files. Only the latest call's response is shown,
    * and none after the sub-dialog was reset.
@@ -1320,7 +1360,10 @@ class DocumentRulesPlugin extends Plugin {
     const session = ++this._proposalSession
     const includeHuman = ui.includeHuman.checked
     const includeMachine = ui.includeMachine.checked
-    ui.downloadBtn.disabled = true
+    const unsavedNotices = this._hasUnsavedEdits() ? [UNSAVED_PROPOSAL_NOTICE] : []
+    // No stale diffs while the request is pending
+    this._clearProposal()
+    this._setProposeNotices(unsavedNotices)
     /** @type {ProposePatchResponse} */
     let response
     try {
@@ -1334,7 +1377,7 @@ class DocumentRulesPlugin extends Plugin {
     } catch (error) {
       if (session !== this._proposalSession) return
       this._clearProposal()
-      this._setProposeNotices([error instanceof Error ? error.message : String(error)])
+      this._setProposeNotices([...unsavedNotices, error instanceof Error ? error.message : String(error)])
       return
     }
     if (session !== this._proposalSession) return
@@ -1352,9 +1395,9 @@ class DocumentRulesPlugin extends Plugin {
       ui.files.append(heading, diff)
       this._proposalViews.push(this._createMergeView(diff, file.before, file.after))
     }
-    const notices = []
+    const notices = [...unsavedNotices, ...response.upstream_changed.map(upstreamChangedNotice)]
     if (includeMachine) {
-      notices.push(MACHINE_PROPOSAL_NOTICE)
+      notices.push(response.in_sync ? MACHINE_PROPOSAL_NOTICE : MACHINE_OUTDATED_PROPOSAL_NOTICE)
     } else if (includeHuman) {
       notices.push(GUIDE_ONLY_PROPOSAL_NOTICE)
     }

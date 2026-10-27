@@ -28,6 +28,7 @@ from fastapi_app.lib.doc_rules.upstream_proposal import (
     section_anchor,
 )
 from fastapi_app.lib.utils.annotation_rules_utils import (
+    RuleFetchError,
     _rewrite_relative_markdown_urls,
     markdown_section_range,
 )
@@ -67,6 +68,7 @@ class _Fixture:
     def __init__(self, human_main: str = HUMAN_FILE, machine_main: str = MACHINE_FILE) -> None:
         self.main_files = {HUMAN_MAIN: human_main, MACHINE_MAIN: machine_main}
         self.fetched: list[str] = []
+        self.default_branch_effect: Optional[BaseException] = None
 
     def _fetch_raw(self, url: str) -> str:
         self.fetched.append(url)
@@ -99,7 +101,10 @@ class _Fixture:
         with ExitStack() as stack:
             stack.enter_context(patch(f"{MODULE}._fetch_raw_file", side_effect=self._fetch_raw))
             stack.enter_context(patch(f"{MODULE}.fetch_rule_excerpt", return_value=_served(MACHINE_FILE)))
-            stack.enter_context(patch.object(GitHubAdapter, "_default_branch", return_value="main"))
+            if self.default_branch_effect is None:
+                stack.enter_context(patch.object(GitHubAdapter, "_default_branch", return_value="main"))
+            else:
+                stack.enter_context(patch.object(GitHubAdapter, "_default_branch", side_effect=self.default_branch_effect))
             return build_upstream_proposal(kind, human_url, machine_url, include_human, include_machine, store, "alice", label, MagicMock())
 
 
@@ -238,6 +243,84 @@ class TestBuildUpstreamProposal(unittest.TestCase):
                 self.assertEqual((root / file.path).read_text(encoding="utf-8"), file.after)
 
 
+HUMAN_SENTENCE = "etc. Therefore, **never** correct mistakes in the text — leave everything as it is."
+MACHINE_RULE = "- `<lb/>` is part of the text stream: never move or remove it."
+
+
+class TestUpstreamChanged(unittest.TestCase):
+    def _upstream(self) -> _Fixture:
+        human_main = HUMAN_FILE.replace(HUMAN_SENTENCE, f"{HUMAN_SENTENCE} Changed upstream.", 1)
+        machine_main = MACHINE_FILE.replace(MACHINE_RULE, f"{MACHINE_RULE} Changed upstream.", 1)
+        return _Fixture(human_main, machine_main)
+
+    def test_unchanged_upstream(self) -> None:
+        proposal = _Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT})
+        self.assertEqual(proposal.upstream_changed, [])
+
+    def test_changed_upstream_sections_of_included_layers(self) -> None:
+        proposal = self._upstream().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT})
+        self.assertEqual(proposal.upstream_changed, ["docs/guidelines.md", "docs/guidelines-llm.md"])
+        self.assertNotIn("Changed upstream.", proposal.files[0].after)
+        self.assertEqual(self._upstream().build({HUMAN_URL: HUMAN_EDIT}, include_machine=False).upstream_changed, ["docs/guidelines.md"])
+        self.assertEqual(self._upstream().build({MACHINE_URL: MACHINE_EDIT}, include_human=False).upstream_changed, ["docs/guidelines-llm.md"])
+
+    def test_changes_outside_the_section_or_of_the_marker_do_not_count(self) -> None:
+        human_main = HUMAN_FILE.replace("## General strategy\n", "## General strategy\n\nChanged upstream.\n", 1)
+        machine_main = MACHINE_FILE.replace("<!-- sync: guide=cd65", "<!-- sync: guide=0000", 1)
+        proposal = _Fixture(human_main, machine_main).build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT})
+        self.assertEqual(proposal.upstream_changed, [])
+
+
+class TestInSync(unittest.TestCase):
+    def test_machine_only_with_a_different_guide_override_is_not_in_sync(self) -> None:
+        proposal = _Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT}, include_human=False)
+        self.assertFalse(proposal.in_sync)
+        self.assertEqual([f.path for f in proposal.files], ["docs/guidelines-llm.md"])
+        machine = _slice(proposal.files[0].after, "data-correction")
+        self.assertNotEqual(sync_status(_slice(HUMAN_FILE, "data-correction"), machine, HUMAN_URL, MACHINE_URL), "in_sync")
+        self.assertEqual(sync_status(_slice(HUMAN_EDIT, "data-correction"), machine, HUMAN_URL, MACHINE_URL), "in_sync")
+
+    def test_machine_only_with_the_guide_as_upstream_is_in_sync(self) -> None:
+        self.assertTrue(_Fixture().build({MACHINE_URL: MACHINE_EDIT}, include_human=False).in_sync)
+
+    def test_machine_only_with_the_guide_changed_upstream_is_not_in_sync(self) -> None:
+        human_main = HUMAN_FILE.replace(HUMAN_SENTENCE, f"{HUMAN_SENTENCE} Changed upstream.", 1)
+        self.assertFalse(_Fixture(human_main).build({MACHINE_URL: MACHINE_EDIT}, include_human=False).in_sync)
+
+    def test_both_layers_are_in_sync(self) -> None:
+        self.assertTrue(_Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT}).in_sync)
+
+    def test_human_only_is_not_in_sync(self) -> None:
+        self.assertFalse(_Fixture().build({HUMAN_URL: HUMAN_EDIT}, include_machine=False).in_sync)
+
+
+class TestHeadingCheck(unittest.TestCase):
+    def test_renamed_human_heading(self) -> None:
+        override = HUMAN_EDIT.replace("## Data correction\n", "## Correcting data\n", 1)
+        with self.assertRaises(ProposalError) as raised:
+            _Fixture().build({HUMAN_URL: override}, include_machine=False)
+        self.assertEqual(str(raised.exception), 'The proposed text for docs/guidelines.md must start with the heading of the section "data-correction".')
+
+    def test_removed_machine_heading(self) -> None:
+        override = MACHINE_EDIT.replace("## Data correction\n", "", 1)
+        with self.assertRaises(ProposalError) as raised:
+            _Fixture().build({MACHINE_URL: override}, include_human=False)
+        self.assertEqual(str(raised.exception), 'The proposed text for docs/guidelines-llm.md must start with the heading of the section "data-correction".')
+
+    def test_leading_blank_lines_are_dropped(self) -> None:
+        proposal = _Fixture().build({HUMAN_URL: f"\n\n{HUMAN_EDIT}"}, include_machine=False)
+        self.assertEqual(_changed_lines(HUMAN_FILE, proposal.files[0].after), ["+ ", "+ A new guide rule."])
+
+
+class TestDefaultBranchErrors(unittest.TestCase):
+    def test_resolve_errors_become_rule_fetch_errors(self) -> None:
+        for error in (KeyError("default_branch"), NotImplementedError("no default branches"), ValueError("bad JSON")):
+            fixture = _Fixture()
+            fixture.default_branch_effect = error
+            with self.subTest(error=type(error).__name__), self.assertRaises(RuleFetchError):
+                fixture.build({HUMAN_URL: HUMAN_EDIT})
+
+
 class TestSectionAnchor(unittest.TestCase):
     def test_heading_anchor(self) -> None:
         self.assertEqual(section_anchor(HUMAN_URL, MagicMock()), "data-correction")
@@ -279,6 +362,27 @@ class TestBuildPatch(unittest.TestCase):
             subprocess.run(["git", "apply", "p.patch"], cwd=root, check=True, capture_output=True)
             for file in files:
                 self.assertEqual((root / file.path).read_text(encoding="utf-8"), file.after)
+
+    def test_label_and_username_cannot_add_preamble_lines(self) -> None:
+        label = "Data\ncorrection\n\ndiff --git a/x b/x\r\n+++ b/x\x00"
+        patch_text = build_patch([ProposedFile("a.md", "x\n", "y\n")], label, "bob\n# Includes: x", "guide section")
+        preamble = patch_text.split("diff --git a/a.md")[0]
+        self.assertEqual(
+            preamble,
+            "# Annotation rules update: Data correction diff --git a/x b/x +++ b/x\n# Proposed with the PDF-TEI-Editor by bob # Includes: x\n# Includes: guide section\n\n",
+        )
+
+    @unittest.skipIf(shutil.which("git") is None, "git is not on PATH")
+    def test_injected_label_does_not_add_files_for_git(self) -> None:
+        label = "Data correction\ndiff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -0,0 +1 @@\n+evil"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "a.md").write_text("x\n", encoding="utf-8", newline="")
+            (root / "p.patch").write_text(build_patch([ProposedFile("a.md", "x\n", "y\n")], label, "bob", "guide section"), encoding="utf-8", newline="")
+            subprocess.run(["git", "apply", "--check", "p.patch"], cwd=root, check=True, capture_output=True)
+            numstat = subprocess.run(["git", "apply", "--numstat", "p.patch"], cwd=root, check=True, capture_output=True, text=True).stdout
+            self.assertEqual([line.split("\t")[-1] for line in numstat.splitlines()], ["a.md"])
 
     def test_filename(self) -> None:
         self.assertEqual(patch_filename("Data correction"), "data-correction-rules.patch")

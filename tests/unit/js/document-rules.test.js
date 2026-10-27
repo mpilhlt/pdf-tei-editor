@@ -2523,6 +2523,8 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
 
   const HUMAN_ONLY_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.';
   const MACHINE_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.';
+  const MACHINE_OUTDATED_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.';
+  const UNSAVED_NOTICE = 'Unsaved changes in the editor are not included. Save them first.';
 
   /**
    * @param {any} body
@@ -2532,7 +2534,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     const files = [];
     if (body.include_human) files.push({ path: 'docs/guidelines.md', before: 'g old', after: 'g new' });
     if (body.include_machine) files.push({ path: 'docs/guidelines-llm.md', before: 'm old', after: 'm new' });
-    return { files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main' };
+    return { files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine };
   }
 
   /**
@@ -2652,6 +2654,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
 
     it('uses the shown layer\'s current selection over the cached selections', async () => {
       const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock('x');
       plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
       plugin._currentSelectedId = 'ov1';
       plugin._selections = [{ kind: 'interpretation-ref', url: machine.url, selected: true }];
@@ -2722,6 +2725,75 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.deepStrictEqual(await noticesFor(false, true), [MACHINE_NOTICE]);
       assert.deepStrictEqual(await noticesFor(true, true), [MACHINE_NOTICE]);
     });
+
+    it('says the machine rules become outdated when they are included but not in sync', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), in_sync: false }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [MACHINE_OUTDATED_NOTICE]);
+    });
+
+    it('warns per file whose section changed upstream', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), upstream_changed: ['docs/guidelines.md', 'docs/guidelines-llm.md'] }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [
+        'The section in docs/guidelines.md changed upstream since your version; the patch replaces those changes.',
+        'The section in docs/guidelines-llm.md changed upstream since your version; the patch replaces those changes.',
+        MACHINE_NOTICE,
+      ]);
+    });
+
+    it('warns that unsaved editor changes are not included', async () => {
+      const { plugin } = setup();
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'saved', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      plugin._cmMdView = makeCmMdViewMock('edited');
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [UNSAVED_NOTICE, HUMAN_ONLY_NOTICE]);
+      plugin._cmMdView = makeCmMdViewMock('saved');
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [HUMAN_ONLY_NOTICE]);
+    });
+  });
+
+  it('clears the shown diffs while a new request is pending', async () => {
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    let resolveRequest;
+    apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+    const pending = plugin._refreshProposal();
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    assert.strictEqual(plugin._proposal, null);
+    resolveRequest();
+    await pending;
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md']);
+  });
+
+  it('a failing refresh from the checkbox handler is logged and shown, not rejected', async () => {
+    const { plugin } = setup();
+    const warnings = [];
+    plugin.getDependency = (name) => {
+      if (name === 'logger') return { warn: (msg) => warnings.push(msg), debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    plugin._refreshProposal = async () => { throw new Error('render failed'); };
+    plugin._installProposeDialogListeners();
+    plugin._proposeDialogUi.includeHuman.dispatchEvent(new dom.window.Event('sl-change'));
+    await plugin._proposalPromise;
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
+    assert.strictEqual(warnings.length, 1);
+    await plugin._openProposeDialog();
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
   });
 
   it('drops a stale response', async () => {

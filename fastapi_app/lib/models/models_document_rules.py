@@ -276,6 +276,8 @@ class ProposePatchResponse(BaseModel):
     patch: str
     filename: str
     branch: str
+    upstream_changed: list[str] = Field(..., description="Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes.")
+    in_sync: bool = Field(..., description="True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch.")
 
 
 class UpdateFromGuideRequest(BaseModel):
