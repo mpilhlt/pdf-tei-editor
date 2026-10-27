@@ -96,6 +96,15 @@ An override that was written against an older version of the original is marked 
 
 **Reset to original** reloads the rules of both tabs from their source, but removes only the overrides of the tab you are on. Overrides of the other tab are kept and may then be marked as based on an older version.
 
+**Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**). Nothing is saved until you click **Accept as new override**: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
+
+The dialog works in one of two modes:
+
+- **Delta**: the guide commit that the machine rules were last synced with was found. The model sees the old and the new guide section and changes only what the change affects.
+- **Align**: no sync base was found (no sync marker, or the guide is not on GitHub or GitLab). The dialog says so, and the model compares the whole guide section with the machine rules.
+
+The guide text and machine rules used are the ones you currently have selected on each tab (your override, or else the original). If no language model is available to you, the dialog says so; update the machine rules by hand, using the change shown in the dialog, and save them as an override.
+
 **Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
 
 Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section. If you had selected such an override of the guide before the previous release, it now appears as an override of the guide section.

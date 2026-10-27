@@ -99,6 +99,94 @@ async function loadFixtureDocument(page, docId) {
   return stableId;
 }
 
+const TWO_LAYER_PORT = 38417;
+const TWO_LAYER_RULE_URLS = [
+  `http://127.0.0.1:${TWO_LAYER_PORT}/guide.md#data-correction`,
+  `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L3`
+];
+const PROPOSED_MACHINE_TEXT = '# Data correction\n\nProposed machine rule text.\n';
+
+/**
+ * Serve the two-layer fixtures (tests/e2e/fixtures/rules-markdown/) over HTTP:
+ * the backend fetches rule text server-side, so page.route() cannot mock it.
+ * @param {number} port
+ * @returns {Promise<http.Server>}
+ */
+async function startRulesServer(port) {
+  const rulesDir = fileURLToPath(new URL('../fixtures/rules-markdown/', import.meta.url));
+  const server = http.createServer((req, res) => {
+    const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
+    if (name !== 'guide.md' && name !== 'machine.md') {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', (err) => reject(new Error(`Could not start the rules markdown server on port ${port}: ${err.message}`)));
+    server.listen(port, '127.0.0.1', () => resolve(undefined));
+  });
+  return server;
+}
+
+/**
+ * Delete every override of the given interpretation-ref urls (overrides have no TTL).
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} urls
+ */
+async function deleteRuleOverrides(page, urls) {
+  await page.evaluate(async (ruleUrls) => {
+    const client = /** @type {any} */ (window).client;
+    for (const url of ruleUrls) {
+      const query = await client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+      for (const override of query.overrides) {
+        await client.apiClient.documentRulesDeleteOverrides(override.id);
+      }
+    }
+  }, urls).catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+}
+
+/**
+ * Mock the LLM endpoints inference-settings reads (it fetches them at start
+ * and on session change, so call this before navigateAndLogin()).
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<{id: string, label: string, models: Array<{id: string, label: string}>}>} providers
+ */
+async function mockLlm(page, providers) {
+  await page.route('**/api/v1/llm/providers', (route) => route.fulfill({
+    json: providers.map((p) => ({
+      ...p,
+      models: p.models.map((m) => ({ ...m, capabilities: [], status: null, free: true })),
+      key_required: false,
+      secret_service: null,
+      error: null
+    }))
+  }));
+  await page.route('**/api/v1/llm/default-model', (route) => route.request().method() === 'GET'
+    ? route.fulfill({ json: null })
+    : route.continue());
+}
+
+/**
+ * Open the "Data correction" editor dialog of the two-layer fixture on its machine tab.
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<import('@playwright/test').Locator>} the editor dialog
+ */
+async function openMachineTab(page) {
+  await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+  await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+  await openToolsMenu(page);
+  const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+  await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+  await editMenuItem.hover();
+  await page.waitForTimeout(500);
+  await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
+  const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+  await expect(dialog).toHaveAttribute('open', '');
+  await dialog.locator('sl-tab[name="machineLayerTab"]').click();
+  return dialog;
+}
+
 test.describe('Document rules registry', () => {
   test('lists both resources in the submenu and edits an override on the schema resource', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
@@ -527,6 +615,74 @@ test.describe('Document rules registry', () => {
           }
         }
       }, ruleUrls).catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+      server?.close();
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+    }
+  });
+
+  test('updates the machine rules from the guide', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {http.Server | null} */
+    let server = null;
+
+    try {
+      server = await startRulesServer(TWO_LAYER_PORT);
+      await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
+      await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
+        json: { mode: 'align', old_human: null, new_human: 'Human guide text for data correction.', machine: 'Machine rule text.', proposed: PROPOSED_MACHINE_TEXT }
+      }));
+
+      const dialog = await openMachineTab(page);
+      await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+      const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+      await expect(updateDialog).toHaveAttribute('open', '');
+      await expect(updateDialog).toContainText('Change in the guide');
+      await expect(updateDialog).toContainText('No sync base found');
+      await updateDialog.locator('sl-button[name="generateBtn"]').click();
+      await expect(updateDialog).toContainText('Proposed machine rules');
+      await updateDialog.locator('sl-button[name="acceptBtn"]').click();
+      await expect(updateDialog).not.toHaveAttribute('open', '');
+
+      const overrideRow = dialog.locator('[name="overrideRow"]');
+      await expect(overrideRow.locator('sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+      await expect(dialog.locator('[name="mdContainer"] .cm-content')).toContainText('Proposed machine rule text.');
+      const stored = await page.evaluate(async (url) => {
+        const query = await /** @type {any} */ (window).client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+        return query.overrides.map((o) => ({ text: o.text, note: o.note }));
+      }, TWO_LAYER_RULE_URLS[1]);
+      expect(stored).toEqual([{ text: PROPOSED_MACHINE_TEXT, note: 'Updated from guide with Mock provider/Mock model' }]);
+
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+    } finally {
+      await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+      server?.close();
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+    }
+  });
+
+  test('tells the user when no language model is available for updating from the guide', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {http.Server | null} */
+    let server = null;
+
+    try {
+      server = await startRulesServer(TWO_LAYER_PORT);
+      await mockLlm(page, []);
+
+      const dialog = await openMachineTab(page);
+      await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+      const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+      await expect(updateDialog).toHaveAttribute('open', '');
+      await expect(updateDialog).toContainText('No language model is available. Update the machine rules by hand, using the change shown above.');
+      await expect(updateDialog.locator('[name="modelRow"]')).toBeHidden();
+
+      await updateDialog.locator('sl-button[name="closeBtn"]').click();
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+    } finally {
       server?.close();
       stopErrorMonitoring();
       await releaseAllLocks(page);
