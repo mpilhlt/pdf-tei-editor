@@ -52,6 +52,11 @@ const SESSION_MODEL_KEY = 'inference-settings.sessionModel';
  * @import { ProviderResponse, ModelResponse } from '../modules/api-client-v1.js'
  */
 
+/**
+ * A model from the last fetch, as offered by getModels() for a model picker.
+ * @typedef {{providerId: string, modelId: string, label: string}} ModelChoice
+ */
+
 export class InferenceSettingsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
@@ -221,6 +226,19 @@ export class InferenceSettingsPlugin extends Plugin {
     const provider = this._providers.find(p => p.id === providerId);
     const model = provider?.models.find(m => m.id === modelId);
     return `${provider?.label ?? providerId}/${model?.label ?? modelId}`;
+  }
+
+  /**
+   * Every model from the last fetch, flattened in provider order, for a
+   * model picker. Empty until the first successful fetch.
+   * @returns {Array<ModelChoice>}
+   */
+  getModels() {
+    return this._providers.flatMap(provider => provider.models.map(model => ({
+      providerId: provider.id,
+      modelId: model.id,
+      label: this.getModelLabel(provider.id, model.id),
+    })));
   }
 
   /**
