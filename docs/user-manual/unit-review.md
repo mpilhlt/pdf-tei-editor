@@ -103,7 +103,7 @@ After you accept an update, the status line keeps showing that the machine rules
 The dialog works in one of two modes:
 
 - **Delta**: the guide commit that the machine rules were last synced with was found. The model sees the old and the new guide section and changes only what the change affects.
-- **Align**: no sync base was found (no sync marker, or the guide is not on GitHub or GitLab). The dialog says so, and the model compares the whole guide section with the machine rules.
+- **Align**: no sync base was found, for example because the machine rules have no sync marker, the guide is not on GitHub or GitLab, or the synced commit is not among the guide's recent history. The dialog says so, and the model compares the whole guide section with the machine rules.
 
 The guide text and machine rules used are the ones you currently have selected on each tab (your override, or else the original). If no language model is available to you, the dialog says so; update the machine rules by hand, using the change shown in the dialog, and save them as an override.
 
