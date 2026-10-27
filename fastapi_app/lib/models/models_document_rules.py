@@ -229,3 +229,47 @@ class SyncStatusResponse(BaseModel):
     machine_source: Literal["original", "override"]
     base: Optional[str] = None
     synced_commit: Optional[str] = None
+
+
+class HumanChangeRequest(BaseModel):
+    """Request for the change of a human guideline section since its machine section was last synced."""
+    human_url: str
+    machine_url: str
+
+
+class HumanChangeResponse(BaseModel):
+    """
+    `mode` is "delta" if the guide commit the machine section was synced with
+    was found (`old_human` and `base_commit` set), else "align". `old_human`
+    and `new_human` have their same-repository links in relative form;
+    `machine` is the user's machine text, sync marker included, with its links
+    in the absolute form of an override.
+    """
+    mode: Literal["delta", "align"]
+    old_human: Optional[str] = None
+    new_human: str
+    machine: str
+    base_commit: Optional[str] = None
+
+
+class UpdateFromGuideRequest(BaseModel):
+    """Request to have a language model update a machine section from its human section."""
+    xml: str
+    human_url: str
+    machine_url: str
+    provider_id: str
+    model_id: str
+
+
+class UpdateFromGuideResponse(BaseModel):
+    """
+    Same fields as HumanChangeResponse, plus `proposed`, the model's updated
+    machine section in the same form as `machine`, so that a diff of the two
+    shows only the model's changes.
+    """
+    mode: Literal["delta", "align"]
+    old_human: Optional[str] = None
+    new_human: str
+    machine: str
+    proposed: str
+    base_commit: Optional[str] = None
