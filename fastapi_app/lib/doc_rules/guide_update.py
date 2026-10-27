@@ -19,7 +19,11 @@ from fastapi_app.lib.doc_rules.condense_prompt import DEFAULT_CONDENSE_PROMPT
 from fastapi_app.lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, split_sync_marker
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
-from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls, fetch_rule_section
+from fastapi_app.lib.utils.annotation_rules_utils import (
+    absolutize_markdown_urls,
+    derelativize_markdown_urls,
+    fetch_rule_section,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +67,21 @@ class GuideChange:
     """
     The inputs of a machine rules update; see the module docstring.
 
-    All texts have `\\n` line endings and same-repository links in relative
-    form (derelativize_markdown_urls()), so neither line endings nor the ref
-    a text was fetched at show up as changes. `machine_full` is the machine
-    text as the user has it in that form, marker line included: it is what a
-    proposal from clean_model_answer() is diffed against and what it
-    replaces, so their diff shows only the model's changes.
+    All texts have `\\n` line endings. The texts given to the model
+    (`old_human`, `new_human`, `machine`) have same-repository links in
+    relative form (derelativize_markdown_urls()), so the ref a text was
+    fetched at does not show up as a change. `machine_full` is the machine
+    text as the user has it, marker line included, with its links absolute
+    against `machine_url` (absolutize_markdown_urls()), the form originals
+    and overrides use, so that it renders in the preview. A proposal from
+    clean_model_answer() is in the same form, so their diff shows only the
+    model's changes.
     """
     old_human: Optional[str]
     new_human: str
-    machine: str  # machine_full without the sync marker line
+    machine: str  # machine_full without the sync marker line, links relative
     machine_full: str
+    machine_url: str
     marker_line: Optional[str]
     base_commit: Optional[str]
     human_source: LayerSource
@@ -129,10 +137,10 @@ def gather_guide_change(
 ) -> GuideChange:
     """Collect the inputs of a machine rules update for `owner`. Raises what layer_text() raises."""
     new_human, human_source = layer_text(kind, human_url, store, owner)
-    machine_full, machine_source = layer_text(kind, machine_url, store, owner)
-    machine_full = _normalized(machine_full, machine_url)
-    machine, marker_line = split_sync_marker(machine_full)
-    marker = parse_sync_marker(machine_full)
+    machine_text, machine_source = layer_text(kind, machine_url, store, owner)
+    machine_text = _normalized(machine_text, machine_url)
+    machine, marker_line = split_sync_marker(machine_text)
+    marker = parse_sync_marker(machine_text)
     old_human: Optional[str] = None
     base_commit: Optional[str] = None
     if marker is not None:
@@ -147,7 +155,8 @@ def gather_guide_change(
         old_human=old_human,
         new_human=_normalized(new_human, human_url),
         machine=machine,
-        machine_full=machine_full,
+        machine_full=absolutize_markdown_urls(machine_text, machine_url),
+        machine_url=machine_url,
         marker_line=marker_line,
         base_commit=base_commit,
         human_source=human_source,
@@ -184,9 +193,10 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
     """
     The model's answer as machine rules: with `\\n` line endings, unwrapped
     from a surrounding code fence, without any sync marker it contains,
-    headed by the machine section's heading if it has none, and with the
+    headed by the machine section's heading if it has none, with the
     original sync marker line inserted after the heading (on top if there is
-    no heading).
+    no heading), and with relative links made absolute against
+    `change.machine_url`, the form of `change.machine_full`.
 
     Raises:
         ValueError: if nothing is left of the answer.
@@ -202,10 +212,11 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
         heading = next((line for line in change.machine.splitlines() if _HEADING_RE.match(line)), None)
         if heading is not None:
             text = f"{heading}\n\n{text}"
-    if change.marker_line is None:
-        return text
-    if not _HEADING_RE.match(text):
-        return f"{change.marker_line}\n\n{text}"
-    heading_line, _, rest = text.partition("\n")
-    rest = _LEADING_BLANK_LINES_RE.sub("", rest)
-    return f"{heading_line}\n\n{change.marker_line}\n\n{rest}" if rest else f"{heading_line}\n\n{change.marker_line}"
+    if change.marker_line is not None:
+        if not _HEADING_RE.match(text):
+            text = f"{change.marker_line}\n\n{text}"
+        else:
+            heading_line, _, rest = text.partition("\n")
+            rest = _LEADING_BLANK_LINES_RE.sub("", rest)
+            text = f"{heading_line}\n\n{change.marker_line}\n\n{rest}" if rest else f"{heading_line}\n\n{change.marker_line}"
+    return absolutize_markdown_urls(text, change.machine_url)

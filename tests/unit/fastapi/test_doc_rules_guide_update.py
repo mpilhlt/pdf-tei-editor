@@ -62,6 +62,7 @@ def _change(old_human: Optional[str] = OLD_HUMAN, machine: str = MACHINE, marker
         new_human=NEW_HUMAN,
         machine=machine,
         machine_full=MACHINE_FULL,
+        machine_url=MACHINE_URL,
         marker_line=marker_line,
         base_commit="abc123" if old_human is not None else None,
         human_source="original",
@@ -172,17 +173,19 @@ class TestGatherGuideChange(unittest.TestCase):
         self.assertEqual(change.machine_full, MACHINE_FULL)
         self.assertEqual(change.marker_line, MARKER)
 
-    def test_links_are_derelativized(self):
+    def test_links_are_relative_for_the_prompt_and_absolute_in_machine_full(self):
         absolute = "![i](https://raw.githubusercontent.com/o/r/{ref}/docs/img/a.png)"
         texts = {
             HUMAN_URL: (f"## Dates\n\n{absolute.format(ref='main')}\n", "original"),
-            MACHINE_URL: (f"## Dates\n\n{MARKER}\n\n{absolute.format(ref='main')}\n", "original"),
+            MACHINE_URL: (f"## Dates\n\n{MARKER}\n\n{absolute.format(ref='xyz')}\n", "override"),
         }
         change, _, _ = self._gather(texts, old_section=f"## Dates\n\n{absolute.format(ref='abc123')}\n")
         self.assertEqual(change.old_human, "## Dates\n\n![i](img/a.png)\n")
         self.assertEqual(change.new_human, "## Dates\n\n![i](img/a.png)\n")
         self.assertEqual(change.machine, "## Dates\n\n![i](img/a.png)\n")
-        self.assertEqual(change.machine_full, f"## Dates\n\n{MARKER}\n\n![i](img/a.png)\n")
+        # the form originals and overrides use: absolute against the machine URL's raw directory
+        self.assertEqual(change.machine_full, f"## Dates\n\n{MARKER}\n\n{absolute.format(ref='main')}\n")
+        self.assertEqual(change.machine_url, MACHINE_URL)
 
     def test_align_mode_without_marker(self):
         texts = {HUMAN_URL: (NEW_HUMAN, "original"), MACHINE_URL: (MACHINE, "original")}
@@ -237,7 +240,7 @@ class TestBuildUpdatePrompts(unittest.TestCase):
 
     def test_braces_in_texts_are_kept(self):
         change = GuideChange(
-            old_human=None, new_human="{x}", machine="## M\n\n{y}", machine_full="## M\n\n{y}",
+            old_human=None, new_human="{x}", machine="## M\n\n{y}", machine_full="## M\n\n{y}", machine_url=MACHINE_URL,
             marker_line=None, base_commit=None, human_source="original", machine_source="original",
         )
         _system, user = build_update_prompts(change, "Condense.")
@@ -307,6 +310,13 @@ class TestCleanModelAnswer(unittest.TestCase):
 
     def test_marker_goes_on_top_without_any_heading(self):
         self.assertEqual(clean_model_answer("- r", _change(machine="- old")), f"{MARKER}\n\n- r")
+
+    def test_relative_links_in_the_proposal_become_absolute(self):
+        answer = "## Dates\n\n- See ![i](img/a.png) and [g](../README.md)."
+        self.assertEqual(
+            clean_model_answer(answer, _change()),
+            f"## Dates\n\n{MARKER}\n\n- See ![i](https://raw.githubusercontent.com/o/r/main/docs/img/a.png) and [g](https://raw.githubusercontent.com/o/r/main/README.md).",
+        )
 
     def test_empty_answer_raises(self):
         for answer in ["", "  \n ", "```\n```", "```markdown\n\n```", MARKER, f"```md\n{MARKER}\n```"]:

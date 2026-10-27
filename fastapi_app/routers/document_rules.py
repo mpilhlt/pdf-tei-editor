@@ -492,7 +492,7 @@ def get_sync_status(
     owner = user["username"]
     human_text, human_source = _layer_text_or_502(kind, request.human_url, store, owner)
     machine_text, machine_source = _layer_text_or_502(kind, request.machine_url, store, owner)
-    status = sync_status(human_text, machine_text, request.human_url)
+    status = sync_status(human_text, machine_text, request.human_url, request.machine_url)
     marker = parse_sync_marker(machine_text)
     synced_commit: Optional[str] = None
     if marker is not None and status in ("machine_outdated", "both_changed"):

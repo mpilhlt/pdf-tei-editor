@@ -78,6 +78,25 @@ def _rewrite_relative_markdown_urls(text: str, base_dir_url: str) -> str:
     return _MD_INLINE_LINK_RE.sub(replace, text)
 
 
+def absolutize_markdown_urls(text: str, url: str) -> str:
+    """
+    The rewrite fetch_rule_excerpt() applies to the text of the markdown
+    resource `url`: relative link/image targets made absolute against the
+    directory of its raw URL (see `_rewrite_relative_markdown_urls()`).
+    Inverse of `derelativize_markdown_urls()`. Returns `text` unchanged for
+    any other format.
+    """
+    # Deferred import: doc_rules/__init__.py imports extraction_contribution.py,
+    # which imports this module - a module-level import here would be circular.
+    from fastapi_app.lib.doc_rules.resource_key import infer_format
+    base_url = url.partition("#")[0]
+    if infer_format(base_url) != "markdown":
+        return text
+    adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
+    raw_url = adapter.to_raw_url(base_url) if adapter else base_url
+    return _rewrite_relative_markdown_urls(text, raw_url.rsplit("/", 1)[0] + "/")
+
+
 def _repo_path_via_any_adapter(url: str) -> "tuple[str, str] | None":
     """First (repo_id, path) any registered adapter's parse_repo_path() recognizes `url` as, or None."""
     for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
@@ -107,8 +126,7 @@ def derelativize_markdown_urls(text: str, base_url: str) -> str:
     Only applies to markdown resources (by `base_url`'s file extension, via
     `infer_format()`); returns `text` unchanged for any other format.
     """
-    # Deferred import: see fetch_rule_excerpt()'s identical comment on why
-    # this can't be a module-level import.
+    # Deferred import: see absolutize_markdown_urls().
     from fastapi_app.lib.doc_rules.resource_key import infer_format
     if infer_format(base_url) != "markdown":
         return text
@@ -145,7 +163,7 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
 
     For a markdown resource (by file extension), relative link/image
     targets are rewritten to absolute URLs before slicing/caching - see
-    `_rewrite_relative_markdown_urls()` - so the excerpt renders correctly
+    `absolutize_markdown_urls()` - so the excerpt renders correctly
     outside its source repository.
 
     `allow_redirects` defaults to True (preserving prior behavior for
@@ -172,13 +190,7 @@ def fetch_rule_excerpt(url: str, cache: UrlCache, allow_redirects: bool = True) 
             raise RuleFetchError(
                 f"Expected raw text but got '{content_type}' from {fetch_url}"
             )
-        text = response.text
-        # Deferred import: doc_rules/__init__.py imports extraction_contribution.py,
-        # which imports this module - a module-level import here would be circular.
-        from fastapi_app.lib.doc_rules.resource_key import infer_format
-        if infer_format(base_url) == "markdown":
-            base_dir_url = fetch_url.rsplit("/", 1)[0] + "/"
-            text = _rewrite_relative_markdown_urls(text, base_dir_url)
+        text = absolutize_markdown_urls(response.text, base_url)
         cache.set_text(fetch_url, text)
 
     match = _LINE_RANGE_RE.match(fragment) if fragment else None

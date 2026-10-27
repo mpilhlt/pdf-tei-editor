@@ -29,6 +29,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 FIXTURES = Path(__file__).parent / "fixtures" / "fossil"
 FOSSIL_SHA = "eab669d4d093c54dd1990b4a0bf017d00f82d5a8"
 HUMAN_URL = f"https://github.com/mpilhlt/fossil/blob/{FOSSIL_SHA}/docs/guidelines.md"
+MACHINE_URL = f"https://github.com/mpilhlt/fossil/blob/{FOSSIL_SHA}/docs/guidelines-llm.md"
 RAW_DIR_URL = f"https://raw.githubusercontent.com/mpilhlt/fossil/{FOSSIL_SHA}/docs/"
 HEX_A, HEX_B, HEX_C = "a" * 64, "b" * 64, "c" * 64
 
@@ -56,31 +57,46 @@ class TestSyncStatus(unittest.TestCase):
             with self.subTest(anchor=anchor):
                 human = _rewrite_relative_markdown_urls(_slice((FIXTURES / "guidelines.md").read_text(encoding="utf-8"), anchor), RAW_DIR_URL)
                 machine = _slice((FIXTURES / "guidelines-llm.md").read_text(encoding="utf-8"), anchor)
-                self.assertEqual(sync_status(human, machine, HUMAN_URL), "in_sync")
+                self.assertEqual(sync_status(human, machine, HUMAN_URL, MACHINE_URL), "in_sync")
+
+    def test_golden_fossil_sections_with_absolute_links_are_in_sync(self) -> None:
+        # As served by core: both sides with their relative links made absolute (see fetch_rule_excerpt())
+        for anchor in ["data-correction", "document-segmentation-model", "reference-segmentation-model", "citation-model"]:
+            with self.subTest(anchor=anchor):
+                human = _rewrite_relative_markdown_urls(_slice((FIXTURES / "guidelines.md").read_text(encoding="utf-8"), anchor), RAW_DIR_URL)
+                machine = _rewrite_relative_markdown_urls(_slice((FIXTURES / "guidelines-llm.md").read_text(encoding="utf-8"), anchor), RAW_DIR_URL)
+                self.assertEqual(sync_status(human, machine, HUMAN_URL, MACHINE_URL), "in_sync")
+
+    def test_machine_absolute_same_repo_link_is_hashed_in_relative_form(self) -> None:
+        human = "## Heading\nHuman text.\n"
+        relative = "## Heading\nSee ![img](img/a.png).\n"
+        absolute_body = f"See ![img]({RAW_DIR_URL}img/a.png)."
+        machine = _marked(absolute_body, human_section_hash(human, HUMAN_URL), section_hash(relative))
+        self.assertEqual(sync_status(human, machine, HUMAN_URL, MACHINE_URL), "in_sync")
 
     def test_synced_pair_is_in_sync(self) -> None:
         human, machine = _synced_pair()
-        self.assertEqual(sync_status(human, machine, HUMAN_URL), "in_sync")
+        self.assertEqual(sync_status(human, machine, HUMAN_URL, MACHINE_URL), "in_sync")
 
     def test_human_change_is_outdated(self) -> None:
         human, machine = _synced_pair()
-        self.assertEqual(sync_status(human + "New line.\n", machine, HUMAN_URL), "machine_outdated")
+        self.assertEqual(sync_status(human + "New line.\n", machine, HUMAN_URL, MACHINE_URL), "machine_outdated")
 
     def test_machine_change_is_edited(self) -> None:
         human, machine = _synced_pair()
-        self.assertEqual(sync_status(human, machine + "Edited.\n", HUMAN_URL), "machine_edited")
+        self.assertEqual(sync_status(human, machine + "Edited.\n", HUMAN_URL, MACHINE_URL), "machine_edited")
 
     def test_both_changed(self) -> None:
         human, machine = _synced_pair()
-        self.assertEqual(sync_status(human + "New line.\n", machine + "Edited.\n", HUMAN_URL), "both_changed")
+        self.assertEqual(sync_status(human + "New line.\n", machine + "Edited.\n", HUMAN_URL, MACHINE_URL), "both_changed")
 
     def test_missing_marker_is_no_marker(self) -> None:
-        self.assertEqual(sync_status("## H\nx\n", "## H\ny\n", HUMAN_URL), "no_marker")
+        self.assertEqual(sync_status("## H\nx\n", "## H\ny\n", HUMAN_URL, MACHINE_URL), "no_marker")
 
     def test_malformed_marker_is_no_marker(self) -> None:
         machine = "## H\n<!-- sync: guide=xyz llm=123 -->\ny\n"
         self.assertIsNone(parse_sync_marker(machine))
-        self.assertEqual(sync_status("## H\nx\n", machine, HUMAN_URL), "no_marker")
+        self.assertEqual(sync_status("## H\nx\n", machine, HUMAN_URL, MACHINE_URL), "no_marker")
 
 
 class TestSyncMarker(unittest.TestCase):

@@ -85,13 +85,18 @@ def human_section_hash(section: str, human_url: str) -> str:
     return section_hash(derelativize_markdown_urls(section, human_url))
 
 
-def sync_status(human_section: str, machine_section: str, human_url: str) -> SyncStatus:
-    """Compare the current hashes of both sections with the ones recorded in the machine section's marker."""
+def sync_status(human_section: str, machine_section: str, human_url: str, machine_url: str) -> SyncStatus:
+    """
+    Compare the current hashes of both sections with the ones recorded in the
+    machine section's marker. Both sections are hashed with their links made
+    relative again (against `human_url` and `machine_url`), the form the
+    marker was computed on upstream.
+    """
     marker = parse_sync_marker(machine_section)
     if marker is None:
         return "no_marker"
     outdated = human_section_hash(human_section, human_url) != marker.guide_hash
-    edited = section_hash(machine_section) != marker.llm_hash
+    edited = section_hash(derelativize_markdown_urls(machine_section, machine_url)) != marker.llm_hash
     if outdated and edited:
         return "both_changed"
     if outdated:
