@@ -46,6 +46,7 @@ from ..lib.doc_rules.guide_update import (
 from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
+from ..lib.doc_rules.upstream_proposal import ProposalError, build_upstream_proposal
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
     perform_refresh,
@@ -76,8 +77,11 @@ from ..lib.models.models_document_rules import (
     ListResourcesResponse,
     OkResponse,
     OverrideModel,
+    ProposePatchRequest,
+    ProposePatchResponse,
     ProposeChangeUrlRequest,
     ProposeChangeUrlResponse,
+    ProposedFileModel,
     QueryResourceRequest,
     QueryResourceResponse,
     RefTargetModel,
@@ -582,6 +586,43 @@ def get_human_change(
         machine=change.machine_full,
         base_commit=change.base_commit,
         unchanged=guide_unchanged(change, request.human_url),
+    )
+
+
+@router.post("/propose-patch", response_model=ProposePatchResponse)
+def propose_patch(
+    request: ProposePatchRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> ProposePatchResponse:
+    """
+    The upstream patch of the caller's current text (selected override, else
+    the original) of a rule category's human and/or machine section, as a
+    unified diff against the default branch. Nothing is stored.
+    """
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        proposal = build_upstream_proposal(
+            _interpretation_ref_kind(),
+            request.human_url,
+            request.machine_url,
+            request.include_human,
+            request.include_machine,
+            store,
+            user["username"],
+            request.label,
+            cache,
+        )
+    except ProposalError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except (OriginalUnavailableError, RuleFetchError, requests.RequestException) as e:
+        logger.error(f"Failed to build the upstream proposal for {request.human_url} / {request.machine_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch upstream resource: {e}")
+    return ProposePatchResponse(
+        files=[ProposedFileModel(path=f.path, before=f.before, after=f.after) for f in proposal.files],
+        patch=proposal.patch,
+        filename=proposal.filename,
+        branch=proposal.branch,
     )
 
 

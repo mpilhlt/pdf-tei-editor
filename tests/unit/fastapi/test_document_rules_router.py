@@ -16,16 +16,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
+from fastapi_app.lib.core.git_forge_adapters import GitHubAdapter
 from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
 from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_PROMPT_TEMPLATE
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
+from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
 from fastapi_app.lib.secrets import MissingSecretError
 from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
 from fastapi_app.routers.document_rules import get_db, router
+
+FIXTURES = Path(__file__).parent / "fixtures" / "fossil"
+HUMAN_FILE = (FIXTURES / "guidelines.md").read_text(encoding="utf-8")
+MACHINE_FILE = (FIXTURES / "guidelines-llm.md").read_text(encoding="utf-8")
+PROPOSAL_SHA = "eab669d4d093c54dd1990b4a0bf017d00f82d5a8"
+PROPOSAL_REPO = "https://github.com/mpilhlt/fossil/blob"
 
 XML_WITH_INTERPRETATION = """<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
@@ -986,6 +994,95 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._human_change().status_code, 403)
         self.assertEqual(self._update().status_code, 403)
+
+
+class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
+    """Builds real proposals from the fossil guideline fixtures as the default-branch files."""
+    HUMAN_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines.md#data-correction"
+    MACHINE_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines-llm.md#L17-L25"
+    MAIN_FILES = {f"{PROPOSAL_REPO}/main/docs/guidelines.md": HUMAN_FILE, f"{PROPOSAL_REPO}/main/docs/guidelines-llm.md": MACHINE_FILE}
+
+    def setUp(self):
+        super().setUp()
+        raw_dir = f"https://raw.githubusercontent.com/mpilhlt/fossil/{PROPOSAL_SHA}/docs/"
+
+        def served(text: str) -> str:
+            return _rewrite_relative_markdown_urls(text, raw_dir)
+
+        def section(text: str) -> str:
+            range_ = markdown_section_range(text, "data-correction")
+            return "\n".join(text.splitlines()[range_[0] - 1:range_[1]])
+
+        human_original = served(section(HUMAN_FILE)) + "\nAn added human rule.\n"
+        machine_original = served(section(MACHINE_FILE)) + "\nAn added machine rule.\n"
+        originals = {self.HUMAN_URL: human_original, self.MACHINE_URL: machine_original}
+        patches = [
+            patch("fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resolve_original", side_effect=lambda url: originals[url]),
+            patch("fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resource_key", side_effect=lambda url, **kw: normalize_resource_key(url)),
+            patch("fastapi_app.lib.doc_rules.upstream_proposal._fetch_raw_file", side_effect=lambda url: self.MAIN_FILES[url]),
+            patch("fastapi_app.lib.doc_rules.upstream_proposal.fetch_rule_excerpt", return_value=served(MACHINE_FILE)),
+            patch.object(GitHubAdapter, "_default_branch", return_value="main"),
+        ]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _post(self, include_human: bool = True, include_machine: bool = True, machine_url: Optional[str] = None):
+        return self.client.post(
+            "/document-rules/propose-patch",
+            json={
+                "human_url": self.HUMAN_URL,
+                "machine_url": machine_url or self.MACHINE_URL,
+                "include_human": include_human,
+                "include_machine": include_machine,
+                "label": "Data correction",
+            },
+        )
+
+    def test_human_only_returns_one_file(self):
+        response = self._post(include_machine=False)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual([f["path"] for f in body["files"]], ["docs/guidelines.md"])
+        self.assertEqual(body["branch"], "main")
+        self.assertEqual(body["filename"], "data-correction-rules.patch")
+        self.assertEqual(body["patch"].count("diff --git"), 1)
+        self.assertIn("An added human rule.", body["files"][0]["after"])
+
+    def test_both_layers_return_two_files_and_two_diff_headers(self):
+        body = self._post().json()
+        self.assertEqual([f["path"] for f in body["files"]], ["docs/guidelines.md", "docs/guidelines-llm.md"])
+        self.assertEqual(body["patch"].count("diff --git"), 2)
+
+    def test_no_layer_selected_is_422(self):
+        response = self._post(include_human=False, include_machine=False)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "Select at least one of the guide section and the machine rules.")
+
+    def test_different_repositories_is_422(self):
+        other = "https://github.com/other/repo/blob/main/docs/guidelines-llm.md#L17-L25"
+        with patch("fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resolve_original", return_value="text"):
+            response = self._post(machine_url=other)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "The guide and the machine rules are in different repositories; propose them separately.")
+
+    def test_nothing_to_propose_is_422(self):
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=ProposalError("There are no changes to propose.")):
+            response = self._post()
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "There are no changes to propose.")
+
+    def test_fetch_failure_is_502(self):
+        with patch("fastapi_app.lib.doc_rules.upstream_proposal._fetch_raw_file", side_effect=RuleFetchError("boom")):
+            self.assertEqual(self._post().status_code, 502)
+
+    def test_request_exception_is_502(self):
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=requests.ConnectionError("down")):
+            self.assertEqual(self._post().status_code, 502)
+
+    def test_non_reviewer_is_forbidden(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
+        self.assertEqual(self._post().status_code, 403)
 
 
 if __name__ == "__main__":

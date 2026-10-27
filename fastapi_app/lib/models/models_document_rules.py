@@ -254,6 +254,30 @@ class HumanChangeResponse(BaseModel):
     unchanged: bool
 
 
+class ProposePatchRequest(BaseModel):
+    """Request for the upstream patch of a rule category's human and/or machine section."""
+    human_url: str
+    machine_url: str
+    include_human: bool
+    include_machine: bool
+    label: str = Field(..., description="The rule category's label, e.g. \"Data correction\".")
+
+
+class ProposedFileModel(BaseModel):
+    """A changed repository file: its path and its whole text before and after the proposal."""
+    path: str
+    before: str
+    after: str
+
+
+class ProposePatchResponse(BaseModel):
+    """The changed files (human first), the unified diff `git apply` accepts, its download file name, and the default branch it targets."""
+    files: list[ProposedFileModel]
+    patch: str
+    filename: str
+    branch: str
+
+
 class UpdateFromGuideRequest(BaseModel):
     """Request to have a language model update a machine section from its human section."""
     xml: str
