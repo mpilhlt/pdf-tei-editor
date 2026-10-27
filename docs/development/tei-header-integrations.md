@@ -205,6 +205,16 @@ See [2026-09-28-grobid-schema-fragment-refs-design.md](../superpowers/specs/2026
 - **Errors**: 404 unknown provider; 428 the provider needs a secret the user has not stored (`secret_required_detail()`); 403 model not allowed (`ModelAccessDenied`); 502 a rule original could not be fetched, the provider request failed (`LLM provider request failed: ...`) or the model returned no machine rules; 500 the condensing prompt could not be resolved.
 - **Frontend**: the `Update from guide` sub-dialog ([document-rules.js](../../app/src/plugins/document-rules.js), template `document-rules-update-dialog.html`) lists models with `inference-settings.getModels()`.
 
+### Paired upstream proposals
+
+[upstream_proposal.py](../../fastapi_app/lib/doc_rules/upstream_proposal.py) builds one patch for a human/machine pair. `POST /api/v1/document-rules/propose-patch` (`human_url`, `machine_url`, `include_human`, `include_machine`, `label`; `require_reviewer_or_admin`; a plain `def`, as it fetches) returns `files` (`path`, `before`, `after`), `patch`, `filename` and `branch`. Nothing is stored. Client method: `documentRulesProposePatch()`.
+
+- **Splicing**: each layer's text is the caller's selected override. It is spliced by its heading anchor into the file as it is on the repository's default branch (not at the ref in the url), so the patch applies to the current file. Both urls must resolve to one repository, else 422.
+- **Marker**: when the machine layer is included, its marker is recomputed from the proposed texts as `format_sync_marker(SyncMarker(guide_hash, llm_hash, base=None))`, with no `base=`, on its own line after the machine heading with a blank line on each side. With only the human layer included, the machine file is untouched and so reads as outdated.
+- **Patch**: a unified diff for `git apply` at the repository root. A preamble of lines starting with `#` (`# Annotation rules update: <label>`, `# Proposed with the PDF-TEI-Editor by <user>`, `# Includes: ...`) precedes `diff --git a/<path> b/<path>` blocks (human file first, then machine file) with 3 lines of context, and `\ No newline at end of file` where the upstream file has no trailing newline. The file name is `<category-slug>-rules.patch`.
+- **Errors**: 422 with a user message (different repositories, no layer selected, nothing to change, a heading anchor missing on the default branch); 502 when a file cannot be fetched or resolved.
+- **Frontend**: the `Propose upstream` sub-dialog ([document-rules.js](../../app/src/plugins/document-rules.js), template `document-rules-propose-dialog.html`) is opened by `_openProposeDialog()` for a pair and calls the route again whenever a checkbox changes.
+
 ## Schema location
 
 Declares the RelaxNG schema a document validates against. Two forms, in precedence order — an existing PI stays authoritative if a document somehow has both:

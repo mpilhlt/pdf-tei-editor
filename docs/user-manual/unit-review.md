@@ -109,6 +109,17 @@ The guide text and machine rules used are the ones you currently have selected o
 
 **Propose change upstream** opens the source file of the rules on GitHub or GitLab with your text in place of the original. For a guide section, your text replaces that section in the file; for machine rules, it replaces the excerpt. The rest of the file stays unchanged.
 
+For a category with both layers, **Propose upstream** (same button) proposes the guide section and the machine rules together as a patch. The dialog has the checkboxes **Guide section (human)** and **Machine rules**; a layer is checked when you have selected an override of it. It shows one diff per changed file, headed by the file's path in the guide repository, against the current default branch of the repository, so the patch applies even if the file changed since your override was based on it. Both files must be in the same repository.
+
+The patch updates the sync marker in the machine rules, depending on what you include:
+
+| Included | Effect on the sync marker |
+| --- | --- |
+| Guide section only | The machine rules are marked as outdated until they are updated from the guide. |
+| Machine rules (with or without the guide section) | The marker is updated: the machine rules are marked as in sync with the guide. |
+
+Click **Download patch** to save `<category>-rules.patch`. To apply it, run `git apply <file>` in a clone of the guide repository, commit, and open a pull request. If the section no longer exists in the repository, or nothing would change, the dialog says so.
+
 Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section. If you had selected such an override of the guide before the previous release, it now appears as an override of the guide section.
 
 ## Edited units
