@@ -574,6 +574,101 @@ test.describe('Document rules registry', () => {
       }
     });
 
+    test('proposes the guide section and the machine rules as a patch', async ({ page }) => {
+      // The local rules server has no forge adapter, so the backend cannot build a real
+      // proposal for localhost urls; propose-patch is mocked. The request body is checked.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      const patch = [
+        '# Annotation rules update: Data correction',
+        '# Proposed with the PDF-TEI-Editor by testreviewer',
+        '# Includes: guide section and machine rules',
+        'diff --git a/docs/guidelines.md b/docs/guidelines.md',
+        '--- a/docs/guidelines.md',
+        '+++ b/docs/guidelines.md',
+        '@@ -1,3 +1,3 @@',
+        ' # Data correction',
+        ' ',
+        '-Human guide text for data correction.',
+        '+Human guide text for data correction. Changed.',
+        'diff --git a/docs/guidelines-llm.md b/docs/guidelines-llm.md',
+        '--- a/docs/guidelines-llm.md',
+        '+++ b/docs/guidelines-llm.md',
+        '@@ -1,5 +1,5 @@',
+        ' # Data correction',
+        ' ',
+        '-<!-- sync: guide=aaaa llm=bbbb -->',
+        '+<!-- sync: guide=cccc llm=dddd -->',
+        ' ',
+        ' Machine rule text.',
+        ''
+      ].join('\n');
+      /** @type {any[]} */
+      const requests = [];
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/propose-patch', (route) => {
+          requests.push(route.request().postDataJSON());
+          return route.fulfill({
+            json: {
+              files: [
+                { path: 'docs/guidelines.md', before: '# Data correction\n\nHuman guide text for data correction.\n', after: '# Data correction\n\nHuman guide text for data correction. Changed.\n' },
+                { path: 'docs/guidelines-llm.md', before: '# Data correction\n\nMachine rule text.\n', after: '# Data correction\n\nMachine rule text, changed.\n' }
+              ],
+              patch,
+              filename: 'data-correction-rules.patch',
+              branch: 'main',
+              upstream_changed: [],
+              in_sync: true
+            }
+          });
+        });
+
+        const dialog = await openMachineTab(page);
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+        // A machine override and a human override
+        for (const tab of ['machineLayerTab', 'humanLayerTab']) {
+          await dialog.locator(`sl-tab[name="${tab}"]`).click();
+          await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          await mdContent.click();
+          await page.keyboard.press('ControlOrMeta+End');
+          await page.keyboard.type(' Changed.');
+          await dialog.locator('sl-button[name="saveBtn"]').click();
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+        }
+
+        await dialog.locator('sl-button[name="proposeUpstreamBtn"]').click();
+        const proposeDialog = page.locator('sl-dialog[name="documentRulesProposeDialog"]');
+        await expect(proposeDialog).toHaveAttribute('open', '');
+        await expect(proposeDialog).toHaveAttribute('label', 'Propose upstream');
+        await expect(proposeDialog.locator('sl-checkbox[name="includeHuman"]')).toHaveAttribute('checked', '');
+        await expect(proposeDialog.locator('sl-checkbox[name="includeMachine"]')).toHaveAttribute('checked', '');
+        await expect(proposeDialog.locator('[data-role="path"]')).toHaveText(['docs/guidelines.md', 'docs/guidelines-llm.md']);
+        await expect(proposeDialog).toContainText('The sync marker is updated: the machine rules are marked as in sync with the guide.');
+        expect(requests.at(-1)).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction' });
+
+        const downloadBtn = proposeDialog.locator('sl-button[name="downloadBtn"]');
+        await expect(downloadBtn).toBeEnabled();
+        const [download] = await Promise.all([page.waitForEvent('download'), downloadBtn.click()]);
+        expect(download.suggestedFilename()).toBe('data-correction-rules.patch');
+        const downloaded = readFileSync(/** @type {string} */ (await download.path()), 'utf8');
+        expect(downloaded.match(/^diff --git a\//gm)).toHaveLength(2);
+        expect(downloaded).toMatch(/<!-- sync: guide=\w+ llm=\w+ -->/);
+        expect(downloaded).not.toContain('base=');
+
+        await proposeDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
     test('updates the machine rules from the guide', async ({ page }) => {
       const consoleLogs = setupTestConsoleCapture(page);
       const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);

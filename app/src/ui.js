@@ -69,6 +69,7 @@ import './modules/panels/index.js';
  * @import {configEditorDialogPart} from './plugins/config-editor.js'
  * @import {documentRulesEditorDialogPart} from './templates/document-rules-editor-dialog.types.js'
  * @import {documentRulesUpdateDialogPart} from './templates/document-rules-update-dialog.types.js'
+ * @import {documentRulesProposeDialogPart} from './templates/document-rules-propose-dialog.types.js'
  * @import {teiHeaderEditorDialogPart} from './templates/tei-header-editor-dialog.types.js'
  * @import {pluginAdminDialogPart} from './templates/plugin-admin-dialog.types.js'
  * @import {pluginAdminConfirmDialogPart} from './templates/plugin-admin-confirm-dialog.types.js'
@@ -106,6 +107,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
  * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
  * @property {UIPart<SlDialog, documentRulesUpdateDialogPart>} [documentRulesUpdateDialog] - "Update machine rules from guide" sub-dialog of the document rules editor (added by document-rules plugin)
+ * @property {UIPart<SlDialog, documentRulesProposeDialogPart>} [documentRulesProposeDialog] - "Propose upstream" sub-dialog of the document rules editor for a human/machine pair (added by document-rules plugin)
  * @property {UIPart<SlDialog, teiHeaderEditorDialogPart>} [teiHeaderEditorDialog] - TEI header editor dialog (added by tei-header-editor plugin)
  * @property {UIPart<SlDialog, pluginAdminDialogPart>} [pluginAdminDialog] - Plugin manager dialog (added by plugin-admin plugin)
  * @property {UIPart<SlDialog, pluginAdminConfirmDialogPart>} [pluginAdminConfirmDialog] - Plugin manager confirmation dialog (added by plugin-admin plugin)

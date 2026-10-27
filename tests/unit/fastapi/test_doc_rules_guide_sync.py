@@ -20,6 +20,7 @@ from fastapi_app.lib.doc_rules.guide_sync import (
     section_hash,
     split_sync_marker,
     sync_status,
+    with_sync_marker,
 )
 from fastapi_app.lib.utils.annotation_rules_utils import (
     _rewrite_relative_markdown_urls,
@@ -127,6 +128,27 @@ class TestSyncMarker(unittest.TestCase):
 
     def test_split_marker_without_marker(self) -> None:
         self.assertEqual(split_sync_marker("## H\n\ntext"), ("## H\n\ntext", None))
+
+
+class TestWithSyncMarker(unittest.TestCase):
+    LINE = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+
+    def test_without_marker_yet(self) -> None:
+        self.assertEqual(with_sync_marker("## H\n\n\ntext\n", self.LINE), f"## H\n\n{self.LINE}\n\ntext\n")
+
+    def test_existing_markers_are_replaced(self) -> None:
+        old = format_sync_marker(SyncMarker(HEX_C, HEX_C, HEX_C))
+        self.assertEqual(with_sync_marker(f"## H\n{old}\ntext\n\n{old}\nmore", self.LINE), f"## H\n\n{self.LINE}\n\ntext\n\nmore")
+
+    def test_heading_only(self) -> None:
+        self.assertEqual(with_sync_marker("## H", self.LINE), f"## H\n\n{self.LINE}")
+
+    def test_without_heading_goes_on_top(self) -> None:
+        self.assertEqual(with_sync_marker("text\n", self.LINE), f"{self.LINE}\n\ntext\n")
+
+    def test_marker_only(self) -> None:
+        old = format_sync_marker(SyncMarker(HEX_C, HEX_C, None))
+        self.assertEqual(with_sync_marker(old, self.LINE), self.LINE)
 
 
 class TestSectionHash(unittest.TestCase):

@@ -21,6 +21,7 @@ from fastapi_app.lib.doc_rules.guide_sync import (
     human_section_hash,
     parse_sync_marker,
     split_sync_marker,
+    with_sync_marker,
 )
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
@@ -60,7 +61,6 @@ ALIGN_PROMPT_TEMPLATE = """Bring the machine rules in line with the guide sectio
 
 _HEADING_RE = re.compile(r"^#{1,6}\s")
 _FENCE_RE = re.compile(r"\A(`{3,})(markdown|md)?[ \t]*\n(.*?)\n?\1[ \t]*\Z", re.DOTALL)
-_LEADING_BLANK_LINES_RE = re.compile(r"\A(?:[ \t]*\n)+")
 
 
 class OriginalUnavailableError(Exception):
@@ -250,10 +250,5 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
         # no heading, or a subsection first: the answer is the section's body
         text = f"{machine_heading}\n\n{text}"
     if change.marker_line is not None:
-        if not _HEADING_RE.match(text):
-            text = f"{change.marker_line}\n\n{text}"
-        else:
-            heading_line, _, rest = text.partition("\n")
-            rest = _LEADING_BLANK_LINES_RE.sub("", rest)
-            text = f"{heading_line}\n\n{change.marker_line}\n\n{rest}" if rest else f"{heading_line}\n\n{change.marker_line}"
+        text = with_sync_marker(text, change.marker_line)
     return absolutize_markdown_urls(text, change.machine_url)

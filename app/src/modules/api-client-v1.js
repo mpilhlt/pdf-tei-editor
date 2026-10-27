@@ -874,6 +874,32 @@
  */
 
 /**
+ * @typedef {Object} ProposePatchRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {boolean} include_human
+ * @property {boolean} include_machine
+ * @property {string} label - The rule category's label, e.g. "Data correction"
+ */
+
+/**
+ * @typedef {Object} ProposedFileModel
+ * @property {string} path
+ * @property {string} before
+ * @property {string} after
+ */
+
+/**
+ * @typedef {Object} ProposePatchResponse
+ * @property {Array<ProposedFileModel>} files
+ * @property {string} patch
+ * @property {string} filename
+ * @property {string} branch
+ * @property {Array<string>} upstream_changed - Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes
+ * @property {boolean} in_sync - True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch
+ */
+
+/**
  * @typedef {Object} UpdateFromGuideRequest
  * @property {string} xml
  * @property {string} human_url
@@ -1974,6 +2000,19 @@ export class ApiClientV1 {
    */
   async documentRulesHumanChange(requestBody) {
     const endpoint = `/document-rules/human-change`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * The upstream patch of the caller's current text of a rule category's
+   * human and/or machine section, as a unified diff against the default
+   * branch. Nothing is stored.
+   *
+   * @param {ProposePatchRequest} requestBody
+   * @returns {Promise<ProposePatchResponse>}
+   */
+  async documentRulesProposePatch(requestBody) {
+    const endpoint = `/document-rules/propose-patch`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

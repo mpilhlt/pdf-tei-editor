@@ -76,6 +76,7 @@ global.fetch = async (url) => {
         'document-rules-refresh-menu-item': readTemplate('document-rules-refresh-menu-item.html'),
         'document-rules-editor-dialog': readTemplate('document-rules-editor-dialog.html'),
         'document-rules-update-dialog': readTemplate('document-rules-update-dialog.html'),
+        'document-rules-propose-dialog': readTemplate('document-rules-propose-dialog.html'),
       })
     };
   }
@@ -159,6 +160,27 @@ function makeDialogUi() {
   // dialog.component's handleOpenChange()/waitForEvent(this, 'sl-after-show'))
   // - _openResourceEditor() awaits it before re-scrolling.
   el.show = async () => { el.open = true; };
+  return el;
+}
+
+/**
+ * A minimal stand-in for `_proposeDialogUi`, mirroring the named parts of
+ * document-rules-propose-dialog.html.
+ * @returns {any}
+ */
+function makeProposeDialogUi() {
+  const el = document.createElement('div');
+  el.includeHuman = Object.assign(document.createElement('sl-checkbox'), { checked: false });
+  el.includeMachine = Object.assign(document.createElement('sl-checkbox'), { checked: false });
+  el.notice = document.createElement('div');
+  el.notice.style.display = 'none';
+  el.files = document.createElement('div');
+  el.hint = document.createElement('div');
+  el.downloadBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+  el.closeBtn = document.createElement('sl-button');
+  el.open = false;
+  el.show = async () => { el.open = true; };
+  el.hide = async () => { el.open = false; };
   return el;
 }
 
@@ -2039,6 +2061,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     plugin._editorDialogUi = makeDialogUi();
     plugin._editorDialogUi.open = true;
     plugin._updateDialogUi = makeUpdateDialogUi();
+    plugin._proposeDialogUi = makeProposeDialogUi();
     plugin._resources = [human, machine];
     plugin._currentResource = machine;
     plugin._currentGroup = [human, machine];
@@ -2490,5 +2513,380 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     } finally {
       view.destroy();
     }
+  });
+});
+
+describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary sources', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary sources', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  const HUMAN_ONLY_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.';
+  const MACHINE_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.';
+  const MACHINE_OUTDATED_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.';
+  const UNSAVED_NOTICE = 'Unsaved changes in the editor are not included. Save them first.';
+
+  /**
+   * @param {any} body
+   * @returns {any}
+   */
+  function proposal(body) {
+    const files = [];
+    if (body.include_human) files.push({ path: 'docs/guidelines.md', before: 'g old', after: 'g new' });
+    if (body.include_machine) files.push({ path: 'docs/guidelines-llm.md', before: 'm old', after: 'm new' });
+    return { files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine };
+  }
+
+  /**
+   * @param {object} [options]
+   * @param {Record<string, Function>} [options.api]
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, apiClient: Record<string, Function>, requests: any[], mergeViews: any[] }}
+   */
+  function setup({ api = {} } = {}) {
+    const plugin = makePlugin(['reviewer']);
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._editorDialogUi.open = true;
+    plugin._updateDialogUi = { open: false };
+    plugin._proposeDialogUi = makeProposeDialogUi();
+    plugin._resources = [human, machine];
+    plugin._currentResource = human;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    plugin._selections = [];
+    const requests = [];
+    const mergeViews = [];
+    plugin._createMergeView = (parent, original, modified) => {
+      const view = { parent, original, modified, destroyed: false, destroy() { this.destroyed = true; } };
+      mergeViews.push(view);
+      return view;
+    };
+    const apiClient = {
+      documentRulesProposePatch: async (body) => { requests.push(body); return proposal(body); },
+      ...api,
+    };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, apiClient, requests, mergeViews };
+  }
+
+  /**
+   * @param {HTMLElement} el
+   * @returns {string[]}
+   */
+  function noticeLines(el) {
+    return [...el.children].map(c => c.textContent);
+  }
+
+  /**
+   * @param {HTMLElement} files
+   * @returns {string[]}
+   */
+  function pathHeadings(files) {
+    return [...files.querySelectorAll('[data-role="path"]')].map(h => h.textContent);
+  }
+
+  beforeEach(() => { notifyCalls.length = 0; });
+
+  describe('proposeUpstreamBtn', () => {
+    /**
+     * @param {any} resource
+     * @param {Array<any>} group
+     * @param {{ selected?: boolean, readOnly?: boolean }} [options]
+     * @returns {string}
+     */
+    function displayFor(resource, group, { selected = false, readOnly = false } = {}) {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock();
+      plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+      plugin._md = { render: (text) => text };
+      plugin._currentResource = resource;
+      plugin._currentGroup = group;
+      plugin._currentOriginalText = 'text';
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: resource.format, created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = selected ? 'ov1' : null;
+      plugin._documentReadOnly = readOnly;
+      plugin._renderEditorDialog();
+      return plugin._editorDialogUi.proposeUpstreamBtn.style.display;
+    }
+
+    it('is shown in a two-layer group even without a selected override', () => {
+      assert.strictEqual(displayFor(human, [human, machine]), '');
+      assert.strictEqual(displayFor(machine, [human, machine]), '');
+    });
+
+    it('is hidden in a two-layer group when the document is read-only', () => {
+      assert.strictEqual(displayFor(human, [human, machine], { selected: true, readOnly: true }), 'none');
+    });
+
+    it('keeps the old rule for a single-layer resource', () => {
+      assert.strictEqual(displayFor(schema, [schema]), 'none');
+      assert.strictEqual(displayFor(schema, [schema], { selected: true }), '');
+    });
+
+    it('opens the sub-dialog in a two-layer group and uses the old flow otherwise', async () => {
+      const { plugin } = setup();
+      const calls = [];
+      plugin._openProposeDialog = async () => { calls.push('dialog'); };
+      plugin._onProposeUpstream = async () => { calls.push('old'); };
+      await plugin._onProposeUpstreamClick();
+      plugin._currentResource = schema;
+      plugin._currentGroup = [schema];
+      await plugin._onProposeUpstreamClick();
+      assert.deepStrictEqual(calls, ['dialog', 'old']);
+    });
+  });
+
+  describe('_openProposeDialog preselection', () => {
+    it('checks each layer with a selected override', async () => {
+      const { plugin, requests } = setup();
+      plugin._selections = [{ kind: 'interpretation-ref', url: machine.url, selected: true }, { kind: 'interpretation-ref', url: human.url, selected: false }];
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, false);
+      assert.strictEqual(ui.includeMachine.checked, true);
+      assert.deepStrictEqual(requests, [{ human_url: human.url, machine_url: machine.url, include_human: false, include_machine: true, label: 'Primary sources' }]);
+      assert.strictEqual(ui.open, true);
+    });
+
+    it('uses the shown layer\'s current selection over the cached selections', async () => {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock('x');
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      plugin._selections = [{ kind: 'interpretation-ref', url: machine.url, selected: true }];
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, true);
+      assert.strictEqual(ui.includeMachine.checked, true);
+    });
+
+    it('falls back to the shown layer when neither layer has a selected override', async () => {
+      const { plugin } = setup();
+      plugin._currentResource = machine;
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, false);
+      assert.strictEqual(ui.includeMachine.checked, true);
+    });
+  });
+
+  it('_refreshProposal renders one merge view per file under its path heading and enables download', async () => {
+    const { plugin, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    ui.includeMachine.checked = true;
+    await plugin._refreshProposal();
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+    assert.strictEqual(mergeViews.length, 2);
+    assert.deepStrictEqual(mergeViews.map(v => [v.original, v.modified]), [['g old', 'g new'], ['m old', 'm new']]);
+    assert.ok(ui.files.contains(mergeViews[0].parent));
+    assert.ok(ui.files.contains(mergeViews[1].parent));
+    assert.strictEqual(ui.downloadBtn.disabled, false);
+  });
+
+  it('toggling a checkbox requests again with the new flags and replaces the merge views', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    plugin._installProposeDialogListeners();
+    await plugin._openProposeDialog();
+    const ui = plugin._proposeDialogUi;
+    assert.strictEqual(ui.includeHuman.checked, true);
+    ui.includeMachine.checked = true;
+    ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+    await plugin._proposalPromise;
+    assert.deepStrictEqual(requests.map(r => [r.include_human, r.include_machine]), [[true, false], [true, true]]);
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+  });
+
+  describe('notices', () => {
+    /**
+     * @param {boolean} includeHuman
+     * @param {boolean} includeMachine
+     * @returns {Promise<string[]>}
+     */
+    async function noticesFor(includeHuman, includeMachine) {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = includeHuman;
+      ui.includeMachine.checked = includeMachine;
+      await plugin._refreshProposal();
+      return ui.notice.style.display === 'none' ? [] : noticeLines(ui.notice);
+    }
+
+    it('warns that the machine rules become outdated when only the guide is included', async () => {
+      assert.deepStrictEqual(await noticesFor(true, false), [HUMAN_ONLY_NOTICE]);
+    });
+
+    it('says the sync marker is updated when the machine rules are included', async () => {
+      assert.deepStrictEqual(await noticesFor(false, true), [MACHINE_NOTICE]);
+      assert.deepStrictEqual(await noticesFor(true, true), [MACHINE_NOTICE]);
+    });
+
+    it('says the machine rules become outdated when they are included but not in sync', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), in_sync: false }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [MACHINE_OUTDATED_NOTICE]);
+    });
+
+    it('warns per file whose section changed upstream', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), upstream_changed: ['docs/guidelines.md', 'docs/guidelines-llm.md'] }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [
+        'The section in docs/guidelines.md changed upstream since your version; the patch replaces those changes.',
+        'The section in docs/guidelines-llm.md changed upstream since your version; the patch replaces those changes.',
+        MACHINE_NOTICE,
+      ]);
+    });
+
+    it('warns that unsaved editor changes are not included', async () => {
+      const { plugin } = setup();
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'saved', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      plugin._cmMdView = makeCmMdViewMock('edited');
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [UNSAVED_NOTICE, HUMAN_ONLY_NOTICE]);
+      plugin._cmMdView = makeCmMdViewMock('saved');
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [HUMAN_ONLY_NOTICE]);
+    });
+  });
+
+  it('clears the shown diffs while a new request is pending', async () => {
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    let resolveRequest;
+    apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+    const pending = plugin._refreshProposal();
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    assert.strictEqual(plugin._proposal, null);
+    resolveRequest();
+    await pending;
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md']);
+  });
+
+  it('a failing refresh from the checkbox handler is logged and shown, not rejected', async () => {
+    const { plugin } = setup();
+    const warnings = [];
+    plugin.getDependency = (name) => {
+      if (name === 'logger') return { warn: (msg) => warnings.push(msg), debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    plugin._refreshProposal = async () => { throw new Error('render failed'); };
+    plugin._installProposeDialogListeners();
+    plugin._proposeDialogUi.includeHuman.dispatchEvent(new dom.window.Event('sl-change'));
+    await plugin._proposalPromise;
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
+    assert.strictEqual(warnings.length, 1);
+    await plugin._openProposeDialog();
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
+  });
+
+  it('drops a stale response', async () => {
+    const pending = [];
+    const { plugin, requests } = setup({ api: {
+      documentRulesProposePatch: (body) => { requests.push(body); return new Promise((resolve) => { pending.push(() => resolve(proposal(body))); }); },
+    } });
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    const first = plugin._refreshProposal();
+    ui.includeMachine.checked = true;
+    const second = plugin._refreshProposal();
+    pending[1]();
+    await second;
+    pending[0]();
+    await first;
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+    assert.strictEqual(plugin._proposal.patch, '# patch docs/guidelines.md,docs/guidelines-llm.md\n');
+  });
+
+  it('shows a 422 message inline, clears the files and disables download', async () => {
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    assert.strictEqual(ui.downloadBtn.disabled, false);
+    apiClient.documentRulesProposePatch = async () => {
+      throw Object.assign(new Error('Select at least one of the guide section and the machine rules.'), { statusCode: 422 });
+    };
+    ui.includeHuman.checked = false;
+    await plugin._refreshProposal();
+    assert.deepStrictEqual(noticeLines(ui.notice), ['Select at least one of the guide section and the machine rules.']);
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    assert.strictEqual(plugin._proposal, null);
+    assert.strictEqual(notifyCalls.length, 0);
+  });
+
+  it('_onDownloadPatch downloads the patch as a text/x-diff Blob under the proposed file name', async () => {
+    const { plugin } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+
+    const blobs = [];
+    const revoked = [];
+    const clicks = [];
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    const originalClick = dom.window.HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = (blob) => { blobs.push(blob); return 'blob:patch'; };
+    URL.revokeObjectURL = (url) => { revoked.push(url); };
+    dom.window.HTMLAnchorElement.prototype.click = function () { clicks.push({ href: this.href, download: this.download }); };
+    try {
+      plugin._onDownloadPatch();
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+      dom.window.HTMLAnchorElement.prototype.click = originalClick;
+    }
+    assert.strictEqual(blobs.length, 1);
+    assert.strictEqual(blobs[0].type, 'text/x-diff');
+    assert.strictEqual(await blobs[0].text(), '# patch docs/guidelines.md\n');
+    assert.deepStrictEqual(clicks, [{ href: 'blob:patch', download: 'primary-sources-rules.patch' }]);
+    assert.deepStrictEqual(revoked, ['blob:patch']);
+  });
+
+  it('_resetProposeDialog (on close) destroys the merge views and drops a pending response', async () => {
+    let resolveRequest;
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+    const pending = plugin._refreshProposal();
+    plugin._resetProposeDialog();
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    resolveRequest();
+    await pending;
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(plugin._proposal, null);
+  });
+
+  it('onXmlChange hides the sub-dialog', () => {
+    const { plugin } = setup();
+    plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    plugin._proposeDialogUi.open = true;
+    plugin.onXmlChange();
+    assert.strictEqual(plugin._proposeDialogUi.open, false);
   });
 });

@@ -96,6 +96,13 @@ sl-dialog[name="apiKeysDialog"] {
   --sl-z-index-dialog: 850;
 }
 
+/* document-rules' "Propose upstream" sub-dialog opens over the resource
+   editor dialog, so it must not depend on DOM order either. It stays below
+   the two dialogs above. */
+sl-dialog[name="documentRulesProposeDialog"] {
+  --sl-z-index-dialog: 820;
+}
+
 div[name = "xmlEditor"] tool-bar sl-button {
   max-height: 19px;
 }

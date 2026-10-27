@@ -9,7 +9,9 @@ import time
 import unittest
 from pathlib import Path
 
-from fastapi_app.lib.core.url_cache import UncacheableUrlError, UrlCache, get_cache_info, is_cache_stale
+from fastapi_app.lib.core.url_cache import (
+    UncacheableUrlError, UrlCache, atomic_write, atomic_write_text, get_cache_info, is_cache_stale,
+)
 
 
 class TestGetCacheInfo(unittest.TestCase):
@@ -125,3 +127,45 @@ class TestUrlCacheTraversal(unittest.TestCase):
     def test_normal_url_still_round_trips(self):
         self.cache.set_text("https://example.com/a/b/c.md", "hello")
         self.assertEqual(self.cache.get_text("https://example.com/a/b/c.md"), "hello")
+
+
+class TestAtomicWrite(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.dir = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_successful_write_produces_content_and_no_temp_files(self):
+        target = self.dir / "out.txt"
+        atomic_write_text(target, "hello")
+        self.assertEqual(target.read_text(encoding="utf-8"), "hello")
+        self.assertEqual([p.name for p in self.dir.iterdir()], ["out.txt"])
+
+    def test_failure_leaves_no_target_and_no_temp_file(self):
+        target = self.dir / "out.txt"
+        with self.assertRaises(RuntimeError):
+            with atomic_write(target) as f:
+                f.write(b"partial")
+                raise RuntimeError("boom")
+        self.assertEqual(list(self.dir.iterdir()), [])
+
+    def test_failure_keeps_previous_content(self):
+        target = self.dir / "out.txt"
+        atomic_write_text(target, "old")
+        with self.assertRaises(RuntimeError):
+            with atomic_write(target) as f:
+                f.write(b"partial")
+                raise RuntimeError("boom")
+        self.assertEqual(target.read_text(encoding="utf-8"), "old")
+        self.assertEqual([p.name for p in self.dir.iterdir()], ["out.txt"])
+
+    def test_target_is_never_partial_during_write(self):
+        target = self.dir / "out.txt"
+        atomic_write_text(target, "old")
+        with atomic_write(target) as f:
+            f.write(b"new-partial")
+            f.flush()
+            self.assertEqual(target.read_text(encoding="utf-8"), "old")
+        self.assertEqual(target.read_text(encoding="utf-8"), "new-partial")
