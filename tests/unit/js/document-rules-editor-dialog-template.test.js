@@ -83,4 +83,17 @@ describe('document-rules-editor-dialog.html tab markup', () => {
     assert.strictEqual(root.syncStatus.style.display, 'none');
     assert.strictEqual(root.layerTabs.nextElementSibling, root.syncStatus);
   });
+
+  it('has a hidden "Update from guide" button in the footer', () => {
+    const dom = new JSDOM(`<!DOCTYPE html><body>${templateHtml}</body>`);
+    const document = dom.window.document;
+    global.Node = dom.window.Node;
+    const root = createNavigableElement(document.querySelector('sl-dialog'));
+    const btn = root.updateFromGuideBtn;
+    assert.ok(btn, 'updateFromGuideBtn must resolve');
+    assert.strictEqual(btn.textContent.trim(), 'Update from guide');
+    assert.strictEqual(btn.getAttribute('size'), 'small');
+    assert.strictEqual(btn.style.display, 'none');
+    assert.strictEqual(btn.parentElement.getAttribute('slot'), 'footer');
+  });
 });

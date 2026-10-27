@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { Text } from '@codemirror/state';
+import { getOriginalDoc } from '@codemirror/merge';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
@@ -28,7 +29,7 @@ function readTemplate(name) {
 // HTMLElement" - evaluated at module-load time), so plain window/document
 // globals are not enough here - see config-editor-masked-value.test.js for
 // the same requirement/pattern.
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { pretendToBeVisual: true });
 global.window = dom.window;
 global.document = dom.window.document;
 global.HTMLElement = dom.window.HTMLElement;
@@ -42,6 +43,10 @@ global.DocumentFragment = dom.window.DocumentFragment;
 global.NodeList = dom.window.NodeList;
 global.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 global.CSS = dom.window.CSS;
+// A real EditorView (see the _createMergeView test) needs these as well
+global.MutationObserver = dom.window.MutationObserver;
+global.requestAnimationFrame = dom.window.requestAnimationFrame;
+global.cancelAnimationFrame = dom.window.cancelAnimationFrame;
 
 if (typeof global.navigator === 'undefined') {
   global.navigator = {};
@@ -70,6 +75,7 @@ global.fetch = async (url) => {
         'document-rules-menu-item': readTemplate('document-rules-menu-item.html'),
         'document-rules-refresh-menu-item': readTemplate('document-rules-refresh-menu-item.html'),
         'document-rules-editor-dialog': readTemplate('document-rules-editor-dialog.html'),
+        'document-rules-update-dialog': readTemplate('document-rules-update-dialog.html'),
       })
     };
   }
@@ -145,6 +151,7 @@ function makeDialogUi() {
   el.deleteBtn = document.createElement('sl-button');
   el.resetBtn = document.createElement('sl-button');
   el.proposeUpstreamBtn = document.createElement('sl-button');
+  el.updateFromGuideBtn = document.createElement('sl-button');
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
   // Real <sl-dialog>.show() sets `open` and resolves once shown (see
@@ -348,7 +355,7 @@ describe('DocumentRulesPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
     assert.strictEqual(plugin.name, 'document-rules');
-    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger']);
+    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings']);
   });
 });
 
@@ -1959,5 +1966,300 @@ describe('DocumentRulesPlugin sync status line', () => {
     assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
     assert.strictEqual(warnings.length, 1);
     assert.match(warnings[0], /boom/);
+  });
+});
+
+describe('DocumentRulesPlugin "Update from guide"', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  const models = [
+    { providerId: 'p1', modelId: 'm1', label: 'Provider 1/Model 1' },
+    { providerId: 'p2', modelId: 'm2', label: 'Provider 2/Model 2' },
+  ];
+
+  const humanChange = { mode: 'delta', old_human: '# G\n\nold', new_human: '# G\n\nnew', machine: '# M\n\nrules', base_commit: 'abc' };
+
+  /**
+   * A minimal stand-in for `_updateDialogUi`, mirroring the named parts of
+   * document-rules-update-dialog.html.
+   * @returns {any}
+   */
+  function makeUpdateDialogUi() {
+    const el = document.createElement('div');
+    el.notice = document.createElement('div');
+    el.notice.style.display = 'none';
+    el.humanDiffHeading = document.createElement('div');
+    el.humanDiff = document.createElement('div');
+    el.modelRow = Object.assign(document.createElement('div'), {
+      modelSelect: Object.assign(document.createElement('sl-select'), { value: '' }),
+      generateBtn: document.createElement('sl-button'),
+    });
+    el.proposedHeading = document.createElement('div');
+    el.proposedHeading.style.display = 'none';
+    el.proposedDiff = document.createElement('div');
+    el.proposedDiff.style.display = 'none';
+    el.acceptBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+    el.closeBtn = document.createElement('sl-button');
+    el.open = false;
+    el.show = async () => { el.open = true; };
+    el.hide = async () => { el.open = false; };
+    return el;
+  }
+
+  /**
+   * @param {object} [options]
+   * @param {Array<any>} [options.modelList] - what inference-settings' getModels() returns
+   * @param {any} [options.defaultModel] - what getDefaultModel() returns
+   * @param {Record<string, Function>} [options.api] - extra/overriding apiClient methods
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, requests: Record<string, any[]>, mergeViews: any[] }}
+   */
+  function setup({ modelList = models, defaultModel = { providerId: 'p2', modelId: 'm2' }, api = {} } = {}) {
+    const plugin = makePlugin(['reviewer']);
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._updateDialogUi = makeUpdateDialogUi();
+    plugin._resources = [human, machine];
+    plugin._currentResource = machine;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    const requests = { humanChange: [], updateFromGuide: [], overrides: [] };
+    const mergeViews = [];
+    plugin._createMergeView = (parent, original, modified) => {
+      const view = { parent, original, modified, destroyed: false, destroy() { this.destroyed = true; } };
+      mergeViews.push(view);
+      return view;
+    };
+    const apiClient = {
+      documentRulesHumanChange: async (body) => { requests.humanChange.push(body); return { ...humanChange }; },
+      documentRulesUpdateFromGuide: async (body) => { requests.updateFromGuide.push(body); return { ...humanChange, proposed: '# M\n\nnew rules' }; },
+      documentRulesOverrides: async (body) => { requests.overrides.push(body); return { id: 'ov-new', note: body.note, text: body.text, format: 'markdown', created_at: '', updated_at: '' }; },
+      ...api,
+    };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'inference-settings') return {
+        getModels: () => modelList,
+        getDefaultModel: () => defaultModel,
+        getModelLabel: (providerId, modelId) => modelList.find(m => m.providerId === providerId && m.modelId === modelId)?.label ?? `${providerId}/${modelId}`,
+      };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, requests, mergeViews };
+  }
+
+  describe('updateFromGuideBtn visibility', () => {
+    /**
+     * @param {any} resource
+     * @param {Array<any>} group
+     * @param {boolean} [readOnly]
+     * @returns {string}
+     */
+    function displayFor(resource, group, readOnly = false) {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock();
+      plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+      plugin._md = { render: (text) => text };
+      plugin._currentResource = resource;
+      plugin._currentGroup = group;
+      plugin._currentOriginalText = 'text';
+      plugin._documentReadOnly = readOnly;
+      plugin._renderEditorDialog();
+      return plugin._editorDialogUi.updateFromGuideBtn.style.display;
+    }
+
+    it('is hidden on the human layer', () => {
+      assert.strictEqual(displayFor(human, [human, machine]), 'none');
+    });
+
+    it('is shown on the machine layer of a human/machine pair', () => {
+      assert.strictEqual(displayFor(machine, [human, machine]), '');
+    });
+
+    it('is hidden for a single-layer resource', () => {
+      assert.strictEqual(displayFor(schema, [schema]), 'none');
+    });
+
+    it('is hidden when the document is read-only', () => {
+      assert.strictEqual(displayFor(machine, [human, machine], true), 'none');
+    });
+  });
+
+  it('_openUpdateDialog requests the pair\'s guide change, shows it as a diff and preselects the default model', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.deepStrictEqual(requests.humanChange, [{ human_url: human.url, machine_url: machine.url }]);
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(mergeViews[0].parent, ui.humanDiff);
+    assert.strictEqual(mergeViews[0].original, humanChange.old_human);
+    assert.strictEqual(mergeViews[0].modified, humanChange.new_human);
+    const options = [...ui.modelRow.modelSelect.querySelectorAll('sl-option')];
+    assert.deepStrictEqual(options.map(o => o.textContent), models.map(m => m.label));
+    assert.strictEqual(ui.modelRow.modelSelect.value, options[1].value);
+    assert.strictEqual(ui.modelRow.style.display, '');
+    assert.strictEqual(ui.notice.style.display, 'none');
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.proposedDiff.style.display, 'none');
+    assert.strictEqual(ui.open, true);
+  });
+
+  it('_openUpdateDialog without models hides the picker and shows the no-model notice', async () => {
+    const { plugin } = setup({ modelList: [], defaultModel: null });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(ui.modelRow.style.display, 'none');
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.notice.textContent.trim(), 'No language model is available. Update the machine rules by hand, using the change shown above.');
+  });
+
+  it('_openUpdateDialog in align mode shows the align notice and diffs against an empty guide', async () => {
+    const { plugin, mergeViews } = setup({ api: {
+      documentRulesHumanChange: async () => ({ mode: 'align', old_human: null, new_human: '# G\n\nnew', machine: '# M', base_commit: null }),
+    } });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(mergeViews[0].original, '');
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.notice.textContent.trim(), 'No sync base found: the model compares the whole guide section with the machine rules.');
+  });
+
+  it('_openUpdateDialog shows the unchanged notice when the guide section has not changed', async () => {
+    const { plugin } = setup({ api: {
+      documentRulesHumanChange: async () => ({ mode: 'delta', old_human: '# G', new_human: '# G', machine: '# M', base_commit: 'abc' }),
+    } });
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.textContent.trim(), 'The guide section has not changed since the last sync.');
+  });
+
+  it('_openUpdateDialog notifies and does not open the dialog when the request fails', async () => {
+    const { plugin } = setup({ api: { documentRulesHumanChange: async () => { throw new Error('boom'); } } });
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /boom/);
+  });
+
+  it('_onGenerate sends the document, the pair and the selected model, shows the proposal and enables accept', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    const generating = plugin._onGenerate();
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, true);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, true);
+    await generating;
+    assert.deepStrictEqual(requests.updateFromGuide, [{ xml: 'stable123', human_url: human.url, machine_url: machine.url, provider_id: 'p2', model_id: 'm2' }]);
+    assert.strictEqual(mergeViews.length, 2);
+    assert.strictEqual(mergeViews[1].parent, ui.proposedDiff);
+    assert.strictEqual(mergeViews[1].original, humanChange.machine);
+    assert.strictEqual(mergeViews[1].modified, '# M\n\nnew rules');
+    assert.strictEqual(plugin._proposedMachineText, '# M\n\nnew rules');
+    assert.strictEqual(ui.proposedHeading.style.display, '');
+    assert.strictEqual(ui.proposedDiff.style.display, '');
+    assert.strictEqual(ui.acceptBtn.disabled, false);
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+  });
+
+  it('_onGenerate on an error notifies, keeps the dialog open and accept disabled', async () => {
+    const { plugin } = setup({ api: { documentRulesUpdateFromGuide: async () => { throw new Error('An API key is required'); } } });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    await plugin._onGenerate();
+    assert.strictEqual(ui.open, true);
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.proposedDiff.style.display, 'none');
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /An API key is required/);
+    assert.strictEqual(notifyCalls[0][1], 'danger');
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+  });
+
+  it('_onAcceptProposal creates a machine override with the model note and the proposal, selects it and closes', async () => {
+    const { plugin, requests } = setup();
+    const selected = [];
+    plugin._selectOverride = async (id) => { selected.push(id); };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    // The note names the model the proposal was generated with, not a later choice
+    const ui = plugin._updateDialogUi;
+    ui.modelRow.modelSelect.value = ui.modelRow.modelSelect.querySelectorAll('sl-option')[0].value;
+    await plugin._onAcceptProposal();
+    assert.deepStrictEqual(requests.overrides, [{ kind: machine.kind, fragment_url: machine.url, note: 'Updated from guide with Provider 2/Model 2', text: '# M\n\nnew rules' }]);
+    assert.deepStrictEqual(plugin._currentOverrides.map(o => o.id), ['ov-new']);
+    assert.deepStrictEqual(selected, ['ov-new']);
+    assert.strictEqual(ui.open, false);
+  });
+
+  it('_onAcceptProposal opens the machine layer first when another layer is shown', async () => {
+    const { plugin } = setup();
+    const selected = [];
+    const opened = [];
+    plugin._selectOverride = async (id) => { selected.push(id); };
+    plugin._openResourceEditor = async (resource) => {
+      opened.push(resource);
+      plugin._currentResource = resource;
+      // The re-query already lists the new override
+      plugin._currentOverrides = [{ id: 'ov-new', note: '', text: '', format: 'markdown', created_at: '', updated_at: '' }];
+    };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._currentResource = human;
+    await plugin._onAcceptProposal();
+    assert.deepStrictEqual(opened, [machine]);
+    assert.deepStrictEqual(plugin._currentOverrides.map(o => o.id), ['ov-new']);
+    assert.deepStrictEqual(selected, ['ov-new']);
+  });
+
+  it('_onAcceptProposal on an error notifies and keeps the dialog open', async () => {
+    const { plugin } = setup({ api: { documentRulesOverrides: async () => { throw new Error('nope'); } } });
+    let selectedCalls = 0;
+    plugin._selectOverride = async () => { selectedCalls++; };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+    assert.strictEqual(selectedCalls, 0);
+    assert.match(notifyCalls[0][0], /nope/);
+  });
+
+  it('_resetUpdateDialog (on close) destroys the merge views and drops the proposal', async () => {
+    const { plugin, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    assert.deepStrictEqual(mergeViews.map(v => v.destroyed), [true, true]);
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, true);
+  });
+
+  it('_onGenerate drops a response that arrives after the dialog was closed', async () => {
+    let resolveRequest;
+    const { plugin, mergeViews } = setup({ api: { documentRulesUpdateFromGuide: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    await plugin._openUpdateDialog();
+    const generating = plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    resolveRequest({ ...humanChange, proposed: '# M\n\nlate' });
+    await generating;
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, true);
+  });
+
+  it('_createMergeView builds a read-only CodeMirror view showing the modified text', () => {
+    const plugin = makePlugin();
+    const parent = document.createElement('div');
+    const view = plugin._createMergeView(parent, 'old line', 'new line');
+    try {
+      assert.strictEqual(view.state.doc.toString(), 'new line');
+      assert.strictEqual(getOriginalDoc(view.state).toString(), 'old line');
+      assert.strictEqual(view.state.readOnly, true);
+      assert.ok(parent.contains(view.dom));
+    } finally {
+      view.destroy();
+    }
   });
 });
