@@ -153,6 +153,9 @@ class DocumentRulesPlugin extends Plugin {
    */
   _updateDialogSession = 0
 
+  /** Number of _openUpdateDialog() requests so far; only the latest one may open the sub-dialog. */
+  _updateDialogOpenRequest = 0
+
   /** Proposed machine rules from the last successful Generate, or null. @type {string|null} */
   _proposedMachineText = null
 
@@ -1196,12 +1199,19 @@ class DocumentRulesPlugin extends Plugin {
    * Open the "Update machine rules from guide" sub-dialog for
    * `_currentGroup`'s human/machine pair: show how the guide section changed
    * since the last sync (POST /document-rules/human-change) and offer the
-   * available models for generating updated machine rules.
+   * available models for generating updated machine rules. The button
+   * shows as loading meanwhile and ignores further clicks; the sub-dialog
+   * is not opened if, by the time the change arrives, the editor dialog was
+   * closed, shows another rule category, or a newer request started.
    * @returns {Promise<void>}
    */
   async _openUpdateDialog() {
     const { human, machine } = this._currentPair()
-    if (!human || !machine) return
+    const btn = this._editorDialogUi.updateFromGuideBtn
+    if (!human || !machine || btn.loading) return
+    const request = ++this._updateDialogOpenRequest
+    btn.loading = true
+    btn.disabled = true
     /** @type {HumanChangeResponse} */
     let change
     try {
@@ -1209,7 +1219,11 @@ class DocumentRulesPlugin extends Plugin {
     } catch (error) {
       notify(`Could not load the guide change: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
+    } finally {
+      btn.loading = false
+      btn.disabled = false
     }
+    if (request !== this._updateDialogOpenRequest || !this._editorDialogUi.open || !this._currentGroup.some(r => r.layer === 'machine' && r.url === machine.url)) return
     const ui = this._updateDialogUi
     this._resetUpdateDialog()
     this._humanDiffView = this._createMergeView(ui.humanDiff, change.old_human ?? '', change.new_human)

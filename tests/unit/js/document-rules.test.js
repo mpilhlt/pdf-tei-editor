@@ -2035,6 +2035,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
   function setup({ modelList = models, defaultModel = { providerId: 'p2', modelId: 'm2' }, api = {} } = {}) {
     const plugin = makePlugin(['reviewer']);
     plugin._editorDialogUi = makeDialogUi();
+    plugin._editorDialogUi.open = true;
     plugin._updateDialogUi = makeUpdateDialogUi();
     plugin._resources = [human, machine];
     plugin._currentResource = machine;
@@ -2158,6 +2159,73 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(plugin._updateDialogUi.open, false);
     assert.strictEqual(notifyCalls.length, 1);
     assert.match(notifyCalls[0][0], /boom/);
+  });
+
+  it('_openUpdateDialog shows updateFromGuideBtn as loading and disabled while the guide change loads', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const btn = plugin._editorDialogUi.updateFromGuideBtn;
+    const opening = plugin._openUpdateDialog();
+    assert.strictEqual(btn.loading, true);
+    assert.strictEqual(btn.disabled, true);
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(btn.loading, false);
+    assert.strictEqual(btn.disabled, false);
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+  });
+
+  it('_openUpdateDialog restores updateFromGuideBtn when the request fails', async () => {
+    const { plugin } = setup({ api: { documentRulesHumanChange: async () => { throw new Error('boom'); } } });
+    await plugin._openUpdateDialog();
+    const btn = plugin._editorDialogUi.updateFromGuideBtn;
+    assert.strictEqual(btn.loading, false);
+    assert.strictEqual(btn.disabled, false);
+  });
+
+  it('_openUpdateDialog called twice while loading sends only one request', async () => {
+    const resolvers = [];
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolvers.push(resolve); }) } });
+    const first = plugin._openUpdateDialog();
+    const second = plugin._openUpdateDialog();
+    for (const resolve of resolvers) resolve({ ...humanChange });
+    await Promise.all([first, second]);
+    assert.strictEqual(resolvers.length, 1);
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when the editor dialog was closed meanwhile', async () => {
+    let resolveRequest;
+    const { plugin, mergeViews } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const opening = plugin._openUpdateDialog();
+    plugin._editorDialogUi.open = false;
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.strictEqual(mergeViews.length, 0);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when another rule category was opened meanwhile', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const opening = plugin._openUpdateDialog();
+    plugin._currentResource = schema;
+    plugin._currentGroup = [schema];
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when the document changed meanwhile', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    const opening = plugin._openUpdateDialog();
+    plugin.onXmlChange();
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
   });
 
   it('_onGenerate sends the document, the pair and the selected model, shows the proposal and enables accept', async () => {
@@ -2349,6 +2417,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
   it('onXmlChange hides the sub-dialog', () => {
     const { plugin } = setup();
     plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
     plugin._updateDialogUi.open = true;
     plugin.onXmlChange();
     assert.strictEqual(plugin._updateDialogUi.open, false);
