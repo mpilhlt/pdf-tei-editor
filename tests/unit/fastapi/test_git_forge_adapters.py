@@ -586,3 +586,42 @@ class TestGitLabAdapterFileHistory(unittest.TestCase):
             self.adapter.url_at_commit(self.sha_url + "#L1-L5", "c" * 40),
             f"https://gitlab.com/group/project/-/blob/{'c' * 40}/docs/guide.md#L1-L5",
         )
+
+
+class TestUrlAtDefaultBranch(unittest.TestCase):
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_github_sha_url_keeps_fragment(self, mock_get):
+        mock_get.return_value = _json_response({"default_branch": "trunk"})
+        url = f"https://github.com/mpilhlt/fossil/blob/{'b' * 40}/docs/guide.md#data-correction"
+        adapter = GitHubAdapter()
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            self.assertEqual(
+                adapter.url_at_default_branch(url, cache),
+                "https://github.com/mpilhlt/fossil/blob/trunk/docs/guide.md#data-correction",
+            )
+            self.assertEqual(adapter.default_branch(url, cache), "trunk")
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertEqual(mock_get.call_args.args[0], "https://api.github.com/repos/mpilhlt/fossil")
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_gitlab_sha_url_keeps_fragment(self, mock_get):
+        mock_get.return_value = _json_response({"default_branch": "trunk"})
+        url = f"https://gitlab.com/group/project/-/blob/{'b' * 40}/docs/guide.md#L1-5"
+        adapter = GitLabAdapter()
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp))
+            self.assertEqual(
+                adapter.url_at_default_branch(url, cache),
+                "https://gitlab.com/group/project/-/blob/trunk/docs/guide.md#L1-5",
+            )
+            self.assertEqual(adapter.default_branch(url, cache), "trunk")
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertEqual(mock_get.call_args.args[0], "https://gitlab.com/api/v4/projects/group%2Fproject")
+
+    def test_adapter_without_support_raises_not_implemented(self):
+        adapter = _AlwaysMatchesAdapter()
+        with self.assertRaises(NotImplementedError):
+            adapter.url_at_default_branch("https://x", MagicMock())
+        with self.assertRaises(NotImplementedError):
+            adapter.default_branch("https://x", MagicMock())

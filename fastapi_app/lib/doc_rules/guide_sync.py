@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 SyncStatus = Literal["in_sync", "machine_outdated", "machine_edited", "both_changed", "no_marker"]
 
 _SYNC_RE = re.compile(r"<!-- sync: guide=([0-9a-f]+) llm=([0-9a-f]+)(?: base=([0-9a-f]+))? -->\n?")
+_HEADING_RE = re.compile(r"^#{1,6}\s")
+_LEADING_BLANK_LINES_RE = re.compile(r"\A(?:[ \t]*\n)+")
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,24 @@ def split_sync_marker(text: str) -> tuple[str, Optional[str]]:
     after = re.sub(r"\A(?:[ \t]*\n)+", "", text[match.end():])
     stripped = f"{before}\n\n{after}" if before and after else before or after
     return stripped, match.group(0).rstrip("\n")
+
+
+def with_sync_marker(text: str, marker_line: str) -> str:
+    """
+    `text` with every sync marker removed and `marker_line` placed in fossil's
+    layout: after `text`'s leading heading line, one blank line on each side
+    (a section starts with its heading), else on top, followed by a blank line.
+    """
+    current: Optional[str] = ""
+    while current is not None:
+        text, current = split_sync_marker(text)
+    if not text:
+        return marker_line
+    if not _HEADING_RE.match(text):
+        return f"{marker_line}\n\n{text}"
+    heading_line, _, rest = text.partition("\n")
+    rest = _LEADING_BLANK_LINES_RE.sub("", rest)
+    return f"{heading_line}\n\n{marker_line}\n\n{rest}" if rest else f"{heading_line}\n\n{marker_line}"
 
 
 def format_sync_marker(marker: SyncMarker) -> str:

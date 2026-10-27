@@ -113,6 +113,14 @@ class BaseGitForgeAdapter(ABC):
         """Return the blob URL `url` with its ref replaced by `sha`, fragment preserved. Optional: the default raises NotImplementedError."""
         raise NotImplementedError(f"{type(self).__name__} does not support commit URLs")
 
+    def default_branch(self, url: str, cache: UrlCache) -> str:
+        """Return the default branch name of the repository `url` points into, via one `cache`-backed API call. Optional: the default raises NotImplementedError."""
+        raise NotImplementedError(f"{type(self).__name__} does not support default branches")
+
+    def url_at_default_branch(self, url: str, cache: UrlCache) -> str:
+        """Return the blob URL `url` with its ref replaced by the repository's default branch, fragment preserved. Optional: the default raises NotImplementedError."""
+        raise NotImplementedError(f"{type(self).__name__} does not support default-branch URLs")
+
 
 class GitHubAdapter(BaseGitForgeAdapter):
     """Adapter for github.com blob URLs."""
@@ -259,6 +267,13 @@ class GitHubAdapter(BaseGitForgeAdapter):
         resolved = f"https://github.com/{m['owner']}/{m['repo']}/blob/{sha}/{m['path']}"
         return f"{resolved}#{fragment}" if fragment else resolved
 
+    def default_branch(self, url: str, cache: UrlCache) -> str:
+        m = self._parse_any(url.partition("#")[0])
+        return self._default_branch(m['owner'], m['repo'], cache)
+
+    def url_at_default_branch(self, url: str, cache: UrlCache) -> str:
+        return self.url_at_commit(url, self.default_branch(url, cache))
+
 
 class GitLabAdapter(BaseGitForgeAdapter):
     """Adapter for GitLab blob URLs (gitlab.com and self-hosted instances)."""
@@ -380,6 +395,13 @@ class GitLabAdapter(BaseGitForgeAdapter):
         origin, project_path, _ref, file_path = self._split(base_url)
         resolved = f"{origin}/{project_path}/-/blob/{sha}/{file_path}"
         return f"{resolved}#{fragment}" if fragment else resolved
+
+    def default_branch(self, url: str, cache: UrlCache) -> str:
+        origin, project_path, _ref, _file_path = self._split_any(url.partition("#")[0])
+        return self._default_branch(origin, project_path, cache)
+
+    def url_at_default_branch(self, url: str, cache: UrlCache) -> str:
+        return self.url_at_commit(url, self.default_branch(url, cache))
 
 
 class GitForgeAdapterRegistry:
