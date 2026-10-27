@@ -908,10 +908,28 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         ):
             response = self._update()
         self.assertEqual(response.status_code, 428)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "secret_required")
+        self.assertEqual(detail["service"], "fake")
 
     def test_update_model_access_denied_is_403(self):
         with patch("fastapi_app.routers.document_rules.check_model_access", side_effect=ModelAccessDenied("no")):
             self.assertEqual(self._update().status_code, 403)
+        self.assertEqual(self.provider.calls, [])
+
+    def test_update_denied_model_access_skips_the_guide_fetch(self):
+        self.texts.pop(self.HUMAN_URL)
+        with patch("fastapi_app.routers.document_rules.check_model_access", side_effect=ModelAccessDenied("no")):
+            self.assertEqual(self._update().status_code, 403)
+
+    def test_update_provider_error_message_comes_from_a_json_error_body(self):
+        error = requests.HTTPError("400 Client Error")
+        error.response = MagicMock()
+        error.response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        self.provider.error = error
+        response = self._update()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"], "LLM provider request failed: Quota exceeded")
 
     def test_update_provider_error_is_502(self):
         self.provider.error = LLMProviderError("boom")
@@ -931,13 +949,15 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
 
     def test_update_condense_prompt_failure_is_500(self):
         client = TestClient(self.app, raise_server_exceptions=False)
-        with patch("fastapi_app.routers.document_rules.resolve_condense_prompt", side_effect=RuntimeError("plugin bug")):
+        with patch("fastapi_app.routers.document_rules.resolve_condense_prompt", side_effect=RuntimeError("plugin bug")), \
+             self.assertLogs("fastapi_app.routers.document_rules", level="ERROR") as logs:
             response = client.post(
                 "/document-rules/update-from-guide",
                 json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
             )
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["detail"], "Could not resolve the condensing prompt")
+        self.assertIsNotNone(logs.records[0].exc_info)
 
     def test_update_unresolvable_original_is_502(self):
         self.texts.pop(self.HUMAN_URL)

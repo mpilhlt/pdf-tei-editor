@@ -8,6 +8,8 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 Handlers that may fetch a rule file (blocking `requests` calls, e.g. via
 ResourceKind.resource_key() or resolve_original()) are plain `def`, so
 FastAPI runs them in its threadpool instead of on the event loop.
+/update-from-guide is an `async def` (it awaits the language model) and runs
+its blocking parts in the threadpool via run_in_threadpool().
 """
 
 import hashlib
@@ -552,6 +554,13 @@ def _upstream_error_message(error: requests.RequestException) -> str:
     return str(error)
 
 
+def _llm_request_error(provider_id: str, error: LLMProviderError | requests.RequestException) -> HTTPException:
+    """The 502 for a failed request to the language model provider (logged)."""
+    logger.warning(f"document-rules: provider '{provider_id}' failed: {error}")
+    message = _upstream_error_message(error) if isinstance(error, requests.RequestException) else str(error)
+    return HTTPException(status_code=502, detail=f"LLM provider request failed: {message}")
+
+
 @router.post("/human-change", response_model=HumanChangeResponse)
 def get_human_change(
     request: HumanChangeRequest,
@@ -587,11 +596,19 @@ async def update_from_guide(
     """
     owner = user["username"]
     try:
-        provider = LLMProviderRegistry.get_instance().get_provider_for_user(request.provider_id, owner)
+        # reads the user's stored secret, so it runs off the event loop
+        provider = await run_in_threadpool(LLMProviderRegistry.get_instance().get_provider_for_user, request.provider_id, owner)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except MissingSecretError as e:
         raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    try:
+        # may list the provider's models, so its connection errors are handled like those of the completion
+        await run_in_threadpool(check_model_access, provider, request.model_id, user)
+    except ModelAccessDenied as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
 
     change = await run_in_threadpool(_gather_guide_change_or_502, request.human_url, request.machine_url, store, owner)
     try:
@@ -602,17 +619,9 @@ async def update_from_guide(
     system_prompt, user_prompt = build_update_prompts(change, condense_prompt)
 
     try:
-        # may list the provider's models, so its connection errors are handled below
-        await run_in_threadpool(check_model_access, provider, request.model_id, user)
         answer = await provider.chat_completion(request.model_id, system_prompt, user_prompt, temperature=0.2)
-    except ModelAccessDenied as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
-    except LLMProviderError as e:
-        logger.warning(f"document-rules: provider '{request.provider_id}' failed: {e}")
-        raise HTTPException(status_code=502, detail=f"LLM provider request failed: {e}") from e
-    except requests.RequestException as e:
-        logger.warning(f"document-rules: provider '{request.provider_id}' request failed: {e}")
-        raise HTTPException(status_code=502, detail=f"LLM provider request failed: {_upstream_error_message(e)}") from e
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
 
     try:
         proposed = clean_model_answer(answer, change)
