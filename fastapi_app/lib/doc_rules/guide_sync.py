@@ -51,6 +51,22 @@ def parse_sync_marker(machine_section: str) -> Optional[SyncMarker]:
     return SyncMarker(match.group(1), match.group(2), match.group(3))
 
 
+def split_sync_marker(text: str) -> tuple[str, Optional[str]]:
+    """
+    `text` without its first sync marker line, the blank lines around it
+    collapsed to one, and that line verbatim (without its newline); `text`
+    and None if there is no marker. CRLF line endings become `\\n`.
+    """
+    text = text.replace("\r\n", "\n")
+    match = _SYNC_RE.search(text)
+    if match is None:
+        return text, None
+    before = text[:match.start()].rstrip("\n")
+    after = re.sub(r"\A(?:[ \t]*\n)+", "", text[match.end():])
+    stripped = f"{before}\n\n{after}" if before and after else before or after
+    return stripped, match.group(0).rstrip("\n")
+
+
 def format_sync_marker(marker: SyncMarker) -> str:
     """Render `marker` as its comment line, without a trailing newline."""
     base = f" base={marker.base}" if marker.base is not None else ""
@@ -69,13 +85,18 @@ def human_section_hash(section: str, human_url: str) -> str:
     return section_hash(derelativize_markdown_urls(section, human_url))
 
 
-def sync_status(human_section: str, machine_section: str, human_url: str) -> SyncStatus:
-    """Compare the current hashes of both sections with the ones recorded in the machine section's marker."""
+def sync_status(human_section: str, machine_section: str, human_url: str, machine_url: str) -> SyncStatus:
+    """
+    Compare the current hashes of both sections with the ones recorded in the
+    machine section's marker. Both sections are hashed with their links made
+    relative again (against `human_url` and `machine_url`), the form the
+    marker was computed on upstream.
+    """
     marker = parse_sync_marker(machine_section)
     if marker is None:
         return "no_marker"
     outdated = human_section_hash(human_section, human_url) != marker.guide_hash
-    edited = section_hash(machine_section) != marker.llm_hash
+    edited = section_hash(derelativize_markdown_urls(machine_section, machine_url)) != marker.llm_hash
     if outdated and edited:
         return "both_changed"
     if outdated:

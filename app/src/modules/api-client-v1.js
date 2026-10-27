@@ -858,6 +858,42 @@
  */
 
 /**
+ * @typedef {Object} HumanChangeRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ */
+
+/**
+ * @typedef {Object} HumanChangeResponse
+ * @property {'delta'|'align'} mode
+ * @property {string|null} [old_human]
+ * @property {string} new_human
+ * @property {string} machine
+ * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
+ */
+
+/**
+ * @typedef {Object} UpdateFromGuideRequest
+ * @property {string} xml
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {string} provider_id
+ * @property {string} model_id
+ */
+
+/**
+ * @typedef {Object} UpdateFromGuideResponse
+ * @property {'delta'|'align'} mode
+ * @property {string|null} [old_human]
+ * @property {string} new_human
+ * @property {string} machine
+ * @property {string} proposed
+ * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
+ */
+
+/**
  * @typedef {Object} RestartResult
  * @property {boolean} restarting
  */
@@ -1925,6 +1961,31 @@ export class ApiClientV1 {
    */
   async documentRulesSyncStatus(requestBody) {
     const endpoint = `/document-rules/sync-status`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * The change of a human guideline section since its machine section was
+   * last synced (delta mode), or the whole section if no sync base is found
+   * (align mode), together with the current machine section.
+   *
+   * @param {HumanChangeRequest} requestBody
+   * @returns {Promise<HumanChangeResponse>}
+   */
+  async documentRulesHumanChange(requestBody) {
+    const endpoint = `/document-rules/human-change`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Have a language model update the machine section from the change of its
+   * human section and return the proposed text. Nothing is stored.
+   *
+   * @param {UpdateFromGuideRequest} requestBody
+   * @returns {Promise<UpdateFromGuideResponse>}
+   */
+  async documentRulesUpdateFromGuide(requestBody) {
+    const endpoint = `/document-rules/update-from-guide`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

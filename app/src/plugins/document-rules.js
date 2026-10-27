@@ -28,7 +28,9 @@
  * @import { SlMenuItem, SlDialog } from '../ui.js'
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse } from '../modules/api-client-v1.js'
+ * @import { documentRulesUpdateDialogPart } from '../templates/document-rules-update-dialog.types.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse } from '../modules/api-client-v1.js'
+ * @import { ModelChoice } from './inference-settings.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
 
@@ -39,6 +41,7 @@ import { userHasRole } from '../modules/acl-utils.js'
 import { createMarkdownRenderer, findHeadingLineForAnchor } from '../modules/markdown-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { EditorState, Compartment } from '@codemirror/state'
+import { unifiedMergeView } from '@codemirror/merge'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { xml, xmlLanguage } from '@codemirror/lang-xml'
 import { markdown } from '@codemirror/lang-markdown'
@@ -52,12 +55,32 @@ import { createOverrideRefField, createOverrideRefClickHandler, refDecorationThe
 await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.html')
 await registerTemplate('document-rules-refresh-menu-item', 'document-rules-refresh-menu-item.html')
 await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-dialog.html')
+await registerTemplate('document-rules-update-dialog', 'document-rules-update-dialog.html')
 
 // Matches a recognized line-range fragment (GitHub's #L10-L50, GitLab's
 // #L10-50) - mirrors annotation_rules_utils.py's _LINE_RANGE_RE.
 const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
 
 const OUTDATED_OVERRIDE_TOOLTIP = 'Based on an older version of the original'
+
+const ALIGN_MODE_NOTICE = 'No sync base found: the model compares the whole guide section with the machine rules.'
+const UNCHANGED_GUIDE_NOTICE = 'The guide section has not changed since the last sync.'
+const NO_MODEL_NOTICE = 'No language model is available. Update the machine rules by hand, using the change shown above.'
+const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated from the guide. Running the update again may apply the same change twice.'
+
+// Note of an override accepted in the "Update machine rules from guide" sub-dialog, followed by the model label
+const UPDATED_FROM_GUIDE_NOTE_PREFIX = 'Updated from guide with '
+
+/**
+ * Markdown language support for the dialogs' CodeMirror views. GFM
+ * (tables/strikethrough/autolink/task lists) matches what the preview's
+ * markdown-it renderer (createMarkdownRenderer()) already supports by
+ * default; xmlLanguage highlights ```xml fenced code blocks, since
+ * annotation guides often embed TEI/XML examples.
+ */
+function markdownLanguage() {
+  return markdown({ extensions: GFM, codeLanguages: (info) => info === 'xml' ? xmlLanguage : null })
+}
 
 /**
  * Status-line copy for each sync status of a human/machine layer pair (see
@@ -95,12 +118,13 @@ function headingAnchorFragment(url) {
 class DocumentRulesPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'document-rules', deps: ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger'] })
+    super(context, { name: 'document-rules', deps: ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings', 'api-keys'] })
   }
 
   get #client() { return this.getDependency('client') }
   get #xmlEditor() { return this.getDependency('xmleditor') }
   get #logger() { return this.getDependency('logger') }
+  get #inferenceSettings() { return this.getDependency('inference-settings') }
 
   /** @type {SlMenuItem & documentRulesEditMenuItemPart} */
   _editMenuItem = null
@@ -110,6 +134,37 @@ class DocumentRulesPlugin extends Plugin {
 
   /** @type {SlDialog & documentRulesEditorDialogPart} */
   _editorDialogUi = null
+
+  /** "Update machine rules from guide" sub-dialog. @type {SlDialog & documentRulesUpdateDialogPart} */
+  _updateDialogUi = null
+
+  /**
+   * Models offered by the sub-dialog's model picker; an option's value is
+   * its index here (an `<sl-select>` value cannot hold arbitrary ids).
+   * @type {Array<ModelChoice>}
+   */
+  _updateModels = []
+
+  /** The sub-dialog's guide-change merge view, destroyed when it closes. @type {EditorView|null} */
+  _humanDiffView = null
+
+  /** The sub-dialog's proposal merge view, destroyed when it closes. @type {EditorView|null} */
+  _proposedDiffView = null
+
+  /**
+   * Incremented whenever the sub-dialog is reset (opened or closed), so a
+   * Generate response that outlives its dialog session is dropped.
+   */
+  _updateDialogSession = 0
+
+  /** Number of _openUpdateDialog() requests so far; only the latest one may open the sub-dialog. */
+  _updateDialogOpenRequest = 0
+
+  /** Proposed machine rules from the last successful Generate, or null. @type {string|null} */
+  _proposedMachineText = null
+
+  /** The model `_proposedMachineText` was generated with. @type {ModelChoice|null} */
+  _proposedModel = null
 
   /**
    * Last successful POST /document-rules/list result for the open document.
@@ -220,6 +275,7 @@ class DocumentRulesPlugin extends Plugin {
 
     const dialog = createSingleFromTemplate('document-rules-editor-dialog', document.body)
     this._editorDialogUi = this.createUi(dialog)
+    this._updateDialogUi = this.createUi(createSingleFromTemplate('document-rules-update-dialog', document.body))
 
     this._md = createMarkdownRenderer()
 
@@ -235,11 +291,8 @@ class DocumentRulesPlugin extends Plugin {
     // Reuse the user's own XML-editor theme choice (persisted the same way
     // xmleditor.js reads it) rather than hardcoding 'default' - otherwise a
     // user who switched the main editor to dark mode would see this dialog's
-    // schema view rendered in light mode regardless. `this.uiStorage` is
-    // namespaced by THIS plugin's own name ('document-rules'), which is not
-    // where xmleditor.js's plugin ('xmleditor') persists the setting - it
-    // must be read from that plugin's own namespace instead.
-    const themeId = this.context.getUIStorage('xmleditor').get('editorTheme', 'default')
+    // schema view rendered in light mode regardless.
+    const themeId = this._editorThemeId()
 
     this._cmView = new EditorView({
       state: EditorState.create({
@@ -261,11 +314,7 @@ class DocumentRulesPlugin extends Plugin {
       state: EditorState.create({
         doc: '',
         extensions: [
-          // GFM (tables/strikethrough/autolink/task lists) matches what the
-          // preview's markdown-it renderer (createMarkdownRenderer()) already
-          // supports by default; xmlLanguage highlights ```xml fenced code
-          // blocks, since annotation guides often embed TEI/XML examples.
-          markdown({ extensions: GFM, codeLanguages: (info) => info === 'xml' ? xmlLanguage : null }),
+          markdownLanguage(),
           EditorView.lineWrapping,
           // CodeMirror only scrolls internally (what EditorView.scrollIntoView()
           // in _scrollMarkdownBodyToAnchor() needs) once its own `.cm-scroller`
@@ -296,6 +345,14 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
     this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
+    this._editorDialogUi.updateFromGuideBtn.addEventListener('click', () => this._openUpdateDialog())
+    this._updateDialogUi.modelRow.generateBtn.addEventListener('click', () => this._onGenerate())
+    this._updateDialogUi.acceptBtn.addEventListener('click', () => this._onAcceptProposal())
+    this._updateDialogUi.closeBtn.addEventListener('click', () => this._updateDialogUi.hide())
+    this._updateDialogUi.addEventListener('sl-after-hide', (event) => {
+      // Nested Shoelace components (the model picker) emit their own sl-after-hide
+      if (event.target === this._updateDialogUi) this._resetUpdateDialog()
+    })
     this._editorDialogUi.layerTabs.addEventListener('sl-tab-show', (event) => {
       this._onLayerTabShow(/** @type {CustomEvent} */(event).detail.name).catch(error => {
         this.#logger.warn('document-rules: could not switch layer: ' + String(error))
@@ -344,6 +401,7 @@ class DocumentRulesPlugin extends Plugin {
 
   /** Rebuild resource discovery when the open document changes. */
   onXmlChange() {
+    if (this._updateDialogUi.open) this._updateDialogUi.hide()
     if (this._editorDialogUi.open) this._editorDialogUi.hide()
     this._refreshResources()
   }
@@ -773,6 +831,8 @@ class DocumentRulesPlugin extends Plugin {
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     dialogUi.resetBtn.style.display = selected ? '' : 'none'
     dialogUi.proposeUpstreamBtn.style.display = selected ? '' : 'none'
+    const pairedMachine = resource.layer === 'machine' && this._currentGroup.some(r => r.layer === 'human')
+    dialogUi.updateFromGuideBtn.style.display = pairedMachine && !this._documentReadOnly ? '' : 'none'
   }
 
   /**
@@ -917,6 +977,8 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._currentOverrides.push(override)
     await this._selectOverride(override.id)
+    // A failed selection (already notified) still has to show the new override in the row
+    if (this._currentSelectedId !== override.id) this._renderEditorDialog()
   }
 
   /**
@@ -1123,6 +1185,265 @@ class DocumentRulesPlugin extends Plugin {
       // itself already carries the text.
     }
     window.open(response.url, '_blank', 'noopener')
+  }
+
+  /**
+   * The human and machine descriptor of `_currentGroup`, each null when the
+   * group has no such layer.
+   * @returns {{ human: ResourceDescriptorModel|null, machine: ResourceDescriptorModel|null }}
+   */
+  _currentPair() {
+    return {
+      human: this._currentGroup.find(r => r.layer === 'human') ?? null,
+      machine: this._currentGroup.find(r => r.layer === 'machine') ?? null
+    }
+  }
+
+  /**
+   * Open the "Update machine rules from guide" sub-dialog for
+   * `_currentGroup`'s human/machine pair: show how the guide section changed
+   * since the last sync (POST /document-rules/human-change) and offer the
+   * available models for generating updated machine rules. The button
+   * shows as loading meanwhile and ignores further clicks; the sub-dialog
+   * is not opened if, by the time the change arrives, the editor dialog was
+   * closed, shows another rule category, or a newer request started.
+   * Warns if the machine layer's selected override was itself accepted
+   * from this dialog, since the sync marker stays unchanged until the
+   * change is proposed upstream.
+   * @returns {Promise<void>}
+   */
+  async _openUpdateDialog() {
+    const { human, machine } = this._currentPair()
+    const btn = this._editorDialogUi.updateFromGuideBtn
+    if (!human || !machine || btn.loading) return
+    // The overrides and selection are those of the shown layer, which is the machine layer when the button is clicked
+    const selectedMachineOverride = this._currentResource === machine
+      ? this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+      : null
+    const request = ++this._updateDialogOpenRequest
+    btn.loading = true
+    btn.disabled = true
+    /** @type {HumanChangeResponse} */
+    let change
+    try {
+      change = await this.#client.apiClient.documentRulesHumanChange({ human_url: human.url, machine_url: machine.url })
+    } catch (error) {
+      notify(`Could not load the guide change: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    } finally {
+      btn.loading = false
+      btn.disabled = false
+    }
+    if (request !== this._updateDialogOpenRequest || !this._editorDialogUi.open || !this._currentGroup.some(r => r.layer === 'machine' && r.url === machine.url)) return
+    const ui = this._updateDialogUi
+    this._resetUpdateDialog()
+    this._humanDiffView = this._createMergeView(ui.humanDiff, change.old_human ?? '', change.new_human)
+
+    this._updateModels = this.#inferenceSettings.getModels()
+    const notices = []
+    if (change.mode === 'align') {
+      notices.push(ALIGN_MODE_NOTICE)
+    } else if (change.unchanged) {
+      notices.push(UNCHANGED_GUIDE_NOTICE)
+    }
+    if (selectedMachineOverride?.note.startsWith(UPDATED_FROM_GUIDE_NOTE_PREFIX)) notices.push(REPEATED_UPDATE_NOTICE)
+    if (this._updateModels.length === 0) notices.push(NO_MODEL_NOTICE)
+    ui.notice.replaceChildren(...notices.map((text) => {
+      const line = document.createElement('div')
+      line.textContent = text
+      return line
+    }))
+    ui.notice.style.display = notices.length > 0 ? '' : 'none'
+    this._renderModelPicker()
+    await ui.show()
+  }
+
+  /**
+   * Fill the sub-dialog's model picker from `_updateModels`, preselecting
+   * inference-settings' default model (else the first one), or hide the
+   * picker when there is no model.
+   */
+  _renderModelPicker() {
+    const modelRow = this._updateDialogUi.modelRow
+    const preferred = this.#inferenceSettings.getDefaultModel()
+    modelRow.modelSelect.replaceChildren(...this._updateModels.map((model, index) => {
+      const option = document.createElement('sl-option')
+      option.value = String(index)
+      option.textContent = model.label
+      return option
+    }))
+    const preferredIndex = preferred
+      ? this._updateModels.findIndex(m => m.providerId === preferred.providerId && m.modelId === preferred.modelId)
+      : -1
+    modelRow.modelSelect.value = this._updateModels.length > 0 ? String(Math.max(preferredIndex, 0)) : ''
+    modelRow.style.display = this._updateModels.length > 0 ? '' : 'none'
+  }
+
+  /**
+   * The model chosen in the sub-dialog's picker, or null if none is.
+   * @returns {ModelChoice|null}
+   */
+  _selectedUpdateModel() {
+    const value = this._updateDialogUi.modelRow.modelSelect.value
+    return typeof value === 'string' && value !== '' ? this._updateModels[Number(value)] ?? null : null
+  }
+
+  /**
+   * Ask the selected model for machine rules updated to the guide change
+   * (POST /document-rules/update-from-guide) and show them as a diff against
+   * the current machine rules. If the provider needs an API key the user
+   * has not stored, asks for it and retries. A response or error that arrives after the
+   * sub-dialog was closed or reopened is dropped, leaving the new session's
+   * buttons alone (_resetUpdateDialog() has already reset them).
+   * @returns {Promise<void>}
+   */
+  async _onGenerate() {
+    const { human, machine } = this._currentPair()
+    const model = this._selectedUpdateModel()
+    if (!human || !machine || !model) return
+    const session = this._updateDialogSession
+    const generateBtn = this._updateDialogUi.modelRow.generateBtn
+    generateBtn.disabled = true
+    generateBtn.loading = true
+    let response
+    try {
+      response = await this.getDependency('api-keys').withKeyPrompt(
+        () => this.#client.apiClient.documentRulesUpdateFromGuide({
+          xml: this.state.xml,
+          human_url: human.url,
+          machine_url: machine.url,
+          provider_id: model.providerId,
+          model_id: model.modelId
+        })
+      )
+    } catch (error) {
+      if (session !== this._updateDialogSession) return
+      generateBtn.disabled = false
+      generateBtn.loading = false
+      notify(`Could not update the machine rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    if (session !== this._updateDialogSession) return
+    generateBtn.disabled = false
+    generateBtn.loading = false
+    const ui = this._updateDialogUi
+    this._proposedDiffView?.destroy()
+    this._proposedDiffView = this._createMergeView(ui.proposedDiff, response.machine, response.proposed)
+    this._proposedMachineText = response.proposed
+    this._proposedModel = model
+    ui.proposedHeading.style.display = ''
+    ui.proposedDiff.style.display = ''
+    ui.acceptBtn.disabled = false
+  }
+
+  /**
+   * Save the proposed machine rules as a new override of the machine layer,
+   * note naming the model that generated them, select it (switching the
+   * editor dialog to the machine layer first if needed) and close the
+   * sub-dialog. Accept and Generate stay disabled while the override is
+   * created, so a double click cannot create it twice; once it exists, the
+   * proposal is dropped and the sub-dialog closes even if the layer switch
+   * or the selection fails.
+   * @returns {Promise<void>}
+   */
+  async _onAcceptProposal() {
+    const { machine } = this._currentPair()
+    const ui = this._updateDialogUi
+    if (!machine || ui.acceptBtn.disabled || this._proposedMachineText === null || this._proposedModel === null) return
+    const modelLabel = this.#inferenceSettings.getModelLabel(this._proposedModel.providerId, this._proposedModel.modelId)
+    ui.acceptBtn.disabled = true
+    ui.acceptBtn.loading = true
+    ui.modelRow.generateBtn.disabled = true
+    let override
+    try {
+      override = await this.#client.apiClient.documentRulesOverrides({
+        kind: machine.kind,
+        fragment_url: machine.url,
+        note: UPDATED_FROM_GUIDE_NOTE_PREFIX + modelLabel,
+        text: this._proposedMachineText
+      })
+    } catch (error) {
+      ui.acceptBtn.disabled = false
+      ui.acceptBtn.loading = false
+      ui.modelRow.generateBtn.disabled = false
+      notify(`Could not create override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    ui.acceptBtn.loading = false
+    this._proposedMachineText = null
+    this._proposedModel = null
+    if (this._currentResource !== machine) {
+      await this._openResourceEditor(machine)
+      // _openResourceEditor() has already notified a failed switch
+      if (this._currentResource !== machine) {
+        await ui.hide()
+        return
+      }
+    }
+    // A layer switch re-queried the overrides, which then already list this one
+    if (!this._currentOverrides.some(o => o.id === override.id)) this._currentOverrides.push(override)
+    await this._selectOverride(override.id)
+    // A failed selection (already notified) still has to show the new override in the row
+    if (this._currentSelectedId !== override.id) this._renderEditorDialog()
+    await ui.hide()
+  }
+
+  /**
+   * Destroy the sub-dialog's merge views, drop its proposal and invalidate
+   * any pending Generate request.
+   */
+  _resetUpdateDialog() {
+    this._updateDialogSession++
+    this._humanDiffView?.destroy()
+    this._proposedDiffView?.destroy()
+    this._humanDiffView = null
+    this._proposedDiffView = null
+    this._proposedMachineText = null
+    this._proposedModel = null
+    const ui = this._updateDialogUi
+    ui.proposedHeading.style.display = 'none'
+    ui.proposedDiff.style.display = 'none'
+    ui.acceptBtn.disabled = true
+    ui.acceptBtn.loading = false
+    ui.modelRow.generateBtn.disabled = false
+    ui.modelRow.generateBtn.loading = false
+  }
+
+  /**
+   * A read-only markdown CodeMirror view in `parent` showing `modified`,
+   * with the changes from `original` highlighted inline.
+   * @param {HTMLElement} parent
+   * @param {string} original
+   * @param {string} modified
+   * @returns {EditorView}
+   */
+  _createMergeView(parent, original, modified) {
+    return new EditorView({
+      state: EditorState.create({
+        doc: modified,
+        extensions: [
+          markdownLanguage(),
+          EditorView.lineWrapping,
+          EditorView.theme({ '&': { maxHeight: '20rem' }, '.cm-scroller': { overflow: 'auto' } }),
+          getTheme(this._editorThemeId()).extensions,
+          EditorView.editable.of(false),
+          EditorState.readOnly.of(true),
+          unifiedMergeView({ original, mergeControls: false })
+        ]
+      }),
+      parent
+    })
+  }
+
+  /**
+   * The user's own XML-editor theme choice. `this.uiStorage` is namespaced
+   * by THIS plugin's own name ('document-rules'), which is not where
+   * xmleditor.js's plugin ('xmleditor') persists the setting - it must be
+   * read from that plugin's own namespace instead.
+   * @returns {string}
+   */
+  _editorThemeId() {
+    return this.context.getUIStorage('xmleditor').get('editorTheme', 'default')
   }
 
   /**

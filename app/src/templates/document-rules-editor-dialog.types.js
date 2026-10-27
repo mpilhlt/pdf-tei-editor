@@ -14,6 +14,7 @@
  * @property {import('../ui.js').SlButton} deleteBtn
  * @property {import('../ui.js').SlButton} resetBtn
  * @property {import('../ui.js').SlButton} proposeUpstreamBtn
+ * @property {import('../ui.js').SlButton} updateFromGuideBtn
  * @property {import('../ui.js').SlButton} closeBtn
  */
 

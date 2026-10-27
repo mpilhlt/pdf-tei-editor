@@ -8,16 +8,22 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
+from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_PROMPT_TEMPLATE
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
+from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
+from fastapi_app.lib.llm.model_access import ModelAccessDenied
+from fastapi_app.lib.secrets import MissingSecretError
 from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
 from fastapi_app.routers.document_rules import get_db, router
 
@@ -767,9 +773,219 @@ class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
         self.texts.pop(self.MACHINE_URL)
         self.assertEqual(self._post().status_code, 502)
 
+    def test_store_failure_is_not_reported_as_502(self):
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(DocumentRulesStore, "get_selected_override_text", side_effect=RuntimeError("db down")):
+            response = client.post(
+                "/document-rules/sync-status", json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL}
+            )
+        self.assertEqual(response.status_code, 500)
+
     def test_non_reviewer_is_forbidden(self):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._post().status_code, 403)
+
+
+class _FakeProvider(LLMProvider):
+    """Records the prompts it receives and answers with `answer`, or raises `error`."""
+
+    def __init__(self, answer: str = "", error: Optional[Exception] = None):
+        self.id = "fake"
+        self.label = "Fake"
+        self.answer = answer
+        self.error = error
+        self.calls: list[tuple[str, str, str, float]] = []
+
+    def list_models(self) -> list[LLMModel]:
+        return []
+
+    async def chat_completion(self, model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+        self.calls.append((model_id, system_prompt, user_prompt, temperature))
+        if self.error is not None:
+            raise self.error
+        return self.answer
+
+
+class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
+    HUMAN_URL = TestSyncStatusEndpoint.HUMAN_URL
+    MACHINE_URL = TestSyncStatusEndpoint.MACHINE_URL
+    OLD_HUMAN = "## Data correction\n\nOld human rule.\n"
+    NEW_HUMAN = "## Data correction\n\nNew human rule.\n"
+    MACHINE = "## Data correction\n\n<!-- sync: guide=abc llm=def -->\n\nMachine rule.\n"
+    XML = "<TEI xmlns='http://www.tei-c.org/ns/1.0'/>"
+
+    def setUp(self):
+        super().setUp()
+        self.texts = {self.HUMAN_URL: self.NEW_HUMAN, self.MACHINE_URL: self.MACHINE}
+        patches = [
+            patch(
+                "fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resolve_original",
+                side_effect=lambda url: self.texts[url],
+            ),
+            patch(
+                "fastapi_app.lib.doc_rules.interpretation_ref_kind.InterpretationRefKind.resource_key",
+                side_effect=lambda url, **kw: normalize_resource_key(url),
+            ),
+            patch("fastapi_app.lib.doc_rules.guide_update.find_synced_human_commit", return_value="abc123"),
+            patch("fastapi_app.lib.doc_rules.guide_update.human_section_at_commit", return_value=self.OLD_HUMAN),
+            patch("fastapi_app.routers.document_rules.check_model_access"),
+            patch("fastapi_app.routers.document_rules.resolve_condense_prompt", return_value="  Custom condense prompt.  "),
+        ]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        LLMProviderRegistry.reset_instance()
+        self.addCleanup(LLMProviderRegistry.reset_instance)
+        self.provider = _FakeProvider("## Data correction\n\nUpdated machine rule.")
+        LLMProviderRegistry.get_instance().register(self.provider)
+
+    def _human_change(self):
+        return self.client.post("/document-rules/human-change", json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL})
+
+    def _update(self, provider_id: str = "fake"):
+        return self.client.post(
+            "/document-rules/update-from-guide",
+            json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": provider_id, "model_id": "m1"},
+        )
+
+    def test_human_change_delta_mode(self):
+        response = self._human_change()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["mode"], "delta")
+        self.assertEqual(body["old_human"], self.OLD_HUMAN)
+        self.assertEqual(body["new_human"], self.NEW_HUMAN)
+        self.assertEqual(body["base_commit"], "abc123")
+        self.assertIn("<!-- sync: guide=abc llm=def -->", body["machine"])
+        self.assertIn("Machine rule.", body["machine"])
+
+    def test_human_change_align_mode_without_a_sync_base(self):
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        body = self._human_change().json()
+        self.assertEqual(body["mode"], "align")
+        self.assertIsNone(body["old_human"])
+        self.assertIsNone(body["base_commit"])
+
+    def test_human_change_reports_a_changed_guide(self):
+        self.assertIs(self._human_change().json()["unchanged"], False)
+
+    def test_human_change_reports_an_unchanged_guide(self):
+        self.texts[self.HUMAN_URL] = self.OLD_HUMAN
+        self.assertIs(self._human_change().json()["unchanged"], True)
+
+    def test_human_change_in_align_mode_is_never_unchanged(self):
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        self.assertIs(self._human_change().json()["unchanged"], False)
+
+    def test_update_reports_whether_the_guide_changed(self):
+        self.assertIs(self._update().json()["unchanged"], False)
+        self.texts[self.HUMAN_URL] = self.OLD_HUMAN
+        self.assertIs(self._update().json()["unchanged"], True)
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        self.assertIs(self._update().json()["unchanged"], False)
+
+    def test_human_change_unresolvable_original_is_502(self):
+        self.texts.pop(self.MACHINE_URL)
+        self.assertEqual(self._human_change().status_code, 502)
+
+    def test_update_returns_the_cleaned_proposal_and_sends_the_templates(self):
+        response = self._update()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["mode"], "delta")
+        self.assertEqual(body["base_commit"], "abc123")
+        self.assertEqual(body["proposed"], "## Data correction\n\n<!-- sync: guide=abc llm=def -->\n\nUpdated machine rule.")
+        self.assertIn("Machine rule.", body["machine"])
+        self.assertEqual(len(self.provider.calls), 1)
+        model_id, system_prompt, user_prompt, temperature = self.provider.calls[0]
+        self.assertEqual(model_id, "m1")
+        self.assertEqual(system_prompt, "Custom condense prompt.")
+        self.assertEqual(temperature, 0.2)
+        self.assertEqual(
+            user_prompt,
+            DELTA_PROMPT_TEMPLATE.format(
+                old=self.OLD_HUMAN, new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n"
+            ),
+        )
+
+    def test_update_in_align_mode_sends_the_align_template(self):
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        body = self._update().json()
+        self.assertEqual(body["mode"], "align")
+        self.assertEqual(
+            self.provider.calls[0][2],
+            ALIGN_PROMPT_TEMPLATE.format(new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n"),
+        )
+
+    def test_update_unknown_provider_is_404(self):
+        self.assertEqual(self._update("nope").status_code, 404)
+
+    def test_update_missing_secret_is_428(self):
+        with patch.object(
+            LLMProviderRegistry, "get_provider_for_user", side_effect=MissingSecretError("fake")
+        ):
+            response = self._update()
+        self.assertEqual(response.status_code, 428)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "secret_required")
+        self.assertEqual(detail["service"], "fake")
+
+    def test_update_model_access_denied_is_403(self):
+        with patch("fastapi_app.routers.document_rules.check_model_access", side_effect=ModelAccessDenied("no")):
+            self.assertEqual(self._update().status_code, 403)
+        self.assertEqual(self.provider.calls, [])
+
+    def test_update_denied_model_access_skips_the_guide_fetch(self):
+        self.texts.pop(self.HUMAN_URL)
+        with patch("fastapi_app.routers.document_rules.check_model_access", side_effect=ModelAccessDenied("no")):
+            self.assertEqual(self._update().status_code, 403)
+
+    def test_update_provider_error_message_comes_from_a_json_error_body(self):
+        error = requests.HTTPError("400 Client Error")
+        error.response = MagicMock()
+        error.response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        self.provider.error = error
+        response = self._update()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"], "LLM provider request failed: Quota exceeded")
+
+    def test_update_provider_error_is_502(self):
+        self.provider.error = LLMProviderError("boom")
+        response = self._update()
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("LLM provider request failed", response.json()["detail"])
+
+    def test_update_request_exception_is_502(self):
+        self.provider.error = requests.RequestException("down")
+        self.assertEqual(self._update().status_code, 502)
+
+    def test_update_empty_answer_is_502(self):
+        self.provider.answer = "  \n"
+        response = self._update()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"], "The model returned no machine rules")
+
+    def test_update_condense_prompt_failure_is_500(self):
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch("fastapi_app.routers.document_rules.resolve_condense_prompt", side_effect=RuntimeError("plugin bug")), \
+             self.assertLogs("fastapi_app.routers.document_rules", level="ERROR") as logs:
+            response = client.post(
+                "/document-rules/update-from-guide",
+                json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
+            )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["detail"], "Could not resolve the condensing prompt")
+        self.assertIsNotNone(logs.records[0].exc_info)
+
+    def test_update_unresolvable_original_is_502(self):
+        self.texts.pop(self.HUMAN_URL)
+        self.assertEqual(self._update().status_code, 502)
+        self.assertEqual(self.provider.calls, [])
+
+    def test_non_reviewer_is_forbidden_on_both_routes(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
+        self.assertEqual(self._human_change().status_code, 403)
+        self.assertEqual(self._update().status_code, 403)
 
 
 if __name__ == "__main__":

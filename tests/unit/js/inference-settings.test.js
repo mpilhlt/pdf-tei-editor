@@ -200,6 +200,58 @@ describe('InferenceSettingsPlugin.getModelLabel', () => {
   });
 });
 
+describe('InferenceSettingsPlugin.getModels', () => {
+  const kisski = {
+    id: 'kisski', label: 'KISSKI', models: [
+      { id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null },
+      { id: 'llama-3', label: 'Llama 3', capabilities: ['chat'], status: null },
+    ]
+  };
+  const anthropic = {
+    id: 'anthropic', label: 'Anthropic', models: [
+      { id: 'opus', label: 'Opus', capabilities: ['chat'], status: null },
+    ]
+  };
+
+  /** @param {Array<object>} providers */
+  function stubFetch(plugin, providers) {
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        llmProviders: async () => providers,
+        llmListDefaultModel: async () => null,
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+  }
+
+  it('returns an empty list before the first fetch', () => {
+    const plugin = makePlugin();
+    assert.deepStrictEqual(plugin.getModels(), []);
+  });
+
+  it('flattens the fetched models in provider order, with labels from getModelLabel', async () => {
+    const plugin = makePlugin();
+    stubFetch(plugin, [kisski, { id: 'google', label: 'Google Gemini', models: [] }, anthropic]);
+    await plugin._refresh();
+    assert.deepStrictEqual(plugin.getModels(), [
+      { providerId: 'kisski', modelId: 'gemma-3', label: 'KISSKI/Gemma 3' },
+      { providerId: 'kisski', modelId: 'llama-3', label: 'KISSKI/Llama 3' },
+      { providerId: 'anthropic', modelId: 'opus', label: 'Anthropic/Opus' },
+    ]);
+  });
+
+  it('reflects the list of a later refresh', async () => {
+    const plugin = makePlugin();
+    stubFetch(plugin, [kisski, anthropic]);
+    await plugin._refresh();
+    stubFetch(plugin, [{ ...kisski, models: [kisski.models[1]] }]);
+    await plugin._refresh();
+    assert.deepStrictEqual(plugin.getModels(), [
+      { providerId: 'kisski', modelId: 'llama-3', label: 'KISSKI/Llama 3' },
+    ]);
+  });
+});
+
 describe('InferenceSettingsPlugin._buildModelItem', () => {
   it('builds a checkbox item with provider/model data attributes', () => {
     const plugin = makePlugin();

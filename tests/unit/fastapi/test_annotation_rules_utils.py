@@ -13,6 +13,7 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
     _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
+    absolutize_markdown_urls,
     derelativize_markdown_urls,
     fetch_rule_section,
     heading_anchor_at_line,
@@ -275,6 +276,30 @@ class TestRewriteRelativeMarkdownUrls(unittest.TestCase):
     def test_resolves_parent_relative_path_against_base(self):
         result = _rewrite_relative_markdown_urls("[link](../other.md)", self.BASE)
         self.assertEqual(result, "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)")
+
+
+class TestAbsolutizeMarkdownUrls(unittest.TestCase):
+    """The rewrite fetch_rule_excerpt() applies to a markdown resource, against its raw directory URL."""
+
+    BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guide.md#some-heading"
+    RAW_DIR = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/"
+
+    def test_rewrites_relative_targets_against_the_raw_directory(self):
+        text = "![alt](img/foo.png) and [link](../other.md)"
+        self.assertEqual(
+            absolutize_markdown_urls(text, self.BASE_URL),
+            f"![alt]({self.RAW_DIR}img/foo.png) and [link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)",
+        )
+
+    def test_round_trips_with_derelativize(self):
+        relative = "![alt](img/foo.png) and [link](../other.md) and [x](https://example.com/a.png)"
+        absolute = absolutize_markdown_urls(relative, self.BASE_URL)
+        self.assertEqual(derelativize_markdown_urls(absolute, self.BASE_URL), relative)
+        self.assertEqual(absolutize_markdown_urls(derelativize_markdown_urls(absolute, self.BASE_URL), self.BASE_URL), absolute)
+
+    def test_returns_text_unchanged_for_non_markdown_url(self):
+        text = "![alt](img/foo.png)"
+        self.assertEqual(absolutize_markdown_urls(text, "https://github.com/mpilhlt/fossil/blob/main/schema/tei.xml"), text)
 
 
 class TestDerelativizeMarkdownUrls(unittest.TestCase):

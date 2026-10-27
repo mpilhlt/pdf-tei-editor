@@ -1,0 +1,19 @@
+<sl-dialog name="documentRulesUpdateDialog" label="Update machine rules from guide" style="--width: 80vw;">
+  <div name="notice" style="display: none; margin-bottom: 0.75rem; font-size: var(--sl-font-size-small);"></div>
+
+  <div name="humanDiffHeading" style="font-weight: var(--sl-font-weight-semibold); margin-bottom: 0.25rem;">Change in the guide</div>
+  <div name="humanDiff" style="border: 1px solid var(--sl-color-neutral-300); margin-bottom: 0.75rem;"></div>
+
+  <div name="modelRow" style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
+    <sl-select name="modelSelect" size="small" style="flex: 1;"></sl-select>
+    <sl-button name="generateBtn" variant="primary" size="small">Generate</sl-button>
+  </div>
+
+  <div name="proposedHeading" style="display: none; font-weight: var(--sl-font-weight-semibold); margin-bottom: 0.25rem;">Proposed machine rules</div>
+  <div name="proposedDiff" style="display: none; border: 1px solid var(--sl-color-neutral-300);"></div>
+
+  <div slot="footer" style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+    <sl-button name="acceptBtn" size="small" variant="primary" disabled>Accept as new override</sl-button>
+    <sl-button name="closeBtn" size="small">Close</sl-button>
+  </div>
+</sl-dialog>

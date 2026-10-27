@@ -8,13 +8,17 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 Handlers that may fetch a rule file (blocking `requests` calls, e.g. via
 ResourceKind.resource_key() or resolve_original()) are plain `def`, so
 FastAPI runs them in its threadpool instead of on the event loop.
+/update-from-guide is an `async def` (it awaits the language model) and runs
+its blocking parts in the threadpool via run_in_threadpool().
 """
 
 import hashlib
 import logging
-from typing import Literal, Optional
+from typing import Optional
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ..config import get_settings
 from ..lib.core.database import DatabaseManager
@@ -27,7 +31,19 @@ from ..lib.core.dependencies import (
 )
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
+from ..lib.doc_rules.condense_prompt import resolve_condense_prompt
 from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
+from ..lib.doc_rules.guide_update import (
+    GuideChange,
+    LayerSource,
+    OriginalUnavailableError,
+    build_update_prompts,
+    clean_model_answer,
+    gather_guide_change,
+    guide_unchanged,
+    layer_text,
+)
+from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
@@ -38,7 +54,10 @@ from ..lib.doc_rules.rules_refresh import (
     resolve_refresh_target,
 )
 from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
+from ..lib.llm import LLMProviderError, LLMProviderRegistry
+from ..lib.llm.model_access import ModelAccessDenied, check_model_access
 from ..lib.repository.file_repository import FileRepository
+from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.annotation_rules_utils import (
     RuleFetchError,
@@ -51,6 +70,8 @@ from ..lib.utils.annotation_rules_utils import (
 )
 from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
+    HumanChangeRequest,
+    HumanChangeResponse,
     ListResourcesRequest,
     ListResourcesResponse,
     OkResponse,
@@ -74,6 +95,8 @@ from ..lib.models.models_document_rules import (
     SetSelectionRequest,
     SyncStatusRequest,
     SyncStatusResponse,
+    UpdateFromGuideRequest,
+    UpdateFromGuideResponse,
     UpdateOverrideRequest,
 )
 
@@ -464,6 +487,15 @@ def refresh_resource(
     )
 
 
+def _layer_text_or_502(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> tuple[str, LayerSource]:
+    """layer_text(), with a failure to resolve the original reported as 502."""
+    try:
+        return layer_text(kind, url, store, owner)
+    except OriginalUnavailableError as e:
+        logger.error(f"Failed to resolve original text for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+
 @router.post("/sync-status", response_model=SyncStatusResponse)
 def get_sync_status(
     request: SyncStatusRequest,
@@ -475,24 +507,11 @@ def get_sync_status(
     in sync, per the sync marker in the machine section. Each layer's text is
     the caller's selected override if there is one, else the original.
     """
-    kind = get_resource_kind("interpretation-ref")
-    if kind is None:
-        raise HTTPException(status_code=500, detail="Resource kind interpretation-ref is not registered")
+    kind = _interpretation_ref_kind()
     owner = user["username"]
-
-    def layer_text(url: str) -> tuple[str, Literal["original", "override"]]:
-        override_text = store.get_selected_override_text(kind.name, _resource_key(kind, url), owner)
-        if override_text is not None:
-            return override_text, "override"
-        try:
-            return kind.resolve_original(url), "original"
-        except Exception as e:
-            logger.error(f"Failed to resolve original text for {url}: {e}")
-            raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
-
-    human_text, human_source = layer_text(request.human_url)
-    machine_text, machine_source = layer_text(request.machine_url)
-    status = sync_status(human_text, machine_text, request.human_url)
+    human_text, human_source = _layer_text_or_502(kind, request.human_url, store, owner)
+    machine_text, machine_source = _layer_text_or_502(kind, request.machine_url, store, owner)
+    status = sync_status(human_text, machine_text, request.human_url, request.machine_url)
     marker = parse_sync_marker(machine_text)
     synced_commit: Optional[str] = None
     if marker is not None and status in ("machine_outdated", "both_changed"):
@@ -504,4 +523,118 @@ def get_sync_status(
         machine_source=machine_source,
         base=marker.base if marker is not None else None,
         synced_commit=synced_commit,
+    )
+
+
+def _interpretation_ref_kind() -> InterpretationRefKind:
+    kind = get_resource_kind("interpretation-ref")
+    if not isinstance(kind, InterpretationRefKind):
+        raise HTTPException(status_code=500, detail="Resource kind interpretation-ref is not registered")
+    return kind
+
+
+def _gather_guide_change_or_502(human_url: str, machine_url: str, store: DocumentRulesStore, owner: str) -> GuideChange:
+    """gather_guide_change(), with a failure to resolve an original reported as 502."""
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        return gather_guide_change(_interpretation_ref_kind(), human_url, machine_url, store, owner, cache)
+    except OriginalUnavailableError as e:
+        logger.error(f"Failed to resolve original text for {human_url} or {machine_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+
+def _upstream_error_message(error: requests.RequestException) -> str:
+    """The provider's own error message if the failed response carries one, else the exception text."""
+    if error.response is not None:
+        try:
+            message = error.response.json().get("error", {}).get("message")
+        except (ValueError, AttributeError):
+            message = None
+        if isinstance(message, str) and message:
+            return message
+    return str(error)
+
+
+def _llm_request_error(provider_id: str, error: LLMProviderError | requests.RequestException) -> HTTPException:
+    """The 502 for a failed request to the language model provider (logged)."""
+    logger.warning(f"document-rules: provider '{provider_id}' failed: {error}")
+    message = _upstream_error_message(error) if isinstance(error, requests.RequestException) else str(error)
+    return HTTPException(status_code=502, detail=f"LLM provider request failed: {message}")
+
+
+@router.post("/human-change", response_model=HumanChangeResponse)
+def get_human_change(
+    request: HumanChangeRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> HumanChangeResponse:
+    """
+    The change of a human guideline section since its machine section was
+    last synced (delta mode), or the whole section if no sync base is found
+    (align mode), together with the current machine section. Each layer's
+    text is the caller's selected override if there is one, else the original.
+    """
+    change = _gather_guide_change_or_502(request.human_url, request.machine_url, store, user["username"])
+    return HumanChangeResponse(
+        mode=change.mode,
+        old_human=change.old_human,
+        new_human=change.new_human,
+        machine=change.machine_full,
+        base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
+    )
+
+
+@router.post("/update-from-guide", response_model=UpdateFromGuideResponse)
+async def update_from_guide(
+    request: UpdateFromGuideRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> UpdateFromGuideResponse:
+    """
+    Have a language model update the machine section from the change of its
+    human section (see /human-change) and return the proposed text. Nothing is
+    stored; the caller saves an accepted proposal as an override.
+    """
+    owner = user["username"]
+    try:
+        # reads the user's stored secret, so it runs off the event loop
+        provider = await run_in_threadpool(LLMProviderRegistry.get_instance().get_provider_for_user, request.provider_id, owner)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    try:
+        # may list the provider's models, so its connection errors are handled like those of the completion
+        await run_in_threadpool(check_model_access, provider, request.model_id, user)
+    except ModelAccessDenied as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
+
+    change = await run_in_threadpool(_gather_guide_change_or_502, request.human_url, request.machine_url, store, owner)
+    try:
+        condense_prompt = await run_in_threadpool(resolve_condense_prompt, request.xml, request.human_url)
+    except Exception as e:
+        logger.exception(f"Could not resolve the condensing prompt for {request.human_url}")
+        raise HTTPException(status_code=500, detail="Could not resolve the condensing prompt") from e
+    system_prompt, user_prompt = build_update_prompts(change, condense_prompt)
+
+    try:
+        answer = await provider.chat_completion(request.model_id, system_prompt, user_prompt, temperature=0.2)
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
+
+    try:
+        proposed = clean_model_answer(answer, change)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return UpdateFromGuideResponse(
+        mode=change.mode,
+        old_human=change.old_human,
+        new_human=change.new_human,
+        machine=change.machine_full,
+        proposed=proposed,
+        base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
     )
