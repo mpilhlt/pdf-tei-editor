@@ -12,7 +12,7 @@ FastAPI runs them in its threadpool instead of on the event loop.
 
 import hashlib
 import logging
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -28,6 +28,8 @@ from ..lib.core.dependencies import (
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
 from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
+from ..lib.doc_rules.guide_update import LayerSource, layer_text
+from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.rules_refresh import (
@@ -464,6 +466,15 @@ def refresh_resource(
     )
 
 
+def _layer_text_or_502(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> tuple[str, LayerSource]:
+    """layer_text(), with a failure to resolve the original reported as 502."""
+    try:
+        return layer_text(kind, url, store, owner)
+    except Exception as e:
+        logger.error(f"Failed to resolve original text for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+
 @router.post("/sync-status", response_model=SyncStatusResponse)
 def get_sync_status(
     request: SyncStatusRequest,
@@ -476,22 +487,11 @@ def get_sync_status(
     the caller's selected override if there is one, else the original.
     """
     kind = get_resource_kind("interpretation-ref")
-    if kind is None:
+    if not isinstance(kind, InterpretationRefKind):
         raise HTTPException(status_code=500, detail="Resource kind interpretation-ref is not registered")
     owner = user["username"]
-
-    def layer_text(url: str) -> tuple[str, Literal["original", "override"]]:
-        override_text = store.get_selected_override_text(kind.name, _resource_key(kind, url), owner)
-        if override_text is not None:
-            return override_text, "override"
-        try:
-            return kind.resolve_original(url), "original"
-        except Exception as e:
-            logger.error(f"Failed to resolve original text for {url}: {e}")
-            raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
-
-    human_text, human_source = layer_text(request.human_url)
-    machine_text, machine_source = layer_text(request.machine_url)
+    human_text, human_source = _layer_text_or_502(kind, request.human_url, store, owner)
+    machine_text, machine_source = _layer_text_or_502(kind, request.machine_url, store, owner)
     status = sync_status(human_text, machine_text, request.human_url)
     marker = parse_sync_marker(machine_text)
     synced_commit: Optional[str] = None
