@@ -87,6 +87,15 @@ sl-dialog[name="dialog"] {
   --sl-z-index-dialog: 900;
 }
 
+/* The API keys dialog (api-keys.js) is also opened from inside other
+   sl-dialogs, as a prompt for a key a request in that dialog needs (e.g.
+   Generate in document-rules' "Update machine rules from guide"), so it
+   gets the same boost for the same reason. It stays below the generic
+   dialog above, which it uses itself to confirm "Remove all keys". */
+sl-dialog[name="apiKeysDialog"] {
+  --sl-z-index-dialog: 850;
+}
+
 div[name = "xmlEditor"] tool-bar sl-button {
   max-height: 19px;
 }

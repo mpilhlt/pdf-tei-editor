@@ -616,6 +616,54 @@ test.describe('Document rules registry', () => {
       }
     });
 
+    test('asks for a missing API key on top of the update dialog', async ({ page }) => {
+      const consoleLogs = setupTestConsoleCapture(page);
+      // the mocked 428 below is logged by the browser
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, [...ALLOWED_ERROR_PATTERNS, 'Failed to load resource.*428']);
+      /** @type {http.Server | null} */
+      let server = null;
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
+        // test-secret-service is registered by the test plugin (tests/fixtures/plugins/test_plugin/)
+        await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
+          status: 428,
+          json: { detail: { code: 'secret_required', message: 'Test Service needs your API key', service: 'test-secret-service', label: 'Test Service', description: '', help_url: '' } }
+        }));
+
+        const dialog = await openMachineTab(page);
+        await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+        const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+        await expect(updateDialog).toHaveAttribute('open', '');
+        await page.waitForTimeout(500);
+        await updateDialog.locator('sl-button[name="generateBtn"]').click();
+
+        const keyDialog = page.locator('sl-dialog[name="apiKeysDialog"]');
+        await expect(keyDialog).toHaveAttribute('open', '');
+        const keyInput = keyDialog.locator('sl-input[label="Test Service"]');
+        await expect(keyInput).toBeVisible();
+        await page.waitForTimeout(500);
+        // The topmost element at the input's center belongs to the key dialog, not the update dialog
+        const onTop = await keyInput.evaluate((input) => {
+          const rect = input.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return hit !== null && /** @type {Element} */ (input.closest('sl-dialog')).contains(hit);
+        });
+        expect(onTop).toBe(true);
+        await keyInput.click({ timeout: 5000 });
+
+        await keyDialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(keyDialog).not.toHaveAttribute('open', '');
+        await updateDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
     test('tells the user when no language model is available for updating from the guide', async ({ page }) => {
       const consoleLogs = setupTestConsoleCapture(page);
       const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
