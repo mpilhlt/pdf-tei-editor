@@ -726,6 +726,23 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.deepStrictEqual(plugin._currentOverrides, [created]);
   });
 
+  it('_onNewOverride shows the new override in the row even when selecting it fails', async () => {
+    const plugin = setup();
+    const created = { id: 'ov1', note: '', text: 'original text', format: 'markdown', created_at: '', updated_at: '' };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesOverrides: async () => created,
+        documentRulesSelection: async () => { throw new Error('selection failed'); },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onNewOverride();
+    assert.strictEqual(plugin._currentSelectedId, null);
+    const labels = [...plugin._editorDialogUi.overrideRow.children].map(b => b.textContent);
+    assert.deepStrictEqual(labels, ['Original', 'Override 1']);
+    assert.match(notifyCalls[0][0], /selection failed/);
+  });
+
   it('_onSave persists the note and shown text for the selected override, rebased on the shown resource', async () => {
     const plugin = setup();
     plugin._currentOverrides = [{ id: 'ov1', note: 'old note', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
@@ -2181,7 +2198,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
   it('_onAcceptProposal creates a machine override with the model note and the proposal, selects it and closes', async () => {
     const { plugin, requests } = setup();
     const selected = [];
-    plugin._selectOverride = async (id) => { selected.push(id); };
+    plugin._selectOverride = async (id) => { selected.push(id); plugin._currentSelectedId = id; };
     await plugin._openUpdateDialog();
     await plugin._onGenerate();
     // The note names the model the proposal was generated with, not a later choice
@@ -2198,7 +2215,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     const { plugin } = setup();
     const selected = [];
     const opened = [];
-    plugin._selectOverride = async (id) => { selected.push(id); };
+    plugin._selectOverride = async (id) => { selected.push(id); plugin._currentSelectedId = id; };
     plugin._openResourceEditor = async (resource) => {
       opened.push(resource);
       plugin._currentResource = resource;
@@ -2247,6 +2264,93 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(mergeViews.length, 1);
     assert.strictEqual(plugin._proposedMachineText, null);
     assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, true);
+  });
+
+  it('_onGenerate drops an error that arrives after the dialog was reopened, leaving the new session\'s buttons alone', async () => {
+    const rejects = [];
+    const { plugin } = setup({ api: { documentRulesUpdateFromGuide: () => new Promise((resolve, reject) => { rejects.push(reject); }) } });
+    await plugin._openUpdateDialog();
+    const stale = plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    await plugin._openUpdateDialog();
+    plugin._onGenerate();
+    rejects[0](new Error('stale failure'));
+    await stale;
+    const { generateBtn } = plugin._updateDialogUi.modelRow;
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.strictEqual(generateBtn.disabled, true);
+    assert.strictEqual(generateBtn.loading, true);
+  });
+
+  it('_onAcceptProposal called twice concurrently creates only one override, with accept and generate disabled meanwhile', async () => {
+    let resolveCreate;
+    const created = [];
+    const { plugin } = setup({ api: { documentRulesOverrides: (body) => { created.push(body); return new Promise((resolve) => { resolveCreate = resolve; }); } } });
+    plugin._selectOverride = async (id) => { plugin._currentSelectedId = id; };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    const ui = plugin._updateDialogUi;
+    const first = plugin._onAcceptProposal();
+    const second = plugin._onAcceptProposal();
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.acceptBtn.loading, true);
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, true);
+    resolveCreate({ id: 'ov-new', note: '', text: '', format: 'markdown', created_at: '', updated_at: '' });
+    await Promise.all([first, second]);
+    assert.strictEqual(created.length, 1);
+  });
+
+  it('_onAcceptProposal re-enables accept and generate when creating the override fails', async () => {
+    const { plugin } = setup({ api: { documentRulesOverrides: async () => { throw new Error('nope'); } } });
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(ui.acceptBtn.disabled, false);
+    assert.strictEqual(ui.acceptBtn.loading, false);
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+  });
+
+  it('_onAcceptProposal drops the proposal and closes once the override exists, even if the layer switch fails', async () => {
+    const { plugin, requests } = setup();
+    let selectedCalls = 0;
+    plugin._selectOverride = async () => { selectedCalls++; };
+    // A failed switch leaves the human layer open (and has notified already)
+    plugin._openResourceEditor = async () => {};
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._currentResource = human;
+    await plugin._onAcceptProposal();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._proposedModel, null);
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.open, false);
+    assert.strictEqual(selectedCalls, 0);
+    await plugin._onAcceptProposal();
+    assert.strictEqual(requests.overrides.length, 1);
+  });
+
+  it('_onAcceptProposal shows the new override in the row and closes when selecting it fails', async () => {
+    const { plugin } = setup({ api: { documentRulesSelection: async () => { throw new Error('selection failed'); } } });
+    plugin._cmMdView = makeCmMdViewMock();
+    plugin._md = { render: (text) => text };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    const labels = [...plugin._editorDialogUi.overrideRow.children].map(b => b.textContent);
+    assert.deepStrictEqual(labels, ['Original', 'Override 1']);
+    assert.strictEqual(plugin._currentSelectedId, null);
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.match(notifyCalls[0][0], /selection failed/);
+  });
+
+  it('onXmlChange hides the sub-dialog', () => {
+    const { plugin } = setup();
+    plugin._refreshResources = () => {};
+    plugin._updateDialogUi.open = true;
+    plugin.onXmlChange();
+    assert.strictEqual(plugin._updateDialogUi.open, false);
   });
 
   it('_createMergeView builds a read-only CodeMirror view showing the modified text', () => {

@@ -970,6 +970,8 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._currentOverrides.push(override)
     await this._selectOverride(override.id)
+    // A failed selection (already notified) still has to show the new override in the row
+    if (this._currentSelectedId !== override.id) this._renderEditorDialog()
   }
 
   /**
@@ -1263,8 +1265,9 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Ask the selected model for machine rules updated to the guide change
    * (POST /document-rules/update-from-guide) and show them as a diff against
-   * the current machine rules. A response that arrives after the sub-dialog
-   * was closed or reopened is dropped.
+   * the current machine rules. A response or error that arrives after the
+   * sub-dialog was closed or reopened is dropped, leaving the new session's
+   * buttons alone (_resetUpdateDialog() has already reset them).
    * @returns {Promise<void>}
    */
   async _onGenerate() {
@@ -1285,13 +1288,15 @@ class DocumentRulesPlugin extends Plugin {
         model_id: model.modelId
       })
     } catch (error) {
-      notify(`Could not update the machine rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
-      return
-    } finally {
+      if (session !== this._updateDialogSession) return
       generateBtn.disabled = false
       generateBtn.loading = false
+      notify(`Could not update the machine rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
     }
     if (session !== this._updateDialogSession) return
+    generateBtn.disabled = false
+    generateBtn.loading = false
     const ui = this._updateDialogUi
     this._proposedDiffView?.destroy()
     this._proposedDiffView = this._createMergeView(ui.proposedDiff, response.machine, response.proposed)
@@ -1306,13 +1311,20 @@ class DocumentRulesPlugin extends Plugin {
    * Save the proposed machine rules as a new override of the machine layer,
    * note naming the model that generated them, select it (switching the
    * editor dialog to the machine layer first if needed) and close the
-   * sub-dialog.
+   * sub-dialog. Accept and Generate stay disabled while the override is
+   * created, so a double click cannot create it twice; once it exists, the
+   * proposal is dropped and the sub-dialog closes even if the layer switch
+   * or the selection fails.
    * @returns {Promise<void>}
    */
   async _onAcceptProposal() {
     const { machine } = this._currentPair()
-    if (!machine || this._proposedMachineText === null || this._proposedModel === null) return
+    const ui = this._updateDialogUi
+    if (!machine || ui.acceptBtn.disabled || this._proposedMachineText === null || this._proposedModel === null) return
     const modelLabel = this.#inferenceSettings.getModelLabel(this._proposedModel.providerId, this._proposedModel.modelId)
+    ui.acceptBtn.disabled = true
+    ui.acceptBtn.loading = true
+    ui.modelRow.generateBtn.disabled = true
     let override
     try {
       override = await this.#client.apiClient.documentRulesOverrides({
@@ -1322,18 +1334,29 @@ class DocumentRulesPlugin extends Plugin {
         text: this._proposedMachineText
       })
     } catch (error) {
+      ui.acceptBtn.disabled = false
+      ui.acceptBtn.loading = false
+      ui.modelRow.generateBtn.disabled = false
       notify(`Could not create override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
     }
+    ui.acceptBtn.loading = false
+    this._proposedMachineText = null
+    this._proposedModel = null
     if (this._currentResource !== machine) {
       await this._openResourceEditor(machine)
       // _openResourceEditor() has already notified a failed switch
-      if (this._currentResource !== machine) return
+      if (this._currentResource !== machine) {
+        await ui.hide()
+        return
+      }
     }
     // A layer switch re-queried the overrides, which then already list this one
     if (!this._currentOverrides.some(o => o.id === override.id)) this._currentOverrides.push(override)
     await this._selectOverride(override.id)
-    await this._updateDialogUi.hide()
+    // A failed selection (already notified) still has to show the new override in the row
+    if (this._currentSelectedId !== override.id) this._renderEditorDialog()
+    await ui.hide()
   }
 
   /**
@@ -1352,6 +1375,9 @@ class DocumentRulesPlugin extends Plugin {
     ui.proposedHeading.style.display = 'none'
     ui.proposedDiff.style.display = 'none'
     ui.acceptBtn.disabled = true
+    ui.acceptBtn.loading = false
+    ui.modelRow.generateBtn.disabled = false
+    ui.modelRow.generateBtn.loading = false
   }
 
   /**
