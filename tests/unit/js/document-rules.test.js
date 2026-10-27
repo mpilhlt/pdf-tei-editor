@@ -1996,7 +1996,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     { providerId: 'p2', modelId: 'm2', label: 'Provider 2/Model 2' },
   ];
 
-  const humanChange = { mode: 'delta', old_human: '# G\n\nold', new_human: '# G\n\nnew', machine: '# M\n\nrules', base_commit: 'abc' };
+  const humanChange = { mode: 'delta', old_human: '# G\n\nold', new_human: '# G\n\nnew', machine: '# M\n\nrules', base_commit: 'abc', unchanged: false };
 
   /**
    * A minimal stand-in for `_updateDialogUi`, mirroring the named parts of
@@ -2134,7 +2134,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
 
   it('_openUpdateDialog in align mode shows the align notice and diffs against an empty guide', async () => {
     const { plugin, mergeViews } = setup({ api: {
-      documentRulesHumanChange: async () => ({ mode: 'align', old_human: null, new_human: '# G\n\nnew', machine: '# M', base_commit: null }),
+      documentRulesHumanChange: async () => ({ mode: 'align', old_human: null, new_human: '# G\n\nnew', machine: '# M', base_commit: null, unchanged: false }),
     } });
     await plugin._openUpdateDialog();
     const ui = plugin._updateDialogUi;
@@ -2143,9 +2143,10 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(ui.notice.textContent.trim(), 'No sync base found: the model compares the whole guide section with the machine rules.');
   });
 
-  it('_openUpdateDialog shows the unchanged notice when the guide section has not changed', async () => {
+  it('_openUpdateDialog shows the unchanged notice when the backend reports the guide section unchanged', async () => {
+    // The texts differ only in a way the section hash ignores
     const { plugin } = setup({ api: {
-      documentRulesHumanChange: async () => ({ mode: 'delta', old_human: '# G', new_human: '# G', machine: '# M', base_commit: 'abc' }),
+      documentRulesHumanChange: async () => ({ mode: 'delta', old_human: '# G\r\n', new_human: '# G\n', machine: '# M', base_commit: 'abc', unchanged: true }),
     } });
     await plugin._openUpdateDialog();
     assert.strictEqual(plugin._updateDialogUi.notice.textContent.trim(), 'The guide section has not changed since the last sync.');

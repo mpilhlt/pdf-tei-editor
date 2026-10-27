@@ -870,6 +870,7 @@
  * @property {string} new_human
  * @property {string} machine
  * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
  */
 
 /**
@@ -889,6 +890,7 @@
  * @property {string} machine
  * @property {string} proposed
  * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
  */
 
 /**

@@ -40,6 +40,7 @@ from ..lib.doc_rules.guide_update import (
     build_update_prompts,
     clean_model_answer,
     gather_guide_change,
+    guide_unchanged,
     layer_text,
 )
 from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
@@ -580,6 +581,7 @@ def get_human_change(
         new_human=change.new_human,
         machine=change.machine_full,
         base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
     )
 
 
@@ -634,4 +636,5 @@ async def update_from_guide(
         machine=change.machine_full,
         proposed=proposed,
         base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
     )

@@ -584,7 +584,7 @@ test.describe('Document rules registry', () => {
         server = await startRulesServer(TWO_LAYER_PORT);
         await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
         await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
-          json: { mode: 'align', old_human: null, new_human: 'Human guide text for data correction.', machine: 'Machine rule text.', proposed: PROPOSED_MACHINE_TEXT }
+          json: { mode: 'align', old_human: null, new_human: 'Human guide text for data correction.', machine: 'Machine rule text.', proposed: PROPOSED_MACHINE_TEXT, unchanged: false }
         }));
 
         const dialog = await openMachineTab(page);

@@ -1218,7 +1218,7 @@ class DocumentRulesPlugin extends Plugin {
     const notices = []
     if (change.mode === 'align') {
       notices.push(ALIGN_MODE_NOTICE)
-    } else if (change.old_human === change.new_human) {
+    } else if (change.unchanged) {
       notices.push(UNCHANGED_GUIDE_NOTICE)
     }
     if (this._updateModels.length === 0) notices.push(NO_MODEL_NOTICE)

@@ -243,13 +243,15 @@ class HumanChangeResponse(BaseModel):
     was found (`old_human` and `base_commit` set), else "align". `old_human`
     and `new_human` have their same-repository links in relative form;
     `machine` is the user's machine text, sync marker included, with its links
-    in the absolute form of an override.
+    in the absolute form of an override. `unchanged` is True in delta mode
+    if the human section has not changed since the sync (same hash).
     """
     mode: Literal["delta", "align"]
     old_human: Optional[str] = None
     new_human: str
     machine: str
     base_commit: Optional[str] = None
+    unchanged: bool
 
 
 class UpdateFromGuideRequest(BaseModel):
@@ -273,3 +275,4 @@ class UpdateFromGuideResponse(BaseModel):
     machine: str
     proposed: str
     base_commit: Optional[str] = None
+    unchanged: bool

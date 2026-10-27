@@ -866,6 +866,24 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         self.assertIsNone(body["old_human"])
         self.assertIsNone(body["base_commit"])
 
+    def test_human_change_reports_a_changed_guide(self):
+        self.assertIs(self._human_change().json()["unchanged"], False)
+
+    def test_human_change_reports_an_unchanged_guide(self):
+        self.texts[self.HUMAN_URL] = self.OLD_HUMAN
+        self.assertIs(self._human_change().json()["unchanged"], True)
+
+    def test_human_change_in_align_mode_is_never_unchanged(self):
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        self.assertIs(self._human_change().json()["unchanged"], False)
+
+    def test_update_reports_whether_the_guide_changed(self):
+        self.assertIs(self._update().json()["unchanged"], False)
+        self.texts[self.HUMAN_URL] = self.OLD_HUMAN
+        self.assertIs(self._update().json()["unchanged"], True)
+        self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
+        self.assertIs(self._update().json()["unchanged"], False)
+
     def test_human_change_unresolvable_original_is_502(self):
         self.texts.pop(self.MACHINE_URL)
         self.assertEqual(self._human_change().status_code, 502)

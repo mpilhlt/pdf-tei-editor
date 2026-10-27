@@ -16,7 +16,12 @@ from typing import Literal, Optional
 from fastapi_app.lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.doc_rules.condense_prompt import DEFAULT_CONDENSE_PROMPT
-from fastapi_app.lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, split_sync_marker
+from fastapi_app.lib.doc_rules.guide_sync import (
+    find_synced_human_commit,
+    human_section_hash,
+    parse_sync_marker,
+    split_sync_marker,
+)
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.utils.annotation_rules_utils import (
@@ -162,6 +167,11 @@ def gather_guide_change(
         human_source=human_source,
         machine_source=machine_source,
     )
+
+
+def guide_unchanged(change: GuideChange, human_url: str) -> bool:
+    """Whether the human section is the one the machine section was synced with; always False in align mode."""
+    return change.old_human is not None and human_section_hash(change.old_human, human_url) == human_section_hash(change.new_human, human_url)
 
 
 def build_update_prompts(change: GuideChange, condense_prompt: str) -> tuple[str, str]:
