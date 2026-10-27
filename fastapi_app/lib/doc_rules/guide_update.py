@@ -214,12 +214,18 @@ def _first_heading_index(lines: list[str]) -> Optional[int]:
     return None
 
 
+def _heading_level(line: str) -> int:
+    """The level of the Markdown heading `line`."""
+    return len(line) - len(line.lstrip("#"))
+
+
 def clean_model_answer(answer: str, change: GuideChange) -> str:
     """
     The model's answer as machine rules: with `\\n` line endings, unwrapped
     from a surrounding code fence, without any sync marker it contains,
-    without a preamble before its first heading, headed by the machine
-    section's heading if it has none at all, with the
+    without a preamble before a heading at the machine section's heading
+    level or above, else headed by the machine section's heading (an answer
+    whose first heading is deeper is the section's body), with the
     original sync marker line inserted after the heading (on top if there is
     no heading), and with relative links made absolute against
     `change.machine_url`, the form of `change.machine_full`.
@@ -236,12 +242,13 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
         raise ValueError("The model returned no machine rules")
     lines = text.split("\n")
     heading_index = _first_heading_index(lines)
-    if heading_index is not None:
+    machine_heading = next((line for line in change.machine.splitlines() if _HEADING_RE.match(line)), None)
+    if heading_index is not None and machine_heading is not None and _heading_level(lines[heading_index]) <= _heading_level(machine_heading):
+        # what precedes a heading at the machine section's level (or above) is a preamble
         text = "\n".join(lines[heading_index:])
-    else:
-        heading = next((line for line in change.machine.splitlines() if _HEADING_RE.match(line)), None)
-        if heading is not None:
-            text = f"{heading}\n\n{text}"
+    elif machine_heading is not None:
+        # no heading, or a subsection first: the answer is the section's body
+        text = f"{machine_heading}\n\n{text}"
     if change.marker_line is not None:
         if not _HEADING_RE.match(text):
             text = f"{change.marker_line}\n\n{text}"

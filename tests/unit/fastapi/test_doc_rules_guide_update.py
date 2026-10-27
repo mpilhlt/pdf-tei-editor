@@ -313,6 +313,19 @@ class TestCleanModelAnswer(unittest.TestCase):
         self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "## Dates\n\n- b")
         self.assertEqual(clean_model_answer(answer, _change()), f"## Dates\n\n{MARKER}\n\n- b")
 
+    def test_rules_before_a_subsection_are_kept_under_the_machine_heading(self):
+        answer = "- rule a\n- rule b\n\n### Sub\n\n- c"
+        self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "## Dates\n\n" + answer)
+        self.assertEqual(clean_model_answer(answer, _change()), f"## Dates\n\n{MARKER}\n\n" + answer)
+
+    def test_an_answer_starting_with_a_subsection_gets_the_machine_heading(self):
+        answer = "### Sub\n\n- c"
+        self.assertEqual(clean_model_answer(answer, _change()), f"## Dates\n\n{MARKER}\n\n" + answer)
+
+    def test_preamble_before_a_shallower_heading_is_dropped(self):
+        answer = "Here you go:\n\n# Rules\n\n- b"
+        self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "# Rules\n\n- b")
+
     def test_heading_like_lines_in_code_blocks_are_not_headings(self):
         answer = "- r\n\n```bash\n# a comment\n```"
         self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "## Dates\n\n" + answer)
