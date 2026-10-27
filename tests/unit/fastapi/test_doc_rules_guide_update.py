@@ -308,6 +308,15 @@ class TestCleanModelAnswer(unittest.TestCase):
     def test_heading_is_prepended_when_missing(self):
         self.assertEqual(clean_model_answer("- New rule.", _change()), f"## Dates\n\n{MARKER}\n\n- New rule.")
 
+    def test_preamble_before_a_later_heading_is_dropped(self):
+        answer = "Here are the updated machine rules:\n\n## Dates\n\n- b"
+        self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "## Dates\n\n- b")
+        self.assertEqual(clean_model_answer(answer, _change()), f"## Dates\n\n{MARKER}\n\n- b")
+
+    def test_heading_like_lines_in_code_blocks_are_not_headings(self):
+        answer = "- r\n\n```bash\n# a comment\n```"
+        self.assertEqual(clean_model_answer(answer, _change(marker_line=None)), "## Dates\n\n" + answer)
+
     def test_marker_goes_on_top_without_any_heading(self):
         self.assertEqual(clean_model_answer("- r", _change(machine="- old")), f"{MARKER}\n\n- r")
 

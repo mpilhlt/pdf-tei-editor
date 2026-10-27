@@ -189,11 +189,27 @@ def _unfenced(text: str) -> str:
     return body.strip()
 
 
+def _first_heading_index(lines: list[str]) -> Optional[int]:
+    """The index of the first Markdown heading line outside fenced code blocks, or None."""
+    fence: Optional[str] = None
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith(("```", "~~~")):
+                fence = stripped[:3]
+            elif _HEADING_RE.match(line):
+                return index
+        elif stripped.startswith(fence):
+            fence = None
+    return None
+
+
 def clean_model_answer(answer: str, change: GuideChange) -> str:
     """
     The model's answer as machine rules: with `\\n` line endings, unwrapped
     from a surrounding code fence, without any sync marker it contains,
-    headed by the machine section's heading if it has none, with the
+    without a preamble before its first heading, headed by the machine
+    section's heading if it has none at all, with the
     original sync marker line inserted after the heading (on top if there is
     no heading), and with relative links made absolute against
     `change.machine_url`, the form of `change.machine_full`.
@@ -208,7 +224,11 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
     text = text.strip()
     if not text:
         raise ValueError("The model returned no machine rules")
-    if not _HEADING_RE.match(text):
+    lines = text.split("\n")
+    heading_index = _first_heading_index(lines)
+    if heading_index is not None:
+        text = "\n".join(lines[heading_index:])
+    else:
         heading = next((line for line in change.machine.splitlines() if _HEADING_RE.match(line)), None)
         if heading is not None:
             text = f"{heading}\n\n{text}"
