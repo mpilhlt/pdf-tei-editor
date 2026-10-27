@@ -82,7 +82,7 @@ all = [
 [tool.uv.sources]
 pte-plugin-annotation-history = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-history", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
 pte-plugin-annotation-progress = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
-pte-plugin-annotation-review = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-review", rev = "28d6220e0d27cbb89abfa71935b1c6c82f4d2027" }
+pte-plugin-annotation-review = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-review", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
 pte-plugin-anthropic-llm = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
 pte-plugin-archival-edition = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/archival-edition", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
 pte-plugin-collection-overview = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/collection-overview", rev = "f01b5017226d7d671eb063a53691a354108de9de" }
