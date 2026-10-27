@@ -28,7 +28,7 @@ from ..lib.core.dependencies import (
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from ..lib.core.url_cache import UrlCache
 from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
-from ..lib.doc_rules.guide_update import LayerSource, layer_text
+from ..lib.doc_rules.guide_update import LayerSource, OriginalUnavailableError, layer_text
 from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
@@ -470,7 +470,7 @@ def _layer_text_or_502(kind: InterpretationRefKind, url: str, store: DocumentRul
     """layer_text(), with a failure to resolve the original reported as 502."""
     try:
         return layer_text(kind, url, store, owner)
-    except Exception as e:
+    except OriginalUnavailableError as e:
         logger.error(f"Failed to resolve original text for {url}: {e}")
         raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
 

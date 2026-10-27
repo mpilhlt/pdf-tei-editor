@@ -767,6 +767,14 @@ class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
         self.texts.pop(self.MACHINE_URL)
         self.assertEqual(self._post().status_code, 502)
 
+    def test_store_failure_is_not_reported_as_502(self):
+        client = TestClient(self.app, raise_server_exceptions=False)
+        with patch.object(DocumentRulesStore, "get_selected_override_text", side_effect=RuntimeError("db down")):
+            response = client.post(
+                "/document-rules/sync-status", json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL}
+            )
+        self.assertEqual(response.status_code, 500)
+
     def test_non_reviewer_is_forbidden(self):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._post().status_code, 403)

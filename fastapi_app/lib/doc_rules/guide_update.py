@@ -16,10 +16,10 @@ from typing import Literal, Optional
 from fastapi_app.lib.core.git_forge_adapters import GitForgeAdapterRegistry
 from fastapi_app.lib.core.url_cache import UrlCache
 from fastapi_app.lib.doc_rules.condense_prompt import DEFAULT_CONDENSE_PROMPT
-from fastapi_app.lib.doc_rules.guide_sync import _SYNC_RE, find_synced_human_commit, parse_sync_marker
+from fastapi_app.lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, split_sync_marker
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
-from fastapi_app.lib.utils.annotation_rules_utils import fetch_rule_excerpt, markdown_section_range
+from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls, fetch_rule_section
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +50,30 @@ ALIGN_PROMPT_TEMPLATE = """Bring the machine rules in line with the guide sectio
 </machine_rules>"""
 
 _HEADING_RE = re.compile(r"^#{1,6}\s")
-_FENCE_RE = re.compile(r"\A```(?:markdown)?[ \t]*\n(.*?)\n?```\Z", re.DOTALL)
+_FENCE_RE = re.compile(r"\A(`{3,})(markdown|md)?[ \t]*\n(.*?)\n?\1[ \t]*\Z", re.DOTALL)
 _LEADING_BLANK_LINES_RE = re.compile(r"\A(?:[ \t]*\n)+")
+
+
+class OriginalUnavailableError(Exception):
+    """The original text of a layer could not be resolved; the cause is chained."""
 
 
 @dataclass(frozen=True)
 class GuideChange:
-    """The inputs of a machine rules update; see the module docstring."""
+    """
+    The inputs of a machine rules update; see the module docstring.
+
+    All texts have `\\n` line endings and same-repository links in relative
+    form (derelativize_markdown_urls()), so neither line endings nor the ref
+    a text was fetched at show up as changes. `machine_full` is the machine
+    text as the user has it in that form, marker line included: it is what a
+    proposal from clean_model_answer() is diffed against and what it
+    replaces, so their diff shows only the model's changes.
+    """
     old_human: Optional[str]
     new_human: str
-    machine: str  # without the sync marker line
-    machine_full: str  # as the user has it, marker line included
+    machine: str  # machine_full without the sync marker line
+    machine_full: str
     marker_line: Optional[str]
     base_commit: Optional[str]
     human_source: LayerSource
@@ -75,51 +88,50 @@ def layer_text(kind: InterpretationRefKind, url: str, store: DocumentRulesStore,
     """
     The text of `owner`'s selected override of `url`, else its original.
     The key is derived leniently (see InterpretationRefKind.resource_key()).
-    Raises whatever `kind.resolve_original()` raises.
+
+    Raises:
+        OriginalUnavailableError: if resolving the original fails. Store
+            errors propagate unchanged.
     """
     override_text = store.get_selected_override_text(kind.name, kind.resource_key(url), owner)
     if override_text is not None:
         return override_text, "override"
-    return kind.resolve_original(url), "original"
+    try:
+        return kind.resolve_original(url), "original"
+    except Exception as e:
+        raise OriginalUnavailableError(str(e)) from e
 
 
 def human_section_at_commit(human_url: str, sha: str, cache: UrlCache) -> Optional[str]:
     """The section `human_url`'s heading anchor selects in the file at commit `sha`, or None on any failure (logged)."""
     base_url, _, anchor = human_url.partition("#")
+    if not anchor:
+        logger.info(f"No heading anchor in {human_url}, cannot fetch its section at commit {sha}")
+        return None
     adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(base_url)
-    if adapter is None or not anchor:
+    if adapter is None:
+        logger.info(f"No forge adapter handles {base_url}, cannot fetch it at commit {sha}")
         return None
     try:
-        text = fetch_rule_excerpt(adapter.url_at_commit(base_url, sha), cache)
+        return fetch_rule_section(f"{adapter.url_at_commit(base_url, sha)}#{anchor}", cache)
     except Exception as e:
         logger.warning(f"Could not fetch {human_url} at commit {sha}: {e}")
         return None
-    range_ = markdown_section_range(text, anchor)
-    if range_ is None:
-        logger.warning(f"Heading #{anchor} not found in {base_url} at commit {sha}")
-        return None
-    return "\n".join(text.splitlines()[range_[0] - 1:range_[1]])
 
 
-def _split_marker(machine_text: str) -> tuple[str, Optional[str]]:
-    """`machine_text` without its sync marker line (blank lines at the seam collapsed), and that line verbatim."""
-    match = _SYNC_RE.search(machine_text)
-    if match is None:
-        return machine_text, None
-    before = machine_text[:match.start()].rstrip("\n")
-    after = _LEADING_BLANK_LINES_RE.sub("", machine_text[match.end():])
-    stripped = f"{before}\n\n{after}" if before and after else before or after
-    return stripped, match.group(0).rstrip("\n")
+def _normalized(text: str, url: str) -> str:
+    """`text` with `\\n` line endings and its same-repository links relative to `url` (the ref is ignored)."""
+    return derelativize_markdown_urls(text.replace("\r\n", "\n"), url)
 
 
 def gather_guide_change(
-    human_url: str, machine_url: str, store: DocumentRulesStore, owner: str, cache: UrlCache
+    kind: InterpretationRefKind, human_url: str, machine_url: str, store: DocumentRulesStore, owner: str, cache: UrlCache
 ) -> GuideChange:
     """Collect the inputs of a machine rules update for `owner`. Raises what layer_text() raises."""
-    kind = InterpretationRefKind()
     new_human, human_source = layer_text(kind, human_url, store, owner)
     machine_full, machine_source = layer_text(kind, machine_url, store, owner)
-    machine, marker_line = _split_marker(machine_full)
+    machine_full = _normalized(machine_full, machine_url)
+    machine, marker_line = split_sync_marker(machine_full)
     marker = parse_sync_marker(machine_full)
     old_human: Optional[str] = None
     base_commit: Optional[str] = None
@@ -128,10 +140,12 @@ def gather_guide_change(
         if sha is not None:
             old_human = human_section_at_commit(human_url, sha, cache)
             if old_human is not None:
+                # derelativize_markdown_urls() ignores the ref, so human_url serves as base for the commit's text
+                old_human = _normalized(old_human, human_url)
                 base_commit = sha
     return GuideChange(
         old_human=old_human,
-        new_human=new_human,
+        new_human=_normalized(new_human, human_url),
         machine=machine,
         machine_full=machine_full,
         marker_line=marker_line,
@@ -151,19 +165,37 @@ def build_update_prompts(change: GuideChange, condense_prompt: str) -> tuple[str
     return system_prompt, user_prompt
 
 
+def _unfenced(text: str) -> str:
+    """
+    The content of `text` if it is one fenced code block. A fence tagged
+    `markdown`/`md` is always a wrapper; a bare fence is one only if no
+    inner line opens another block with it.
+    """
+    match = _FENCE_RE.match(text)
+    if match is None:
+        return text
+    fence, tag, body = match.groups()
+    if tag is None and any(line.startswith(fence) for line in body.splitlines()):
+        return text
+    return body.strip()
+
+
 def clean_model_answer(answer: str, change: GuideChange) -> str:
     """
-    The model's answer as machine rules: unwrapped from a surrounding code
-    fence, headed by the machine section's heading if it has none, and with
-    the original sync marker line re-inserted after the heading.
+    The model's answer as machine rules: with `\\n` line endings, unwrapped
+    from a surrounding code fence, without any sync marker it contains,
+    headed by the machine section's heading if it has none, and with the
+    original sync marker line inserted after the heading (on top if there is
+    no heading).
 
     Raises:
         ValueError: if nothing is left of the answer.
     """
-    text = answer.strip()
-    fenced = _FENCE_RE.match(text)
-    if fenced is not None and "\n```" not in "\n" + fenced.group(1):
-        text = fenced.group(1).strip()
+    text = _unfenced(answer.replace("\r\n", "\n").strip())
+    marker_line: Optional[str] = ""
+    while marker_line is not None:
+        text, marker_line = split_sync_marker(text)
+    text = text.strip()
     if not text:
         raise ValueError("The model returned no machine rules")
     if not _HEADING_RE.match(text):
@@ -172,6 +204,8 @@ def clean_model_answer(answer: str, change: GuideChange) -> str:
             text = f"{heading}\n\n{text}"
     if change.marker_line is None:
         return text
+    if not _HEADING_RE.match(text):
+        return f"{change.marker_line}\n\n{text}"
     heading_line, _, rest = text.partition("\n")
     rest = _LEADING_BLANK_LINES_RE.sub("", rest)
     return f"{heading_line}\n\n{change.marker_line}\n\n{rest}" if rest else f"{heading_line}\n\n{change.marker_line}"

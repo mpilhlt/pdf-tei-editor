@@ -3,11 +3,11 @@ Tests for fastapi_app/lib/doc_rules/guide_sync.py: sync-marker parsing and
 hashing, checked against real fossil guideline files.
 """
 
+import unittest
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from fastapi_app.lib.core.git_forge_adapters import GitHubAdapter
@@ -18,6 +18,7 @@ from fastapi_app.lib.doc_rules.guide_sync import (
     human_section_hash,
     parse_sync_marker,
     section_hash,
+    split_sync_marker,
     sync_status,
 )
 from fastapi_app.lib.utils.annotation_rules_utils import (
@@ -43,84 +44,94 @@ def _marked(body: str, guide: str, llm: str, base: str | None = None) -> str:
     return f"## Heading\n{format_sync_marker(SyncMarker(guide, llm, base))}\n{body}\n"
 
 
-@pytest.mark.parametrize("anchor", ["data-correction", "document-segmentation-model", "reference-segmentation-model", "citation-model"])
-def test_golden_fossil_sections_are_in_sync(anchor: str) -> None:
-    human = _rewrite_relative_markdown_urls(_slice((FIXTURES / "guidelines.md").read_text(encoding="utf-8"), anchor), RAW_DIR_URL)
-    machine = _slice((FIXTURES / "guidelines-llm.md").read_text(encoding="utf-8"), anchor)
-    assert sync_status(human, machine, HUMAN_URL) == "in_sync"
-
-
 def _synced_pair() -> tuple[str, str]:
     human = "## Heading\nHuman text.\n"
     unmarked = "## Heading\nMachine text.\n"
     return human, _marked("Machine text.", human_section_hash(human, HUMAN_URL), section_hash(unmarked))
 
 
-def test_synced_pair_is_in_sync() -> None:
-    human, machine = _synced_pair()
-    assert sync_status(human, machine, HUMAN_URL) == "in_sync"
+class TestSyncStatus(unittest.TestCase):
+    def test_golden_fossil_sections_are_in_sync(self) -> None:
+        for anchor in ["data-correction", "document-segmentation-model", "reference-segmentation-model", "citation-model"]:
+            with self.subTest(anchor=anchor):
+                human = _rewrite_relative_markdown_urls(_slice((FIXTURES / "guidelines.md").read_text(encoding="utf-8"), anchor), RAW_DIR_URL)
+                machine = _slice((FIXTURES / "guidelines-llm.md").read_text(encoding="utf-8"), anchor)
+                self.assertEqual(sync_status(human, machine, HUMAN_URL), "in_sync")
+
+    def test_synced_pair_is_in_sync(self) -> None:
+        human, machine = _synced_pair()
+        self.assertEqual(sync_status(human, machine, HUMAN_URL), "in_sync")
+
+    def test_human_change_is_outdated(self) -> None:
+        human, machine = _synced_pair()
+        self.assertEqual(sync_status(human + "New line.\n", machine, HUMAN_URL), "machine_outdated")
+
+    def test_machine_change_is_edited(self) -> None:
+        human, machine = _synced_pair()
+        self.assertEqual(sync_status(human, machine + "Edited.\n", HUMAN_URL), "machine_edited")
+
+    def test_both_changed(self) -> None:
+        human, machine = _synced_pair()
+        self.assertEqual(sync_status(human + "New line.\n", machine + "Edited.\n", HUMAN_URL), "both_changed")
+
+    def test_missing_marker_is_no_marker(self) -> None:
+        self.assertEqual(sync_status("## H\nx\n", "## H\ny\n", HUMAN_URL), "no_marker")
+
+    def test_malformed_marker_is_no_marker(self) -> None:
+        machine = "## H\n<!-- sync: guide=xyz llm=123 -->\ny\n"
+        self.assertIsNone(parse_sync_marker(machine))
+        self.assertEqual(sync_status("## H\nx\n", machine, HUMAN_URL), "no_marker")
 
 
-def test_human_change_is_outdated() -> None:
-    human, machine = _synced_pair()
-    assert sync_status(human + "New line.\n", machine, HUMAN_URL) == "machine_outdated"
+class TestSyncMarker(unittest.TestCase):
+    def test_parse_marker_without_base(self) -> None:
+        self.assertEqual(parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} -->\ntext"), SyncMarker(HEX_A, HEX_B, None))
+
+    def test_parse_marker_with_base(self) -> None:
+        self.assertEqual(parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} base={HEX_C} -->\ntext"), SyncMarker(HEX_A, HEX_B, HEX_C))
+
+    def test_format_marker_round_trip(self) -> None:
+        for marker in (SyncMarker(HEX_A, HEX_B, None), SyncMarker(HEX_A, HEX_B, HEX_C)):
+            line = format_sync_marker(marker)
+            self.assertNotIn("\n", line)
+            self.assertEqual("base=" in line, marker.base is not None)
+            self.assertEqual(parse_sync_marker(line), marker)
+
+    def test_split_marker_returns_text_without_marker_and_the_line(self) -> None:
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, HEX_C))
+        self.assertEqual(split_sync_marker(f"## H\n\n{line}\n\ntext\n"), ("## H\n\ntext\n", line))
+
+    def test_split_marker_at_the_start(self) -> None:
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        self.assertEqual(split_sync_marker(f"{line}\n## H\n\ntext"), ("## H\n\ntext", line))
+
+    def test_split_marker_normalizes_crlf(self) -> None:
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        self.assertEqual(split_sync_marker(f"## H\r\n\r\n{line}\r\n\r\ntext\r\n"), ("## H\n\ntext\n", line))
+
+    def test_split_marker_without_marker(self) -> None:
+        self.assertEqual(split_sync_marker("## H\n\ntext"), ("## H\n\ntext", None))
 
 
-def test_machine_change_is_edited() -> None:
-    human, machine = _synced_pair()
-    assert sync_status(human, machine + "Edited.\n", HUMAN_URL) == "machine_edited"
+class TestSectionHash(unittest.TestCase):
+    def test_hash_ignores_crlf_trailing_whitespace_and_blank_lines(self) -> None:
+        self.assertEqual(section_hash("## H\r\nline one  \r\n\r\nline two\t\r\n"), section_hash("## H\nline one\nline two"))
 
+    def test_hash_ignores_sync_marker(self) -> None:
+        marker = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        self.assertEqual(section_hash(f"## H\n{marker}\ntext"), section_hash("## H\ntext"))
 
-def test_both_changed() -> None:
-    human, machine = _synced_pair()
-    assert sync_status(human + "New line.\n", machine + "Edited.\n", HUMAN_URL) == "both_changed"
-
-
-def test_missing_marker_is_no_marker() -> None:
-    assert sync_status("## H\nx\n", "## H\ny\n", HUMAN_URL) == "no_marker"
-
-
-def test_malformed_marker_is_no_marker() -> None:
-    machine = "## H\n<!-- sync: guide=xyz llm=123 -->\ny\n"
-    assert parse_sync_marker(machine) is None
-    assert sync_status("## H\nx\n", machine, HUMAN_URL) == "no_marker"
-
-
-def test_parse_marker_without_base() -> None:
-    assert parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} -->\ntext") == SyncMarker(HEX_A, HEX_B, None)
-
-
-def test_parse_marker_with_base() -> None:
-    assert parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} base={HEX_C} -->\ntext") == SyncMarker(HEX_A, HEX_B, HEX_C)
-
-
-def test_format_marker_round_trip() -> None:
-    for marker in (SyncMarker(HEX_A, HEX_B, None), SyncMarker(HEX_A, HEX_B, HEX_C)):
-        line = format_sync_marker(marker)
-        assert "\n" not in line
-        assert ("base=" in line) == (marker.base is not None)
-        assert parse_sync_marker(line) == marker
-
-
-def test_hash_ignores_crlf_trailing_whitespace_and_blank_lines() -> None:
-    assert section_hash("## H\r\nline one  \r\n\r\nline two\t\r\n") == section_hash("## H\nline one\nline two")
-
-
-def test_hash_ignores_sync_marker() -> None:
-    marker = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
-    assert section_hash(f"## H\n{marker}\ntext") == section_hash("## H\ntext")
-
-
-def test_human_hash_derelativizes_links() -> None:
-    from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls
-    section = "## H\n![img](img/a.png)\n"
-    assert human_section_hash(section, HUMAN_URL) == section_hash(derelativize_markdown_urls(section, HUMAN_URL))
+    def test_human_hash_derelativizes_links(self) -> None:
+        from fastapi_app.lib.utils.annotation_rules_utils import derelativize_markdown_urls
+        section = "## H\n![img](img/a.png)\n"
+        self.assertEqual(human_section_hash(section, HUMAN_URL), section_hash(derelativize_markdown_urls(section, HUMAN_URL)))
 
 
 # find_synced_human_commit
 
 SHAS = ["1" * 40, "2" * 40, "3" * 40, "4" * 40]
 BLOB_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md#heading"
+GUIDE_SYNC_LOGGER = "fastapi_app.lib.doc_rules.guide_sync"
 
 
 def _file_at(sha: str) -> str:
@@ -137,66 +148,62 @@ def _patched(commits: "list[str] | Exception", files: dict[str, str]) -> ExitSta
         return files[url.split("/blob/")[1].split("/")[0]]
 
     stack = ExitStack()
-    kwargs = {"side_effect": commits} if isinstance(commits, Exception) else {"return_value": commits}
-    stack.enter_context(patch.object(GitHubAdapter, "list_file_commits", **kwargs))
+    if isinstance(commits, Exception):
+        stack.enter_context(patch.object(GitHubAdapter, "list_file_commits", side_effect=commits))
+    else:
+        stack.enter_context(patch.object(GitHubAdapter, "list_file_commits", return_value=commits))
     stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=fetch))
     return stack
 
 
-def test_find_synced_commit_matches_second_newest() -> None:
-    marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, None)
-    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[1]
+class TestFindSyncedHumanCommit(unittest.TestCase):
+    def test_find_synced_commit_matches_second_newest(self) -> None:
+        marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, None)
+        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+            self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[1])
 
+    def test_find_synced_commit_no_match(self) -> None:
+        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
 
-def test_find_synced_commit_no_match() -> None:
-    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
+    def test_find_synced_commit_stops_at_base(self) -> None:
+        marker = SyncMarker(_file_hash(SHAS[3]), HEX_B, SHAS[1])
+        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, marker, MagicMock()))
 
+    def test_find_synced_commit_matches_base_itself(self) -> None:
+        marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, SHAS[1])
+        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
+            self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[1])
 
-def test_find_synced_commit_stops_at_base() -> None:
-    marker = SyncMarker(_file_hash(SHAS[3]), HEX_B, SHAS[1])
-    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) is None
+    def test_find_synced_commit_listing_error_gives_none(self) -> None:
+        with _patched(requests.HTTPError("403"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING"):
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
 
+    def test_find_synced_commit_skips_commit_without_anchor(self) -> None:
+        files = {s: _file_at(s) for s in SHAS}
+        files[SHAS[0]] = "# Title\n\nNo such section.\n"
+        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+        with _patched(SHAS, files):
+            self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[2])
 
-def test_find_synced_commit_matches_base_itself() -> None:
-    marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, SHAS[1])
-    with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[1]
+    def test_find_synced_commit_stops_at_deadline(self) -> None:
+        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+        with _patched(SHAS, {s: _file_at(s) for s in SHAS}) as stack:
+            stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.time.monotonic", side_effect=[0.0, 0.0, 100.0]))
+            fetch = stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=lambda url, cache: _file_at(SHAS[0])))
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, marker, MagicMock(), deadline_seconds=20.0))
+        self.assertEqual(fetch.call_count, 1)
 
+    def test_find_synced_commit_http_error_logs_warning_without_traceback(self) -> None:
+        with _patched(requests.HTTPError("403"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING") as logs:
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
+        [record] = logs.records
+        self.assertEqual(record.levelname, "WARNING")
+        self.assertIsNone(record.exc_info)
 
-def test_find_synced_commit_listing_error_gives_none() -> None:
-    with _patched(requests.HTTPError("403"), {}):
-        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
-
-
-def test_find_synced_commit_skips_commit_without_anchor() -> None:
-    files = {s: _file_at(s) for s in SHAS}
-    files[SHAS[0]] = "# Title\n\nNo such section.\n"
-    marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
-    with _patched(SHAS, files):
-        assert find_synced_human_commit(BLOB_URL, marker, MagicMock()) == SHAS[2]
-
-
-def test_find_synced_commit_stops_at_deadline() -> None:
-    marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
-    with _patched(SHAS, {s: _file_at(s) for s in SHAS}) as stack:
-        stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.time.monotonic", side_effect=[0.0, 0.0, 100.0]))
-        fetch = stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=lambda url, cache: _file_at(SHAS[0])))
-        assert find_synced_human_commit(BLOB_URL, marker, MagicMock(), deadline_seconds=20.0) is None
-    assert fetch.call_count == 1
-
-
-def test_find_synced_commit_http_error_logs_warning_without_traceback(caplog: pytest.LogCaptureFixture) -> None:
-    with _patched(requests.HTTPError("403"), {}), caplog.at_level("WARNING", logger="fastapi_app.lib.doc_rules.guide_sync"):
-        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
-    [record] = caplog.records
-    assert record.levelname == "WARNING" and record.exc_info is None
-
-
-def test_find_synced_commit_unexpected_error_logs_traceback(caplog: pytest.LogCaptureFixture) -> None:
-    with _patched(KeyError("sha"), {}), caplog.at_level("WARNING", logger="fastapi_app.lib.doc_rules.guide_sync"):
-        assert find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()) is None
-    [record] = caplog.records
-    assert record.exc_info is not None
+    def test_find_synced_commit_unexpected_error_logs_traceback(self) -> None:
+        with _patched(KeyError("sha"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING") as logs:
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
+        [record] = logs.records
+        self.assertIsNotNone(record.exc_info)
