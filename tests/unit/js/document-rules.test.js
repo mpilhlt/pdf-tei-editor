@@ -94,6 +94,7 @@ const { default: StateManager } = await import('../../../app/src/modules/state-m
 const { Application } = await import('../../../app/src/modules/application.js');
 const { default: DocumentRulesPlugin } = await import('../../../app/src/plugins/document-rules.js');
 const { createMarkdownRenderer } = await import('../../../app/src/modules/markdown-utils.js');
+const { withKeyPrompt } = await import('../../../app/src/modules/secret-required.js');
 
 /**
  * @param {string[]} [roles] - defaults to a plain, non-privileged user;
@@ -355,7 +356,7 @@ describe('DocumentRulesPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
     assert.strictEqual(plugin.name, 'document-rules');
-    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings']);
+    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings', 'api-keys']);
   });
 });
 
@@ -2030,9 +2031,10 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
    * @param {Array<any>} [options.modelList] - what inference-settings' getModels() returns
    * @param {any} [options.defaultModel] - what getDefaultModel() returns
    * @param {Record<string, Function>} [options.api] - extra/overriding apiClient methods
+   * @param {(detail: any) => Promise<boolean>} [options.promptForKey] - the api-keys key prompt; resolves true if a key was saved
    * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, requests: Record<string, any[]>, mergeViews: any[] }}
    */
-  function setup({ modelList = models, defaultModel = { providerId: 'p2', modelId: 'm2' }, api = {} } = {}) {
+  function setup({ modelList = models, defaultModel = { providerId: 'p2', modelId: 'm2' }, api = {}, promptForKey = async () => false } = {}) {
     const plugin = makePlugin(['reviewer']);
     plugin._editorDialogUi = makeDialogUi();
     plugin._editorDialogUi.open = true;
@@ -2063,6 +2065,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
         getModelLabel: (providerId, modelId) => modelList.find(m => m.providerId === providerId && m.modelId === modelId)?.label ?? `${providerId}/${modelId}`,
       };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      if (name === 'api-keys') return { withKeyPrompt: (action, blocker) => withKeyPrompt(action, promptForKey, blocker) };
       throw new Error(`unexpected dependency: ${name}`);
     };
     return { plugin, requests, mergeViews };
@@ -2278,6 +2281,27 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(ui.acceptBtn.disabled, false);
     assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
     assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+  });
+
+  it('_onGenerate asks for a missing API key and shows the proposal of the retried request', async () => {
+    const secretRequired = Object.assign(new Error('API key required'), {
+      statusCode: 428,
+      detail: { code: 'secret_required', service: 'openai', label: 'OpenAI' },
+    });
+    let calls = 0;
+    const prompted = [];
+    const { plugin, mergeViews } = setup({
+      api: { documentRulesUpdateFromGuide: async () => { if (calls++ === 0) throw secretRequired; return { ...humanChange, proposed: '# M\n\nretried' }; } },
+      promptForKey: async (detail) => { prompted.push(detail.service); return true; },
+    });
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    assert.deepStrictEqual(prompted, ['openai']);
+    assert.strictEqual(calls, 2);
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.strictEqual(mergeViews[1].modified, '# M\n\nretried');
+    assert.strictEqual(plugin._proposedMachineText, '# M\n\nretried');
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, false);
   });
 
   it('_onGenerate on an error notifies, keeps the dialog open and accept disabled', async () => {

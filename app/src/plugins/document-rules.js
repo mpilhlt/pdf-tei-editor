@@ -118,7 +118,7 @@ function headingAnchorFragment(url) {
 class DocumentRulesPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'document-rules', deps: ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings'] })
+    super(context, { name: 'document-rules', deps: ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings', 'api-keys'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -1291,7 +1291,8 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Ask the selected model for machine rules updated to the guide change
    * (POST /document-rules/update-from-guide) and show them as a diff against
-   * the current machine rules. A response or error that arrives after the
+   * the current machine rules. If the provider needs an API key the user
+   * has not stored, asks for it and retries. A response or error that arrives after the
    * sub-dialog was closed or reopened is dropped, leaving the new session's
    * buttons alone (_resetUpdateDialog() has already reset them).
    * @returns {Promise<void>}
@@ -1306,13 +1307,15 @@ class DocumentRulesPlugin extends Plugin {
     generateBtn.loading = true
     let response
     try {
-      response = await this.#client.apiClient.documentRulesUpdateFromGuide({
-        xml: this.state.xml,
-        human_url: human.url,
-        machine_url: machine.url,
-        provider_id: model.providerId,
-        model_id: model.modelId
-      })
+      response = await this.getDependency('api-keys').withKeyPrompt(
+        () => this.#client.apiClient.documentRulesUpdateFromGuide({
+          xml: this.state.xml,
+          human_url: human.url,
+          machine_url: machine.url,
+          provider_id: model.providerId,
+          model_id: model.modelId
+        })
+      )
     } catch (error) {
       if (session !== this._updateDialogSession) return
       generateBtn.disabled = false
