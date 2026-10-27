@@ -29,7 +29,8 @@
  * @import { documentRulesEditMenuItemPart } from '../templates/document-rules-menu-item.types.js'
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
  * @import { documentRulesUpdateDialogPart } from '../templates/document-rules-update-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse } from '../modules/api-client-v1.js'
+ * @import { documentRulesProposeDialogPart } from '../templates/document-rules-propose-dialog.types.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse } from '../modules/api-client-v1.js'
  * @import { ModelChoice } from './inference-settings.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
@@ -56,6 +57,7 @@ await registerTemplate('document-rules-menu-item', 'document-rules-menu-item.htm
 await registerTemplate('document-rules-refresh-menu-item', 'document-rules-refresh-menu-item.html')
 await registerTemplate('document-rules-editor-dialog', 'document-rules-editor-dialog.html')
 await registerTemplate('document-rules-update-dialog', 'document-rules-update-dialog.html')
+await registerTemplate('document-rules-propose-dialog', 'document-rules-propose-dialog.html')
 
 // Matches a recognized line-range fragment (GitHub's #L10-L50, GitLab's
 // #L10-50) - mirrors annotation_rules_utils.py's _LINE_RANGE_RE.
@@ -67,6 +69,10 @@ const ALIGN_MODE_NOTICE = 'No sync base found: the model compares the whole guid
 const UNCHANGED_GUIDE_NOTICE = 'The guide section has not changed since the last sync.'
 const NO_MODEL_NOTICE = 'No language model is available. Update the machine rules by hand, using the change shown above.'
 const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated from the guide. Running the update again may apply the same change twice.'
+
+// Notices of the "Propose upstream" sub-dialog, by the layers included in the proposal
+const GUIDE_ONLY_PROPOSAL_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.'
+const MACHINE_PROPOSAL_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.'
 
 // Note of an override accepted in the "Update machine rules from guide" sub-dialog, followed by the model label
 const UPDATED_FROM_GUIDE_NOTE_PREFIX = 'Updated from guide with '
@@ -165,6 +171,24 @@ class DocumentRulesPlugin extends Plugin {
 
   /** The model `_proposedMachineText` was generated with. @type {ModelChoice|null} */
   _proposedModel = null
+
+  /** "Propose upstream" sub-dialog of a human/machine pair. @type {SlDialog & documentRulesProposeDialogPart} */
+  _proposeDialogUi = null
+
+  /** The propose sub-dialog's per-file merge views, destroyed when it closes. @type {Array<EditorView>} */
+  _proposalViews = []
+
+  /** The proposal the propose sub-dialog shows, or null. @type {ProposePatchResponse|null} */
+  _proposal = null
+
+  /**
+   * Incremented on every _refreshProposal() call and when the propose
+   * sub-dialog is reset, so only the latest request's response is shown.
+   */
+  _proposalSession = 0
+
+  /** The latest _refreshProposal() call. @type {Promise<void>|null} */
+  _proposalPromise = null
 
   /**
    * Last successful POST /document-rules/list result for the open document.
@@ -276,6 +300,7 @@ class DocumentRulesPlugin extends Plugin {
     const dialog = createSingleFromTemplate('document-rules-editor-dialog', document.body)
     this._editorDialogUi = this.createUi(dialog)
     this._updateDialogUi = this.createUi(createSingleFromTemplate('document-rules-update-dialog', document.body))
+    this._proposeDialogUi = this.createUi(createSingleFromTemplate('document-rules-propose-dialog', document.body))
 
     this._md = createMarkdownRenderer()
 
@@ -344,7 +369,7 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
-    this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstream())
+    this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstreamClick())
     this._editorDialogUi.updateFromGuideBtn.addEventListener('click', () => this._openUpdateDialog())
     this._updateDialogUi.modelRow.generateBtn.addEventListener('click', () => this._onGenerate())
     this._updateDialogUi.acceptBtn.addEventListener('click', () => this._onAcceptProposal())
@@ -353,6 +378,7 @@ class DocumentRulesPlugin extends Plugin {
       // Nested Shoelace components (the model picker) emit their own sl-after-hide
       if (event.target === this._updateDialogUi) this._resetUpdateDialog()
     })
+    this._installProposeDialogListeners()
     this._editorDialogUi.layerTabs.addEventListener('sl-tab-show', (event) => {
       this._onLayerTabShow(/** @type {CustomEvent} */(event).detail.name).catch(error => {
         this.#logger.warn('document-rules: could not switch layer: ' + String(error))
@@ -402,6 +428,7 @@ class DocumentRulesPlugin extends Plugin {
   /** Rebuild resource discovery when the open document changes. */
   onXmlChange() {
     if (this._updateDialogUi.open) this._updateDialogUi.hide()
+    if (this._proposeDialogUi.open) this._proposeDialogUi.hide()
     if (this._editorDialogUi.open) this._editorDialogUi.hide()
     this._refreshResources()
   }
@@ -830,7 +857,8 @@ class DocumentRulesPlugin extends Plugin {
     dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     dialogUi.resetBtn.style.display = selected ? '' : 'none'
-    dialogUi.proposeUpstreamBtn.style.display = selected ? '' : 'none'
+    // A pair proposes both layers together, whatever is selected; a single resource proposes its selected override
+    dialogUi.proposeUpstreamBtn.style.display = (this._isPairGroup() ? !this._documentReadOnly : selected) ? '' : 'none'
     const pairedMachine = resource.layer === 'machine' && this._currentGroup.some(r => r.layer === 'human')
     dialogUi.updateFromGuideBtn.style.display = pairedMachine && !this._documentReadOnly ? '' : 'none'
   }
@@ -1197,6 +1225,190 @@ class DocumentRulesPlugin extends Plugin {
       human: this._currentGroup.find(r => r.layer === 'human') ?? null,
       machine: this._currentGroup.find(r => r.layer === 'machine') ?? null
     }
+  }
+
+  /**
+   * Whether `_currentGroup` is a human/machine layer pair.
+   * @returns {boolean}
+   */
+  _isPairGroup() {
+    const { human, machine } = this._currentPair()
+    return human !== null && machine !== null
+  }
+
+  /**
+   * Click handler of the editor dialog's "Propose upstream" button: a
+   * human/machine pair is proposed as one patch in the propose sub-dialog,
+   * any other resource through the forge's web editor.
+   * @returns {Promise<void>}
+   */
+  async _onProposeUpstreamClick() {
+    if (this._isPairGroup()) {
+      await this._openProposeDialog()
+    } else {
+      await this._onProposeUpstream()
+    }
+  }
+
+  /**
+   * Wire the propose sub-dialog's checkboxes and buttons, and reset it when
+   * it closes.
+   */
+  _installProposeDialogListeners() {
+    const ui = this._proposeDialogUi
+    const refresh = () => { this._proposalPromise = this._refreshProposal() }
+    ui.includeHuman.addEventListener('sl-change', refresh)
+    ui.includeMachine.addEventListener('sl-change', refresh)
+    ui.downloadBtn.addEventListener('click', () => this._onDownloadPatch())
+    ui.closeBtn.addEventListener('click', () => ui.hide())
+    ui.addEventListener('sl-after-hide', (event) => {
+      // Nested Shoelace components may emit their own sl-after-hide
+      if (event.target === ui) this._resetProposeDialog()
+    })
+  }
+
+  /**
+   * Whether the user has selected an override of `resource`. The shown
+   * layer's selection is read from the editor dialog, the other layer's
+   * from `_selections`.
+   * @param {ResourceDescriptorModel} resource
+   * @returns {boolean}
+   */
+  _hasSelectedOverride(resource) {
+    if (resource === this._currentResource) return this._currentSelectedId !== null
+    return this._selections.some(s => s.kind === resource.kind && s.url === resource.url && s.selected)
+  }
+
+  /**
+   * Open the "Propose upstream" sub-dialog for `_currentGroup`'s
+   * human/machine pair, with each layer that has a selected override
+   * included (the shown layer if neither has one), and load the proposal.
+   * @returns {Promise<void>}
+   */
+  async _openProposeDialog() {
+    const { human, machine } = this._currentPair()
+    if (!human || !machine) return
+    const ui = this._proposeDialogUi
+    this._resetProposeDialog()
+    let includeHuman = this._hasSelectedOverride(human)
+    let includeMachine = this._hasSelectedOverride(machine)
+    if (!includeHuman && !includeMachine) {
+      includeHuman = this._currentResource === human
+      includeMachine = this._currentResource === machine
+    }
+    ui.includeHuman.checked = includeHuman
+    ui.includeMachine.checked = includeMachine
+    this._proposalPromise = this._refreshProposal()
+    await ui.show()
+    await this._proposalPromise
+  }
+
+  /**
+   * Request the patch for the layers checked in the propose sub-dialog
+   * (POST /document-rules/propose-patch) and show one diff per changed
+   * file, with notices on what the proposal does to the sync status.
+   * Download is disabled while the request is pending. An error (e.g.
+   * nothing selected, nothing to change, a fetch failure) is shown in the
+   * notice instead of the files. Only the latest call's response is shown,
+   * and none after the sub-dialog was reset.
+   * @returns {Promise<void>}
+   */
+  async _refreshProposal() {
+    const { human, machine } = this._currentPair()
+    if (!human || !machine) return
+    const ui = this._proposeDialogUi
+    const session = ++this._proposalSession
+    const includeHuman = ui.includeHuman.checked
+    const includeMachine = ui.includeMachine.checked
+    ui.downloadBtn.disabled = true
+    /** @type {ProposePatchResponse} */
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesProposePatch({
+        human_url: human.url,
+        machine_url: machine.url,
+        include_human: includeHuman,
+        include_machine: includeMachine,
+        label: human.label
+      })
+    } catch (error) {
+      if (session !== this._proposalSession) return
+      this._clearProposal()
+      this._setProposeNotices([error instanceof Error ? error.message : String(error)])
+      return
+    }
+    if (session !== this._proposalSession) return
+    this._clearProposal()
+    this._proposal = response
+    for (const file of response.files) {
+      const heading = document.createElement('div')
+      heading.dataset.role = 'path'
+      heading.textContent = file.path
+      heading.style.fontWeight = 'var(--sl-font-weight-semibold)'
+      heading.style.marginBottom = '0.25rem'
+      const diff = document.createElement('div')
+      diff.style.border = '1px solid var(--sl-color-neutral-300)'
+      diff.style.marginBottom = '0.75rem'
+      ui.files.append(heading, diff)
+      this._proposalViews.push(this._createMergeView(diff, file.before, file.after))
+    }
+    const notices = []
+    if (includeMachine) {
+      notices.push(MACHINE_PROPOSAL_NOTICE)
+    } else if (includeHuman) {
+      notices.push(GUIDE_ONLY_PROPOSAL_NOTICE)
+    }
+    this._setProposeNotices(notices)
+    ui.downloadBtn.disabled = false
+  }
+
+  /**
+   * Show `notices` in the propose sub-dialog's notice area, one per line,
+   * or hide it when there are none.
+   * @param {Array<string>} notices
+   */
+  _setProposeNotices(notices) {
+    const notice = this._proposeDialogUi.notice
+    notice.replaceChildren(...notices.map((text) => {
+      const line = document.createElement('div')
+      line.textContent = text
+      return line
+    }))
+    notice.style.display = notices.length > 0 ? '' : 'none'
+  }
+
+  /**
+   * Destroy the propose sub-dialog's merge views and drop its proposal.
+   */
+  _clearProposal() {
+    for (const view of this._proposalViews) view.destroy()
+    this._proposalViews = []
+    this._proposal = null
+    this._proposeDialogUi.files.replaceChildren()
+    this._proposeDialogUi.downloadBtn.disabled = true
+  }
+
+  /**
+   * Clear the propose sub-dialog and invalidate any pending request.
+   */
+  _resetProposeDialog() {
+    this._proposalSession++
+    this._clearProposal()
+    this._setProposeNotices([])
+  }
+
+  /**
+   * Download the shown proposal's patch under its proposed file name.
+   */
+  _onDownloadPatch() {
+    if (!this._proposal) return
+    const blob = new Blob([this._proposal.patch], { type: 'text/x-diff' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = this._proposal.filename
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   /**
