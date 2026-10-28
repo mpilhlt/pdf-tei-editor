@@ -8,9 +8,16 @@
 
   <div name="files"></div>
 
+  <div name="prSection" style="display: none; margin-top: 0.75rem;">
+    <sl-input name="prTitle" size="small" label="Pull request title"></sl-input>
+    <sl-textarea name="prBody" size="small" rows="5" label="Description" style="margin-top: 0.5rem;"></sl-textarea>
+    <div name="prResult" style="margin-top: 0.5rem; font-size: var(--sl-font-size-small);"></div>
+  </div>
+
   <div name="hint" style="margin-top: 0.75rem; font-size: var(--sl-font-size-small); color: var(--sl-color-neutral-600);">Apply the patch in a clone of the guide repository with "git apply &lt;file&gt;", then commit and open a pull request.</div>
 
   <div slot="footer" style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+    <sl-button name="createPrBtn" size="small" style="display: none;" disabled>Create pull request</sl-button>
     <sl-button name="downloadBtn" size="small" variant="primary" disabled>Download patch</sl-button>
     <sl-button name="closeBtn" size="small">Close</sl-button>
   </div>

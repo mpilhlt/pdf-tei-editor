@@ -30,7 +30,7 @@
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
  * @import { documentRulesUpdateDialogPart } from '../templates/document-rules-update-dialog.types.js'
  * @import { documentRulesProposeDialogPart } from '../templates/document-rules-propose-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse, ProposePullRequestResponse } from '../modules/api-client-v1.js'
  * @import { ModelChoice } from './inference-settings.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
@@ -200,6 +200,18 @@ class DocumentRulesPlugin extends Plugin {
 
   /** The latest _refreshProposal() call. @type {Promise<void>|null} */
   _proposalPromise = null
+
+  /** Whether the user edited the pull request title since the propose sub-dialog opened. */
+  _prTitleEdited = false
+
+  /** Whether the user edited the pull request description since the propose sub-dialog opened. */
+  _prBodyEdited = false
+
+  /**
+   * Incremented when the propose sub-dialog is reset, so the result of a
+   * pull request created before is not shown after it was reopened.
+   */
+  _pullRequestSession = 0
 
   /**
    * Last successful POST /document-rules/list result for the open document.
@@ -1270,6 +1282,9 @@ class DocumentRulesPlugin extends Plugin {
     const refresh = () => { this._proposalPromise = this._refreshProposalSafely() }
     ui.includeHuman.addEventListener('sl-change', refresh)
     ui.includeMachine.addEventListener('sl-change', refresh)
+    ui.prSection.prTitle.addEventListener('sl-input', () => { this._prTitleEdited = true })
+    ui.prSection.prBody.addEventListener('sl-input', () => { this._prBodyEdited = true })
+    ui.createPrBtn.addEventListener('click', () => this._onCreatePullRequest())
     ui.downloadBtn.addEventListener('click', () => this._onDownloadPatch())
     ui.closeBtn.addEventListener('click', () => ui.hide())
     ui.addEventListener('sl-after-hide', (event) => {
@@ -1346,8 +1361,10 @@ class DocumentRulesPlugin extends Plugin {
    * (POST /document-rules/propose-patch) and show one diff per changed
    * file, with notices on unsaved editor edits (not included), sections
    * changed upstream (replaced by the patch), and what the proposal does to
-   * the sync status. The previous diffs are cleared and download is
-   * disabled while the request is pending. An error (e.g.
+   * the sync status. For a guide on GitHub the pull request controls are
+   * shown, with the default title and description unless the user edited
+   * them. The previous diffs are cleared and download and pull request
+   * creation are disabled while the request is pending. An error (e.g.
    * nothing selected, nothing to change, a fetch failure) is shown in the
    * notice instead of the files. Only the latest call's response is shown,
    * and none after the sub-dialog was reset.
@@ -1403,6 +1420,13 @@ class DocumentRulesPlugin extends Plugin {
     }
     this._setProposeNotices(notices)
     ui.downloadBtn.disabled = false
+    const canOpen = response.can_open_pull_request
+    ui.prSection.style.display = canOpen ? '' : 'none'
+    ui.createPrBtn.style.display = canOpen ? '' : 'none'
+    ui.createPrBtn.disabled = !canOpen
+    // Texts the user edited since the dialog opened are kept
+    if (!this._prTitleEdited) ui.prSection.prTitle.value = response.pull_request_title
+    if (!this._prBodyEdited) ui.prSection.prBody.value = response.pull_request_body
   }
 
   /**
@@ -1429,15 +1453,73 @@ class DocumentRulesPlugin extends Plugin {
     this._proposal = null
     this._proposeDialogUi.files.replaceChildren()
     this._proposeDialogUi.downloadBtn.disabled = true
+    this._proposeDialogUi.createPrBtn.disabled = true
   }
 
   /**
-   * Clear the propose sub-dialog and invalidate any pending request.
+   * Clear the propose sub-dialog, hide its pull request controls, forget
+   * the user's edits of the pull request texts and invalidate any pending
+   * request.
    */
   _resetProposeDialog() {
+    const ui = this._proposeDialogUi
     this._proposalSession++
+    this._pullRequestSession++
     this._clearProposal()
     this._setProposeNotices([])
+    ui.prSection.style.display = 'none'
+    ui.createPrBtn.style.display = 'none'
+    ui.prSection.prResult.replaceChildren()
+    this._prTitleEdited = false
+    this._prBodyEdited = false
+  }
+
+  /**
+   * Open a GitHub pull request with the shown proposal
+   * (POST /document-rules/propose-pull-request), with the title and
+   * description from the sub-dialog. A missing GitHub token is asked for
+   * and the request retried. On success the pull request's number and link
+   * are shown and the button stays disabled, so that a second click does
+   * not open a duplicate; on an error its message is shown and the button
+   * enabled again.
+   * @returns {Promise<void>}
+   */
+  async _onCreatePullRequest() {
+    const { human, machine } = this._currentPair()
+    if (!human || !machine || !this._proposal) return
+    const ui = this._proposeDialogUi
+    const result = ui.prSection.prResult
+    const session = this._pullRequestSession
+    ui.createPrBtn.disabled = true
+    result.replaceChildren()
+    /** @type {ProposePullRequestResponse} */
+    let response
+    try {
+      response = await this.getDependency('api-keys').withKeyPrompt(
+        () => this.#client.apiClient.documentRulesProposePullRequest({
+          human_url: human.url,
+          machine_url: machine.url,
+          include_human: ui.includeHuman.checked,
+          include_machine: ui.includeMachine.checked,
+          label: human.label,
+          title: ui.prSection.prTitle.value,
+          body: ui.prSection.prBody.value
+        })
+      )
+    } catch (error) {
+      if (session !== this._pullRequestSession) return
+      result.textContent = error instanceof Error ? error.message : String(error)
+      ui.createPrBtn.disabled = false
+      return
+    }
+    if (session !== this._pullRequestSession) return
+    const link = document.createElement('a')
+    link.href = response.url
+    link.target = '_blank'
+    link.rel = 'noopener'
+    link.textContent = 'Open on GitHub'
+    result.append(`Pull request #${response.number} created. `, link)
+    if (response.fork) result.append(`. It was opened from your fork ${response.fork}.`)
   }
 
   /**

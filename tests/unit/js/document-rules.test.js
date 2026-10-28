@@ -175,7 +175,15 @@ function makeProposeDialogUi() {
   el.notice = document.createElement('div');
   el.notice.style.display = 'none';
   el.files = document.createElement('div');
+  el.prSection = document.createElement('div');
+  el.prSection.style.display = 'none';
+  el.prSection.prTitle = Object.assign(document.createElement('sl-input'), { value: '' });
+  el.prSection.prBody = Object.assign(document.createElement('sl-textarea'), { value: '' });
+  el.prSection.prResult = document.createElement('div');
+  el.prSection.append(el.prSection.prTitle, el.prSection.prBody, el.prSection.prResult);
   el.hint = document.createElement('div');
+  el.createPrBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+  el.createPrBtn.style.display = 'none';
   el.downloadBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
@@ -2534,15 +2542,20 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     const files = [];
     if (body.include_human) files.push({ path: 'docs/guidelines.md', before: 'g old', after: 'g new' });
     if (body.include_machine) files.push({ path: 'docs/guidelines-llm.md', before: 'm old', after: 'm new' });
-    return { files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine };
+    const includes = body.include_human && body.include_machine ? 'guide section and machine rules' : body.include_human ? 'guide section' : 'machine rules';
+    return {
+      files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine,
+      can_open_pull_request: true, pull_request_title: 'Annotation rules update: Primary sources', pull_request_body: `Includes: ${includes}.`,
+    };
   }
 
   /**
    * @param {object} [options]
    * @param {Record<string, Function>} [options.api]
+   * @param {(detail: any) => Promise<boolean>} [options.promptForKey] - the api-keys key prompt; resolves true if a key was saved
    * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, apiClient: Record<string, Function>, requests: any[], mergeViews: any[] }}
    */
-  function setup({ api = {} } = {}) {
+  function setup({ api = {}, promptForKey = async () => false } = {}) {
     const plugin = makePlugin(['reviewer']);
     plugin._editorDialogUi = makeDialogUi();
     plugin._editorDialogUi.open = true;
@@ -2568,6 +2581,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     plugin.getDependency = (name) => {
       if (name === 'client') return { apiClient };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      if (name === 'api-keys') return { withKeyPrompt: (action, blocker) => withKeyPrompt(action, promptForKey, blocker) };
       throw new Error(`unexpected dependency: ${name}`);
     };
     return { plugin, apiClient, requests, mergeViews };
@@ -2861,6 +2875,180 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     assert.strictEqual(await blobs[0].text(), '# patch docs/guidelines.md\n');
     assert.deepStrictEqual(clicks, [{ href: 'blob:patch', download: 'primary-sources-rules.patch' }]);
     assert.deepStrictEqual(revoked, ['blob:patch']);
+  });
+
+  describe('pull request', () => {
+    const created = { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'pdf-tei-editor/primary-sources-20261028-120000', fork: null };
+
+    it('hides the controls when the guide is not on GitHub', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), can_open_pull_request: false }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.prSection.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.style.display, 'none');
+      assert.strictEqual(ui.downloadBtn.disabled, false);
+    });
+
+    it('shows the controls with the default texts and enables the button when the guide is on GitHub', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.prSection.style.display, '');
+      assert.strictEqual(ui.createPrBtn.style.display, '');
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+      assert.strictEqual(ui.prSection.prTitle.value, 'Annotation rules update: Primary sources');
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+    });
+
+    it('disables the button while a request is pending and after an error', async () => {
+      const { plugin, apiClient } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      let resolveRequest;
+      apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+      const pending = plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      resolveRequest();
+      await pending;
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+      apiClient.documentRulesProposePatch = async () => { throw new Error('nothing to change'); };
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+    });
+
+    it('keeps an edited title on a checkbox toggle and replaces an untouched description', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+      ui.prSection.prTitle.value = 'My title';
+      ui.prSection.prTitle.dispatchEvent(new dom.window.Event('sl-input'));
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(ui.prSection.prTitle.value, 'My title');
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section and machine rules.');
+    });
+
+    it('keeps an edited description on a checkbox toggle and replaces an untouched title', async () => {
+      const { plugin, apiClient } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      ui.prSection.prBody.value = 'My description';
+      ui.prSection.prBody.dispatchEvent(new dom.window.Event('sl-input'));
+      apiClient.documentRulesProposePatch = async (body) => ({ ...proposal(body), pull_request_title: 'New default' });
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(ui.prSection.prTitle.value, 'New default');
+      assert.strictEqual(ui.prSection.prBody.value, 'My description');
+    });
+
+    it('takes the defaults again after the dialog was closed and reopened', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      ui.prSection.prBody.value = 'My description';
+      ui.prSection.prBody.dispatchEvent(new dom.window.Event('sl-input'));
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+    });
+
+    it('sends the edited title and body with the proposal flags through withKeyPrompt', async () => {
+      const secretRequired = Object.assign(new Error('API key required'), {
+        statusCode: 428,
+        detail: { code: 'secret_required', service: 'github', label: 'GitHub' },
+      });
+      const prRequests = [];
+      const prompted = [];
+      const { plugin } = setup({
+        api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); if (prRequests.length === 1) throw secretRequired; return created; } },
+        promptForKey: async (detail) => { prompted.push(detail.service); return true; },
+      });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      ui.prSection.prTitle.value = 'Edited title';
+      ui.prSection.prBody.value = 'Edited body';
+      await plugin._onCreatePullRequest();
+      assert.deepStrictEqual(prompted, ['github']);
+      assert.strictEqual(prRequests.length, 2);
+      assert.deepStrictEqual(prRequests[1], {
+        human_url: human.url, machine_url: machine.url, include_human: true, include_machine: true, label: human.label,
+        title: 'Edited title', body: 'Edited body',
+      });
+    });
+
+    it('shows the created pull request with a link and keeps the button disabled', async () => {
+      const prRequests = [];
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); return created; } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      const result = ui.prSection.prResult;
+      assert.strictEqual(result.textContent, 'Pull request #7 created. Open on GitHub');
+      const link = result.querySelector('a');
+      assert.strictEqual(link.textContent, 'Open on GitHub');
+      assert.strictEqual(link.getAttribute('href'), 'https://github.com/o/r/pull/7');
+      assert.strictEqual(link.getAttribute('target'), '_blank');
+      assert.strictEqual(link.getAttribute('rel'), 'noopener');
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(prRequests.length, 1);
+    });
+
+    it('names the fork a pull request was opened from', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => ({ ...created, number: 8, fork: 'me/r' }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created. Open on GitHub. It was opened from your fork me/r.');
+    });
+
+    it('shows an error message and re-enables the button', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => { throw Object.assign(new Error('The pull request needs a title.'), { statusCode: 422 }); } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      assert.strictEqual(ui.prSection.prResult.textContent, 'The pull request needs a title.');
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+    });
+
+    it('disables the button and clears the previous result while the request is pending', async () => {
+      let resolveRequest;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveRequest = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      ui.prSection.prResult.textContent = 'previous error';
+      const pending = plugin._onCreatePullRequest();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
+      resolveRequest();
+      await pending;
+    });
+
+    it('_resetProposeDialog hides the controls and clears the result', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => created } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      plugin._resetProposeDialog();
+      assert.strictEqual(ui.prSection.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
+    });
   });
 
   it('_resetProposeDialog (on close) destroys the merge views and drops a pending response', async () => {
