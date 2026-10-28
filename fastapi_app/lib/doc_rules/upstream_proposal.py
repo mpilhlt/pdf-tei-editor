@@ -12,6 +12,7 @@ text, the guide text the machine rules were derived from.
 """
 
 import difflib
+import hashlib
 import re
 from dataclasses import dataclass
 
@@ -76,6 +77,11 @@ class UpstreamProposal:
     branch: str
     upstream_changed: list[str]
     in_sync: bool
+
+    @property
+    def base_hashes(self) -> dict[str, str]:
+        """The SHA-256 (hex) of each changed file's `before` text (UTF-8), by path: the default-branch state the proposal was built on."""
+        return {file.path: hashlib.sha256(file.before.encode("utf-8")).hexdigest() for file in self.files}
 
 
 def _adapter(url: str) -> BaseGitForgeAdapter:
@@ -201,8 +207,8 @@ def _upstream_changed(kind: InterpretationRefKind, url: str, upstream_section: s
     return section_hash(_proposed_text(original, url)) != section_hash(_proposed_text(upstream_section, url))
 
 
-def _one_line(value: str) -> str:
-    """`value` with every run of whitespace collapsed to one space and other control characters removed, for a `# ` preamble line."""
+def one_line(value: str) -> str:
+    """`value` with every run of whitespace collapsed to one space and other control characters removed, for a single-line text such as a `# ` preamble line or a pull request title."""
     return _CONTROL_CHARS_RE.sub("", " ".join(value.split()))
 
 
@@ -220,7 +226,8 @@ def patch_filename(label: str) -> str:
     return f"{slug}-rules.patch" if slug else "rules.patch"
 
 
-def _includes(include_human: bool, include_machine: bool) -> str:
+def includes_text(include_human: bool, include_machine: bool) -> str:
+    """What a proposal includes, for its `Includes:` line: `guide section`, `machine rules`, or both."""
     if include_human and include_machine:
         return "guide section and machine rules"
     return "guide section" if include_human else "machine rules"
@@ -261,7 +268,8 @@ def build_upstream_proposal(
     machine_path = ""
     if include_machine:
         machine_repo, machine_path = _repo_path(machine_url)
-        if machine_repo != human_repo:
+        # The same repo_id on another forge is another repository; a GitLab repo_id includes the origin, so its host is compared too
+        if machine_repo != human_repo or type(_adapter(machine_url)) is not type(_adapter(human_url)):
             raise ProposalError("The guide and the machine rules are in different repositories; propose them separately.")
 
     branch, human_main_url = _default_branch(_adapter(human_url), human_url, cache)
@@ -296,7 +304,7 @@ def build_upstream_proposal(
     files = [file for file in files if file.after != file.before]
     if not files:
         raise ProposalError("There are no changes to propose.")
-    patch = build_patch(files, label, owner, _includes(include_human, include_machine))
+    patch = build_patch(files, label, owner, includes_text(include_human, include_machine))
     return UpstreamProposal(
         files=files,
         patch=patch,
@@ -329,8 +337,8 @@ def build_patch(files: list[ProposedFile], label: str, username: str, includes: 
     lines (e.g. a forged `diff --git`) to the patch.
     """
     parts = [
-        f"# Annotation rules update: {_one_line(label)}\n",
-        f"# Proposed with the PDF-TEI-Editor by {_one_line(username)}\n",
+        f"# Annotation rules update: {one_line(label)}\n",
+        f"# Proposed with the PDF-TEI-Editor by {one_line(username)}\n",
         f"# Includes: {includes}\n",
         "\n",
     ]

@@ -188,6 +188,10 @@ async def lifespan(app: FastAPI):
     from .lib.doc_rules.storage import DocumentRulesStore
     start_legacy_override_key_migration(lambda: DocumentRulesStore(get_db()))
 
+    # The user's GitHub token opens pull requests of document rule proposals
+    from .lib.doc_rules.github_pull_request import register_github_secret_service
+    register_github_secret_service()
+
     # Log startup complete
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
 

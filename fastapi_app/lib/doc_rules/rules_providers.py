@@ -69,6 +69,8 @@ def extract_extractor_provenance(tei_content: str) -> Optional[tuple[str, str]]:
         root = etree.fromstring(tei_content.encode("utf-8"), parser)
     except etree.XMLSyntaxError:
         return None
+    if root is None:  # recover=True returns None for input without any element
+        return None
 
     ns = {"tei": TEI_NS}
     app = root.find(".//tei:encodingDesc/tei:appInfo/tei:application[@type='extractor']", ns)

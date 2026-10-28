@@ -278,10 +278,30 @@ class ProposePatchResponse(BaseModel):
     branch: str
     upstream_changed: list[str] = Field(..., description="Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes.")
     in_sync: bool = Field(..., description="True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch.")
+    can_open_pull_request: bool = Field(..., description="True iff the guide is on GitHub, so that a pull request can be opened.")
+    pull_request_title: str = Field(..., description="The default title of the pull request.")
+    pull_request_body: str = Field(..., description="The default description of the pull request.")
+    pull_request_repository: Optional[str] = Field(None, description="The `owner/repo` the pull request is opened on, if `can_open_pull_request`.")
+    base_hashes: dict[str, str] = Field(..., description="The SHA-256 (hex) of each changed file's text on the default branch (`before`), by path; sent back to /propose-pull-request to detect upstream changes since the preview.")
+
+
+class ProposePullRequestRequest(ProposePatchRequest):
+    """Request to open a GitHub pull request with the changes of a proposal, with the (possibly edited) title and description."""
+    title: str
+    body: str
+    base_hashes: dict[str, str] = Field(..., description="The `base_hashes` of the previewed /propose-patch response.")
+
+
+class ProposePullRequestResponse(BaseModel):
+    """The created pull request's web URL and number, its branch, and the full name of the user's fork if it was opened from one."""
+    url: str
+    number: int
+    branch: str
+    fork: Optional[str] = None
 
 
 class UpdateFromGuideRequest(BaseModel):
-    """Request to have a language model update a machine section from its human section."""
+    """Request to have a language model update a machine section from its human section. `xml` is the stable id of the open TEI document, whose extractor provider may supply the condensing prompt."""
     xml: str
     human_url: str
     machine_url: str

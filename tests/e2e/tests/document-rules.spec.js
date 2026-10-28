@@ -622,7 +622,12 @@ test.describe('Document rules registry', () => {
               filename: 'data-correction-rules.patch',
               branch: 'main',
               upstream_changed: [],
-              in_sync: true
+              in_sync: true,
+              can_open_pull_request: false,
+              pull_request_title: 'Annotation rules update: Data correction',
+              pull_request_body: '',
+              pull_request_repository: null,
+              base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
             }
           });
         });
@@ -658,6 +663,86 @@ test.describe('Document rules registry', () => {
         expect(downloaded.match(/^diff --git a\//gm)).toHaveLength(2);
         expect(downloaded).toMatch(/<!-- sync: guide=\w+ llm=\w+ -->/);
         expect(downloaded).not.toContain('base=');
+
+        await proposeDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('creates a pull request from the propose dialog', async ({ page }) => {
+      // No real GitHub call is possible in E2E: propose-patch and propose-pull-request are
+      // mocked. The request body of the latter is checked.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      /** @type {any[]} */
+      const prRequests = [];
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/propose-patch', (route) => route.fulfill({
+          json: {
+            files: [
+              { path: 'docs/guidelines.md', before: '# Data correction\n\nHuman guide text for data correction.\n', after: '# Data correction\n\nHuman guide text for data correction. Changed.\n' },
+              { path: 'docs/guidelines-llm.md', before: '# Data correction\n\nMachine rule text.\n', after: '# Data correction\n\nMachine rule text, changed.\n' }
+            ],
+            patch: 'diff --git a/docs/guidelines.md b/docs/guidelines.md\n',
+            filename: 'data-correction-rules.patch',
+            branch: 'main',
+            upstream_changed: [],
+            in_sync: true,
+            can_open_pull_request: true,
+            pull_request_title: 'Annotation rules update: Data correction',
+            pull_request_body: 'Proposed with the PDF-TEI-Editor by testreviewer.\n\nIncludes: guide section and machine rules.\nThe sync marker of the machine rules is updated; the pair is in sync.',
+            pull_request_repository: 'example/guides',
+            base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
+          }
+        }));
+        await page.route('**/api/v1/document-rules/propose-pull-request', (route) => {
+          prRequests.push(route.request().postDataJSON());
+          return route.fulfill({
+            json: { url: 'https://github.com/example/guides/pull/42', number: 42, branch: 'pdf-tei-editor/data-correction-20261028-120000', fork: 'testreviewer/guides' }
+          });
+        });
+
+        const dialog = await openMachineTab(page);
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+        for (const tab of ['machineLayerTab', 'humanLayerTab']) {
+          await dialog.locator(`sl-tab[name="${tab}"]`).click();
+          await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          await mdContent.click();
+          await page.keyboard.press('ControlOrMeta+End');
+          await page.keyboard.type(' Changed.');
+          await dialog.locator('sl-button[name="saveBtn"]').click();
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+        }
+
+        await dialog.locator('sl-button[name="proposeUpstreamBtn"]').click();
+        const proposeDialog = page.locator('sl-dialog[name="documentRulesProposeDialog"]');
+        await expect(proposeDialog).toHaveAttribute('open', '');
+        const title = proposeDialog.locator('sl-input[name="prTitle"]');
+        await expect(title.locator('input')).toHaveValue('Annotation rules update: Data correction');
+        await expect(proposeDialog.locator('sl-textarea[name="prBody"] textarea')).toHaveValue(/Includes: guide section and machine rules\./);
+        await expect(proposeDialog.locator('[name="prTarget"]')).toHaveText('The pull request will be opened on example/guides.');
+        const createBtn = proposeDialog.locator('sl-button[name="createPrBtn"]');
+        await expect(createBtn).toBeEnabled();
+
+        await title.locator('input').fill('Edited title');
+        await createBtn.click();
+
+        const result = proposeDialog.locator('[name="prResult"]');
+        await expect(result).toContainText('Pull request #42 created from your fork testreviewer/guides. Open on GitHub');
+        await expect(result.locator('a')).toHaveAttribute('href', 'https://github.com/example/guides/pull/42');
+        await expect(result.locator('a')).toHaveText('Open on GitHub');
+        expect(prRequests).toHaveLength(1);
+        expect(prRequests[0]).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction', title: 'Edited title', base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' } });
+        await expect(createBtn).toHaveAttribute('disabled', '');
 
         await proposeDialog.locator('sl-button[name="closeBtn"]').click();
         await dialog.locator('sl-button[name="closeBtn"]').click();

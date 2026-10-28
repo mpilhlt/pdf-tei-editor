@@ -59,4 +59,32 @@ describe('document-rules-propose-dialog.html', () => {
     assert.strictEqual(root.closeBtn.textContent.trim(), 'Close');
     assert.strictEqual(root.closeBtn.parentElement.getAttribute('slot'), 'footer');
   });
+
+  it('has a hidden pull-request section with title, description and result between the files and the hint', () => {
+    const { root } = load();
+    const section = root.prSection;
+    assert.strictEqual(section.tagName, 'DIV');
+    assert.strictEqual(section.style.display, 'none');
+    assert.strictEqual(section.previousElementSibling, root.files);
+    assert.strictEqual(section.nextElementSibling, root.hint);
+    // The target repository line comes first, above the title field
+    assert.strictEqual(section.prTarget.tagName, 'DIV');
+    assert.strictEqual(section.firstElementChild, section.prTarget);
+    assert.strictEqual(section.prTarget.nextElementSibling, section.prTitle);
+    assert.strictEqual(section.prTitle.tagName, 'SL-INPUT');
+    assert.strictEqual(section.prTitle.getAttribute('label'), 'Pull request title');
+    assert.strictEqual(section.prBody.tagName, 'SL-TEXTAREA');
+    assert.strictEqual(section.prBody.getAttribute('label'), 'Description');
+    assert.strictEqual(section.prBody.getAttribute('rows'), '5');
+    assert.strictEqual(section.prResult.tagName, 'DIV');
+  });
+
+  it('has a hidden, disabled "Create pull request" button before the download button', () => {
+    const { root } = load();
+    assert.strictEqual(root.createPrBtn.tagName, 'SL-BUTTON');
+    assert.strictEqual(root.createPrBtn.textContent.trim(), 'Create pull request');
+    assert.ok(root.createPrBtn.hasAttribute('disabled'));
+    assert.strictEqual(root.createPrBtn.style.display, 'none');
+    assert.strictEqual(root.createPrBtn.nextElementSibling, root.downloadBtn);
+  });
 });

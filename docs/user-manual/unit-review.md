@@ -96,7 +96,7 @@ An override that was written against an older version of the original is marked 
 
 **Reset to original** reloads the rules of both tabs from their source, but removes only the overrides of the tab you are on. Overrides of the other tab are kept and may then be marked as based on an older version.
 
-**Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**). Nothing is saved until you click **Accept as new override**: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
+**Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**); both diffs show only the changed lines with a few lines of context, and a click on a collapsed stretch expands it. Nothing is saved until you click **Accept as new override**, which appears once there is a proposal: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
 
 After you accept an update, the status line keeps showing that the machine rules are outdated until the change is synced upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
 
@@ -112,6 +112,17 @@ The guide text and machine rules used are the ones you currently have selected o
 For a category with both layers, the same **Propose change upstream** button opens the **Propose upstream** dialog, which proposes the guide section and the machine rules together as a patch. The dialog has the checkboxes **Guide section (human)** and **Machine rules**; a layer is checked when you have selected an override of it, and if you have selected none, the layer of the tab you are on is checked. It shows one diff per changed file, headed by the file's path in the guide repository, against the current default branch of the repository. The section is found by its heading, even if it moved in the file since the version your override is based on. If the section's content changed upstream since then, the dialog warns you, because the patch replaces those changes. Both files must be in the same repository.
 
 The patch is built from your saved texts. If the editor shows changes you have not saved, the dialog says that they are not included; save them first.
+
+If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Guides on GitLab keep the patch download only.
+
+Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens> (the **GitHub** entry's help link opens the form for a classic token with `public_repo` preselected):
+
+- A classic token with the `public_repo` scope (`repo` for a private guide repository) works whether or not you have push access to the guide repository.
+- A fine-grained token needs read and write access to "Contents" and "Pull requests" on the guide repository. If you have no push access, it may not be able to create the fork that is then needed, so a classic token is the safer choice.
+
+If you have push access to the guide repository, the changes go on a new branch there. Otherwise a fork of the repository is created in your GitHub account (or an existing one is used), the branch is created in the fork, and the pull request is opened from it; the dialog names the fork. Pull requests from a fork allow the maintainers of the guide repository to edit the branch.
+
+If the guide changed upstream between the moment the dialog showed the diffs and your click on **Create pull request**, no pull request is created and the dialog asks you to close and reopen it to see the current changes.
 
 The patch updates the sync marker in the machine rules, depending on what you include:
 

@@ -12,7 +12,7 @@ from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
@@ -22,12 +22,13 @@ from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
-from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError
+from fastapi_app.lib.doc_rules.github_pull_request import GITHUB_SECRET_SERVICE, GitHubError, PullRequestResult, register_github_secret_service
+from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError, ProposedFile, UpstreamProposal
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
-from fastapi_app.lib.secrets import MissingSecretError
+from fastapi_app.lib.secrets import MissingSecretError, unregister_secret_service
 from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
-from fastapi_app.routers.document_rules import get_db, router
+from fastapi_app.routers.document_rules import _document_tei_or_http_error, get_db, router
 
 FIXTURES = Path(__file__).parent / "fixtures" / "fossil"
 HUMAN_FILE = (FIXTURES / "guidelines.md").read_text(encoding="utf-8")
@@ -821,6 +822,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
     NEW_HUMAN = "## Data correction\n\nNew human rule.\n"
     MACHINE = "## Data correction\n\n<!-- sync: guide=abc llm=def -->\n\nMachine rule.\n"
     XML = "<TEI xmlns='http://www.tei-c.org/ns/1.0'/>"
+    STABLE_ID = "stable1"
 
     def setUp(self):
         super().setUp()
@@ -838,6 +840,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
             patch("fastapi_app.lib.doc_rules.guide_update.human_section_at_commit", return_value=self.OLD_HUMAN),
             patch("fastapi_app.routers.document_rules.check_model_access"),
             patch("fastapi_app.routers.document_rules.resolve_condense_prompt", return_value="  Custom condense prompt.  "),
+            patch("fastapi_app.routers.document_rules._document_tei_or_http_error", return_value=self.XML),
         ]
         for patcher in patches:
             patcher.start()
@@ -853,7 +856,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
     def _update(self, provider_id: str = "fake"):
         return self.client.post(
             "/document-rules/update-from-guide",
-            json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": provider_id, "model_id": "m1"},
+            json={"xml": self.STABLE_ID, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": provider_id, "model_id": "m1"},
         )
 
     def test_human_change_delta_mode(self):
@@ -915,6 +918,17 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
                 old=self.OLD_HUMAN, new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n"
             ),
         )
+
+    def test_update_resolves_the_condense_prompt_from_the_documents_content(self):
+        with patch("fastapi_app.routers.document_rules.resolve_condense_prompt", return_value="P") as resolve:
+            self.assertEqual(self._update().status_code, 200)
+        resolve.assert_called_once_with(self.XML, self.HUMAN_URL)
+
+    def test_update_without_a_readable_document_skips_the_model(self):
+        with patch("fastapi_app.routers.document_rules._document_tei_or_http_error", side_effect=HTTPException(status_code=400, detail="No TEI document open.")):
+            response = self._update()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.provider.calls, [])
 
     def test_update_in_align_mode_sends_the_align_template(self):
         self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
@@ -979,7 +993,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
              self.assertLogs("fastapi_app.routers.document_rules", level="ERROR") as logs:
             response = client.post(
                 "/document-rules/update-from-guide",
-                json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
+                json={"xml": self.STABLE_ID, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
             )
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["detail"], "Could not resolve the condensing prompt")
@@ -996,7 +1010,38 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         self.assertEqual(self._update().status_code, 403)
 
 
-class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
+class TestDocumentTeiOrHttpError(unittest.TestCase):
+    USER = {"username": "alice", "roles": ["reviewer"]}
+
+    def _call(self, file_meta, content=b"<TEI/>", access=True):
+        file_repo = MagicMock()
+        file_repo.get_file_by_stable_id.return_value = file_meta
+        file_storage = MagicMock()
+        file_storage.read_file.return_value = content
+        with patch("fastapi_app.routers.document_rules.check_file_access", return_value=access):
+            return _document_tei_or_http_error(file_repo, file_storage, "stable1", self.USER)
+
+    def test_returns_the_tei_content(self):
+        self.assertEqual(self._call(MagicMock(file_type="tei")), "<TEI/>")
+
+    def test_unknown_or_non_tei_document_is_400(self):
+        for file_meta in (None, MagicMock(file_type="pdf")):
+            with self.assertRaises(HTTPException) as ctx:
+                self._call(file_meta)
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_no_read_access_is_403(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._call(MagicMock(file_type="tei"), access=False)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_missing_content_is_400(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._call(MagicMock(file_type="tei"), content=None)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+
+class ProposalRouterTestCase(DocumentRulesRouterTestCase):
     """Builds real proposals from the fossil guideline fixtures as the default-branch files."""
     HUMAN_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines.md#data-correction"
     MACHINE_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines-llm.md#L17-L25"
@@ -1027,6 +1072,8 @@ class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
+
+class TestProposePatchEndpoint(ProposalRouterTestCase):
     def _post(self, include_human: bool = True, include_machine: bool = True, machine_url: Optional[str] = None):
         return self.client.post(
             "/document-rules/propose-patch",
@@ -1104,6 +1151,144 @@ class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
     def test_non_reviewer_is_forbidden(self):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._post().status_code, 403)
+
+    def test_github_guide_can_open_a_pull_request_with_default_texts(self):
+        body = self._post().json()
+        self.assertTrue(body["can_open_pull_request"])
+        self.assertEqual(body["pull_request_title"], "Annotation rules update: Data correction")
+        self.assertEqual(
+            body["pull_request_body"].splitlines()[:3],
+            ["Proposed with the PDF-TEI-Editor by alice.", "", "Includes: guide section and machine rules."],
+        )
+        self.assertIn("The sync marker of the machine rules is updated; the pair is in sync.", body["pull_request_body"])
+        self.assertEqual(body["pull_request_repository"], "mpilhlt/fossil")
+
+    def test_base_hashes_of_the_default_branch_files(self):
+        body = self._post().json()
+        self.assertEqual(body["base_hashes"], {
+            "docs/guidelines.md": hashlib.sha256(HUMAN_FILE.encode("utf-8")).hexdigest(),
+            "docs/guidelines-llm.md": hashlib.sha256(MACHINE_FILE.encode("utf-8")).hexdigest(),
+        })
+
+    def test_gitlab_guide_cannot_open_a_pull_request(self):
+        proposal = UpstreamProposal(files=[], patch="", filename="x-rules.patch", branch="main", upstream_changed=[], in_sync=False)
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", return_value=proposal):
+            response = self.client.post(
+                "/document-rules/propose-patch",
+                json={"human_url": "https://gitlab.com/g/p/-/blob/main/docs/guidelines.md#data-correction", "machine_url": "https://gitlab.com/g/p/-/blob/main/docs/llm.md#L1-L2", "include_human": True, "include_machine": False, "label": "Data correction"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["can_open_pull_request"])
+        self.assertIsNone(response.json()["pull_request_repository"])
+
+
+class TestProposePullRequestEndpoint(ProposalRouterTestCase):
+    """The GitHub calls are patched."""
+    GITLAB_URL = "https://gitlab.com/g/p/-/blob/main/docs/guidelines.md#data-correction"
+
+    def setUp(self):
+        super().setUp()
+        register_github_secret_service()
+        self.addCleanup(unregister_secret_service, GITHUB_SECRET_SERVICE)
+        token_patch = patch("fastapi_app.routers.document_rules.require_user_secret", return_value="ghp_TOKEN")
+        self.require_secret = token_patch.start()
+        self.addCleanup(token_patch.stop)
+        pr_patch = patch(
+            "fastapi_app.routers.document_rules.open_pull_request",
+            return_value=PullRequestResult(url="https://github.com/mpilhlt/fossil/pull/7", number=7, branch="pdf-tei-editor/x", fork="alice/fossil"),
+        )
+        self.open_pr = pr_patch.start()
+        self.addCleanup(pr_patch.stop)
+
+    BASE_HASHES = {
+        "docs/guidelines.md": hashlib.sha256(HUMAN_FILE.encode("utf-8")).hexdigest(),
+        "docs/guidelines-llm.md": hashlib.sha256(MACHINE_FILE.encode("utf-8")).hexdigest(),
+    }
+
+    def _open(self, title: str = "My title", human_url: Optional[str] = None, base_hashes: Optional[dict[str, str]] = None):
+        return self.client.post(
+            "/document-rules/propose-pull-request",
+            json={
+                "human_url": human_url or self.HUMAN_URL,
+                "machine_url": self.MACHINE_URL,
+                "include_human": True,
+                "include_machine": True,
+                "label": "Data correction",
+                "title": title,
+                "body": "My body",
+                "base_hashes": self.BASE_HASHES if base_hashes is None else base_hashes,
+            },
+        )
+
+    def test_opens_the_pull_request(self):
+        response = self._open()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"url": "https://github.com/mpilhlt/fossil/pull/7", "number": 7, "branch": "pdf-tei-editor/x", "fork": "alice/fossil"})
+        self.require_secret.assert_called_once_with("alice", "github")
+        token, repo_id, base_branch, files, title, body, branch = self.open_pr.call_args.args
+        self.assertEqual((token, repo_id, base_branch, title, body), ("ghp_TOKEN", "mpilhlt/fossil", "main", "My title", "My body"))
+        self.assertEqual([f.path for f in files], ["docs/guidelines.md", "docs/guidelines-llm.md"])
+        self.assertRegex(branch, r"^pdf-tei-editor/data-correction-\d{8}-\d{6}$")
+
+    def test_upstream_change_since_the_preview_is_409(self):
+        # The default branch moved on after the preview: the rebuilt proposal's `before` differs from the previewed one
+        self.MAIN_FILES = {**self.MAIN_FILES, f"{PROPOSAL_REPO}/main/docs/guidelines-llm.md": MACHINE_FILE + "\nAn upstream addition.\n"}
+        response = self._open()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        self.open_pr.assert_not_called()
+
+    def test_different_previewed_paths_are_409(self):
+        for base_hashes in ({"docs/guidelines.md": self.BASE_HASHES["docs/guidelines.md"]}, {**self.BASE_HASHES, "docs/other.md": "0" * 64}):
+            with self.subTest(paths=sorted(base_hashes)):
+                response = self._open(base_hashes=base_hashes)
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        self.open_pr.assert_not_called()
+
+    def test_base_hashes_are_required(self):
+        response = self.client.post(
+            "/document-rules/propose-pull-request",
+            json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "include_human": True, "include_machine": True, "label": "Data correction", "title": "T", "body": "B"},
+        )
+        self.assertEqual(response.status_code, 422)
+        self.open_pr.assert_not_called()
+
+    def test_missing_token_is_428(self):
+        self.require_secret.side_effect = MissingSecretError("github", "alice")
+        response = self._open()
+        self.assertEqual(response.status_code, 428)
+        detail = response.json()["detail"]
+        self.assertEqual((detail["code"], detail["service"]), ("secret_required", "github"))
+        self.open_pr.assert_not_called()
+
+    def test_gitlab_guide_is_422(self):
+        response = self._open(human_url=self.GITLAB_URL)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "Pull requests can only be created for guides on GitHub. Download the patch instead.")
+        self.open_pr.assert_not_called()
+
+    def test_empty_title_is_422(self):
+        response = self._open(title="   ")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "The pull request needs a title.")
+        self.open_pr.assert_not_called()
+
+    def test_github_error_status_and_message_are_returned(self):
+        self.open_pr.side_effect = GitHubError(409, "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        response = self._open()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+
+    def test_proposal_errors_are_mapped_like_propose_patch(self):
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=ProposalError("There are no changes to propose.")):
+            self.assertEqual(self._open().status_code, 422)
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=requests.ConnectionError("down")):
+            self.assertEqual(self._open().status_code, 502)
+
+    def test_non_reviewer_is_forbidden(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
+        self.assertEqual(self._open().status_code, 403)
 
 
 if __name__ == "__main__":
