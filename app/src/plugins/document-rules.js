@@ -38,6 +38,10 @@
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { notify } from '../modules/sl-utils.js'
+
+// Icons set via setAttribute() (needed for the build system to include them)
+// <sl-icon name="cloud-check"></sl-icon>
+// <sl-icon name="arrow-repeat"></sl-icon>
 import { userHasRole } from '../modules/acl-utils.js'
 import { createMarkdownRenderer, findHeadingLineForAnchor } from '../modules/markdown-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'

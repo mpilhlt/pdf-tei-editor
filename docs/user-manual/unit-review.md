@@ -135,6 +135,10 @@ Click **Download patch** to save `<category>-rules.patch`. To apply it, run `git
 
 Overrides of the whole guide file that were created before this change are cut down to the section they belong to when the instance is upgraded. They are removed only if they cannot be matched to a section. If you had selected such an override of the guide before the previous release, it now appears as an override of the guide section.
 
+### After a proposal is merged
+
+Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream. The **Update to upstream** button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed, and the server checks again that upstream contains each override before it deletes it.
+
 ## Edited units
 
 A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
