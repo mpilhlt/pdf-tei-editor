@@ -10,7 +10,7 @@ reported as in upstream and never be deleted. Whenever a layer's upstream
 section cannot be determined, nothing of that layer is marked.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import requests
@@ -122,10 +122,17 @@ def upstream_status(tei_content: str, url: str, store: DocumentRulesStore, owner
     """
     layers = category_layers(tei_content, url)
     kind = InterpretationRefKind()
-    outcome = plan_resource_refresh(tei_content, url, cache)
+    refs_behind = False
+    refresh_message: Optional[str] = None
+    try:
+        outcome = plan_resource_refresh(tei_content, url, cache)
+        refs_behind = outcome.status == "ok" and outcome.changed
+        refresh_message = None if outcome.status == "ok" else outcome.message
+    except (RuleFetchError, requests.RequestException) as e:
+        refresh_message = str(e)
     return UpstreamStatus(
-        refs_behind=outcome.status == "ok" and outcome.changed,
-        refresh_message=None if outcome.status == "ok" else outcome.message,
+        refs_behind=refs_behind,
+        refresh_message=refresh_message,
         layers=[_layer_status(layer, kind, store, owner, cache) for layer in layers],
     )
 
@@ -137,10 +144,12 @@ def remove_overrides_in_upstream(tei_content: str, url: str, store: DocumentRule
     to the original via the selection's cascade.
 
     Returns:
-        The recomputed status; its `in_upstream` lists are the deleted ids.
+        The recomputed status; its `in_upstream` lists are the ids actually
+        deleted (an override already gone or not owned is not reported).
     """
     status = upstream_status(tei_content, url, store, owner, cache)
-    for layer in status.layers:
-        for override_id in layer.in_upstream:
-            store.delete_override(override_id, owner)
-    return status
+    layers = [
+        replace(layer, in_upstream=[i for i in layer.in_upstream if store.delete_override(i, owner)])
+        for layer in status.layers
+    ]
+    return replace(status, layers=layers)

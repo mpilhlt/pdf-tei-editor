@@ -24,6 +24,7 @@ from fastapi_app.lib.doc_rules.upstream_cleanup import (
     upstream_status,
 )
 from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError
+from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError
 
 HUMAN_URL = "https://github.com/o/r/blob/abc/docs/g.md#data-correction"
 MACHINE_URL = "https://github.com/o/r/blob/abc/docs/g-llm.md#data-correction"
@@ -120,6 +121,23 @@ class TestStatus(UpstreamCleanupTestCase):
         status = upstream_status(TEI, HUMAN_URL, self.store, "alice", self.cache)
         self.assertFalse(status.refs_behind)
         self.assertEqual(status.refresh_message, "offline")
+
+
+class TestRobustness(UpstreamCleanupTestCase):
+    def test_status_survives_a_failing_refresh_plan(self) -> None:
+        override = self._override(MACHINE_URL, UPSTREAM)
+        with patch.object(upstream_cleanup, "plan_resource_refresh", side_effect=RuleFetchError("provider down")):
+            status = upstream_status(TEI, HUMAN_URL, self.store, "alice", self.cache)
+        self.assertFalse(status.refs_behind)
+        self.assertEqual(status.refresh_message, "provider down")
+        self.assertEqual(status.layers[1].in_upstream, [override])
+
+    def test_remove_reports_only_ids_actually_deleted(self) -> None:
+        gone = self._override(MACHINE_URL, UPSTREAM)
+        real_delete = self.store.delete_override
+        self.store.delete_override = lambda i, o: False if i == gone else real_delete(i, o)  # type: ignore[method-assign]
+        status = remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
+        self.assertEqual(status.layers[1].in_upstream, [])
 
 
 class TestRemove(UpstreamCleanupTestCase):
