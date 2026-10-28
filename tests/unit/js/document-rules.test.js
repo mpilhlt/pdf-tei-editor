@@ -747,6 +747,8 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
     wireOverrideIndicatorStubs(plugin);
+    // _onSave/_onDelete fire it without awaiting; its own tests are in "upstream cleanup"
+    plugin._refreshUpstreamStatus = async () => {};
     return plugin;
   }
 
@@ -823,6 +825,52 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.strictEqual(deletedId, 'ov1');
     assert.strictEqual(plugin._currentSelectedId, null);
     assert.deepStrictEqual(plugin._currentOverrides, []);
+  });
+
+  it('_onSave refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const updated = { id: 'ov1', note: '', text: 'original text', format: 'markdown', created_at: '', updated_at: '' };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => updated } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 1);
+  });
+
+  it('_onSave does not refresh the upstream status when saving fails', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => { throw new Error('boom'); } } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 0);
+  });
+
+  it('_onDelete refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'client') return { apiClient: { documentRulesDeleteOverrides: async () => {} } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onDelete();
+    assert.strictEqual(upstreamRefreshes, 1);
   });
 
   it('_onDelete does nothing when the confirmation is declined', async () => {

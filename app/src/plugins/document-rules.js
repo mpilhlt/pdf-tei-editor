@@ -1198,7 +1198,9 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Persist the currently selected override's note + shown text, rebased on
-   * the shown resource's current original (clears its "outdated" marker).
+   * the shown resource's current original (clears its "outdated" marker),
+   * then refresh the sync and upstream status (the saved text may now match
+   * upstream or no longer do so).
    * @returns {Promise<void>}
    */
   async _onSave() {
@@ -1221,11 +1223,13 @@ class DocumentRulesPlugin extends Plugin {
     // otherwise stay stale until some other action forces a re-render.
     this._renderOverrideRow()
     this._refreshSyncStatus()
+    this._refreshUpstreamStatus()
     notify('Override saved.', 'success', 'check-circle')
   }
 
   /**
-   * Delete the currently selected override (owner-only, enforced server-side).
+   * Delete the currently selected override (owner-only, enforced server-side),
+   * then refresh the sync and upstream status so the marks and counts drop it.
    * @returns {Promise<void>}
    */
   async _onDelete() {
@@ -1243,6 +1247,7 @@ class DocumentRulesPlugin extends Plugin {
     this._currentSelectedId = null
     this._renderEditorDialog()
     this._refreshSyncStatus()
+    this._refreshUpstreamStatus()
     await this._refreshOverrideIndicators()
   }
 
