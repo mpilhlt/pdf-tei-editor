@@ -48,6 +48,9 @@ class TestExtractExtractorProvenance(unittest.TestCase):
     def test_returns_none_for_malformed_xml(self):
         self.assertIsNone(extract_extractor_provenance("<TEI><unclosed></TEI>"))
 
+    def test_returns_none_for_text_without_any_element(self):
+        self.assertIsNone(extract_extractor_provenance("stable123"))
+
 
 class TestProviderRegistry(unittest.TestCase):
     def tearDown(self):

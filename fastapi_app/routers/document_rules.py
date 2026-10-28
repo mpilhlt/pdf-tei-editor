@@ -65,6 +65,7 @@ from ..lib.doc_rules.rules_refresh import (
 from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
 from ..lib.llm import LLMProviderError, LLMProviderRegistry
 from ..lib.llm.model_access import ModelAccessDenied, check_model_access
+from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
 from ..lib.secrets import MissingSecretError, require_user_secret, secret_required_detail
 from ..lib.storage.file_storage import FileStorage
@@ -711,11 +712,26 @@ def propose_pull_request(
     return ProposePullRequestResponse(url=result.url, number=result.number, branch=result.branch, fork=result.fork)
 
 
+def _document_tei_or_http_error(file_repo: FileRepository, file_storage: FileStorage, stable_id: str, user: dict) -> str:
+    """The TEI content of the document `stable_id`, which `user` must be able to read; 400 if there is none, 403 without access."""
+    file_meta = file_repo.get_file_by_stable_id(stable_id)
+    if not file_meta or file_meta.file_type != "tei":
+        raise HTTPException(status_code=400, detail="No TEI document open.")
+    if not check_file_access(file_meta, user, "read"):
+        raise HTTPException(status_code=403, detail="You don't have permission to read this document.")
+    content = file_storage.read_file(file_meta.id, "tei")
+    if not content:
+        raise HTTPException(status_code=400, detail="File content not found.")
+    return content.decode("utf-8", errors="replace")
+
+
 @router.post("/update-from-guide", response_model=UpdateFromGuideResponse)
 async def update_from_guide(
     request: UpdateFromGuideRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
 ) -> UpdateFromGuideResponse:
     """
     Have a language model update the machine section from the change of its
@@ -738,9 +754,10 @@ async def update_from_guide(
     except (LLMProviderError, requests.RequestException) as e:
         raise _llm_request_error(request.provider_id, e) from e
 
+    tei_content = await run_in_threadpool(_document_tei_or_http_error, FileRepository(db), file_storage, request.xml, user)
     change = await run_in_threadpool(_gather_guide_change_or_502, request.human_url, request.machine_url, store, owner)
     try:
-        condense_prompt = await run_in_threadpool(resolve_condense_prompt, request.xml, request.human_url)
+        condense_prompt = await run_in_threadpool(resolve_condense_prompt, tei_content, request.human_url)
     except Exception as e:
         logger.exception(f"Could not resolve the condensing prompt for {request.human_url}")
         raise HTTPException(status_code=500, detail="Could not resolve the condensing prompt") from e

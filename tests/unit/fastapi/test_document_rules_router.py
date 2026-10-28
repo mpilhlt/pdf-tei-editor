@@ -12,7 +12,7 @@ from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
@@ -28,7 +28,7 @@ from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProv
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
 from fastapi_app.lib.secrets import MissingSecretError, unregister_secret_service
 from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
-from fastapi_app.routers.document_rules import get_db, router
+from fastapi_app.routers.document_rules import _document_tei_or_http_error, get_db, router
 
 FIXTURES = Path(__file__).parent / "fixtures" / "fossil"
 HUMAN_FILE = (FIXTURES / "guidelines.md").read_text(encoding="utf-8")
@@ -822,6 +822,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
     NEW_HUMAN = "## Data correction\n\nNew human rule.\n"
     MACHINE = "## Data correction\n\n<!-- sync: guide=abc llm=def -->\n\nMachine rule.\n"
     XML = "<TEI xmlns='http://www.tei-c.org/ns/1.0'/>"
+    STABLE_ID = "stable1"
 
     def setUp(self):
         super().setUp()
@@ -839,6 +840,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
             patch("fastapi_app.lib.doc_rules.guide_update.human_section_at_commit", return_value=self.OLD_HUMAN),
             patch("fastapi_app.routers.document_rules.check_model_access"),
             patch("fastapi_app.routers.document_rules.resolve_condense_prompt", return_value="  Custom condense prompt.  "),
+            patch("fastapi_app.routers.document_rules._document_tei_or_http_error", return_value=self.XML),
         ]
         for patcher in patches:
             patcher.start()
@@ -854,7 +856,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
     def _update(self, provider_id: str = "fake"):
         return self.client.post(
             "/document-rules/update-from-guide",
-            json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": provider_id, "model_id": "m1"},
+            json={"xml": self.STABLE_ID, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": provider_id, "model_id": "m1"},
         )
 
     def test_human_change_delta_mode(self):
@@ -916,6 +918,17 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
                 old=self.OLD_HUMAN, new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n"
             ),
         )
+
+    def test_update_resolves_the_condense_prompt_from_the_documents_content(self):
+        with patch("fastapi_app.routers.document_rules.resolve_condense_prompt", return_value="P") as resolve:
+            self.assertEqual(self._update().status_code, 200)
+        resolve.assert_called_once_with(self.XML, self.HUMAN_URL)
+
+    def test_update_without_a_readable_document_skips_the_model(self):
+        with patch("fastapi_app.routers.document_rules._document_tei_or_http_error", side_effect=HTTPException(status_code=400, detail="No TEI document open.")):
+            response = self._update()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.provider.calls, [])
 
     def test_update_in_align_mode_sends_the_align_template(self):
         self.texts[self.MACHINE_URL] = "## Data correction\n\nMachine rule.\n"
@@ -980,7 +993,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
              self.assertLogs("fastapi_app.routers.document_rules", level="ERROR") as logs:
             response = client.post(
                 "/document-rules/update-from-guide",
-                json={"xml": self.XML, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
+                json={"xml": self.STABLE_ID, "human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "provider_id": "fake", "model_id": "m1"},
             )
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["detail"], "Could not resolve the condensing prompt")
@@ -995,6 +1008,37 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._human_change().status_code, 403)
         self.assertEqual(self._update().status_code, 403)
+
+
+class TestDocumentTeiOrHttpError(unittest.TestCase):
+    USER = {"username": "alice", "roles": ["reviewer"]}
+
+    def _call(self, file_meta, content=b"<TEI/>", access=True):
+        file_repo = MagicMock()
+        file_repo.get_file_by_stable_id.return_value = file_meta
+        file_storage = MagicMock()
+        file_storage.read_file.return_value = content
+        with patch("fastapi_app.routers.document_rules.check_file_access", return_value=access):
+            return _document_tei_or_http_error(file_repo, file_storage, "stable1", self.USER)
+
+    def test_returns_the_tei_content(self):
+        self.assertEqual(self._call(MagicMock(file_type="tei")), "<TEI/>")
+
+    def test_unknown_or_non_tei_document_is_400(self):
+        for file_meta in (None, MagicMock(file_type="pdf")):
+            with self.assertRaises(HTTPException) as ctx:
+                self._call(file_meta)
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_no_read_access_is_403(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._call(MagicMock(file_type="tei"), access=False)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_missing_content_is_400(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._call(MagicMock(file_type="tei"), content=None)
+        self.assertEqual(ctx.exception.status_code, 400)
 
 
 class ProposalRouterTestCase(DocumentRulesRouterTestCase):

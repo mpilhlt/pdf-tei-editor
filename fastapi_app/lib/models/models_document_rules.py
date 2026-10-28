@@ -301,7 +301,7 @@ class ProposePullRequestResponse(BaseModel):
 
 
 class UpdateFromGuideRequest(BaseModel):
-    """Request to have a language model update a machine section from its human section."""
+    """Request to have a language model update a machine section from its human section. `xml` is the stable id of the open TEI document, whose extractor provider may supply the condensing prompt."""
     xml: str
     human_url: str
     machine_url: str
