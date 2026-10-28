@@ -281,12 +281,15 @@ class ProposePatchResponse(BaseModel):
     can_open_pull_request: bool = Field(..., description="True iff the guide is on GitHub, so that a pull request can be opened.")
     pull_request_title: str = Field(..., description="The default title of the pull request.")
     pull_request_body: str = Field(..., description="The default description of the pull request.")
+    pull_request_repository: Optional[str] = Field(None, description="The `owner/repo` the pull request is opened on, if `can_open_pull_request`.")
+    base_hashes: dict[str, str] = Field(..., description="The SHA-256 (hex) of each changed file's text on the default branch (`before`), by path; sent back to /propose-pull-request to detect upstream changes since the preview.")
 
 
 class ProposePullRequestRequest(ProposePatchRequest):
     """Request to open a GitHub pull request with the changes of a proposal, with the (possibly edited) title and description."""
     title: str
     body: str
+    base_hashes: dict[str, str] = Field(..., description="The `base_hashes` of the previewed /propose-patch response.")
 
 
 class ProposePullRequestResponse(BaseModel):

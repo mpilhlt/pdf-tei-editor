@@ -640,8 +640,8 @@ def propose_patch(
     The upstream patch of the caller's current text (selected override, else
     the original) of a rule category's human and/or machine section, as a
     unified diff against the default branch. Nothing is stored. Also returns
-    whether a GitHub pull request can be opened and its default title and
-    description.
+    whether a GitHub pull request can be opened, on which repository, and
+    its default title and description.
     """
     username = user["username"]
     proposal = _build_proposal_or_http_error(request, store, username)
@@ -653,6 +653,7 @@ def propose_patch(
         proposal.in_sync,
         proposal.upstream_changed,
     )
+    repo_id = _github_repo_id(request.human_url)
     return ProposePatchResponse(
         files=[ProposedFileModel(path=f.path, before=f.before, after=f.after) for f in proposal.files],
         patch=proposal.patch,
@@ -660,9 +661,11 @@ def propose_patch(
         branch=proposal.branch,
         upstream_changed=proposal.upstream_changed,
         in_sync=proposal.in_sync,
-        can_open_pull_request=_github_repo_id(request.human_url) is not None,
+        can_open_pull_request=repo_id is not None,
         pull_request_title=title,
         pull_request_body=body,
+        pull_request_repository=repo_id,
+        base_hashes=proposal.base_hashes,
     )
 
 
@@ -675,7 +678,9 @@ def propose_pull_request(
     """
     Open a GitHub pull request with the changes of /propose-patch, using the
     caller's stored GitHub token (HTTP 428 if there is none). Opens it from
-    a fork if the token has no push access. Nothing is stored locally.
+    a fork if the token has no push access. Nothing is stored locally. The
+    proposal is rebuilt; if its files on the default branch differ from the
+    previewed ones (`base_hashes`), nothing is created (HTTP 409).
     """
     username = user["username"]
     title = request.title.strip()
@@ -689,6 +694,8 @@ def propose_pull_request(
     except MissingSecretError as e:
         raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
     proposal = _build_proposal_or_http_error(request, store, username)
+    if proposal.base_hashes != request.base_hashes:
+        raise HTTPException(status_code=409, detail="The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
     try:
         result = open_pull_request(
             token,

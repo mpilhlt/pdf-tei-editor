@@ -8,13 +8,13 @@ user's own GitHub token. Without push access to the repository, the branch is
 created in the token owner's fork (created, or reused if it exists).
 """
 
-import base64
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import requests
 
@@ -32,6 +32,10 @@ _BRANCH_PREFIX = "pdf-tei-editor"
 _PATCH_SUFFIX = "-rules.patch"
 _CHANGED_UPSTREAM = "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes."
 _TOKEN_REJECTED = 'GitHub rejected the token. Update it under "GitHub" in your API keys.'
+_ACCEPT_JSON = "application/vnd.github+json"
+# File contents as the raw body: no base64, and no 1 MB limit
+_ACCEPT_RAW = "application/vnd.github.raw+json"
+_REPO_ID_RE = re.compile(r"^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$")
 
 
 class GitHubError(Exception):
@@ -100,10 +104,10 @@ def default_pull_request_text(
     return title, "\n".join(lines)
 
 
-def _request(method: str, path: str, token: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
+def _send(method: str, path: str, token: str, json: dict[str, Any] | None = None, accept: str = _ACCEPT_JSON) -> requests.Response:
     """
-    The JSON answer of the GitHub REST API to `method path` (path from the
-    API root) with `token`. Logs the method, path and status only.
+    The answer of the GitHub REST API to `method path` (path from the API
+    root) with `token`. Logs the method, path and status only.
 
     Raises:
         GitHubError: 422 if GitHub rejects the token (401), else 502 with
@@ -111,30 +115,49 @@ def _request(method: str, path: str, token: str, json: dict[str, Any] | None = N
     """
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
+        "Accept": accept,
         "X-GitHub-Api-Version": "2022-11-28",
     }
+    failure: str | None = None
     try:
         response = requests.request(method, f"{_API}{path}", headers=headers, json=json, timeout=_TIMEOUT)
     except requests.RequestException as e:
-        # The exception text may carry request details; only its type is reported
-        logger.warning(f"GitHub {method} {path} failed: {type(e).__name__}")
-        raise GitHubError(502, f"GitHub request failed: {type(e).__name__}") from None
+        # The exception (and its text) may carry request details such as the headers; only its type is kept
+        failure = type(e).__name__
+    if failure is not None:
+        # Raised outside the except block, so that the GitHubError has no __context__ referring to the request
+        logger.warning(f"GitHub {method} {path} failed: {failure}")
+        raise GitHubError(502, f"GitHub request failed: {failure}")
     logger.info(f"GitHub {method} {path} -> {response.status_code}")
+    if response.status_code == 401:
+        raise GitHubError(422, _TOKEN_REJECTED, 401)
+    if response.status_code >= 400:
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        message = str((body.get("message") if isinstance(body, dict) else None) or response.reason or "")
+        if token:
+            message = message.replace(token, "***")
+        raise GitHubError(502, f"GitHub request failed ({response.status_code}): {message}", response.status_code)
+    return response
+
+
+def _request(method: str, path: str, token: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The JSON object GitHub answers to `method path` (an empty dict for any other body); see _send() for the errors."""
+    response = _send(method, path, token, json)
     try:
         body = response.json()
     except ValueError:
         body = {}
-    if not isinstance(body, dict):
-        body = {}
-    if response.status_code == 401:
-        raise GitHubError(422, _TOKEN_REJECTED, 401)
-    if response.status_code >= 400:
-        message = str(body.get("message") or response.reason or "")
-        if token:
-            message = message.replace(token, "***")
-        raise GitHubError(502, f"GitHub request failed ({response.status_code}): {message}", response.status_code)
-    return body
+    return body if isinstance(body, dict) else {}
+
+
+def _check_repo_id(repo_id: str) -> None:
+    """Raises GitHubError (422) unless `repo_id` is a plain `owner/repo`, so that it cannot address another API path."""
+    match = _REPO_ID_RE.match(repo_id)
+    if match is None or any(segment in (".", "..") for segment in match.groups()):
+        raise GitHubError(422, f"The GitHub token has no access to {repo_id}.")
 
 
 def _ref_sha(token: str, repo_id: str, branch: str) -> str:
@@ -143,15 +166,22 @@ def _ref_sha(token: str, repo_id: str, branch: str) -> str:
 
 
 def _check_unchanged(token: str, repo_id: str, base_sha: str, files: list[ProposedFile]) -> None:
-    """Raises GitHubError (409) if a file at `base_sha` is gone or differs from its `before` text."""
+    """Raises GitHubError (409) if a file at `base_sha` is gone or differs from its `before` text, the previewed text."""
     for file in files:
         try:
-            contents = _request("GET", f"/repos/{repo_id}/contents/{quote(file.path)}?ref={base_sha}", token)
+            response = _send("GET", f"/repos/{repo_id}/contents/{quote(unquote(file.path))}?ref={base_sha}", token, accept=_ACCEPT_RAW)
         except GitHubError as e:
             if e.github_status == 404:
                 raise GitHubError(409, _CHANGED_UPSTREAM) from None
             raise
-        text = base64.b64decode(str(contents.get("content", ""))).decode("utf-8")
+        failure: str | None = None
+        text = ""
+        try:
+            text = response.content.decode("utf-8")
+        except UnicodeDecodeError as e:
+            failure = type(e).__name__
+        if failure is not None:
+            raise GitHubError(502, f"GitHub request failed: {failure}")
         if text != file.before:
             raise GitHubError(409, _CHANGED_UPSTREAM)
 
@@ -162,11 +192,13 @@ def _fork(token: str, repo_id: str, base_branch: str, fork_wait_seconds: float) 
     reused, once its `base_branch` ref answers.
 
     Raises:
-        GitHubError: 502 if the fork is not ready after `fork_wait_seconds`.
+        GitHubError: 502 if the fork is not ready after `fork_wait_seconds`;
+            422 if GitHub answers with a fork name that is not `owner/repo`.
     """
     fork = _request("POST", f"/repos/{repo_id}/forks", token, {"default_branch_only": True})
-    full_name = str(fork["full_name"])
-    owner = str(fork.get("owner", {}).get("login") or full_name.split("/")[0])
+    full_name = str(fork.get("full_name") or "")
+    _check_repo_id(full_name)
+    owner = str((fork.get("owner") or {}).get("login") or full_name.split("/")[0])
     deadline = time.monotonic() + fork_wait_seconds
     while True:
         try:
@@ -179,6 +211,14 @@ def _fork(token: str, repo_id: str, base_branch: str, fork_wait_seconds: float) 
         if time.monotonic() >= deadline:
             raise GitHubError(502, f"GitHub did not finish creating the fork of {repo_id}. Try again in a minute.")
         time.sleep(_FORK_POLL_INTERVAL)
+
+
+def _delete_branch(token: str, repo_id: str, branch: str) -> None:
+    """Best-effort removal of `branch` from `repo_id`; errors are ignored (_send() logs method, path and status)."""
+    try:
+        _send("DELETE", f"/repos/{repo_id}/git/refs/heads/{quote(branch)}", token)
+    except GitHubError:
+        pass
 
 
 def open_pull_request(
@@ -198,19 +238,22 @@ def open_pull_request(
     with `title` and `body` against `base_branch`. Without push access, the
     branch is created in the token owner's fork; its parent is still the
     upstream head commit. Nothing is written if a file's text on
-    `base_branch` differs from its `before` text.
+    `base_branch` differs from its `before` text. If the pull request cannot
+    be opened, the new branch is deleted again (best effort).
 
     Raises:
         GitHubError: see the class; 409 if the files changed upstream.
     """
+    _check_repo_id(repo_id)
     try:
         repo = _request("GET", f"/repos/{repo_id}", token)
     except GitHubError as e:
         if e.github_status in (403, 404):
             raise GitHubError(422, f"The GitHub token has no access to {repo_id}.") from None
         raise
-    can_push = bool(repo.get("permissions", {}).get("push"))
+    can_push = bool((repo.get("permissions") or {}).get("push"))
     base_sha = _ref_sha(token, repo_id, base_branch)
+    base_tree = str(_request("GET", f"/repos/{repo_id}/git/commits/{base_sha}", token)["tree"]["sha"])
     _check_unchanged(token, repo_id, base_sha, files)
 
     fork: str | None = None
@@ -222,8 +265,8 @@ def open_pull_request(
         head = f"{fork_owner}:{branch}"
 
     tree = _request("POST", f"/repos/{target}/git/trees", token, {
-        "base_tree": base_sha,
-        "tree": [{"path": file.path, "mode": "100644", "type": "blob", "content": file.after} for file in files],
+        "base_tree": base_tree,
+        "tree": [{"path": unquote(file.path), "mode": "100644", "type": "blob", "content": file.after} for file in files],
     })
     commit = _request("POST", f"/repos/{target}/git/commits", token, {
         "message": f"{title}\n\n{body}",
@@ -231,11 +274,15 @@ def open_pull_request(
         "parents": [base_sha],
     })
     _request("POST", f"/repos/{target}/git/refs", token, {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
-    pull = _request("POST", f"/repos/{repo_id}/pulls", token, {
-        "title": title,
-        "body": body,
-        "head": head,
-        "base": base_branch,
-        "maintainer_can_modify": True,
-    })
+    try:
+        pull = _request("POST", f"/repos/{repo_id}/pulls", token, {
+            "title": title,
+            "body": body,
+            "head": head,
+            "base": base_branch,
+            "maintainer_can_modify": True,
+        })
+    except GitHubError:
+        _delete_branch(token, target, branch)
+        raise
     return PullRequestResult(url=str(pull["html_url"]), number=int(pull["number"]), branch=branch, fork=fork)

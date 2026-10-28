@@ -625,7 +625,9 @@ test.describe('Document rules registry', () => {
               in_sync: true,
               can_open_pull_request: false,
               pull_request_title: 'Annotation rules update: Data correction',
-              pull_request_body: ''
+              pull_request_body: '',
+              pull_request_repository: null,
+              base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
             }
           });
         });
@@ -697,7 +699,9 @@ test.describe('Document rules registry', () => {
             in_sync: true,
             can_open_pull_request: true,
             pull_request_title: 'Annotation rules update: Data correction',
-            pull_request_body: 'Proposed with the PDF-TEI-Editor by testreviewer.\n\nIncludes: guide section and machine rules.\nThe sync marker of the machine rules is updated; the pair is in sync.'
+            pull_request_body: 'Proposed with the PDF-TEI-Editor by testreviewer.\n\nIncludes: guide section and machine rules.\nThe sync marker of the machine rules is updated; the pair is in sync.',
+            pull_request_repository: 'example/guides',
+            base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
           }
         }));
         await page.route('**/api/v1/document-rules/propose-pull-request', (route) => {
@@ -725,6 +729,7 @@ test.describe('Document rules registry', () => {
         const title = proposeDialog.locator('sl-input[name="prTitle"]');
         await expect(title.locator('input')).toHaveValue('Annotation rules update: Data correction');
         await expect(proposeDialog.locator('sl-textarea[name="prBody"] textarea')).toHaveValue(/Includes: guide section and machine rules\./);
+        await expect(proposeDialog.locator('[name="prTarget"]')).toHaveText('The pull request will be opened on example/guides.');
         const createBtn = proposeDialog.locator('sl-button[name="createPrBtn"]');
         await expect(createBtn).toBeEnabled();
 
@@ -732,12 +737,11 @@ test.describe('Document rules registry', () => {
         await createBtn.click();
 
         const result = proposeDialog.locator('[name="prResult"]');
-        await expect(result).toContainText('Pull request #42 created.');
-        await expect(result).toContainText('It was opened from your fork testreviewer/guides.');
+        await expect(result).toContainText('Pull request #42 created from your fork testreviewer/guides. Open on GitHub');
         await expect(result.locator('a')).toHaveAttribute('href', 'https://github.com/example/guides/pull/42');
         await expect(result.locator('a')).toHaveText('Open on GitHub');
         expect(prRequests).toHaveLength(1);
-        expect(prRequests[0]).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction', title: 'Edited title' });
+        expect(prRequests[0]).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction', title: 'Edited title', base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' } });
         await expect(createBtn).toHaveAttribute('disabled', '');
 
         await proposeDialog.locator('sl-button[name="closeBtn"]').click();

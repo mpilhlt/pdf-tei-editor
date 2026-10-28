@@ -113,14 +113,14 @@ For a category with both layers, the same **Propose change upstream** button ope
 
 The patch is built from your saved texts. If the editor shows changes you have not saved, the dialog says that they are not included; save them first.
 
-If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Guides on GitLab keep the patch download only.
+If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Guides on GitLab keep the patch download only.
 
 Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens>:
 
 - A classic token with the `public_repo` scope works whether or not you have push access to the guide repository.
 - A fine-grained token needs read and write access to "Contents" and "Pull requests" on the guide repository. If you have no push access, it may not be able to create the fork that is then needed, so a classic token is the safer choice.
 
-If you have push access to the guide repository, the changes go on a new branch there. Otherwise a fork of the repository is created in your GitHub account (or an existing one is used), the branch is created in the fork, and the pull request is opened from it; the dialog names the fork. Pull requests allow maintainers to edit the branch.
+If you have push access to the guide repository, the changes go on a new branch there. Otherwise a fork of the repository is created in your GitHub account (or an existing one is used), the branch is created in the fork, and the pull request is opened from it; the dialog names the fork. Pull requests from a fork allow the maintainers of the guide repository to edit the branch.
 
 If the guide changed upstream between the moment the dialog showed the diffs and your click on **Create pull request**, no pull request is created and the dialog asks you to close and reopen it to see the current changes.
 

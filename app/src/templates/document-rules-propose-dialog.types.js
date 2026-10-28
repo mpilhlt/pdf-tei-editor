@@ -16,6 +16,7 @@
 
 /**
  * @typedef {object} prSectionPart
+ * @property {HTMLDivElement} prTarget
  * @property {import('../ui.js').SlInput} prTitle
  * @property {import('../ui.js').SlTextarea} prBody
  * @property {HTMLDivElement} prResult

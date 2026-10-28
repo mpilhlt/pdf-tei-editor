@@ -1117,6 +1117,14 @@ class TestProposePatchEndpoint(ProposalRouterTestCase):
             ["Proposed with the PDF-TEI-Editor by alice.", "", "Includes: guide section and machine rules."],
         )
         self.assertIn("The sync marker of the machine rules is updated; the pair is in sync.", body["pull_request_body"])
+        self.assertEqual(body["pull_request_repository"], "mpilhlt/fossil")
+
+    def test_base_hashes_of_the_default_branch_files(self):
+        body = self._post().json()
+        self.assertEqual(body["base_hashes"], {
+            "docs/guidelines.md": hashlib.sha256(HUMAN_FILE.encode("utf-8")).hexdigest(),
+            "docs/guidelines-llm.md": hashlib.sha256(MACHINE_FILE.encode("utf-8")).hexdigest(),
+        })
 
     def test_gitlab_guide_cannot_open_a_pull_request(self):
         proposal = UpstreamProposal(files=[], patch="", filename="x-rules.patch", branch="main", upstream_changed=[], in_sync=False)
@@ -1127,6 +1135,7 @@ class TestProposePatchEndpoint(ProposalRouterTestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["can_open_pull_request"])
+        self.assertIsNone(response.json()["pull_request_repository"])
 
 
 class TestProposePullRequestEndpoint(ProposalRouterTestCase):
@@ -1147,7 +1156,12 @@ class TestProposePullRequestEndpoint(ProposalRouterTestCase):
         self.open_pr = pr_patch.start()
         self.addCleanup(pr_patch.stop)
 
-    def _open(self, title: str = "My title", human_url: Optional[str] = None):
+    BASE_HASHES = {
+        "docs/guidelines.md": hashlib.sha256(HUMAN_FILE.encode("utf-8")).hexdigest(),
+        "docs/guidelines-llm.md": hashlib.sha256(MACHINE_FILE.encode("utf-8")).hexdigest(),
+    }
+
+    def _open(self, title: str = "My title", human_url: Optional[str] = None, base_hashes: Optional[dict[str, str]] = None):
         return self.client.post(
             "/document-rules/propose-pull-request",
             json={
@@ -1158,6 +1172,7 @@ class TestProposePullRequestEndpoint(ProposalRouterTestCase):
                 "label": "Data correction",
                 "title": title,
                 "body": "My body",
+                "base_hashes": self.BASE_HASHES if base_hashes is None else base_hashes,
             },
         )
 
@@ -1170,6 +1185,30 @@ class TestProposePullRequestEndpoint(ProposalRouterTestCase):
         self.assertEqual((token, repo_id, base_branch, title, body), ("ghp_TOKEN", "mpilhlt/fossil", "main", "My title", "My body"))
         self.assertEqual([f.path for f in files], ["docs/guidelines.md", "docs/guidelines-llm.md"])
         self.assertRegex(branch, r"^pdf-tei-editor/data-correction-\d{8}-\d{6}$")
+
+    def test_upstream_change_since_the_preview_is_409(self):
+        # The default branch moved on after the preview: the rebuilt proposal's `before` differs from the previewed one
+        self.MAIN_FILES = {**self.MAIN_FILES, f"{PROPOSAL_REPO}/main/docs/guidelines-llm.md": MACHINE_FILE + "\nAn upstream addition.\n"}
+        response = self._open()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        self.open_pr.assert_not_called()
+
+    def test_different_previewed_paths_are_409(self):
+        for base_hashes in ({"docs/guidelines.md": self.BASE_HASHES["docs/guidelines.md"]}, {**self.BASE_HASHES, "docs/other.md": "0" * 64}):
+            with self.subTest(paths=sorted(base_hashes)):
+                response = self._open(base_hashes=base_hashes)
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        self.open_pr.assert_not_called()
+
+    def test_base_hashes_are_required(self):
+        response = self.client.post(
+            "/document-rules/propose-pull-request",
+            json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL, "include_human": True, "include_machine": True, "label": "Data correction", "title": "T", "body": "B"},
+        )
+        self.assertEqual(response.status_code, 422)
+        self.open_pr.assert_not_called()
 
     def test_missing_token_is_428(self):
         self.require_secret.side_effect = MissingSecretError("github", "alice")

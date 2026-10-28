@@ -900,6 +900,8 @@
  * @property {boolean} can_open_pull_request - True iff the guide is on GitHub, so that a pull request can be opened
  * @property {string} pull_request_title - The default title of the pull request
  * @property {string} pull_request_body - The default description of the pull request
+ * @property {string|null} [pull_request_repository] - The `owner/repo` the pull request is opened on, if `can_open_pull_request`
+ * @property {Object<string, string>} base_hashes - The SHA-256 (hex) of each changed file's text on the default branch (`before`), by path; sent back to /propose-pull-request to detect upstream changes since the preview
  */
 
 /**
@@ -911,6 +913,7 @@
  * @property {string} label - The rule category's label, e.g. "Data correction"
  * @property {string} title
  * @property {string} body
+ * @property {Object<string, string>} base_hashes - The `base_hashes` of the previewed /propose-patch response
  */
 
 /**

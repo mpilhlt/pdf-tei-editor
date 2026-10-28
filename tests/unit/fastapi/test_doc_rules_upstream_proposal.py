@@ -7,6 +7,7 @@ files as the default-branch files.
 """
 
 import difflib
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -199,6 +200,19 @@ class TestBuildUpstreamProposal(unittest.TestCase):
         with self.assertRaises(ProposalError) as raised:
             _Fixture().build({}, machine_url=machine_url)
         self.assertEqual(str(raised.exception), "The guide and the machine rules are in different repositories; propose them separately.")
+
+    def test_same_repo_id_on_another_forge_is_a_different_repository(self) -> None:
+        machine_url = f"https://gitlab.com/mpilhlt/fossil/-/blob/{SHA}/docs/guidelines-llm.md#L17-L25"
+        with self.assertRaises(ProposalError) as raised:
+            _Fixture().build({}, machine_url=machine_url)
+        self.assertEqual(str(raised.exception), "The guide and the machine rules are in different repositories; propose them separately.")
+
+    def test_base_hashes_are_of_the_default_branch_files(self) -> None:
+        proposal = _Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT})
+        self.assertEqual(proposal.base_hashes, {
+            "docs/guidelines.md": hashlib.sha256(HUMAN_FILE.encode("utf-8")).hexdigest(),
+            "docs/guidelines-llm.md": hashlib.sha256(MACHINE_FILE.encode("utf-8")).hexdigest(),
+        })
 
     def test_different_repositories_do_not_matter_for_human_only(self) -> None:
         machine_url = f"https://github.com/other/repo/blob/{SHA}/docs/guidelines-llm.md#L17-L25"

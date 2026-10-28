@@ -1431,6 +1431,7 @@ class DocumentRulesPlugin extends Plugin {
     ui.createPrBtn.style.display = canOpen ? '' : 'none'
     // No second pull request while one is created or after it was, until the dialog is reopened
     ui.createPrBtn.disabled = !canOpen || this._pullRequestPending || this._pullRequestCreated
+    ui.prSection.prTarget.textContent = canOpen ? `The pull request will be opened on ${response.pull_request_repository}.` : ''
     // Texts the user edited since the dialog opened are kept
     if (!this._prTitleEdited) ui.prSection.prTitle.value = response.pull_request_title
     if (!this._prBodyEdited) ui.prSection.prBody.value = response.pull_request_body
@@ -1476,7 +1477,9 @@ class DocumentRulesPlugin extends Plugin {
     this._setProposeNotices([])
     ui.prSection.style.display = 'none'
     ui.createPrBtn.style.display = 'none'
+    ui.prSection.prTarget.textContent = ''
     ui.prSection.prResult.replaceChildren()
+    ui.createPrBtn.loading = false
     this._prTitleEdited = false
     this._prBodyEdited = false
     this._pullRequestPending = false
@@ -1486,11 +1489,15 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Open a GitHub pull request with the shown proposal
    * (POST /document-rules/propose-pull-request), with the title and
-   * description from the sub-dialog. A missing GitHub token is asked for
-   * and the request retried. On success the pull request's number and link
-   * are shown and the button stays disabled until the sub-dialog is
-   * reset, also across refreshes, so that no duplicate is opened; on an error its message is shown and the button
-   * enabled again.
+   * description from the sub-dialog and the previewed files' base hashes,
+   * so that the server refuses it if the guide changed upstream since the
+   * preview. A missing GitHub token is asked for and the request retried.
+   * The button shows a spinner while the request runs. On success the pull
+   * request's number and link are shown and the button stays disabled
+   * until the sub-dialog is reset, also across refreshes, so that no
+   * duplicate is opened; on an error its message is shown and the button
+   * enabled again. A pull request created after the sub-dialog was reset
+   * or closed is reported in a notification.
    * @returns {Promise<void>}
    */
   async _onCreatePullRequest() {
@@ -1499,7 +1506,9 @@ class DocumentRulesPlugin extends Plugin {
     const ui = this._proposeDialogUi
     const result = ui.prSection.prResult
     const session = this._pullRequestSession
+    const baseHashes = this._proposal.base_hashes
     ui.createPrBtn.disabled = true
+    ui.createPrBtn.loading = true
     this._pullRequestPending = true
     result.replaceChildren()
     /** @type {ProposePullRequestResponse} */
@@ -1513,18 +1522,25 @@ class DocumentRulesPlugin extends Plugin {
           include_machine: ui.includeMachine.checked,
           label: human.label,
           title: ui.prSection.prTitle.value,
-          body: ui.prSection.prBody.value
+          body: ui.prSection.prBody.value,
+          base_hashes: baseHashes
         })
       )
     } catch (error) {
       if (session !== this._pullRequestSession) return
+      ui.createPrBtn.loading = false
       this._pullRequestPending = false
       result.textContent = error instanceof Error ? error.message : String(error)
       // Enabled only if a proposal is shown, not while a refresh is pending
       ui.createPrBtn.disabled = this._proposal === null || !this._proposal.can_open_pull_request
       return
     }
-    if (session !== this._pullRequestSession) return
+    if (session !== this._pullRequestSession) {
+      // Created on GitHub although the sub-dialog was reset or closed meanwhile
+      notify(`Pull request #${response.number} created: ${response.url}`, 'success', 'check-circle')
+      return
+    }
+    ui.createPrBtn.loading = false
     this._pullRequestPending = false
     this._pullRequestCreated = true
     const link = document.createElement('a')
@@ -1532,8 +1548,10 @@ class DocumentRulesPlugin extends Plugin {
     link.target = '_blank'
     link.rel = 'noopener'
     link.textContent = 'Open on GitHub'
-    result.append(`Pull request #${response.number} created. `, link)
-    if (response.fork) result.append(` It was opened from your fork ${response.fork}.`)
+    const created = response.fork
+      ? `Pull request #${response.number} created from your fork ${response.fork}. `
+      : `Pull request #${response.number} created. `
+    result.append(created, link)
   }
 
   /**

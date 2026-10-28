@@ -177,12 +177,13 @@ function makeProposeDialogUi() {
   el.files = document.createElement('div');
   el.prSection = document.createElement('div');
   el.prSection.style.display = 'none';
+  el.prSection.prTarget = document.createElement('div');
   el.prSection.prTitle = Object.assign(document.createElement('sl-input'), { value: '' });
   el.prSection.prBody = Object.assign(document.createElement('sl-textarea'), { value: '' });
   el.prSection.prResult = document.createElement('div');
-  el.prSection.append(el.prSection.prTitle, el.prSection.prBody, el.prSection.prResult);
+  el.prSection.append(el.prSection.prTarget, el.prSection.prTitle, el.prSection.prBody, el.prSection.prResult);
   el.hint = document.createElement('div');
-  el.createPrBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+  el.createPrBtn = Object.assign(document.createElement('sl-button'), { disabled: true, loading: false });
   el.createPrBtn.style.display = 'none';
   el.downloadBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
   el.closeBtn = document.createElement('sl-button');
@@ -2546,6 +2547,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     return {
       files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine,
       can_open_pull_request: true, pull_request_title: 'Annotation rules update: Primary sources', pull_request_body: `Includes: ${includes}.`,
+      pull_request_repository: 'o/r', base_hashes: Object.fromEntries(files.map(f => [f.path, `hash of ${f.before}`])),
     };
   }
 
@@ -2888,6 +2890,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.strictEqual(ui.prSection.style.display, 'none');
       assert.strictEqual(ui.createPrBtn.style.display, 'none');
       assert.strictEqual(ui.downloadBtn.disabled, false);
+      assert.strictEqual(ui.prSection.prTarget.textContent, '');
     });
 
     it('shows the controls with the default texts and enables the button when the guide is on GitHub', async () => {
@@ -2900,6 +2903,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.strictEqual(ui.createPrBtn.disabled, false);
       assert.strictEqual(ui.prSection.prTitle.value, 'Annotation rules update: Primary sources');
       assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+      assert.strictEqual(ui.prSection.prTarget.textContent, 'The pull request will be opened on o/r.');
     });
 
     it('disables the button while a request is pending and after an error', async () => {
@@ -2983,6 +2987,8 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.deepStrictEqual(prRequests[1], {
         human_url: human.url, machine_url: machine.url, include_human: true, include_machine: true, label: human.label,
         title: 'Edited title', body: 'Edited body',
+        // The previewed files' hashes, unchanged
+        base_hashes: { 'docs/guidelines.md': 'hash of g old', 'docs/guidelines-llm.md': 'hash of m old' },
       });
     });
 
@@ -3010,7 +3016,8 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
       await plugin._onCreatePullRequest();
-      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created. Open on GitHub It was opened from your fork me/r.');
+      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created from your fork me/r. Open on GitHub');
+      assert.strictEqual(ui.prSection.prResult.querySelector('a').textContent, 'Open on GitHub');
     });
 
     it('shows an error message and re-enables the button', async () => {
@@ -3021,6 +3028,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       await plugin._onCreatePullRequest();
       assert.strictEqual(ui.prSection.prResult.textContent, 'The pull request needs a title.');
       assert.strictEqual(ui.createPrBtn.disabled, false);
+      assert.strictEqual(ui.createPrBtn.loading, false);
     });
 
     it('disables the button and clears the previous result while the request is pending', async () => {
@@ -3032,9 +3040,28 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       ui.prSection.prResult.textContent = 'previous error';
       const pending = plugin._onCreatePullRequest();
       assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(ui.createPrBtn.loading, true);
       assert.strictEqual(ui.prSection.prResult.textContent, '');
       resolveRequest();
       await pending;
+      assert.strictEqual(ui.createPrBtn.loading, false);
+    });
+
+    it('reports a pull request created after the dialog was reset in a notification', async () => {
+      let resolveRequest;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveRequest = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      const pending = plugin._onCreatePullRequest();
+      plugin._resetProposeDialog();
+      assert.strictEqual(ui.createPrBtn.loading, false);
+      resolveRequest();
+      await pending;
+      assert.strictEqual(notifyCalls.length, 1);
+      assert.strictEqual(notifyCalls[0][0], 'Pull request #7 created: https://github.com/o/r/pull/7');
+      assert.strictEqual(notifyCalls[0][1], 'success');
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
     });
 
     it('keeps the button disabled after a created pull request when a refresh succeeds', async () => {
@@ -3089,6 +3116,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.strictEqual(ui.createPrBtn.style.display, 'none');
       assert.strictEqual(ui.createPrBtn.disabled, true);
       assert.strictEqual(ui.prSection.prResult.textContent, '');
+      assert.strictEqual(ui.prSection.prTarget.textContent, '');
     });
   });
 

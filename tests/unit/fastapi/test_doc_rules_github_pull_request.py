@@ -5,7 +5,6 @@ pull request of a document rules proposal, against a fake GitHub REST API.
 @testCovers fastapi_app/lib/doc_rules/github_pull_request.py
 """
 
-import base64
 import itertools
 import json
 import logging
@@ -31,6 +30,7 @@ API = "https://api.github.com"
 TOKEN = "ghp_SECRET"
 REPO = "owner/repo"
 BASE_SHA = "a" * 40
+BASE_TREE = "t" * 40
 FILES = [
     ProposedFile("docs/guide.md", "# Guide\n\nold\n", "# Guide\n\nnew\n"),
     ProposedFile("docs/guide-llm.md", "# LLM\n\nold\n", "# LLM\n\nnew\n"),
@@ -39,22 +39,24 @@ BRANCH = "pdf-tei-editor/data-correction-20261028-090507"
 
 
 class FakeResponse:
-    """A requests.Response stand-in with a status code and a JSON body."""
+    """A requests.Response stand-in with a status code and a JSON body, or a raw body (`bytes`)."""
 
-    def __init__(self, status_code: int, body: dict[str, Any]):
+    def __init__(self, status_code: int, body: dict[str, Any] | bytes):
         self.status_code = status_code
         self._body = body
         self.reason = "Reason"
         self.ok = status_code < 400
+        self.content = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
 
     def json(self) -> dict[str, Any]:
+        if isinstance(self._body, bytes):
+            raise ValueError("not JSON")
         return self._body
 
 
-def _contents(text: str) -> dict[str, Any]:
-    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
-    # GitHub wraps the base64 content in lines
-    return {"content": "\n".join(encoded[i:i + 20] for i in range(0, len(encoded), 20)), "encoding": "base64"}
+def _contents(text: str) -> bytes:
+    """The raw body GitHub answers for `Accept: application/vnd.github.raw+json`."""
+    return text.encode("utf-8")
 
 
 class FakeGitHub:
@@ -66,14 +68,15 @@ class FakeGitHub:
         self.routes: dict[tuple[str, str], list[FakeResponse]] = {}
         self.route("GET", f"/repos/{REPO}", 200, {"full_name": REPO, "permissions": {"push": push, "pull": True}})
         self.route("GET", f"/repos/{REPO}/git/ref/heads/main", 200, {"object": {"sha": BASE_SHA}})
+        self.route("GET", f"/repos/{REPO}/git/commits/{BASE_SHA}", 200, {"sha": BASE_SHA, "tree": {"sha": BASE_TREE}})
         for file in FILES:
             self.route("GET", f"/repos/{REPO}/contents/{file.path}?ref={BASE_SHA}", 200, _contents(file.before))
 
-    def route(self, method: str, path: str, status: int, body: dict[str, Any]) -> None:
+    def route(self, method: str, path: str, status: int, body: dict[str, Any] | bytes) -> None:
         """Answer `method path` with `status` and `body`; several routes for one path answer in turn, the last repeatedly."""
         self.routes.setdefault((method, path), []).append(FakeResponse(status, body))
 
-    def set_route(self, method: str, path: str, status: int, body: dict[str, Any]) -> None:
+    def set_route(self, method: str, path: str, status: int, body: dict[str, Any] | bytes) -> None:
         self.routes[(method, path)] = [FakeResponse(status, body)]
 
     def target_routes(self, target: str) -> None:
@@ -119,6 +122,7 @@ class OpenPullRequestTest(unittest.TestCase):
         self.assertEqual([(m, p) for m, p, _ in fake.calls], [
             ("GET", f"/repos/{REPO}"),
             ("GET", f"/repos/{REPO}/git/ref/heads/main"),
+            ("GET", f"/repos/{REPO}/git/commits/{BASE_SHA}"),
             ("GET", f"/repos/{REPO}/contents/docs/guide.md?ref={BASE_SHA}"),
             ("GET", f"/repos/{REPO}/contents/docs/guide-llm.md?ref={BASE_SHA}"),
             ("POST", f"/repos/{REPO}/git/trees"),
@@ -126,8 +130,9 @@ class OpenPullRequestTest(unittest.TestCase):
             ("POST", f"/repos/{REPO}/git/refs"),
             ("POST", f"/repos/{REPO}/pulls"),
         ])
+        # The base tree is the base commit's tree, not the commit itself
         self.assertEqual(fake.body("POST", f"/repos/{REPO}/git/trees"), {
-            "base_tree": BASE_SHA,
+            "base_tree": BASE_TREE,
             "tree": [
                 {"path": "docs/guide.md", "mode": "100644", "type": "blob", "content": "# Guide\n\nnew\n"},
                 {"path": "docs/guide-llm.md", "mode": "100644", "type": "blob", "content": "# LLM\n\nnew\n"},
@@ -149,7 +154,7 @@ class OpenPullRequestTest(unittest.TestCase):
             result = _open(fake)
         sleep.assert_called_once_with(1)
         self.assertEqual(fake.body("POST", f"/repos/{REPO}/forks"), {"default_branch_only": True})
-        self.assertEqual([(m, p) for m, p, _ in fake.calls][4:], [
+        self.assertEqual([(m, p) for m, p, _ in fake.calls][5:], [
             ("POST", f"/repos/{REPO}/forks"),
             ("GET", f"/repos/{fork}/git/ref/heads/main"),
             ("GET", f"/repos/{fork}/git/ref/heads/main"),
@@ -160,7 +165,7 @@ class OpenPullRequestTest(unittest.TestCase):
         ])
         # The upstream base commit is the parent, not the fork's default branch
         self.assertEqual(fake.body("POST", f"/repos/{fork}/git/commits")["parents"], [BASE_SHA])
-        self.assertEqual(fake.body("POST", f"/repos/{fork}/git/trees")["base_tree"], BASE_SHA)
+        self.assertEqual(fake.body("POST", f"/repos/{fork}/git/trees")["base_tree"], BASE_TREE)
         self.assertEqual(fake.body("POST", f"/repos/{REPO}/pulls")["head"], f"forkowner:{BRANCH}")
         self.assertEqual(result.fork, fork)
         self.assertEqual(result.number, 7)
@@ -240,20 +245,93 @@ class OpenPullRequestTest(unittest.TestCase):
             with self.assertRaises(GitHubError) as ctx:
                 open_pull_request(TOKEN, REPO, "main", FILES, "Title", "Body", BRANCH)
         self.assertEqual(ctx.exception.status_code, 502)
+        self.assertEqual(str(ctx.exception), "GitHub request failed: ConnectionError")
         self.assertNotIn(TOKEN, str(ctx.exception))
         self.assertNotIn(TOKEN, "\n".join(logs.output))
+        # No chained exception refers to the failed request (and its headers)
+        self.assertIsNone(ctx.exception.__context__)
+        self.assertIsNone(ctx.exception.__cause__)
 
     def test_headers_and_timeout(self):
         fake = FakeGitHub(push=True)
         fake.target_routes(REPO)
         _open(fake)
-        for kwargs in fake.kwargs:
+        for (_, path, _), kwargs in zip(fake.calls, fake.kwargs):
+            # File contents are fetched as the raw body (no base64, no 1 MB limit)
+            accept = "application/vnd.github.raw+json" if "/contents/" in path else "application/vnd.github+json"
             self.assertEqual(kwargs["headers"], {
                 "Authorization": f"Bearer {TOKEN}",
-                "Accept": "application/vnd.github+json",
+                "Accept": accept,
                 "X-GitHub-Api-Version": "2022-11-28",
-            })
+            }, path)
             self.assertEqual(kwargs["timeout"], 15)
+
+    def test_undecodable_contents_are_502(self):
+        fake = FakeGitHub(push=True)
+        fake.set_route("GET", f"/repos/{REPO}/contents/docs/guide.md?ref={BASE_SHA}", 200, b"\xff\xfe")
+        with self.assertRaises(GitHubError) as ctx:
+            _open(fake)
+        self.assertEqual(ctx.exception.status_code, 502)
+        self.assertEqual(str(ctx.exception), "GitHub request failed: UnicodeDecodeError")
+        self.assertIsNone(ctx.exception.__context__)
+        self.assertFalse(any(m == "POST" for m, _, _ in fake.calls))
+
+    def test_percent_encoded_path(self):
+        # ProposedFile.path comes from the blob URL and may be percent-encoded
+        files = [ProposedFile("docs/guide%20rules.md", "# Guide\n\nold\n", "# Guide\n\nnew\n")]
+        fake = FakeGitHub(push=True)
+        fake.route("GET", f"/repos/{REPO}/contents/docs/guide%20rules.md?ref={BASE_SHA}", 200, _contents(files[0].before))
+        fake.target_routes(REPO)
+        with patch(f"{MODULE}.requests.request", side_effect=fake):
+            open_pull_request(TOKEN, REPO, "main", files, "Title", "Body", BRANCH)
+        self.assertIn(("GET", f"/repos/{REPO}/contents/docs/guide%20rules.md?ref={BASE_SHA}"), [(m, p) for m, p, _ in fake.calls])
+        self.assertEqual(fake.body("POST", f"/repos/{REPO}/git/trees")["tree"][0]["path"], "docs/guide rules.md")
+
+    def test_failed_pull_request_deletes_the_branch(self):
+        for push, target in ((True, REPO), (False, "forkowner/repo")):
+            with self.subTest(push=push):
+                fake = FakeGitHub(push=push)
+                if not push:
+                    fake.route("POST", f"/repos/{REPO}/forks", 202, {"full_name": target, "owner": {"login": "forkowner"}})
+                    fake.route("GET", f"/repos/{target}/git/ref/heads/main", 200, {"object": {"sha": "stale-sha"}})
+                fake.route("POST", f"/repos/{target}/git/trees", 201, {"sha": "tree-sha"})
+                fake.route("POST", f"/repos/{target}/git/commits", 201, {"sha": "commit-sha"})
+                fake.route("POST", f"/repos/{target}/git/refs", 201, {"ref": f"refs/heads/{BRANCH}"})
+                fake.route("POST", f"/repos/{REPO}/pulls", 422, {"message": "Validation Failed"})
+                # The cleanup's own failure is ignored
+                fake.route("DELETE", f"/repos/{target}/git/refs/heads/{BRANCH}", 500, {"message": "boom"})
+                with self.assertRaises(GitHubError) as ctx:
+                    _open(fake)
+                self.assertEqual(str(ctx.exception), "GitHub request failed (422): Validation Failed")
+                self.assertEqual(fake.calls[-1][:2], ("DELETE", f"/repos/{target}/git/refs/heads/{BRANCH}"))
+
+    def test_invalid_repo_id_makes_no_request(self):
+        for repo_id in ("owner/repo/extra", "owner", "../repo", "owner/..", "./repo", "owner/re po", "owner/repo?x=1", ""):
+            with self.subTest(repo_id=repo_id), patch(f"{MODULE}.requests.request") as request:
+                with self.assertRaises(GitHubError) as ctx:
+                    open_pull_request(TOKEN, repo_id, "main", FILES, "Title", "Body", BRANCH)
+                self.assertEqual(ctx.exception.status_code, 422)
+                self.assertEqual(str(ctx.exception), f"The GitHub token has no access to {repo_id}.")
+                request.assert_not_called()
+
+    def test_invalid_fork_name(self):
+        fake = FakeGitHub(push=False)
+        fake.route("POST", f"/repos/{REPO}/forks", 202, {"full_name": "forkowner/../x", "owner": {"login": "forkowner"}})
+        with self.assertRaises(GitHubError) as ctx:
+            _open(fake)
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(str(ctx.exception), "The GitHub token has no access to forkowner/../x.")
+        self.assertEqual(fake.calls[-1][:2], ("POST", f"/repos/{REPO}/forks"))
+
+    def test_fork_without_owner(self):
+        fork = "forkowner/repo"
+        fake = FakeGitHub(push=False)
+        fake.route("POST", f"/repos/{REPO}/forks", 202, {"full_name": fork, "owner": None})
+        fake.route("GET", f"/repos/{fork}/git/ref/heads/main", 200, {"object": {"sha": "stale-sha"}})
+        fake.target_routes(fork)
+        result = _open(fake)
+        self.assertEqual(fake.body("POST", f"/repos/{REPO}/pulls")["head"], f"forkowner:{BRANCH}")
+        self.assertEqual(result.fork, fork)
 
 
 class BranchNameTest(unittest.TestCase):

@@ -67,6 +67,10 @@ describe('document-rules-propose-dialog.html', () => {
     assert.strictEqual(section.style.display, 'none');
     assert.strictEqual(section.previousElementSibling, root.files);
     assert.strictEqual(section.nextElementSibling, root.hint);
+    // The target repository line comes first, above the title field
+    assert.strictEqual(section.prTarget.tagName, 'DIV');
+    assert.strictEqual(section.firstElementChild, section.prTarget);
+    assert.strictEqual(section.prTarget.nextElementSibling, section.prTitle);
     assert.strictEqual(section.prTitle.tagName, 'SL-INPUT');
     assert.strictEqual(section.prTitle.getAttribute('label'), 'Pull request title');
     assert.strictEqual(section.prBody.tagName, 'SL-TEXTAREA');

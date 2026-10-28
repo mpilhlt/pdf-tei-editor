@@ -12,6 +12,7 @@ text, the guide text the machine rules were derived from.
 """
 
 import difflib
+import hashlib
 import re
 from dataclasses import dataclass
 
@@ -76,6 +77,11 @@ class UpstreamProposal:
     branch: str
     upstream_changed: list[str]
     in_sync: bool
+
+    @property
+    def base_hashes(self) -> dict[str, str]:
+        """The SHA-256 (hex) of each changed file's `before` text (UTF-8), by path: the default-branch state the proposal was built on."""
+        return {file.path: hashlib.sha256(file.before.encode("utf-8")).hexdigest() for file in self.files}
 
 
 def _adapter(url: str) -> BaseGitForgeAdapter:
@@ -262,7 +268,8 @@ def build_upstream_proposal(
     machine_path = ""
     if include_machine:
         machine_repo, machine_path = _repo_path(machine_url)
-        if machine_repo != human_repo:
+        # The same repo_id on another forge is another repository; a GitLab repo_id includes the origin, so its host is compared too
+        if machine_repo != human_repo or type(_adapter(machine_url)) is not type(_adapter(human_url)):
             raise ProposalError("The guide and the machine rules are in different repositories; propose them separately.")
 
     branch, human_main_url = _default_branch(_adapter(human_url), human_url, cache)
