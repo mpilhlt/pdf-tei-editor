@@ -23,6 +23,7 @@ from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.doc_rules.github_pull_request import GITHUB_SECRET_SERVICE, GitHubError, PullRequestResult, register_github_secret_service
+from fastapi_app.lib.doc_rules.upstream_cleanup import CategoryNotFoundError, LayerUpstreamStatus, UpstreamStatus
 from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError, ProposedFile, UpstreamProposal
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
