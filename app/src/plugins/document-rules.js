@@ -1702,6 +1702,7 @@ class DocumentRulesPlugin extends Plugin {
     this._proposedModel = model
     ui.proposedHeading.style.display = ''
     ui.proposedDiff.style.display = ''
+    ui.acceptBtn.style.display = ''
     ui.acceptBtn.disabled = false
   }
 
@@ -1772,6 +1773,8 @@ class DocumentRulesPlugin extends Plugin {
     const ui = this._updateDialogUi
     ui.proposedHeading.style.display = 'none'
     ui.proposedDiff.style.display = 'none'
+    // Shown once Generate has produced machine rules to accept
+    ui.acceptBtn.style.display = 'none'
     ui.acceptBtn.disabled = true
     ui.acceptBtn.loading = false
     ui.modelRow.generateBtn.disabled = false
@@ -1780,7 +1783,8 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * A read-only markdown CodeMirror view in `parent` showing `modified`,
-   * with the changes from `original` highlighted inline.
+   * with the changes from `original` highlighted inline and unchanged
+   * stretches collapsed (expandable by click) to three lines of context.
    * @param {HTMLElement} parent
    * @param {string} original
    * @param {string} modified
@@ -1797,7 +1801,7 @@ class DocumentRulesPlugin extends Plugin {
           getTheme(this._editorThemeId()).extensions,
           EditorView.editable.of(false),
           EditorState.readOnly.of(true),
-          unifiedMergeView({ original, mergeControls: false })
+          unifiedMergeView({ original, mergeControls: false, collapseUnchanged: { margin: 3, minSize: 4 } })
         ]
       }),
       parent

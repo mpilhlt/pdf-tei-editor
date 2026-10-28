@@ -2155,6 +2155,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(ui.modelRow.style.display, '');
     assert.strictEqual(ui.notice.style.display, 'none');
     assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.acceptBtn.style.display, 'none');
     assert.strictEqual(ui.proposedDiff.style.display, 'none');
     assert.strictEqual(ui.open, true);
   });
@@ -2311,6 +2312,7 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(ui.proposedHeading.style.display, '');
     assert.strictEqual(ui.proposedDiff.style.display, '');
     assert.strictEqual(ui.acceptBtn.disabled, false);
+    assert.strictEqual(ui.acceptBtn.style.display, '');
     assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
     assert.strictEqual(ui.modelRow.generateBtn.loading, false);
   });
