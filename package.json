@@ -108,7 +108,7 @@
     },
     "overrides": {
         "@napi-rs/canvas": "$@napi-rs/canvas",
-        "handlebars": "4.7.9",
+        "handlebars": "4.7.10",
         "lodash": "^4.17.23",
         "postcss": "^8.5.23",
         "@babel/core": "^7.29.6",
