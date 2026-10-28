@@ -18,6 +18,7 @@ from fastapi_app.lib.doc_rules.rules_refresh import ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.doc_rules.upstream_cleanup import (
     CategoryNotFoundError,
+    OverrideDeletionError,
     category_layers,
     matches_upstream,
     remove_overrides_in_upstream,
@@ -47,10 +48,12 @@ class UpstreamCleanupTestCase(unittest.TestCase):
         self.store = DocumentRulesStore(DatabaseManager(Path(self.temp_dir.name) / "test.db"))
         self.cache = MagicMock()
         self.sections: dict[str, Union[str, Exception]] = {HUMAN_URL: UPSTREAM, MACHINE_URL: UPSTREAM}
+        self.pinned: dict[str, Union[str, Exception]] = {HUMAN_URL: UPSTREAM, MACHINE_URL: UPSTREAM}
         self.refresh = ResourceRefreshOutcome(status="ok", refs=[], changed=False, message="")
         patches = (
             patch.object(InterpretationRefKind, "resource_key", lambda self, url, strict=False, allow_redirects=True: normalize_resource_key(url)),
             patch.object(upstream_cleanup, "upstream_section", self._section),
+            patch.object(upstream_cleanup, "pinned_section", self._pinned),
             patch.object(upstream_cleanup, "plan_resource_refresh", lambda tei, url, cache: self.refresh),
         )
         for p in patches:
@@ -62,6 +65,12 @@ class UpstreamCleanupTestCase(unittest.TestCase):
 
     def _section(self, url: str, cache: object) -> str:
         section = self.sections[url]
+        if isinstance(section, Exception):
+            raise section
+        return section
+
+    def _pinned(self, url: str) -> str:
+        section = self.pinned[url]
         if isinstance(section, Exception):
             raise section
         return section
@@ -154,7 +163,7 @@ class TestRemove(UpstreamCleanupTestCase):
     def test_remove_rechecks_instead_of_trusting_an_earlier_status(self) -> None:
         override = self._override(MACHINE_URL, UPSTREAM)
         self.assertEqual(upstream_status(TEI, HUMAN_URL, self.store, "alice", self.cache).layers[1].in_upstream, [override])
-        self.sections[MACHINE_URL] = "## Data correction\n\nChanged.\n"
+        self.pinned[MACHINE_URL] = "## Data correction\n\nChanged.\n"
         remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
         self.assertEqual(self._ids(MACHINE_URL), [override])
 
@@ -162,6 +171,65 @@ class TestRemove(UpstreamCleanupTestCase):
         bob = self._override(MACHINE_URL, UPSTREAM, owner="bob")
         remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
         self.assertEqual(self._ids(MACHINE_URL, "bob"), [bob])
+
+
+    def test_remove_compares_with_the_pinned_original_not_the_default_branch(self) -> None:
+        in_head_only = self._override(MACHINE_URL, UPSTREAM)
+        self.pinned[MACHINE_URL] = "## Data correction\n\nOld rule.\n"
+        status = remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
+        self.assertEqual(status.layers[1].in_upstream, [])
+        self.assertEqual(self._ids(MACHINE_URL), [in_head_only])
+
+    def test_remove_deletes_an_override_matching_the_pinned_original(self) -> None:
+        pinned_text = "## Data correction\n\nOld rule.\n"
+        override = self._override(MACHINE_URL, pinned_text)
+        self.sections[MACHINE_URL] = UPSTREAM
+        self.pinned[MACHINE_URL] = pinned_text
+        status = remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
+        self.assertEqual(status.layers[1].in_upstream, [override])
+        self.assertEqual(self._ids(MACHINE_URL), [])
+
+    def test_remove_pinned_fetch_failure_deletes_nothing_of_that_layer(self) -> None:
+        human = self._override(HUMAN_URL, UPSTREAM)
+        machine = self._override(MACHINE_URL, UPSTREAM)
+        self.pinned[HUMAN_URL] = RuleFetchError("offline")
+        human_status, machine_status = remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache).layers
+        self.assertEqual((human_status.error, human_status.in_upstream, human_status.kept), ("offline", [], [human]))
+        self.assertEqual(machine_status.in_upstream, [machine])
+        self.assertEqual(self._ids(HUMAN_URL), [human])
+
+    def test_remove_stops_on_a_failing_delete_and_reports_deleted_ids(self) -> None:
+        human = self._override(HUMAN_URL, UPSTREAM)
+        machine = self._override(MACHINE_URL, UPSTREAM)
+        real_delete = self.store.delete_override
+
+        def failing_delete(override_id: str, owner: str) -> bool:
+            if override_id == machine:
+                raise RuntimeError("disk full")
+            return real_delete(override_id, owner)
+
+        self.store.delete_override = failing_delete  # type: ignore[method-assign]
+        with self.assertRaises(OverrideDeletionError) as ctx:
+            remove_overrides_in_upstream(TEI, HUMAN_URL, self.store, "alice", self.cache)
+        self.assertEqual(ctx.exception.deleted, [human])
+        self.assertIn("after 1 were deleted", str(ctx.exception))
+
+
+class TestResourceKeyFailure(UpstreamCleanupTestCase):
+    def test_resource_key_failure_reports_only_that_layer(self) -> None:
+        self._override(MACHINE_URL, UPSTREAM)
+
+        def resource_key(kind: InterpretationRefKind, url: str, strict: bool = False, allow_redirects: bool = True) -> str:
+            if strict and url == HUMAN_URL:
+                raise RuleFetchError("cannot fetch")
+            return normalize_resource_key(url)
+
+        with patch.object(InterpretationRefKind, "resource_key", resource_key):
+            for run in (upstream_status, remove_overrides_in_upstream):
+                human_status, machine_status = run(TEI, HUMAN_URL, self.store, "alice", self.cache).layers
+                self.assertEqual((human_status.error, human_status.in_upstream, human_status.kept), ("cannot fetch", [], []))
+                self.assertIsNone(machine_status.error)
+        self.assertEqual(self._ids(MACHINE_URL), [])
 
 
 if __name__ == "__main__":

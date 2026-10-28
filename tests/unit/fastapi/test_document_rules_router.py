@@ -23,7 +23,7 @@ from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.doc_rules.github_pull_request import GITHUB_SECRET_SERVICE, GitHubError, PullRequestResult, register_github_secret_service
-from fastapi_app.lib.doc_rules.upstream_cleanup import CategoryNotFoundError, LayerUpstreamStatus, UpstreamStatus
+from fastapi_app.lib.doc_rules.upstream_cleanup import CategoryNotFoundError, LayerUpstreamStatus, OverrideDeletionError, UpstreamStatus
 from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError, ProposedFile, UpstreamProposal
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
@@ -1340,6 +1340,14 @@ class TestUpstreamCleanupRoutes(DocumentRulesRouterTestCase):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["user"]}
         self.assertEqual(self._post("upstream-status").status_code, 403)
         self.assertEqual(self._post("remove-overrides-in-upstream").status_code, 403)
+
+    def test_remove_failing_delete_is_502_naming_the_deleted_count(self):
+        error = OverrideDeletionError(["o1"], RuntimeError("disk full"))
+        with patch("fastapi_app.routers.document_rules.remove_overrides_in_upstream", side_effect=error):
+            with self.assertLogs("fastapi_app.routers.document_rules", level="ERROR"):
+                response = self._post("remove-overrides-in-upstream")
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("after 1 were deleted", response.json()["detail"])
 
 
 if __name__ == "__main__":

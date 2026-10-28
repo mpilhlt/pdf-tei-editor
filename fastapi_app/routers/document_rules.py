@@ -56,6 +56,7 @@ from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resource
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
 from ..lib.doc_rules.upstream_cleanup import (
     CategoryNotFoundError,
+    OverrideDeletionError,
     UpstreamStatus,
     remove_overrides_in_upstream,
     upstream_status,
@@ -832,11 +833,14 @@ def post_remove_overrides_in_upstream(
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
 ) -> UpstreamStatusResponse:
-    """Delete the caller's overrides of the rule category of `url` that the upstream guide already contains; `in_upstream` lists the deleted ids."""
+    """Delete the caller's overrides of the rule category of `url` whose text the rules the document is now pinned to contain; `in_upstream` lists the deleted ids. A failing deletion stops and answers 502 naming how many were deleted."""
     tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
     try:
         status = remove_overrides_in_upstream(tei_content, request.url, store, user["username"], cache)
     except CategoryNotFoundError as e:
         raise HTTPException(status_code=400, detail="This rule is not referenced by the document.") from e
+    except OverrideDeletionError as e:
+        logger.error(f"Failed to remove overrides in upstream for {request.url}: {e}")
+        raise HTTPException(status_code=502, detail=str(e)) from e
     return _upstream_status_response(status)
