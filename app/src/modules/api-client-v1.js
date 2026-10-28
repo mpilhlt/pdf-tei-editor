@@ -897,6 +897,28 @@
  * @property {string} branch
  * @property {Array<string>} upstream_changed - Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes
  * @property {boolean} in_sync - True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch
+ * @property {boolean} can_open_pull_request - True iff the guide is on GitHub, so that a pull request can be opened
+ * @property {string} pull_request_title - The default title of the pull request
+ * @property {string} pull_request_body - The default description of the pull request
+ */
+
+/**
+ * @typedef {Object} ProposePullRequestRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {boolean} include_human
+ * @property {boolean} include_machine
+ * @property {string} label - The rule category's label, e.g. "Data correction"
+ * @property {string} title
+ * @property {string} body
+ */
+
+/**
+ * @typedef {Object} ProposePullRequestResponse
+ * @property {string} url
+ * @property {number} number
+ * @property {string} branch
+ * @property {string|null} [fork] - Full name of the user's fork if the pull request was opened from one
  */
 
 /**
@@ -2013,6 +2035,18 @@ export class ApiClientV1 {
    */
   async documentRulesProposePatch(requestBody) {
     const endpoint = `/document-rules/propose-patch`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Open a GitHub pull request with the changes of the propose-patch result,
+   * using the caller's stored GitHub token (HTTP 428 if there is none).
+   *
+   * @param {ProposePullRequestRequest} requestBody
+   * @returns {Promise<ProposePullRequestResponse>}
+   */
+  async documentRulesProposePullRequest(requestBody) {
+    const endpoint = `/document-rules/propose-pull-request`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

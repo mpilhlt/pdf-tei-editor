@@ -22,10 +22,11 @@ from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
-from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError
+from fastapi_app.lib.doc_rules.github_pull_request import GITHUB_SECRET_SERVICE, GitHubError, PullRequestResult, register_github_secret_service
+from fastapi_app.lib.doc_rules.upstream_proposal import ProposalError, ProposedFile, UpstreamProposal
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderError, LLMProviderRegistry
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
-from fastapi_app.lib.secrets import MissingSecretError
+from fastapi_app.lib.secrets import MissingSecretError, unregister_secret_service
 from fastapi_app.lib.utils.annotation_rules_utils import RuleFetchError, _rewrite_relative_markdown_urls, markdown_section_range
 from fastapi_app.routers.document_rules import get_db, router
 
@@ -996,7 +997,7 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
         self.assertEqual(self._update().status_code, 403)
 
 
-class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
+class ProposalRouterTestCase(DocumentRulesRouterTestCase):
     """Builds real proposals from the fossil guideline fixtures as the default-branch files."""
     HUMAN_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines.md#data-correction"
     MACHINE_URL = f"{PROPOSAL_REPO}/{PROPOSAL_SHA}/docs/guidelines-llm.md#L17-L25"
@@ -1027,6 +1028,8 @@ class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
+
+class TestProposePatchEndpoint(ProposalRouterTestCase):
     def _post(self, include_human: bool = True, include_machine: bool = True, machine_url: Optional[str] = None):
         return self.client.post(
             "/document-rules/propose-patch",
@@ -1104,6 +1107,105 @@ class TestProposePatchEndpoint(DocumentRulesRouterTestCase):
     def test_non_reviewer_is_forbidden(self):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
         self.assertEqual(self._post().status_code, 403)
+
+    def test_github_guide_can_open_a_pull_request_with_default_texts(self):
+        body = self._post().json()
+        self.assertTrue(body["can_open_pull_request"])
+        self.assertEqual(body["pull_request_title"], "Annotation rules update: Data correction")
+        self.assertEqual(
+            body["pull_request_body"].splitlines()[:3],
+            ["Proposed with the PDF-TEI-Editor by alice.", "", "Includes: guide section and machine rules."],
+        )
+        self.assertIn("The sync marker of the machine rules is updated; the pair is in sync.", body["pull_request_body"])
+
+    def test_gitlab_guide_cannot_open_a_pull_request(self):
+        proposal = UpstreamProposal(files=[], patch="", filename="x-rules.patch", branch="main", upstream_changed=[], in_sync=False)
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", return_value=proposal):
+            response = self.client.post(
+                "/document-rules/propose-patch",
+                json={"human_url": "https://gitlab.com/g/p/-/blob/main/docs/guidelines.md#data-correction", "machine_url": "https://gitlab.com/g/p/-/blob/main/docs/llm.md#L1-L2", "include_human": True, "include_machine": False, "label": "Data correction"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["can_open_pull_request"])
+
+
+class TestProposePullRequestEndpoint(ProposalRouterTestCase):
+    """The GitHub calls are patched."""
+    GITLAB_URL = "https://gitlab.com/g/p/-/blob/main/docs/guidelines.md#data-correction"
+
+    def setUp(self):
+        super().setUp()
+        register_github_secret_service()
+        self.addCleanup(unregister_secret_service, GITHUB_SECRET_SERVICE)
+        token_patch = patch("fastapi_app.routers.document_rules.require_user_secret", return_value="ghp_TOKEN")
+        self.require_secret = token_patch.start()
+        self.addCleanup(token_patch.stop)
+        pr_patch = patch(
+            "fastapi_app.routers.document_rules.open_pull_request",
+            return_value=PullRequestResult(url="https://github.com/mpilhlt/fossil/pull/7", number=7, branch="pdf-tei-editor/x", fork="alice/fossil"),
+        )
+        self.open_pr = pr_patch.start()
+        self.addCleanup(pr_patch.stop)
+
+    def _open(self, title: str = "My title", human_url: Optional[str] = None):
+        return self.client.post(
+            "/document-rules/propose-pull-request",
+            json={
+                "human_url": human_url or self.HUMAN_URL,
+                "machine_url": self.MACHINE_URL,
+                "include_human": True,
+                "include_machine": True,
+                "label": "Data correction",
+                "title": title,
+                "body": "My body",
+            },
+        )
+
+    def test_opens_the_pull_request(self):
+        response = self._open()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"url": "https://github.com/mpilhlt/fossil/pull/7", "number": 7, "branch": "pdf-tei-editor/x", "fork": "alice/fossil"})
+        self.require_secret.assert_called_once_with("alice", "github")
+        token, repo_id, base_branch, files, title, body, branch = self.open_pr.call_args.args
+        self.assertEqual((token, repo_id, base_branch, title, body), ("ghp_TOKEN", "mpilhlt/fossil", "main", "My title", "My body"))
+        self.assertEqual([f.path for f in files], ["docs/guidelines.md", "docs/guidelines-llm.md"])
+        self.assertRegex(branch, r"^pdf-tei-editor/data-correction-\d{8}-\d{6}$")
+
+    def test_missing_token_is_428(self):
+        self.require_secret.side_effect = MissingSecretError("github", "alice")
+        response = self._open()
+        self.assertEqual(response.status_code, 428)
+        detail = response.json()["detail"]
+        self.assertEqual((detail["code"], detail["service"]), ("secret_required", "github"))
+        self.open_pr.assert_not_called()
+
+    def test_gitlab_guide_is_422(self):
+        response = self._open(human_url=self.GITLAB_URL)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "Pull requests can only be created for guides on GitHub. Download the patch instead.")
+        self.open_pr.assert_not_called()
+
+    def test_empty_title_is_422(self):
+        response = self._open(title="   ")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "The pull request needs a title.")
+        self.open_pr.assert_not_called()
+
+    def test_github_error_status_and_message_are_returned(self):
+        self.open_pr.side_effect = GitHubError(409, "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+        response = self._open()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"], "The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+
+    def test_proposal_errors_are_mapped_like_propose_patch(self):
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=ProposalError("There are no changes to propose.")):
+            self.assertEqual(self._open().status_code, 422)
+        with patch("fastapi_app.routers.document_rules.build_upstream_proposal", side_effect=requests.ConnectionError("down")):
+            self.assertEqual(self._open().status_code, 502)
+
+    def test_non_reviewer_is_forbidden(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob", "roles": ["user"]}
+        self.assertEqual(self._open().status_code, 403)
 
 
 if __name__ == "__main__":

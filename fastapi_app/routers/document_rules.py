@@ -14,6 +14,7 @@ its blocking parts in the threadpool via run_in_threadpool().
 
 import hashlib
 import logging
+from datetime import UTC, datetime
 from typing import Optional
 
 import requests
@@ -29,9 +30,16 @@ from ..lib.core.dependencies import (
     require_authenticated_user,
     require_reviewer_or_admin,
 )
-from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
+from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry, GitHubAdapter
 from ..lib.core.url_cache import UrlCache
 from ..lib.doc_rules.condense_prompt import resolve_condense_prompt
+from ..lib.doc_rules.github_pull_request import (
+    GITHUB_SECRET_SERVICE,
+    GitHubError,
+    default_pull_request_text,
+    open_pull_request,
+    pull_request_branch_name,
+)
 from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
 from ..lib.doc_rules.guide_update import (
     GuideChange,
@@ -46,7 +54,7 @@ from ..lib.doc_rules.guide_update import (
 from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
-from ..lib.doc_rules.upstream_proposal import ProposalError, build_upstream_proposal
+from ..lib.doc_rules.upstream_proposal import ProposalError, UpstreamProposal, build_upstream_proposal
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
     perform_refresh,
@@ -58,7 +66,7 @@ from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
 from ..lib.llm import LLMProviderError, LLMProviderRegistry
 from ..lib.llm.model_access import ModelAccessDenied, check_model_access
 from ..lib.repository.file_repository import FileRepository
-from ..lib.secrets import MissingSecretError, secret_required_detail
+from ..lib.secrets import MissingSecretError, require_user_secret, secret_required_detail
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.annotation_rules_utils import (
     RuleFetchError,
@@ -78,6 +86,8 @@ from ..lib.models.models_document_rules import (
     OkResponse,
     OverrideModel,
     ProposePatchRequest,
+    ProposePullRequestRequest,
+    ProposePullRequestResponse,
     ProposePatchResponse,
     ProposeChangeUrlRequest,
     ProposeChangeUrlResponse,
@@ -589,6 +599,37 @@ def get_human_change(
     )
 
 
+def _build_proposal_or_http_error(request: ProposePatchRequest, store: DocumentRulesStore, username: str) -> UpstreamProposal:
+    """The upstream proposal of `request`; proposal errors become 422, upstream fetch errors 502."""
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        return build_upstream_proposal(
+            _interpretation_ref_kind(),
+            request.human_url,
+            request.machine_url,
+            request.include_human,
+            request.include_machine,
+            store,
+            username,
+            request.label,
+            cache,
+        )
+    except ProposalError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except (OriginalUnavailableError, RuleFetchError, requests.RequestException) as e:
+        logger.error(f"Failed to build the upstream proposal for {request.human_url} / {request.machine_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch upstream resource: {e}")
+
+
+def _github_repo_id(human_url: str) -> Optional[str]:
+    """The `owner/repo` of `human_url` if it is a GitHub URL, else None."""
+    adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(human_url.partition("#")[0])
+    if not isinstance(adapter, GitHubAdapter):
+        return None
+    repo_path = adapter.parse_repo_path(human_url)
+    return repo_path[0] if repo_path else None
+
+
 @router.post("/propose-patch", response_model=ProposePatchResponse)
 def propose_patch(
     request: ProposePatchRequest,
@@ -598,26 +639,20 @@ def propose_patch(
     """
     The upstream patch of the caller's current text (selected override, else
     the original) of a rule category's human and/or machine section, as a
-    unified diff against the default branch. Nothing is stored.
+    unified diff against the default branch. Nothing is stored. Also returns
+    whether a GitHub pull request can be opened and its default title and
+    description.
     """
-    cache = UrlCache(get_settings().annotation_rules_cache_dir)
-    try:
-        proposal = build_upstream_proposal(
-            _interpretation_ref_kind(),
-            request.human_url,
-            request.machine_url,
-            request.include_human,
-            request.include_machine,
-            store,
-            user["username"],
-            request.label,
-            cache,
-        )
-    except ProposalError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except (OriginalUnavailableError, RuleFetchError, requests.RequestException) as e:
-        logger.error(f"Failed to build the upstream proposal for {request.human_url} / {request.machine_url}: {e}")
-        raise HTTPException(status_code=502, detail=f"Could not fetch upstream resource: {e}")
+    username = user["username"]
+    proposal = _build_proposal_or_http_error(request, store, username)
+    title, body = default_pull_request_text(
+        request.label,
+        username,
+        request.include_human,
+        request.include_machine,
+        proposal.in_sync,
+        proposal.upstream_changed,
+    )
     return ProposePatchResponse(
         files=[ProposedFileModel(path=f.path, before=f.before, after=f.after) for f in proposal.files],
         patch=proposal.patch,
@@ -625,7 +660,48 @@ def propose_patch(
         branch=proposal.branch,
         upstream_changed=proposal.upstream_changed,
         in_sync=proposal.in_sync,
+        can_open_pull_request=_github_repo_id(request.human_url) is not None,
+        pull_request_title=title,
+        pull_request_body=body,
     )
+
+
+@router.post("/propose-pull-request", response_model=ProposePullRequestResponse)
+def propose_pull_request(
+    request: ProposePullRequestRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> ProposePullRequestResponse:
+    """
+    Open a GitHub pull request with the changes of /propose-patch, using the
+    caller's stored GitHub token (HTTP 428 if there is none). Opens it from
+    a fork if the token has no push access. Nothing is stored locally.
+    """
+    username = user["username"]
+    title = request.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="The pull request needs a title.")
+    repo_id = _github_repo_id(request.human_url)
+    if repo_id is None:
+        raise HTTPException(status_code=422, detail="Pull requests can only be created for guides on GitHub. Download the patch instead.")
+    try:
+        token = require_user_secret(username, GITHUB_SECRET_SERVICE)
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    proposal = _build_proposal_or_http_error(request, store, username)
+    try:
+        result = open_pull_request(
+            token,
+            repo_id,
+            proposal.branch,
+            proposal.files,
+            title,
+            request.body,
+            pull_request_branch_name(request.label, datetime.now(UTC)),
+        )
+    except GitHubError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    return ProposePullRequestResponse(url=result.url, number=result.number, branch=result.branch, fork=result.fork)
 
 
 @router.post("/update-from-guide", response_model=UpdateFromGuideResponse)
