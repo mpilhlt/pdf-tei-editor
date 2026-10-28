@@ -213,6 +213,12 @@ class DocumentRulesPlugin extends Plugin {
    */
   _pullRequestSession = 0
 
+  /** Whether a pull request is being created from the propose sub-dialog. */
+  _pullRequestPending = false
+
+  /** Whether a pull request was created since the propose sub-dialog opened. */
+  _pullRequestCreated = false
+
   /**
    * Last successful POST /document-rules/list result for the open document.
    * @type {Array<ResourceDescriptorModel>}
@@ -1423,7 +1429,8 @@ class DocumentRulesPlugin extends Plugin {
     const canOpen = response.can_open_pull_request
     ui.prSection.style.display = canOpen ? '' : 'none'
     ui.createPrBtn.style.display = canOpen ? '' : 'none'
-    ui.createPrBtn.disabled = !canOpen
+    // No second pull request while one is created or after it was, until the dialog is reopened
+    ui.createPrBtn.disabled = !canOpen || this._pullRequestPending || this._pullRequestCreated
     // Texts the user edited since the dialog opened are kept
     if (!this._prTitleEdited) ui.prSection.prTitle.value = response.pull_request_title
     if (!this._prBodyEdited) ui.prSection.prBody.value = response.pull_request_body
@@ -1472,6 +1479,8 @@ class DocumentRulesPlugin extends Plugin {
     ui.prSection.prResult.replaceChildren()
     this._prTitleEdited = false
     this._prBodyEdited = false
+    this._pullRequestPending = false
+    this._pullRequestCreated = false
   }
 
   /**
@@ -1479,8 +1488,8 @@ class DocumentRulesPlugin extends Plugin {
    * (POST /document-rules/propose-pull-request), with the title and
    * description from the sub-dialog. A missing GitHub token is asked for
    * and the request retried. On success the pull request's number and link
-   * are shown and the button stays disabled, so that a second click does
-   * not open a duplicate; on an error its message is shown and the button
+   * are shown and the button stays disabled until the sub-dialog is
+   * reset, also across refreshes, so that no duplicate is opened; on an error its message is shown and the button
    * enabled again.
    * @returns {Promise<void>}
    */
@@ -1491,6 +1500,7 @@ class DocumentRulesPlugin extends Plugin {
     const result = ui.prSection.prResult
     const session = this._pullRequestSession
     ui.createPrBtn.disabled = true
+    this._pullRequestPending = true
     result.replaceChildren()
     /** @type {ProposePullRequestResponse} */
     let response
@@ -1508,18 +1518,22 @@ class DocumentRulesPlugin extends Plugin {
       )
     } catch (error) {
       if (session !== this._pullRequestSession) return
+      this._pullRequestPending = false
       result.textContent = error instanceof Error ? error.message : String(error)
-      ui.createPrBtn.disabled = false
+      // Enabled only if a proposal is shown, not while a refresh is pending
+      ui.createPrBtn.disabled = this._proposal === null || !this._proposal.can_open_pull_request
       return
     }
     if (session !== this._pullRequestSession) return
+    this._pullRequestPending = false
+    this._pullRequestCreated = true
     const link = document.createElement('a')
     link.href = response.url
     link.target = '_blank'
     link.rel = 'noopener'
     link.textContent = 'Open on GitHub'
     result.append(`Pull request #${response.number} created. `, link)
-    if (response.fork) result.append(`. It was opened from your fork ${response.fork}.`)
+    if (response.fork) result.append(` It was opened from your fork ${response.fork}.`)
   }
 
   /**

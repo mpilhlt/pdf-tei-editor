@@ -3010,7 +3010,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
       await plugin._onCreatePullRequest();
-      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created. Open on GitHub. It was opened from your fork me/r.');
+      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created. Open on GitHub It was opened from your fork me/r.');
     });
 
     it('shows an error message and re-enables the button', async () => {
@@ -3035,6 +3035,47 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.strictEqual(ui.prSection.prResult.textContent, '');
       resolveRequest();
       await pending;
+    });
+
+    it('keeps the button disabled after a created pull request when a refresh succeeds', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => created } });
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      await plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(plugin._proposal.files.length, 2);
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+    });
+
+    it('keeps the button disabled when a refresh resolves while a pull request is created', async () => {
+      let resolveCreate;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveCreate = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      const pending = plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      resolveCreate();
+      await pending;
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+    });
+
+    it('enables the button on a refresh after a failed pull request', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => { throw new Error('GitHub request failed (500): boom'); } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, false);
     });
 
     it('_resetProposeDialog hides the controls and clears the result', async () => {
