@@ -201,8 +201,8 @@ def _upstream_changed(kind: InterpretationRefKind, url: str, upstream_section: s
     return section_hash(_proposed_text(original, url)) != section_hash(_proposed_text(upstream_section, url))
 
 
-def _one_line(value: str) -> str:
-    """`value` with every run of whitespace collapsed to one space and other control characters removed, for a `# ` preamble line."""
+def one_line(value: str) -> str:
+    """`value` with every run of whitespace collapsed to one space and other control characters removed, for a single-line text such as a `# ` preamble line or a pull request title."""
     return _CONTROL_CHARS_RE.sub("", " ".join(value.split()))
 
 
@@ -220,7 +220,8 @@ def patch_filename(label: str) -> str:
     return f"{slug}-rules.patch" if slug else "rules.patch"
 
 
-def _includes(include_human: bool, include_machine: bool) -> str:
+def includes_text(include_human: bool, include_machine: bool) -> str:
+    """What a proposal includes, for its `Includes:` line: `guide section`, `machine rules`, or both."""
     if include_human and include_machine:
         return "guide section and machine rules"
     return "guide section" if include_human else "machine rules"
@@ -296,7 +297,7 @@ def build_upstream_proposal(
     files = [file for file in files if file.after != file.before]
     if not files:
         raise ProposalError("There are no changes to propose.")
-    patch = build_patch(files, label, owner, _includes(include_human, include_machine))
+    patch = build_patch(files, label, owner, includes_text(include_human, include_machine))
     return UpstreamProposal(
         files=files,
         patch=patch,
@@ -329,8 +330,8 @@ def build_patch(files: list[ProposedFile], label: str, username: str, includes: 
     lines (e.g. a forged `diff --git`) to the patch.
     """
     parts = [
-        f"# Annotation rules update: {_one_line(label)}\n",
-        f"# Proposed with the PDF-TEI-Editor by {_one_line(username)}\n",
+        f"# Annotation rules update: {one_line(label)}\n",
+        f"# Proposed with the PDF-TEI-Editor by {one_line(username)}\n",
         f"# Includes: {includes}\n",
         "\n",
     ]
