@@ -115,9 +115,9 @@ The patch is built from your saved texts. If the editor shows changes you have n
 
 If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Guides on GitLab keep the patch download only.
 
-Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens>:
+Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens> (the **GitHub** entry's help link opens the form for a classic token with `public_repo` preselected):
 
-- A classic token with the `public_repo` scope works whether or not you have push access to the guide repository.
+- A classic token with the `public_repo` scope (`repo` for a private guide repository) works whether or not you have push access to the guide repository.
 - A fine-grained token needs read and write access to "Contents" and "Pull requests" on the guide repository. If you have no push access, it may not be able to create the fork that is then needed, so a classic token is the safer choice.
 
 If you have push access to the guide repository, the changes go on a new branch there. Otherwise a fork of the repository is created in your GitHub account (or an existing one is used), the branch is created in the fork, and the pull request is opened from it; the dialog names the fork. Pull requests from a fork allow the maintainers of the guide repository to edit the branch.

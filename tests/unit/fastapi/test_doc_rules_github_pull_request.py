@@ -377,8 +377,8 @@ class SecretServiceTest(unittest.TestCase):
         assert service is not None
         self.assertEqual(service.id, "github")
         self.assertEqual(service.label, "GitHub")
-        self.assertEqual(service.description, "Personal access token used to open pull requests with document rule changes.")
-        self.assertEqual(service.help_url, "https://github.com/settings/tokens")
+        self.assertIn("classic token with the public_repo scope", service.description)
+        self.assertEqual(service.help_url, "https://github.com/settings/tokens/new?scopes=public_repo&description=PDF-TEI%20Editor%20document%20rules")
 
 
 if __name__ == "__main__":

@@ -70,8 +70,8 @@ def register_github_secret_service() -> None:
     register_secret_service(
         GITHUB_SECRET_SERVICE,
         "GitHub",
-        "Personal access token used to open pull requests with document rule changes.",
-        "https://github.com/settings/tokens",
+        "Personal access token used to open pull requests with document rule changes. Use a classic token with the public_repo scope (repo if the guide repository is private); it also lets the editor fork the repository when you have no push access. A fine-grained token only works with push access, and needs read and write access to Contents and Pull requests on the guide repository.",
+        "https://github.com/settings/tokens/new?scopes=public_repo&description=PDF-TEI%20Editor%20document%20rules",
     )
 
 
