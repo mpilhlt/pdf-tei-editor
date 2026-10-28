@@ -88,6 +88,7 @@ from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
     HumanChangeRequest,
     HumanChangeResponse,
+    LayerUpstreamStatusModel,
     ListResourcesRequest,
     ListResourcesResponse,
     OkResponse,
@@ -119,7 +120,6 @@ from ..lib.models.models_document_rules import (
     UpdateFromGuideRequest,
     UpdateFromGuideResponse,
     UpdateOverrideRequest,
-    LayerUpstreamStatusModel,
     UpstreamStatusRequest,
     UpstreamStatusResponse,
 )
@@ -793,12 +793,15 @@ async def update_from_guide(
 
 
 def _upstream_status_response(status: UpstreamStatus) -> UpstreamStatusResponse:
+    """The response model of an `UpstreamStatus`."""
     return UpstreamStatusResponse(
         refs_behind=status.refs_behind,
         refresh_message=status.refresh_message,
         layers=[
-            LayerUpstreamStatusModel(layer=l.layer, url=l.url, error=l.error, in_upstream=list(l.in_upstream), kept=list(l.kept))
-            for l in status.layers
+            LayerUpstreamStatusModel(
+                layer=layer.layer, url=layer.url, error=layer.error, in_upstream=list(layer.in_upstream), kept=list(layer.kept)
+            )
+            for layer in status.layers
         ],
     )
 

@@ -1292,5 +1292,55 @@ class TestProposePullRequestEndpoint(ProposalRouterTestCase):
         self.assertEqual(self._open().status_code, 403)
 
 
+class TestUpstreamCleanupRoutes(DocumentRulesRouterTestCase):
+    URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md"
+
+    def setUp(self):
+        super().setUp()
+        self.app.dependency_overrides[get_file_storage] = lambda: object()
+        patcher = patch("fastapi_app.routers.document_rules._document_tei_or_http_error", return_value="<TEI/>")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _status(self) -> UpstreamStatus:
+        layer = LayerUpstreamStatus(layer="human", url=self.URL, error=None, in_upstream=["o1"], kept=["o2"])
+        return UpstreamStatus(refs_behind=True, refresh_message="behind", layers=[layer])
+
+    def _post(self, route: str):
+        return self.client.post(f"/document-rules/{route}", json={"xml": "abc", "url": self.URL})
+
+    def test_status_returns_the_module_result(self):
+        with patch("fastapi_app.routers.document_rules.upstream_status", return_value=self._status()):
+            response = self._post("upstream-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "refs_behind": True,
+                "refresh_message": "behind",
+                "layers": [{"layer": "human", "url": self.URL, "error": None, "in_upstream": ["o1"], "kept": ["o2"]}],
+            },
+        )
+
+    def test_unknown_url_is_400(self):
+        with patch("fastapi_app.routers.document_rules.upstream_status", side_effect=CategoryNotFoundError()):
+            response = self._post("upstream-status")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "This rule is not referenced by the document.")
+
+    def test_remove_returns_the_deleted_ids(self):
+        with patch("fastapi_app.routers.document_rules.remove_overrides_in_upstream", return_value=self._status()) as remove:
+            response = self._post("remove-overrides-in-upstream")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["layers"][0]["in_upstream"], ["o1"])
+        self.assertEqual(remove.call_args.args[1], self.URL)
+        self.assertEqual(remove.call_args.args[3], "alice")
+
+    def test_non_reviewer_is_forbidden_on_both_routes(self):
+        self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": ["user"]}
+        self.assertEqual(self._post("upstream-status").status_code, 403)
+        self.assertEqual(self._post("remove-overrides-in-upstream").status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()
