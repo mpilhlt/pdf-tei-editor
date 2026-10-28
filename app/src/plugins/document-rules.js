@@ -30,7 +30,7 @@
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
  * @import { documentRulesUpdateDialogPart } from '../templates/document-rules-update-dialog.types.js'
  * @import { documentRulesProposeDialogPart } from '../templates/document-rules-propose-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse, ProposePullRequestResponse } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse, ProposePullRequestResponse, UpstreamStatusResponse } from '../modules/api-client-v1.js'
  * @import { ModelChoice } from './inference-settings.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
@@ -64,6 +64,7 @@ await registerTemplate('document-rules-propose-dialog', 'document-rules-propose-
 const LINE_RANGE_FRAGMENT_RE = /^L\d+(-L?\d+)?$/
 
 const OUTDATED_OVERRIDE_TOOLTIP = 'Based on an older version of the original'
+const IN_UPSTREAM_OVERRIDE_TOOLTIP = 'Upstream contains this text; it is removed when you update to upstream.'
 
 const ALIGN_MODE_NOTICE = 'No sync base found: the model compares the whole guide section with the machine rules.'
 const UNCHANGED_GUIDE_NOTICE = 'The guide section has not changed since the last sync.'
@@ -130,6 +131,31 @@ function headingAnchorFragment(url) {
   if (hashIndex === -1) return null
   const fragment = url.slice(hashIndex + 1)
   return fragment && !LINE_RANGE_FRAGMENT_RE.test(fragment) ? fragment : null
+}
+
+/**
+ * Names of the layers in the upstream status line's error messages.
+ * @type {Readonly<Record<string, string>>}
+ */
+const UPSTREAM_LAYER_NAME = Object.freeze({ human: 'Guide', machine: 'Machine rules' })
+
+/**
+ * Number of override ids in one list of all layers of an upstream status.
+ * @param {UpstreamStatusResponse|null} status
+ * @param {'in_upstream'|'kept'} list
+ * @returns {number}
+ */
+function countUpstreamIds(status, list) {
+  return status ? status.layers.reduce((sum, layer) => sum + layer[list].length, 0) : 0
+}
+
+/**
+ * "1 override" / "N overrides".
+ * @param {number} count
+ * @returns {string}
+ */
+function pluralizeOverrides(count) {
+  return `${count} ${count === 1 ? 'override' : 'overrides'}`
 }
 
 class DocumentRulesPlugin extends Plugin {
@@ -270,6 +296,19 @@ class DocumentRulesPlugin extends Plugin {
    */
   _syncStatusPair = null
 
+  /**
+   * Last upstream status of `_currentGroup`'s overrides (see
+   * _refreshUpstreamStatus()), or null for a resource that has none.
+   * @type {UpstreamStatusResponse|null}
+   */
+  _upstreamStatus = null
+
+  /**
+   * Number of _refreshUpstreamStatus() calls so far; a response is only
+   * used if no newer call started while it was pending.
+   */
+  _upstreamStatusRequest = 0
+
   /** Selected override id, or null when "Original" is selected. @type {string|null} */
   _currentSelectedId = null
 
@@ -398,6 +437,7 @@ class DocumentRulesPlugin extends Plugin {
     this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
     this._editorDialogUi.resetBtn.addEventListener('click', () => this._onReset())
+    this._editorDialogUi.updateToUpstreamBtn.addEventListener('click', () => this._onUpdateToUpstream())
     this._editorDialogUi.proposeUpstreamBtn.addEventListener('click', () => this._onProposeUpstreamClick())
     this._editorDialogUi.updateFromGuideBtn.addEventListener('click', () => this._openUpdateDialog())
     this._updateDialogUi.modelRow.generateBtn.addEventListener('click', () => this._onGenerate())
@@ -725,10 +765,18 @@ class DocumentRulesPlugin extends Plugin {
       if (this._currentResource) this._renderLayerTabs()
       return
     }
+    // A layer-tab switch keeps the upstream status: it covers both layers
+    const sameGroup = this._editorDialogUi.open && this._currentGroup.includes(resource)
     this._currentResource = resource
     this._currentGroup = this._groupOf(resource)
     this._renderLayerTabs()
     this._refreshSyncStatus()
+    if (!sameGroup) {
+      // Don't show another group's marks while this one's status loads
+      this._upstreamStatus = null
+      this._renderUpstreamStatus()
+      this._refreshUpstreamStatus()
+    }
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
@@ -824,6 +872,90 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
+   * Load the upstream status of `_currentGroup`'s overrides for an
+   * interpretation-ref (whether the document's refs are behind upstream and
+   * which overrides upstream now contains), then re-render the override row,
+   * the status line and the buttons. Other kinds, and a failed request,
+   * clear the status. Never rejects, so callers need not await it.
+   * @returns {Promise<void>}
+   */
+  async _refreshUpstreamStatus() {
+    const request = ++this._upstreamStatusRequest
+    /** @type {UpstreamStatusResponse|null} */
+    let status = null
+    if (this._currentResource?.kind === 'interpretation-ref') {
+      try {
+        status = await this.#client.apiClient.documentRulesUpstreamStatus({ xml: this.state.xml, url: this._currentResource.url })
+      } catch (error) {
+        if (request !== this._upstreamStatusRequest) return
+        this.#logger.warn('document-rules: could not load upstream status: ' + String(error))
+      }
+    }
+    if (request !== this._upstreamStatusRequest) return
+    this._upstreamStatus = status
+    this._renderUpstreamStatus()
+    // Not a full re-render: that would replace text being edited in the dialog
+    if (this._currentResource) {
+      this._renderOverrideRow()
+      this._renderResetButtons()
+    }
+  }
+
+  /**
+   * Show `_upstreamStatus` in the line below the sync status: what upstream
+   * changed, with a hint to "Update to upstream", and a line per layer that
+   * could not be compared. Hidden when there is nothing to say.
+   */
+  _renderUpstreamStatus() {
+    const line = this._editorDialogUi.upstreamStatus
+    const status = this._upstreamStatus
+    /** @type {HTMLElement[]} */
+    const children = []
+    if (status && this._upstreamActionable()) {
+      const parts = []
+      if (status.refs_behind) parts.push('The guide upstream has changed since this document was annotated.')
+      const inUpstream = countUpstreamIds(status, 'in_upstream')
+      if (inUpstream > 0) parts.push(`${pluralizeOverrides(inUpstream)} now in upstream.`)
+      parts.push('Use "Update to upstream" to apply it.')
+      const summary = document.createElement('div')
+      const icon = document.createElement('sl-icon')
+      icon.setAttribute('name', 'arrow-repeat')
+      icon.style.verticalAlign = '-0.125em'
+      icon.style.marginRight = '0.25rem'
+      summary.append(icon, document.createTextNode(parts.join(' ')))
+      children.push(summary)
+    }
+    for (const layer of status?.layers ?? []) {
+      if (!layer.error) continue
+      const errorLine = document.createElement('div')
+      errorLine.textContent = `Could not compare the ${UPSTREAM_LAYER_NAME[layer.layer] ?? layer.layer} with upstream: ${layer.error}`
+      children.push(errorLine)
+    }
+    line.replaceChildren(...children)
+    line.style.display = children.length > 0 ? '' : 'none'
+  }
+
+  /**
+   * Whether `_upstreamStatus` gives "Update to upstream" something to do:
+   * the document's refs are behind upstream, or upstream contains overrides.
+   * @returns {boolean}
+   */
+  _upstreamActionable() {
+    const status = this._upstreamStatus
+    return !!status && (status.refs_behind || countUpstreamIds(status, 'in_upstream') > 0)
+  }
+
+  /**
+   * Whether upstream now contains the text of an override (in any layer of
+   * the last upstream status).
+   * @param {string} overrideId
+   * @returns {boolean}
+   */
+  _inUpstream(overrideId) {
+    return !!this._upstreamStatus && this._upstreamStatus.layers.some((layer) => layer.in_upstream.includes(overrideId))
+  }
+
+  /**
    * `sl-tab-show` handler of the layer tabs: open the descriptor of the
    * chosen layer in the same dialog. No-op for the layer already shown (the
    * event also fires when _renderLayerTabs() selects a tab).
@@ -885,11 +1017,25 @@ class DocumentRulesPlugin extends Plugin {
     dialogUi.newOverrideBtn.disabled = this._documentReadOnly
     dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
-    dialogUi.resetBtn.style.display = selected ? '' : 'none'
+    this._renderResetButtons()
     // A pair proposes both layers together, whatever is selected; a single resource proposes its selected override
     dialogUi.proposeUpstreamBtn.style.display = (this._isPairGroup() ? !this._documentReadOnly : selected) ? '' : 'none'
     const pairedMachine = resource.layer === 'machine' && this._currentGroup.some(r => r.layer === 'human')
     dialogUi.updateFromGuideBtn.style.display = pairedMachine && !this._documentReadOnly ? '' : 'none'
+  }
+
+  /**
+   * Show "Reset to original" (a selected override of a non-interpretation-ref
+   * resource) or, for an interpretation-ref, "Update to upstream" (when
+   * `_upstreamStatus` gives it something to do and the document is
+   * editable) - an interpretation-ref is brought up to date that way instead.
+   */
+  _renderResetButtons() {
+    const dialogUi = this._editorDialogUi
+    const isRef = this._currentResource.kind === 'interpretation-ref'
+    const selected = this._currentOverrides.some(o => o.id === this._currentSelectedId)
+    dialogUi.resetBtn.style.display = selected && !isRef ? '' : 'none'
+    dialogUi.updateToUpstreamBtn.style.display = isRef && this._upstreamActionable() && !this._documentReadOnly ? '' : 'none'
   }
 
   /**
@@ -952,9 +1098,11 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Rebuild the "Original"/"Override N" button row. An override copied from
-   * an older version of the original (`outdated`, see /query) is marked with
-   * a clock icon and a tooltip saying so, followed by its note if any.
+   * Rebuild the "Original"/"Override N" button row. An override whose text
+   * upstream now contains (see _inUpstream()) is marked with a cloud icon,
+   * otherwise one copied from an older version of the original (`outdated`,
+   * see /query) with a clock icon - each with a tooltip saying so, followed
+   * by the override's note if any.
    */
   _renderOverrideRow() {
     const row = this._editorDialogUi.overrideRow
@@ -972,7 +1120,13 @@ class DocumentRulesPlugin extends Plugin {
       btn.setAttribute('size', 'small')
       btn.textContent = this._overrideLabel(override.id)
       btn.variant = this._currentSelectedId === override.id ? 'primary' : 'default'
-      if (override.outdated) {
+      if (this._inUpstream(override.id)) {
+        const icon = document.createElement('sl-icon')
+        icon.setAttribute('name', 'cloud-check')
+        icon.setAttribute('slot', 'suffix')
+        btn.appendChild(icon)
+        btn.title = override.note ? `${IN_UPSTREAM_OVERRIDE_TOOLTIP}\n${override.note}` : IN_UPSTREAM_OVERRIDE_TOOLTIP
+      } else if (override.outdated) {
         const icon = document.createElement('sl-icon')
         icon.setAttribute('name', 'clock-history')
         icon.setAttribute('slot', 'suffix')
@@ -1136,35 +1290,7 @@ class DocumentRulesPlugin extends Plugin {
         notify(refreshResult.message, variant, icon)
         return
       }
-      if (refreshResult.changed) {
-        // Every layer of the category is refreshed together, so match the
-        // document's <ref>s against all layers' urls, not just the shown one's
-        const group = this._currentGroup.includes(this._currentResource) ? this._currentGroup : [this._currentResource]
-        const groupUrls = new Set(group.flatMap((r) => [r.url, ...(r.related_urls ?? [])]))
-        /** @type {Map<string, string>} old target -> refreshed target */
-        const replacedUrls = new Map()
-        await this.#xmlEditor.saveIfDirty()
-        for (const ref of refreshResult.refs) {
-          const candidates = this.#xmlEditor.getDomNodesByXpath(`//tei:editorialDecl//tei:ref[@subtype="${ref.subtype}"]`)
-          const node = candidates.find((n) => groupUrls.has(n.getAttribute('target')))
-          if (!node) continue
-          replacedUrls.set(node.getAttribute('target'), ref.target)
-          node.setAttribute('target', ref.target)
-          await this.#xmlEditor.updateEditorFromNode(node)
-        }
-        await this.#xmlEditor.saveIfDirty()
-
-        if (refreshResult.refs.length > 0) {
-          for (const member of group) {
-            // A layerless descriptor keeps representative_ref()'s choice
-            // (interpretation_ref_kind.py): the machine ref when present
-            const layer = member.layer ?? 'machine'
-            const ref = refreshResult.refs.find((r) => r.subtype === layer) ?? (member.layer ? null : refreshResult.refs[0])
-            if (ref) member.url = ref.target
-            if (member.related_urls) member.related_urls = member.related_urls.map((u) => replacedUrls.get(u) ?? u)
-          }
-        }
-      }
+      await this._applyRefreshedRefs(refreshResult)
     }
 
     try {
@@ -1196,6 +1322,132 @@ class DocumentRulesPlugin extends Plugin {
           : 'Reset to original: overrides removed (already up to date).')
       : `Reset to original: "${this._currentResource.label}" and its overrides have been reloaded.`
     notify(message, 'success', 'check-circle')
+  }
+
+  /**
+   * Write the refreshed `<ref target>`s of a /refresh-resource result into
+   * the document (saved before and after) and point `_currentGroup`'s
+   * descriptors at them. No-op unless the result says the refs changed.
+   * Every layer of the category is refreshed together.
+   * @param {RefreshResourceResponse} refreshResult
+   * @returns {Promise<void>}
+   */
+  async _applyRefreshedRefs(refreshResult) {
+    if (refreshResult.changed) {
+      // Every layer of the category is refreshed together, so match the
+      // document's <ref>s against all layers' urls, not just the shown one's
+      const group = this._currentGroup.includes(this._currentResource) ? this._currentGroup : [this._currentResource]
+      const groupUrls = new Set(group.flatMap((r) => [r.url, ...(r.related_urls ?? [])]))
+      /** @type {Map<string, string>} old target -> refreshed target */
+      const replacedUrls = new Map()
+      await this.#xmlEditor.saveIfDirty()
+      for (const ref of refreshResult.refs) {
+        const candidates = this.#xmlEditor.getDomNodesByXpath(`//tei:editorialDecl//tei:ref[@subtype="${ref.subtype}"]`)
+        const node = candidates.find((n) => groupUrls.has(n.getAttribute('target')))
+        if (!node) continue
+        replacedUrls.set(node.getAttribute('target'), ref.target)
+        node.setAttribute('target', ref.target)
+        await this.#xmlEditor.updateEditorFromNode(node)
+      }
+      await this.#xmlEditor.saveIfDirty()
+
+      if (refreshResult.refs.length > 0) {
+        for (const member of group) {
+          // A layerless descriptor keeps representative_ref()'s choice
+          // (interpretation_ref_kind.py): the machine ref when present
+          const layer = member.layer ?? 'machine'
+          const ref = refreshResult.refs.find((r) => r.subtype === layer) ?? (member.layer ? null : refreshResult.refs[0])
+          if (ref) member.url = ref.target
+          if (member.related_urls) member.related_urls = member.related_urls.map((u) => replacedUrls.get(u) ?? u)
+        }
+      }
+    }
+  }
+
+  /**
+   * "Update to upstream" of an interpretation-ref: re-pin the document's refs
+   * of `_currentGroup` to the current upstream rules, then remove the
+   * caller's overrides whose text upstream now contains - the server checks
+   * that again on removal, so only what it confirms is deleted. Other
+   * overrides are kept. Confirmed up front, with the counts of the last
+   * upstream status.
+   * @returns {Promise<void>}
+   */
+  async _onUpdateToUpstream() {
+    const inUpstream = countUpstreamIds(this._upstreamStatus, 'in_upstream')
+    const kept = countUpstreamIds(this._upstreamStatus, 'kept')
+    let text = 'This updates the document to the current upstream rules'
+    text += inUpstream > 0 ? ` and removes ${pluralizeOverrides(inUpstream)} that upstream now contains.` : '.'
+    if (kept > 0) text += ` ${kept} other ${kept === 1 ? 'override is' : 'overrides are'} kept.`
+    const confirmed = await this.getDependency('dialog').confirm(text, 'Update to upstream')
+    if (!confirmed) return
+
+    const btn = this._editorDialogUi.updateToUpstreamBtn
+    btn.disabled = true
+    btn.loading = true
+    try {
+      await this._updateToUpstream()
+    } finally {
+      btn.disabled = false
+      btn.loading = false
+    }
+  }
+
+  /**
+   * The work of _onUpdateToUpstream() after its confirmation.
+   * @returns {Promise<void>}
+   */
+  async _updateToUpstream() {
+    /** @type {RefreshResourceResponse} */
+    let refreshResult
+    try {
+      refreshResult = await this.#client.apiClient.documentRulesRefreshResource({
+        xml: this.state.xml,
+        url: this._currentResource.url
+      })
+    } catch (error) {
+      notify(`Could not refresh resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    if (refreshResult.status !== 'ok') {
+      const variant = refreshResult.status === 'not_found' ? 'danger' : 'warning'
+      const icon = refreshResult.status === 'not_found' ? 'exclamation-octagon' : 'exclamation-triangle'
+      notify(refreshResult.message, variant, icon)
+      return
+    }
+    await this._applyRefreshedRefs(refreshResult)
+
+    /** @type {UpstreamStatusResponse|null} */
+    let removal = null
+    try {
+      // The url after the re-pin, so the server compares with the refs now in the document
+      removal = await this.#client.apiClient.documentRulesRemoveOverridesInUpstream({
+        xml: this.state.xml,
+        url: this._currentResource.url
+      })
+    } catch (error) {
+      notify(`Could not remove overrides: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+    }
+
+    let response
+    try {
+      response = await this.#client.apiClient.documentRulesQuery({ kind: this._currentResource.kind, url: this._currentResource.url })
+    } catch (error) {
+      notify(`Could not reload resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
+      return
+    }
+    this._currentOverrides = response.overrides
+    this._currentSelectedId = response.selected_override_id
+    this._currentOriginalText = response.original_text
+    this._renderEditorDialog()
+    this._refreshSyncStatus()
+    this._refreshUpstreamStatus()
+    await this._refreshOverrideIndicators()
+
+    if (removal) {
+      const removed = countUpstreamIds(removal, 'in_upstream')
+      notify(`Updated to upstream: removed ${pluralizeOverrides(removed)}, kept ${countUpstreamIds(removal, 'kept')}.`, 'success', 'check-circle')
+    }
   }
 
   /**
