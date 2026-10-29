@@ -7,7 +7,7 @@ selected layer (selected override, else the original) is spliced into the
 file on the repository's default branch, by heading anchor, and the changed
 files are rendered as one unified diff that `git apply` accepts at the
 repository root. A proposed machine section gets a freshly computed sync
-marker (without `base=`) whose guide hash is of the user's current human
+marker whose guide hash is of the user's current human
 text, the guide text the machine rules were derived from.
 """
 
@@ -293,7 +293,7 @@ def build_upstream_proposal(
         machine_before = _fetch_raw_file(machine_main_url)
         machine_text = _without_sync_markers(_proposed_text(layer_text(kind, machine_url, store, owner)[0], machine_url))
         guide_hash = human_section_hash(human_section, human_url)
-        marker = SyncMarker(guide_hash=guide_hash, llm_hash=section_hash(machine_text), base=None)
+        marker = SyncMarker(guide_hash=guide_hash, llm_hash=section_hash(machine_text))
         machine_section = with_sync_marker(machine_text, format_sync_marker(marker))
         files.append(ProposedFile(machine_path, machine_before, _splice(machine_before, machine_anchor, machine_section, machine_path, branch)))
         if _upstream_changed(kind, machine_url, _section(machine_before, machine_anchor, machine_path, branch)):

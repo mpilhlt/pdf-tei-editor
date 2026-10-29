@@ -662,7 +662,6 @@ test.describe('Document rules registry', () => {
         const downloaded = readFileSync(/** @type {string} */ (await download.path()), 'utf8');
         expect(downloaded.match(/^diff --git a\//gm)).toHaveLength(2);
         expect(downloaded).toMatch(/<!-- sync: guide=\w+ llm=\w+ -->/);
-        expect(downloaded).not.toContain('base=');
 
         await proposeDialog.locator('sl-button[name="closeBtn"]').click();
         await dialog.locator('sl-button[name="closeBtn"]').click();

@@ -42,8 +42,8 @@ def _slice(text: str, anchor: str) -> str:
     return "\n".join(text.splitlines()[start - 1:end])
 
 
-def _marked(body: str, guide: str, llm: str, base: str | None = None) -> str:
-    return f"## Heading\n{format_sync_marker(SyncMarker(guide, llm, base))}\n{body}\n"
+def _marked(body: str, guide: str, llm: str) -> str:
+    return f"## Heading\n{format_sync_marker(SyncMarker(guide, llm))}\n{body}\n"
 
 
 def _synced_pair() -> tuple[str, str]:
@@ -101,29 +101,25 @@ class TestSyncStatus(unittest.TestCase):
 
 
 class TestSyncMarker(unittest.TestCase):
-    def test_parse_marker_without_base(self) -> None:
-        self.assertEqual(parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} -->\ntext"), SyncMarker(HEX_A, HEX_B, None))
-
-    def test_parse_marker_with_base(self) -> None:
-        self.assertEqual(parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} base={HEX_C} -->\ntext"), SyncMarker(HEX_A, HEX_B, HEX_C))
+    def test_parse_marker(self) -> None:
+        self.assertEqual(parse_sync_marker(f"## H\n<!-- sync: guide={HEX_A} llm={HEX_B} -->\ntext"), SyncMarker(HEX_A, HEX_B))
 
     def test_format_marker_round_trip(self) -> None:
-        for marker in (SyncMarker(HEX_A, HEX_B, None), SyncMarker(HEX_A, HEX_B, HEX_C)):
-            line = format_sync_marker(marker)
-            self.assertNotIn("\n", line)
-            self.assertEqual("base=" in line, marker.base is not None)
-            self.assertEqual(parse_sync_marker(line), marker)
+        marker = SyncMarker(HEX_A, HEX_B)
+        line = format_sync_marker(marker)
+        self.assertNotIn("\n", line)
+        self.assertEqual(parse_sync_marker(line), marker)
 
     def test_split_marker_returns_text_without_marker_and_the_line(self) -> None:
-        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, HEX_C))
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B))
         self.assertEqual(split_sync_marker(f"## H\n\n{line}\n\ntext\n"), ("## H\n\ntext\n", line))
 
     def test_split_marker_at_the_start(self) -> None:
-        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B))
         self.assertEqual(split_sync_marker(f"{line}\n## H\n\ntext"), ("## H\n\ntext", line))
 
     def test_split_marker_normalizes_crlf(self) -> None:
-        line = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        line = format_sync_marker(SyncMarker(HEX_A, HEX_B))
         self.assertEqual(split_sync_marker(f"## H\r\n\r\n{line}\r\n\r\ntext\r\n"), ("## H\n\ntext\n", line))
 
     def test_split_marker_without_marker(self) -> None:
@@ -131,13 +127,13 @@ class TestSyncMarker(unittest.TestCase):
 
 
 class TestWithSyncMarker(unittest.TestCase):
-    LINE = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+    LINE = format_sync_marker(SyncMarker(HEX_A, HEX_B))
 
     def test_without_marker_yet(self) -> None:
         self.assertEqual(with_sync_marker("## H\n\n\ntext\n", self.LINE), f"## H\n\n{self.LINE}\n\ntext\n")
 
     def test_existing_markers_are_replaced(self) -> None:
-        old = format_sync_marker(SyncMarker(HEX_C, HEX_C, HEX_C))
+        old = format_sync_marker(SyncMarker(HEX_C, HEX_C))
         self.assertEqual(with_sync_marker(f"## H\n{old}\ntext\n\n{old}\nmore", self.LINE), f"## H\n\n{self.LINE}\n\ntext\n\nmore")
 
     def test_heading_only(self) -> None:
@@ -147,7 +143,7 @@ class TestWithSyncMarker(unittest.TestCase):
         self.assertEqual(with_sync_marker("text\n", self.LINE), f"{self.LINE}\n\ntext\n")
 
     def test_marker_only(self) -> None:
-        old = format_sync_marker(SyncMarker(HEX_C, HEX_C, None))
+        old = format_sync_marker(SyncMarker(HEX_C, HEX_C))
         self.assertEqual(with_sync_marker(old, self.LINE), self.LINE)
 
 
@@ -156,7 +152,7 @@ class TestSectionHash(unittest.TestCase):
         self.assertEqual(section_hash("## H\r\nline one  \r\n\r\nline two\t\r\n"), section_hash("## H\nline one\nline two"))
 
     def test_hash_ignores_sync_marker(self) -> None:
-        marker = format_sync_marker(SyncMarker(HEX_A, HEX_B, None))
+        marker = format_sync_marker(SyncMarker(HEX_A, HEX_B))
         self.assertEqual(section_hash(f"## H\n{marker}\ntext"), section_hash("## H\ntext"))
 
     def test_human_hash_derelativizes_links(self) -> None:
@@ -196,37 +192,27 @@ def _patched(commits: "list[str] | Exception", files: dict[str, str]) -> ExitSta
 
 class TestFindSyncedHumanCommit(unittest.TestCase):
     def test_find_synced_commit_matches_second_newest(self) -> None:
-        marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, None)
+        marker = SyncMarker(_file_hash(SHAS[1]), HEX_B)
         with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
             self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[1])
 
     def test_find_synced_commit_no_match(self) -> None:
         with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
-
-    def test_find_synced_commit_stops_at_base(self) -> None:
-        marker = SyncMarker(_file_hash(SHAS[3]), HEX_B, SHAS[1])
-        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-            self.assertIsNone(find_synced_human_commit(BLOB_URL, marker, MagicMock()))
-
-    def test_find_synced_commit_matches_base_itself(self) -> None:
-        marker = SyncMarker(_file_hash(SHAS[1]), HEX_B, SHAS[1])
-        with _patched(SHAS, {s: _file_at(s) for s in SHAS}):
-            self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[1])
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B), MagicMock()))
 
     def test_find_synced_commit_listing_error_gives_none(self) -> None:
         with _patched(requests.HTTPError("403"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING"):
-            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B), MagicMock()))
 
     def test_find_synced_commit_skips_commit_without_anchor(self) -> None:
         files = {s: _file_at(s) for s in SHAS}
         files[SHAS[0]] = "# Title\n\nNo such section.\n"
-        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B)
         with _patched(SHAS, files):
             self.assertEqual(find_synced_human_commit(BLOB_URL, marker, MagicMock()), SHAS[2])
 
     def test_find_synced_commit_stops_at_deadline(self) -> None:
-        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B, None)
+        marker = SyncMarker(_file_hash(SHAS[2]), HEX_B)
         with _patched(SHAS, {s: _file_at(s) for s in SHAS}) as stack:
             stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.time.monotonic", side_effect=[0.0, 0.0, 100.0]))
             fetch = stack.enter_context(patch("fastapi_app.lib.doc_rules.guide_sync.fetch_rule_excerpt", side_effect=lambda url, cache: _file_at(SHAS[0])))
@@ -235,13 +221,13 @@ class TestFindSyncedHumanCommit(unittest.TestCase):
 
     def test_find_synced_commit_http_error_logs_warning_without_traceback(self) -> None:
         with _patched(requests.HTTPError("403"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING") as logs:
-            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B), MagicMock()))
         [record] = logs.records
         self.assertEqual(record.levelname, "WARNING")
         self.assertIsNone(record.exc_info)
 
     def test_find_synced_commit_unexpected_error_logs_traceback(self) -> None:
         with _patched(KeyError("sha"), {}), self.assertLogs(GUIDE_SYNC_LOGGER, level="WARNING") as logs:
-            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B, None), MagicMock()))
+            self.assertIsNone(find_synced_human_commit(BLOB_URL, SyncMarker(HEX_A, HEX_B), MagicMock()))
         [record] = logs.records
         self.assertIsNotNone(record.exc_info)

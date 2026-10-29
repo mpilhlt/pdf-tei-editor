@@ -22,7 +22,7 @@ from fastapi_app.lib.doc_rules.guide_update import (
 
 HUMAN_URL = "https://github.com/o/r/blob/main/docs/guide.md#dates"
 MACHINE_URL = "https://github.com/o/r/blob/main/docs/guide-llm.md#dates"
-MARKER = "<!-- sync: guide=" + "a" * 64 + " llm=" + "b" * 64 + " base=abc123 -->"
+MARKER = "<!-- sync: guide=" + "a" * 64 + " llm=" + "b" * 64 + " -->"
 STALE_MARKER = "<!-- sync: guide=" + "c" * 64 + " llm=" + "d" * 64 + " -->"
 MACHINE_FULL = f"## Dates\n\n{MARKER}\n\n- Tag dates with `date`.\n"
 MACHINE = "## Dates\n\n- Tag dates with `date`.\n"
@@ -156,7 +156,7 @@ class TestGatherGuideChange(unittest.TestCase):
         self.assertEqual(change.old_human, OLD_HUMAN)
         self.assertEqual(change.new_human, NEW_HUMAN)
         self.assertEqual(change.base_commit, "abc123")
-        self.assertEqual(find.call_args.args[1], SyncMarker("a" * 64, "b" * 64, "abc123"))
+        self.assertEqual(find.call_args.args[1], SyncMarker("a" * 64, "b" * 64))
         self.assertEqual(at_commit.call_args.args[:2], (HUMAN_URL, "abc123"))
 
     def test_machine_is_stripped_of_the_marker_and_the_marker_kept_verbatim(self):
