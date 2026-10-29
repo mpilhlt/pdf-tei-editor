@@ -796,6 +796,78 @@ test.describe('Document rules registry', () => {
       }
     });
 
+    test('updates to upstream and removes overrides upstream contains', async ({ page }) => {
+      // The three routes are mocked (the local rules server cannot show a changed upstream);
+      // the override ids in the mocked status come from a real override.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      /** @type {string[]} */
+      let inUpstream = [];
+      /** @type {any[]} */
+      const removalRequests = [];
+      const status = () => ({
+        refs_behind: true,
+        refresh_message: null,
+        layers: [{ layer: 'machine', url: TWO_LAYER_RULE_URLS[1], error: null, in_upstream: inUpstream, kept: [] }]
+      });
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/upstream-status', (route) => route.fulfill({ json: status() }));
+        await page.route('**/api/v1/document-rules/refresh-resource', (route) => route.fulfill({
+          json: { status: 'ok', refs: [], changed: false, message: '' }
+        }));
+        await page.route('**/api/v1/document-rules/remove-overrides-in-upstream', (route) => {
+          removalRequests.push(route.request().postDataJSON());
+          return route.fulfill({ json: status() });
+        });
+
+        const dialog = await openMachineTab(page);
+        const created = await page.evaluate(async (url) => {
+          return await /** @type {any} */ (window).client.apiClient.documentRulesOverrides({ kind: 'interpretation-ref', fragment_url: url });
+        }, TWO_LAYER_RULE_URLS[1]);
+        inUpstream = [created.id];
+
+        // Reopen so that the status is loaded with the override
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(dialog).not.toHaveAttribute('open', '');
+        await openToolsMenu(page);
+        const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
+        await expect(dialog).toHaveAttribute('open', '');
+        await dialog.locator('sl-tab[name="machineLayerTab"]').click();
+
+        await expect(dialog.locator('[name="upstreamStatus"]')).toContainText('now in upstream');
+        const updateBtn = dialog.locator('sl-button[name="updateToUpstreamBtn"]');
+        await expect(updateBtn).toBeVisible();
+        await expect(updateBtn).toContainText('Update to upstream');
+        await expect(dialog.locator('sl-button[name="resetBtn"]')).toBeHidden();
+
+        await page.waitForTimeout(500);
+        await updateBtn.click();
+        const confirmDialog = page.locator('sl-dialog[name="dialog"]');
+        await expect(confirmDialog).toHaveAttribute('open', '', { timeout: 5000 });
+        await expect(confirmDialog).toContainText('Update to upstream');
+        await page.waitForTimeout(500);
+        await confirmDialog.locator('sl-button[name="confirmBtn"]').click();
+
+        await expect(page.locator('sl-alert[variant="success"]')).toContainText('Updated to upstream: removed 1 override, kept 0.', { timeout: 15000 });
+        expect(removalRequests).toHaveLength(1);
+        expect(removalRequests[0].url).toBe(TWO_LAYER_RULE_URLS[1]);
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
     test('asks for a missing API key on top of the update dialog', async ({ page }) => {
       const consoleLogs = setupTestConsoleCapture(page);
       // the mocked 428 below is logged by the browser

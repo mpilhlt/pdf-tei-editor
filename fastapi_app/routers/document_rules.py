@@ -54,6 +54,13 @@ from ..lib.doc_rules.guide_update import (
 from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
+from ..lib.doc_rules.upstream_cleanup import (
+    CategoryNotFoundError,
+    OverrideDeletionError,
+    UpstreamStatus,
+    remove_overrides_in_upstream,
+    upstream_status,
+)
 from ..lib.doc_rules.upstream_proposal import ProposalError, UpstreamProposal, build_upstream_proposal
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
@@ -82,6 +89,7 @@ from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
     HumanChangeRequest,
     HumanChangeResponse,
+    LayerUpstreamStatusModel,
     ListResourcesRequest,
     ListResourcesResponse,
     OkResponse,
@@ -113,6 +121,8 @@ from ..lib.models.models_document_rules import (
     UpdateFromGuideRequest,
     UpdateFromGuideResponse,
     UpdateOverrideRequest,
+    UpstreamStatusRequest,
+    UpstreamStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -781,3 +791,56 @@ async def update_from_guide(
         base_commit=change.base_commit,
         unchanged=guide_unchanged(change, request.human_url),
     )
+
+
+def _upstream_status_response(status: UpstreamStatus) -> UpstreamStatusResponse:
+    """The response model of an `UpstreamStatus`."""
+    return UpstreamStatusResponse(
+        refs_behind=status.refs_behind,
+        refresh_message=status.refresh_message,
+        layers=[
+            LayerUpstreamStatusModel(
+                layer=layer.layer, url=layer.url, error=layer.error, in_upstream=list(layer.in_upstream), kept=list(layer.kept)
+            )
+            for layer in status.layers
+        ],
+    )
+
+
+@router.post("/upstream-status", response_model=UpstreamStatusResponse)
+def get_upstream_status(
+    request: UpstreamStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> UpstreamStatusResponse:
+    """Which of the caller's overrides of the rule category of `url` the upstream guide already contains."""
+    tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        status = upstream_status(tei_content, request.url, store, user["username"], cache)
+    except CategoryNotFoundError as e:
+        raise HTTPException(status_code=400, detail="This rule is not referenced by the document.") from e
+    return _upstream_status_response(status)
+
+
+@router.post("/remove-overrides-in-upstream", response_model=UpstreamStatusResponse)
+def post_remove_overrides_in_upstream(
+    request: UpstreamStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> UpstreamStatusResponse:
+    """Delete the caller's overrides of the rule category of `url` whose text the rules the document is now pinned to contain; `in_upstream` lists the deleted ids. A failing deletion stops and answers 502 naming how many were deleted."""
+    tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        status = remove_overrides_in_upstream(tei_content, request.url, store, user["username"], cache)
+    except CategoryNotFoundError as e:
+        raise HTTPException(status_code=400, detail="This rule is not referenced by the document.") from e
+    except OverrideDeletionError as e:
+        logger.error(f"Failed to remove overrides in upstream for {request.url}: {e}")
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return _upstream_status_response(status)

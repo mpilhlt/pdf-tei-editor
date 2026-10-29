@@ -322,3 +322,25 @@ class UpdateFromGuideResponse(BaseModel):
     proposed: str
     base_commit: Optional[str] = None
     unchanged: bool
+
+
+class UpstreamStatusRequest(BaseModel):
+    """Request for the upstream status of a rule category. `xml` is the open document's stable id; `url` is one of its refs."""
+    xml: str
+    url: str
+
+
+class LayerUpstreamStatusModel(BaseModel):
+    """Upstream status of the caller's overrides of one layer; `in_upstream` and `kept` hold override ids."""
+    layer: str
+    url: str
+    error: Optional[str] = None
+    in_upstream: list[str]
+    kept: list[str]
+
+
+class UpstreamStatusResponse(BaseModel):
+    """Upstream status of a rule category; after a removal, the `in_upstream` lists hold the deleted override ids."""
+    refs_behind: bool
+    refresh_message: Optional[str] = None
+    layers: list[LayerUpstreamStatusModel]

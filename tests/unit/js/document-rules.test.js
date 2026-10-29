@@ -147,11 +147,14 @@ function makeDialogUi() {
   el.layerTabs.show = (panel) => { el.layerTabs.shown.push(panel); };
   el.syncStatus = document.createElement('div');
   el.syncStatus.style.display = 'none';
+  el.upstreamStatus = document.createElement('div');
+  el.upstreamStatus.style.display = 'none';
   el.xmlBody = Object.assign(document.createElement('div'), { xmlContainer: document.createElement('div') });
   el.newOverrideBtn = document.createElement('sl-button');
   el.saveBtn = document.createElement('sl-button');
   el.deleteBtn = document.createElement('sl-button');
   el.resetBtn = document.createElement('sl-button');
+  el.updateToUpstreamBtn = Object.assign(document.createElement('sl-button'), { disabled: false, loading: false });
   el.proposeUpstreamBtn = document.createElement('sl-button');
   el.updateFromGuideBtn = document.createElement('sl-button');
   el.closeBtn = document.createElement('sl-button');
@@ -652,6 +655,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: text }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -690,6 +695,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: 'plain text' }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -714,6 +721,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: '<grammar/>' }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -738,6 +747,8 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
     wireOverrideIndicatorStubs(plugin);
+    // _onSave/_onDelete fire it without awaiting; its own tests are in "upstream cleanup"
+    plugin._refreshUpstreamStatus = async () => {};
     return plugin;
   }
 
@@ -814,6 +825,52 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.strictEqual(deletedId, 'ov1');
     assert.strictEqual(plugin._currentSelectedId, null);
     assert.deepStrictEqual(plugin._currentOverrides, []);
+  });
+
+  it('_onSave refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const updated = { id: 'ov1', note: '', text: 'original text', format: 'markdown', created_at: '', updated_at: '' };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => updated } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 1);
+  });
+
+  it('_onSave does not refresh the upstream status when saving fails', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => { throw new Error('boom'); } } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 0);
+  });
+
+  it('_onDelete refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'client') return { apiClient: { documentRulesDeleteOverrides: async () => {} } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onDelete();
+    assert.strictEqual(upstreamRefreshes, 1);
   });
 
   it('_onDelete does nothing when the confirmation is declined', async () => {
@@ -3147,5 +3204,321 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
     plugin._proposeDialogUi.open = true;
     plugin.onXmlChange();
     assert.strictEqual(plugin._proposeDialogUi.open, false);
+  });
+});
+
+describe('DocumentRulesPlugin upstream cleanup', () => {
+  const oldHuman = 'https://github.com/o/r/blob/oldsha/docs/g.md#seg';
+  const oldMachine = 'https://github.com/o/r/blob/oldsha/docs/rules.md#L3-L9';
+  const newHuman = 'https://github.com/o/r/blob/newsha/docs/g.md#seg';
+  const newMachine = 'https://github.com/o/r/blob/newsha/docs/rules.md#L4-L10';
+  const override = (id) => ({ id, note: '', text: id, format: 'markdown', created_at: '', updated_at: '' });
+
+  /**
+   * @param {Partial<{ refs_behind: boolean, human: any, machine: any }>} [options]
+   * @returns {any} an UpstreamStatusResponse
+   */
+  function status({ refs_behind = false, human = {}, machine = {} } = {}) {
+    return {
+      refs_behind,
+      refresh_message: null,
+      layers: [
+        { layer: 'human', url: oldHuman, error: null, in_upstream: [], kept: [], ...human },
+        { layer: 'machine', url: oldMachine, error: null, in_upstream: [], kept: [], ...machine },
+      ],
+    };
+  }
+
+  /**
+   * A plugin showing the machine layer of a two-layer category, with the
+   * markdown body stubbed out.
+   * @param {Record<string, Function>} [apiClient]
+   * @param {{ confirm?: boolean, xmleditor?: any }} [options]
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, warnings: string[], confirms: string[][] }}
+   */
+  function setup(apiClient = {}, { confirm = true, xmleditor = null } = {}) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._setMarkdownContent = () => {};
+    plugin._scrollMarkdownBodyToAnchor = () => {};
+    plugin._md = { render: (text) => text };
+    const human = { kind: 'interpretation-ref', url: oldHuman, key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'g', related_urls: [oldHuman] };
+    const machine = { kind: 'interpretation-ref', url: oldMachine, key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'g', related_urls: [oldMachine] };
+    plugin._currentResource = machine;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOriginalText = 'original';
+    plugin._currentOverrides = [override('ov1'), override('ov2')];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    plugin._refreshSyncStatus = async () => {};
+    const warnings = [];
+    const confirms = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'logger') return { warn: (msg) => { warnings.push(msg); }, debug: () => {} };
+      if (name === 'dialog') return { confirm: async (text, title) => { confirms.push([text, title]); return confirm; } };
+      if (name === 'xmleditor' && xmleditor) return xmleditor;
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, warnings, confirms };
+  }
+
+  it('_refreshUpstreamStatus requests the status with the stable id and the shown url', async () => {
+    const requests = [];
+    const { plugin } = setup({ documentRulesUpstreamStatus: async (body) => { requests.push(body); return status(); } });
+    await plugin._refreshUpstreamStatus();
+    assert.deepStrictEqual(requests, [{ xml: 'stable123', url: oldMachine }]);
+    assert.deepStrictEqual(plugin._upstreamStatus, status());
+  });
+
+  it('_refreshUpstreamStatus sends no request for a schema resource and hides the line', async () => {
+    let requested = false;
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => { requested = true; return status(); } });
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._upstreamStatus = status({ refs_behind: true });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(requested, false);
+    assert.strictEqual(plugin._upstreamStatus, null);
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+  });
+
+  it('_refreshUpstreamStatus hides the line and logs a warning when the request fails', async () => {
+    const { plugin, warnings } = setup({ documentRulesUpstreamStatus: async () => { throw new Error('boom'); } });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await assert.doesNotReject(plugin._refreshUpstreamStatus());
+    assert.strictEqual(plugin._upstreamStatus, null);
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+    assert.match(warnings[0], /boom/);
+  });
+
+  it('_refreshUpstreamStatus ignores a response that arrives after a newer request', async () => {
+    let resolveFirst;
+    let call = 0;
+    const { plugin } = setup({ documentRulesUpstreamStatus: () => {
+      call++;
+      if (call === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve(status());
+    } });
+    const first = plugin._refreshUpstreamStatus();
+    await plugin._refreshUpstreamStatus();
+    resolveFirst(status({ refs_behind: true }));
+    await first;
+    assert.deepStrictEqual(plugin._upstreamStatus, status());
+  });
+
+  it('_openResourceEditor refreshes the upstream status, but not on a layer-tab switch within the group', async () => {
+    const requests = [];
+    const { plugin } = setup({
+      documentRulesUpstreamStatus: async (body) => { requests.push(body); return status(); },
+      documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: 'x' }),
+    });
+    plugin._cmMdView = makeCmMdViewMock('');
+    plugin._groupOf = () => plugin._currentGroup;
+    const [human, machine] = plugin._currentGroup;
+    plugin._editorDialogUi.open = false;
+    await plugin._openResourceEditor(machine);
+    assert.strictEqual(requests.length, 1);
+    await plugin._openResourceEditor(human);
+    assert.strictEqual(requests.length, 1);
+  });
+
+  it('marks overrides that upstream contains with the cloud-check icon and tooltip', () => {
+    const { plugin } = setup();
+    plugin._currentOverrides = [{ ...override('ov1'), outdated: true, note: 'my note' }, override('ov2')];
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+    plugin._renderOverrideRow();
+    const [, btn1, btn2] = [...plugin._editorDialogUi.overrideRow.children];
+    assert.strictEqual(btn1.querySelectorAll('sl-icon').length, 1);
+    assert.strictEqual(btn1.querySelector('sl-icon').getAttribute('name'), 'cloud-check');
+    assert.strictEqual(btn1.querySelector('sl-icon').getAttribute('slot'), 'suffix');
+    assert.strictEqual(btn1.title, 'Upstream contains this text; it is removed when you update to upstream.\nmy note');
+    assert.strictEqual(btn2.querySelector('sl-icon'), null);
+  });
+
+  it('shows the status line with counts and per-layer errors', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({
+      refs_behind: true,
+      human: { in_upstream: ['ov1'] },
+      machine: { in_upstream: ['ov2'], error: 'rate limited' },
+    }) });
+    await plugin._refreshUpstreamStatus();
+    const line = plugin._editorDialogUi.upstreamStatus;
+    assert.strictEqual(line.style.display, '');
+    assert.strictEqual(line.querySelector('sl-icon').getAttribute('name'), 'arrow-repeat');
+    const lines = [...line.children].map((c) => c.textContent.trim());
+    assert.deepStrictEqual(lines, [
+      'The guide upstream has changed since this document was annotated. 2 overrides now in upstream. Use "Update to upstream" to apply it.',
+      'Could not compare the Machine rules with upstream: rate limited',
+    ]);
+  });
+
+  it('uses the singular for one override and shows a layer error alone', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({ human: { in_upstream: ['ov1'] } }) });
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.textContent.trim(), '1 override now in upstream. Use "Update to upstream" to apply it.');
+
+    const { plugin: plugin2 } = setup({ documentRulesUpstreamStatus: async () => status({ human: { error: 'not found' } }) });
+    await plugin2._refreshUpstreamStatus();
+    const line = plugin2._editorDialogUi.upstreamStatus;
+    assert.strictEqual(line.style.display, '');
+    assert.strictEqual(line.textContent.trim(), 'Could not compare the Guide with upstream: not found');
+  });
+
+  it('hides the status line when nothing is behind and nothing matches', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({ human: { kept: ['ov1'] } }) });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+  });
+
+  it('shows "Update to upstream" instead of "Reset to original" for interpretation-ref; schema keeps "Reset to original"', () => {
+    const { plugin } = setup();
+    const ui = plugin._editorDialogUi;
+    plugin._currentSelectedId = 'ov1';
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.resetBtn.style.display, 'none');
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, '');
+
+    plugin._upstreamStatus = status({ human: { kept: ['ov1'] } });
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+
+    plugin._upstreamStatus = status({ refs_behind: true });
+    plugin._documentReadOnly = true;
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+
+    plugin._documentReadOnly = false;
+    plugin._setXmlContent = () => {};
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._upstreamStatus = null;
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.resetBtn.style.display, '');
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+  });
+
+  /**
+   * apiClient stand-ins for a full "Update to upstream" run, recording the
+   * call order into `calls`.
+   * @param {string[]} calls
+   * @param {{ refresh?: any, removal?: any, removalError?: Error }} [options]
+   * @returns {Record<string, Function>}
+   */
+  function updateClient(calls, { refresh, removal, removalError } = {}) {
+    return {
+      documentRulesRefreshResource: async (body) => {
+        calls.push(`refreshResource:${body.url}`);
+        return refresh ?? {
+          status: 'ok', changed: true, message: 'Resource refreshed from upstream.',
+          refs: [
+            { target: newHuman, content_type: 'markdown', subtype: 'human' },
+            { target: newMachine, content_type: 'markdown', subtype: 'machine' },
+          ],
+        };
+      },
+      documentRulesRemoveOverridesInUpstream: async (body) => {
+        calls.push(`removeOverridesInUpstream:${body.xml}:${body.url}`);
+        if (removalError) throw removalError;
+        return removal ?? status({ human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+      },
+      documentRulesQuery: async (body) => {
+        calls.push(`query:${body.url}`);
+        return { original_text: 'fresh', overrides: [override('ov2')], selected_override_id: null };
+      },
+      documentRulesUpstreamStatus: async () => { calls.push('upstreamStatus'); return status({ machine: { kept: ['ov2'] } }); },
+    };
+  }
+
+  /**
+   * An xmleditor stand-in for _applyRefreshedRefs() that records its
+   * document edit into `calls`.
+   * @param {string[]} calls
+   * @returns {any}
+   */
+  function recordingXmlEditor(calls) {
+    const { mock } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [makeRefElement(oldHuman)],
+      '//tei:editorialDecl//tei:ref[@subtype="machine"]': [makeRefElement(oldMachine)],
+    });
+    mock.updateEditorFromNode = async (node) => { calls.push(`documentEdit:${node.getAttribute('target')}`); };
+    return mock;
+  }
+
+  it('_onUpdateToUpstream re-pins the document before removing overrides', async () => {
+    const calls = [];
+    const { plugin, confirms } = setup(updateClient(calls), { xmleditor: recordingXmlEditor(calls) });
+    plugin._upstreamStatus = status({ refs_behind: true, human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(confirms, [[
+      'This updates the document to the current upstream rules and removes 1 override that upstream now contains. 1 other override is kept.',
+      'Update to upstream',
+    ]]);
+    assert.deepStrictEqual(calls, [
+      `refreshResource:${oldMachine}`,
+      `documentEdit:${newHuman}`,
+      `documentEdit:${newMachine}`,
+      `removeOverridesInUpstream:stable123:${newMachine}`,
+      `query:${newMachine}`,
+      'upstreamStatus',
+    ]);
+    assert.strictEqual(plugin._currentResource.url, newMachine);
+    assert.deepStrictEqual(plugin._currentOverrides, [override('ov2')]);
+    assert.strictEqual(plugin._editorDialogUi.updateToUpstreamBtn.loading, false);
+    assert.strictEqual(plugin._editorDialogUi.updateToUpstreamBtn.disabled, false);
+  });
+
+  it('_onUpdateToUpstream confirmation omits the parts with a zero count', async () => {
+    const { plugin, confirms } = setup({}, { confirm: false });
+    plugin._upstreamStatus = status({ refs_behind: true });
+    await plugin._onUpdateToUpstream();
+    assert.strictEqual(confirms[0][0], 'This updates the document to the current upstream rules.');
+  });
+
+  it('_onUpdateToUpstream stops before removal when the refresh is not ok', async () => {
+    const calls = [];
+    const refresh = { status: 'unavailable', changed: false, refs: [], message: 'upstream unavailable' };
+    const { plugin } = setup(updateClient(calls, { refresh }));
+    plugin._upstreamStatus = status({ refs_behind: true });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, [`refreshResource:${oldMachine}`]);
+    assert.deepStrictEqual(notifyCalls.map((c) => c.slice(0, 2)), [['upstream unavailable', 'warning']]);
+  });
+
+  it('_onUpdateToUpstream does nothing when the confirmation is declined', async () => {
+    const calls = [];
+    const { plugin } = setup(updateClient(calls), { confirm: false });
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, []);
+    assert.deepStrictEqual(notifyCalls, []);
+  });
+
+  it('_onUpdateToUpstream reports the counts of the removal response', async () => {
+    const calls = [];
+    const removal = status({ human: { in_upstream: ['ov1', 'ov3'] }, machine: { in_upstream: ['ov4'], kept: ['ov2'] } });
+    const refresh = { status: 'ok', changed: false, refs: [], message: 'Resource is already up to date.' };
+    const { plugin } = setup(updateClient(calls, { refresh, removal }));
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, [
+      `refreshResource:${oldMachine}`,
+      `removeOverridesInUpstream:stable123:${oldMachine}`,
+      `query:${oldMachine}`,
+      'upstreamStatus',
+    ]);
+    assert.deepStrictEqual(notifyCalls.at(-1).slice(0, 2), ['Updated to upstream: removed 3 overrides, kept 1.', 'success']);
+  });
+
+  it('_onUpdateToUpstream notifies a failed removal and still reloads', async () => {
+    const calls = [];
+    const refresh = { status: 'ok', changed: false, refs: [], message: 'Resource is already up to date.' };
+    const { plugin } = setup(updateClient(calls, { refresh, removalError: new Error('boom') }));
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.ok(calls.includes(`query:${oldMachine}`));
+    assert.deepStrictEqual(notifyCalls.map((c) => c[1]), ['danger']);
+    assert.match(notifyCalls[0][0], /boom/);
   });
 });

@@ -858,6 +858,28 @@
  */
 
 /**
+ * @typedef {Object} UpstreamStatusRequest
+ * @property {string} xml - Stable id of the open document
+ * @property {string} url - One of the document's refs
+ */
+
+/**
+ * @typedef {Object} LayerUpstreamStatus
+ * @property {string} layer
+ * @property {string} url
+ * @property {string|null} [error]
+ * @property {string[]} in_upstream - Override ids (the deleted ones after a removal)
+ * @property {string[]} kept - Override ids
+ */
+
+/**
+ * @typedef {Object} UpstreamStatusResponse
+ * @property {boolean} refs_behind
+ * @property {string|null} [refresh_message]
+ * @property {LayerUpstreamStatus[]} layers
+ */
+
+/**
  * @typedef {Object} HumanChangeRequest
  * @property {string} human_url
  * @property {string} machine_url
@@ -2012,6 +2034,30 @@ export class ApiClientV1 {
    */
   async documentRulesSyncStatus(requestBody) {
     const endpoint = `/document-rules/sync-status`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Which of the caller's overrides of a rule category the upstream guide
+   * already contains.
+   *
+   * @param {UpstreamStatusRequest} requestBody
+   * @returns {Promise<UpstreamStatusResponse>}
+   */
+  async documentRulesUpstreamStatus(requestBody) {
+    const endpoint = `/document-rules/upstream-status`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete the caller's overrides of a rule category that the upstream guide
+   * already contains. The `in_upstream` lists hold the deleted ids.
+   *
+   * @param {UpstreamStatusRequest} requestBody
+   * @returns {Promise<UpstreamStatusResponse>}
+   */
+  async documentRulesRemoveOverridesInUpstream(requestBody) {
+    const endpoint = `/document-rules/remove-overrides-in-upstream`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
