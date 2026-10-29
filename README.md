@@ -8,7 +8,6 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 
 - **Dual-pane interface** with synchronized PDF viewer and XML editor
 - **AI-powered extraction and validation** supporting multiple extraction engines (GROBID or LLM-based extraction workflows) as well as LLM-based annotation reviews
-- **AI-assisted refinement of annotation rules and schemas** — try out changes to the annotation guidelines, to the condensed rules the LLM reviewer works with and to the validation schema as personal overrides on real documents, have a language model carry guideline changes over into the machine rules, and propose the result upstream as a patch or pull request once it has proven itself (see [Adjusting the rules the model uses](docs/user-manual/unit-review.md#adjusting-the-rules-the-model-uses))
 - **Visual annotation mode** — hide raw XML and annotate text with colored badges using a point-and-click interface
 - **Search-in-PDF navigation** — automatically locates and highlights the PDF region corresponding to the cursor position in the XML editor
 - **Version management** with branching, merging, and comparison tools
@@ -17,6 +16,7 @@ A comprehensive viewer/editor web application for comparing PDF sources with TEI
 - **Collection organization** for managing document sets
 - **Revision tracking** with detailed change documentation
 - **Review and comments** - reviewers mark XML units as OK or not OK and discuss them in comment threads, also in documents they cannot edit; review requests, replies and mentions arrive as in-app messages that open the document at the right place
+- **AI-assisted refinement of annotation rules and schemas** — try out changes to the annotation guidelines, to the condensed rules the LLM reviewer works with and to the validation schema as personal overrides on real documents, have a language model carry guideline changes over into the machine rules, and propose the result upstream as a patch or pull request once it has proven itself (see [Adjusting the rules the model uses](docs/user-manual/unit-review.md#adjusting-the-rules-the-model-uses))
 - **Modular architecture** - easily add new features and behavior with frontend and backend plugins
 - **Mature and agent-ready** - extensive developer documentation and test coverage, so humans and agents can contribute new code easily and safely
 
