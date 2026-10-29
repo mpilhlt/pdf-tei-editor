@@ -8,7 +8,8 @@ The machine section carries a marker comment
 
 (optionally with ` base=<commit>`, a commit id) holding the hashes of the human and machine
 sections when they were last brought in sync. The hashing is the algorithm of
-fossil's `scripts/check-llm-digest.py`, so markers written there stay valid.
+the `scripts/check-llm-digest.py` fossil used before the editor took over the
+sync, so the markers that script wrote stay valid.
 """
 
 import hashlib
