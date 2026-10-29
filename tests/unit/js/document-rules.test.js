@@ -1799,7 +1799,7 @@ describe('DocumentRulesPlugin layer tabs (Guide (human) / Machine rules)', () =>
     plugin.getDependency = (name) => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async (body) => { queried.push(body.url); return { overrides: [], selected_override_id: null, original_text: `text of ${body.url}` }; },
-        documentRulesSyncStatus: async () => ({ status: 'in_sync', human_source: 'original', machine_source: 'original', base: null, synced_commit: null }),
+        documentRulesSyncStatus: async () => ({ status: 'in_sync', human_source: 'original', machine_source: 'original', synced_commit: null }),
       } };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
@@ -1958,7 +1958,7 @@ describe('DocumentRulesPlugin sync status line', () => {
   }
 
   /** @param {string} status */
-  const response = (status, synced_commit = null) => ({ status, human_source: 'original', machine_source: 'original', base: null, synced_commit });
+  const response = (status, synced_commit = null) => ({ status, human_source: 'original', machine_source: 'original', synced_commit });
 
   it('is hidden for a single-layer group, without a request', async () => {
     const { plugin, requests } = setup(async () => response('in_sync'));

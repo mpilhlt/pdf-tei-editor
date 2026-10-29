@@ -6,8 +6,8 @@ The machine section carries a marker comment
 
     <!-- sync: guide=<sha256> llm=<sha256> -->
 
-(optionally with ` base=<commit>`, a commit id) holding the hashes of the human and machine
-sections when they were last brought in sync. The editor is the only writer
+holding the hashes of the human and machine sections when they were last
+brought in sync. The editor is the only writer
 of these markers; guide repositories do not check them.
 """
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 SyncStatus = Literal["in_sync", "machine_outdated", "machine_edited", "both_changed", "no_marker"]
 
-_SYNC_RE = re.compile(r"<!-- sync: guide=([0-9a-f]+) llm=([0-9a-f]+)(?: base=([0-9a-f]+))? -->\n?")
+_SYNC_RE = re.compile(r"<!-- sync: guide=([0-9a-f]+) llm=([0-9a-f]+) -->\n?")
 _HEADING_RE = re.compile(r"^#{1,6}\s")
 _LEADING_BLANK_LINES_RE = re.compile(r"\A(?:[ \t]*\n)+")
 
@@ -42,7 +42,6 @@ class SyncMarker:
     """Hashes recorded when the machine section was last synced with the human section."""
     guide_hash: str
     llm_hash: str
-    base: Optional[str]
 
 
 def parse_sync_marker(machine_section: str) -> Optional[SyncMarker]:
@@ -50,7 +49,7 @@ def parse_sync_marker(machine_section: str) -> Optional[SyncMarker]:
     match = _SYNC_RE.search(machine_section)
     if match is None:
         return None
-    return SyncMarker(match.group(1), match.group(2), match.group(3))
+    return SyncMarker(match.group(1), match.group(2))
 
 
 def split_sync_marker(text: str) -> tuple[str, Optional[str]]:
@@ -89,8 +88,7 @@ def with_sync_marker(text: str, marker_line: str) -> str:
 
 def format_sync_marker(marker: SyncMarker) -> str:
     """Render `marker` as its comment line, without a trailing newline."""
-    base = f" base={marker.base}" if marker.base is not None else ""
-    return f"<!-- sync: guide={marker.guide_hash} llm={marker.llm_hash}{base} -->"
+    return f"<!-- sync: guide={marker.guide_hash} llm={marker.llm_hash} -->"
 
 
 def section_hash(text: str) -> str:
@@ -133,8 +131,8 @@ def find_synced_human_commit(
     Find the commit of the guide file whose section hashes to `marker.guide_hash`.
 
     `human_url` is a heading-anchor blob URL. At most `limit` commits are
-    checked, newest first, stopping after `marker.base` if that commit is
-    reached, or before the next fetch once `deadline_seconds` have passed.
+    checked, newest first, stopping before the next fetch once
+    `deadline_seconds` have passed.
     Returns None if nothing matches, the anchor is absent, no forge adapter
     handles the URL, the deadline passes, or a listing or fetch fails (logged
     as a warning).
@@ -156,8 +154,6 @@ def find_synced_human_commit(
                 section = "\n".join(lines[range_[0] - 1:range_[1]])
                 if human_section_hash(section, commit_url) == marker.guide_hash:
                     return sha
-            if sha == marker.base:
-                return None
     except requests.HTTPError as e:
         logger.warning(f"Could not find the synced commit for {human_url}: {e}")
     except Exception as e:

@@ -546,7 +546,6 @@ def get_sync_status(
         status=status,
         human_source=human_source,
         machine_source=machine_source,
-        base=marker.base if marker is not None else None,
         synced_commit=synced_commit,
     )
 

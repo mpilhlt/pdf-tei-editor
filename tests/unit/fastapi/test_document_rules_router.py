@@ -735,7 +735,7 @@ class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"status": "in_sync", "human_source": "original", "machine_source": "original", "base": None, "synced_commit": None},
+            {"status": "in_sync", "human_source": "original", "machine_source": "original", "synced_commit": None},
         )
         find.assert_not_called()
 

@@ -227,7 +227,6 @@ class SyncStatusResponse(BaseModel):
     status: SyncStatus
     human_source: Literal["original", "override"]
     machine_source: Literal["original", "override"]
-    base: Optional[str] = None
     synced_commit: Optional[str] = None
 
 

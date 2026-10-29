@@ -140,7 +140,6 @@ class TestBuildUpstreamProposal(unittest.TestCase):
         proposal = _Fixture().build({MACHINE_URL: MACHINE_EDIT}, include_human=False)
         self.assertEqual([f.path for f in proposal.files], ["docs/guidelines-llm.md"])
         after = proposal.files[0].after
-        self.assertNotIn("base=", after)
         section = _slice(after, "data-correction").split("\n")
         self.assertEqual(section[0], "## Data correction")
         self.assertEqual(section[1], "")

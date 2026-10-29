@@ -853,7 +853,6 @@
  * @property {'in_sync'|'machine_outdated'|'machine_edited'|'both_changed'|'no_marker'} status
  * @property {'original'|'override'} human_source
  * @property {'original'|'override'} machine_source
- * @property {string|null} [base]
  * @property {string|null} [synced_commit]
  */
 
