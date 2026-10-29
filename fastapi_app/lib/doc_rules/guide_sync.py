@@ -7,8 +7,8 @@ The machine section carries a marker comment
     <!-- sync: guide=<sha256> llm=<sha256> -->
 
 (optionally with ` base=<commit>`, a commit id) holding the hashes of the human and machine
-sections when they were last brought in sync. The hashing is the algorithm of
-fossil's `scripts/check-llm-digest.py`, so markers written there stay valid.
+sections when they were last brought in sync. The editor is the only writer
+of these markers; guide repositories do not check them.
 """
 
 import hashlib
