@@ -112,6 +112,34 @@ Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/t
 - Everything the plugin ships (schema, guidelines, prompts) stays inside the plugin directory; serve files through `static/` and reference them by their `/api/plugins/{plugin_id}/static/` URL.
 - A schema the plugin's documents reference by a public URL (`<?xml-model href=...?>`) is shipped in `static/` as well and registered in `initialize()` with `register_bundled_schema(url, path)` from `fastapi_app.lib.core.schema_validator`. Validation and autocomplete then read the bundled file instead of downloading the URL, so they work offline and with the schema version of the installed plugin.
 
+## Moving a Feature from Core to a Plugin
+
+Checklist for moving behavior out of core into a plugin (built-in in `fastapi_app/plugins/` or a package in pte-plugins). It was derived from walking the document rules feature (#666) through an extraction; the result is recorded in [docs/superpowers/specs/2026-10-29-extension-html-templates-design.md](../superpowers/specs/2026-10-29-extension-html-templates-design.md#validation-case-document-rules-666-as-a-plugin).
+
+Run each step against the feature and record the outcome in the plan before writing code. A step that finds a missing piece in core (a "gap") blocks the extraction until core provides it in a separate PR.
+
+1. **Inbound dependencies.** `git grep` for the feature's modules, routes, templates and API client methods outside the feature's own files, in core and in pte-plugins. Each hit is moved with the feature, replaced by a hook, or a gap.
+2. **Outbound dependencies.** List the core imports the feature makes (`git grep -h "from fastapi_app" <files> | sort | uniq -c`). Each must be exported by `fastapi_app/plugin_api.py` (see [Plugin API](#plugin-api)); anything else is a gap (add the export) or moves with the feature.
+3. **Persistent state.** Tables, migrations, files under `data/`, secrets, config keys. Existing instances keep their data: the plugin adopts existing tables and config keys under their current names, never renames them.
+4. **Startup and background work.** Code in the `main.py` lifespan, background threads, GC handlers: move it to `initialize()` / `cleanup()` and check that it is safe to run in every worker.
+5. **Request-path hooks.** Places where core routers call into the feature (validation, extraction, file save). Each needs a registration function in `plugin_api` that does nothing while no plugin is registered (see [Extension Points Instead of Core Couplings](#extension-points-instead-of-core-couplings)).
+6. **Routes and client.** `/api/v1/<feature>` becomes `/api/plugins/<id>/...` (`routes.py`). Remove the methods and typedefs from `app/src/modules/api-client-v1.js`; the extension calls its routes with `callPluginApi()` and declares local JSDoc typedefs for the responses. Check whether external clients use the old URL.
+7. **Frontend code.** The frontend plugin becomes a `FrontendExtensionPlugin` ([Frontend Extensions](#frontend-extensions)), whose `import` statements are stripped. Every import must be reachable through `getDependency()`: app plugins, or modules tagged `@registerModule` (`app/src/module-registry.js`). A missing module is a gap. Check the code against the extension validator: `fetch` outside `/api/`, `window.open` (open links through an `<a target="_blank" rel="noopener">` instead), `localStorage`, dynamic `import()`.
+8. **Templates and styles.** Move the templates to the plugin's `templates/` directory, prefix top-level `name` attributes with the plugin id in camelCase, move the feature's CSS from `app/web/app.css` to `templates/*.css`, and drop its `ui.js` typedefs and `.types.js` files (access through `ui` is untyped). Icons used by templates must be bundled (see [HTML Templates and Stylesheets](../development/frontend-extensions.md#html-templates-and-stylesheets)).
+9. **Frontend consumers.** Core plugins that call the feature's methods or client endpoints need an extension point that the extension implements.
+10. **Plugin consumers.** For plugins that import the feature's Python API, choose between a hard dependency (`Requires-Dist` plus `metadata["dependencies"]`) and an optional capability looked up through the [Service Registry](#service-registry) in `initialize()`, and update them in the same release.
+11. **Tests.** Python unit tests move to `<plugin>/tests/` (packages: `src/<pkg>/tests/`), JS unit tests import the extension file directly, API and E2E tests move to `<plugin>/tests/api` and `<plugin>/tests/e2e`. Add the feature's modules to `tests/unit/fastapi/test_core_plugin_independence.py` so core cannot import them again.
+12. **Docs and references.** User manual, `docs/development/*`, the CLAUDE.md files of core and of repositories that refer to the feature, and plugin configs that point at it.
+13. **Release order.** A core release with the new hooks and exports first, then the plugin release, then the core release that deletes the feature and pins the plugin in `pyproject.toml`.
+
+Known gaps in core as of 2026-10 (each needs a core PR before a feature that depends on it can move):
+
+- No migrations owned by a plugin: a plugin cannot version its own tables or adopt tables created by core migrations.
+- `plugin_api` does not export the secrets API (`register_secret_service`, `MissingSecretError`, `get_secret_store`), `UrlCache`, `GitForgeAdapterRegistry`, `check_file_access` or `extract_schema_locations`.
+- No hook for per-user schema overrides in `routers/validation.py`.
+- Modules not available to extensions: `markdown-utils`, `panels` (`PanelUtils`) and CodeMirror. CodeMirror has to be exposed as one module that re-exports the app's instances, since a second copy of `@codemirror/state` breaks `instanceof` checks.
+- Plugin E2E data fixtures (e.g. TEI files) are not staged by `tests/lib/plugin-tests.js`; only spec files are.
+
 ## User API Keys
 
 A plugin that calls a service billed to the user (instead of using a key configured by the administrator) reads the user's own key from the encrypted secret store in `fastapi_app/lib/secrets/` (SQLite `secrets.db`, Fernet; see [User API Keys](../user-manual/cli.md#user-api-keys) for the key management and the CLI):
