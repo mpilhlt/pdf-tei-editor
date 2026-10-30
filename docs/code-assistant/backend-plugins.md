@@ -64,7 +64,7 @@ dependencies = ["requests>=2.33"]
 grobid = "pte_plugin_grobid"
 ```
 
-- The package directory is the plugin directory: it contains `plugin.py`, `pte-plugin.json` (required, as for external plugins), and optionally `routes.py`, `static/` and `extensions/` as package data.
+- The package directory is the plugin directory: it contains `plugin.py`, `pte-plugin.json` (required, as for external plugins), and optionally `routes.py`, `static/`, `extensions/` and `templates/` as package data.
 - Modules are imported under the real package name (`pte_plugin_grobid.plugin`), so plugins can import each other's packages; declare such dependencies both as a Python dependency and in `metadata["dependencies"]`.
 - The package is located with `importlib.util.find_spec()` without importing it (`get_installed_plugin_dirs()` in `plugin_paths.py`). Unlike directory plugins, an installed plugin declares its own Python dependencies.
 - The Plugin Manager lists installed plugins as "external", and plugins installed in the Plugin Manager as "site" (see [Runtime Install](#runtime-install)).
@@ -157,6 +157,9 @@ fastapi_app/plugins/my_plugin/
 ├── routes.py          # Optional custom routes
 ├── extensions/        # Optional: frontend extensions to be registered
 │   ├── my-script.js
+├── templates/         # Optional: HTML templates and stylesheets of the frontend extensions
+│   ├── my-dialog.html
+│   └── my-plugin.css
 ├── static/            # Optional: static assets served at /api/plugins/{plugin_id}/static/
 │   ├── view.html      # HTML templates (read by routes.py, also served statically)
 │   ├── view.js        # JavaScript for view.html
@@ -1146,6 +1149,8 @@ Quick reference:
 - Register extensions via `FrontendExtensionRegistry.register_extension(path, plugin_id)`
 - Extensions integrate with PluginManager lifecycle (`install`, `start`, `onStateUpdate`)
 - Use sandbox for controlled API access (`ui`, `dialog`, `notify`, `invoke`, etc.)
+- Ship HTML templates and stylesheets in `templates/` next to `extensions/`; they are inlined into the extension bundle and used with `this.createSingleFromTemplate(name, ...)`. Top-level element names start with the plugin id in camelCase. See [HTML Templates and Stylesheets](../development/frontend-extensions.md#html-templates-and-stylesheets) and the reference implementation `tests/fixtures/plugins/reference_plugin`
+- Test fixture plugins can set `"hidden": True` in their metadata to be left out of the plugin manager list
 
 **Example registration in plugin initialize():**
 

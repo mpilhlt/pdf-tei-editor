@@ -11,13 +11,16 @@
  * `class MyExt extends window.FrontendExtensionPlugin`.
  *
  * This class adds only what cannot be done via `Plugin` + `getDependency()`:
- * authenticated HTTP calls that need the current session ID from state.
+ * authenticated HTTP calls that need the current session ID from state, and
+ * access to the HTML templates the backend plugin ships in its `templates/`
+ * directory, which are registered as `<pluginId>:<name>` (see templateId()).
  *
  * @import { PluginContext } from './plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  */
 
 import { Plugin } from './plugin-base.js';
+import { createFromTemplate, createSingleFromTemplate, getRegisteredTemplateHtml } from './ui-system.js';
 
 export class FrontendExtensionPlugin extends Plugin {
   /**
@@ -26,6 +29,61 @@ export class FrontendExtensionPlugin extends Plugin {
    */
   constructor(context, config = {}) {
     super(context, config);
+  }
+
+  /**
+   * Id of the backend plugin that delivered this extension, set by the extension
+   * bundle. `undefined` if the class was not loaded from the bundle (e.g. in unit tests).
+   * @returns {string|undefined}
+   */
+  get backendPluginId() {
+    return /** @type {{backendPluginId?: string}} */ (/** @type {unknown} */ (this.constructor)).backendPluginId;
+  }
+
+  /**
+   * Full registry id of one of the backend plugin's templates.
+   * @param {string} name - Template name (file stem in the plugin's `templates/` directory)
+   * @returns {string} `<pluginId>:<name>`
+   * @throws {Error} If the extension was not loaded from the extension bundle
+   */
+  templateId(name) {
+    if (!this.backendPluginId) {
+      throw new Error(`Cannot resolve template '${name}': extension ${this.constructor.name} has no backend plugin id`);
+    }
+    return `${this.backendPluginId}:${name}`;
+  }
+
+  /**
+   * Create DOM nodes from one of the backend plugin's templates.
+   * Named elements become reachable through `getDependency('ui')` when `parentNode` is given;
+   * otherwise call `getDependency('ui-system').updateUi()` after inserting the nodes.
+   * @param {string} name - Template name
+   * @param {Element|Document|null} [parentNode] - If given, the nodes are appended to it
+   * @param {Record<string, string|number>} [params] - Values for `${param}` placeholders
+   * @returns {ChildNode[]} The created nodes
+   */
+  createFromTemplate(name, parentNode = null, params = {}) {
+    return createFromTemplate(this.templateId(name), parentNode, params);
+  }
+
+  /**
+   * Create the first element of one of the backend plugin's templates.
+   * @param {string} name - Template name
+   * @param {Element|Document|null} [parentNode] - If given, the element is appended to it
+   * @param {Record<string, string|number>} [params] - Values for `${param}` placeholders
+   * @returns {HTMLElement} The created element
+   */
+  createSingleFromTemplate(name, parentNode = null, params = {}) {
+    return createSingleFromTemplate(this.templateId(name), parentNode, params);
+  }
+
+  /**
+   * Raw HTML of one of the backend plugin's templates.
+   * @param {string} name - Template name
+   * @returns {string} Template HTML
+   */
+  getTemplateHtml(name) {
+    return getRegisteredTemplateHtml(this.templateId(name));
   }
 
   /**

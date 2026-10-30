@@ -55,6 +55,12 @@ class TestPluginAdminApi(unittest.TestCase):
         self.assertTrue(wizard["enabled"])
         self.assertIsNone(wizard["readme_url"])
 
+    def test_list_leaves_out_hidden_plugins(self):
+        record = next(r for r in self.mgr.registry.get_records() if r.id == "grobid")
+        record.metadata = {**record.metadata, "hidden": True}
+        ids = [p["id"] for p in self.client.get("/api/v1/plugins/admin").json()["plugins"]]
+        self.assertEqual(ids, ["wizard"])
+
     def test_list_reports_propagation(self):
         self.mgr.load_disabled()
         r = self.client.post("/api/v1/plugins/admin/wizard/disable", json={"cascade": True})

@@ -182,7 +182,7 @@ Run each step against the feature and record the result in the plan before writi
 - Python unit tests for the template collector: discovery via the extension path, file-stem naming, ignoring non-HTML files and subdirectories, rejection of `<script>` / `on*=` / `javascript:`, stylesheet collection and validation, the warning for unprefixed top-level `name`s.
 - API test in `tests/api/v1/plugins_extensions.test.js`: the bundle contains a `registerFrontendExtensionTemplates("test-plugin", ...)` call ahead of the test plugin's IIFE, and a `registerFrontendExtensionStyles` call when the plugin has a stylesheet.
 - Frontend unit test for `addTemplateHtml`, `registerFrontendExtensionTemplates`, and the `FrontendExtensionPlugin` template methods (prefixing, missing-template error).
-- Convert the test plugin's hello-world dialog to a template and extend `tests/e2e/tests/frontend-extension.spec.js` so the dialog is rendered from it and reachable through `ui`.
+- A new fixture plugin `tests/fixtures/plugins/reference_plugin` (available in testing mode only, `"hidden": True` so the plugin manager does not list it) serves as test subject and reference implementation: a toolbar button and a parameterized dialog from templates, and a stylesheet. `tests/e2e/tests/frontend-extension.spec.js` checks that the dialog is rendered from the template, reachable through `ui` and styled by the stylesheet. The hello-world extension of `test_plugin` stays as the example of an extension without templates.
 
 ## Documentation
 

@@ -16,6 +16,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from fastapi_app.lib.core.dependencies import get_current_user, get_session_id_from_request
+from fastapi_app.lib.plugins.extension_templates import collect_plugin_assets, render_plugin_assets, templates_dir_for
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_manager import PluginManager
 from fastapi_app.lib.plugins.plugin_tools import validate_javascript_content
@@ -206,12 +207,30 @@ async def get_extensions_bundle():
     """
     Return concatenated JavaScript of all registered frontend extensions.
     Each extension self-registers via window.registerFrontendExtension().
+
+    The templates and stylesheets of a plugin (``templates/`` next to ``extensions/``,
+    see ``lib/plugins/extension_templates.py``) are emitted once, ahead of the
+    plugin's first extension, so they are registered before any extension is installed.
     """
     bundle_parts = []
 
     registry = FrontendExtensionRegistry.get_instance()
+    plugins_with_assets: set[str] = set()
 
     for js_file, plugin_id in registry.get_extension_files():
+        if plugin_id not in plugins_with_assets:
+            plugins_with_assets.add(plugin_id)
+            try:
+                assets = collect_plugin_assets(templates_dir_for(js_file), plugin_id)
+                for error in assets.errors:
+                    logger.warning(f"Extension template of {plugin_id}: {error}")
+                rendered = render_plugin_assets(plugin_id, assets)
+                if rendered:
+                    bundle_parts.append(rendered)
+            except Exception as e:
+                logger.error("Failed to load templates of %s: %s", plugin_id, e)
+                bundle_parts.append(f"// Error loading templates from {plugin_id}: {e}\n")
+
         try:
             content = js_file.read_text(encoding="utf-8")
 
