@@ -174,12 +174,19 @@ class RestartResult(BaseModel):
 async def plugins_admin_list(
     _admin: dict[str, Any] = Depends(require_admin_user),
 ) -> PluginAdminListResponse:
-    """List all discovered plugins with status, dependencies and README link, and the propagation of the last change."""
+    """
+    List all discovered plugins with status, dependencies and README link, and the propagation of the last change.
+
+    Plugins whose metadata sets ``"hidden": True`` (test fixtures such as the reference plugin) are left out.
+    """
     manager = PluginManager.get_instance()
     registry = manager.registry
     state = manager.state_store.read()
     waiting = state.restart_plugins if manager.restart_pending(state) else frozenset()
-    records = sorted(registry.get_records(), key=lambda r: str(r.metadata.get("name", r.id)).lower())
+    records = sorted(
+        (r for r in registry.get_records() if not r.metadata.get("hidden", False)),
+        key=lambda r: str(r.metadata.get("name", r.id)).lower(),
+    )
     return PluginAdminListResponse(
         plugins=[
             PluginAdminInfo(**build_plugin_info(registry, r, state.get_installed(r.id), r.id in waiting))

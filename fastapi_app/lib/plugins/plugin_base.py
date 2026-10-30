@@ -121,6 +121,9 @@ class Plugin(ABC):
 
               If not specified, defaults to single menu item calling 'execute' endpoint.
               If empty list, plugin appears in list but adds no menu items.
+            - hidden (bool): If True, the plugin is left out of the plugin manager's list
+              (``GET /api/v1/plugins/admin``). For test fixtures only; the plugin is still
+              loaded and active.
 
         Returns:
             dict: Plugin metadata

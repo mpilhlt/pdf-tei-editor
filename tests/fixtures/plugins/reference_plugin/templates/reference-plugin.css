@@ -1,0 +1,8 @@
+/* Styles of the reference plugin's templates. Select by the plugin's own element names or classes. */
+sl-dialog.reference-plugin-dialog {
+  --width: 24rem;
+}
+
+sl-dialog.reference-plugin-dialog [name="message"] {
+  font-style: italic;
+}

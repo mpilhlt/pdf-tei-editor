@@ -6,6 +6,8 @@
  * @testCovers fastapi_app/lib/frontend_extension_registry.py
  * @testCovers fastapi_app/routers/plugins.py
  * @testCovers tests/fixtures/plugins/test_plugin/extensions/hello-world.js
+ * @testCovers tests/fixtures/plugins/reference_plugin/extensions/reference-dialog.js
+ * @testCovers fastapi_app/lib/plugins/extension_templates.py
  */
 
 import { test, expect } from '../fixtures/debug-on-failure.js';
@@ -80,6 +82,36 @@ test.describe('Frontend Extension System', () => {
     expect(content).toContain('window.registerFrontendExtension(HelloWorldExtension');
     expect(content).toContain('extends window.FrontendExtensionPlugin');
     expect(content).toContain('hello-world-test');
+  });
+
+  test('Reference plugin renders its UI from plugin templates', async ({ page }) => {
+    const button = page.locator('[data-test-id="reference-plugin-toolbar-btn"]');
+    await expect(button).toBeVisible();
+
+    // The dialog was appended to a parent and the button inserted by the extension
+    // followed by updateUi(): both are reachable through `ui`
+    const named = await page.evaluate(() => {
+      const ui = /** @type {any} */(window).ui;
+      return {
+        button: Boolean(ui.toolbar?.referencePluginToolbarBtn),
+        dialog: Boolean(ui.referencePluginDialog?.closeBtn)
+      };
+    });
+    expect(named).toEqual({ button: true, dialog: true });
+
+    await button.click();
+    const dialog = page.locator('sl-dialog[name="referencePluginDialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('label', 'Reference Plugin');
+    await expect(dialog.locator('[name="message"]')).toHaveText('Rendered from a plugin template');
+
+    // The plugin stylesheet applies to the dialog
+    const width = await dialog.evaluate(el => getComputedStyle(el).getPropertyValue('--width').trim());
+    expect(width).toBe('24rem');
+
+    // first(): Shoelace forwards the name to the button in its shadow DOM
+    await dialog.locator('sl-button[name="closeBtn"]').first().click();
+    await expect(dialog).toBeHidden();
   });
 
 });
