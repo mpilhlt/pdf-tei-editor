@@ -464,6 +464,38 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     assert.strictEqual(notifyCalls[0][0], 'Override 1 selected for A.');
   });
 
+  it('selects a new override for the resource it was created for when the layer switches meanwhile', async () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    const machine = { kind: 'interpretation-ref', url: 'https://example.com/m.md', key: 'm', label: 'M', format: 'markdown', layer: 'machine' };
+    const human = { kind: 'interpretation-ref', url: 'https://example.com/h.md', key: 'h', label: 'H', format: 'markdown', layer: 'human' };
+    plugin._currentResource = machine;
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    plugin._currentShownText = () => 'text';
+    let renders = 0;
+    plugin._renderEditorDialog = () => { renders++; };
+    const selections = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') {
+        return {
+          apiClient: {
+            documentRulesOverrides: async () => { plugin._currentResource = human; return { id: 'ov1', note: '', text: 'text' }; },
+            documentRulesSelection: async (body) => { selections.push(body); }
+          }
+        };
+      }
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    await plugin._onNewOverride();
+
+    assert.deepStrictEqual(selections, [{ kind: 'interpretation-ref', fragment_url: 'https://example.com/m.md', override_id: 'ov1' }]);
+    assert.deepStrictEqual(plugin._currentOverrides, []);
+    assert.strictEqual(plugin._currentSelectedId, null);
+    assert.strictEqual(renders, 0);
+  });
+
   it('is a no-op when the target is already selected', async () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();

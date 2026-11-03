@@ -1145,26 +1145,31 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Select the original (null) or one override for `_currentResource`,
+   * Select the original (null) or one override for `resource`
+   * (default `_currentResource`; callers pass the resource they acted on, since
+   * a layer switch can change `_currentResource` while a request is in flight),
    * persisting the choice immediately - per the spec, clicking a row entry
    * "uses it immediately", it is not a staged/unsaved choice. Notifies which
    * one is now selected, for which resource, since the row's button state
    * alone is easy to miss.
    * @param {string|null} overrideId
+   * @param {typeof this._currentResource} [resource]
    * @returns {Promise<void>}
    */
-  async _selectOverride(overrideId) {
-    if (overrideId === this._currentSelectedId) return
+  async _selectOverride(overrideId, resource = this._currentResource) {
+    if (resource === this._currentResource && overrideId === this._currentSelectedId) return
     try {
       await this.#client.apiClient.documentRulesSelection({
-        kind: this._currentResource.kind,
-        fragment_url: this._currentResource.url,
+        kind: resource.kind,
+        fragment_url: resource.url,
         override_id: overrideId
       })
     } catch (error) {
       notify(`Could not change selection: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
     }
+    // The user switched layers meanwhile: the selection is persisted, the dialog shows another resource
+    if (resource !== this._currentResource) return
     this._currentSelectedId = overrideId
     this._renderEditorDialog()
     this._refreshSyncStatus()
@@ -1177,12 +1182,13 @@ class DocumentRulesPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async _onNewOverride() {
+    const resource = this._currentResource
     const text = this._currentShownText()
     let override
     try {
       override = await this.#client.apiClient.documentRulesOverrides({
-        kind: this._currentResource.kind,
-        fragment_url: this._currentResource.url,
+        kind: resource.kind,
+        fragment_url: resource.url,
         note: '',
         text
       })
@@ -1190,10 +1196,11 @@ class DocumentRulesPlugin extends Plugin {
       notify(`Could not create override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
     }
-    this._currentOverrides.push(override)
-    await this._selectOverride(override.id)
+    // A layer switch meanwhile re-queried the overrides of the other layer
+    if (resource === this._currentResource) this._currentOverrides.push(override)
+    await this._selectOverride(override.id, resource)
     // A failed selection (already notified) still has to show the new override in the row
-    if (this._currentSelectedId !== override.id) this._renderEditorDialog()
+    if (resource === this._currentResource && this._currentSelectedId !== override.id) this._renderEditorDialog()
   }
 
   /**
