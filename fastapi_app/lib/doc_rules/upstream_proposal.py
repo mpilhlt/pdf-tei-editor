@@ -44,9 +44,24 @@ from fastapi_app.lib.utils.annotation_rules_utils import (
 
 _NO_NEWLINE = "\\ No newline at end of file\n"
 _SLUG_SEPARATOR_RE = re.compile(r"[^a-z0-9]+")
-_TRAILING_BLANK_LINES_RE = re.compile(r"(?:\n[ \t]*)+\Z")
-_LEADING_BLANK_LINES_RE = re.compile(r"\A(?:[ \t]*\n)+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _strip_leading_blank_lines(text: str) -> str:
+    """`text` without its leading lines that are empty or only spaces/tabs (linear time, no regex)."""
+    start = 0
+    while True:
+        end = text.find("\n", start)
+        if end == -1 or text[start:end].strip(" \t"):
+            return text[start:]
+        start = end + 1
+
+
+def _strip_trailing_blank_lines(text: str) -> str:
+    """`text` without the trailing run of newlines/spaces/tabs that starts at a newline (linear time, no regex)."""
+    tail = text[len(text.rstrip(" \t\n")):]
+    newline = tail.find("\n")
+    return text if newline == -1 else text[:len(text) - len(tail) + newline]
 
 
 class ProposalError(Exception):
@@ -174,8 +189,8 @@ def _splice(before: str, anchor: str, section: str, path: str, branch: str) -> s
         raise ProposalError(f'The section "{anchor}" no longer exists in {path} on {branch}.')
     upstream_lines = before.splitlines()[range_[0] - 1:range_[1]]
     trailing_blank_lines = len(upstream_lines) - len("\n".join(upstream_lines).rstrip().splitlines())
-    section = _LEADING_BLANK_LINES_RE.sub("", section)
-    section = _TRAILING_BLANK_LINES_RE.sub("", section) + "\n" * (trailing_blank_lines + 1)
+    section = _strip_leading_blank_lines(section)
+    section = _strip_trailing_blank_lines(section) +"\n" * (trailing_blank_lines + 1)
     after = splice_heading_section(before, anchor, section)
     # Anchors are computed on the whole file, so a duplicate heading keeps its "-N" suffix
     if heading_anchor_at_line(after, range_[0]) != anchor:
