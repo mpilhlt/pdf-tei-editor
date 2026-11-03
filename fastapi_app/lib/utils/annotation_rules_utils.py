@@ -27,7 +27,7 @@ _LINE_RANGE_RE = re.compile(r'^L(\d+)(?:-L?(\d+))?$')
 # optionally followed by a "title" in quotes. Reference-style links/images
 # (`![alt][ref]`) are not matched - rare enough in the annotation-rules
 # guides this targets that supporting them isn't worth the complexity.
-_MD_INLINE_LINK_RE = re.compile(r'(!?\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))')
+_MD_INLINE_LINK_RE = re.compile(r'(!?\[[^\[\]]{0,1000}\]\()([^)\s]{1,2000})((?:\s+"[^"]{0,1000}")?\))')
 
 _ABSOLUTE_URL_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://')
 
@@ -248,10 +248,18 @@ def line_range_start(fragment: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
-_ATX_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)(?:\s+#+)?$')
+_ATX_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+)$')
 _SLUG_STRIP_RE = re.compile(r'[^\w\s-]')
 _SLUG_WHITESPACE_RE = re.compile(r'\s')
 _FENCE_RE = re.compile(r'^(`{3,}|~{3,})')
+
+
+def _strip_closing_hashes(content: str) -> str:
+    """An ATX heading's text without its optional closing hash sequence (`## Title ##` -> `Title`), by string scan (no backtracking regex)."""
+    without_hashes = content.rstrip("#")
+    if without_hashes != content and without_hashes[-1:].isspace() and without_hashes.strip():
+        return without_hashes.rstrip()
+    return content
 
 
 class _Heading(TypedDict):
@@ -296,7 +304,7 @@ def _scan_markdown_headings(text: str) -> list[_Heading]:
         if not match:
             continue
         level = len(match.group(1))
-        slug = _slugify_heading(match.group(2))
+        slug = _slugify_heading(_strip_closing_hashes(match.group(2)))
         if slug in seen:
             seen[slug] += 1
             slug = f"{slug}-{seen[slug]}"

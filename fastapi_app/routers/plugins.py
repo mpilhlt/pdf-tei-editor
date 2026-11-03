@@ -229,7 +229,7 @@ async def get_extensions_bundle():
                     bundle_parts.append(rendered)
             except Exception as e:
                 logger.error("Failed to load templates of %s: %s", plugin_id, e)
-                bundle_parts.append(f"// Error loading templates from {plugin_id}: {e}\n")
+                bundle_parts.append(f"// Error loading templates from {plugin_id}: see the server log\n")
 
         try:
             content = js_file.read_text(encoding="utf-8")
@@ -250,7 +250,7 @@ async def get_extensions_bundle():
         except Exception as e:
             logger.error("Failed to load extension %s from %s: %s", js_file.name, plugin_id, e)
             bundle_parts.append(
-                f"// Error loading {js_file.name} from {plugin_id}: {e}\n"
+                f"// Error loading {js_file.name} from {plugin_id}: see the server log\n"
             )
 
     bundle = "\n\n".join(bundle_parts)
