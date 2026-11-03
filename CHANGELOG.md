@@ -2,6 +2,27 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.80.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.79.0...v0.80.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **document-rules:** replace blank-line regexes with linear string scans (CodeQL polynomial regex, Refs [#681](https://github.com/mpilhlt/pdf-tei-editor/issues/681)) ([1463d0f](https://github.com/mpilhlt/pdf-tei-editor/commit/1463d0f5d0f0f3c0b8f4b67d126ec3c14f2cf364))
+* **document-rules:** select a new override for the layer it was created for when the layer switches meanwhile (Refs [#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666)) ([88b19e3](https://github.com/mpilhlt/pdf-tei-editor/commit/88b19e38f96719467bc41b76c059df4cb3810d01))
+* **security:** bound markdown link regex, parse ATX headings without backtracking, keep exception text out of the extensions bundle (CodeQL, Refs [#681](https://github.com/mpilhlt/pdf-tei-editor/issues/681)) ([78b082e](https://github.com/mpilhlt/pdf-tei-editor/commit/78b082e705c2ddb011e1547aa235e2862e8bcdd5))
+* **security:** parse ATX headings by string scan, keep exception text out of rendered template errors (CodeQL, Refs [#681](https://github.com/mpilhlt/pdf-tei-editor/issues/681)) ([54f4920](https://github.com/mpilhlt/pdf-tei-editor/commit/54f49207a8e6855ccd08507dbeac4c9c4010f84e))
+
+
+### Features
+
+* **document-rules:** open GitHub pull requests for rule proposals ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666), phase 4b) ([#673](https://github.com/mpilhlt/pdf-tei-editor/issues/673)) ([fe20833](https://github.com/mpilhlt/pdf-tei-editor/commit/fe20833bd14e59238f04c7c99cc75e65ee3a9896))
+* **document-rules:** paired upstream proposals as a patch ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666), phase 4) ([#672](https://github.com/mpilhlt/pdf-tei-editor/issues/672)) ([d8b44c8](https://github.com/mpilhlt/pdf-tei-editor/commit/d8b44c887f402e3927e6892d157d03ea0aa0ad3b))
+* **document-rules:** sync status between human and machine rules ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666), phase 2) ([#670](https://github.com/mpilhlt/pdf-tei-editor/issues/670)) ([d4fee10](https://github.com/mpilhlt/pdf-tei-editor/commit/d4fee10df25c241283c7c872fa358869daf1c8ea))
+* **document-rules:** two-layer editor with human and machine rules ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666), phase 1) ([#668](https://github.com/mpilhlt/pdf-tei-editor/issues/668)) ([25de236](https://github.com/mpilhlt/pdf-tei-editor/commit/25de236a51ea7a0aaa99f360258f20f0e8bf649b))
+* **document-rules:** update machine rules from the guide with a language model ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666), phase 3) ([#671](https://github.com/mpilhlt/pdf-tei-editor/issues/671)) ([566922c](https://github.com/mpilhlt/pdf-tei-editor/commit/566922c9d12ad9f78e3761cfee65e65cc12ada99))
+* **document-rules:** update to upstream after a merged proposal ([#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666)) ([#675](https://github.com/mpilhlt/pdf-tei-editor/issues/675)) ([923a863](https://github.com/mpilhlt/pdf-tei-editor/commit/923a8637947a95bf739356a659195d369aa38ab9))
+* **plugins:** HTML templates for backend plugin frontend extensions ([#677](https://github.com/mpilhlt/pdf-tei-editor/issues/677)) ([18e7235](https://github.com/mpilhlt/pdf-tei-editor/commit/18e7235a8e15d89f1e2bf57792e86285089f1b02)), closes [#666](https://github.com/mpilhlt/pdf-tei-editor/issues/666)
+
 # [0.79.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.78.0...v0.79.0) (2026-10-25)
 
 
