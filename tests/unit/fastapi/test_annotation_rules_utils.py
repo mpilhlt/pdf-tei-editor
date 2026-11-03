@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi_app.lib.utils.annotation_rules_utils import (
     RuleFetchError,
-    _ATX_HEADING_RE,
+    _parse_atx_heading,
     _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
@@ -491,9 +491,8 @@ class TestTranslateAnchorToLineRange(unittest.TestCase):
 
 class TestScanMarkdownHeadingsEdgeCases(unittest.TestCase):
     def test_title_ending_in_literal_hash_without_preceding_space_not_truncated(self):
-        match = _ATX_HEADING_RE.match("# C#")
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group(2), "C#")
+        parsed = _parse_atx_heading("# C#")
+        self.assertEqual(parsed, (1, "C#"))
 
         headings = _scan_markdown_headings("# C#\n")
         self.assertEqual(len(headings), 1)

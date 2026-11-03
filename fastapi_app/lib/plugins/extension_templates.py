@@ -194,7 +194,7 @@ def collect_plugin_assets(templates_dir: Path, plugin_id: str) -> PluginAssets:
         try:
             content = path.read_text(encoding="utf-8").strip()
         except (OSError, UnicodeDecodeError) as e:
-            assets.errors.append(f"{path.name}: {e}")
+            assets.errors.append(f"{path.name}: unreadable ({type(e).__name__})")
             continue
 
         problems = validate_template_html(content) if path.suffix == ".html" else validate_stylesheet(content)

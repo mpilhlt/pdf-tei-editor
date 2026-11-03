@@ -248,10 +248,18 @@ def line_range_start(fragment: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
-_ATX_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+)$')
 _SLUG_STRIP_RE = re.compile(r'[^\w\s-]')
 _SLUG_WHITESPACE_RE = re.compile(r'\s')
 _FENCE_RE = re.compile(r'^(`{3,}|~{3,})')
+
+
+def _parse_atx_heading(line: str) -> tuple[int, str] | None:
+    """(level, text) of an ATX heading line ("## Title ##" -> (2, "Title")), None if `line` is not one. By string scan (no backtracking regex)."""
+    rest = line.lstrip("#")
+    level = len(line) - len(rest)
+    if not 1 <= level <= 6 or not rest[:1].isspace():
+        return None
+    return level, _strip_closing_hashes(rest.lstrip() or rest[-1])
 
 
 def _strip_closing_hashes(content: str) -> str:
@@ -300,11 +308,11 @@ def _scan_markdown_headings(text: str) -> list[_Heading]:
             continue
         if in_fence:
             continue
-        match = _ATX_HEADING_RE.match(line)
-        if not match:
+        parsed = _parse_atx_heading(line)
+        if parsed is None:
             continue
-        level = len(match.group(1))
-        slug = _slugify_heading(_strip_closing_hashes(match.group(2)))
+        level, title = parsed
+        slug = _slugify_heading(title)
         if slug in seen:
             seen[slug] += 1
             slug = f"{slug}-{seen[slug]}"
