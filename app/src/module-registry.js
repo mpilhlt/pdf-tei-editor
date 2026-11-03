@@ -12,6 +12,7 @@ import * as sessionStorage from './modules/session-storage.js';
 import * as slUtils from './modules/sl-utils.js';
 import * as teiUtils from './modules/tei-utils.js';
 import ui from './ui.js';
+import * as uiSystem from './modules/ui-system.js';
 
 /**
  * Register utility modules with the given PluginManager.
@@ -27,6 +28,7 @@ export function registerModules(pluginManager) {
     'sl-utils': slUtils,
     'tei-utils': teiUtils,
     'ui': ui,
+    'ui-system': uiSystem,
   };
   for (const [name, api] of Object.entries(modules)) {
     pluginManager.register({ name, api });

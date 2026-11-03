@@ -1,5 +1,9 @@
 /**
+ * @registerModule
  * UI System - Template registration and DOM element utilities
+ *
+ * Registered as the `ui-system` module, so frontend extensions of backend plugins
+ * can reach it through `getDependency('ui-system')`.
  * 
  * This module provides a lightweight template registration system that supports
  * both development and production modes:
@@ -53,6 +57,43 @@ export async function registerTemplate(id, pathOrHtml) {
   template.cached = true;
   
   templateRegistry.set(id, template);
+}
+
+/**
+ * Stores an already loaded template in the registry. Unlike registerTemplate(),
+ * this bypasses the dev/production loading and is synchronous, so it behaves the
+ * same in both modes. Used for the templates of backend plugin frontend extensions,
+ * which are inlined into the extension bundle.
+ *
+ * @param {string} id - Unique template identifier
+ * @param {string} html - Template HTML
+ * @returns {void}
+ */
+export function addTemplateHtml(id, html) {
+  if (templateRegistry.has(id)) {
+    console.warn(`Template '${id}' is already registered, overwriting`);
+  }
+  /** @type {Template} */
+  const template = { id, pathOrHtml: html, cached: true, html: html.trim() };
+  templateRegistry.set(id, template);
+}
+
+/**
+ * Returns the HTML of a registered and loaded template.
+ *
+ * @param {string} id - Template identifier
+ * @returns {string} The template HTML
+ * @throws {Error} If the template is not registered or not loaded yet
+ */
+export function getRegisteredTemplateHtml(id) {
+  const template = templateRegistry.get(id);
+  if (!template) {
+    throw new Error(`Template '${id}' is not registered. Available templates: ${Array.from(templateRegistry.keys()).join(', ')}`);
+  }
+  if (!template.cached || !template.html) {
+    throw new Error(`Template '${id}' is not loaded. Make sure to await registerTemplate() before using it.`);
+  }
+  return template.html;
 }
 
 /**
@@ -248,6 +289,7 @@ export async function createHtmlElements(htmlOrFile, parentNode = null) {
 }
 
 export { createNavigableElement } from './navigable-element.js';
+export { updateUi };
 
 /**
  * Gets all registered template IDs

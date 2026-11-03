@@ -13,7 +13,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -79,7 +79,7 @@ describe('bin/ and scripts/ layout', () => {
     const scripts = [...walk(join(ROOT, 'bin')), ...walk(join(ROOT, 'scripts'))].filter(f => !f.endsWith('.pyc') && !f.endsWith('.md'));
     const problems = [];
     for (const f of scripts) {
-      const depth = relative(ROOT, f).split('/').length - 1;
+      const depth = relative(ROOT, f).split(sep).length - 1;
       const src = readFileSync(f, 'utf8');
       /** @param {string} text @param {number} climbs @param {number} needs */
       const check = (text, climbs, needs) => {

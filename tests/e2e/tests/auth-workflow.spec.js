@@ -69,7 +69,7 @@ test.describe('Authentication Workflow', () => {
     });
 
     // Wait for login to complete and dialog to hide
-    await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { timeout: 5000 });
+    await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { state: 'attached', timeout: 5000 });
 
     // Verify login dialog is now hidden
     const loginDialogHidden = await page.evaluate(() => {

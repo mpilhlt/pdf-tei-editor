@@ -323,28 +323,99 @@ export function generateTOC(markdown) {
 }
 
 /**
+ * An ATX heading found by scanHeadings()
+ * @typedef {object} ScannedHeading
+ * @property {number} line - 1-based line number
+ * @property {number} level - Heading level, 1-6
+ * @property {string} anchor - Anchor id; repeated slugs get a "-1", "-2", ... suffix (as on GitHub and in the backend)
+ */
+
+/**
+ * Scans the ATX-style headings ("# Title", "## Title", ...) of a Markdown
+ * document using the same rules as the backend's `_scan_markdown_headings`
+ * (annotation_rules_utils.py): lines inside fenced code blocks (``` or ~~~)
+ * are skipped and repeated slugs are de-duplicated. Slugs use headingAnchor(),
+ * the algorithm createMarkdownRenderer() uses to `id`-tag rendered headings.
+ * @param {string} markdown
+ * @returns {ScannedHeading[]}
+ */
+function scanHeadings(markdown) {
+  /** @type {ScannedHeading[]} */
+  const headings = []
+  /** @type {Map<string, number>} */
+  const seen = new Map()
+  let inFence = false
+  markdown.split(/\r?\n/).forEach((line, i) => {
+    if (/^(`{3,}|~{3,})/.test(line.trim())) {
+      inFence = !inFence
+      return
+    }
+    if (inFence) return
+    const match = /^(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line)
+    if (!match) return
+    let anchor = headingAnchor(match[2].trim())
+    if (seen.has(anchor)) {
+      const count = /** @type {number} */ (seen.get(anchor)) + 1
+      seen.set(anchor, count)
+      anchor = `${anchor}-${count}`
+    } else {
+      seen.set(anchor, 0)
+    }
+    headings.push({ line: i + 1, level: match[1].length, anchor })
+  })
+  return headings
+}
+
+/**
  * Finds the 1-based line number of the first ATX-style Markdown heading
- * ("# Title", "## Title", ...) whose anchor id matches `anchor`, using the
- * same slug algorithm createMarkdownRenderer()'s heading_open rule uses to
- * `id`-tag rendered headings (lowercase, strip characters that aren't word
- * characters/spaces/hyphens, collapse whitespace to hyphens) - so a URL
+ * ("# Title", "## Title", ...) whose anchor id matches `anchor`, so a URL
  * fragment like "#data-correction" (e.g. an interpretation-ref "human" ref
  * pointing at a heading anchor - see docs/development/tei-header-
  * integrations.md) resolves to the same heading here as it does in the
- * rendered preview.
+ * rendered preview and in the backend. Headings inside fenced code blocks
+ * are ignored; repeated headings are addressed as "title", "title-1", ...
  * @param {string} markdown
  * @param {string} anchor
  * @returns {number|null} 1-based line number, or null if no heading matches
  */
 export function findHeadingLineForAnchor(markdown, anchor) {
-  const lines = markdown.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    const match = /^(#{1,6})\s+(.+)$/.exec(lines[i])
-    if (!match) continue
-    const slug = headingAnchor(match[2].trim())
-    if (slug === anchor) return i + 1
-  }
-  return null
+  return scanHeadings(markdown).find(h => h.anchor === anchor)?.line ?? null
+}
+
+/**
+ * Replaces the section whose heading anchor is `anchor` with `section`. The
+ * section runs from its heading line to the line before the next heading of
+ * the same or shallower level (or the end of the text) - the same boundary
+ * rule as the backend's `markdown_section_range`.
+ * @param {string} markdown - The whole document
+ * @param {string} anchor - Heading anchor of the section to replace
+ * @param {string} section - Replacement text, including its heading line
+ * @returns {string} The spliced document, or `markdown` unchanged if the anchor is missing
+ */
+export function spliceMarkdownSection(markdown, anchor, section) {
+  const headings = scanHeadings(markdown)
+  const index = headings.findIndex(h => h.anchor === anchor)
+  if (index === -1) return markdown
+  const eol = markdown.includes('\r\n') ? '\r\n' : '\n'
+  const lines = markdown.split(/\r?\n/)
+  const start = headings[index].line
+  const next = headings.slice(index + 1).find(h => h.level <= headings[index].level)
+  const end = next ? next.line - 1 : lines.length
+  const before = lines.slice(0, start - 1).map(l => `${l}${eol}`).join('')
+  const after = lines.slice(end).join(eol)
+  const text = section.trimEnd().replace(/\r?\n/g, eol)
+  return `${before}${text}${eol}${after ? `${eol}${after}` : ''}`
+}
+
+/**
+ * Whether the document has a heading with the given anchor, i.e. whether
+ * spliceMarkdownSection() would find a section to replace.
+ * @param {string} markdown
+ * @param {string} anchor
+ * @returns {boolean}
+ */
+export function hasMarkdownSection(markdown, anchor) {
+  return findHeadingLineForAnchor(markdown, anchor) !== null
 }
 
 /**

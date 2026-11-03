@@ -30,6 +30,9 @@
  * @testCovers fastapi_app/lib/doc_rules/rules_refresh.py
  */
 
+import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, releaseAllLocks } from './helpers/login-helper.js';
@@ -94,6 +97,94 @@ async function loadFixtureDocument(page, docId) {
   }, { timeout: 15000 });
   await page.waitForTimeout(500);
   return stableId;
+}
+
+const TWO_LAYER_PORT = 38417;
+const TWO_LAYER_RULE_URLS = [
+  `http://127.0.0.1:${TWO_LAYER_PORT}/guide.md#data-correction`,
+  `http://127.0.0.1:${TWO_LAYER_PORT}/machine.md#L1-L3`
+];
+const PROPOSED_MACHINE_TEXT = '# Data correction\n\nProposed machine rule text.\n';
+
+/**
+ * Serve the two-layer fixtures (tests/e2e/fixtures/rules-markdown/) over HTTP:
+ * the backend fetches rule text server-side, so page.route() cannot mock it.
+ * @param {number} port
+ * @returns {Promise<http.Server>}
+ */
+async function startRulesServer(port) {
+  const rulesDir = fileURLToPath(new URL('../fixtures/rules-markdown/', import.meta.url));
+  const server = http.createServer((req, res) => {
+    const name = (req.url ?? '').split('#')[0].replace(/^\//, '');
+    if (name !== 'guide.md' && name !== 'machine.md') {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' }).end(readFileSync(rulesDir + name));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', (err) => reject(new Error(`Could not start the rules markdown server on port ${port}: ${err.message}`)));
+    server.listen(port, '127.0.0.1', () => resolve(undefined));
+  });
+  return server;
+}
+
+/**
+ * Delete every override of the given interpretation-ref urls (overrides have no TTL).
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} urls
+ */
+async function deleteRuleOverrides(page, urls) {
+  await page.evaluate(async (ruleUrls) => {
+    const client = /** @type {any} */ (window).client;
+    for (const url of ruleUrls) {
+      const query = await client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+      for (const override of query.overrides) {
+        await client.apiClient.documentRulesDeleteOverrides(override.id);
+      }
+    }
+  }, urls).catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+}
+
+/**
+ * Mock the LLM endpoints inference-settings reads (it fetches them at start
+ * and on session change, so call this before navigateAndLogin()).
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<{id: string, label: string, models: Array<{id: string, label: string}>}>} providers
+ */
+async function mockLlm(page, providers) {
+  await page.route('**/api/v1/llm/providers', (route) => route.fulfill({
+    json: providers.map((p) => ({
+      ...p,
+      models: p.models.map((m) => ({ ...m, capabilities: [], status: null, free: true })),
+      key_required: false,
+      secret_service: null,
+      error: null
+    }))
+  }));
+  await page.route('**/api/v1/llm/default-model', (route) => route.request().method() === 'GET'
+    ? route.fulfill({ json: null })
+    : route.continue());
+}
+
+/**
+ * Open the "Data correction" editor dialog of the two-layer fixture on its machine tab.
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<import('@playwright/test').Locator>} the editor dialog
+ */
+async function openMachineTab(page) {
+  await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+  await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+  await openToolsMenu(page);
+  const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+  await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+  await editMenuItem.hover();
+  await page.waitForTimeout(500);
+  await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
+  const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+  await expect(dialog).toHaveAttribute('open', '');
+  await dialog.locator('sl-tab[name="machineLayerTab"]').click();
+  return dialog;
 }
 
 test.describe('Document rules registry', () => {
@@ -349,5 +440,505 @@ test.describe('Document rules registry', () => {
       stopErrorMonitoring();
       await releaseAllLocks(page);
     }
+  });
+
+  // These tests share port TWO_LAYER_PORT, the two-layer fixture document and its
+  // override urls, so they must not run in parallel.
+  test.describe('two-layer categories', () => {
+    test.describe.configure({ mode: 'serial' });
+
+    test('edits a human override and a machine override in separate tabs', async ({ page }) => {
+      // The fixture's refs point at the local server of startRulesServer() (the
+      // app server can't serve the files to itself: its async handlers fetch
+      // synchronously).
+      /** @type {http.Server | null} */
+      let server = null;
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+
+        await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+        await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+
+        await openToolsMenu(page);
+        const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+        await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        const submenu = page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"]');
+        // One entry per rule category, not per layer.
+        await expect(submenu.locator('sl-menu-item')).toHaveCount(2); // category + schema
+        await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+
+        const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+        await expect(dialog).toHaveAttribute('open', '');
+        const humanTab = dialog.locator('sl-tab[name="humanLayerTab"]');
+        const machineTab = dialog.locator('sl-tab[name="machineLayerTab"]');
+        await expect(humanTab).toHaveText('Guide (human)');
+        await expect(machineTab).toHaveText('Machine rules');
+
+        const overrideRow = dialog.locator('[name="overrideRow"]');
+        const originalBtn = overrideRow.locator('sl-button:has-text("Original")');
+        const override1Btn = overrideRow.locator('sl-button:has-text("Override 1")');
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+
+        // Human layer: create an override.
+        await humanTab.click();
+        await expect(originalBtn).toHaveAttribute('variant', 'primary');
+        await expect(mdContent).toContainText('Human guide text');
+        await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+        await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+        // Machine layer: starts on "Original" despite the human override.
+        await machineTab.click();
+        await expect(mdContent).toContainText('Machine rule text');
+        await expect(originalBtn).toHaveAttribute('variant', 'primary');
+        await expect(override1Btn).toHaveCount(0);
+        await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+        await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+        // Close, reopen: each layer keeps its own selection.
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(dialog).not.toHaveAttribute('open', '');
+        await openToolsMenu(page);
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+        await expect(dialog).toHaveAttribute('open', '');
+        await humanTab.click();
+        await expect(override1Btn).toHaveAttribute('variant', 'primary');
+        await machineTab.click();
+        await expect(override1Btn).toHaveAttribute('variant', 'primary');
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('shows the sync status of a two-layer category', async ({ page }) => {
+      // Same local markdown server as the previous test. machine.md carries
+      // `<!-- sync: guide=... llm=... -->`; the hashes were computed with
+      // fastapi_app.lib.doc_rules.guide_sync: `human_section_hash(<guide.md
+      // "Data correction" section>, <guide url>)` and `section_hash(<machine.md
+      // without the marker line>)`. Edit the fixtures and the hashes together.
+      // The human url is not a forge url, so the synced-commit search returns null.
+      /** @type {http.Server | null} */
+      let server = null;
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+
+        await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+        await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+
+        await openToolsMenu(page);
+        const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+        await editMenuItem.waitFor({ state: 'visible', timeout: 15000 });
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        const submenu = page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"]');
+        await submenu.locator('sl-menu-item:has-text("Data correction")').click();
+
+        const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+        await expect(dialog).toHaveAttribute('open', '');
+        const status = dialog.locator('[name="syncStatus"]');
+        await expect(status).toBeVisible();
+        await expect(status).toContainText('In sync with the guide');
+
+        // A human override with changed text makes the machine rules outdated.
+        await dialog.locator('sl-tab[name="humanLayerTab"]').click();
+        await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+        await mdContent.click();
+        await page.keyboard.press('ControlOrMeta+End');
+        await page.keyboard.type(' Changed.');
+        await dialog.locator('sl-button[name="saveBtn"]').click();
+        await expect(dialog.locator('sl-tab[name="humanLayerTab"]')).toBeVisible();
+        await expect(status).toBeVisible();
+        await expect(status).toContainText('Machine rules outdated: the guide changed since the last sync');
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('proposes the guide section and the machine rules as a patch', async ({ page }) => {
+      // The local rules server has no forge adapter, so the backend cannot build a real
+      // proposal for localhost urls; propose-patch is mocked. The request body is checked.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      const patch = [
+        '# Annotation rules update: Data correction',
+        '# Proposed with the PDF-TEI-Editor by testreviewer',
+        '# Includes: guide section and machine rules',
+        'diff --git a/docs/guidelines.md b/docs/guidelines.md',
+        '--- a/docs/guidelines.md',
+        '+++ b/docs/guidelines.md',
+        '@@ -1,3 +1,3 @@',
+        ' # Data correction',
+        ' ',
+        '-Human guide text for data correction.',
+        '+Human guide text for data correction. Changed.',
+        'diff --git a/docs/guidelines-llm.md b/docs/guidelines-llm.md',
+        '--- a/docs/guidelines-llm.md',
+        '+++ b/docs/guidelines-llm.md',
+        '@@ -1,5 +1,5 @@',
+        ' # Data correction',
+        ' ',
+        '-<!-- sync: guide=aaaa llm=bbbb -->',
+        '+<!-- sync: guide=cccc llm=dddd -->',
+        ' ',
+        ' Machine rule text.',
+        ''
+      ].join('\n');
+      /** @type {any[]} */
+      const requests = [];
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/propose-patch', (route) => {
+          requests.push(route.request().postDataJSON());
+          return route.fulfill({
+            json: {
+              files: [
+                { path: 'docs/guidelines.md', before: '# Data correction\n\nHuman guide text for data correction.\n', after: '# Data correction\n\nHuman guide text for data correction. Changed.\n' },
+                { path: 'docs/guidelines-llm.md', before: '# Data correction\n\nMachine rule text.\n', after: '# Data correction\n\nMachine rule text, changed.\n' }
+              ],
+              patch,
+              filename: 'data-correction-rules.patch',
+              branch: 'main',
+              upstream_changed: [],
+              in_sync: true,
+              can_open_pull_request: false,
+              pull_request_title: 'Annotation rules update: Data correction',
+              pull_request_body: '',
+              pull_request_repository: null,
+              base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
+            }
+          });
+        });
+
+        const dialog = await openMachineTab(page);
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+        // A machine override and a human override
+        for (const tab of ['machineLayerTab', 'humanLayerTab']) {
+          await dialog.locator(`sl-tab[name="${tab}"]`).click();
+          await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          await mdContent.click();
+          await page.keyboard.press('ControlOrMeta+End');
+          await page.keyboard.type(' Changed.');
+          await dialog.locator('sl-button[name="saveBtn"]').click();
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+        }
+
+        await dialog.locator('sl-button[name="proposeUpstreamBtn"]').click();
+        const proposeDialog = page.locator('sl-dialog[name="documentRulesProposeDialog"]');
+        await expect(proposeDialog).toHaveAttribute('open', '');
+        await expect(proposeDialog).toHaveAttribute('label', 'Propose upstream');
+        await expect(proposeDialog.locator('sl-checkbox[name="includeHuman"]')).toHaveAttribute('checked', '');
+        await expect(proposeDialog.locator('sl-checkbox[name="includeMachine"]')).toHaveAttribute('checked', '');
+        await expect(proposeDialog.locator('[data-role="path"]')).toHaveText(['docs/guidelines.md', 'docs/guidelines-llm.md']);
+        await expect(proposeDialog).toContainText('The sync marker is updated: the machine rules are marked as in sync with the guide.');
+        expect(requests.at(-1)).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction' });
+
+        const downloadBtn = proposeDialog.locator('sl-button[name="downloadBtn"]');
+        await expect(downloadBtn).toBeEnabled();
+        const [download] = await Promise.all([page.waitForEvent('download'), downloadBtn.click()]);
+        expect(download.suggestedFilename()).toBe('data-correction-rules.patch');
+        const downloaded = readFileSync(/** @type {string} */ (await download.path()), 'utf8');
+        expect(downloaded.match(/^diff --git a\//gm)).toHaveLength(2);
+        expect(downloaded).toMatch(/<!-- sync: guide=\w+ llm=\w+ -->/);
+
+        await proposeDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('creates a pull request from the propose dialog', async ({ page }) => {
+      // No real GitHub call is possible in E2E: propose-patch and propose-pull-request are
+      // mocked. The request body of the latter is checked.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      /** @type {any[]} */
+      const prRequests = [];
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/propose-patch', (route) => route.fulfill({
+          json: {
+            files: [
+              { path: 'docs/guidelines.md', before: '# Data correction\n\nHuman guide text for data correction.\n', after: '# Data correction\n\nHuman guide text for data correction. Changed.\n' },
+              { path: 'docs/guidelines-llm.md', before: '# Data correction\n\nMachine rule text.\n', after: '# Data correction\n\nMachine rule text, changed.\n' }
+            ],
+            patch: 'diff --git a/docs/guidelines.md b/docs/guidelines.md\n',
+            filename: 'data-correction-rules.patch',
+            branch: 'main',
+            upstream_changed: [],
+            in_sync: true,
+            can_open_pull_request: true,
+            pull_request_title: 'Annotation rules update: Data correction',
+            pull_request_body: 'Proposed with the PDF-TEI-Editor by testreviewer.\n\nIncludes: guide section and machine rules.\nThe sync marker of the machine rules is updated; the pair is in sync.',
+            pull_request_repository: 'example/guides',
+            base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' }
+          }
+        }));
+        await page.route('**/api/v1/document-rules/propose-pull-request', (route) => {
+          prRequests.push(route.request().postDataJSON());
+          return route.fulfill({
+            json: { url: 'https://github.com/example/guides/pull/42', number: 42, branch: 'pdf-tei-editor/data-correction-20261028-120000', fork: 'testreviewer/guides' }
+          });
+        });
+
+        const dialog = await openMachineTab(page);
+        const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
+        for (const tab of ['machineLayerTab', 'humanLayerTab']) {
+          await dialog.locator(`sl-tab[name="${tab}"]`).click();
+          await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          await mdContent.click();
+          await page.keyboard.press('ControlOrMeta+End');
+          await page.keyboard.type(' Changed.');
+          await dialog.locator('sl-button[name="saveBtn"]').click();
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+        }
+
+        await dialog.locator('sl-button[name="proposeUpstreamBtn"]').click();
+        const proposeDialog = page.locator('sl-dialog[name="documentRulesProposeDialog"]');
+        await expect(proposeDialog).toHaveAttribute('open', '');
+        const title = proposeDialog.locator('sl-input[name="prTitle"]');
+        await expect(title.locator('input')).toHaveValue('Annotation rules update: Data correction');
+        await expect(proposeDialog.locator('sl-textarea[name="prBody"] textarea')).toHaveValue(/Includes: guide section and machine rules\./);
+        await expect(proposeDialog.locator('[name="prTarget"]')).toHaveText('The pull request will be opened on example/guides.');
+        const createBtn = proposeDialog.locator('sl-button[name="createPrBtn"]');
+        await expect(createBtn).toBeEnabled();
+
+        await title.locator('input').fill('Edited title');
+        await createBtn.click();
+
+        const result = proposeDialog.locator('[name="prResult"]');
+        await expect(result).toContainText('Pull request #42 created from your fork testreviewer/guides. Open on GitHub');
+        await expect(result.locator('a')).toHaveAttribute('href', 'https://github.com/example/guides/pull/42');
+        await expect(result.locator('a')).toHaveText('Open on GitHub');
+        expect(prRequests).toHaveLength(1);
+        expect(prRequests[0]).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction', title: 'Edited title', base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' } });
+        await expect(createBtn).toHaveAttribute('disabled', '');
+
+        await proposeDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('updates the machine rules from the guide', async ({ page }) => {
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
+        await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
+          json: { mode: 'align', old_human: null, new_human: 'Human guide text for data correction.', machine: 'Machine rule text.', proposed: PROPOSED_MACHINE_TEXT, unchanged: false }
+        }));
+
+        const dialog = await openMachineTab(page);
+        await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+        const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+        await expect(updateDialog).toHaveAttribute('open', '');
+        await expect(updateDialog).toContainText('Change in the guide');
+        await expect(updateDialog).toContainText('No sync base found');
+        await updateDialog.locator('sl-button[name="generateBtn"]').click();
+        await expect(updateDialog).toContainText('Proposed machine rules');
+        await updateDialog.locator('sl-button[name="acceptBtn"]').click();
+        await expect(updateDialog).not.toHaveAttribute('open', '');
+
+        const overrideRow = dialog.locator('[name="overrideRow"]');
+        await expect(overrideRow.locator('sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
+        await expect(dialog.locator('[name="mdContainer"] .cm-content')).toContainText('Proposed machine rule text.');
+        const stored = await page.evaluate(async (url) => {
+          const query = await /** @type {any} */ (window).client.apiClient.documentRulesQuery({ kind: 'interpretation-ref', url });
+          return query.overrides.map((o) => ({ text: o.text, note: o.note }));
+        }, TWO_LAYER_RULE_URLS[1]);
+        expect(stored).toEqual([{ text: PROPOSED_MACHINE_TEXT, note: 'Updated from guide with Mock provider/Mock model' }]);
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('updates to upstream and removes overrides upstream contains', async ({ page }) => {
+      // The three routes are mocked (the local rules server cannot show a changed upstream);
+      // the override ids in the mocked status come from a real override.
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      /** @type {string[]} */
+      let inUpstream = [];
+      /** @type {any[]} */
+      const removalRequests = [];
+      const status = () => ({
+        refs_behind: true,
+        refresh_message: null,
+        layers: [{ layer: 'machine', url: TWO_LAYER_RULE_URLS[1], error: null, in_upstream: inUpstream, kept: [] }]
+      });
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await page.route('**/api/v1/document-rules/upstream-status', (route) => route.fulfill({ json: status() }));
+        await page.route('**/api/v1/document-rules/refresh-resource', (route) => route.fulfill({
+          json: { status: 'ok', refs: [], changed: false, message: '' }
+        }));
+        await page.route('**/api/v1/document-rules/remove-overrides-in-upstream', (route) => {
+          removalRequests.push(route.request().postDataJSON());
+          return route.fulfill({ json: status() });
+        });
+
+        const dialog = await openMachineTab(page);
+        const created = await page.evaluate(async (url) => {
+          return await /** @type {any} */ (window).client.apiClient.documentRulesOverrides({ kind: 'interpretation-ref', fragment_url: url });
+        }, TWO_LAYER_RULE_URLS[1]);
+        inUpstream = [created.id];
+
+        // Reopen so that the status is loaded with the override
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(dialog).not.toHaveAttribute('open', '');
+        await openToolsMenu(page);
+        const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
+        await expect(dialog).toHaveAttribute('open', '');
+        await dialog.locator('sl-tab[name="machineLayerTab"]').click();
+
+        await expect(dialog.locator('[name="upstreamStatus"]')).toContainText('now in upstream');
+        const updateBtn = dialog.locator('sl-button[name="updateToUpstreamBtn"]');
+        await expect(updateBtn).toBeVisible();
+        await expect(updateBtn).toContainText('Update to upstream');
+        await expect(dialog.locator('sl-button[name="resetBtn"]')).toBeHidden();
+
+        await page.waitForTimeout(500);
+        await updateBtn.click();
+        const confirmDialog = page.locator('sl-dialog[name="dialog"]');
+        await expect(confirmDialog).toHaveAttribute('open', '', { timeout: 5000 });
+        await expect(confirmDialog).toContainText('Update to upstream');
+        await page.waitForTimeout(500);
+        await confirmDialog.locator('sl-button[name="confirmBtn"]').click();
+
+        await expect(page.locator('sl-alert[variant="success"]')).toContainText('Updated to upstream: removed 1 override, kept 0.', { timeout: 15000 });
+        expect(removalRequests).toHaveLength(1);
+        expect(removalRequests[0].url).toBe(TWO_LAYER_RULE_URLS[1]);
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('asks for a missing API key on top of the update dialog', async ({ page }) => {
+      const consoleLogs = setupTestConsoleCapture(page);
+      // the mocked 428 below is logged by the browser
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, [...ALLOWED_ERROR_PATTERNS, 'Failed to load resource.*428']);
+      /** @type {http.Server | null} */
+      let server = null;
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
+        // test-secret-service is registered by the test plugin (tests/fixtures/plugins/test_plugin/)
+        await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
+          status: 428,
+          json: { detail: { code: 'secret_required', message: 'Test Service needs your API key', service: 'test-secret-service', label: 'Test Service', description: '', help_url: '' } }
+        }));
+
+        const dialog = await openMachineTab(page);
+        await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+        const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+        await expect(updateDialog).toHaveAttribute('open', '');
+        await page.waitForTimeout(500);
+        await updateDialog.locator('sl-button[name="generateBtn"]').click();
+
+        const keyDialog = page.locator('sl-dialog[name="apiKeysDialog"]');
+        await expect(keyDialog).toHaveAttribute('open', '');
+        const keyInput = keyDialog.locator('sl-input[label="Test Service"]');
+        await expect(keyInput).toBeVisible();
+        await page.waitForTimeout(500);
+        // The topmost element at the input's center belongs to the key dialog, not the update dialog
+        const onTop = await keyInput.evaluate((input) => {
+          const rect = input.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return hit !== null && /** @type {Element} */ (input.closest('sl-dialog')).contains(hit);
+        });
+        expect(onTop).toBe(true);
+        await keyInput.click({ timeout: 5000 });
+
+        await keyDialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(keyDialog).not.toHaveAttribute('open', '');
+        await updateDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
+    test('tells the user when no language model is available for updating from the guide', async ({ page }) => {
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await mockLlm(page, []);
+
+        const dialog = await openMachineTab(page);
+        await dialog.locator('sl-button[name="updateFromGuideBtn"]').click();
+        const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+        await expect(updateDialog).toHaveAttribute('open', '');
+        await expect(updateDialog).toContainText('No language model is available. Update the machine rules by hand, using the change shown above.');
+        await expect(updateDialog.locator('[name="modelRow"]')).toBeHidden();
+
+        await updateDialog.locator('sl-button[name="closeBtn"]').click();
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
   });
 });

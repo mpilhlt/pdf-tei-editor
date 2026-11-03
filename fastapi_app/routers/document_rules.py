@@ -4,12 +4,22 @@ overriding the resources a TEI document references (interpretation-ref
 prompt/rule fragments and its schema). See
 docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 ("REST API"). Write endpoints only ever touch the caller's own rows.
+
+Handlers that may fetch a rule file (blocking `requests` calls, e.g. via
+ResourceKind.resource_key() or resolve_original()) are plain `def`, so
+FastAPI runs them in its threadpool instead of on the event loop.
+/update-from-guide is an `async def` (it awaits the language model) and runs
+its blocking parts in the threadpool via run_in_threadpool().
 """
 
 import hashlib
 import logging
+from datetime import UTC, datetime
+from typing import Optional
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ..config import get_settings
 from ..lib.core.database import DatabaseManager
@@ -20,10 +30,38 @@ from ..lib.core.dependencies import (
     require_authenticated_user,
     require_reviewer_or_admin,
 )
-from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry
+from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry, GitHubAdapter
 from ..lib.core.url_cache import UrlCache
-from ..lib.doc_rules.kinds import get_resource_kind, list_resources
+from ..lib.doc_rules.condense_prompt import resolve_condense_prompt
+from ..lib.doc_rules.github_pull_request import (
+    GITHUB_SECRET_SERVICE,
+    GitHubError,
+    default_pull_request_text,
+    open_pull_request,
+    pull_request_branch_name,
+)
+from ..lib.doc_rules.guide_sync import find_synced_human_commit, parse_sync_marker, sync_status
+from ..lib.doc_rules.guide_update import (
+    GuideChange,
+    LayerSource,
+    OriginalUnavailableError,
+    build_update_prompts,
+    clean_model_answer,
+    gather_guide_change,
+    guide_unchanged,
+    layer_text,
+)
+from ..lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
+from ..lib.doc_rules.kinds import ResourceKind, get_resource_kind, list_resources
 from ..lib.doc_rules.resource_key import infer_format, normalize_resource_key
+from ..lib.doc_rules.upstream_cleanup import (
+    CategoryNotFoundError,
+    OverrideDeletionError,
+    UpstreamStatus,
+    remove_overrides_in_upstream,
+    upstream_status,
+)
+from ..lib.doc_rules.upstream_proposal import ProposalError, UpstreamProposal, build_upstream_proposal
 from ..lib.doc_rules.rules_refresh import (
     RefreshPreconditionError,
     perform_refresh,
@@ -31,23 +69,38 @@ from ..lib.doc_rules.rules_refresh import (
     preview_refresh,
     resolve_refresh_target,
 )
-from ..lib.doc_rules.storage import DocumentRulesStore
+from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
+from ..lib.llm import LLMProviderError, LLMProviderRegistry
+from ..lib.llm.model_access import ModelAccessDenied, check_model_access
+from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
+from ..lib.secrets import MissingSecretError, require_user_secret, secret_required_detail
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.annotation_rules_utils import (
+    RuleFetchError,
     derelativize_markdown_urls,
     fetch_rule_excerpt,
+    is_heading_anchor_fragment,
     is_line_range_fragment,
+    splice_heading_section,
     splice_line_range,
 )
 from ..lib.models.models_document_rules import (
     CreateOverrideRequest,
+    HumanChangeRequest,
+    HumanChangeResponse,
+    LayerUpstreamStatusModel,
     ListResourcesRequest,
     ListResourcesResponse,
     OkResponse,
     OverrideModel,
+    ProposePatchRequest,
+    ProposePullRequestRequest,
+    ProposePullRequestResponse,
+    ProposePatchResponse,
     ProposeChangeUrlRequest,
     ProposeChangeUrlResponse,
+    ProposedFileModel,
     QueryResourceRequest,
     QueryResourceResponse,
     RefTargetModel,
@@ -57,18 +110,28 @@ from ..lib.models.models_document_rules import (
     RefreshResourceResponse,
     ResetSelectionRequest,
     ResourceDescriptorModel,
+    ResourceRef,
+    SelectedOverrideResponse,
     SelectionInfo,
     SelectionsRequest,
     SelectionsResponse,
     SetSelectionRequest,
+    SyncStatusRequest,
+    SyncStatusResponse,
+    UpdateFromGuideRequest,
+    UpdateFromGuideResponse,
     UpdateOverrideRequest,
+    UpstreamStatusRequest,
+    UpstreamStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/document-rules", tags=["document-rules"])
 
 
-def _override_to_model(override: dict) -> OverrideModel:
+def _override_to_model(override: OverrideRow, original_hash: Optional[str] = None) -> OverrideModel:
+    """`original_hash` (sha256 of the current original) sets `outdated`; an empty base_hash (migrated override) is never outdated."""
+    base_hash = override["base_hash"]
     return OverrideModel(
         id=override["id"],
         note=override["note"],
@@ -76,11 +139,34 @@ def _override_to_model(override: dict) -> OverrideModel:
         format=override["format"],
         created_at=override["created_at"],
         updated_at=override["updated_at"],
+        outdated=original_hash is not None and base_hash != "" and base_hash != original_hash,
     )
 
 
+def _resource_key(kind: ResourceKind, url: str, strict: bool = False) -> str:
+    """
+    The key overrides of `url` are stored under (may fetch, see
+    InterpretationRefKind.resource_key()). Write and selection routes pass
+    `strict`: a fetch failure is then a 502 instead of a fallback key, which
+    would pass for a different resource; read routes keep the fallback.
+    """
+    if not strict:
+        return kind.resource_key(url)
+    try:
+        return kind.resource_key(url, strict=True)
+    except RuleFetchError as e:
+        logger.error(f"Could not derive the resource key of {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch the resource to identify it: {e}")
+
+
+def _resource_key_for(kind_name: str, url: str, strict: bool = False) -> str:
+    """_resource_key() for a kind given by name; an unregistered kind falls back to normalize_resource_key()."""
+    kind = get_resource_kind(kind_name)
+    return _resource_key(kind, url, strict) if kind is not None else normalize_resource_key(url)
+
+
 @router.post("/list", response_model=ListResourcesResponse)
-async def list_document_resources(
+def list_document_resources(
     request: ListResourcesRequest,
     user: dict = Depends(require_reviewer_or_admin),
 ) -> ListResourcesResponse:
@@ -90,7 +176,7 @@ async def list_document_resources(
         resources=[
             ResourceDescriptorModel(
                 kind=r.kind, url=r.url, key=r.key, label=r.label, format=r.format,
-                related_urls=r.related_urls,
+                related_urls=r.related_urls, layer=r.layer, group=r.group,
             )
             for r in resources
         ]
@@ -98,7 +184,7 @@ async def list_document_resources(
 
 
 @router.post("/query", response_model=QueryResourceResponse)
-async def query_resource(
+def query_resource(
     request: QueryResourceRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -114,20 +200,37 @@ async def query_resource(
         logger.error(f"Failed to resolve original text for {request.kind} {request.url}: {e}")
         raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
 
-    resource_key = normalize_resource_key(request.url)
+    resource_key = _resource_key(kind, request.url)
     owner = user["username"]
     overrides = store.list_overrides(request.kind, resource_key, owner)
     selected_override_id = store.get_selection(request.kind, resource_key, owner)
+    original_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
 
     return QueryResourceResponse(
         original_text=original_text,
-        overrides=[_override_to_model(o) for o in overrides],
+        overrides=[_override_to_model(o, original_hash) for o in overrides],
         selected_override_id=selected_override_id,
     )
 
 
+@router.post("/selected-override", response_model=SelectedOverrideResponse)
+def get_selected_override(
+    request: ResourceRef,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> SelectedOverrideResponse:
+    """The caller's selected override for one resource, without fetching the original (so `outdated` is always false)."""
+    kind = get_resource_kind(request.kind)
+    if kind is None:
+        raise HTTPException(status_code=400, detail=f"Unknown resource kind: {request.kind}")
+    owner = user["username"]
+    override_id = store.get_selection(request.kind, _resource_key(kind, request.url), owner)
+    override = store.get_override(override_id) if override_id is not None else None
+    return SelectedOverrideResponse(override=_override_to_model(override) if override is not None else None)
+
+
 @router.post("/overrides", response_model=OverrideModel)
-async def create_override(
+def create_override(
     request: CreateOverrideRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -146,7 +249,7 @@ async def create_override(
     base_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
     override = store.create_override(
         kind=request.kind,
-        resource_key=normalize_resource_key(request.fragment_url),
+        resource_key=_resource_key(kind, request.fragment_url, strict=True),
         owner=user["username"],
         note=request.note,
         text=request.text if request.text is not None else original_text,
@@ -158,17 +261,40 @@ async def create_override(
 
 
 @router.put("/overrides/{override_id}", response_model=OverrideModel)
-async def update_override(
+def update_override(
     override_id: str,
     request: UpdateOverrideRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OverrideModel:
-    """Update an override's note and/or text. Owner only."""
-    updated = store.update_override(override_id, user["username"], request.note, request.text)
+    """
+    Update an override's note and/or text. Owner only. With `fragment_url`
+    (the resource as currently shown), the override is rebased on that
+    resource's current original, which clears its `outdated` flag.
+    """
+    owner = user["username"]
+    base_hash: Optional[str] = None
+    if request.fragment_url is not None:
+        existing = store.get_override(override_id)
+        if existing is None or existing["owner"] != owner:
+            raise HTTPException(status_code=404, detail="Override not found or not owned by you")
+        kind = get_resource_kind(existing["kind"])
+        if kind is None:
+            raise HTTPException(status_code=400, detail=f"Unknown resource kind: {existing['kind']}")
+        if _resource_key(kind, request.fragment_url, strict=True) != existing["resource_key"]:
+            raise HTTPException(status_code=400, detail="Override does not belong to this resource")
+        try:
+            original_text = kind.resolve_original(request.fragment_url)
+        except Exception as e:
+            logger.error(f"Failed to resolve original text for {existing['kind']} {request.fragment_url}: {e}")
+            raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+        base_hash = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
+    updated = store.update_override(
+        override_id, owner, request.note, request.text, base_url=request.fragment_url, base_hash=base_hash
+    )
     if updated is None:
         raise HTTPException(status_code=404, detail="Override not found or not owned by you")
-    return _override_to_model(updated)
+    return _override_to_model(updated, base_hash)
 
 
 @router.delete("/overrides/{override_id}", response_model=OkResponse)
@@ -185,13 +311,13 @@ async def delete_override(
 
 
 @router.put("/selection", response_model=OkResponse)
-async def set_selection(
+def set_selection(
     request: SetSelectionRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Select an override (or `null` for the original) for one resource."""
-    resource_key = normalize_resource_key(request.fragment_url)
+    resource_key = _resource_key_for(request.kind, request.fragment_url, strict=True)
     if request.override_id is not None:
         override = store.get_override(request.override_id)
         if override is None or override["owner"] != user["username"]:
@@ -203,19 +329,19 @@ async def set_selection(
 
 
 @router.post("/selection/reset", response_model=OkResponse)
-async def reset_selection(
+def reset_selection(
     request: ResetSelectionRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
 ) -> OkResponse:
     """Clear the caller's selection for each listed resource, keeping all overrides."""
-    resources = [(r.kind, normalize_resource_key(r.url)) for r in request.resources]
+    resources = [(r.kind, _resource_key_for(r.kind, r.url, strict=True)) for r in request.resources]
     store.reset_selection(user["username"], resources)
     return OkResponse()
 
 
 @router.post("/selections", response_model=SelectionsResponse)
-async def get_selections(
+def get_selections(
     request: SelectionsRequest,
     user: dict = Depends(require_reviewer_or_admin),
     store: DocumentRulesStore = Depends(get_document_rules_store),
@@ -231,7 +357,7 @@ async def get_selections(
         SelectionInfo(
             kind=r.kind,
             url=r.url,
-            selected=store.get_selection(r.kind, normalize_resource_key(r.url), owner) is not None,
+            selected=store.get_selection(r.kind, _resource_key_for(r.kind, r.url), owner) is not None,
         )
         for r in request.resources
     ]
@@ -249,7 +375,7 @@ def _outcome_response(outcome) -> RefreshOutcomeResponse:
 
 
 @router.post("/refresh/preview", response_model=RefreshOutcomeResponse)
-async def refresh_preview(
+def refresh_preview(
     request: RefreshRequest,
     # Only these two refresh endpoints are reviewer/admin-gated - the rest
     # of this router is intentionally open to any authenticated user (see
@@ -297,7 +423,7 @@ async def refresh_execute(
 
 
 @router.post("/propose-change-url", response_model=ProposeChangeUrlResponse)
-async def propose_change_url(
+def propose_change_url(
     request: ProposeChangeUrlRequest,
     user: dict = Depends(require_authenticated_user),
 ) -> ProposeChangeUrlResponse:
@@ -320,17 +446,24 @@ async def propose_change_url(
     spliced back into the full upstream file at that range (see
     splice_line_range()), since the forge edit page replaces the whole
     file - so `text` in the response is then the whole file's new content.
+    A heading-anchor `url` on a Markdown file (a human-guide section) is
+    spliced the same way, replacing that heading's section.
     """
     cache = UrlCache(get_settings().annotation_rules_cache_dir)
     text = request.text
     base_url, _, fragment = request.url.partition("#")
-    if fragment and is_line_range_fragment(fragment):
+    is_line_range = bool(fragment) and is_line_range_fragment(fragment)
+    is_section = is_heading_anchor_fragment(fragment) and infer_format(base_url) == "markdown"
+    if is_line_range or is_section:
         try:
             full_text = fetch_rule_excerpt(base_url, cache)
+            if is_line_range:
+                text = splice_line_range(full_text, fragment, text)
+            else:
+                text = splice_heading_section(full_text, fragment, text)
         except Exception as e:
-            logger.error(f"Could not fetch {base_url} to splice the edited excerpt into: {e}", exc_info=True)
-            raise HTTPException(status_code=502, detail=f"Could not fetch the upstream file: {e}")
-        text = splice_line_range(full_text, fragment, text)
+            logger.error(f"Could not splice the edited excerpt into {base_url}: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail=f"Could not splice the edit into the upstream file: {e}")
     text = derelativize_markdown_urls(text, request.url)
     for adapter in GitForgeAdapterRegistry.get_instance().all_adapters():
         try:
@@ -347,7 +480,7 @@ async def propose_change_url(
 
 
 @router.post("/refresh-resource", response_model=RefreshResourceResponse)
-async def refresh_resource(
+def refresh_resource(
     request: RefreshResourceRequest,
     # Same gate as /refresh/preview and /refresh/execute - this endpoint
     # exists purely to support the same reviewer/admin-only "Document
@@ -377,3 +510,336 @@ async def refresh_resource(
         changed=outcome.changed,
         message=outcome.message,
     )
+
+
+def _layer_text_or_502(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> tuple[str, LayerSource]:
+    """layer_text(), with a failure to resolve the original reported as 502."""
+    try:
+        return layer_text(kind, url, store, owner)
+    except OriginalUnavailableError as e:
+        logger.error(f"Failed to resolve original text for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+
+@router.post("/sync-status", response_model=SyncStatusResponse)
+def get_sync_status(
+    request: SyncStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> SyncStatusResponse:
+    """
+    Whether a human guideline section and its condensed machine section are
+    in sync, per the sync marker in the machine section. Each layer's text is
+    the caller's selected override if there is one, else the original.
+    """
+    kind = _interpretation_ref_kind()
+    owner = user["username"]
+    human_text, human_source = _layer_text_or_502(kind, request.human_url, store, owner)
+    machine_text, machine_source = _layer_text_or_502(kind, request.machine_url, store, owner)
+    status = sync_status(human_text, machine_text, request.human_url, request.machine_url)
+    marker = parse_sync_marker(machine_text)
+    synced_commit: Optional[str] = None
+    if marker is not None and status in ("machine_outdated", "both_changed"):
+        cache = UrlCache(get_settings().annotation_rules_cache_dir)
+        synced_commit = find_synced_human_commit(request.human_url, marker, cache)
+    return SyncStatusResponse(
+        status=status,
+        human_source=human_source,
+        machine_source=machine_source,
+        synced_commit=synced_commit,
+    )
+
+
+def _interpretation_ref_kind() -> InterpretationRefKind:
+    kind = get_resource_kind("interpretation-ref")
+    if not isinstance(kind, InterpretationRefKind):
+        raise HTTPException(status_code=500, detail="Resource kind interpretation-ref is not registered")
+    return kind
+
+
+def _gather_guide_change_or_502(human_url: str, machine_url: str, store: DocumentRulesStore, owner: str) -> GuideChange:
+    """gather_guide_change(), with a failure to resolve an original reported as 502."""
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        return gather_guide_change(_interpretation_ref_kind(), human_url, machine_url, store, owner, cache)
+    except OriginalUnavailableError as e:
+        logger.error(f"Failed to resolve original text for {human_url} or {machine_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch original resource: {e}")
+
+
+def _upstream_error_message(error: requests.RequestException) -> str:
+    """The provider's own error message if the failed response carries one, else the exception text."""
+    if error.response is not None:
+        try:
+            message = error.response.json().get("error", {}).get("message")
+        except (ValueError, AttributeError):
+            message = None
+        if isinstance(message, str) and message:
+            return message
+    return str(error)
+
+
+def _llm_request_error(provider_id: str, error: LLMProviderError | requests.RequestException) -> HTTPException:
+    """The 502 for a failed request to the language model provider (logged)."""
+    logger.warning(f"document-rules: provider '{provider_id}' failed: {error}")
+    message = _upstream_error_message(error) if isinstance(error, requests.RequestException) else str(error)
+    return HTTPException(status_code=502, detail=f"LLM provider request failed: {message}")
+
+
+@router.post("/human-change", response_model=HumanChangeResponse)
+def get_human_change(
+    request: HumanChangeRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> HumanChangeResponse:
+    """
+    The change of a human guideline section since its machine section was
+    last synced (delta mode), or the whole section if no sync base is found
+    (align mode), together with the current machine section. Each layer's
+    text is the caller's selected override if there is one, else the original.
+    """
+    change = _gather_guide_change_or_502(request.human_url, request.machine_url, store, user["username"])
+    return HumanChangeResponse(
+        mode=change.mode,
+        old_human=change.old_human,
+        new_human=change.new_human,
+        machine=change.machine_full,
+        base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
+    )
+
+
+def _build_proposal_or_http_error(request: ProposePatchRequest, store: DocumentRulesStore, username: str) -> UpstreamProposal:
+    """The upstream proposal of `request`; proposal errors become 422, upstream fetch errors 502."""
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        return build_upstream_proposal(
+            _interpretation_ref_kind(),
+            request.human_url,
+            request.machine_url,
+            request.include_human,
+            request.include_machine,
+            store,
+            username,
+            request.label,
+            cache,
+        )
+    except ProposalError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except (OriginalUnavailableError, RuleFetchError, requests.RequestException) as e:
+        logger.error(f"Failed to build the upstream proposal for {request.human_url} / {request.machine_url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch upstream resource: {e}")
+
+
+def _github_repo_id(human_url: str) -> Optional[str]:
+    """The `owner/repo` of `human_url` if it is a GitHub URL, else None."""
+    adapter = GitForgeAdapterRegistry.get_instance().get_adapter_for(human_url.partition("#")[0])
+    if not isinstance(adapter, GitHubAdapter):
+        return None
+    repo_path = adapter.parse_repo_path(human_url)
+    return repo_path[0] if repo_path else None
+
+
+@router.post("/propose-patch", response_model=ProposePatchResponse)
+def propose_patch(
+    request: ProposePatchRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> ProposePatchResponse:
+    """
+    The upstream patch of the caller's current text (selected override, else
+    the original) of a rule category's human and/or machine section, as a
+    unified diff against the default branch. Nothing is stored. Also returns
+    whether a GitHub pull request can be opened, on which repository, and
+    its default title and description.
+    """
+    username = user["username"]
+    proposal = _build_proposal_or_http_error(request, store, username)
+    title, body = default_pull_request_text(
+        request.label,
+        username,
+        request.include_human,
+        request.include_machine,
+        proposal.in_sync,
+        proposal.upstream_changed,
+    )
+    repo_id = _github_repo_id(request.human_url)
+    return ProposePatchResponse(
+        files=[ProposedFileModel(path=f.path, before=f.before, after=f.after) for f in proposal.files],
+        patch=proposal.patch,
+        filename=proposal.filename,
+        branch=proposal.branch,
+        upstream_changed=proposal.upstream_changed,
+        in_sync=proposal.in_sync,
+        can_open_pull_request=repo_id is not None,
+        pull_request_title=title,
+        pull_request_body=body,
+        pull_request_repository=repo_id,
+        base_hashes=proposal.base_hashes,
+    )
+
+
+@router.post("/propose-pull-request", response_model=ProposePullRequestResponse)
+def propose_pull_request(
+    request: ProposePullRequestRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+) -> ProposePullRequestResponse:
+    """
+    Open a GitHub pull request with the changes of /propose-patch, using the
+    caller's stored GitHub token (HTTP 428 if there is none). Opens it from
+    a fork if the token has no push access. Nothing is stored locally. The
+    proposal is rebuilt; if its files on the default branch differ from the
+    previewed ones (`base_hashes`), nothing is created (HTTP 409).
+    """
+    username = user["username"]
+    title = request.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="The pull request needs a title.")
+    repo_id = _github_repo_id(request.human_url)
+    if repo_id is None:
+        raise HTTPException(status_code=422, detail="Pull requests can only be created for guides on GitHub. Download the patch instead.")
+    try:
+        token = require_user_secret(username, GITHUB_SECRET_SERVICE)
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    proposal = _build_proposal_or_http_error(request, store, username)
+    if proposal.base_hashes != request.base_hashes:
+        raise HTTPException(status_code=409, detail="The guide changed upstream since the preview. Close and reopen the dialog to see the current changes.")
+    try:
+        result = open_pull_request(
+            token,
+            repo_id,
+            proposal.branch,
+            proposal.files,
+            title,
+            request.body,
+            pull_request_branch_name(request.label, datetime.now(UTC)),
+        )
+    except GitHubError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
+    return ProposePullRequestResponse(url=result.url, number=result.number, branch=result.branch, fork=result.fork)
+
+
+def _document_tei_or_http_error(file_repo: FileRepository, file_storage: FileStorage, stable_id: str, user: dict) -> str:
+    """The TEI content of the document `stable_id`, which `user` must be able to read; 400 if there is none, 403 without access."""
+    file_meta = file_repo.get_file_by_stable_id(stable_id)
+    if not file_meta or file_meta.file_type != "tei":
+        raise HTTPException(status_code=400, detail="No TEI document open.")
+    if not check_file_access(file_meta, user, "read"):
+        raise HTTPException(status_code=403, detail="You don't have permission to read this document.")
+    content = file_storage.read_file(file_meta.id, "tei")
+    if not content:
+        raise HTTPException(status_code=400, detail="File content not found.")
+    return content.decode("utf-8", errors="replace")
+
+
+@router.post("/update-from-guide", response_model=UpdateFromGuideResponse)
+async def update_from_guide(
+    request: UpdateFromGuideRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> UpdateFromGuideResponse:
+    """
+    Have a language model update the machine section from the change of its
+    human section (see /human-change) and return the proposed text. Nothing is
+    stored; the caller saves an accepted proposal as an override.
+    """
+    owner = user["username"]
+    try:
+        # reads the user's stored secret, so it runs off the event loop
+        provider = await run_in_threadpool(LLMProviderRegistry.get_instance().get_provider_for_user, request.provider_id, owner)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    try:
+        # may list the provider's models, so its connection errors are handled like those of the completion
+        await run_in_threadpool(check_model_access, provider, request.model_id, user)
+    except ModelAccessDenied as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
+
+    tei_content = await run_in_threadpool(_document_tei_or_http_error, FileRepository(db), file_storage, request.xml, user)
+    change = await run_in_threadpool(_gather_guide_change_or_502, request.human_url, request.machine_url, store, owner)
+    try:
+        condense_prompt = await run_in_threadpool(resolve_condense_prompt, tei_content, request.human_url)
+    except Exception as e:
+        logger.exception(f"Could not resolve the condensing prompt for {request.human_url}")
+        raise HTTPException(status_code=500, detail="Could not resolve the condensing prompt") from e
+    system_prompt, user_prompt = build_update_prompts(change, condense_prompt)
+
+    try:
+        answer = await provider.chat_completion(request.model_id, system_prompt, user_prompt, temperature=0.2)
+    except (LLMProviderError, requests.RequestException) as e:
+        raise _llm_request_error(request.provider_id, e) from e
+
+    try:
+        proposed = clean_model_answer(answer, change)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return UpdateFromGuideResponse(
+        mode=change.mode,
+        old_human=change.old_human,
+        new_human=change.new_human,
+        machine=change.machine_full,
+        proposed=proposed,
+        base_commit=change.base_commit,
+        unchanged=guide_unchanged(change, request.human_url),
+    )
+
+
+def _upstream_status_response(status: UpstreamStatus) -> UpstreamStatusResponse:
+    """The response model of an `UpstreamStatus`."""
+    return UpstreamStatusResponse(
+        refs_behind=status.refs_behind,
+        refresh_message=status.refresh_message,
+        layers=[
+            LayerUpstreamStatusModel(
+                layer=layer.layer, url=layer.url, error=layer.error, in_upstream=list(layer.in_upstream), kept=list(layer.kept)
+            )
+            for layer in status.layers
+        ],
+    )
+
+
+@router.post("/upstream-status", response_model=UpstreamStatusResponse)
+def get_upstream_status(
+    request: UpstreamStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> UpstreamStatusResponse:
+    """Which of the caller's overrides of the rule category of `url` the upstream guide already contains."""
+    tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        status = upstream_status(tei_content, request.url, store, user["username"], cache)
+    except CategoryNotFoundError as e:
+        raise HTTPException(status_code=400, detail="This rule is not referenced by the document.") from e
+    return _upstream_status_response(status)
+
+
+@router.post("/remove-overrides-in-upstream", response_model=UpstreamStatusResponse)
+def post_remove_overrides_in_upstream(
+    request: UpstreamStatusRequest,
+    user: dict = Depends(require_reviewer_or_admin),
+    store: DocumentRulesStore = Depends(get_document_rules_store),
+    db: DatabaseManager = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage),
+) -> UpstreamStatusResponse:
+    """Delete the caller's overrides of the rule category of `url` whose text the rules the document is now pinned to contain; `in_upstream` lists the deleted ids. A failing deletion stops and answers 502 naming how many were deleted."""
+    tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
+    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    try:
+        status = remove_overrides_in_upstream(tei_content, request.url, store, user["username"], cache)
+    except CategoryNotFoundError as e:
+        raise HTTPException(status_code=400, detail="This rule is not referenced by the document.") from e
+    except OverrideDeletionError as e:
+        logger.error(f"Failed to remove overrides in upstream for {request.url}: {e}")
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return _upstream_status_response(status)

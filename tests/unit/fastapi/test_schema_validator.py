@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 from fastapi_app.lib.core.schema_validator import (
     SCHEMA_CACHE_TTL_SECONDS,
+    ValidationError,
+    get_schema_cache_info,
     extract_schema_locations,
     is_schema_cache_stale,
     register_bundled_schema,
@@ -254,5 +256,54 @@ class TestExtractSchemaLocationsSchemaRef(unittest.TestCase):
         self.assertEqual(extract_schema_locations(xml), [])
 
 
+class TestSchemaCacheInfoTraversal(unittest.TestCase):
+    def test_rejects_location_outside_cache_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValidationError):
+                get_schema_cache_info("https://evil.example/../../../../tmp/x.rng", Path(tmp))
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDownloadSchemaFileAtomic(unittest.TestCase):
+    """download_schema_file must never expose a partially written cache file."""
+
+    def test_failed_download_leaves_no_target_or_temp_file(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+        from fastapi_app.lib.core.schema_validator import ValidationError, download_schema_file
+
+        def broken_chunks(chunk_size=8192):
+            yield b"<grammar"
+            raise ConnectionError("connection dropped")
+
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.iter_content.side_effect = broken_chunks
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp) / "cache"
+            cache_file = cache_dir / "x.rng"
+            with patch("fastapi_app.lib.core.schema_validator.requests.get", return_value=response):
+                with self.assertRaises(ValidationError):
+                    download_schema_file("https://example.com/x.rng", cache_dir, cache_file)
+            self.assertEqual(list(cache_dir.iterdir()), [])
+
+    def test_successful_download_writes_content(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+        from fastapi_app.lib.core.schema_validator import download_schema_file
+
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.iter_content.return_value = [b"<gram", b"mar/>"]
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp) / "cache"
+            cache_file = cache_dir / "x.rng"
+            with patch("fastapi_app.lib.core.schema_validator.requests.get", return_value=response):
+                download_schema_file("https://example.com/x.rng", cache_dir, cache_file)
+            self.assertEqual(cache_file.read_bytes(), b"<grammar/>")
+            self.assertEqual([p.name for p in cache_dir.iterdir()], ["x.rng"])

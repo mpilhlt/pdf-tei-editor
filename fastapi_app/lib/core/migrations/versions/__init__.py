@@ -17,6 +17,7 @@ from .m007_add_created_by_column import Migration007AddCreatedByColumn
 from .m008_change_primary_key import Migration008ChangePrimaryKey
 from .m009_document_rules_tables import Migration009DocumentRulesTables
 from .m010_add_parent_stable_id_column import Migration010AddParentStableIdColumn
+from .m011_document_rules_section_overrides import Migration011DocumentRulesSectionOverrides
 
 # Migrations by target database
 LOCKS_MIGRATIONS = [
@@ -33,6 +34,7 @@ METADATA_MIGRATIONS = [
     Migration008ChangePrimaryKey,
     Migration009DocumentRulesTables,
     Migration010AddParentStableIdColumn,
+    Migration011DocumentRulesSectionOverrides,
 ]
 
 # Permissions database migrations (for future schema changes)
@@ -51,6 +53,7 @@ ALL_MIGRATIONS = [
     Migration008ChangePrimaryKey,
     Migration009DocumentRulesTables,
     Migration010AddParentStableIdColumn,
+    Migration011DocumentRulesSectionOverrides,
 ]
 
 __all__ = ["ALL_MIGRATIONS", "LOCKS_MIGRATIONS", "METADATA_MIGRATIONS", "PERMISSIONS_MIGRATIONS"]

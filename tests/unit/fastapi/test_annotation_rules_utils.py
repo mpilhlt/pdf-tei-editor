@@ -9,11 +9,17 @@ from unittest.mock import MagicMock, patch
 
 from fastapi_app.lib.utils.annotation_rules_utils import (
     RuleFetchError,
-    _ATX_HEADING_RE,
+    _parse_atx_heading,
     _rewrite_relative_markdown_urls,
     _scan_markdown_headings,
     _slugify_heading,
+    absolutize_markdown_urls,
     derelativize_markdown_urls,
+    fetch_rule_section,
+    heading_anchor_at_line,
+    is_heading_anchor_fragment,
+    markdown_section_range,
+    splice_heading_section,
     extract_annotation_rule_refs,
     fetch_rule_excerpt,
     is_line_range_fragment,
@@ -272,6 +278,30 @@ class TestRewriteRelativeMarkdownUrls(unittest.TestCase):
         self.assertEqual(result, "[link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)")
 
 
+class TestAbsolutizeMarkdownUrls(unittest.TestCase):
+    """The rewrite fetch_rule_excerpt() applies to a markdown resource, against its raw directory URL."""
+
+    BASE_URL = "https://github.com/mpilhlt/fossil/blob/main/docs/guide.md#some-heading"
+    RAW_DIR = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/"
+
+    def test_rewrites_relative_targets_against_the_raw_directory(self):
+        text = "![alt](img/foo.png) and [link](../other.md)"
+        self.assertEqual(
+            absolutize_markdown_urls(text, self.BASE_URL),
+            f"![alt]({self.RAW_DIR}img/foo.png) and [link](https://raw.githubusercontent.com/mpilhlt/fossil/main/other.md)",
+        )
+
+    def test_round_trips_with_derelativize(self):
+        relative = "![alt](img/foo.png) and [link](../other.md) and [x](https://example.com/a.png)"
+        absolute = absolutize_markdown_urls(relative, self.BASE_URL)
+        self.assertEqual(derelativize_markdown_urls(absolute, self.BASE_URL), relative)
+        self.assertEqual(absolutize_markdown_urls(derelativize_markdown_urls(absolute, self.BASE_URL), self.BASE_URL), absolute)
+
+    def test_returns_text_unchanged_for_non_markdown_url(self):
+        text = "![alt](img/foo.png)"
+        self.assertEqual(absolutize_markdown_urls(text, "https://github.com/mpilhlt/fossil/blob/main/schema/tei.xml"), text)
+
+
 class TestDerelativizeMarkdownUrls(unittest.TestCase):
     """
     Inverse of TestRewriteRelativeMarkdownUrls above - round-trips its
@@ -461,9 +491,8 @@ class TestTranslateAnchorToLineRange(unittest.TestCase):
 
 class TestScanMarkdownHeadingsEdgeCases(unittest.TestCase):
     def test_title_ending_in_literal_hash_without_preceding_space_not_truncated(self):
-        match = _ATX_HEADING_RE.match("# C#")
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group(2), "C#")
+        parsed = _parse_atx_heading("# C#")
+        self.assertEqual(parsed, (1, "C#"))
 
         headings = _scan_markdown_headings("# C#\n")
         self.assertEqual(len(headings), 1)
@@ -662,3 +691,48 @@ class TestExtractAnnotationRuleRefsLabel(unittest.TestCase):
         </TEI>"""
         entries = extract_annotation_rule_refs(xml)
         self.assertNotIn("n", entries[0])
+
+
+class TestMarkdownSections(unittest.TestCase):
+    TEXT = "# T\n\n## A\na1\n### A.1\na2\n## B\nb1\n"
+    URL = "https://raw.githubusercontent.com/mpilhlt/fossil/main/docs/g.md"
+
+    def test_section_range(self):
+        self.assertEqual(markdown_section_range(self.TEXT, "a"), (3, 6))
+        self.assertEqual(markdown_section_range(self.TEXT, "b"), (7, 8))
+        self.assertIsNone(markdown_section_range(self.TEXT, "missing"))
+
+    def test_section_range_ignores_fenced_heading(self):
+        text = "## B\n```\n## A\n```\n"
+        self.assertIsNone(markdown_section_range(text, "a"))
+
+    def test_heading_anchor_at_line(self):
+        self.assertEqual(heading_anchor_at_line(self.TEXT, 3), "a")
+        self.assertIsNone(heading_anchor_at_line(self.TEXT, 4))
+
+    def test_is_heading_anchor_fragment(self):
+        self.assertTrue(is_heading_anchor_fragment("a"))
+        self.assertFalse(is_heading_anchor_fragment("L3-L6"))
+        self.assertFalse(is_heading_anchor_fragment(""))
+
+    def test_splice_heading_section(self):
+        self.assertEqual(
+            splice_heading_section(self.TEXT, "a", "## A\nnew"),
+            "# T\n\n## A\nnew\n## B\nb1\n",
+        )
+        unchanged = "\n".join(self.TEXT.splitlines()[2:6])
+        self.assertEqual(splice_heading_section(self.TEXT, "a", unchanged), self.TEXT)
+        with self.assertRaises(RuleFetchError):
+            splice_heading_section(self.TEXT, "missing", "x")
+
+    def test_fetch_rule_section(self):
+        import tempfile
+        from pathlib import Path
+        from fastapi_app.lib.core.url_cache import UrlCache
+        with tempfile.TemporaryDirectory() as d:
+            cache = UrlCache(Path(d))
+            cache.set_text(self.URL, self.TEXT)
+            self.assertEqual(fetch_rule_section(f"{self.URL}#a", cache), "## A\na1\n### A.1\na2")
+            self.assertEqual(fetch_rule_section(f"{self.URL}#L7-L8", cache), "## B\nb1")
+            with self.assertRaises(RuleFetchError):
+                fetch_rule_section(f"{self.URL}#missing", cache)

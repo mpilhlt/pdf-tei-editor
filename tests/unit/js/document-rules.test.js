@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { Text } from '@codemirror/state';
+import { getOriginalDoc } from '@codemirror/merge';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
@@ -28,7 +29,7 @@ function readTemplate(name) {
 // HTMLElement" - evaluated at module-load time), so plain window/document
 // globals are not enough here - see config-editor-masked-value.test.js for
 // the same requirement/pattern.
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { pretendToBeVisual: true });
 global.window = dom.window;
 global.document = dom.window.document;
 global.HTMLElement = dom.window.HTMLElement;
@@ -42,6 +43,10 @@ global.DocumentFragment = dom.window.DocumentFragment;
 global.NodeList = dom.window.NodeList;
 global.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 global.CSS = dom.window.CSS;
+// A real EditorView (see the _createMergeView test) needs these as well
+global.MutationObserver = dom.window.MutationObserver;
+global.requestAnimationFrame = dom.window.requestAnimationFrame;
+global.cancelAnimationFrame = dom.window.cancelAnimationFrame;
 
 if (typeof global.navigator === 'undefined') {
   global.navigator = {};
@@ -70,6 +75,8 @@ global.fetch = async (url) => {
         'document-rules-menu-item': readTemplate('document-rules-menu-item.html'),
         'document-rules-refresh-menu-item': readTemplate('document-rules-refresh-menu-item.html'),
         'document-rules-editor-dialog': readTemplate('document-rules-editor-dialog.html'),
+        'document-rules-update-dialog': readTemplate('document-rules-update-dialog.html'),
+        'document-rules-propose-dialog': readTemplate('document-rules-propose-dialog.html'),
       })
     };
   }
@@ -88,6 +95,7 @@ const { default: StateManager } = await import('../../../app/src/modules/state-m
 const { Application } = await import('../../../app/src/modules/application.js');
 const { default: DocumentRulesPlugin } = await import('../../../app/src/plugins/document-rules.js');
 const { createMarkdownRenderer } = await import('../../../app/src/modules/markdown-utils.js');
+const { withKeyPrompt } = await import('../../../app/src/modules/secret-required.js');
 
 /**
  * @param {string[]} [roles] - defaults to a plain, non-privileged user;
@@ -128,18 +136,63 @@ function makeDialogUi() {
     editPanel, previewPanel, show: () => {},
   });
   el.textBody = Object.assign(document.createElement('div'), { textTabs });
+  // Real <sl-tab-group>.show(panelName) emits `sl-tab-show` for the newly
+  // active tab - recorded here so tests can assert which layer tab
+  // _openResourceEditor() activates.
+  el.layerTabs = Object.assign(document.createElement('sl-tab-group'), {
+    humanLayerTab: document.createElement('sl-tab'),
+    machineLayerTab: document.createElement('sl-tab'),
+    shown: [],
+  });
+  el.layerTabs.show = (panel) => { el.layerTabs.shown.push(panel); };
+  el.syncStatus = document.createElement('div');
+  el.syncStatus.style.display = 'none';
+  el.upstreamStatus = document.createElement('div');
+  el.upstreamStatus.style.display = 'none';
   el.xmlBody = Object.assign(document.createElement('div'), { xmlContainer: document.createElement('div') });
   el.newOverrideBtn = document.createElement('sl-button');
   el.saveBtn = document.createElement('sl-button');
   el.deleteBtn = document.createElement('sl-button');
   el.resetBtn = document.createElement('sl-button');
+  el.updateToUpstreamBtn = Object.assign(document.createElement('sl-button'), { disabled: false, loading: false });
   el.proposeUpstreamBtn = document.createElement('sl-button');
+  el.updateFromGuideBtn = document.createElement('sl-button');
   el.closeBtn = document.createElement('sl-button');
   el.open = false;
   // Real <sl-dialog>.show() sets `open` and resolves once shown (see
   // dialog.component's handleOpenChange()/waitForEvent(this, 'sl-after-show'))
   // - _openResourceEditor() awaits it before re-scrolling.
   el.show = async () => { el.open = true; };
+  return el;
+}
+
+/**
+ * A minimal stand-in for `_proposeDialogUi`, mirroring the named parts of
+ * document-rules-propose-dialog.html.
+ * @returns {any}
+ */
+function makeProposeDialogUi() {
+  const el = document.createElement('div');
+  el.includeHuman = Object.assign(document.createElement('sl-checkbox'), { checked: false });
+  el.includeMachine = Object.assign(document.createElement('sl-checkbox'), { checked: false });
+  el.notice = document.createElement('div');
+  el.notice.style.display = 'none';
+  el.files = document.createElement('div');
+  el.prSection = document.createElement('div');
+  el.prSection.style.display = 'none';
+  el.prSection.prTarget = document.createElement('div');
+  el.prSection.prTitle = Object.assign(document.createElement('sl-input'), { value: '' });
+  el.prSection.prBody = Object.assign(document.createElement('sl-textarea'), { value: '' });
+  el.prSection.prResult = document.createElement('div');
+  el.prSection.append(el.prSection.prTarget, el.prSection.prTitle, el.prSection.prBody, el.prSection.prResult);
+  el.hint = document.createElement('div');
+  el.createPrBtn = Object.assign(document.createElement('sl-button'), { disabled: true, loading: false });
+  el.createPrBtn.style.display = 'none';
+  el.downloadBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+  el.closeBtn = document.createElement('sl-button');
+  el.open = false;
+  el.show = async () => { el.open = true; };
+  el.hide = async () => { el.open = false; };
   return el;
 }
 
@@ -337,7 +390,7 @@ describe('DocumentRulesPlugin construction', () => {
   it('has the expected name and dependencies', () => {
     const plugin = makePlugin();
     assert.strictEqual(plugin.name, 'document-rules');
-    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger']);
+    assert.deepStrictEqual(plugin.deps, ['client', 'tools', 'xmleditor', 'dialog', 'services', 'logger', 'inference-settings', 'api-keys']);
   });
 });
 
@@ -409,6 +462,38 @@ describe('DocumentRulesPlugin._selectOverride', () => {
     assert.strictEqual(plugin._currentSelectedId, 'ov1');
     assert.deepStrictEqual(setMdArgs, ['override text', false]);
     assert.strictEqual(notifyCalls[0][0], 'Override 1 selected for A.');
+  });
+
+  it('selects a new override for the resource it was created for when the layer switches meanwhile', async () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    const machine = { kind: 'interpretation-ref', url: 'https://example.com/m.md', key: 'm', label: 'M', format: 'markdown', layer: 'machine' };
+    const human = { kind: 'interpretation-ref', url: 'https://example.com/h.md', key: 'h', label: 'H', format: 'markdown', layer: 'human' };
+    plugin._currentResource = machine;
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    plugin._currentShownText = () => 'text';
+    let renders = 0;
+    plugin._renderEditorDialog = () => { renders++; };
+    const selections = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') {
+        return {
+          apiClient: {
+            documentRulesOverrides: async () => { plugin._currentResource = human; return { id: 'ov1', note: '', text: 'text' }; },
+            documentRulesSelection: async (body) => { selections.push(body); }
+          }
+        };
+      }
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+
+    await plugin._onNewOverride();
+
+    assert.deepStrictEqual(selections, [{ kind: 'interpretation-ref', fragment_url: 'https://example.com/m.md', override_id: 'ov1' }]);
+    assert.deepStrictEqual(plugin._currentOverrides, []);
+    assert.strictEqual(plugin._currentSelectedId, null);
+    assert.strictEqual(renders, 0);
   });
 
   it('is a no-op when the target is already selected', async () => {
@@ -602,6 +687,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: text }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -640,6 +727,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: 'plain text' }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -664,6 +753,8 @@ describe('DocumentRulesPlugin._openResourceEditor', () => {
       if (name === 'client') return { apiClient: {
         documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: '<grammar/>' }),
       } };
+      // The upstream status request (not stubbed) fails and is logged
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
 
@@ -688,6 +779,8 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     plugin._currentOverrides = [];
     plugin._currentSelectedId = null;
     wireOverrideIndicatorStubs(plugin);
+    // _onSave/_onDelete fire it without awaiting; its own tests are in "upstream cleanup"
+    plugin._refreshUpstreamStatus = async () => {};
     return plugin;
   }
 
@@ -708,7 +801,24 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.deepStrictEqual(plugin._currentOverrides, [created]);
   });
 
-  it('_onSave persists the note and shown text for the selected override', async () => {
+  it('_onNewOverride shows the new override in the row even when selecting it fails', async () => {
+    const plugin = setup();
+    const created = { id: 'ov1', note: '', text: 'original text', format: 'markdown', created_at: '', updated_at: '' };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesOverrides: async () => created,
+        documentRulesSelection: async () => { throw new Error('selection failed'); },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onNewOverride();
+    assert.strictEqual(plugin._currentSelectedId, null);
+    const labels = [...plugin._editorDialogUi.overrideRow.children].map(b => b.textContent);
+    assert.deepStrictEqual(labels, ['Original', 'Override 1']);
+    assert.match(notifyCalls[0][0], /selection failed/);
+  });
+
+  it('_onSave persists the note and shown text for the selected override, rebased on the shown resource', async () => {
     const plugin = setup();
     plugin._currentOverrides = [{ id: 'ov1', note: 'old note', text: 'old text', format: 'markdown', created_at: '', updated_at: '' }];
     plugin._currentSelectedId = 'ov1';
@@ -721,7 +831,7 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
       throw new Error(`unexpected dependency: ${name}`);
     };
     await plugin._onSave();
-    assert.deepStrictEqual(calls, [['ov1', { note: 'new note', text: 'new text' }]]);
+    assert.deepStrictEqual(calls, [['ov1', { note: 'new note', text: 'new text', fragment_url: 'https://example.com/a.md' }]]);
     assert.deepStrictEqual(plugin._currentOverrides[0], updated);
   });
 
@@ -747,6 +857,52 @@ describe('DocumentRulesPlugin._onNewOverride/_onSave/_onDelete/_onReset', () => 
     assert.strictEqual(deletedId, 'ov1');
     assert.strictEqual(plugin._currentSelectedId, null);
     assert.deepStrictEqual(plugin._currentOverrides, []);
+  });
+
+  it('_onSave refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    const updated = { id: 'ov1', note: '', text: 'original text', format: 'markdown', created_at: '', updated_at: '' };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => updated } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 1);
+  });
+
+  it('_onSave does not refresh the upstream status when saving fails', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'old', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesUpdateOverrides: async () => { throw new Error('boom'); } } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onSave();
+    assert.strictEqual(upstreamRefreshes, 0);
+  });
+
+  it('_onDelete refreshes the upstream status', async () => {
+    const plugin = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'client') return { apiClient: { documentRulesDeleteOverrides: async () => {} } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    let upstreamRefreshes = 0;
+    plugin._refreshSyncStatus = async () => {};
+    plugin._refreshUpstreamStatus = async () => { upstreamRefreshes++; };
+    await plugin._onDelete();
+    assert.strictEqual(upstreamRefreshes, 1);
   });
 
   it('_onDelete does nothing when the confirmation is declined', async () => {
@@ -1647,5 +1803,1754 @@ describe('DocumentRulesPlugin._onRefDecorationClick', () => {
     plugin._onRefDecorationClick('https://example.com/unknown.md');
     assert.strictEqual(opened, false);
     assert.strictEqual(warned, true);
+  });
+});
+
+describe('DocumentRulesPlugin layer tabs (Guide (human) / Machine rules)', () => {
+  const human = {
+    kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary',
+    format: 'markdown', layer: 'human', group: 'interpretation-ref:primary', related_urls: ['https://example.com/g.md#primary'],
+  };
+  const machine = {
+    kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary',
+    format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary', related_urls: ['https://example.com/rules.md'],
+  };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  /**
+   * @param {string[]} queried - receives every queried url
+   * @returns {InstanceType<typeof DocumentRulesPlugin>}
+   */
+  function setup(queried) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._cmMdView = makeCmMdViewMock('');
+    plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+    plugin._md = { render: (text) => text };
+    plugin._resources = [{ ...human }, { ...machine }, { ...schema }];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: {
+        documentRulesQuery: async (body) => { queried.push(body.url); return { overrides: [], selected_override_id: null, original_text: `text of ${body.url}` }; },
+        documentRulesSyncStatus: async () => ({ status: 'in_sync', human_source: 'original', machine_source: 'original', synced_commit: null }),
+      } };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return plugin;
+  }
+
+  it('_resourceGroups groups by group (or url when null), in first-seen order', () => {
+    const plugin = setup([]);
+    const groups = plugin._resourceGroups();
+    assert.deepStrictEqual(groups.map(g => g.map(r => r.url)), [[human.url, machine.url], [schema.url]]);
+  });
+
+  it('_populateSubmenu shows one item for a two-layer group, opening its first descriptor', () => {
+    const plugin = setup([]);
+    plugin._editMenuItem = { documentRulesEditSubmenu: document.createElement('sl-menu') };
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._populateSubmenu();
+    const items = [...plugin._editMenuItem.documentRulesEditSubmenu.children];
+    assert.deepStrictEqual(items.map(i => i.textContent), ['Primary', 'Schema (RelaxNG)']);
+    items[0].dispatchEvent(new dom.window.Event('click'));
+    assert.strictEqual(opened, plugin._resources[0]);
+  });
+
+  it('opening a grouped resource shows layerTabs with the tab matching its layer', async () => {
+    const plugin = setup([]);
+    await plugin._openResourceEditor(plugin._resources[1]);
+    assert.strictEqual(plugin._editorDialogUi.layerTabs.style.display, '');
+    assert.deepStrictEqual(plugin._editorDialogUi.layerTabs.shown, ['machine']);
+    assert.deepStrictEqual(plugin._currentGroup, [plugin._resources[0], plugin._resources[1]]);
+  });
+
+  it('opening a single-layer resource hides layerTabs', async () => {
+    const plugin = setup([]);
+    await plugin._openResourceEditor(plugin._resources[2]);
+    assert.strictEqual(plugin._editorDialogUi.layerTabs.style.display, 'none');
+    assert.deepStrictEqual(plugin._editorDialogUi.layerTabs.shown, []);
+  });
+
+  it('switching to the other layer tab queries that layer\'s url', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    await plugin._openResourceEditor(plugin._resources[0]);
+    await plugin._onLayerTabShow('machine');
+    assert.deepStrictEqual(queried, [human.url, machine.url]);
+    assert.strictEqual(plugin._currentResource, plugin._resources[1]);
+    assert.strictEqual(plugin._currentOriginalText, `text of ${machine.url}`);
+  });
+
+  it('a tab-show for the already shown layer (programmatic select while opening) does not re-query', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    await plugin._openResourceEditor(plugin._resources[0]);
+    await plugin._onLayerTabShow('human');
+    assert.deepStrictEqual(queried, [human.url]);
+  });
+
+  it('_onRefDecorationClick on the machine url opens the machine descriptor', () => {
+    const plugin = setup([]);
+    // Even when the human descriptor's related_urls also lists the machine url
+    plugin._resources[0].related_urls = [human.url, machine.url];
+    let opened;
+    plugin._openResourceEditor = (r) => { opened = r; };
+    plugin._onRefDecorationClick(machine.url);
+    assert.strictEqual(opened, plugin._resources[1]);
+  });
+
+  it('an outdated override button gets a clock icon and the outdated tooltip, with the note on a new line', () => {
+    const plugin = setup([]);
+    plugin._currentOverrides = [
+      { id: 'a', note: 'my note', text: '', format: 'markdown', created_at: '', updated_at: '', outdated: true },
+      { id: 'b', note: '', text: '', format: 'markdown', created_at: '', updated_at: '', outdated: false },
+    ];
+    plugin._currentSelectedId = null;
+    plugin._renderOverrideRow();
+    const [, outdatedBtn, freshBtn] = [...plugin._editorDialogUi.overrideRow.children];
+    const icon = outdatedBtn.querySelector('sl-icon');
+    assert.ok(icon);
+    assert.strictEqual(icon.getAttribute('name'), 'clock-history');
+    assert.strictEqual(icon.getAttribute('slot'), 'suffix');
+    assert.strictEqual(outdatedBtn.title, 'Based on an older version of the original\nmy note');
+    assert.strictEqual(freshBtn.querySelector('sl-icon'), null);
+    assert.strictEqual(freshBtn.title, '');
+  });
+
+  it('_onReset on the human layer switches to the refreshed human ref and updates both group members', async () => {
+    const queried = [];
+    const plugin = setup(queried);
+    const [h, m] = plugin._resources;
+    plugin._currentResource = h;
+    plugin._currentGroup = [h, m];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    const newHuman = 'https://example.com/g2.md#primary';
+    const newMachine = 'https://example.com/rules2.md';
+    const { mock: xmleditorMock, calls: xmlCalls } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [makeRefElement(human.url)],
+      '//tei:editorialDecl//tei:ref[@subtype="machine"]': [makeRefElement(machine.url)],
+    });
+    const baseGetDependency = plugin.getDependency;
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return xmleditorMock;
+      if (name === 'client') {
+        const client = baseGetDependency('client');
+        client.apiClient.documentRulesRefreshResource = async () => ({
+          status: 'ok', changed: true, message: 'ok',
+          refs: [
+            { target: newHuman, content_type: 'markdown', subtype: 'human' },
+            { target: newMachine, content_type: 'markdown', subtype: 'machine' },
+          ],
+        });
+        client.apiClient.documentRulesDeleteOverrides = async () => {};
+        client.apiClient.documentRulesSelections = async () => ({ selections: [] });
+        return client;
+      }
+      return baseGetDependency(name);
+    };
+    await plugin._onReset();
+
+    // Both layers' <ref>s are rewritten, although each descriptor only lists its own url
+    assert.ok(xmlCalls.includes(`updateEditorFromNode:${newHuman}`));
+    assert.ok(xmlCalls.includes(`updateEditorFromNode:${newMachine}`));
+    assert.strictEqual(h.url, newHuman);
+    assert.deepStrictEqual(h.related_urls, [newHuman]);
+    assert.strictEqual(m.url, newMachine);
+    assert.deepStrictEqual(m.related_urls, [newMachine]);
+    assert.deepStrictEqual(queried, [newHuman]);
+  });
+});
+
+describe('DocumentRulesPlugin sync status line', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  /**
+   * @param {(body: any) => Promise<any>} syncStatus - stand-in for apiClient.documentRulesSyncStatus
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, requests: any[], warnings: string[] }}
+   */
+  function setup(syncStatus) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._currentResource = human;
+    plugin._currentGroup = [human, machine];
+    const requests = [];
+    const warnings = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient: { documentRulesSyncStatus: async (body) => { requests.push(body); return syncStatus(body); } } };
+      if (name === 'logger') return { warn: (msg) => { warnings.push(msg); }, debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, requests, warnings };
+  }
+
+  /** @param {string} status */
+  const response = (status, synced_commit = null) => ({ status, human_source: 'original', machine_source: 'original', synced_commit });
+
+  it('is hidden for a single-layer group, without a request', async () => {
+    const { plugin, requests } = setup(async () => response('in_sync'));
+    plugin._currentResource = schema;
+    plugin._currentGroup = [schema];
+    plugin._editorDialogUi.syncStatus.style.display = '';
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+    assert.deepStrictEqual(requests, []);
+  });
+
+  const cases = [
+    ['in_sync', 'In sync with the guide', 'check-circle'],
+    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync', 'exclamation-triangle'],
+    ['machine_edited', 'Machine rules edited by hand since the last sync', 'exclamation-triangle'],
+    ['both_changed', 'Machine rules outdated and edited by hand', 'exclamation-triangle'],
+    ['no_marker', 'No sync marker', 'exclamation-triangle'],
+  ];
+  for (const [status, text, icon] of cases) {
+    it(`shows "${text}" for ${status}`, async () => {
+      const { plugin, requests } = setup(async () => response(status));
+      await plugin._refreshSyncStatus();
+      const line = plugin._editorDialogUi.syncStatus;
+      assert.deepStrictEqual(requests, [{ human_url: human.url, machine_url: machine.url }]);
+      assert.strictEqual(line.style.display, '');
+      assert.strictEqual(line.querySelector('sl-icon').getAttribute('name'), icon);
+      assert.strictEqual(line.textContent.trim(), text);
+    });
+  }
+
+  it('appends the short hash of the last sync commit', async () => {
+    const { plugin } = setup(async () => response('in_sync', 'abc1234def5678'));
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide (last sync: abc1234)');
+  });
+
+  it('is refreshed after _selectOverride', async () => {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._setMarkdownContent = () => {};
+    plugin._scrollMarkdownBodyToAnchor = () => {};
+    plugin._md = { render: (text) => text };
+    plugin._currentResource = human;
+    plugin._currentOriginalText = 'original text';
+    plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'override text', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    plugin.getDependency = () => ({ apiClient: { documentRulesSelection: async () => {} } });
+    let refreshed = 0;
+    plugin._refreshSyncStatus = async () => { refreshed++; };
+    await plugin._selectOverride('ov1');
+    assert.strictEqual(refreshed, 1);
+  });
+
+  it('ignores a response that arrives after a newer request', async () => {
+    let resolveFirst;
+    let call = 0;
+    const { plugin } = setup(() => {
+      call++;
+      if (call === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve(response('in_sync'));
+    });
+    const first = plugin._refreshSyncStatus();
+    await plugin._refreshSyncStatus();
+    resolveFirst(response('no_marker'));
+    await first;
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide');
+  });
+
+  /**
+   * A syncStatus stand-in that answers the first call with `in_sync` and
+   * leaves every later call pending.
+   * @returns {(body: any) => Promise<any>}
+   */
+  function firstResolvedThenPending() {
+    let call = 0;
+    return () => (++call === 1 ? Promise.resolve(response('in_sync')) : new Promise(() => {}));
+  }
+
+  it('hides the previous pair\'s status while the status of another pair loads', async () => {
+    const { plugin } = setup(firstResolvedThenPending());
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, '');
+    const otherHuman = { ...human, url: 'https://example.com/g.md#secondary', group: 'interpretation-ref:secondary' };
+    const otherMachine = { ...machine, url: 'https://example.com/rules2.md', group: 'interpretation-ref:secondary' };
+    plugin._currentResource = otherHuman;
+    plugin._currentGroup = [otherHuman, otherMachine];
+    plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+  });
+
+  it('keeps the line visible while a layer-tab switch within the same pair reloads it', async () => {
+    const { plugin } = setup(firstResolvedThenPending());
+    await plugin._refreshSyncStatus();
+    plugin._currentResource = machine;
+    plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, '');
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'In sync with the guide');
+  });
+
+  it('shows the raw status when there is no copy for it', async () => {
+    const { plugin } = setup(async () => response('something_new'));
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.textContent.trim(), 'something_new');
+  });
+
+  it('hides the line and logs a warning when the request fails', async () => {
+    const { plugin, warnings } = setup(async () => { throw new Error('boom'); });
+    plugin._editorDialogUi.syncStatus.style.display = '';
+    await plugin._refreshSyncStatus();
+    assert.strictEqual(plugin._editorDialogUi.syncStatus.style.display, 'none');
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0], /boom/);
+  });
+});
+
+describe('DocumentRulesPlugin "Update from guide"', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  const models = [
+    { providerId: 'p1', modelId: 'm1', label: 'Provider 1/Model 1' },
+    { providerId: 'p2', modelId: 'm2', label: 'Provider 2/Model 2' },
+  ];
+
+  const humanChange = { mode: 'delta', old_human: '# G\n\nold', new_human: '# G\n\nnew', machine: '# M\n\nrules', base_commit: 'abc', unchanged: false };
+
+  /**
+   * A minimal stand-in for `_updateDialogUi`, mirroring the named parts of
+   * document-rules-update-dialog.html.
+   * @returns {any}
+   */
+  function makeUpdateDialogUi() {
+    const el = document.createElement('div');
+    el.notice = document.createElement('div');
+    el.notice.style.display = 'none';
+    el.humanDiffHeading = document.createElement('div');
+    el.humanDiff = document.createElement('div');
+    el.modelRow = Object.assign(document.createElement('div'), {
+      modelSelect: Object.assign(document.createElement('sl-select'), { value: '' }),
+      generateBtn: document.createElement('sl-button'),
+    });
+    el.proposedHeading = document.createElement('div');
+    el.proposedHeading.style.display = 'none';
+    el.proposedDiff = document.createElement('div');
+    el.proposedDiff.style.display = 'none';
+    el.acceptBtn = Object.assign(document.createElement('sl-button'), { disabled: true });
+    el.closeBtn = document.createElement('sl-button');
+    el.open = false;
+    el.show = async () => { el.open = true; };
+    el.hide = async () => { el.open = false; };
+    return el;
+  }
+
+  /**
+   * @param {object} [options]
+   * @param {Array<any>} [options.modelList] - what inference-settings' getModels() returns
+   * @param {any} [options.defaultModel] - what getDefaultModel() returns
+   * @param {Record<string, Function>} [options.api] - extra/overriding apiClient methods
+   * @param {(detail: any) => Promise<boolean>} [options.promptForKey] - the api-keys key prompt; resolves true if a key was saved
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, requests: Record<string, any[]>, mergeViews: any[] }}
+   */
+  function setup({ modelList = models, defaultModel = { providerId: 'p2', modelId: 'm2' }, api = {}, promptForKey = async () => false } = {}) {
+    const plugin = makePlugin(['reviewer']);
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._editorDialogUi.open = true;
+    plugin._updateDialogUi = makeUpdateDialogUi();
+    plugin._proposeDialogUi = makeProposeDialogUi();
+    plugin._resources = [human, machine];
+    plugin._currentResource = machine;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    const requests = { humanChange: [], updateFromGuide: [], overrides: [] };
+    const mergeViews = [];
+    plugin._createMergeView = (parent, original, modified) => {
+      const view = { parent, original, modified, destroyed: false, destroy() { this.destroyed = true; } };
+      mergeViews.push(view);
+      return view;
+    };
+    const apiClient = {
+      documentRulesHumanChange: async (body) => { requests.humanChange.push(body); return { ...humanChange }; },
+      documentRulesUpdateFromGuide: async (body) => { requests.updateFromGuide.push(body); return { ...humanChange, proposed: '# M\n\nnew rules' }; },
+      documentRulesOverrides: async (body) => { requests.overrides.push(body); return { id: 'ov-new', note: body.note, text: body.text, format: 'markdown', created_at: '', updated_at: '' }; },
+      ...api,
+    };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'inference-settings') return {
+        getModels: () => modelList,
+        getDefaultModel: () => defaultModel,
+        getModelLabel: (providerId, modelId) => modelList.find(m => m.providerId === providerId && m.modelId === modelId)?.label ?? `${providerId}/${modelId}`,
+      };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      if (name === 'api-keys') return { withKeyPrompt: (action, blocker) => withKeyPrompt(action, promptForKey, blocker) };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, requests, mergeViews };
+  }
+
+  describe('updateFromGuideBtn visibility', () => {
+    /**
+     * @param {any} resource
+     * @param {Array<any>} group
+     * @param {boolean} [readOnly]
+     * @returns {string}
+     */
+    function displayFor(resource, group, readOnly = false) {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock();
+      plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+      plugin._md = { render: (text) => text };
+      plugin._currentResource = resource;
+      plugin._currentGroup = group;
+      plugin._currentOriginalText = 'text';
+      plugin._documentReadOnly = readOnly;
+      plugin._renderEditorDialog();
+      return plugin._editorDialogUi.updateFromGuideBtn.style.display;
+    }
+
+    it('is hidden on the human layer', () => {
+      assert.strictEqual(displayFor(human, [human, machine]), 'none');
+    });
+
+    it('is shown on the machine layer of a human/machine pair', () => {
+      assert.strictEqual(displayFor(machine, [human, machine]), '');
+    });
+
+    it('is hidden for a single-layer resource', () => {
+      assert.strictEqual(displayFor(schema, [schema]), 'none');
+    });
+
+    it('is hidden when the document is read-only', () => {
+      assert.strictEqual(displayFor(machine, [human, machine], true), 'none');
+    });
+  });
+
+  it('_openUpdateDialog requests the pair\'s guide change, shows it as a diff and preselects the default model', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.deepStrictEqual(requests.humanChange, [{ human_url: human.url, machine_url: machine.url }]);
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(mergeViews[0].parent, ui.humanDiff);
+    assert.strictEqual(mergeViews[0].original, humanChange.old_human);
+    assert.strictEqual(mergeViews[0].modified, humanChange.new_human);
+    const options = [...ui.modelRow.modelSelect.querySelectorAll('sl-option')];
+    assert.deepStrictEqual(options.map(o => o.textContent), models.map(m => m.label));
+    assert.strictEqual(ui.modelRow.modelSelect.value, options[1].value);
+    assert.strictEqual(ui.modelRow.style.display, '');
+    assert.strictEqual(ui.notice.style.display, 'none');
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.acceptBtn.style.display, 'none');
+    assert.strictEqual(ui.proposedDiff.style.display, 'none');
+    assert.strictEqual(ui.open, true);
+  });
+
+  it('_openUpdateDialog without models hides the picker and shows the no-model notice', async () => {
+    const { plugin } = setup({ modelList: [], defaultModel: null });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(ui.modelRow.style.display, 'none');
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.notice.textContent.trim(), 'No language model is available. Update the machine rules by hand, using the change shown above.');
+  });
+
+  it('_openUpdateDialog in align mode shows the align notice and diffs against an empty guide', async () => {
+    const { plugin, mergeViews } = setup({ api: {
+      documentRulesHumanChange: async () => ({ mode: 'align', old_human: null, new_human: '# G\n\nnew', machine: '# M', base_commit: null, unchanged: false }),
+    } });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(mergeViews[0].original, '');
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.notice.textContent.trim(), 'No sync base found: the model compares the whole guide section with the machine rules.');
+  });
+
+  it('_openUpdateDialog shows the unchanged notice when the backend reports the guide section unchanged', async () => {
+    // The texts differ only in a way the section hash ignores
+    const { plugin } = setup({ api: {
+      documentRulesHumanChange: async () => ({ mode: 'delta', old_human: '# G\r\n', new_human: '# G\n', machine: '# M', base_commit: 'abc', unchanged: true }),
+    } });
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.textContent.trim(), 'The guide section has not changed since the last sync.');
+  });
+
+  it('_openUpdateDialog warns when the selected machine override was already updated from the guide, next to the other notices', async () => {
+    const { plugin } = setup({ api: {
+      documentRulesHumanChange: async () => ({ ...humanChange, unchanged: true }),
+    } });
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Updated from guide with Provider 1/Model 1', text: '# M', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    const lines = [...plugin._updateDialogUi.notice.children].map(line => line.textContent);
+    assert.deepStrictEqual(lines, [
+      'The guide section has not changed since the last sync.',
+      'The selected machine rules were already updated from the guide. Running the update again may apply the same change twice.',
+    ]);
+  });
+
+  it('_openUpdateDialog shows no repeat warning for an override not created from the guide', async () => {
+    const { plugin } = setup();
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Hand edit', text: '# M', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.style.display, 'none');
+  });
+
+  it('_openUpdateDialog reads the repeat warning from the machine layer, not from another shown layer', async () => {
+    const { plugin } = setup();
+    plugin._currentResource = human;
+    plugin._currentOverrides = [{ id: 'ov1', note: 'Updated from guide with Provider 1/Model 1', text: '# G', format: 'markdown', created_at: '', updated_at: '' }];
+    plugin._currentSelectedId = 'ov1';
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.notice.style.display, 'none');
+  });
+
+  it('_openUpdateDialog notifies and does not open the dialog when the request fails', async () => {
+    const { plugin } = setup({ api: { documentRulesHumanChange: async () => { throw new Error('boom'); } } });
+    await plugin._openUpdateDialog();
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /boom/);
+  });
+
+  it('_openUpdateDialog shows updateFromGuideBtn as loading and disabled while the guide change loads', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const btn = plugin._editorDialogUi.updateFromGuideBtn;
+    const opening = plugin._openUpdateDialog();
+    assert.strictEqual(btn.loading, true);
+    assert.strictEqual(btn.disabled, true);
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(btn.loading, false);
+    assert.strictEqual(btn.disabled, false);
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+  });
+
+  it('_openUpdateDialog restores updateFromGuideBtn when the request fails', async () => {
+    const { plugin } = setup({ api: { documentRulesHumanChange: async () => { throw new Error('boom'); } } });
+    await plugin._openUpdateDialog();
+    const btn = plugin._editorDialogUi.updateFromGuideBtn;
+    assert.strictEqual(btn.loading, false);
+    assert.strictEqual(btn.disabled, false);
+  });
+
+  it('_openUpdateDialog called twice while loading sends only one request', async () => {
+    const resolvers = [];
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolvers.push(resolve); }) } });
+    const first = plugin._openUpdateDialog();
+    const second = plugin._openUpdateDialog();
+    for (const resolve of resolvers) resolve({ ...humanChange });
+    await Promise.all([first, second]);
+    assert.strictEqual(resolvers.length, 1);
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when the editor dialog was closed meanwhile', async () => {
+    let resolveRequest;
+    const { plugin, mergeViews } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const opening = plugin._openUpdateDialog();
+    plugin._editorDialogUi.open = false;
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.strictEqual(mergeViews.length, 0);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when another rule category was opened meanwhile', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    const opening = plugin._openUpdateDialog();
+    plugin._currentResource = schema;
+    plugin._currentGroup = [schema];
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+  });
+
+  it('_openUpdateDialog does not open the sub-dialog when the document changed meanwhile', async () => {
+    let resolveRequest;
+    const { plugin } = setup({ api: { documentRulesHumanChange: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    const opening = plugin._openUpdateDialog();
+    plugin.onXmlChange();
+    resolveRequest({ ...humanChange });
+    await opening;
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+  });
+
+  it('_onGenerate sends the document, the pair and the selected model, shows the proposal and enables accept', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    const generating = plugin._onGenerate();
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, true);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, true);
+    await generating;
+    assert.deepStrictEqual(requests.updateFromGuide, [{ xml: 'stable123', human_url: human.url, machine_url: machine.url, provider_id: 'p2', model_id: 'm2' }]);
+    assert.strictEqual(mergeViews.length, 2);
+    assert.strictEqual(mergeViews[1].parent, ui.proposedDiff);
+    assert.strictEqual(mergeViews[1].original, humanChange.machine);
+    assert.strictEqual(mergeViews[1].modified, '# M\n\nnew rules');
+    assert.strictEqual(plugin._proposedMachineText, '# M\n\nnew rules');
+    assert.strictEqual(ui.proposedHeading.style.display, '');
+    assert.strictEqual(ui.proposedDiff.style.display, '');
+    assert.strictEqual(ui.acceptBtn.disabled, false);
+    assert.strictEqual(ui.acceptBtn.style.display, '');
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+  });
+
+  it('_onGenerate asks for a missing API key and shows the proposal of the retried request', async () => {
+    const secretRequired = Object.assign(new Error('API key required'), {
+      statusCode: 428,
+      detail: { code: 'secret_required', service: 'openai', label: 'OpenAI' },
+    });
+    let calls = 0;
+    const prompted = [];
+    const { plugin, mergeViews } = setup({
+      api: { documentRulesUpdateFromGuide: async () => { if (calls++ === 0) throw secretRequired; return { ...humanChange, proposed: '# M\n\nretried' }; } },
+      promptForKey: async (detail) => { prompted.push(detail.service); return true; },
+    });
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    assert.deepStrictEqual(prompted, ['openai']);
+    assert.strictEqual(calls, 2);
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.strictEqual(mergeViews[1].modified, '# M\n\nretried');
+    assert.strictEqual(plugin._proposedMachineText, '# M\n\nretried');
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, false);
+  });
+
+  it('_onGenerate on an error notifies, keeps the dialog open and accept disabled', async () => {
+    const { plugin } = setup({ api: { documentRulesUpdateFromGuide: async () => { throw new Error('An API key is required'); } } });
+    await plugin._openUpdateDialog();
+    const ui = plugin._updateDialogUi;
+    await plugin._onGenerate();
+    assert.strictEqual(ui.open, true);
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.proposedDiff.style.display, 'none');
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /An API key is required/);
+    assert.strictEqual(notifyCalls[0][1], 'danger');
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+    assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+  });
+
+  it('_onAcceptProposal creates a machine override with the model note and the proposal, selects it and closes', async () => {
+    const { plugin, requests } = setup();
+    const selected = [];
+    plugin._selectOverride = async (id) => { selected.push(id); plugin._currentSelectedId = id; };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    // The note names the model the proposal was generated with, not a later choice
+    const ui = plugin._updateDialogUi;
+    ui.modelRow.modelSelect.value = ui.modelRow.modelSelect.querySelectorAll('sl-option')[0].value;
+    await plugin._onAcceptProposal();
+    assert.deepStrictEqual(requests.overrides, [{ kind: machine.kind, fragment_url: machine.url, note: 'Updated from guide with Provider 2/Model 2', text: '# M\n\nnew rules' }]);
+    assert.deepStrictEqual(plugin._currentOverrides.map(o => o.id), ['ov-new']);
+    assert.deepStrictEqual(selected, ['ov-new']);
+    assert.strictEqual(ui.open, false);
+  });
+
+  it('_onAcceptProposal opens the machine layer first when another layer is shown', async () => {
+    const { plugin } = setup();
+    const selected = [];
+    const opened = [];
+    plugin._selectOverride = async (id) => { selected.push(id); plugin._currentSelectedId = id; };
+    plugin._openResourceEditor = async (resource) => {
+      opened.push(resource);
+      plugin._currentResource = resource;
+      // The re-query already lists the new override
+      plugin._currentOverrides = [{ id: 'ov-new', note: '', text: '', format: 'markdown', created_at: '', updated_at: '' }];
+    };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._currentResource = human;
+    await plugin._onAcceptProposal();
+    assert.deepStrictEqual(opened, [machine]);
+    assert.deepStrictEqual(plugin._currentOverrides.map(o => o.id), ['ov-new']);
+    assert.deepStrictEqual(selected, ['ov-new']);
+  });
+
+  it('_onAcceptProposal on an error notifies and keeps the dialog open', async () => {
+    const { plugin } = setup({ api: { documentRulesOverrides: async () => { throw new Error('nope'); } } });
+    let selectedCalls = 0;
+    plugin._selectOverride = async () => { selectedCalls++; };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    assert.strictEqual(plugin._updateDialogUi.open, true);
+    assert.strictEqual(selectedCalls, 0);
+    assert.match(notifyCalls[0][0], /nope/);
+  });
+
+  it('_resetUpdateDialog (on close) destroys the merge views and drops the proposal', async () => {
+    const { plugin, mergeViews } = setup();
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    assert.deepStrictEqual(mergeViews.map(v => v.destroyed), [true, true]);
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, true);
+  });
+
+  it('_onGenerate drops a response that arrives after the dialog was closed', async () => {
+    let resolveRequest;
+    const { plugin, mergeViews } = setup({ api: { documentRulesUpdateFromGuide: () => new Promise((resolve) => { resolveRequest = resolve; }) } });
+    await plugin._openUpdateDialog();
+    const generating = plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    resolveRequest({ ...humanChange, proposed: '# M\n\nlate' });
+    await generating;
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._updateDialogUi.acceptBtn.disabled, true);
+  });
+
+  it('_onGenerate drops an error that arrives after the dialog was reopened, leaving the new session\'s buttons alone', async () => {
+    const rejects = [];
+    const { plugin } = setup({ api: { documentRulesUpdateFromGuide: () => new Promise((resolve, reject) => { rejects.push(reject); }) } });
+    await plugin._openUpdateDialog();
+    const stale = plugin._onGenerate();
+    plugin._resetUpdateDialog();
+    await plugin._openUpdateDialog();
+    plugin._onGenerate();
+    rejects[0](new Error('stale failure'));
+    await stale;
+    const { generateBtn } = plugin._updateDialogUi.modelRow;
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.strictEqual(generateBtn.disabled, true);
+    assert.strictEqual(generateBtn.loading, true);
+  });
+
+  it('_onAcceptProposal called twice concurrently creates only one override, with accept and generate disabled meanwhile', async () => {
+    let resolveCreate;
+    const created = [];
+    const { plugin } = setup({ api: { documentRulesOverrides: (body) => { created.push(body); return new Promise((resolve) => { resolveCreate = resolve; }); } } });
+    plugin._selectOverride = async (id) => { plugin._currentSelectedId = id; };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    const ui = plugin._updateDialogUi;
+    const first = plugin._onAcceptProposal();
+    const second = plugin._onAcceptProposal();
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.acceptBtn.loading, true);
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, true);
+    resolveCreate({ id: 'ov-new', note: '', text: '', format: 'markdown', created_at: '', updated_at: '' });
+    await Promise.all([first, second]);
+    assert.strictEqual(created.length, 1);
+  });
+
+  it('_onAcceptProposal re-enables accept and generate when creating the override fails', async () => {
+    const { plugin } = setup({ api: { documentRulesOverrides: async () => { throw new Error('nope'); } } });
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(ui.acceptBtn.disabled, false);
+    assert.strictEqual(ui.acceptBtn.loading, false);
+    assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
+  });
+
+  it('_onAcceptProposal drops the proposal and closes once the override exists, even if the layer switch fails', async () => {
+    const { plugin, requests } = setup();
+    let selectedCalls = 0;
+    plugin._selectOverride = async () => { selectedCalls++; };
+    // A failed switch leaves the human layer open (and has notified already)
+    plugin._openResourceEditor = async () => {};
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    plugin._currentResource = human;
+    await plugin._onAcceptProposal();
+    const ui = plugin._updateDialogUi;
+    assert.strictEqual(plugin._proposedMachineText, null);
+    assert.strictEqual(plugin._proposedModel, null);
+    assert.strictEqual(ui.acceptBtn.disabled, true);
+    assert.strictEqual(ui.open, false);
+    assert.strictEqual(selectedCalls, 0);
+    await plugin._onAcceptProposal();
+    assert.strictEqual(requests.overrides.length, 1);
+  });
+
+  it('_onAcceptProposal shows the new override in the row and closes when selecting it fails', async () => {
+    const { plugin } = setup({ api: { documentRulesSelection: async () => { throw new Error('selection failed'); } } });
+    plugin._cmMdView = makeCmMdViewMock();
+    plugin._md = { render: (text) => text };
+    await plugin._openUpdateDialog();
+    await plugin._onGenerate();
+    await plugin._onAcceptProposal();
+    const labels = [...plugin._editorDialogUi.overrideRow.children].map(b => b.textContent);
+    assert.deepStrictEqual(labels, ['Original', 'Override 1']);
+    assert.strictEqual(plugin._currentSelectedId, null);
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+    assert.match(notifyCalls[0][0], /selection failed/);
+  });
+
+  it('onXmlChange hides the sub-dialog', () => {
+    const { plugin } = setup();
+    plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    plugin._updateDialogUi.open = true;
+    plugin.onXmlChange();
+    assert.strictEqual(plugin._updateDialogUi.open, false);
+  });
+
+  it('_createMergeView builds a read-only CodeMirror view showing the modified text', () => {
+    const plugin = makePlugin();
+    const parent = document.createElement('div');
+    const view = plugin._createMergeView(parent, 'old line', 'new line');
+    try {
+      assert.strictEqual(view.state.doc.toString(), 'new line');
+      assert.strictEqual(getOriginalDoc(view.state).toString(), 'old line');
+      assert.strictEqual(view.state.readOnly, true);
+      assert.ok(parent.contains(view.dom));
+    } finally {
+      view.destroy();
+    }
+  });
+});
+
+describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary sources', format: 'markdown', layer: 'human', group: 'interpretation-ref:primary' };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary sources', format: 'markdown', layer: 'machine', group: 'interpretation-ref:primary' };
+  const schema = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema (RelaxNG)', format: 'xml', layer: null, group: null };
+
+  const HUMAN_ONLY_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.';
+  const MACHINE_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.';
+  const MACHINE_OUTDATED_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.';
+  const UNSAVED_NOTICE = 'Unsaved changes in the editor are not included. Save them first.';
+
+  /**
+   * @param {any} body
+   * @returns {any}
+   */
+  function proposal(body) {
+    const files = [];
+    if (body.include_human) files.push({ path: 'docs/guidelines.md', before: 'g old', after: 'g new' });
+    if (body.include_machine) files.push({ path: 'docs/guidelines-llm.md', before: 'm old', after: 'm new' });
+    const includes = body.include_human && body.include_machine ? 'guide section and machine rules' : body.include_human ? 'guide section' : 'machine rules';
+    return {
+      files, patch: `# patch ${files.map(f => f.path).join(',')}\n`, filename: 'primary-sources-rules.patch', branch: 'main', upstream_changed: [], in_sync: body.include_machine,
+      can_open_pull_request: true, pull_request_title: 'Annotation rules update: Primary sources', pull_request_body: `Includes: ${includes}.`,
+      pull_request_repository: 'o/r', base_hashes: Object.fromEntries(files.map(f => [f.path, `hash of ${f.before}`])),
+    };
+  }
+
+  /**
+   * @param {object} [options]
+   * @param {Record<string, Function>} [options.api]
+   * @param {(detail: any) => Promise<boolean>} [options.promptForKey] - the api-keys key prompt; resolves true if a key was saved
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, apiClient: Record<string, Function>, requests: any[], mergeViews: any[] }}
+   */
+  function setup({ api = {}, promptForKey = async () => false } = {}) {
+    const plugin = makePlugin(['reviewer']);
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._editorDialogUi.open = true;
+    plugin._updateDialogUi = { open: false };
+    plugin._proposeDialogUi = makeProposeDialogUi();
+    plugin._resources = [human, machine];
+    plugin._currentResource = human;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOverrides = [];
+    plugin._currentSelectedId = null;
+    plugin._selections = [];
+    const requests = [];
+    const mergeViews = [];
+    plugin._createMergeView = (parent, original, modified) => {
+      const view = { parent, original, modified, destroyed: false, destroy() { this.destroyed = true; } };
+      mergeViews.push(view);
+      return view;
+    };
+    const apiClient = {
+      documentRulesProposePatch: async (body) => { requests.push(body); return proposal(body); },
+      ...api,
+    };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      if (name === 'api-keys') return { withKeyPrompt: (action, blocker) => withKeyPrompt(action, promptForKey, blocker) };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, apiClient, requests, mergeViews };
+  }
+
+  /**
+   * @param {HTMLElement} el
+   * @returns {string[]}
+   */
+  function noticeLines(el) {
+    return [...el.children].map(c => c.textContent);
+  }
+
+  /**
+   * @param {HTMLElement} files
+   * @returns {string[]}
+   */
+  function pathHeadings(files) {
+    return [...files.querySelectorAll('[data-role="path"]')].map(h => h.textContent);
+  }
+
+  beforeEach(() => { notifyCalls.length = 0; });
+
+  describe('proposeUpstreamBtn', () => {
+    /**
+     * @param {any} resource
+     * @param {Array<any>} group
+     * @param {{ selected?: boolean, readOnly?: boolean }} [options]
+     * @returns {string}
+     */
+    function displayFor(resource, group, { selected = false, readOnly = false } = {}) {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock();
+      plugin._cmView = { state: { doc: { length: 0 } }, dispatch: () => {}, scrollDOM: { scrollTop: 0 } };
+      plugin._md = { render: (text) => text };
+      plugin._currentResource = resource;
+      plugin._currentGroup = group;
+      plugin._currentOriginalText = 'text';
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: resource.format, created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = selected ? 'ov1' : null;
+      plugin._documentReadOnly = readOnly;
+      plugin._renderEditorDialog();
+      return plugin._editorDialogUi.proposeUpstreamBtn.style.display;
+    }
+
+    it('is shown in a two-layer group even without a selected override', () => {
+      assert.strictEqual(displayFor(human, [human, machine]), '');
+      assert.strictEqual(displayFor(machine, [human, machine]), '');
+    });
+
+    it('is hidden in a two-layer group when the document is read-only', () => {
+      assert.strictEqual(displayFor(human, [human, machine], { selected: true, readOnly: true }), 'none');
+    });
+
+    it('keeps the old rule for a single-layer resource', () => {
+      assert.strictEqual(displayFor(schema, [schema]), 'none');
+      assert.strictEqual(displayFor(schema, [schema], { selected: true }), '');
+    });
+
+    it('opens the sub-dialog in a two-layer group and uses the old flow otherwise', async () => {
+      const { plugin } = setup();
+      const calls = [];
+      plugin._openProposeDialog = async () => { calls.push('dialog'); };
+      plugin._onProposeUpstream = async () => { calls.push('old'); };
+      await plugin._onProposeUpstreamClick();
+      plugin._currentResource = schema;
+      plugin._currentGroup = [schema];
+      await plugin._onProposeUpstreamClick();
+      assert.deepStrictEqual(calls, ['dialog', 'old']);
+    });
+  });
+
+  describe('_openProposeDialog preselection', () => {
+    it('checks each layer with a selected override', async () => {
+      const { plugin, requests } = setup();
+      plugin._selections = [{ kind: 'interpretation-ref', url: machine.url, selected: true }, { kind: 'interpretation-ref', url: human.url, selected: false }];
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, false);
+      assert.strictEqual(ui.includeMachine.checked, true);
+      assert.deepStrictEqual(requests, [{ human_url: human.url, machine_url: machine.url, include_human: false, include_machine: true, label: 'Primary sources' }]);
+      assert.strictEqual(ui.open, true);
+    });
+
+    it('uses the shown layer\'s current selection over the cached selections', async () => {
+      const { plugin } = setup();
+      plugin._cmMdView = makeCmMdViewMock('x');
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'x', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      plugin._selections = [{ kind: 'interpretation-ref', url: machine.url, selected: true }];
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, true);
+      assert.strictEqual(ui.includeMachine.checked, true);
+    });
+
+    it('falls back to the shown layer when neither layer has a selected override', async () => {
+      const { plugin } = setup();
+      plugin._currentResource = machine;
+      await plugin._openProposeDialog();
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, false);
+      assert.strictEqual(ui.includeMachine.checked, true);
+    });
+  });
+
+  it('_refreshProposal renders one merge view per file under its path heading and enables download', async () => {
+    const { plugin, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    ui.includeMachine.checked = true;
+    await plugin._refreshProposal();
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+    assert.strictEqual(mergeViews.length, 2);
+    assert.deepStrictEqual(mergeViews.map(v => [v.original, v.modified]), [['g old', 'g new'], ['m old', 'm new']]);
+    assert.ok(ui.files.contains(mergeViews[0].parent));
+    assert.ok(ui.files.contains(mergeViews[1].parent));
+    assert.strictEqual(ui.downloadBtn.disabled, false);
+  });
+
+  it('toggling a checkbox requests again with the new flags and replaces the merge views', async () => {
+    const { plugin, requests, mergeViews } = setup();
+    plugin._installProposeDialogListeners();
+    await plugin._openProposeDialog();
+    const ui = plugin._proposeDialogUi;
+    assert.strictEqual(ui.includeHuman.checked, true);
+    ui.includeMachine.checked = true;
+    ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+    await plugin._proposalPromise;
+    assert.deepStrictEqual(requests.map(r => [r.include_human, r.include_machine]), [[true, false], [true, true]]);
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+  });
+
+  describe('notices', () => {
+    /**
+     * @param {boolean} includeHuman
+     * @param {boolean} includeMachine
+     * @returns {Promise<string[]>}
+     */
+    async function noticesFor(includeHuman, includeMachine) {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = includeHuman;
+      ui.includeMachine.checked = includeMachine;
+      await plugin._refreshProposal();
+      return ui.notice.style.display === 'none' ? [] : noticeLines(ui.notice);
+    }
+
+    it('warns that the machine rules become outdated when only the guide is included', async () => {
+      assert.deepStrictEqual(await noticesFor(true, false), [HUMAN_ONLY_NOTICE]);
+    });
+
+    it('says the sync marker is updated when the machine rules are included', async () => {
+      assert.deepStrictEqual(await noticesFor(false, true), [MACHINE_NOTICE]);
+      assert.deepStrictEqual(await noticesFor(true, true), [MACHINE_NOTICE]);
+    });
+
+    it('says the machine rules become outdated when they are included but not in sync', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), in_sync: false }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [MACHINE_OUTDATED_NOTICE]);
+    });
+
+    it('warns per file whose section changed upstream', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), upstream_changed: ['docs/guidelines.md', 'docs/guidelines-llm.md'] }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [
+        'The section in docs/guidelines.md changed upstream since your version; the patch replaces those changes.',
+        'The section in docs/guidelines-llm.md changed upstream since your version; the patch replaces those changes.',
+        MACHINE_NOTICE,
+      ]);
+    });
+
+    it('warns that unsaved editor changes are not included', async () => {
+      const { plugin } = setup();
+      plugin._currentOverrides = [{ id: 'ov1', note: '', text: 'saved', format: 'markdown', created_at: '', updated_at: '' }];
+      plugin._currentSelectedId = 'ov1';
+      plugin._cmMdView = makeCmMdViewMock('edited');
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [UNSAVED_NOTICE, HUMAN_ONLY_NOTICE]);
+      plugin._cmMdView = makeCmMdViewMock('saved');
+      await plugin._refreshProposal();
+      assert.deepStrictEqual(noticeLines(ui.notice), [HUMAN_ONLY_NOTICE]);
+    });
+  });
+
+  it('clears the shown diffs while a new request is pending', async () => {
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    let resolveRequest;
+    apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+    const pending = plugin._refreshProposal();
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    assert.strictEqual(plugin._proposal, null);
+    resolveRequest();
+    await pending;
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md']);
+  });
+
+  it('a failing refresh from the checkbox handler is logged and shown, not rejected', async () => {
+    const { plugin } = setup();
+    const warnings = [];
+    plugin.getDependency = (name) => {
+      if (name === 'logger') return { warn: (msg) => warnings.push(msg), debug: () => {} };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    plugin._refreshProposal = async () => { throw new Error('render failed'); };
+    plugin._installProposeDialogListeners();
+    plugin._proposeDialogUi.includeHuman.dispatchEvent(new dom.window.Event('sl-change'));
+    await plugin._proposalPromise;
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
+    assert.strictEqual(warnings.length, 1);
+    await plugin._openProposeDialog();
+    assert.deepStrictEqual(noticeLines(plugin._proposeDialogUi.notice), ['render failed']);
+  });
+
+  it('drops a stale response', async () => {
+    const pending = [];
+    const { plugin, requests } = setup({ api: {
+      documentRulesProposePatch: (body) => { requests.push(body); return new Promise((resolve) => { pending.push(() => resolve(proposal(body))); }); },
+    } });
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    const first = plugin._refreshProposal();
+    ui.includeMachine.checked = true;
+    const second = plugin._refreshProposal();
+    pending[1]();
+    await second;
+    pending[0]();
+    await first;
+    assert.deepStrictEqual(pathHeadings(ui.files), ['docs/guidelines.md', 'docs/guidelines-llm.md']);
+    assert.strictEqual(plugin._proposal.patch, '# patch docs/guidelines.md,docs/guidelines-llm.md\n');
+  });
+
+  it('shows a 422 message inline, clears the files and disables download', async () => {
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    assert.strictEqual(ui.downloadBtn.disabled, false);
+    apiClient.documentRulesProposePatch = async () => {
+      throw Object.assign(new Error('Select at least one of the guide section and the machine rules.'), { statusCode: 422 });
+    };
+    ui.includeHuman.checked = false;
+    await plugin._refreshProposal();
+    assert.deepStrictEqual(noticeLines(ui.notice), ['Select at least one of the guide section and the machine rules.']);
+    assert.strictEqual(ui.notice.style.display, '');
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    assert.strictEqual(plugin._proposal, null);
+    assert.strictEqual(notifyCalls.length, 0);
+  });
+
+  it('_onDownloadPatch downloads the patch as a text/x-diff Blob under the proposed file name', async () => {
+    const { plugin } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+
+    const blobs = [];
+    const revoked = [];
+    const clicks = [];
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    const originalClick = dom.window.HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = (blob) => { blobs.push(blob); return 'blob:patch'; };
+    URL.revokeObjectURL = (url) => { revoked.push(url); };
+    dom.window.HTMLAnchorElement.prototype.click = function () { clicks.push({ href: this.href, download: this.download }); };
+    try {
+      plugin._onDownloadPatch();
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+      dom.window.HTMLAnchorElement.prototype.click = originalClick;
+    }
+    assert.strictEqual(blobs.length, 1);
+    assert.strictEqual(blobs[0].type, 'text/x-diff');
+    assert.strictEqual(await blobs[0].text(), '# patch docs/guidelines.md\n');
+    assert.deepStrictEqual(clicks, [{ href: 'blob:patch', download: 'primary-sources-rules.patch' }]);
+    assert.deepStrictEqual(revoked, ['blob:patch']);
+  });
+
+  describe('pull request', () => {
+    const created = { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'pdf-tei-editor/primary-sources-20261028-120000', fork: null };
+
+    it('hides the controls when the guide is not on GitHub', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePatch: async (body) => ({ ...proposal(body), can_open_pull_request: false }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.prSection.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.style.display, 'none');
+      assert.strictEqual(ui.downloadBtn.disabled, false);
+      assert.strictEqual(ui.prSection.prTarget.textContent, '');
+    });
+
+    it('shows the controls with the default texts and enables the button when the guide is on GitHub', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.prSection.style.display, '');
+      assert.strictEqual(ui.createPrBtn.style.display, '');
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+      assert.strictEqual(ui.prSection.prTitle.value, 'Annotation rules update: Primary sources');
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+      assert.strictEqual(ui.prSection.prTarget.textContent, 'The pull request will be opened on o/r.');
+    });
+
+    it('disables the button while a request is pending and after an error', async () => {
+      const { plugin, apiClient } = setup();
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      let resolveRequest;
+      apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+      const pending = plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      resolveRequest();
+      await pending;
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+      apiClient.documentRulesProposePatch = async () => { throw new Error('nothing to change'); };
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+    });
+
+    it('keeps an edited title on a checkbox toggle and replaces an untouched description', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+      ui.prSection.prTitle.value = 'My title';
+      ui.prSection.prTitle.dispatchEvent(new dom.window.Event('sl-input'));
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(ui.prSection.prTitle.value, 'My title');
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section and machine rules.');
+    });
+
+    it('keeps an edited description on a checkbox toggle and replaces an untouched title', async () => {
+      const { plugin, apiClient } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      ui.prSection.prBody.value = 'My description';
+      ui.prSection.prBody.dispatchEvent(new dom.window.Event('sl-input'));
+      apiClient.documentRulesProposePatch = async (body) => ({ ...proposal(body), pull_request_title: 'New default' });
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(ui.prSection.prTitle.value, 'New default');
+      assert.strictEqual(ui.prSection.prBody.value, 'My description');
+    });
+
+    it('takes the defaults again after the dialog was closed and reopened', async () => {
+      const { plugin } = setup();
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      ui.prSection.prBody.value = 'My description';
+      ui.prSection.prBody.dispatchEvent(new dom.window.Event('sl-input'));
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.prSection.prBody.value, 'Includes: guide section.');
+    });
+
+    it('sends the edited title and body with the proposal flags through withKeyPrompt', async () => {
+      const secretRequired = Object.assign(new Error('API key required'), {
+        statusCode: 428,
+        detail: { code: 'secret_required', service: 'github', label: 'GitHub' },
+      });
+      const prRequests = [];
+      const prompted = [];
+      const { plugin } = setup({
+        api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); if (prRequests.length === 1) throw secretRequired; return created; } },
+        promptForKey: async (detail) => { prompted.push(detail.service); return true; },
+      });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      ui.prSection.prTitle.value = 'Edited title';
+      ui.prSection.prBody.value = 'Edited body';
+      await plugin._onCreatePullRequest();
+      assert.deepStrictEqual(prompted, ['github']);
+      assert.strictEqual(prRequests.length, 2);
+      assert.deepStrictEqual(prRequests[1], {
+        human_url: human.url, machine_url: machine.url, include_human: true, include_machine: true, label: human.label,
+        title: 'Edited title', body: 'Edited body',
+        // The previewed files' hashes, unchanged
+        base_hashes: { 'docs/guidelines.md': 'hash of g old', 'docs/guidelines-llm.md': 'hash of m old' },
+      });
+    });
+
+    it('shows the created pull request with a link and keeps the button disabled', async () => {
+      const prRequests = [];
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); return created; } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      const result = ui.prSection.prResult;
+      assert.strictEqual(result.textContent, 'Pull request #7 created. Open on GitHub');
+      const link = result.querySelector('a');
+      assert.strictEqual(link.textContent, 'Open on GitHub');
+      assert.strictEqual(link.getAttribute('href'), 'https://github.com/o/r/pull/7');
+      assert.strictEqual(link.getAttribute('target'), '_blank');
+      assert.strictEqual(link.getAttribute('rel'), 'noopener');
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(prRequests.length, 1);
+    });
+
+    it('names the fork a pull request was opened from', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => ({ ...created, number: 8, fork: 'me/r' }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created from your fork me/r. Open on GitHub');
+      assert.strictEqual(ui.prSection.prResult.querySelector('a').textContent, 'Open on GitHub');
+    });
+
+    it('shows an error message and re-enables the button', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => { throw Object.assign(new Error('The pull request needs a title.'), { statusCode: 422 }); } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      assert.strictEqual(ui.prSection.prResult.textContent, 'The pull request needs a title.');
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+      assert.strictEqual(ui.createPrBtn.loading, false);
+    });
+
+    it('disables the button and clears the previous result while the request is pending', async () => {
+      let resolveRequest;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveRequest = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      ui.prSection.prResult.textContent = 'previous error';
+      const pending = plugin._onCreatePullRequest();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(ui.createPrBtn.loading, true);
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
+      resolveRequest();
+      await pending;
+      assert.strictEqual(ui.createPrBtn.loading, false);
+    });
+
+    it('reports a pull request created after the dialog was reset in a notification', async () => {
+      let resolveRequest;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveRequest = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      const pending = plugin._onCreatePullRequest();
+      plugin._resetProposeDialog();
+      assert.strictEqual(ui.createPrBtn.loading, false);
+      resolveRequest();
+      await pending;
+      assert.strictEqual(notifyCalls.length, 1);
+      assert.strictEqual(notifyCalls[0][0], 'Pull request #7 created: https://github.com/o/r/pull/7');
+      assert.strictEqual(notifyCalls[0][1], 'success');
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
+    });
+
+    it('keeps the button disabled after a created pull request when a refresh succeeds', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => created } });
+      const ui = plugin._proposeDialogUi;
+      plugin._installProposeDialogListeners();
+      await plugin._openProposeDialog();
+      await plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      ui.includeMachine.dispatchEvent(new dom.window.Event('sl-change'));
+      await plugin._proposalPromise;
+      assert.strictEqual(plugin._proposal.files.length, 2);
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      await plugin._openProposeDialog();
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+    });
+
+    it('keeps the button disabled when a refresh resolves while a pull request is created', async () => {
+      let resolveCreate;
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: () => new Promise((resolve) => { resolveCreate = () => resolve(created); }) } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      const pending = plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      resolveCreate();
+      await pending;
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+    });
+
+    it('enables the button on a refresh after a failed pull request', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => { throw new Error('GitHub request failed (500): boom'); } } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      ui.includeMachine.checked = true;
+      await plugin._refreshProposal();
+      assert.strictEqual(ui.createPrBtn.disabled, false);
+    });
+
+    it('_resetProposeDialog hides the controls and clears the result', async () => {
+      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => created } });
+      const ui = plugin._proposeDialogUi;
+      ui.includeHuman.checked = true;
+      await plugin._refreshProposal();
+      await plugin._onCreatePullRequest();
+      plugin._resetProposeDialog();
+      assert.strictEqual(ui.prSection.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.style.display, 'none');
+      assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
+      assert.strictEqual(ui.prSection.prTarget.textContent, '');
+    });
+  });
+
+  it('_resetProposeDialog (on close) destroys the merge views and drops a pending response', async () => {
+    let resolveRequest;
+    const { plugin, apiClient, mergeViews } = setup();
+    const ui = plugin._proposeDialogUi;
+    ui.includeHuman.checked = true;
+    await plugin._refreshProposal();
+    apiClient.documentRulesProposePatch = (body) => new Promise((resolve) => { resolveRequest = () => resolve(proposal(body)); });
+    const pending = plugin._refreshProposal();
+    plugin._resetProposeDialog();
+    assert.strictEqual(mergeViews[0].destroyed, true);
+    assert.strictEqual(ui.files.children.length, 0);
+    assert.strictEqual(ui.downloadBtn.disabled, true);
+    resolveRequest();
+    await pending;
+    assert.strictEqual(mergeViews.length, 1);
+    assert.strictEqual(plugin._proposal, null);
+  });
+
+  it('onXmlChange hides the sub-dialog', () => {
+    const { plugin } = setup();
+    plugin._refreshResources = () => {};
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    plugin._proposeDialogUi.open = true;
+    plugin.onXmlChange();
+    assert.strictEqual(plugin._proposeDialogUi.open, false);
+  });
+});
+
+describe('DocumentRulesPlugin upstream cleanup', () => {
+  const oldHuman = 'https://github.com/o/r/blob/oldsha/docs/g.md#seg';
+  const oldMachine = 'https://github.com/o/r/blob/oldsha/docs/rules.md#L3-L9';
+  const newHuman = 'https://github.com/o/r/blob/newsha/docs/g.md#seg';
+  const newMachine = 'https://github.com/o/r/blob/newsha/docs/rules.md#L4-L10';
+  const override = (id) => ({ id, note: '', text: id, format: 'markdown', created_at: '', updated_at: '' });
+
+  /**
+   * @param {Partial<{ refs_behind: boolean, human: any, machine: any }>} [options]
+   * @returns {any} an UpstreamStatusResponse
+   */
+  function status({ refs_behind = false, human = {}, machine = {} } = {}) {
+    return {
+      refs_behind,
+      refresh_message: null,
+      layers: [
+        { layer: 'human', url: oldHuman, error: null, in_upstream: [], kept: [], ...human },
+        { layer: 'machine', url: oldMachine, error: null, in_upstream: [], kept: [], ...machine },
+      ],
+    };
+  }
+
+  /**
+   * A plugin showing the machine layer of a two-layer category, with the
+   * markdown body stubbed out.
+   * @param {Record<string, Function>} [apiClient]
+   * @param {{ confirm?: boolean, xmleditor?: any }} [options]
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, warnings: string[], confirms: string[][] }}
+   */
+  function setup(apiClient = {}, { confirm = true, xmleditor = null } = {}) {
+    const plugin = makePlugin();
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._setMarkdownContent = () => {};
+    plugin._scrollMarkdownBodyToAnchor = () => {};
+    plugin._md = { render: (text) => text };
+    const human = { kind: 'interpretation-ref', url: oldHuman, key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'g', related_urls: [oldHuman] };
+    const machine = { kind: 'interpretation-ref', url: oldMachine, key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'g', related_urls: [oldMachine] };
+    plugin._currentResource = machine;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOriginalText = 'original';
+    plugin._currentOverrides = [override('ov1'), override('ov2')];
+    plugin._currentSelectedId = null;
+    wireOverrideIndicatorStubs(plugin);
+    plugin._refreshSyncStatus = async () => {};
+    const warnings = [];
+    const confirms = [];
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'logger') return { warn: (msg) => { warnings.push(msg); }, debug: () => {} };
+      if (name === 'dialog') return { confirm: async (text, title) => { confirms.push([text, title]); return confirm; } };
+      if (name === 'xmleditor' && xmleditor) return xmleditor;
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, warnings, confirms };
+  }
+
+  it('_refreshUpstreamStatus requests the status with the stable id and the shown url', async () => {
+    const requests = [];
+    const { plugin } = setup({ documentRulesUpstreamStatus: async (body) => { requests.push(body); return status(); } });
+    await plugin._refreshUpstreamStatus();
+    assert.deepStrictEqual(requests, [{ xml: 'stable123', url: oldMachine }]);
+    assert.deepStrictEqual(plugin._upstreamStatus, status());
+  });
+
+  it('_refreshUpstreamStatus sends no request for a schema resource and hides the line', async () => {
+    let requested = false;
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => { requested = true; return status(); } });
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._upstreamStatus = status({ refs_behind: true });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(requested, false);
+    assert.strictEqual(plugin._upstreamStatus, null);
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+  });
+
+  it('_refreshUpstreamStatus hides the line and logs a warning when the request fails', async () => {
+    const { plugin, warnings } = setup({ documentRulesUpstreamStatus: async () => { throw new Error('boom'); } });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await assert.doesNotReject(plugin._refreshUpstreamStatus());
+    assert.strictEqual(plugin._upstreamStatus, null);
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+    assert.match(warnings[0], /boom/);
+  });
+
+  it('_refreshUpstreamStatus ignores a response that arrives after a newer request', async () => {
+    let resolveFirst;
+    let call = 0;
+    const { plugin } = setup({ documentRulesUpstreamStatus: () => {
+      call++;
+      if (call === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve(status());
+    } });
+    const first = plugin._refreshUpstreamStatus();
+    await plugin._refreshUpstreamStatus();
+    resolveFirst(status({ refs_behind: true }));
+    await first;
+    assert.deepStrictEqual(plugin._upstreamStatus, status());
+  });
+
+  it('_openResourceEditor refreshes the upstream status, but not on a layer-tab switch within the group', async () => {
+    const requests = [];
+    const { plugin } = setup({
+      documentRulesUpstreamStatus: async (body) => { requests.push(body); return status(); },
+      documentRulesQuery: async () => ({ overrides: [], selected_override_id: null, original_text: 'x' }),
+    });
+    plugin._cmMdView = makeCmMdViewMock('');
+    plugin._groupOf = () => plugin._currentGroup;
+    const [human, machine] = plugin._currentGroup;
+    plugin._editorDialogUi.open = false;
+    await plugin._openResourceEditor(machine);
+    assert.strictEqual(requests.length, 1);
+    await plugin._openResourceEditor(human);
+    assert.strictEqual(requests.length, 1);
+  });
+
+  it('marks overrides that upstream contains with the cloud-check icon and tooltip', () => {
+    const { plugin } = setup();
+    plugin._currentOverrides = [{ ...override('ov1'), outdated: true, note: 'my note' }, override('ov2')];
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+    plugin._renderOverrideRow();
+    const [, btn1, btn2] = [...plugin._editorDialogUi.overrideRow.children];
+    assert.strictEqual(btn1.querySelectorAll('sl-icon').length, 1);
+    assert.strictEqual(btn1.querySelector('sl-icon').getAttribute('name'), 'cloud-check');
+    assert.strictEqual(btn1.querySelector('sl-icon').getAttribute('slot'), 'suffix');
+    assert.strictEqual(btn1.title, 'Upstream contains this text; it is removed when you update to upstream.\nmy note');
+    assert.strictEqual(btn2.querySelector('sl-icon'), null);
+  });
+
+  it('shows the status line with counts and per-layer errors', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({
+      refs_behind: true,
+      human: { in_upstream: ['ov1'] },
+      machine: { in_upstream: ['ov2'], error: 'rate limited' },
+    }) });
+    await plugin._refreshUpstreamStatus();
+    const line = plugin._editorDialogUi.upstreamStatus;
+    assert.strictEqual(line.style.display, '');
+    assert.strictEqual(line.querySelector('sl-icon').getAttribute('name'), 'arrow-repeat');
+    const lines = [...line.children].map((c) => c.textContent.trim());
+    assert.deepStrictEqual(lines, [
+      'The guide upstream has changed since this document was annotated. 2 overrides now in upstream. Use "Update to upstream" to apply it.',
+      'Could not compare the Machine rules with upstream: rate limited',
+    ]);
+  });
+
+  it('uses the singular for one override and shows a layer error alone', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({ human: { in_upstream: ['ov1'] } }) });
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.textContent.trim(), '1 override now in upstream. Use "Update to upstream" to apply it.');
+
+    const { plugin: plugin2 } = setup({ documentRulesUpstreamStatus: async () => status({ human: { error: 'not found' } }) });
+    await plugin2._refreshUpstreamStatus();
+    const line = plugin2._editorDialogUi.upstreamStatus;
+    assert.strictEqual(line.style.display, '');
+    assert.strictEqual(line.textContent.trim(), 'Could not compare the Guide with upstream: not found');
+  });
+
+  it('hides the status line when nothing is behind and nothing matches', async () => {
+    const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({ human: { kept: ['ov1'] } }) });
+    plugin._editorDialogUi.upstreamStatus.style.display = '';
+    await plugin._refreshUpstreamStatus();
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.style.display, 'none');
+  });
+
+  it('shows "Update to upstream" instead of "Reset to original" for interpretation-ref; schema keeps "Reset to original"', () => {
+    const { plugin } = setup();
+    const ui = plugin._editorDialogUi;
+    plugin._currentSelectedId = 'ov1';
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.resetBtn.style.display, 'none');
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, '');
+
+    plugin._upstreamStatus = status({ human: { kept: ['ov1'] } });
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+
+    plugin._upstreamStatus = status({ refs_behind: true });
+    plugin._documentReadOnly = true;
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+
+    plugin._documentReadOnly = false;
+    plugin._setXmlContent = () => {};
+    plugin._currentResource = { kind: 'schema', url: 'https://example.com/s.rng', key: 's', label: 'Schema', format: 'xml' };
+    plugin._upstreamStatus = null;
+    plugin._renderEditorDialog();
+    assert.strictEqual(ui.resetBtn.style.display, '');
+    assert.strictEqual(ui.updateToUpstreamBtn.style.display, 'none');
+  });
+
+  /**
+   * apiClient stand-ins for a full "Update to upstream" run, recording the
+   * call order into `calls`.
+   * @param {string[]} calls
+   * @param {{ refresh?: any, removal?: any, removalError?: Error }} [options]
+   * @returns {Record<string, Function>}
+   */
+  function updateClient(calls, { refresh, removal, removalError } = {}) {
+    return {
+      documentRulesRefreshResource: async (body) => {
+        calls.push(`refreshResource:${body.url}`);
+        return refresh ?? {
+          status: 'ok', changed: true, message: 'Resource refreshed from upstream.',
+          refs: [
+            { target: newHuman, content_type: 'markdown', subtype: 'human' },
+            { target: newMachine, content_type: 'markdown', subtype: 'machine' },
+          ],
+        };
+      },
+      documentRulesRemoveOverridesInUpstream: async (body) => {
+        calls.push(`removeOverridesInUpstream:${body.xml}:${body.url}`);
+        if (removalError) throw removalError;
+        return removal ?? status({ human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+      },
+      documentRulesQuery: async (body) => {
+        calls.push(`query:${body.url}`);
+        return { original_text: 'fresh', overrides: [override('ov2')], selected_override_id: null };
+      },
+      documentRulesUpstreamStatus: async () => { calls.push('upstreamStatus'); return status({ machine: { kept: ['ov2'] } }); },
+    };
+  }
+
+  /**
+   * An xmleditor stand-in for _applyRefreshedRefs() that records its
+   * document edit into `calls`.
+   * @param {string[]} calls
+   * @returns {any}
+   */
+  function recordingXmlEditor(calls) {
+    const { mock } = makeXmlEditorMock({
+      '//tei:editorialDecl//tei:ref[@subtype="human"]': [makeRefElement(oldHuman)],
+      '//tei:editorialDecl//tei:ref[@subtype="machine"]': [makeRefElement(oldMachine)],
+    });
+    mock.updateEditorFromNode = async (node) => { calls.push(`documentEdit:${node.getAttribute('target')}`); };
+    return mock;
+  }
+
+  it('_onUpdateToUpstream re-pins the document before removing overrides', async () => {
+    const calls = [];
+    const { plugin, confirms } = setup(updateClient(calls), { xmleditor: recordingXmlEditor(calls) });
+    plugin._upstreamStatus = status({ refs_behind: true, human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(confirms, [[
+      'This updates the document to the current upstream rules and removes 1 override that upstream now contains. 1 other override is kept.',
+      'Update to upstream',
+    ]]);
+    assert.deepStrictEqual(calls, [
+      `refreshResource:${oldMachine}`,
+      `documentEdit:${newHuman}`,
+      `documentEdit:${newMachine}`,
+      `removeOverridesInUpstream:stable123:${newMachine}`,
+      `query:${newMachine}`,
+      'upstreamStatus',
+    ]);
+    assert.strictEqual(plugin._currentResource.url, newMachine);
+    assert.deepStrictEqual(plugin._currentOverrides, [override('ov2')]);
+    assert.strictEqual(plugin._editorDialogUi.updateToUpstreamBtn.loading, false);
+    assert.strictEqual(plugin._editorDialogUi.updateToUpstreamBtn.disabled, false);
+  });
+
+  it('_onUpdateToUpstream confirmation omits the parts with a zero count', async () => {
+    const { plugin, confirms } = setup({}, { confirm: false });
+    plugin._upstreamStatus = status({ refs_behind: true });
+    await plugin._onUpdateToUpstream();
+    assert.strictEqual(confirms[0][0], 'This updates the document to the current upstream rules.');
+  });
+
+  it('_onUpdateToUpstream stops before removal when the refresh is not ok', async () => {
+    const calls = [];
+    const refresh = { status: 'unavailable', changed: false, refs: [], message: 'upstream unavailable' };
+    const { plugin } = setup(updateClient(calls, { refresh }));
+    plugin._upstreamStatus = status({ refs_behind: true });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, [`refreshResource:${oldMachine}`]);
+    assert.deepStrictEqual(notifyCalls.map((c) => c.slice(0, 2)), [['upstream unavailable', 'warning']]);
+  });
+
+  it('_onUpdateToUpstream does nothing when the confirmation is declined', async () => {
+    const calls = [];
+    const { plugin } = setup(updateClient(calls), { confirm: false });
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, []);
+    assert.deepStrictEqual(notifyCalls, []);
+  });
+
+  it('_onUpdateToUpstream reports the counts of the removal response', async () => {
+    const calls = [];
+    const removal = status({ human: { in_upstream: ['ov1', 'ov3'] }, machine: { in_upstream: ['ov4'], kept: ['ov2'] } });
+    const refresh = { status: 'ok', changed: false, refs: [], message: 'Resource is already up to date.' };
+    const { plugin } = setup(updateClient(calls, { refresh, removal }));
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.deepStrictEqual(calls, [
+      `refreshResource:${oldMachine}`,
+      `removeOverridesInUpstream:stable123:${oldMachine}`,
+      `query:${oldMachine}`,
+      'upstreamStatus',
+    ]);
+    assert.deepStrictEqual(notifyCalls.at(-1).slice(0, 2), ['Updated to upstream: removed 3 overrides, kept 1.', 'success']);
+  });
+
+  it('_onUpdateToUpstream notifies a failed removal and still reloads', async () => {
+    const calls = [];
+    const refresh = { status: 'ok', changed: false, refs: [], message: 'Resource is already up to date.' };
+    const { plugin } = setup(updateClient(calls, { refresh, removalError: new Error('boom') }));
+    plugin._upstreamStatus = status({ human: { in_upstream: ['ov1'] } });
+    await plugin._onUpdateToUpstream();
+    assert.ok(calls.includes(`query:${oldMachine}`));
+    assert.deepStrictEqual(notifyCalls.map((c) => c[1]), ['danger']);
+    assert.match(notifyCalls[0][0], /boom/);
   });
 });

@@ -512,6 +512,23 @@ class TestPlanResourceRefresh(unittest.TestCase):
         self.assertEqual(outcome.status, "ok")
         self.assertFalse(outcome.changed)
 
+    def test_plan_resource_refresh_matches_human_ref_url(self):
+        """An entry with both layers is found by its human ref's URL, not only by its representative (machine) ref."""
+        machine = "https://github.com/mpilhlt/fossil/blob/oldsha/docs/machine.md#L1-L9"
+        human_ref = f'<ref subtype="human" target="{OLD_TARGET}" type="markdown">Guide</ref>'
+        tei = TEI_WITH_PI_AND_DECL.replace(
+            human_ref, f'{human_ref}<ref subtype="machine" target="{machine}" type="markdown"/>'
+        )
+        register_document_rules_provider("GROBID", "grobid", FakeProvider(entries=[
+            {"category": "primary", "refs": [
+                {"target": OLD_TARGET, "content_type": "markdown", "subtype": "human"},
+                {"target": machine, "content_type": "markdown", "subtype": "machine"},
+            ]},
+        ]))
+        outcome = plan_resource_refresh(tei, OLD_TARGET, cache=mock.MagicMock())
+        self.assertEqual(outcome.status, "ok")
+        self.assertFalse(outcome.changed)
+
 
 if __name__ == "__main__":
     unittest.main()

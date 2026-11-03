@@ -8,6 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { login, authenticatedApiCall } from '../helpers/test-auth.js';
 
 const API_BASE = process.env.E2E_BASE_URL || 'http://127.0.0.1:8014';
 
@@ -99,4 +100,40 @@ test('GET /api/v1/plugins/extensions.js - bundle structure is valid IIFE', async
     content.includes('})();'),
     'Should close IIFE properly with })();'
   );
+});
+
+test('GET /api/v1/plugins/extensions.js - inlines reference-plugin templates and styles ahead of its extension', async () => {
+  const response = await fetch(`${API_BASE}/api/v1/plugins/extensions.js`);
+  assert.strictEqual(response.status, 200);
+
+  const content = await response.text();
+
+  const stylesAt = content.indexOf('window.registerFrontendExtensionStyles("reference-plugin", ');
+  const templatesAt = content.indexOf('window.registerFrontendExtensionTemplates("reference-plugin", ');
+  const extensionAt = content.indexOf('window.registerFrontendExtension(ReferenceDialogExtension, "reference-plugin")');
+  assert.ok(stylesAt >= 0, 'Should register the plugin stylesheet');
+  assert.ok(templatesAt >= 0, 'Should register the plugin templates');
+  assert.ok(extensionAt >= 0, 'Should contain the reference extension');
+  assert.ok(stylesAt < templatesAt && templatesAt < extensionAt, 'Styles and templates should precede the extension');
+
+  // The template map is a JSON object keyed by file stem
+  const line = content.slice(templatesAt).split('\n')[0];
+  const json = line.slice('window.registerFrontendExtensionTemplates("reference-plugin", '.length, -2);
+  const templates = JSON.parse(json);
+  assert.deepStrictEqual(Object.keys(templates).sort(), ['dialog', 'toolbar-button']);
+  assert.ok(templates.dialog.includes('name="referencePluginDialog"'));
+});
+
+test('GET /api/v1/plugins/extensions.js - plugins without templates emit no template calls', async () => {
+  const response = await fetch(`${API_BASE}/api/v1/plugins/extensions.js`);
+  const content = await response.text();
+  assert.ok(!content.includes('registerFrontendExtensionTemplates("test-plugin"'));
+});
+
+test('GET /api/v1/plugins/admin - the hidden reference-plugin is not listed', async () => {
+  const { sessionId } = await login('admin', 'admin');
+  const { plugins } = await authenticatedApiCall(sessionId, '/plugins/admin');
+  const ids = plugins.map(p => p.id);
+  assert.ok(ids.includes('test-plugin'), 'Visible fixture plugins should be listed');
+  assert.ok(!ids.includes('reference-plugin'), 'Hidden plugin should not be listed');
 });

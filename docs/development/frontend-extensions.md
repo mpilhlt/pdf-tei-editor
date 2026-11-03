@@ -82,12 +82,17 @@ The class name can be anything; the plugin name is set in the `super()` call. Th
 
 ## `FrontendExtensionPlugin` API
 
-Extensions inherit all `Plugin` methods plus two authenticated HTTP helpers:
+Extensions inherit all `Plugin` methods plus two authenticated HTTP helpers and access to the backend plugin's [HTML templates](#html-templates-and-stylesheets):
 
 | Method | Description |
 |--------|-------------|
 | `this.callPluginApi(url, method, params)` | Call a backend plugin route with session auth. Returns parsed JSON. |
 | `this.fetchText(url)` | Fetch text from a URL with session auth. Returns string. |
+| `this.createFromTemplate(name, parentNode?, params?)` | Create the nodes of one of the plugin's templates. Returns `ChildNode[]`. |
+| `this.createSingleFromTemplate(name, parentNode?, params?)` | Create the first element of one of the plugin's templates. |
+| `this.getTemplateHtml(name)` | Raw HTML of one of the plugin's templates. |
+| `this.templateId(name)` | Full registry id `<pluginId>:<name>`, for use with `ui-system` directly. |
+| `this.backendPluginId` | Id of the backend plugin that delivered the extension. |
 
 All other application APIs are accessed via `this.getDependency(name)`:
 
@@ -100,8 +105,10 @@ These modules are pre-registered by `module-registry.js` and are always availabl
 | `'ui'` | `app/src/ui.js` | The UI element tree (`ui.toolbar`, `ui.pdfViewer`, etc.) |
 | `'sl-utils'` | `app/src/modules/sl-utils.js` | `notify(msg, variant, icon)` and other Shoelace utilities |
 | `'tei-utils'` | `app/src/modules/tei-utils.js` | `encodeXmlEntities(xml, opts)` and other TEI helpers |
+| `'ui-system'` | `app/src/modules/ui-system.js` | `createFromTemplate`, `createSingleFromTemplate`, `addTemplateHtml`, `registerTemplate`, `updateUi` |
+| `'lint-utils'` | `app/src/modules/lint-utils.js` | `applyMergedDiagnostics` (see [Contributing editor diagnostics](#contributing-editor-diagnostics)) |
 
-To expose additional modules, add an entry to `app/src/modules/module-registry.js`.
+To expose an additional module, add a `@registerModule` tag to its file header and run `node scripts/build/generate-modules.js`, which regenerates `app/src/module-registry.js`.
 
 ### Plugin APIs (via `getDependency`)
 
@@ -193,13 +200,62 @@ async def initialize(self, context: PluginContext) -> None:
 
 ### Directory Structure
 
-```
+```text
 fastapi_app/plugins/my_plugin/
 ├── __init__.py
 ├── plugin.py
-└── extensions/
-    └── my-extension.js
+├── extensions/
+│   └── my-extension.js
+└── templates/           # optional, see HTML Templates and Stylesheets
+    └── my-dialog.html
 ```
+
+## HTML Templates and Stylesheets
+
+A backend plugin can ship HTML templates and stylesheets in a `templates/` directory next to `extensions/`. The reference implementation is the test fixture plugin [tests/fixtures/plugins/reference_plugin](../../tests/fixtures/plugins/reference_plugin/README.md).
+
+```text
+my_plugin/
+├── plugin.py
+├── extensions/
+│   └── my-extension.js
+└── templates/
+    ├── dialog.html           # template "dialog"
+    ├── toolbar-button.html   # template "toolbar-button"
+    └── my-plugin.css         # stylesheet
+```
+
+- The server finds the directory from each registered extension file (`<extension>.parent.parent / "templates"`); `plugin.py` does not change. Only `*.html` and `*.css` files directly in the directory are used.
+- The template name is the file stem. Its registry id is `<pluginId>:<name>`, so templates of different plugins and of the app cannot collide.
+- `GET /api/v1/plugins/extensions.js` inlines the templates (`window.registerFrontendExtensionTemplates(pluginId, {...})`) and the stylesheets (`window.registerFrontendExtensionStyles(pluginId, css)`, one `<style data-plugin="...">` per plugin) ahead of the plugin's first extension. They are read on every request, so dev and production behave the same and edits take effect on reload, and they are registered before any extension's `install()`.
+- Pip-packaged plugins must include `templates/*.html` and `templates/*.css` as package data, like `extensions/*.js`.
+
+Using them from the extension:
+
+```javascript
+async install(state) {
+  await super.install(state);
+  // Appended to a parent: updateUi() runs, named elements are reachable through `ui`
+  this.createSingleFromTemplate('dialog', document.body, { title: 'My Plugin' });
+  const ui = this.getDependency('ui');
+  ui.myPluginDialog.closeBtn.addEventListener('click', () => ui.myPluginDialog.hide());
+
+  // Created without a parent and inserted by the extension: call updateUi() afterwards
+  const button = this.createSingleFromTemplate('toolbar-button');
+  ui.toolbar.add(button, 0, -1);
+  this.getDependency('ui-system').updateUi();
+}
+```
+
+Rules:
+
+- **Names**: all named elements share the global `ui` tree, and a second element with the same name replaces the first. Top-level `name` attributes must start with the plugin id in camelCase (`my-plugin` → `myPluginDialog`); the server logs a warning otherwise. Access through `ui` is untyped.
+- **No inline code**: templates containing `<script`, an `on*=` attribute or a `javascript:` URL are rejected, since they would execute when inserted and bypass the extension validator. Attach event handlers in the extension.
+- **Stylesheets**: rejected if they contain `@import`, `expression(`, `javascript:` or a `url()` with an external scheme (`data:`, relative and `/api/` URLs are allowed). Selectors are not scoped; select by the plugin's own names or classes.
+- **Parameters**: `${param}` placeholders are replaced from the `params` argument, as for app templates.
+- **Icons**: `<sl-icon name="...">` names in templates are bundled by `scripts/build/compile-sl-icons.py`, which scans the plugin directories known at build time (`fastapi_app/plugins`, installed and `FASTAPI_PLUGIN_PATHS` plugins). Plugins outside these (e.g. the test fixtures in `tests/fixtures/plugins`) must use icons the app already bundles; a missing icon is a 404, which fails the E2E console-error check.
+- Templates and stylesheets are delivered to every client while the plugin is active, like extension code, so they must not contain anything sensitive.
+- A rejected or unreadable file is left out with a server log warning and a `// Skipped ...` comment in the bundle; the extension then fails with a "not registered" error naming the template id.
 
 ## Security
 
@@ -211,7 +267,7 @@ Extension files are validated before serving. The following patterns are blocked
 - Storage access (`localStorage`, `sessionStorage`, `indexedDB`, `cookies`)
 - Window manipulation (`window.open`, `location.href`)
 
-Extensions containing blocked patterns are skipped with a warning in the server logs.
+Extensions containing blocked patterns are skipped with a warning in the server logs. Templates and stylesheets have their own checks, see [HTML Templates and Stylesheets](#html-templates-and-stylesheets).
 
 ## IIFE Transformation
 

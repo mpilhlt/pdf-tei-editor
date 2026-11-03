@@ -10,6 +10,8 @@
 
 /** @import { PluginContext } from './plugin-context.js' */
 
+import { addTemplateHtml } from './ui-system.js';
+
 /** @type {Array<{ExtensionClass: Function, pluginId: string}>} */
 const registeredExtensions = [];
 
@@ -26,6 +28,8 @@ function registerFrontendExtension(ExtensionClass, pluginId = 'unknown') {
   }
 
   const name = ExtensionClass.name;
+  // Read by FrontendExtensionPlugin.backendPluginId to prefix template ids
+  /** @type {any} */ (ExtensionClass).backendPluginId = pluginId;
 
   const existingIndex = registeredExtensions.findIndex(
     e => e.ExtensionClass === ExtensionClass
@@ -38,6 +42,35 @@ function registerFrontendExtension(ExtensionClass, pluginId = 'unknown') {
 
   registeredExtensions.push({ ExtensionClass, pluginId });
   console.log(`Registered frontend extension: ${name} (from ${pluginId})`);
+}
+
+/**
+ * Register the HTML templates of a backend plugin.
+ * Called by the extension bundle ahead of the plugin's extensions, so the templates
+ * exist before any extension is installed. Each template is stored as `pluginId:name`.
+ * @param {string} pluginId - Backend plugin id
+ * @param {Record<string, string>} templates - Template HTML by template name (file stem)
+ */
+function registerFrontendExtensionTemplates(pluginId, templates) {
+  for (const [name, html] of Object.entries(templates)) {
+    addTemplateHtml(`${pluginId}:${name}`, html);
+  }
+}
+
+/**
+ * Add or replace the stylesheet of a backend plugin as a `<style data-plugin="...">`
+ * element in the document head. Called by the extension bundle ahead of the
+ * plugin's extensions.
+ * @param {string} pluginId - Backend plugin id
+ * @param {string} css - Stylesheet text
+ */
+function registerFrontendExtensionStyles(pluginId, css) {
+  const existing = Array.from(document.head.querySelectorAll('style[data-plugin]'))
+    .find(el => el.getAttribute('data-plugin') === pluginId);
+  const style = existing ?? document.createElement('style');
+  style.setAttribute('data-plugin', pluginId);
+  style.textContent = css;
+  if (!existing) document.head.appendChild(style);
 }
 
 /**
@@ -102,5 +135,14 @@ async function loadExtensionsFromServer(pluginManager, context) {
 
 // Expose global registration function
 window.registerFrontendExtension = registerFrontendExtension;
+window.registerFrontendExtensionTemplates = registerFrontendExtensionTemplates;
+window.registerFrontendExtensionStyles = registerFrontendExtensionStyles;
 
-export { registerFrontendExtension, getExtensions, clearExtensions, loadExtensionsFromServer };
+export {
+  registerFrontendExtension,
+  registerFrontendExtensionTemplates,
+  registerFrontendExtensionStyles,
+  getExtensions,
+  clearExtensions,
+  loadExtensionsFromServer
+};

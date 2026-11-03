@@ -31,7 +31,7 @@ export async function performLogin(page, username = 'testuser', password = 'test
   }, { username, password });
 
   // Wait for login to complete
-  await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { timeout: 5000 });
+  await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { state: 'attached', timeout: 5000 });
 
   // Wait for UI to be fully ready
   await page.waitForTimeout(2000);

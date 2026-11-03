@@ -34,6 +34,13 @@ class DocumentRulesProvider(Protocol):
         """Current schema URL for variant_id, or None if this extractor has no schema mapping."""
         ...
 
+    def get_condense_prompt(self, guide_url: str) -> Optional[str]:
+        """
+        Optional. Condensing prompt for the guide at guide_url, or None to use
+        the core default. Callers use getattr, so providers may omit it.
+        """
+        ...
+
 
 _registry: dict[str, tuple[str, DocumentRulesProvider]] = {}
 
@@ -61,6 +68,8 @@ def extract_extractor_provenance(tei_content: str) -> Optional[tuple[str, str]]:
     try:
         root = etree.fromstring(tei_content.encode("utf-8"), parser)
     except etree.XMLSyntaxError:
+        return None
+    if root is None:  # recover=True returns None for input without any element
         return None
 
     ns = {"tei": TEI_NS}

@@ -10,7 +10,6 @@ Ported from server/api/validate.py for FastAPI migration.
 import os
 import re
 import json
-import shutil
 import subprocess
 import tempfile
 import logging
@@ -21,7 +20,7 @@ from lxml.etree import XMLSyntaxError
 import xmlschema
 import requests
 
-from fastapi_app.lib.core.url_cache import get_cache_info, is_cache_stale
+from fastapi_app.lib.core.url_cache import UncacheableUrlError, atomic_write, atomic_write_bytes, get_cache_info, is_cache_stale
 
 logger = logging.getLogger(__name__)
 
@@ -366,8 +365,14 @@ def get_schema_cache_info(schema_location: str, cache_root: Path) -> Tuple[Path,
 
     Returns:
         Tuple of (cache_dir, cache_file, filename)
+
+    Raises:
+        ValidationError: If the cache path would fall outside cache_root
     """
-    return get_cache_info(schema_location, cache_root)
+    try:
+        return get_cache_info(schema_location, cache_root)
+    except UncacheableUrlError as e:
+        raise ValidationError(f"Cannot cache schema {schema_location}: {e}")
 
 
 def is_schema_cache_stale(schema_cache_file: Path, ttl_seconds: int = SCHEMA_CACHE_TTL_SECONDS) -> bool:
@@ -408,7 +413,7 @@ def download_schema_file(
     if bundled_path is not None:
         logger.debug(f"Using bundled schema {bundled_path} for {schema_location}")
         try:
-            shutil.copyfile(bundled_path, schema_cache_file)
+            atomic_write_bytes(schema_cache_file, Path(bundled_path).read_bytes())
         except OSError as e:
             raise ValidationError(f"Failed to copy bundled schema {bundled_path} for {schema_location}: {e}")
         return
@@ -417,7 +422,7 @@ def download_schema_file(
     try:
         with requests.get(schema_location, stream=True, timeout=30) as r:
             r.raise_for_status()
-            with open(schema_cache_file, 'wb') as f:
+            with atomic_write(schema_cache_file) as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
     except requests.HTTPError as e:

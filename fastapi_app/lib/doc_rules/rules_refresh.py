@@ -19,7 +19,6 @@ from lxml import etree
 
 from fastapi_app.lib.core.schema_validator import extract_schema_locations
 from fastapi_app.lib.core.url_cache import UrlCache
-from fastapi_app.lib.doc_rules.interpretation_ref_kind import representative_ref
 from fastapi_app.lib.doc_rules.rules_providers import get_document_rules_provider_for_document
 from fastapi_app.lib.models.models import FileMetadata, FileUpdate
 from fastapi_app.lib.permissions.access_control import check_file_access
@@ -336,8 +335,9 @@ def plan_resource_refresh(tei_content: str, url: str, cache: UrlCache) -> Resour
     provider's *configured* source URL (via build_editorial_decl_entries())
     can. See docs/superpowers/specs/2026-09-29-document-rules-reset-to-original-design.md.
 
-    `url` is the resource's current representative ref target, exactly as
-    exposed by ResourceDescriptor.url / InterpretationRefKind.discover().
+    `url` is the target of any of the entry's current refs (human or
+    machine layer), exactly as exposed by ResourceDescriptor.url /
+    InterpretationRefKind.discover().
     """
     lookup = get_document_rules_provider_for_document(tei_content)
     if lookup is None:
@@ -348,10 +348,7 @@ def plan_resource_refresh(tei_content: str, url: str, cache: UrlCache) -> Resour
     variant_id, provider = lookup
 
     existing_entries = extract_annotation_rule_refs(tei_content)
-    old_entry = next(
-        (e for e in existing_entries if (rep := representative_ref(e["refs"])) is not None and rep["target"] == url),
-        None,
-    )
+    old_entry = next((e for e in existing_entries if any(r["target"] == url for r in e["refs"])), None)
     if old_entry is None:
         return ResourceRefreshOutcome(
             status="not_found", refs=[], changed=False,

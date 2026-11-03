@@ -156,18 +156,19 @@ class ApiKeysPlugin extends Plugin {
       input.setAttribute('label', service.label)
       input.setAttribute('autocomplete', 'off')
       input.setAttribute('placeholder', service.is_set ? 'Stored; enter a new key to replace it' : 'Enter your API key')
-      const help = []
-      if (service.description) help.push(service.description)
-      input.setAttribute('help-text', help.join(' '))
       if (service.help_url) {
+        // Slotted help text replaces the help-text attribute, so it carries the description too
+        const help = document.createElement('span')
+        help.slot = 'help-text'
         const link = document.createElement('a')
-        link.slot = 'help-text'
         link.href = service.help_url
         link.target = '_blank'
         link.rel = 'noopener'
         link.textContent = 'Get a key'
-        input.removeAttribute('help-text')
-        input.append(link)
+        help.append(...(service.description ? [service.description, ' '] : []), link)
+        input.append(help)
+      } else {
+        input.setAttribute('help-text', service.description)
       }
       const save = document.createElement('sl-button')
       save.setAttribute('variant', 'primary')

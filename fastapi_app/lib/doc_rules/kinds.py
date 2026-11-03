@@ -15,6 +15,10 @@ from typing import ClassVar, Literal, Optional
 # format inference, and the REST models.
 ResourceFormat = Literal["markdown", "text", "xml"]
 
+# The two layers of an interpretation-ref rule category: the human-readable
+# guide and the machine rules the LLM annotation reviewer consumes (#666).
+ResourceLayer = Literal["human", "machine"]
+
 
 @dataclass(frozen=True)
 class ResourceDescriptor:
@@ -33,6 +37,12 @@ class ResourceDescriptor:
     # back to this resource. Empty for kinds with no such grouping (e.g.
     # "schema"), where `url` alone is authoritative.
     related_urls: list[str] = field(default_factory=list)
+    # Which layer of a multi-layer resource this descriptor is (interpretation-ref
+    # only); None for kinds without layers (e.g. "schema").
+    layer: Optional[ResourceLayer] = None
+    # Descriptors sharing a group are layers of one resource (e.g.
+    # "interpretation-ref:primary"); None for kinds without layers.
+    group: Optional[str] = None
 
 
 class ResourceKind(ABC):
@@ -47,6 +57,17 @@ class ResourceKind(ABC):
     @abstractmethod
     def resolve_original(self, url: str) -> str:
         """Fetch/read the resource's original text."""
+
+    def resource_key(self, url: str, strict: bool = False) -> str:
+        """
+        The key overrides of the resource at `url` are stored under; defaults
+        to normalize_resource_key(url). A kind whose key derivation can fail
+        (e.g. needs a fetch) raises RuleFetchError on failure if `strict`,
+        else falls back to a best-effort key.
+        """
+        # Deferred import: resource_key.py imports ResourceFormat from this module.
+        from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
+        return normalize_resource_key(url)
 
 
 class ResourceKindRegistry:

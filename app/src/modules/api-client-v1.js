@@ -598,6 +598,7 @@
  * @property {string} format
  * @property {string} created_at
  * @property {string} updated_at
+ * @property {boolean=} outdated - True when the original has changed since this override was copied from it (set by /query only; overrides migrated without a base hash are never outdated).
  */
 
 /**
@@ -842,6 +843,129 @@
  */
 
 /**
+ * @typedef {Object} SyncStatusRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ */
+
+/**
+ * @typedef {Object} SyncStatusResponse
+ * @property {'in_sync'|'machine_outdated'|'machine_edited'|'both_changed'|'no_marker'} status
+ * @property {'original'|'override'} human_source
+ * @property {'original'|'override'} machine_source
+ * @property {string|null} [synced_commit]
+ */
+
+/**
+ * @typedef {Object} UpstreamStatusRequest
+ * @property {string} xml - Stable id of the open document
+ * @property {string} url - One of the document's refs
+ */
+
+/**
+ * @typedef {Object} LayerUpstreamStatus
+ * @property {string} layer
+ * @property {string} url
+ * @property {string|null} [error]
+ * @property {string[]} in_upstream - Override ids (the deleted ones after a removal)
+ * @property {string[]} kept - Override ids
+ */
+
+/**
+ * @typedef {Object} UpstreamStatusResponse
+ * @property {boolean} refs_behind
+ * @property {string|null} [refresh_message]
+ * @property {LayerUpstreamStatus[]} layers
+ */
+
+/**
+ * @typedef {Object} HumanChangeRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ */
+
+/**
+ * @typedef {Object} HumanChangeResponse
+ * @property {'delta'|'align'} mode
+ * @property {string|null} [old_human]
+ * @property {string} new_human
+ * @property {string} machine
+ * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
+ */
+
+/**
+ * @typedef {Object} ProposePatchRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {boolean} include_human
+ * @property {boolean} include_machine
+ * @property {string} label - The rule category's label, e.g. "Data correction"
+ */
+
+/**
+ * @typedef {Object} ProposedFileModel
+ * @property {string} path
+ * @property {string} before
+ * @property {string} after
+ */
+
+/**
+ * @typedef {Object} ProposePatchResponse
+ * @property {Array<ProposedFileModel>} files
+ * @property {string} patch
+ * @property {string} filename
+ * @property {string} branch
+ * @property {Array<string>} upstream_changed - Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes
+ * @property {boolean} in_sync - True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch
+ * @property {boolean} can_open_pull_request - True iff the guide is on GitHub, so that a pull request can be opened
+ * @property {string} pull_request_title - The default title of the pull request
+ * @property {string} pull_request_body - The default description of the pull request
+ * @property {string|null} [pull_request_repository] - The `owner/repo` the pull request is opened on, if `can_open_pull_request`
+ * @property {Object<string, string>} base_hashes - The SHA-256 (hex) of each changed file's text on the default branch (`before`), by path; sent back to /propose-pull-request to detect upstream changes since the preview
+ */
+
+/**
+ * @typedef {Object} ProposePullRequestRequest
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {boolean} include_human
+ * @property {boolean} include_machine
+ * @property {string} label - The rule category's label, e.g. "Data correction"
+ * @property {string} title
+ * @property {string} body
+ * @property {Object<string, string>} base_hashes - The `base_hashes` of the previewed /propose-patch response
+ */
+
+/**
+ * @typedef {Object} ProposePullRequestResponse
+ * @property {string} url
+ * @property {number} number
+ * @property {string} branch
+ * @property {string|null} [fork] - Full name of the user's fork if the pull request was opened from one
+ */
+
+/**
+ * @typedef {Object} UpdateFromGuideRequest
+ * @property {string} xml
+ * @property {string} human_url
+ * @property {string} machine_url
+ * @property {string} provider_id
+ * @property {string} model_id
+ */
+
+/**
+ * @typedef {Object} UpdateFromGuideResponse
+ * @property {'delta'|'align'} mode
+ * @property {string|null} [old_human]
+ * @property {string} new_human
+ * @property {string} machine
+ * @property {string} proposed
+ * @property {string|null} [base_commit]
+ * @property {boolean} unchanged - Delta mode only: the guide section has not changed since the sync
+ */
+
+/**
  * @typedef {Object} RestartResult
  * @property {boolean} restarting
  */
@@ -893,6 +1017,8 @@
  * @property {string} label
  * @property {string} format
  * @property {Array<string>=} related_urls - Every URL in the document referring to this same resource (including `url`); e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource but have different target URLs.
+ * @property {('human'|'machine'|null)=} layer - Which layer of a multi-layer resource this is ("human" guide or "machine" rules); null for kinds without layers.
+ * @property {string|null=} group - Resources sharing a group are layers of one rule category (e.g. "interpretation-ref:primary"); null for kinds without layers.
  */
 
 /**
@@ -934,6 +1060,11 @@
  * @typedef {Object} SaveFileResponse
  * @property {string} status
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} SelectedOverrideResponse
+ * @property {OverrideModel|null=} override - The caller's selected override, or null if the resource currently uses the original.
  */
 
 /**
@@ -1006,6 +1137,7 @@
  * @typedef {Object} UpdateOverrideRequest
  * @property {string=} note
  * @property {string=} text
+ * @property {string=} fragment_url - The resource as currently shown; rebases the override on its current original, clearing `outdated`
  */
 
 /**
@@ -1760,6 +1892,17 @@ export class ApiClientV1 {
   }
 
   /**
+   * The caller's selected override for one resource, without fetching the original (so `outdated` is always false).
+   *
+   * @param {ResourceRef} requestBody
+   * @returns {Promise<SelectedOverrideResponse>}
+   */
+  async documentRulesSelectedOverride(requestBody) {
+    const endpoint = `/document-rules/selected-override`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * Create a new override, copying the resource's original text unless `text` is given.
    *
    * @param {CreateOverrideRequest} requestBody
@@ -1771,7 +1914,8 @@ export class ApiClientV1 {
   }
 
   /**
-   * Update an override's note and/or text. Owner only.
+   * Update an override's note and/or text. Owner only. With `fragment_url`,
+   * the override is rebased on that resource's current original.
    *
    * @param {string} override_id
    * @param {UpdateOverrideRequest} requestBody
@@ -1876,6 +2020,93 @@ export class ApiClientV1 {
    */
   async documentRulesRefreshResource(requestBody) {
     const endpoint = `/document-rules/refresh-resource`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Whether a human guideline section and its condensed machine section are
+   * in sync, per the sync marker in the machine section. Each layer's text
+   * is the caller's selected override if there is one, else the original.
+   *
+   * @param {SyncStatusRequest} requestBody
+   * @returns {Promise<SyncStatusResponse>}
+   */
+  async documentRulesSyncStatus(requestBody) {
+    const endpoint = `/document-rules/sync-status`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Which of the caller's overrides of a rule category the upstream guide
+   * already contains.
+   *
+   * @param {UpstreamStatusRequest} requestBody
+   * @returns {Promise<UpstreamStatusResponse>}
+   */
+  async documentRulesUpstreamStatus(requestBody) {
+    const endpoint = `/document-rules/upstream-status`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete the caller's overrides of a rule category that the upstream guide
+   * already contains. The `in_upstream` lists hold the deleted ids.
+   *
+   * @param {UpstreamStatusRequest} requestBody
+   * @returns {Promise<UpstreamStatusResponse>}
+   */
+  async documentRulesRemoveOverridesInUpstream(requestBody) {
+    const endpoint = `/document-rules/remove-overrides-in-upstream`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * The change of a human guideline section since its machine section was
+   * last synced (delta mode), or the whole section if no sync base is found
+   * (align mode), together with the current machine section.
+   *
+   * @param {HumanChangeRequest} requestBody
+   * @returns {Promise<HumanChangeResponse>}
+   */
+  async documentRulesHumanChange(requestBody) {
+    const endpoint = `/document-rules/human-change`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * The upstream patch of the caller's current text of a rule category's
+   * human and/or machine section, as a unified diff against the default
+   * branch. Nothing is stored.
+   *
+   * @param {ProposePatchRequest} requestBody
+   * @returns {Promise<ProposePatchResponse>}
+   */
+  async documentRulesProposePatch(requestBody) {
+    const endpoint = `/document-rules/propose-patch`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Open a GitHub pull request with the changes of the propose-patch result,
+   * using the caller's stored GitHub token (HTTP 428 if there is none).
+   *
+   * @param {ProposePullRequestRequest} requestBody
+   * @returns {Promise<ProposePullRequestResponse>}
+   */
+  async documentRulesProposePullRequest(requestBody) {
+    const endpoint = `/document-rules/propose-pull-request`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Have a language model update the machine section from the change of its
+   * human section and return the proposed text. Nothing is stored.
+   *
+   * @param {UpdateFromGuideRequest} requestBody
+   * @returns {Promise<UpdateFromGuideResponse>}
+   */
+  async documentRulesUpdateFromGuide(requestBody) {
+    const endpoint = `/document-rules/update-from-guide`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

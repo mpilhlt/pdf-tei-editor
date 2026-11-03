@@ -225,7 +225,7 @@ test.describe('SSE Progress Widget', () => {
         ui.loginDialog.password.value = 'testpass';
         ui.loginDialog.submit.click();
       });
-      await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { timeout: 5000 });
+      await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { state: 'attached', timeout: 5000 });
 
       // Wait for progress plugin to be installed (app ready)
       await page.waitForTimeout(1000);

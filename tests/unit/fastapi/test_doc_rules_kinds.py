@@ -14,6 +14,7 @@ from fastapi_app.lib.doc_rules.kinds import (
     list_resources,
     register_resource_kind,
 )
+from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 
 
 class _FakeKind(ResourceKind):
@@ -57,6 +58,17 @@ class TestResourceKindRegistry(unittest.TestCase):
         register_resource_kind(_OtherKind([d2]))
 
         self.assertEqual(list_resources("<xml/>"), [d1, d2])
+
+
+class TestResourceKindDefaults(unittest.TestCase):
+    def test_default_resource_key_is_normalized_url(self):
+        url = "https://example.com/rules.md#L1-L10"
+        self.assertEqual(_FakeKind([]).resource_key(url), normalize_resource_key(url))
+
+    def test_descriptor_layer_and_group_default_to_none(self):
+        d = ResourceDescriptor(kind="fake-kind", url="https://a", key="https://a", label="A", format="text")
+        self.assertIsNone(d.layer)
+        self.assertIsNone(d.group)
 
 
 class TestBuiltinKindsRegisterLazily(unittest.TestCase):

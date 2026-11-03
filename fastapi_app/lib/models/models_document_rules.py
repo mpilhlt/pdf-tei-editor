@@ -7,7 +7,8 @@ docs/superpowers/specs/2026-09-27-document-rules-registry-design.md
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-from fastapi_app.lib.doc_rules.kinds import ResourceFormat
+from fastapi_app.lib.doc_rules.guide_sync import SyncStatus
+from fastapi_app.lib.doc_rules.kinds import ResourceFormat, ResourceLayer
 
 
 class ResourceDescriptorModel(BaseModel):
@@ -22,6 +23,14 @@ class ResourceDescriptorModel(BaseModel):
         description="Every URL in the document referring to this same resource (including `url`); "
         "e.g. an interpretation-ref entry's human and auto-derived machine ref share one resource "
         "but have different target URLs.",
+    )
+    layer: Optional[ResourceLayer] = Field(
+        default=None,
+        description="Which layer of a multi-layer resource this is (\"human\" guide or \"machine\" rules); null for kinds without layers.",
+    )
+    group: Optional[str] = Field(
+        default=None,
+        description="Resources sharing a group are layers of one rule category (e.g. \"interpretation-ref:primary\"); null for kinds without layers.",
     )
 
 
@@ -54,6 +63,10 @@ class OverrideModel(BaseModel):
     format: ResourceFormat
     created_at: str
     updated_at: str
+    outdated: bool = Field(
+        False,
+        description="True when the original has changed since this override was copied from it (set by /query only; overrides migrated without a base hash are never outdated).",
+    )
 
 
 class QueryResourceResponse(BaseModel):
@@ -73,9 +86,15 @@ class CreateOverrideRequest(BaseModel):
 
 
 class UpdateOverrideRequest(BaseModel):
-    """Request to update an override's note and/or text. Omitted fields are left unchanged."""
+    """
+    Request to update an override's note and/or text. Omitted fields are left
+    unchanged. `fragment_url`, the URL of the resource as currently shown,
+    rebases the override on that resource's current original, which clears
+    its `outdated` flag.
+    """
     note: Optional[str] = None
     text: Optional[str] = None
+    fragment_url: Optional[str] = None
 
 
 class SetSelectionRequest(BaseModel):
@@ -88,6 +107,11 @@ class SetSelectionRequest(BaseModel):
 class ResourceRef(BaseModel):
     kind: str
     url: str
+
+
+class SelectedOverrideResponse(BaseModel):
+    """The caller's selected override for one resource, or null if it currently uses the original."""
+    override: Optional[OverrideModel] = None
 
 
 class ResetSelectionRequest(BaseModel):
@@ -154,7 +178,7 @@ class RefreshResourceResponse(BaseModel):
     Response to POST /document-rules/refresh-resource.
 
     `status` meanings: "unavailable" (no provider for this document's
-    extractor), "not_found" (`url` isn't the representative target of any
+    extractor), "not_found" (`url` isn't a ref target of any
     current editorialDecl entry), "orphaned" (the entry's category no
     longer exists in a freshly-built entries list), "ok" (`refs`/`changed`
     populated). See plan_resource_refresh()'s docstring.
@@ -185,3 +209,137 @@ class ProposeChangeUrlResponse(BaseModel):
     url: Optional[str] = None
     content_prefilled: bool = False
     text: str = ""
+
+
+class SyncStatusRequest(BaseModel):
+    """Request for the sync status of a human guideline section and its condensed machine section."""
+    human_url: str
+    machine_url: str
+
+
+class SyncStatusResponse(BaseModel):
+    """
+    `*_source` tells whether the layer text compared was the original or the
+    caller's selected override. `synced_commit` is the guide commit the machine
+    section was last synced with; only looked up for `machine_outdated` and
+    `both_changed`, and null if not found.
+    """
+    status: SyncStatus
+    human_source: Literal["original", "override"]
+    machine_source: Literal["original", "override"]
+    synced_commit: Optional[str] = None
+
+
+class HumanChangeRequest(BaseModel):
+    """Request for the change of a human guideline section since its machine section was last synced."""
+    human_url: str
+    machine_url: str
+
+
+class HumanChangeResponse(BaseModel):
+    """
+    `mode` is "delta" if the guide commit the machine section was synced with
+    was found (`old_human` and `base_commit` set), else "align". `old_human`
+    and `new_human` have their same-repository links in relative form;
+    `machine` is the user's machine text, sync marker included, with its links
+    in the absolute form of an override. `unchanged` is True in delta mode
+    if the human section has not changed since the sync (same hash).
+    """
+    mode: Literal["delta", "align"]
+    old_human: Optional[str] = None
+    new_human: str
+    machine: str
+    base_commit: Optional[str] = None
+    unchanged: bool
+
+
+class ProposePatchRequest(BaseModel):
+    """Request for the upstream patch of a rule category's human and/or machine section."""
+    human_url: str
+    machine_url: str
+    include_human: bool
+    include_machine: bool
+    label: str = Field(..., description="The rule category's label, e.g. \"Data correction\".")
+
+
+class ProposedFileModel(BaseModel):
+    """A changed repository file: its path and its whole text before and after the proposal."""
+    path: str
+    before: str
+    after: str
+
+
+class ProposePatchResponse(BaseModel):
+    """The changed files (human first), the unified diff `git apply` accepts, its download file name, and the default branch it targets."""
+    files: list[ProposedFileModel]
+    patch: str
+    filename: str
+    branch: str
+    upstream_changed: list[str] = Field(..., description="Repository paths (human first) of the included layers whose section on the default branch differs from the pinned original; the patch replaces those changes.")
+    in_sync: bool = Field(..., description="True iff the machine rules are included and their new sync marker matches the guide section upstream after the patch.")
+    can_open_pull_request: bool = Field(..., description="True iff the guide is on GitHub, so that a pull request can be opened.")
+    pull_request_title: str = Field(..., description="The default title of the pull request.")
+    pull_request_body: str = Field(..., description="The default description of the pull request.")
+    pull_request_repository: Optional[str] = Field(None, description="The `owner/repo` the pull request is opened on, if `can_open_pull_request`.")
+    base_hashes: dict[str, str] = Field(..., description="The SHA-256 (hex) of each changed file's text on the default branch (`before`), by path; sent back to /propose-pull-request to detect upstream changes since the preview.")
+
+
+class ProposePullRequestRequest(ProposePatchRequest):
+    """Request to open a GitHub pull request with the changes of a proposal, with the (possibly edited) title and description."""
+    title: str
+    body: str
+    base_hashes: dict[str, str] = Field(..., description="The `base_hashes` of the previewed /propose-patch response.")
+
+
+class ProposePullRequestResponse(BaseModel):
+    """The created pull request's web URL and number, its branch, and the full name of the user's fork if it was opened from one."""
+    url: str
+    number: int
+    branch: str
+    fork: Optional[str] = None
+
+
+class UpdateFromGuideRequest(BaseModel):
+    """Request to have a language model update a machine section from its human section. `xml` is the stable id of the open TEI document, whose extractor provider may supply the condensing prompt."""
+    xml: str
+    human_url: str
+    machine_url: str
+    provider_id: str
+    model_id: str
+
+
+class UpdateFromGuideResponse(BaseModel):
+    """
+    Same fields as HumanChangeResponse, plus `proposed`, the model's updated
+    machine section in the same form as `machine`, so that a diff of the two
+    shows only the model's changes.
+    """
+    mode: Literal["delta", "align"]
+    old_human: Optional[str] = None
+    new_human: str
+    machine: str
+    proposed: str
+    base_commit: Optional[str] = None
+    unchanged: bool
+
+
+class UpstreamStatusRequest(BaseModel):
+    """Request for the upstream status of a rule category. `xml` is the open document's stable id; `url` is one of its refs."""
+    xml: str
+    url: str
+
+
+class LayerUpstreamStatusModel(BaseModel):
+    """Upstream status of the caller's overrides of one layer; `in_upstream` and `kept` hold override ids."""
+    layer: str
+    url: str
+    error: Optional[str] = None
+    in_upstream: list[str]
+    kept: list[str]
+
+
+class UpstreamStatusResponse(BaseModel):
+    """Upstream status of a rule category; after a removal, the `in_upstream` lists hold the deleted override ids."""
+    refs_behind: bool
+    refresh_message: Optional[str] = None
+    layers: list[LayerUpstreamStatusModel]

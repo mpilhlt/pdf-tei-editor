@@ -4,6 +4,7 @@
 /**
  * @typedef {object} annotationGuideDrawerPart
  * @property {HTMLDivElement} content
+ * @property {HTMLElement} personalBadge
  * @property {import('../ui.js').SlDropdown & tocDropdownPart} tocDropdown
  * @property {import('../ui.js').SlButton} openInNewWindowBtn
  * @property {import('../ui.js').SlButton} closeBtn
