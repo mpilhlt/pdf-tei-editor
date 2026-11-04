@@ -12,6 +12,10 @@ Tables:
 - `message`: one row per message key and recipient, taken from its newest occurrence (the file
   with the latest `updated_at`).
 - `read_state`: which recipient has read which message.
+
+Direct messages (`d:` keys), which a user sends to a person of a document (see
+docs/user-manual/document-people.md), are not in the file: they are stored as `message` rows
+without occurrences and survive a rebuild of the index.
 """
 
 import logging
@@ -27,8 +31,11 @@ logger = logging.getLogger(__name__)
 
 DB_FILE_NAME = "messages.db"
 
-MessageKind = Literal["review", "comment", "mention", "review-request"]
-MessageReason = Literal["owner", "mention", "thread-author", "thread-mention", "reviewer"]
+MessageKind = Literal["review", "comment", "mention", "review-request", "direct"]
+MessageReason = Literal["owner", "mention", "thread-author", "thread-mention", "reviewer", "direct"]
+
+# Key prefix of direct messages, which are not derived from files
+DIRECT_KEY_PREFIX = "d:"
 
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS occurrence (
@@ -258,6 +265,8 @@ class MessageStore:
             conditions.append("(m.key LIKE 'r:%' OR m.key LIKE 'q:%')")
         elif kind == "comment":
             conditions.append("m.key LIKE 'c:%'")
+        elif kind == "direct":
+            conditions.append("m.key LIKE 'd:%'")
         elif kind is not None:
             conditions.append("m.kind = ?")
             params.append(kind)
@@ -272,6 +281,34 @@ class MessageStore:
         ).fetchall()
         return [_row_to_message(row) for row in rows]
 
+    def add_direct_message(
+        self, key: str, recipient: str, doc_id: str, stable_id: str, author: str, author_name: str | None, text: str
+    ) -> None:
+        """
+        Stores a direct message, which has no occurrence in a file.
+
+        Args:
+            key: Message key, starting with `d:`
+            recipient: User name of the recipient
+            doc_id: The document the message is about
+            stable_id: The file the message opens
+            author: User name of the sender
+            author_name: Display name of the sender
+            text: The message
+        """
+        if not key.startswith(DIRECT_KEY_PREFIX):
+            raise ValueError(f"A direct message key must start with '{DIRECT_KEY_PREFIX}': {key}")
+        created_at = now_iso()
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO message (key, recipient, kind, reason, doc_id, stable_id, author, author_name, text, excerpt,
+                    thread_id, fingerprint, settled, settled_note, created_at, updated_at)
+                VALUES (?, ?, 'direct', 'direct', ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+                """,
+                (key, recipient, doc_id, stable_id, author, author_name, text, created_at, created_at),
+            )
+
     def delete_recipient(self, recipient: str) -> None:
         """Removes all rows of a recipient (when the user account is deleted)."""
         with transaction(self.db_path) as conn:
@@ -279,10 +316,10 @@ class MessageStore:
                 conn.execute(f"DELETE FROM {table} WHERE recipient = ?", (recipient,))
 
     def clear_index(self) -> None:
-        """Removes all occurrences and messages, keeping the read state (before a rebuild)."""
+        """Removes all occurrences and messages derived from files, keeping the read state and the direct messages (before a rebuild)."""
         with transaction(self.db_path) as conn:
             conn.execute("DELETE FROM occurrence")
-            conn.execute("DELETE FROM message")
+            conn.execute("DELETE FROM message WHERE key NOT LIKE 'd:%'")
 
     # ── Read state ──────────────────────────────────────────────────────
 

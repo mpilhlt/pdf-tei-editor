@@ -13,6 +13,11 @@
  * the XML editor marked with the `data-reveals-diagnostics` attribute (e.g.
  * the unit review and comment meters) is clicked.
  *
+ * When diagnostics are added (by a validation run, an LLM review, ...), the list scrolls to show
+ * them; if diagnostics were listed before, only the added ones are checked, so that they can be
+ * applied or dismissed together (#688). Diagnostics that reappear (e.g. after a re-validation)
+ * and those whose text was edited count as known, not as added.
+ *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
  * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
  * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
@@ -86,6 +91,12 @@ class DiagnosticsDrawerPlugin extends Plugin {
 
   #refreshScheduled = false
 
+  /** @type {Set<string>} Keys of the diagnostics listed since the document was loaded */
+  #knownKeys = new Set()
+
+  /** True if the document changed since the last refresh */
+  #docChangedSinceRefresh = false
+
   /**
    * @param {ApplicationState} state
    */
@@ -141,6 +152,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
   async onStateUpdate(changedKeys, state) {
     if (changedKeys.includes('xml')) {
       this.#checked.clear()
+      this.#knownKeys.clear()
       // a newly loaded document shows its diagnostics
       if (state.xml) this.#setExpanded(true)
     }
@@ -217,6 +229,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #onEditorUpdate(update) {
     if (revealsDiagnostics(update)) this.#setExpanded(true)
+    if (update.docChanged) this.#docChangedSinceRefresh = true
     if (update.docChanged || replacesDiagnostics(update)) this.#scheduleRefresh()
   }
 
@@ -257,6 +270,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #refresh() {
     const state = this.#xmlEditor.getView().state
+    const hadEntries = this.#entries.length > 0
     this.#entries = collectDiagnostics(state)
       .map(diagnostic => ({
         diagnostic,
@@ -265,9 +279,52 @@ class DiagnosticsDrawerPlugin extends Plugin {
       }))
       .sort((a, b) => a.diagnostic.from - b.diagnostic.from
         || SEVERITY_ORDER[a.diagnostic.severity] - SEVERITY_ORDER[b.diagnostic.severity])
-    // checks are kept for diagnostics that are not listed: replacing the diagnostic set (e.g. a
-    // validation run) removes the diagnostics of other sources until they re-merge them
+    const added = this.#takeAddedKeys()
+    // otherwise, checks are kept for diagnostics that are not listed: replacing the diagnostic set
+    // (e.g. a validation run) removes the diagnostics of other sources until they re-merge them
+    if (added.size && hadEntries) this.#checked = new Set(added)
     this.#render()
+    if (added.size) this.#scrollToEntries(added)
+  }
+
+  /**
+   * Returns the keys of the listed diagnostics that were not listed before since the document was
+   * loaded, and remembers all listed keys. After an edit, the diagnostics whose text was edited
+   * have new keys: they count as known.
+   * @returns {Set<string>}
+   */
+  #takeAddedKeys() {
+    const edited = this.#docChangedSinceRefresh
+    this.#docChangedSinceRefresh = false
+    const added = new Set(this.#entries.map(e => e.key).filter(key => !this.#knownKeys.has(key)))
+    for (const key of added) this.#knownKeys.add(key)
+    return edited ? new Set() : added
+  }
+
+  /**
+   * Scrolls the drawer body (only the drawer, not the PDF viewer around it) so that the entries
+   * with the given keys are visible below the sticky header, from the first one on if they do not
+   * fit.
+   * @param {Set<string>} keys
+   */
+  #scrollToEntries(keys) {
+    const body = /** @type {HTMLElement|null|undefined} */ (this.#ui.shadowRoot?.querySelector('[part~="body"]'))
+    const items = /** @type {HTMLElement[]} */ (Array.from(this.#ui.list.children))
+      .filter((_item, index) => keys.has(this.#entries[index]?.key ?? ''))
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!body || !first || !last) return
+    // positions in the scrolled content
+    const origin = body.getBoundingClientRect().top - body.scrollTop
+    const top = first.getBoundingClientRect().top - origin
+    const bottom = last.getBoundingClientRect().bottom - origin
+    const header = this.#ui.header.offsetHeight
+    const visible = body.clientHeight - header
+    if (bottom - top > visible || top < body.scrollTop + header) {
+      body.scrollTop = Math.max(0, top - header)
+    } else if (bottom > body.scrollTop + body.clientHeight) {
+      body.scrollTop = bottom - body.clientHeight
+    }
   }
 
   /**

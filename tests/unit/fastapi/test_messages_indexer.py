@@ -293,5 +293,32 @@ class TestReadState(IndexerTestCase):
         self.assertEqual(self.indexer.index_file("f1"), set())
 
 
+class TestDirectMessages(IndexerTestCase):
+    def test_direct_message_survives_rebuild_and_reindex(self) -> None:
+        self.files.put("f1", self.xml)
+        self.indexer.index_file("f1")
+        self.store.add_direct_message("d:doc1:abc", "jdoe", "doc1", "f1", "asmith", "A. Smith", "Please check")
+        message = self.store.get_message("d:doc1:abc", "jdoe")
+        assert message is not None
+        self.assertEqual((message.kind, message.reason, message.text, message.read), ("direct", "direct", "Please check", False))
+        self.indexer.index_file("f1")
+        self.indexer.rebuild()
+        self.indexer.remove_file("f1")
+        self.assertIsNotNone(self.store.get_message("d:doc1:abc", "jdoe"))
+
+    def test_kind_filter_and_read_state(self) -> None:
+        self.files.put("f1", self.xml)
+        self.indexer.index_file("f1")
+        self.store.add_direct_message("d:doc1:abc", "jdoe", "doc1", "f1", "asmith", None, "Hi")
+        self.assertEqual([m.key for m in self.store.list_messages("jdoe", kind="direct")], ["d:doc1:abc"])
+        self.assertNotIn("d:doc1:abc", [m.key for m in self.store.list_messages("jdoe", kind="comment")])
+        self.store.set_read("jdoe", ["d:doc1:abc"], True)
+        self.assertNotIn("d:doc1:abc", [m.key for m in self.store.list_messages("jdoe", unread_only=True)])
+
+    def test_key_must_have_the_direct_prefix(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_direct_message("c:doc1:abc", "jdoe", "doc1", "f1", "asmith", None, "Hi")
+
+
 if __name__ == "__main__":
     unittest.main()
