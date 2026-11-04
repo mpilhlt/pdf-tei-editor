@@ -815,9 +815,12 @@ def get_upstream_status(
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
 ) -> UpstreamStatusResponse:
-    """Which of the caller's overrides of the rule category of `url` the upstream guide already contains."""
+    """
+    Which of the caller's overrides of the rule category of `url` the upstream guide already contains. With `refetch`, every cached lookup counts as expired (a TTL of 0), so a branch head that moved since it was cached, e.g. by a merged pull request, is resolved anew and cached for the requests that follow ("Update to upstream").
+    """
     tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
-    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    cache_dir = get_settings().annotation_rules_cache_dir
+    cache = UrlCache(cache_dir, ttl_seconds=0) if request.refetch else UrlCache(cache_dir)
     try:
         status = upstream_status(tei_content, request.url, store, user["username"], cache)
     except CategoryNotFoundError as e:

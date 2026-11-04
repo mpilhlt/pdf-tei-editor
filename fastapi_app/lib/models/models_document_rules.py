@@ -324,9 +324,10 @@ class UpdateFromGuideResponse(BaseModel):
 
 
 class UpstreamStatusRequest(BaseModel):
-    """Request for the upstream status of a rule category. `xml` is the open document's stable id; `url` is one of its refs."""
+    """Request for the upstream status of a rule category. `xml` is the open document's stable id; `url` is one of its refs. `refetch` (honored by /upstream-status only) ignores cached upstream lookups, e.g. a branch head resolved before a pull request was merged; the fresh results replace the cached ones."""
     xml: str
     url: str
+    refetch: bool = False
 
 
 class LayerUpstreamStatusModel(BaseModel):

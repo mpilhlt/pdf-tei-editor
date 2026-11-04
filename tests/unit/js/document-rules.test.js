@@ -2016,9 +2016,9 @@ describe('DocumentRulesPlugin sync status line', () => {
 
   const cases = [
     ['in_sync', 'In sync with the guide', 'check-circle'],
-    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync', 'exclamation-triangle'],
+    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync. Update from guide', 'exclamation-triangle'],
     ['machine_edited', 'Machine rules edited by hand since the last sync', 'exclamation-triangle'],
-    ['both_changed', 'Machine rules outdated and edited by hand', 'exclamation-triangle'],
+    ['both_changed', 'Guide and machine rules both changed since the last sync. If the machine rules already match the guide, propose both upstream to record the sync. Propose change upstream', 'exclamation-triangle'],
     ['no_marker', 'No sync marker', 'exclamation-triangle'],
   ];
   for (const [status, text, icon] of cases) {
@@ -2400,6 +2400,8 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     const { plugin, requests, mergeViews } = setup();
     await plugin._openUpdateDialog();
     const ui = plugin._updateDialogUi;
+    const scrolled = [];
+    ui.proposedHeading.scrollIntoView = (options) => { scrolled.push(options); };
     const generating = plugin._onGenerate();
     assert.strictEqual(ui.modelRow.generateBtn.disabled, true);
     assert.strictEqual(ui.modelRow.generateBtn.loading, true);
@@ -2416,6 +2418,8 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
     assert.strictEqual(ui.acceptBtn.style.display, '');
     assert.strictEqual(ui.modelRow.generateBtn.disabled, false);
     assert.strictEqual(ui.modelRow.generateBtn.loading, false);
+    // The proposal is scrolled into view
+    assert.deepStrictEqual(scrolled, [{ block: 'start', behavior: 'smooth' }]);
   });
 
   it('_onGenerate asks for a missing API key and shows the proposal of the retried request', async () => {
@@ -3101,9 +3105,17 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       const ui = plugin._proposeDialogUi;
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
+      const scrolled = [];
+      ui.prSection.prResult.scrollIntoView = (options) => { scrolled.push(options); };
       await plugin._onCreatePullRequest();
       const result = ui.prSection.prResult;
-      assert.strictEqual(result.textContent, 'Pull request #7 created. Open on GitHub');
+      assert.strictEqual(result.children[0].textContent, 'Pull request #7 created. Open on GitHub');
+      assert.strictEqual(
+        result.querySelector('[name="prMergeInstructions"]').textContent,
+        'Once the pull request has been merged, close this dialog and use "Update to upstream" to apply the merged rules to this document.'
+      );
+      // Scrolled into view, since it is below a long proposal
+      assert.strictEqual(scrolled.length, 1);
       const link = result.querySelector('a');
       assert.strictEqual(link.textContent, 'Open on GitHub');
       assert.strictEqual(link.getAttribute('href'), 'https://github.com/o/r/pull/7');
@@ -3119,7 +3131,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
       await plugin._onCreatePullRequest();
-      assert.strictEqual(ui.prSection.prResult.textContent, 'Pull request #8 created from your fork me/r. Open on GitHub');
+      assert.strictEqual(ui.prSection.prResult.children[0].textContent, 'Pull request #8 created from your fork me/r. Open on GitHub');
       assert.strictEqual(ui.prSection.prResult.querySelector('a').textContent, 'Open on GitHub');
     });
 
@@ -3392,7 +3404,7 @@ describe('DocumentRulesPlugin upstream cleanup', () => {
     assert.strictEqual(line.querySelector('sl-icon').getAttribute('name'), 'arrow-repeat');
     const lines = [...line.children].map((c) => c.textContent.trim());
     assert.deepStrictEqual(lines, [
-      'The guide upstream has changed since this document was annotated. 2 overrides now in upstream. Use "Update to upstream" to apply it.',
+      'The guide upstream has changed since this document was annotated. 2 overrides now in upstream. Use Update to upstream to apply it.',
       'Could not compare the Machine rules with upstream: rate limited',
     ]);
   });
@@ -3400,7 +3412,7 @@ describe('DocumentRulesPlugin upstream cleanup', () => {
   it('uses the singular for one override and shows a layer error alone', async () => {
     const { plugin } = setup({ documentRulesUpstreamStatus: async () => status({ human: { in_upstream: ['ov1'] } }) });
     await plugin._refreshUpstreamStatus();
-    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.textContent.trim(), '1 override now in upstream. Use "Update to upstream" to apply it.');
+    assert.strictEqual(plugin._editorDialogUi.upstreamStatus.textContent.trim(), '1 override now in upstream. Use Update to upstream to apply it.');
 
     const { plugin: plugin2 } = setup({ documentRulesUpstreamStatus: async () => status({ human: { error: 'not found' } }) });
     await plugin2._refreshUpstreamStatus();
@@ -3564,5 +3576,253 @@ describe('DocumentRulesPlugin upstream cleanup', () => {
     assert.ok(calls.includes(`query:${oldMachine}`));
     assert.deepStrictEqual(notifyCalls.map((c) => c[1]), ['danger']);
     assert.match(notifyCalls[0][0], /boom/);
+  });
+});
+
+describe('DocumentRulesPlugin editing workflow (#702)', () => {
+  const human = { kind: 'interpretation-ref', url: 'https://example.com/g.md#primary', key: 'k', label: 'Primary', format: 'markdown', layer: 'human', group: 'g', related_urls: [] };
+  const machine = { kind: 'interpretation-ref', url: 'https://example.com/rules.md', key: 'k2', label: 'Primary', format: 'markdown', layer: 'machine', group: 'g', related_urls: [] };
+  const override = (id, text = `text ${id}`, note = '') => ({ id, note, text, format: 'markdown', created_at: '', updated_at: '' });
+
+  /**
+   * A plugin showing override ov1 of the human layer of a two-layer category.
+   * @param {{ confirm?: boolean, api?: Record<string, Function> }} [options]
+   * @returns {{ plugin: InstanceType<typeof DocumentRulesPlugin>, confirms: string[][], saves: any[], queried: string[], upstreamRequests: any[] }}
+   */
+  function setup({ confirm = true, api = {} } = {}) {
+    const plugin = makePlugin(['reviewer']);
+    plugin._editorDialogUi = makeDialogUi();
+    plugin._editorDialogUi.open = true;
+    plugin._editorDialogUi.hide = async () => { plugin._editorDialogUi.open = false; };
+    plugin._cmMdView = makeCmMdViewMock('');
+    plugin._md = { render: (text) => text };
+    plugin._scrollMarkdownBodyToAnchor = () => {};
+    wireOverrideIndicatorStubs(plugin);
+    plugin._resources = [human, machine];
+    plugin._currentResource = human;
+    plugin._currentGroup = [human, machine];
+    plugin._currentOriginalText = 'original';
+    plugin._currentOverrides = [override('ov1', 'saved text', 'saved note')];
+    plugin._currentSelectedId = 'ov1';
+    plugin._renderEditorDialog();
+    const confirms = [];
+    const saves = [];
+    const queried = [];
+    const upstreamRequests = [];
+    const apiClient = {
+      documentRulesUpdateOverrides: async (id, body) => { saves.push([id, body]); return { ...override(id), ...body }; },
+      documentRulesQuery: async (body) => { queried.push(body.url); return { overrides: [], selected_override_id: null, original_text: 'machine text' }; },
+      documentRulesSyncStatus: async () => ({ status: 'in_sync', human_source: 'override', machine_source: 'original', synced_commit: null }),
+      documentRulesUpstreamStatus: async (body) => { upstreamRequests.push(body); return { refs_behind: false, refresh_message: null, layers: [] }; },
+      documentRulesSelection: async () => ({}),
+      documentRulesSelections: async () => ({ selections: [] }),
+      ...api,
+    };
+    plugin.getDependency = (name) => {
+      if (name === 'client') return { apiClient };
+      if (name === 'logger') return { warn: () => {}, debug: () => {} };
+      if (name === 'dialog') return { confirm: async (text, title) => { confirms.push([text, title]); return confirm; } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, confirms, saves, queried, upstreamRequests };
+  }
+
+  describe('Save button', () => {
+    it('is disabled while the shown override is unchanged', () => {
+      const { plugin } = setup();
+      assert.strictEqual(plugin._editorDialogUi.saveBtn.disabled, true);
+      assert.strictEqual(plugin._isDirty(), false);
+    });
+
+    it('is enabled once the text or the note differs from the stored override', () => {
+      const { plugin } = setup();
+      plugin._cmMdView.setText('edited text');
+      plugin._renderSaveButton();
+      assert.strictEqual(plugin._editorDialogUi.saveBtn.disabled, false);
+
+      plugin._cmMdView.setText('saved text');
+      plugin._renderSaveButton();
+      assert.strictEqual(plugin._editorDialogUi.saveBtn.disabled, true);
+
+      plugin._editorDialogUi.noteInput.value = 'edited note';
+      plugin._renderSaveButton();
+      assert.strictEqual(plugin._editorDialogUi.saveBtn.disabled, false);
+    });
+
+    it('is disabled again after saving', async () => {
+      const { plugin, saves } = setup();
+      plugin._cmMdView.setText('edited text');
+      plugin._renderSaveButton();
+      assert.strictEqual(await plugin._onSave(), true);
+      assert.strictEqual(saves.length, 1);
+      assert.strictEqual(plugin._editorDialogUi.saveBtn.disabled, true);
+    });
+
+    it('is never dirty with the original selected', () => {
+      const { plugin } = setup();
+      plugin._currentSelectedId = null;
+      plugin._cmMdView.setText('anything');
+      assert.strictEqual(plugin._isDirty(), false);
+    });
+  });
+
+  describe('unsaved changes', () => {
+    it('asks nothing when there is nothing to save', async () => {
+      const { plugin, confirms } = setup();
+      assert.strictEqual(await plugin._resolveUnsavedEdits(), true);
+      assert.deepStrictEqual(confirms, []);
+    });
+
+    it('saves the changes when the user confirms', async () => {
+      const { plugin, confirms, saves } = setup();
+      plugin._cmMdView.setText('edited text');
+      assert.strictEqual(await plugin._resolveUnsavedEdits(), true);
+      assert.strictEqual(confirms.length, 1);
+      assert.strictEqual(confirms[0][1], 'Unsaved changes');
+      assert.deepStrictEqual(saves, [['ov1', { note: 'saved note', text: 'edited text', fragment_url: human.url }]]);
+    });
+
+    it('discards the changes when the user declines', async () => {
+      const { plugin, saves } = setup({ confirm: false });
+      plugin._cmMdView.setText('edited text');
+      assert.strictEqual(await plugin._resolveUnsavedEdits(), true);
+      assert.deepStrictEqual(saves, []);
+    });
+
+    it('tells the caller to stay when saving fails', async () => {
+      const { plugin } = setup({ api: { documentRulesUpdateOverrides: async () => { throw new Error('locked'); } } });
+      plugin._cmMdView.setText('edited text');
+      assert.strictEqual(await plugin._resolveUnsavedEdits(), false);
+    });
+
+    it('are saved before switching to the other layer tab', async () => {
+      const { plugin, saves, queried } = setup();
+      plugin._cmMdView.setText('edited text');
+      await plugin._onLayerTabShow('machine');
+      assert.strictEqual(saves.length, 1);
+      assert.deepStrictEqual(queried, [machine.url]);
+      assert.strictEqual(plugin._currentResource, machine);
+    });
+
+    it('keep the shown layer when saving fails on a tab switch', async () => {
+      const { plugin, queried } = setup({ api: { documentRulesUpdateOverrides: async () => { throw new Error('locked'); } } });
+      plugin._cmMdView.setText('edited text');
+      await plugin._onLayerTabShow('machine');
+      assert.deepStrictEqual(queried, []);
+      assert.strictEqual(plugin._currentResource, human);
+      assert.strictEqual(plugin._editorDialogUi.layerTabs.shown.at(-1), 'human');
+    });
+
+    it('are offered for saving before selecting another override', async () => {
+      const { plugin, confirms, saves } = setup();
+      plugin._cmMdView.setText('edited text');
+      await plugin._onOverrideButtonClick(null);
+      assert.strictEqual(confirms.length, 1);
+      assert.strictEqual(saves.length, 1);
+      assert.strictEqual(plugin._currentSelectedId, null);
+    });
+
+    it('are offered for saving before the dialog closes', async () => {
+      const { plugin, confirms, saves } = setup();
+      plugin._cmMdView.setText('edited text');
+      await plugin._requestEditorClose();
+      assert.strictEqual(confirms.length, 1);
+      assert.strictEqual(saves.length, 1);
+      assert.strictEqual(plugin._editorDialogUi.open, false);
+    });
+
+    it('keep the dialog open when saving fails on close', async () => {
+      const { plugin } = setup({ api: { documentRulesUpdateOverrides: async () => { throw new Error('locked'); } } });
+      plugin._cmMdView.setText('edited text');
+      await plugin._requestEditorClose();
+      assert.strictEqual(plugin._editorDialogUi.open, true);
+    });
+  });
+
+  describe('status line links', () => {
+    /**
+     * @param {string} status
+     * @param {boolean} [readOnly]
+     */
+    async function syncLine(status, readOnly = false) {
+      const { plugin } = setup({ api: { documentRulesSyncStatus: async () => ({ status, human_source: 'override', machine_source: 'original', synced_commit: null }) } });
+      plugin._documentReadOnly = readOnly;
+      const calls = [];
+      plugin._openUpdateDialog = async () => { calls.push('update'); };
+      plugin._onProposeUpstreamClick = async () => { calls.push('propose'); };
+      await plugin._refreshSyncStatus();
+      return { line: plugin._editorDialogUi.syncStatus, calls };
+    }
+
+    it('"Update from guide" in the outdated status opens the update sub-dialog', async () => {
+      const { line, calls } = await syncLine('machine_outdated');
+      const link = line.querySelector('a[name="syncStatusUpdateLink"]');
+      assert.strictEqual(link.textContent, 'Update from guide');
+      link.dispatchEvent(new dom.window.MouseEvent('click', { cancelable: true }));
+      assert.deepStrictEqual(calls, ['update']);
+    });
+
+    it('"Propose change upstream" in the both-changed status opens the propose sub-dialog', async () => {
+      const { line, calls } = await syncLine('both_changed');
+      line.querySelector('a[name="syncStatusProposeLink"]').dispatchEvent(new dom.window.MouseEvent('click', { cancelable: true }));
+      assert.deepStrictEqual(calls, ['propose']);
+    });
+
+    it('shows no link for a read-only document or another status', async () => {
+      assert.strictEqual((await syncLine('machine_outdated', true)).line.querySelector('a'), null);
+      assert.strictEqual((await syncLine('machine_edited')).line.querySelector('a'), null);
+    });
+
+    it('"Update to upstream" in the upstream status does the same as the button', async () => {
+      const { plugin } = setup();
+      plugin._upstreamStatus = { refs_behind: true, refresh_message: null, layers: [] };
+      let updates = 0;
+      plugin._onUpdateToUpstream = async () => { updates++; };
+      plugin._renderUpstreamStatus();
+      const link = plugin._editorDialogUi.upstreamStatus.querySelector('a[name="upstreamStatusUpdateLink"]');
+      assert.strictEqual(link.textContent, 'Update to upstream');
+      link.dispatchEvent(new dom.window.MouseEvent('click', { cancelable: true }));
+      await flushMicrotasks();
+      assert.strictEqual(updates, 1);
+
+      // Not while an update runs
+      plugin._editorDialogUi.updateToUpstreamBtn.disabled = true;
+      link.dispatchEvent(new dom.window.MouseEvent('click', { cancelable: true }));
+      await flushMicrotasks();
+      assert.strictEqual(updates, 1);
+    });
+
+    it('"Update to upstream" is plain text for a read-only document', () => {
+      const { plugin } = setup();
+      plugin._documentReadOnly = true;
+      plugin._upstreamStatus = { refs_behind: true, refresh_message: null, layers: [] };
+      plugin._renderUpstreamStatus();
+      assert.strictEqual(plugin._editorDialogUi.upstreamStatus.querySelector('a'), null);
+      assert.match(plugin._editorDialogUi.upstreamStatus.textContent, /Use "Update to upstream" to apply it\./);
+    });
+  });
+
+  describe('closing the propose sub-dialog', () => {
+    it('refreshes the upstream status bypassing the server cache after a pull request', async () => {
+      const { plugin, upstreamRequests } = setup();
+      plugin._onProposeDialogClosed(true);
+      await flushMicrotasks();
+      assert.deepStrictEqual(upstreamRequests, [{ xml: 'stable123', url: human.url, refetch: true }]);
+    });
+
+    it('refreshes the upstream status from the cache without a pull request', async () => {
+      const { plugin, upstreamRequests } = setup();
+      plugin._onProposeDialogClosed(false);
+      await flushMicrotasks();
+      assert.deepStrictEqual(upstreamRequests, [{ xml: 'stable123', url: human.url }]);
+    });
+
+    it('does nothing once the editor dialog is closed', async () => {
+      const { plugin, upstreamRequests } = setup();
+      plugin._editorDialogUi.open = false;
+      plugin._onProposeDialogClosed(true);
+      await flushMicrotasks();
+      assert.deepStrictEqual(upstreamRequests, []);
+    });
   });
 });

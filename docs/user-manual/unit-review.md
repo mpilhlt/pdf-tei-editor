@@ -74,16 +74,16 @@ When review mode is on and you run **Review Annotations** (Tools menu, LLM Revie
 - **Guide (human)**: the section of the annotation guide that people read in the Annotation Guide drawer. An override here replaces that section only, not the whole guide file.
 - **Machine rules**: the condensed text the LLM reviewer receives. Only shown when the category has a machine version in a separate file.
 
-Each tab has its own list of versions (**Original**, **Override 1**, ...) and its own selection: choosing an override on one tab does not change the other. Click **New override** to start from the text currently shown, edit it and click **Save**. Other users are not affected.
+Each tab has its own list of versions (**Original**, **Override 1**, ...) and its own selection: choosing an override on one tab does not change the other. Click **New override** to start from the text currently shown, edit it and click **Save**. **Save** is enabled only while the text or the note has unsaved changes. If you switch tabs, select another version, open one of the sub-dialogs or close the dialog with unsaved changes, you are asked whether to save them; if you decline, they are lost. Other users are not affected.
 
 When a category has both layers, a status line below the tabs shows whether the machine rules are up to date with the guide section. It compares the texts you currently have selected on both tabs (your override, or else the original) with the sync marker in the machine rules:
 
 | Status line | Meaning |
 | --- | --- |
 | In sync with the guide | Neither the guide section nor the machine rules changed since the last sync. |
-| Machine rules outdated: the guide changed since the last sync | The guide section changed; the machine rules still reflect the old text. |
+| Machine rules outdated: the guide changed since the last sync | The guide section changed; the machine rules still reflect the old text. The line links to **Update from guide**. |
 | Machine rules edited by hand since the last sync | The machine rules changed, the guide section did not. |
-| Machine rules outdated and edited by hand | Both changed. |
+| Guide and machine rules both changed since the last sync | Both changed, for example after you accepted an update from the guide. If the machine rules already match the guide, propose both upstream to record the sync; the line links to **Propose change upstream**. |
 | No sync marker | The machine rules carry no marker, so nothing can be compared. |
 
 The guide repository does not check the markers itself: the machine rules are kept in sync from here, with **Update from guide** and **Propose change upstream** (see below). If someone changes either file directly in the repository, the status line shows it.
@@ -98,9 +98,9 @@ An override that was written against an older version of the original is marked 
 
 **Reset to original** reloads the rules of both tabs from their source, but removes only the overrides of the tab you are on. Overrides of the other tab are kept and may then be marked as based on an older version.
 
-**Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**); both diffs show only the changed lines with a few lines of context, and a click on a collapsed stretch expands it. Nothing is saved until you click **Accept as new override**, which appears once there is a proposal: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
+**Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**), scrolled into view; both diffs show only the changed lines with a few lines of context, and a click on a collapsed stretch expands it. Nothing is saved until you click **Accept as new override**, which appears once there is a proposal: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
 
-After you accept an update, the status line keeps showing that the machine rules are outdated until the change is synced upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
+After you accept an update, the status line says that the guide and the machine rules both changed since the last sync until the change is proposed upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
 
 The dialog works in one of two modes:
 
@@ -113,9 +113,9 @@ The guide text and machine rules used are the ones you currently have selected o
 
 For a category with both layers, the same **Propose change upstream** button opens the **Propose upstream** dialog, which proposes the guide section and the machine rules together as a patch. The dialog has the checkboxes **Guide section (human)** and **Machine rules**; a layer is checked when you have selected an override of it, and if you have selected none, the layer of the tab you are on is checked. It shows one diff per changed file, headed by the file's path in the guide repository, against the current default branch of the repository. The section is found by its heading, even if it moved in the file since the version your override is based on. If the section's content changed upstream since then, the dialog warns you, because the patch replaces those changes. Both files must be in the same repository.
 
-The patch is built from your saved texts. If the editor shows changes you have not saved, the dialog says that they are not included; save them first.
+The patch is built from your saved texts, so you are asked to save unsaved changes before the dialog opens.
 
-If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Guides on GitLab keep the patch download only.
+If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Once the pull request has been merged, close the dialog: the editor then checks upstream again (bypassing the cached state of the guide repository) and offers **Update to upstream**. Guides on GitLab keep the patch download only.
 
 Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens> (the **GitHub** entry's help link opens the form for a classic token with `public_repo` preselected):
 
@@ -139,7 +139,7 @@ Overrides of the whole guide file that were created before this change are cut d
 
 ### After a proposal is merged
 
-Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream. The **Update to upstream** button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
+Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream, with a link that does the same as the **Update to upstream** button. The button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
 
 ## Edited units
 
