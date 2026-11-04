@@ -21,7 +21,7 @@
  *   role        List roles
  *   config      Manage configuration
  *   diagnostic  Diagnostic utilities
- *   maintenance Maintenance mode controls (spinner, reload, repopulate)
+ *   maintenance Maintenance mode controls (spinner, reload, repopulate, gc)
  */
 
 import { Command } from 'commander';
@@ -794,6 +794,30 @@ async function maintenanceRebuildMessages(baseUrl, sessionId) {
 }
 
 /**
+ * Run garbage collection and print one line per task
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ * @param {{dryRun?: boolean, task?: string[], deletedBefore?: string}} options
+ */
+async function maintenanceGc(baseUrl, sessionId, options) {
+  /** @type {{deleted_before: string, dry_run: boolean, tasks?: string[]}} */
+  const body = {
+    deleted_before: options.deletedBefore || new Date().toISOString(),
+    dry_run: Boolean(options.dryRun)
+  };
+  if (options.task && options.task.length > 0) body.tasks = options.task;
+  const result = await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/files/garbage_collect', body);
+  console.log(result.dry_run ? 'Garbage collection (dry run):' : 'Garbage collection:');
+  for (const task of result.tasks) {
+    const details = Object.entries(task.details || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    const status = task.skipped ? 'skipped (no dry run)' : `${task.items_deleted} items, ${task.bytes_freed} bytes`;
+    console.log(`  ${task.id.padEnd(24)} ${status}${details ? ` (${details})` : ''}`);
+    for (const error of task.errors || []) console.log(`    error: ${error}`);
+  }
+  console.log(`Total: ${result.totals.items_deleted} items, ${result.totals.bytes_freed} bytes`);
+}
+
+/**
  * Repopulate database fields from TEI documents
  * @param {string} baseUrl - API base URL
  * @param {string} sessionId - Session ID
@@ -1255,6 +1279,16 @@ Examples:
     await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) =>
       maintenanceRepopulate(baseUrl, sessionId, fields)
     );
+  });
+
+maintenanceCmd
+  .command('gc')
+  .description('Run garbage collection: purge deleted files, orphans, stale message index rows, caches, plugin data, tmp files')
+  .option('--dry-run', 'Report what would be deleted without deleting anything')
+  .option('--task <id...>', 'Only run these task ids (e.g. deleted-files orphaned-xml message-index)')
+  .option('--deleted-before <iso>', 'Purge soft-deleted files last updated before this time (default: now)')
+  .action(async (cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => maintenanceGc(baseUrl, sessionId, cmdOptions));
   });
 
 maintenanceCmd

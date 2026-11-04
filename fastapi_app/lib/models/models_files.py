@@ -222,14 +222,36 @@ class GarbageCollectRequest(BaseModel):
     """Request for POST /api/files/garbage_collect"""
     deleted_before: datetime  # ISO timestamp - purge files deleted before this time
     sync_status: Optional[str] = None  # Optional filter by sync_status
-    # Extensible for additional filters
+    dry_run: bool = False  # Report what would be deleted without deleting anything
+    tasks: Optional[list[str]] = None  # Only run these GC tasks (ids); all if omitted
+
+
+class GarbageCollectTaskResult(BaseModel):
+    """Result of one garbage-collection task"""
+    id: str
+    label: str
+    items_deleted: int = 0
+    bytes_freed: int = 0
+    details: dict[str, int] = {}  # Task-specific counts, e.g. records_purged, rows_updated
+    errors: list[str] = []
+    skipped: bool = False  # True if the task did not run (no dry-run support)
+
+
+class GarbageCollectTotals(BaseModel):
+    """Totals of all garbage-collection tasks"""
+    items_deleted: int = 0
+    bytes_freed: int = 0
 
 
 class GarbageCollectResponse(BaseModel):
     """Response for POST /api/files/garbage_collect"""
+    tasks: list[GarbageCollectTaskResult] = []  # One entry per task, in run order
+    totals: GarbageCollectTotals = GarbageCollectTotals()
+    dry_run: bool = False
+    # Deprecated: derived from the task results
     purged_count: int  # Number of database records purged
     files_deleted: int  # Number of physical files deleted
-    storage_freed: int  # Total bytes freed from storage
+    storage_freed: int  # Bytes freed in file storage (without caches)
     orphaned_xml_deleted: int = 0  # Number of orphaned XML files deleted (XML with no PDF)
     plugin_items_deleted: dict[str, int] = {}  # Number of plugin data items deleted, by plugin id
     annotation_rules_cache_deleted: int = 0  # Number of annotation-rules fetch cache entries deleted

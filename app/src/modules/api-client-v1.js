@@ -440,18 +440,40 @@
 
 /**
  * @typedef {Object} GarbageCollectRequest
- * @property {string} deleted_before
- * @property {string=} sync_status
+ * @property {string} deleted_before - Purge soft-deleted files last updated before this ISO timestamp
+ * @property {string=} sync_status - Only purge soft-deleted files with this sync status
+ * @property {boolean=} dry_run - Report what would be deleted without deleting anything
+ * @property {Array<string>=} tasks - Only run these GC task ids (all if omitted)
+ */
+
+/**
+ * @typedef {Object} GarbageCollectTaskResult
+ * @property {string} id - Task id, e.g. `deleted-files`, `message-index`, `plugin:grobid`
+ * @property {string} label - Human-readable task name
+ * @property {number} items_deleted
+ * @property {number} bytes_freed
+ * @property {Object<string, number>} details - Task-specific counts, e.g. `records_purged`, `rows_updated`
+ * @property {Array<string>} errors
+ * @property {boolean} skipped - True if the task did not run (no dry-run support)
+ */
+
+/**
+ * @typedef {Object} GarbageCollectTotals
+ * @property {number} items_deleted
+ * @property {number} bytes_freed
  */
 
 /**
  * @typedef {Object} GarbageCollectResponse
- * @property {number} purged_count
- * @property {number} files_deleted
- * @property {number} storage_freed
- * @property {number=} orphaned_xml_deleted
- * @property {Object<string, number>=} plugin_items_deleted
- * @property {number=} annotation_rules_cache_deleted
+ * @property {Array<GarbageCollectTaskResult>} tasks - One entry per task, in run order
+ * @property {GarbageCollectTotals} totals
+ * @property {boolean} dry_run
+ * @property {number} purged_count - Deprecated: sum of `records_purged` of the tasks
+ * @property {number} files_deleted - Deprecated: sum of `files_deleted` of the tasks
+ * @property {number} storage_freed - Deprecated: bytes freed by the tasks that delete stored files (without caches)
+ * @property {number=} orphaned_xml_deleted - Deprecated: items of the `orphaned-xml` task
+ * @property {Object<string, number>=} plugin_items_deleted - Deprecated: items of the `plugin:<id>` tasks
+ * @property {number=} annotation_rules_cache_deleted - Deprecated: items of the `annotation-rules-cache` task
  */
 
 /**
@@ -2357,29 +2379,12 @@ export class ApiClientV1 {
   }
 
   /**
-   * Garbage collect soft-deleted files older than the specified timestamp.
-   * Permanently removes files that have been soft-deleted and meet all filter criteria:
-   * - deleted=1 (soft-deleted)
-   * - updated_at < deleted_before timestamp
-   * - sync_status matches (if provided)
-   * Filters are additive - all conditions must match if they have a value.
-   * Security:
-   * - Admin role required for timestamps younger than 24 hours (prevents accidental deletion)
-   * - All users can garbage collect files older than 24 hours
-   * This operation:
-   * 1. Finds all deleted files matching the criteria
-   * 2. Removes physical files from storage
-   * 3. Permanently deletes database records
-   * 4. Returns statistics about purged files
-   * Args:
-   * body: GarbageCollectRequest with timestamp and optional filters
-   * repo: File repository (injected)
-   * storage: File storage (injected)
-   * current_user: Current user dict (injected)
-   * Returns:
-   * GarbageCollectResponse with purge statistics
-   * Raises:
-   * HTTPException: 403 if non-admin user tries to purge files deleted within 24 hours
+   * Run all garbage-collection tasks (purge of soft-deleted files, orphan scans, message index,
+   * caches, plugin data, tmp dir); each task reports its own statistics.
+   * Soft-deleted files are purged if they were last updated before `deleted_before` and match
+   * `sync_status` (if given). With `dry_run`, tasks only report what they would delete; tasks
+   * that cannot do a dry run are skipped. `tasks` restricts the run to these task ids.
+   * Admin role required for timestamps younger than 24 hours.
    *
    * @param {GarbageCollectRequest} requestBody
    * @returns {Promise<GarbageCollectResponse>}

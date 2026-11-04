@@ -354,6 +354,52 @@ describe('File Garbage Collection API E2E Tests', { concurrency: 1 }, () => {
     logger.success(`Garbage collection returned orphaned_xml_deleted: ${result.orphaned_xml_deleted}`);
   });
 
+  test('POST /api/files/garbage_collect should report one result per task', async () => {
+    const session = await getSession();
+    const cutoff = new Date('2000-01-01T00:00:00Z');
+
+    const result = await authenticatedApiCall(session.sessionId, '/files/garbage_collect', 'POST', {
+      deleted_before: cutoff.toISOString()
+    }, BASE_URL);
+
+    const ids = result.tasks.map(task => task.id);
+    for (const id of ['deleted-files', 'orphaned-storage-files', 'orphaned-xml', 'message-index', 'schema-cache', 'tmp']) {
+      assert.ok(ids.includes(id), `Should report task ${id}, got ${ids.join(', ')}`);
+    }
+    assert.ok(ids.indexOf('deleted-files') < ids.indexOf('message-index'), 'File purge runs before the message index cleanup');
+    assert.ok(ids.indexOf('message-index') < ids.indexOf('tmp'), 'Tmp dir is cleared last');
+    for (const task of result.tasks) {
+      assert.strictEqual(typeof task.label, 'string');
+      assert.ok(task.items_deleted >= 0 && task.bytes_freed >= 0);
+      assert.deepStrictEqual(task.errors, [], `Task ${task.id} should not fail`);
+    }
+    assert.strictEqual(result.totals.items_deleted, result.tasks.reduce((sum, t) => sum + t.items_deleted, 0));
+    assert.strictEqual(result.dry_run, false);
+  });
+
+  test('POST /api/files/garbage_collect dry run deletes nothing and skips tasks without dry run', async () => {
+    const session = await getSession();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 365);
+
+    const dry = await authenticatedApiCall(session.sessionId, '/files/garbage_collect', 'POST', {
+      deleted_before: cutoff.toISOString(),
+      dry_run: true,
+      tasks: ['deleted-files', 'duplicate-entries']
+    }, BASE_URL);
+
+    assert.strictEqual(dry.dry_run, true);
+    assert.deepStrictEqual(dry.tasks.map(t => t.id), ['deleted-files', 'duplicate-entries']);
+    assert.strictEqual(dry.tasks[1].skipped, true, 'duplicate-entries has no dry run');
+
+    const again = await authenticatedApiCall(session.sessionId, '/files/garbage_collect', 'POST', {
+      deleted_before: cutoff.toISOString(),
+      dry_run: true,
+      tasks: ['deleted-files']
+    }, BASE_URL);
+    assert.strictEqual(again.tasks[0].items_deleted, dry.tasks[0].items_deleted, 'A dry run must not delete');
+  });
+
   test('Cleanup: Purge all remaining test files', async () => {
     const session = await getSession();
 

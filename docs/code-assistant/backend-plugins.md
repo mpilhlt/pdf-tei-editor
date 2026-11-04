@@ -72,13 +72,13 @@ grobid = "pte_plugin_grobid"
 
 ### Plugin API
 
-`fastapi_app/plugin_api.py` re-exports the core symbols plugins are supposed to use (plugin base classes, dependencies, registries, extension points such as `register_gc_handler()` and `register_schema_config()`). Within a major `PLUGIN_API_VERSION` they stay compatible; imports from other core modules keep working but may break with any core release. Plugins maintained outside the core repository should import from `fastapi_app.plugin_api` and declare `engines.pte-plugin-api` in their manifest.
+`fastapi_app/plugin_api.py` re-exports the core symbols plugins are supposed to use (plugin base classes, dependencies, registries, extension points such as `register_gc_task()` and `register_schema_config()`). Within a major `PLUGIN_API_VERSION` they stay compatible; imports from other core modules keep working but may break with any core release. Plugins maintained outside the core repository should import from `fastapi_app.plugin_api` and declare `engines.pte-plugin-api` in their manifest.
 
 ### Extension Points Instead of Core Couplings
 
 Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/test_core_plugin_independence.py` and the CI job that runs the core suites with `fastapi_app/plugins/` emptied). Plugins hook into core through:
 
-- `register_gc_handler(plugin_id, handler)` (`lib/core/gc_hooks.py`): reproducible plugin data deleted by `POST /api/v1/files/garbage_collect`; the response reports the counts in `plugin_items_deleted`.
+- `register_gc_task(task_id, label, task, order=500, supports_dry_run=True)` (`lib/core/gc_registry.py`, plugin API 1.1): a garbage-collection task run by `POST /api/v1/files/garbage_collect`. Register it in `initialize()` with an id `plugin:<plugin id>` and remove it with `unregister_gc_task()` in `cleanup()`. The task receives a `GcContext` (`deleted_before`, `sync_status`, `is_admin`, `dry_run`, `file_repo`, `file_storage`, `db_dir`) and returns a `GcResult` (`items_deleted`, `bytes_freed`, `details: dict[str, int]`, `errors`); the result is shown as one row of the GC result dialog. A task that supports dry runs must not delete anything when `context.dry_run` is set. Use order 800-899 for caches; `register_directory_gc_task(task_id, label, get_dir)` empties a cache directory and reports its size. Exceptions are caught and reported as the task's error. The older `register_gc_handler(plugin_id, handler)` (handler returns the number of deleted items) is deprecated; it registers a task `plugin:<plugin_id>` without dry-run support, whose count still appears in the response's `plugin_items_deleted`.
 - Event bus events (`lib/sse/event_bus.py`): e.g. `file.lock_changed` (emitted after a lock is acquired or released, payload `stable_id`), `file.deleted`, `document.saved`.
 - `register_schema_config(url, timeout, reason)` (`lib/core/schema_validator.py`): a shorter validation timeout for complex schemas.
 - `ExtractorUnavailableError` (`lib/extraction`): raise it when an external dependency of an extractor is missing; the extraction router then falls back to the mock extractor if one is registered.

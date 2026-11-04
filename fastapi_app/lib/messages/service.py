@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi_app.config import get_settings
+from fastapi_app.lib.core.gc_registry import GcContext, GcResult, register_gc_task
 from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.models.models import FileMetadata
 from fastapi_app.lib.permissions.access_control import check_file_access
@@ -22,7 +23,7 @@ from fastapi_app.lib.sse.sse_utils import send_to_user_sessions
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.utils.config_utils import get_config
 
-from .indexer import IndexContext, MessageIndexer, UserInfo
+from .indexer import IndexContext, MessageGcStats, MessageIndexer, UserInfo
 from .store import DB_FILE_NAME, MessageRow, MessageStore
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,52 @@ def rebuild_index(file_repo: FileRepository, file_storage: FileStorage, db_dir: 
     """Rebuilds the whole index; returns the number of indexed files."""
     with _index_lock:
         return make_indexer(file_repo, file_storage, db_dir).rebuild()
+
+
+# ── Garbage collection ──────────────────────────────────────────────────
+
+SETTLED_RETENTION_CONFIG_KEY = "messages.settled-retention-days"
+
+
+def collect_garbage_locked(indexer: MessageIndexer, usernames: set[str], settled_retention_days: int,
+                           dry_run: bool = False) -> MessageGcStats:
+    """Runs `MessageIndexer.collect_garbage` under the index lock."""
+    with _index_lock:
+        return indexer.collect_garbage(usernames, settled_retention_days, dry_run)
+
+
+def collect_message_garbage(ctx: GcContext) -> GcResult:
+    """GC task: removes the rows of the message index that no file or user backs (issue #664)."""
+    usernames = {u["username"] for u in list_users(ctx.db_dir) if u.get("username")}
+    try:
+        retention = int(get_config().get(SETTLED_RETENTION_CONFIG_KEY, default=0) or 0)
+    except (TypeError, ValueError):
+        retention = 0
+    indexer = make_indexer(ctx.file_repo, ctx.file_storage, ctx.db_dir)
+    stats = collect_garbage_locked(indexer, usernames, retention, ctx.dry_run)
+    if stats.changed_recipients:
+        from fastapi_app.lib.core.dependencies import get_session_manager, get_sse_service
+        try:
+            notify_recipients(stats.changed_recipients, indexer.store, ctx.file_repo, get_sse_service(),
+                              get_session_manager())
+        except Exception as e:  # noqa: BLE001 - the cleanup is done, a failed notification must not hide it
+            logger.warning("Cannot notify the recipients of changed messages: %s", e)
+    return GcResult(
+        items_deleted=stats.rows_deleted,
+        details={
+            "dead_files": stats.dead_files,
+            "dead_file_occurrences": stats.dead_file_occurrences,
+            "removed_users": stats.removed_recipients,
+            "removed_user_rows": stats.removed_recipient_rows,
+            "expired_settled_occurrences": stats.expired_occurrences,
+            "orphaned_read_state": stats.orphaned_read_state,
+        },
+    )
+
+
+def register_message_gc_task() -> None:
+    """Registers the cleanup of the message index; runs after the file purge."""
+    register_gc_task("message-index", "Message index", collect_message_garbage, order=600)
 
 
 # ── Access-filtered views ───────────────────────────────────────────────

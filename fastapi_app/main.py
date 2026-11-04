@@ -142,6 +142,10 @@ async def lifespan(app: FastAPI):
 
         asyncio.create_task(_build_message_index())
 
+    # Garbage-collection tasks of the core components (plugins register theirs in initialize())
+    from .lib.core.gc_tasks import register_core_gc_tasks
+    register_core_gc_tasks()
+
     # Auto-migrate existing groups to projects on first run
     from .lib.utils.project_utils import migrate_groups_to_projects
     created = migrate_groups_to_projects(settings.db_dir)

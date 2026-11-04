@@ -28,7 +28,7 @@ Open it with **Messages** in the user menu.
 
 Click a message to open its document at the source: a comment opens with its thread popover, a review opens with review mode on and the unit's review popover, a review request opens the document with review mode on. Opening a message marks it as read.
 
-A message with a grey note is **settled**: the comment thread was resolved, the not-OK mark was changed to OK, the unit was edited after the review, a newer LLM review replaced the earlier one, or the status of a document under review changed from in-review. Settled messages are kept, so you can still look them up.
+A message with a grey note is **settled**: the comment thread was resolved, the not-OK mark was changed to OK, the unit was edited after the review, a newer LLM review replaced the earlier one, or the status of a document under review changed from in-review. Settled messages are kept, so you can still look them up. An administrator can have settled review messages deleted after some time (see [For administrators](#for-administrators)).
 
 ### Replying
 
@@ -58,3 +58,11 @@ npm run manage-remote -- maintenance rebuild-messages
 ```
 
 Read states are kept across a rebuild.
+
+Garbage collection (**Tools > Administration > Garbage Collection**, or `npm run manage-remote -- maintenance gc`) also cleans up the index: it removes the messages of deleted documents and of users that no longer exist, and read states whose message is gone. Settled review messages (fixed or superseded review marks, finished review requests) are kept forever by default. To delete them a number of days after they were settled, set the configuration key `messages.settled-retention-days`, for example:
+
+```bash
+npm run manage-remote -- config set messages.settled-retention-days 180
+```
+
+Settled comments need no retention: they disappear when the comment is deleted from the document.
