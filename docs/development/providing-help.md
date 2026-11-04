@@ -146,12 +146,14 @@ Navigation behavior:
 
 ### GitHub Edit Integration
 
-The "Edit on GitHub" button constructs URLs based on the current version:
+The "Edit on GitHub" button opens the current page in GitHub's web editor on the `devel` branch:
 
 ```javascript
 const githubUrl = `${githubEditBasePath}/${currentPage}`;
-// Example: https://github.com/mpilhlt/pdf-tei-editor/edit/v0.1.0/docs/index.md
+// Example: https://github.com/mpilhlt/pdf-tei-editor/edit/devel/docs/index.md
 ```
+
+The URL must name a branch: GitHub's editor returns 404 for a tag such as `v0.79.0`. The displayed docs still come from the release tag (`#remoteDocsBasePath`), so the edited page can be newer than the one shown.
 
 This allows users to contribute documentation improvements directly through GitHub's web interface.
 
