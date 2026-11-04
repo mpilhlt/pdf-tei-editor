@@ -2117,7 +2117,9 @@ export class ApiClientV1 {
    * other providers should still be listed. Models rejected by the
    * admin-configured `llm.model-filter.include`/`.exclude` filters (see
    * fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
-   * returned with a flag - the picker should simply never offer them.
+   * returned with a flag - the picker should simply never offer them. The
+   * filter only applies to providers using the shared key, not to those
+   * running on the current user's own API key.
    *
    * @returns {Promise<Array<ProviderResponse>>}
    */

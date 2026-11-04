@@ -36,7 +36,7 @@ class TestListProvidersRoute(unittest.TestCase):
 
     def setUp(self):
         # independent of the real llm.model-filter config and the access rules; both are tested separately
-        for target in ("fastapi_app.routers.llm.is_model_allowed", "fastapi_app.routers.llm.user_may_use_model"):
+        for target in ("fastapi_app.lib.llm.model_access.is_model_allowed", "fastapi_app.routers.llm.user_may_use_model"):
             patcher = mock.patch(target, return_value=True)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -152,7 +152,7 @@ class TestListProvidersRouteModelFilter(unittest.TestCase):
         LLMProviderRegistry.reset_instance()
         self.app.dependency_overrides.clear()
 
-    @mock.patch("fastapi_app.routers.llm.is_model_allowed")
+    @mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed")
     def test_only_matching_models_are_listed(self, mock_is_allowed):
         mock_is_allowed.side_effect = lambda label: label == "KISSKI/Gemma 3"
         response = self.client.get("/llm/providers")
@@ -161,18 +161,31 @@ class TestListProvidersRouteModelFilter(unittest.TestCase):
         mock_is_allowed.assert_any_call("KISSKI/Gemma 3")
         mock_is_allowed.assert_any_call("KISSKI/Gemma 27B")
 
-    @mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True)
+    @mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=True)
     def test_no_filtering_lists_every_model(self, mock_is_allowed):
         response = self.client.get("/llm/providers")
         body = response.json()
         self.assertEqual(len(body[0]["models"]), 2)
 
-    @mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=False)
+    @mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=False)
     def test_provider_with_no_allowed_models_is_still_listed_with_empty_models(self, mock_is_allowed):
         response = self.client.get("/llm/providers")
         body = response.json()
         self.assertEqual(body[0]["id"], "kisski")
         self.assertEqual(body[0]["models"], [])
+
+    @mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=False)
+    def test_filter_does_not_apply_to_provider_on_users_own_key(self, mock_is_allowed):
+        own_key = _StubProvider(
+            id="kisski",
+            label="KISSKI",
+            models=[LLMModel(id="gemma-3", label="Gemma 3", capabilities=frozenset({"chat"}), status=None)],
+        )
+        own_key.uses_user_key = True
+        with mock.patch.object(LLMProviderRegistry, "get_provider_for_user", return_value=own_key):
+            body = self.client.get("/llm/providers").json()
+        self.assertEqual([m["id"] for m in body[0]["models"]], ["gemma-3"])
+        mock_is_allowed.assert_not_called()
 
 
 class TestListProvidersRouteAccess(unittest.TestCase):
@@ -180,7 +193,7 @@ class TestListProvidersRouteAccess(unittest.TestCase):
 
     def setUp(self):
         patchers = [
-            mock.patch("fastapi_app.routers.llm.is_model_allowed", return_value=True),
+            mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=True),
             mock.patch("fastapi_app.lib.llm.model_access.is_default_model", return_value=False),
             mock.patch("fastapi_app.lib.llm.model_access.get_plugin_config"),
         ]

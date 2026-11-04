@@ -70,7 +70,7 @@ See `pte-plugins/plugins/anthropic-llm/src/pte_plugin_anthropic_llm/plugin.py` f
 
 ## Model filter
 
-Administrators can restrict which models are offered and usable, e.g. to exclude expensive premium models or to allow only "flash" models. Patterns are matched (`re.search`, i.e. substring) against the `<Provider label>/<Model label>` string shown in the UI, e.g. `Google Gemini/Gemini 2.5 Flash`.
+Administrators can restrict which models are offered and usable on the installation's shared API keys, e.g. to exclude expensive premium models or to allow only "flash" models. The filter does not apply to providers that run on the user's own API key (`provider.uses_user_key`), since the user pays for those requests: a user who stored a personal key sees and may use all models of that provider. Patterns are matched (`re.search`, i.e. substring) against the `<Provider label>/<Model label>` string shown in the UI, e.g. `Google Gemini/Gemini 2.5 Flash`.
 
 | Config key | Env var | Effect |
 | --- | --- | --- |
@@ -89,8 +89,9 @@ The admin-chosen default is stored under `llm.default-model.provider` / `llm.def
 
 `check_model_access(provider, model_id, user)` raises `ModelAccessDenied` (routes return 403) unless:
 
-1. the model passes the include/exclude filter (applies to everyone, admins included), and
-2. the user is an admin, or the provider runs on the user's own API key (`provider.uses_user_key`, set by `get_provider_for_user()`; usage is billed to the user), or the model is free, or it is the configured default model.
+1. the provider runs on the user's own API key (`provider.uses_user_key`, set by `get_provider_for_user()`; usage is billed to the user): then any model is allowed and the filter does not apply; otherwise
+2. the model passes the include/exclude filter (applies to everyone using the shared key, admins included), and
+3. the user is an admin, or the model is free, or it is the configured default model.
 
 Pass the provider returned by `get_provider_for_user()`, not the registered one, so that `uses_user_key` is set.
 
