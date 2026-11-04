@@ -1,6 +1,8 @@
 """
 Authorization for using a given LLM model: the admin-configured
-include/exclude filter applies to everyone; models that are not free are
+include/exclude filter applies to everyone using the operator's shared keys
+(admins included), but not to providers running on the user's own API key;
+models that are not free are
 usable by admins and, for other users, only when an admin made them the
 default model or the provider runs on the user's own API key (usage is
 then billed to the user, see LLMProvider.uses_user_key). A model counts as
@@ -54,6 +56,16 @@ def is_free_model(provider: LLMProvider, model: LLMModel) -> bool:
     return any(pattern.search(label) for pattern in parse_patterns(get_config().get(FREE_MODELS_CONFIG_KEY, "")))
 
 
+def passes_model_filter(provider: LLMProvider, model: LLMModel) -> bool:
+    """
+    True if `model` passes the admin-configured include/exclude filter. The
+    filter protects the operator's shared keys, so it does not apply when
+    `provider` runs on the user's own API key (see LLMProvider.uses_user_key).
+    `provider` must be the instance returned by get_provider_for_user().
+    """
+    return provider.uses_user_key or is_model_allowed(f"{provider.label}/{model['label']}")
+
+
 def user_may_use_model(provider: LLMProvider, model: LLMModel, user: dict[str, object] | None) -> bool:
     """
     The admin/own-key/free/default part of the access rules, without the
@@ -72,16 +84,18 @@ def check_model_access(provider: LLMProvider, model_id: str, user: dict[str, obj
     """
     Raise ModelAccessDenied unless `user` may use `model_id` of `provider`.
     Only consults provider.list_models() (a live round-trip for some
-    providers) when the answer depends on it: a filter is configured or the
-    user neither is an admin nor uses their own API key.
+    providers) when the answer depends on it: the user neither uses their own
+    API key nor is an admin without a configured filter.
     """
+    if provider.uses_user_key:
+        return
     is_admin = user_is_admin(user)
     filtered = has_model_filter()
-    if (is_admin or provider.uses_user_key) and not filtered:
+    if is_admin and not filtered:
         return
 
     model = next((m for m in provider.list_models() if m["id"] == model_id), None)
-    if filtered and (model is None or not is_model_allowed(f"{provider.label}/{model['label']}")):
+    if filtered and (model is None or not passes_model_filter(provider, model)):
         raise ModelAccessDenied(f"Model '{provider.label}/{model_id}' is not permitted by the configured model filter")
     if not is_admin and not (model and user_may_use_model(provider, model, user)) and not is_default_model(provider.id, model_id):
         raise ModelAccessDenied(

@@ -67,13 +67,14 @@ class TestCheckModelAccess(unittest.TestCase):
         check_model_access(provider, "paid", USER)
         self.assertEqual(provider.list_calls, 0)
 
-    def test_filter_applies_to_users_with_own_key(self, mock_filter, _d, _free):
+    def test_filter_does_not_apply_to_users_with_own_key(self, mock_filter, _d, _free):
         mock_filter.return_value = True
         provider = _Provider()
         provider.uses_user_key = True
-        with mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=False):
-            with self.assertRaisesRegex(ModelAccessDenied, "model filter"):
-                check_model_access(provider, "paid", USER)
+        with mock.patch("fastapi_app.lib.llm.model_access.is_model_allowed", return_value=False) as allowed:
+            check_model_access(provider, "paid", USER)
+        allowed.assert_not_called()
+        self.assertEqual(provider.list_calls, 0)
 
     def test_admin_may_use_paid_model_when_filter_allows_it(self, mock_filter, _d, _free):
         mock_filter.return_value = True

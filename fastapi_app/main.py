@@ -64,8 +64,23 @@ async def lifespan(app: FastAPI):
 
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
-    from .lib.utils.config_utils import get_config
+    from .lib.utils.config_utils import ConfigSecretError, check_config_secrets, get_config
     config = get_config()
+
+    # Fail fast if the masked (encrypted) config values cannot be decrypted with the configured key,
+    # instead of failing later in the plugin that needs the secret
+    try:
+        encrypted_count, plaintext_keys = check_config_secrets(settings.db_dir)
+    except ConfigSecretError as e:
+        logger.error(str(e))
+        raise
+    if encrypted_count:
+        logger.info(f"{encrypted_count} masked config value(s) are encrypted at rest")
+    if plaintext_keys:
+        logger.warning(
+            f"{len(plaintext_keys)} masked config value(s) are stored as plain text ({', '.join(plaintext_keys)}); they are encrypted when set again, or run bin/migrations/encrypt-masked-config-values.py"
+        )
+
     config_data = config.load()
 
     if "FASTAPI_APPLICATION_MODE" in os.environ:

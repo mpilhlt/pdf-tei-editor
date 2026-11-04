@@ -131,7 +131,7 @@ API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as 
 
 | Variable | Description |
 | --- | --- |
-| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the stored API keys. Set it in production and keep it. Without it, the key is generated in `data/db/secrets.key`, next to the encrypted keys, so every copy of the data directory (backups, the volume) can decrypt them |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key encrypting the users' stored API keys and the masked settings in `config.json` (see [Encryption of secrets](#encryption-of-secrets)). Set it in production and keep it. Without it, the key is generated in `data/db/secrets.key`, next to the encrypted values, so every copy of the data directory (backups, the volume) can decrypt them |
 | `PTE_PLUGIN_INSTALL` | Allow administrators to install plugins from GitHub releases (off by default) |
 | `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
@@ -150,7 +150,7 @@ See [Plugins in the image](#plugins-in-the-image). `.env.production` documents t
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
 | `WEBDAV_ENABLED` | Enable WebDAV integration (`webdav-sync` plugin) | `false` |
 | `WEBDAV_BASE_URL` | WebDAV server URL (`webdav-sync` plugin) | - |
-| `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)); without it a key file is generated in `data/db` | - |
+| `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)) and the masked settings in `config.json` (see [Encryption of secrets](#encryption-of-secrets)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 
 See `.env.production` for complete list.
@@ -256,8 +256,38 @@ npm run deploy .env.deploy.example.org
 - ✅ Use HTTPS with valid SSL certificate
 - ✅ Set `LOG_LEVEL=WARNING` or `ERROR`
 - ✅ Secure the data directory with proper file permissions
-- ✅ Set and back up `SECRETS_ENCRYPTION_KEY`; users enter API keys in the key store, not in environment variables
+- ✅ Set and back up `SECRETS_ENCRYPTION_KEY` (it also encrypts the masked settings in `config.json`, see [Encryption of secrets](#encryption-of-secrets)); users enter API keys in the key store, not in environment variables
 - ✅ Use firewall rules to limit access
+
+### Encryption of secrets
+
+Two kinds of secrets are stored encrypted (Fernet) with the same key:
+
+- the API keys users enter themselves, in `data/db/secrets.db` (see [User API Keys](./cli.md#user-api-keys));
+- masked settings in `data/db/config.json`: plugin settings that hold credentials, such as shared API keys, which the config editor shows as `****`. They are stored as `"fernet:<token>"` and decrypted only when the server needs the value.
+
+**Setup.** Generate a key and pass it to the container as `SECRETS_ENCRYPTION_KEY`:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Without the variable, a key is generated on first use into `data/db/secrets.key` (mode 0600). This protects against a leaked `config.json` or database, but not against anyone who has the whole data directory or a backup of it, since the key lies next to the secrets. Keep the variable's value outside the data directory, e.g. in a password manager, and set it before the first secret is stored: switching from the key file to the variable later requires setting the variable to the content of `secrets.key`.
+
+**Startup check.** The server checks at startup that every encrypted value in `config.json` can be decrypted with the configured key and refuses to start otherwise; the log names the affected keys. Masked values still stored as plain text are logged as a warning.
+
+**Migration of existing instances.** After upgrading, new and changed masked values are encrypted when they are written, and plugins re-encrypt their own settings when they register them at startup. To encrypt the remaining plain-text values (e.g. of plugins that are no longer installed), run the migration with the same environment as the server:
+
+```bash
+uv run python bin/migrations/encrypt-masked-config-values.py --dry-run
+uv run python bin/migrations/encrypt-masked-config-values.py
+# in a container
+docker exec <container> python bin/migrations/encrypt-masked-config-values.py
+```
+
+The script refuses a malformed `config.json` and a `config.json` with values encrypted with a different key. Earlier backups of `config.json` still contain the plain-text values.
+
+**Losing the key.** Encrypted values cannot be recovered without the key. Users have to enter their API keys again, and an administrator has to delete the masked settings named in the startup error from `data/db/config.json` (or with `DELETE /api/v1/config/{key}` once the server runs) and set them again in the config editor or through their environment variables. To rotate the key, set it to the new value, delete the old encrypted settings in the same way and set them again.
 
 ### Password Generation
 

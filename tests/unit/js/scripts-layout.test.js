@@ -37,7 +37,8 @@ const EXPECTED_BIN = [
 ];
 const EXPECTED_BIN_MIGRATIONS = [
   'run-migration.py', 'migrate-tei-fileref-to-xml-id.py', 'migrate-tei-flavor-rename.py',
-  'fix-doc-ids.py', 'update-metadata.py', 'update-tei-metadata.py', 'preprocess_legacy_files.py'
+  'fix-doc-ids.py', 'update-metadata.py', 'update-tei-metadata.py', 'preprocess_legacy_files.py',
+  'encrypt-masked-config-values.py'
 ];
 
 describe('bin/ and scripts/ layout', () => {
