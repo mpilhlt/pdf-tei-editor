@@ -18,6 +18,7 @@ export { default as ConfigPlugin } from './plugins/config.js';
 export { default as DiagnosticsDrawerPlugin } from './plugins/diagnostics-drawer.js';
 export { default as DialogPlugin } from './plugins/dialog.js';
 export { default as DocumentActionsPlugin } from './plugins/document-actions.js';
+export { default as DocumentPeoplePlugin } from './plugins/document-people.js';
 export { default as DocumentRulesPlugin } from './plugins/document-rules.js';
 export { default as ExtractionPlugin } from './plugins/extraction.js';
 export { default as FileSelectionDrawerPlugin } from './plugins/file-selection-drawer.js';
@@ -64,6 +65,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   "diagnostics-drawer": import('./plugins/diagnostics-drawer.js').default,
  *   dialog: import('./plugins/dialog.js').default,
  *   "document-actions": import('./plugins/document-actions.js').default,
+ *   "document-people": import('./plugins/document-people.js').default,
  *   "document-rules": import('./plugins/document-rules.js').default,
  *   extraction: import('./plugins/extraction.js').default,
  *   "file-selection-drawer": import('./plugins/file-selection-drawer.js').default,

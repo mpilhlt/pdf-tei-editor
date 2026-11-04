@@ -144,6 +144,15 @@ REST API endpoints for configuration access:
   - The `.masked` flag is kept, so a secret registered again later stays hidden
   - The plugin registers the key again with its default (or environment variable) at the next server start, through `get_plugin_config()`
 
+#### Masked values
+
+Keys with `{key}.masked = True` hold credentials. The API never returns their values (`****`, or `""` when unset) and `GET /api/v1/config/state` omits them. `set_config_value()` stores a non-empty masked value encrypted as `"fernet:<token>"` (a Fernet token of the JSON-encoded value), with the key of the user secret store (`SECRETS_ENCRYPTION_KEY` or `data/db/secrets.key`, see `fastapi_app/lib/secrets/encryption.py`). Setting the `.masked` flag encrypts an existing value; setting it to anything but `true` decrypts it again. Re-setting an unchanged value keeps its token.
+
+- `get_config_value()` / `Config.get()` decrypt; `load_full_config()` / `Config.load()` return the tokens, since their callers discard masked values. With `apply_masks=True`, nothing is decrypted.
+- `check_config_secrets(db_dir)` decrypts every encrypted value; the server calls it at startup and does not start if one fails (`ConfigSecretError`).
+- `bin/migrations/encrypt-masked-config-values.py` encrypts masked values stored as plain text.
+- Project config overrides (`projects.json`) are not encrypted.
+
 ### Frontend Integration
 
 #### `app/src/plugins/config.js`

@@ -1,0 +1,19 @@
+<sl-dialog name="documentPeopleDialog" label="People" class="document-people-dialog" style="--width: 680px;">
+  <div name="peopleList" class="document-people-list" data-testid="document-people-list"></div>
+  <div name="emptyNote" class="document-people-empty">No people are recorded in this document.</div>
+  <div name="addSection" class="document-people-add" data-testid="document-people-add">
+    <div class="document-people-add-title">Add a person</div>
+    <div class="document-people-add-row">
+      <sl-select name="userSelect" size="small" placeholder="User" hoist data-testid="document-people-user"></sl-select>
+      <sl-select name="roleSelect" size="small" placeholder="Responsibility" hoist disabled data-testid="document-people-role"></sl-select>
+      <sl-button name="addBtn" size="small" variant="primary" disabled data-testid="document-people-add-btn">
+        <sl-icon slot="prefix" name="person-plus"></sl-icon>
+        Add
+      </sl-button>
+    </div>
+    <div name="addNote" class="document-people-note"></div>
+  </div>
+  <!-- icons the plugin and the messages dialog create from JS, listed here so that the build compiles them -->
+  <span hidden><sl-icon name="chat-dots"></sl-icon><sl-icon name="send"></sl-icon></span>
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>

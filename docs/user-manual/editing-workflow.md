@@ -31,6 +31,7 @@ Left side: the XML / Visual annotation mode toggle (only visible for variants th
 | Undo / Redo | Always | Undo or redo editor changes |
 | TEI Wizard (wand icon) | Always | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
 | Review (clipboard icon) | Always | Switch [unit review](unit-review.md) mode on or off |
+| People (group icon) | Document loaded | List the [people of the document](document-people.md), add people (reviewers) and send them messages |
 | Revision history (clock icon) | When document has `<revisionDesc>` | Open the revision history panel |
 | XSL viewer | When XSL viewer plugin is active | Preview the document rendered via XSLT |
 | Save revision (floppy disk) | Document loaded, annotator role | Record the current state in the document's revision history |
@@ -125,6 +126,7 @@ While the document has diagnostics, they are listed in a drawer on the left side
 - Click a diagnostic to select the text it applies to in the XML editor.
 - **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
 - Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply.
+- When diagnostics are added, for example by a validation run or an LLM review, the list scrolls to show them. Added diagnostics that have a fix (such as LLM review suggestions) are checked, so that you can apply them right away; diagnostics without a fix (validation errors, comments, disputed reviews) are not checked, and the checks you set yourself stay as they are. Diagnostics that reappear after a re-validation, and those whose text you edited, do not count as added.
 
 ---
 

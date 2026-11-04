@@ -332,7 +332,7 @@ test.describe('Document rules registry', () => {
     }
   });
 
-  test('shows the headerbar indicator and decorates an overridden ref differently once an override is selected', async ({ page }) => {
+  test('shows the headerbar indicator, which opens the "Edit document rules" menu, and decorates an overridden ref differently once an override is selected', async ({ page }) => {
     // Creating an override for the interpretation-ref resource resolves its
     // original text server-side regardless of whether the caller inspects
     // it (fastapi_app/routers/document_rules.py's create_override always
@@ -366,11 +366,6 @@ test.describe('Document rules registry', () => {
       const refSpan = page.locator(`#codemirror-container .cm-content .doc-rules-ref:has-text("${INTERPRETATION_REF_URL}")`);
       await expect(refSpan).toBeVisible();
       await expect(refSpan).not.toHaveClass(/doc-rules-ref-overridden/);
-
-      // Re-fold so the headerbar indicator's click (checked below) is a
-      // meaningful test of "reveals editorialDecl", not a no-op.
-      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').foldByXpath('//tei:teiHeader'));
-      await page.waitForTimeout(300);
 
       // Create and select an override for the interpretation-ref resource
       // directly via the API rather than through the "Data correction"
@@ -413,14 +408,13 @@ test.describe('Document rules registry', () => {
       const indicator = page.locator('status-text[name="documentRulesOverridesStatus"]');
       await expect(indicator).toBeVisible();
 
-      // teiHeader is still folded: editorialDecl's tag name isn't in the
-      // rendered main editor content yet.
-      await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('editorialDecl');
-
-      // Clicking the indicator unfolds teiHeader and selects editorialDecl.
+      // Clicking the indicator opens the Tools menu with the "Edit document
+      // rules" submenu expanded (#686).
       await indicator.click();
-      await page.waitForTimeout(500);
-      await expect(page.locator('#codemirror-container .cm-content')).toContainText('editorialDecl');
+      const submenuEntry = page.locator('sl-menu[name="documentRulesEditSubmenu"] sl-menu-item').first();
+      await expect(submenuEntry).toBeVisible({ timeout: 5000 });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
 
       // The ref is now decorated as overridden.
       const refSpanAfter = page.locator(`#codemirror-container .cm-content .doc-rules-ref:has-text("${INTERPRETATION_REF_URL}")`);

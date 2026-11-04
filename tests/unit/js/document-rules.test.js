@@ -1489,6 +1489,23 @@ describe('DocumentRulesPlugin._refreshResources', () => {
     assert.strictEqual(fetched, false, 'expected the role gate to short-circuit before reading the editor content');
   });
 
+  it('hides the "Overrides active" widget and the ref decorations for a user without the reviewer/admin role', async () => {
+    const plugin = makePlugin(['user']);
+    plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    plugin._overridesWidget = makeOverridesWidgetStub(true, 'w1');
+    plugin._selections = [{ kind: 'interpretation-ref', url: 'u', selected: true }];
+    let removedId, reconfigured;
+    plugin._refDecorationSlot = { reconfigure: (extensions) => { reconfigured = extensions; } };
+    plugin.getDependency = (name) => {
+      if (name === 'xmleditor') return { removeHeaderbarWidget: (id) => { removedId = id; } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._refreshResources();
+    assert.strictEqual(removedId, 'w1');
+    assert.deepStrictEqual(plugin._selections, []);
+    assert.ok(reconfigured, 'expected the ref decorations to be rebuilt without overrides');
+  });
+
   it('shows the menu item disabled when the document has no resources', async () => {
     const plugin = makePlugin(['reviewer']);
     plugin._editMenuItem = { style: {}, disabled: false, documentRulesEditSubmenu: document.createElement('sl-menu') };
@@ -1646,32 +1663,27 @@ describe('DocumentRulesPlugin._refreshOverrideIndicators', () => {
 });
 
 describe('DocumentRulesPlugin._onOverridesWidgetClick', () => {
-  it('unfolds the TEI header and reveals editorialDecl', () => {
+  it('opens the "Edit document rules" submenu of the Tools menu', async () => {
     const plugin = makePlugin();
-    const calls = [];
+    plugin._editMenuItem = { style: {} };
+    const opened = [];
     plugin.getDependency = (name) => {
-      if (name === 'xmleditor') return {
-        unfoldByXpath: (xp) => calls.push(['unfold', xp]),
-        selectByXpath: (xp) => calls.push(['select', xp]),
-      };
+      if (name === 'tools') return { openMenuItem: async (item) => { opened.push(item); } };
       throw new Error(`unexpected dependency: ${name}`);
     };
-    plugin._onOverridesWidgetClick();
-    assert.deepStrictEqual(calls, [['unfold', '//tei:teiHeader'], ['select', '//tei:editorialDecl']]);
+    await plugin._onOverridesWidgetClick();
+    assert.deepStrictEqual(opened, [plugin._editMenuItem]);
   });
 
-  it('logs a warning and does not throw when the xmleditor calls fail', () => {
+  it('logs a warning and does not throw when the menu cannot be opened', async () => {
     const plugin = makePlugin();
     let warned = false;
     plugin.getDependency = (name) => {
-      if (name === 'xmleditor') return {
-        unfoldByXpath: () => { throw new Error('no such node'); },
-        selectByXpath: () => {},
-      };
+      if (name === 'tools') return { openMenuItem: async () => { throw new Error('not in menu'); } };
       if (name === 'logger') return { warn: () => { warned = true; }, debug: () => {} };
       throw new Error(`unexpected dependency: ${name}`);
     };
-    assert.doesNotThrow(() => plugin._onOverridesWidgetClick());
+    await plugin._onOverridesWidgetClick();
     assert.strictEqual(warned, true);
   });
 });

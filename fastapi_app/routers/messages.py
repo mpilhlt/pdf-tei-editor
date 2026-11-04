@@ -1,14 +1,17 @@
 """
 Messages API: review marks and comments addressed to the current user (see docs/user-manual/messages.md).
 
-Messages come from the message index (`fastapi_app/lib/messages/`). Lists and counts only
-include messages from files the user can view at request time.
+Messages come from the message index (`fastapi_app/lib/messages/`), except direct messages, which
+users send each other about a document (`POST /messages/direct`) and which are stored in the index
+only. Lists and counts only include messages from files the user can view at request time.
 """
 
 import logging
+import uuid
+from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..lib.core.dependencies import (
     get_file_repository,
@@ -18,23 +21,29 @@ from ..lib.core.dependencies import (
     require_admin_user,
     require_authenticated_user,
 )
+from ..config import get_settings
 from ..lib.core.sessions import SessionManager
 from ..lib.messages.service import (
     AccessCache,
     get_message_store,
+    notify_recipients,
     rebuild_index,
     unread_count,
     visible_messages,
 )
-from ..lib.messages.store import MessageRow, MessageStore
+from ..lib.messages.store import DIRECT_KEY_PREFIX, MessageRow, MessageStore
 from ..lib.models.models import FileMetadata
 from ..lib.models.models_messages import (
+    DirectMessageRequest,
+    DirectMessageResponse,
     MarkReadRequest,
     MessageCountResponse,
     MessageItem,
     MessageListResponse,
     RebuildResponse,
 )
+from ..lib.permissions.access_control import check_file_access
+from ..lib.permissions.user_utils import list_users
 from ..lib.repository.file_repository import FileRepository
 from ..lib.sse.sse_service import SSEService
 from ..lib.sse.sse_utils import send_to_user_sessions
@@ -99,7 +108,7 @@ def get_message_count(
 @router.get("", response_model=MessageListResponse)
 def list_messages(
     status: Literal["unread", "all"] = Query("all"),
-    kind: Literal["review", "comment"] | None = Query(None),
+    kind: Literal["review", "comment", "direct"] | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: dict = Depends(require_authenticated_user),
@@ -141,6 +150,41 @@ def mark_all_read(
     keys = [row.key for row in store.list_messages(user["username"], unread_only=True)]
     store.set_read(user["username"], keys, True)
     return MessageCountResponse(unread=_notify_own_sessions(user, store, file_repo, sse_service, session_manager))
+
+
+@router.post("/direct", response_model=DirectMessageResponse)
+def send_direct_message(
+    request: DirectMessageRequest,
+    user: dict = Depends(require_authenticated_user),
+    store: MessageStore = Depends(get_store),
+    file_repo: FileRepository = Depends(get_file_repository),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager),
+) -> DirectMessageResponse:
+    """
+    Sends a short message about a document to another user. The message is shown in the
+    recipient's messages, not stored in the document. Both users must be able to view the file.
+    """
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="The message is empty")
+    file = file_repo.get_file_by_stable_id(request.stable_id)
+    if file is None or file.deleted or not check_file_access(file, user, "read"):
+        raise HTTPException(status_code=404, detail="File not found")
+    if request.recipient == user["username"]:
+        raise HTTPException(status_code=400, detail="You cannot send a message to yourself")
+    recipient = next((u for u in list_users(Path(get_settings().db_dir)) if u.get("username") == request.recipient), None)
+    if recipient is None:
+        raise HTTPException(status_code=404, detail=f"User '{request.recipient}' not found")
+    if not check_file_access(file, recipient, "read"):
+        raise HTTPException(status_code=400, detail=f"{recipient.get('fullname') or request.recipient} cannot view this document")
+    key = f"{DIRECT_KEY_PREFIX}{file.doc_id}:{uuid.uuid4().hex}"
+    store.add_direct_message(
+        key, request.recipient, file.doc_id, file.stable_id, user["username"], user.get("fullname") or None, text
+    )
+    logger.info(f"Direct message from {user['username']} to {request.recipient} about {file.stable_id}")
+    notify_recipients({request.recipient}, store, file_repo, sse_service, session_manager)
+    return DirectMessageResponse(key=key)
 
 
 @router.post("/rebuild", response_model=RebuildResponse)

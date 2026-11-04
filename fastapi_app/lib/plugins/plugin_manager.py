@@ -145,6 +145,7 @@ class PluginManager:
         3. Installed packages with a ``pte.plugins`` entry point
         """
         state = self._remove_pending_directories(self.state_store.read())
+        state = self._prune_missing_installed(state)
         plugin_site.activate(state.installed)
         deferred, site_dirs = self._site_records(state)
         plugin_dirs = get_plugin_dirs()
@@ -202,6 +203,34 @@ class PluginManager:
         except OSError as e:
             logger.error(f"Could not update the plugin state: {e}")
             return state
+
+    def _prune_missing_installed(self, state: PluginState) -> PluginState:
+        """
+        Drop the runtime-installed plugins whose directory no longer exists in the site directory.
+
+        This repairs the state after the site directory of a plugin was deleted by hand, so that
+        the plugin can be installed again. The ``disabled`` entry is kept.
+        """
+        gone = {entry.id: entry for entry in plugin_site.missing(state.installed)}
+        if not gone:
+            return state
+        for entry in gone.values():
+            logger.warning(
+                f"Runtime-installed plugin {entry.id} {entry.version} is missing from {plugin_site.get_site_dir()}; removing it from the plugin state"
+            )
+
+        def change(current: PluginState) -> PluginState:
+            # Re-check under the lock: another worker may have installed a new version meanwhile
+            still_gone = {e.id for e in plugin_site.missing(current.installed) if e.id in gone and e == gone[e.id]}
+            if not still_gone:
+                return current
+            return replace(current, installed=tuple(e for e in current.installed if e.id not in still_gone))
+
+        try:
+            return self.state_store.update(change)
+        except OSError as e:
+            logger.error(f"Could not update the plugin state: {e}")
+            return replace(state, installed=tuple(e for e in state.installed if e.id not in gone))
 
     def _older_workers(self, state: PluginState) -> int:
         """Number of other running workers started before the restart the state asks for."""

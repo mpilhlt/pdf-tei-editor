@@ -23,7 +23,7 @@ eval "$(uv run python bin/user-secrets.py export anthropic --user alice --env AN
 
 `--prompt` asks for a missing key on the controlling terminal (hidden input), stores it and returns it; without a terminal the command fails. `get` and `export` refuse to write to a terminal. `--user` defaults to `$PTE_SECRETS_USER`.
 
-The encryption key is read from `SECRETS_ENCRYPTION_KEY` (generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`). Without it, a key is generated once into `data/db/secrets.key` (mode 0600), which protects against a leaked database or backup but not against access to the data directory; production deployments should set the variable. Losing the key makes stored keys unreadable, and users have to enter them again.
+The encryption key is read from `SECRETS_ENCRYPTION_KEY` (generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`). Without it, a key is generated once into `data/db/secrets.key` (mode 0600), which protects against a leaked database or backup but not against access to the data directory; production deployments should set the variable. Losing the key makes stored keys unreadable, and users have to enter them again. The same key encrypts the masked settings in `config.json`, see [Encryption of secrets](./docker-deployment.md#encryption-of-secrets).
 
 ## Database Management
 

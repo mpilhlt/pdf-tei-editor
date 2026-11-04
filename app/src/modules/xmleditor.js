@@ -1088,11 +1088,17 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Update the complete editor content from the XML Document. When dealing with small changes,
-   * use {@link updateEditorFromNode} instead.
+   * Update the editor content from the XML Document. Only the changed ranges are replaced, so
+   * that folds (e.g. of the teiHeader), decorations and the selection outside them stay (#660).
+   * When dealing with changes to a single node, {@link updateEditorFromNode} is cheaper.
    */
   async updateEditorFromXmlTree() {
-    const changes = { from: 0, to: this.#view.state.doc.length, insert: this.getXML() }
+    const current = this.#view.state.doc.toString()
+    const xml = this.getXML()
+    // nothing to dispatch: no update would follow, so "editorReady" would not be emitted
+    if (current === xml) return
+    const changes = diff(current, xml, { scanLimit: 10000, timeout: 200 })
+      .map(c => ({ from: c.fromA, to: c.toA, insert: xml.slice(c.fromB, c.toB) }))
     await this.#waitForEditorUpdate(changes);
   }
 

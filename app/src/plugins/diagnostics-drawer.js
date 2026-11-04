@@ -13,6 +13,12 @@
  * the XML editor marked with the `data-reveals-diagnostics` attribute (e.g.
  * the unit review and comment meters) is clicked.
  *
+ * When diagnostics are added (by a validation run, an LLM review, ...), the list scrolls to show
+ * them. Added diagnostics that have a fix (e.g. LLM review suggestions) are checked, so that they
+ * can be applied right away (#688); added diagnostics without a fix (validation errors, comments,
+ * disputed reviews) are not checked, and the checks of the other diagnostics are left as they are. Diagnostics that reappear
+ * (e.g. after a re-validation) and those whose text was edited count as known, not as added.
+ *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
  * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
  * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
@@ -86,6 +92,12 @@ class DiagnosticsDrawerPlugin extends Plugin {
 
   #refreshScheduled = false
 
+  /** @type {Set<string>} Keys of the diagnostics listed since the document was loaded */
+  #knownKeys = new Set()
+
+  /** @type {{from: number, to: number}[]} Ranges of the current document edited since the last refresh */
+  #editedRanges = []
+
   /**
    * @param {ApplicationState} state
    */
@@ -141,6 +153,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
   async onStateUpdate(changedKeys, state) {
     if (changedKeys.includes('xml')) {
       this.#checked.clear()
+      this.#knownKeys.clear()
       // a newly loaded document shows its diagnostics
       if (state.xml) this.#setExpanded(true)
     }
@@ -217,6 +230,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #onEditorUpdate(update) {
     if (revealsDiagnostics(update)) this.#setExpanded(true)
+    if (update.docChanged) this.#addEditedRanges(update)
     if (update.docChanged || replacesDiagnostics(update)) this.#scheduleRefresh()
   }
 
@@ -265,9 +279,74 @@ class DiagnosticsDrawerPlugin extends Plugin {
       }))
       .sort((a, b) => a.diagnostic.from - b.diagnostic.from
         || SEVERITY_ORDER[a.diagnostic.severity] - SEVERITY_ORDER[b.diagnostic.severity])
-    // checks are kept for diagnostics that are not listed: replacing the diagnostic set (e.g. a
-    // validation run) removes the diagnostics of other sources until they re-merge them
+    const added = this.#takeAddedKeys()
+    // otherwise, checks are kept for diagnostics that are not listed: replacing the diagnostic set
+    // (e.g. a validation run) removes the diagnostics of other sources until they re-merge them
+    const fixable = this.#entries
+      .filter(e => added.has(e.key) && typeof e.diagnostic.replacement === 'string')
+      .map(e => e.key)
+    // added to the checks, so that the suggestions of all parts of a chunked LLM review stay checked
+    for (const key of fixable) this.#checked.add(key)
     this.#render()
+    if (added.size) this.#scrollToEntries(added)
+  }
+
+  /**
+   * Remembers the ranges an update changed, mapping those remembered before to the new document.
+   * @param {ViewUpdate} update
+   */
+  #addEditedRanges(update) {
+    const ranges = this.#editedRanges.map(({ from, to }) => ({
+      from: update.changes.mapPos(from, -1),
+      to: update.changes.mapPos(to, 1)
+    }))
+    update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => ranges.push({ from: fromB, to: toB }))
+    this.#editedRanges = ranges
+  }
+
+  /**
+   * Returns the keys of the listed diagnostics that were not listed before since the document was
+   * loaded, and remembers all listed keys. A diagnostic whose text was edited since the last
+   * refresh has a new key: it counts as known. Edits elsewhere (e.g. review marks written to the
+   * standOff along with LLM review suggestions) do not matter.
+   * @returns {Set<string>}
+   */
+  #takeAddedKeys() {
+    const edited = this.#editedRanges
+    this.#editedRanges = []
+    const added = new Set()
+    for (const { key, diagnostic } of this.#entries) {
+      if (this.#knownKeys.has(key)) continue
+      this.#knownKeys.add(key)
+      if (!edited.some(range => range.from <= diagnostic.to && range.to >= diagnostic.from)) added.add(key)
+    }
+    return added
+  }
+
+  /**
+   * Scrolls the drawer body (only the drawer, not the PDF viewer around it) so that the entries
+   * with the given keys are visible below the sticky header, from the first one on if they do not
+   * fit.
+   * @param {Set<string>} keys
+   */
+  #scrollToEntries(keys) {
+    const body = /** @type {HTMLElement|null|undefined} */ (this.#ui.shadowRoot?.querySelector('[part~="body"]'))
+    const items = /** @type {HTMLElement[]} */ (Array.from(this.#ui.list.children))
+      .filter((_item, index) => keys.has(this.#entries[index]?.key ?? ''))
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!body || !first || !last) return
+    // positions in the scrolled content
+    const origin = body.getBoundingClientRect().top - body.scrollTop
+    const top = first.getBoundingClientRect().top - origin
+    const bottom = last.getBoundingClientRect().bottom - origin
+    const header = this.#ui.header.offsetHeight
+    const visible = body.clientHeight - header
+    if (bottom - top > visible || top < body.scrollTop + header) {
+      body.scrollTop = Math.max(0, top - header)
+    } else if (bottom > body.scrollTop + body.clientHeight) {
+      body.scrollTop = bottom - body.clientHeight
+    }
   }
 
   /**

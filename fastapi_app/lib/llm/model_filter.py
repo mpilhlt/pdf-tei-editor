@@ -6,7 +6,9 @@ registered provider (see registry.py), filtered against the same
 "<Provider label>/<Model label>" string the frontend's default-model picker
 shows (app/src/plugins/inference-settings.js), letting an admin block
 expensive/premium models or restrict usage to e.g. only "flash" models
-without needing to know each provider's internal model ids.
+without needing to know each provider's internal model ids. It protects the
+operator's shared API keys and is therefore not applied to providers running
+on a user's own key (see model_access.passes_model_filter()).
 
 Registered as flat `llm.*` config keys rather than `plugin.<name>.*` since
 it isn't provider-specific - see docs/code-assistant/backend-plugins.md's
@@ -47,13 +49,13 @@ def _ensure_registered() -> None:
             INCLUDE_CONFIG_KEY,
             INCLUDE_ENV_VAR,
             default="",
-            description=PATTERN_SYNTAX + "If non-empty, only models matching at least one pattern are listed or usable; empty means no include filtering.",
+            description=PATTERN_SYNTAX + "If non-empty, only models matching at least one pattern are listed or usable with the shared API keys (models of providers running on a user's own key are not filtered); empty means no include filtering.",
         )
         get_plugin_config(
             EXCLUDE_CONFIG_KEY,
             EXCLUDE_ENV_VAR,
             default="",
-            description=PATTERN_SYNTAX + "Models matching at least one pattern are neither listed nor usable, even if they match an include pattern; empty means nothing is excluded.",
+            description=PATTERN_SYNTAX + "Models matching at least one pattern are neither listed nor usable with the shared API keys, even if they match an include pattern (models of providers running on a user's own key are not filtered); empty means nothing is excluded.",
         )
         _registered = True
 

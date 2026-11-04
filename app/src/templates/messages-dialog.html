@@ -4,10 +4,11 @@
       <sl-radio-button value="unread">Unread</sl-radio-button>
       <sl-radio-button value="all">All</sl-radio-button>
     </sl-radio-group>
-    <sl-select name="kindFilter" size="small" value="any" style="width: 150px;">
-      <sl-option value="any">Reviews and comments</sl-option>
+    <sl-select name="kindFilter" size="small" value="any" style="width: 170px;">
+      <sl-option value="any">All messages</sl-option>
       <sl-option value="review">Reviews</sl-option>
       <sl-option value="comment">Comments</sl-option>
+      <sl-option value="direct">Direct messages</sl-option>
     </sl-select>
     <sl-button name="markAllBtn" size="small">
       <sl-icon slot="prefix" name="envelope-open"></sl-icon>
@@ -17,5 +18,7 @@
   <div name="messageList" class="messages-list" data-testid="messages-list"></div>
   <div name="emptyNote" class="messages-empty">No messages.</div>
   <sl-button name="loadMoreBtn" size="small" class="messages-more">Load more</sl-button>
+  <!-- icons the plugin sets from JS, listed here so that the build compiles them -->
+  <span hidden><sl-icon name="chat-dots"></sl-icon><sl-icon name="reply"></sl-icon></span>
   <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
 </sl-dialog>

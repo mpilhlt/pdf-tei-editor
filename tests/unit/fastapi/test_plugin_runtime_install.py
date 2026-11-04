@@ -508,6 +508,32 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
         with self.assertRaises(PluginChangeError):
             asyncio.run(self.mgr.remove_plugin(PLUGIN_ID))
 
+    def test_startup_prunes_plugins_whose_directory_was_deleted(self):
+        import shutil
+
+        self.install(self.mgr)
+        shutil.rmtree(self.site_dir / "pte-plugin-rt-hello")
+        forget_plugin_modules()
+        worker = self.new_manager()
+        with self.assertLogs("fastapi_app.lib.plugins.plugin_manager", level="WARNING"):
+            self.discover(worker)
+        self.assertIsNone(worker.state_store.read().get_installed(PLUGIN_ID))
+        self.assertIsNone(worker.registry.get_record(PLUGIN_ID))
+        # the plugin can be installed again
+        result = self.install(worker)
+        self.assertEqual(result["action"], "install")
+        self.assertTrue((self.site_dir / "pte-plugin-rt-hello" / "1.0.0" / PACKAGE).is_dir())
+
+    def test_startup_keeps_plugins_whose_directory_exists(self):
+        self.install(self.mgr)
+        generation = self.mgr.state_store.read().generation
+        forget_plugin_modules()
+        worker = self.new_manager()
+        self.discover(worker)
+        state = worker.state_store.read()
+        self.assertIsNotNone(state.get_installed(PLUGIN_ID))
+        self.assertEqual(state.generation, generation)
+
     def test_remove_of_enabled_plugin_disables_it_and_requires_restart(self):
         self.install(self.mgr)
         asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))

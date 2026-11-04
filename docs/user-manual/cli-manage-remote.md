@@ -201,6 +201,7 @@ Requires admin privileges. Broadcasts commands to all connected browser clients 
 | `maintenance on [--message <text>]` | Show a blocking spinner on all clients (default: "System maintenance in progress, please wait...") |
 | `maintenance off [--message <text>]` | Remove the spinner and resume normal operation. If `--message` is given, show it in an info dialog |
 | `maintenance reload` | Force all clients to reload the page |
+| `maintenance gc [--dry-run] [--task <id...>] [--deleted-before <iso>]` | Run [garbage collection](#garbage-collection) and print the result of each task |
 | `maintenance rebuild-messages` | Rebuild the [messages](messages.md) index from all documents; read states are kept |
 
 When maintenance mode is active, the heartbeat mechanism is paused and the UI is blocked.
@@ -222,6 +223,30 @@ npm run manage-remote -- maintenance off --message "Maintenance complete. Please
 
 # Force all clients to reload (e.g. after deploying a frontend update)
 npm run manage-remote -- maintenance reload
+```
+
+### Garbage Collection
+
+`maintenance gc` runs the same cleanup as **Tools > Administration > Garbage Collection**. Each task reports what it deleted:
+
+| Task id | What it cleans up |
+| --- | --- |
+| `deleted-files` | Records and physical files of soft-deleted files last updated before `--deleted-before` (default: now) |
+| `orphaned-storage-files` | Files in storage without a database record |
+| `duplicate-entries` | Duplicate file records (not run with `--dry-run`) |
+| `tei-collections` | Gives TEI files the collections of their PDF (not run with `--dry-run`) |
+| `inbox-assignment` | Moves files without a collection to `_inbox` (not run with `--dry-run`) |
+| `orphaned-xml` | TEI files whose document has no PDF |
+| `message-index` | Stale rows of the [messages](messages.md) index |
+| `schema-cache`, `annotation-rules-cache`, `tmp` | Caches and temporary files |
+| `plugin:<id>` | Reproducible data of a plugin (not run with `--dry-run`) |
+
+```bash
+# Show what would be deleted
+npm run manage-remote -- maintenance gc --dry-run
+
+# Only purge orphaned XML files and clean up the message index
+npm run manage-remote -- maintenance gc --task orphaned-xml message-index
 ```
 
 ## Plugin Commands

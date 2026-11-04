@@ -123,5 +123,8 @@
   "unit-review.mode.values": ["majority", "final"],
   "unit-review.llm-vote": true,
   "unit-review.llm-vote.description": "Count the marks of the LLM Reviewer as votes in unit review mode. If false, LLM marks are only shown for units that no person has reviewed yet.",
-  "unit-review.llm-vote.type": "boolean"
+  "unit-review.llm-vote.type": "boolean",
+  "messages.settled-retention-days": 0,
+  "messages.settled-retention-days.description": "Garbage collection deletes settled review messages (fixed or superseded review marks, finished review requests) this many days after they were settled. 0 keeps them forever.",
+  "messages.settled-retention-days.type": "number"
 }

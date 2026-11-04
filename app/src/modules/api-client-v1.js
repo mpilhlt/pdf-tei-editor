@@ -440,18 +440,40 @@
 
 /**
  * @typedef {Object} GarbageCollectRequest
- * @property {string} deleted_before
- * @property {string=} sync_status
+ * @property {string} deleted_before - Purge soft-deleted files last updated before this ISO timestamp
+ * @property {string=} sync_status - Only purge soft-deleted files with this sync status
+ * @property {boolean=} dry_run - Report what would be deleted without deleting anything
+ * @property {Array<string>=} tasks - Only run these GC task ids (all if omitted)
+ */
+
+/**
+ * @typedef {Object} GarbageCollectTaskResult
+ * @property {string} id - Task id, e.g. `deleted-files`, `message-index`, `plugin:grobid`
+ * @property {string} label - Human-readable task name
+ * @property {number} items_deleted
+ * @property {number} bytes_freed
+ * @property {Object<string, number>} details - Task-specific counts, e.g. `records_purged`, `rows_updated`
+ * @property {Array<string>} errors
+ * @property {boolean} skipped - True if the task did not run (no dry-run support)
+ */
+
+/**
+ * @typedef {Object} GarbageCollectTotals
+ * @property {number} items_deleted
+ * @property {number} bytes_freed
  */
 
 /**
  * @typedef {Object} GarbageCollectResponse
- * @property {number} purged_count
- * @property {number} files_deleted
- * @property {number} storage_freed
- * @property {number=} orphaned_xml_deleted
- * @property {Object<string, number>=} plugin_items_deleted
- * @property {number=} annotation_rules_cache_deleted
+ * @property {Array<GarbageCollectTaskResult>} tasks - One entry per task, in run order
+ * @property {GarbageCollectTotals} totals
+ * @property {boolean} dry_run
+ * @property {number} purged_count - Deprecated: sum of `records_purged` of the tasks
+ * @property {number} files_deleted - Deprecated: sum of `files_deleted` of the tasks
+ * @property {number} storage_freed - Deprecated: bytes freed by the tasks that delete stored files (without caches)
+ * @property {number=} orphaned_xml_deleted - Deprecated: items of the `orphaned-xml` task
+ * @property {Object<string, number>=} plugin_items_deleted - Deprecated: items of the `plugin:<id>` tasks
+ * @property {number=} annotation_rules_cache_deleted - Deprecated: items of the `annotation-rules-cache` task
  */
 
 /**
@@ -729,9 +751,9 @@
 
 /**
  * @typedef {Object} MessageItem
- * @property {string} key - Message key: `c:<doc_id>:<comment id>` or `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`
- * @property {'review'|'comment'|'mention'|'review-request'} kind
- * @property {'owner'|'mention'|'thread-author'|'thread-mention'|'reviewer'} reason - Why the user receives it
+ * @property {string} key - Message key: `c:<doc_id>:<comment id>`, `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`, `q:<doc_id>:<variant>:<when>` or `d:<doc_id>:<uuid>` (direct messages)
+ * @property {'review'|'comment'|'mention'|'review-request'|'direct'} kind
+ * @property {'owner'|'mention'|'thread-author'|'thread-mention'|'reviewer'|'direct'} reason - Why the user receives it
  * @property {string} doc_id
  * @property {string} stable_id - The file of the newest occurrence, which the message opens
  * @property {string} doc_label
@@ -763,6 +785,18 @@
  * @typedef {Object} MarkReadRequest
  * @property {Array<string>} keys
  * @property {boolean=} read - Default true
+ */
+
+/**
+ * @typedef {Object} DirectMessageRequest
+ * @property {string} stable_id - The file the message is about
+ * @property {string} recipient - User name of the recipient
+ * @property {string} text - At most 500 characters
+ */
+
+/**
+ * @typedef {Object} DirectMessageResponse
+ * @property {string} key - The key of the new message (`d:...`)
  */
 
 /**
@@ -2117,7 +2151,9 @@ export class ApiClientV1 {
    * other providers should still be listed. Models rejected by the
    * admin-configured `llm.model-filter.include`/`.exclude` filters (see
    * fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
-   * returned with a flag - the picker should simply never offer them.
+   * returned with a flag - the picker should simply never offer them. The
+   * filter only applies to providers using the shared key, not to those
+   * running on the current user's own API key.
    *
    * @returns {Promise<Array<ProviderResponse>>}
    */
@@ -2184,7 +2220,7 @@ export class ApiClientV1 {
   /**
    * The messages of the current user (reviews and comments addressed to them), newest first.
    *
-   * @param {{status?: 'unread'|'all', kind?: 'review'|'comment', limit?: number, offset?: number}} [params]
+   * @param {{status?: 'unread'|'all', kind?: 'review'|'comment'|'direct', limit?: number, offset?: number}} [params]
    * @returns {Promise<MessageListResponse>}
    */
   async messagesList(params = {}) {
@@ -2211,6 +2247,18 @@ export class ApiClientV1 {
   async messagesMarkAllRead() {
     const endpoint = `/messages/read-all`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Sends a short message about a document to another user. It is shown in the recipient's
+   * messages and not stored in the document; both users must be able to view the file.
+   *
+   * @param {DirectMessageRequest} requestBody
+   * @returns {Promise<DirectMessageResponse>}
+   */
+  async messagesSendDirect(requestBody) {
+    const endpoint = `/messages/direct`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**
@@ -2357,29 +2405,12 @@ export class ApiClientV1 {
   }
 
   /**
-   * Garbage collect soft-deleted files older than the specified timestamp.
-   * Permanently removes files that have been soft-deleted and meet all filter criteria:
-   * - deleted=1 (soft-deleted)
-   * - updated_at < deleted_before timestamp
-   * - sync_status matches (if provided)
-   * Filters are additive - all conditions must match if they have a value.
-   * Security:
-   * - Admin role required for timestamps younger than 24 hours (prevents accidental deletion)
-   * - All users can garbage collect files older than 24 hours
-   * This operation:
-   * 1. Finds all deleted files matching the criteria
-   * 2. Removes physical files from storage
-   * 3. Permanently deletes database records
-   * 4. Returns statistics about purged files
-   * Args:
-   * body: GarbageCollectRequest with timestamp and optional filters
-   * repo: File repository (injected)
-   * storage: File storage (injected)
-   * current_user: Current user dict (injected)
-   * Returns:
-   * GarbageCollectResponse with purge statistics
-   * Raises:
-   * HTTPException: 403 if non-admin user tries to purge files deleted within 24 hours
+   * Run all garbage-collection tasks (purge of soft-deleted files, orphan scans, message index,
+   * caches, plugin data, tmp dir); each task reports its own statistics.
+   * Soft-deleted files are purged if they were last updated before `deleted_before` and match
+   * `sync_status` (if given). With `dry_run`, tasks only report what they would delete; tasks
+   * that cannot do a dry run are skipped. `tasks` restricts the run to these task ids.
+   * Admin role required for timestamps younger than 24 hours.
    *
    * @param {GarbageCollectRequest} requestBody
    * @returns {Promise<GarbageCollectResponse>}

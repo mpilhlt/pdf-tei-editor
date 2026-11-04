@@ -26,7 +26,16 @@ from fastapi_app.lib.core.dependencies import (
     require_authenticated_user,
     require_reviewer_or_admin,
 )
-from fastapi_app.lib.core.gc_hooks import clear_directory, register_gc_handler, unregister_gc_handler
+from fastapi_app.lib.core.gc_hooks import register_gc_handler, unregister_gc_handler
+from fastapi_app.lib.core.gc_registry import (
+    GcContext,
+    GcResult,
+    clear_directory,
+    clear_directory_result,
+    register_directory_gc_task,
+    register_gc_task,
+    unregister_gc_task,
+)
 from fastapi_app.lib.core.schema_validator import (
     register_bundled_schema,
     register_schema_config,
@@ -81,6 +90,8 @@ __all__ = [
     "FileRepository",
     "FileStorage",
     "FrontendExtensionRegistry",
+    "GcContext",
+    "GcResult",
     "LLMBaseExtractor",
     "LLMImage",
     "LLMModel",
@@ -93,6 +104,7 @@ __all__ = [
     "PluginConfigSpec",
     "PluginContext",
     "clear_directory",
+    "clear_directory_result",
     "generate_datatable_page",
     "get_config",
     "get_current_user",
@@ -107,8 +119,10 @@ __all__ = [
     "get_sse_service",
     "load_plugin_html",
     "register_bundled_schema",
+    "register_directory_gc_task",
     "register_document_rules_provider",
     "register_gc_handler",
+    "register_gc_task",
     "register_schema_config",
     "register_schema_redirect",
     "require_admin_user",
@@ -117,6 +131,7 @@ __all__ = [
     "unregister_bundled_schema",
     "unregister_document_rules_provider",
     "unregister_gc_handler",
+    "unregister_gc_task",
     "unregister_schema_config",
     "unregister_schema_redirect",
 ]

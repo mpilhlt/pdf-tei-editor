@@ -14,3 +14,4 @@ Convention: state in each script's docstring the release that introduced it. Rem
 | `update-metadata.py` | Run/revert named maintenance functions on metadata.db |
 | `update-tei-metadata.py` | Enrich TEI metadata (CrossRef/DataCite/LLM) |
 | `preprocess_legacy_files.py` | Convert the legacy webdav-data layout for import |
+| `encrypt-masked-config-values.py` | Encrypt masked `config.json` values stored as plain text (0.81.0) |

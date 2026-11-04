@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 from lxml import etree
 
@@ -273,6 +274,38 @@ def _settle(occurrence: Occurrence, file_time: str, reviewer_ok: set[tuple[str, 
     return occurrence
 
 
+@dataclass
+class MessageGcStats:
+    """What `MessageIndexer.collect_garbage` deleted (or would delete in a dry run)."""
+
+    dead_files: int = 0
+    """Files that are gone or soft-deleted and still had occurrences."""
+    dead_file_occurrences: int = 0
+    dead_file_direct_messages: int = 0
+    """Direct messages about files that are gone or soft-deleted."""
+    removed_recipients: int = 0
+    """Recipients that are no longer user accounts."""
+    removed_recipient_rows: int = 0
+    expired_occurrences: int = 0
+    """Settled review-mark and review-request occurrences older than the retention period."""
+    orphaned_read_state: int = 0
+    changed_recipients: set[str] = field(default_factory=set)
+    """Recipients whose messages changed (to be notified)."""
+
+    @property
+    def rows_deleted(self) -> int:
+        return (self.dead_file_occurrences + self.dead_file_direct_messages + self.removed_recipient_rows
+                + self.expired_occurrences + self.orphaned_read_state)
+
+
+def _parse_time(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 class MessageIndexer:
     """Updates the message index from the TEI files."""
 
@@ -360,6 +393,82 @@ class MessageIndexer:
             return set()
         self.store.replace_file_occurrences(stable_id, [])
         return self._refresh({(o.key, o.recipient) for o in previous})
+
+    def collect_garbage(
+        self,
+        usernames: set[str],
+        settled_retention_days: int = 0,
+        dry_run: bool = False,
+        now: datetime | None = None,
+    ) -> MessageGcStats:
+        """
+        Removes rows that no file or user account backs any more.
+
+        1. Occurrences of files that are missing or soft-deleted, and direct messages about them
+        2. All rows of recipients that are not in `usernames`
+        3. Settled review-mark and review-request occurrences whose `file_updated_at` (the time
+           they were settled) is older than `settled_retention_days` (0 keeps them forever)
+        4. Read-state rows whose message is gone (after steps 1-3)
+
+        Args:
+            usernames: The current user accounts; must not be empty
+            settled_retention_days: Retention period of settled review messages; 0 = keep forever
+            dry_run: Only count; step 4 then counts the read state that is orphaned already
+            now: Current time (tests)
+
+        Returns:
+            The counts and the recipients whose messages changed
+        """
+        if not usernames:
+            raise ValueError("No user accounts found; not removing the messages of all recipients")
+        stats = MessageGcStats()
+
+        # 1. dead files
+        for stable_id in self.store.indexed_stable_ids():
+            file = self.file_repo.get_file_by_stable_id(stable_id)
+            if file is not None and not file.deleted:
+                continue
+            stats.dead_files += 1
+            stats.dead_file_occurrences += len(self.store.occurrences_of_file(stable_id))
+            if not dry_run:
+                stats.changed_recipients |= self.remove_file(stable_id)
+
+        for stable_id in self.store.direct_message_stable_ids():
+            file = self.file_repo.get_file_by_stable_id(stable_id)
+            if file is not None and not file.deleted:
+                continue
+            messages = self.store.direct_messages_of_file(stable_id)
+            stats.dead_file_direct_messages += len(messages)
+            if not dry_run:
+                self.store.delete_direct_messages_of_file(stable_id)
+                stats.changed_recipients |= {recipient for _key, recipient in messages}
+
+        # 2. removed users
+        for recipient in self.store.recipients() - usernames:
+            stats.removed_recipients += 1
+            stats.removed_recipient_rows += self.store.count_recipient_rows(recipient)
+            if not dry_run:
+                self.store.delete_recipient(recipient)
+
+        # 3. retention of settled review messages
+        if settled_retention_days > 0:
+            now = now or datetime.now(timezone.utc)
+            cutoff = (now if now.tzinfo else now.replace(tzinfo=timezone.utc)) - timedelta(days=settled_retention_days)
+            expired = [
+                o for o in self.store.settled_review_occurrences()
+                if (t := _parse_time(o.file_updated_at)) is not None and t < cutoff
+            ]
+            stats.expired_occurrences = len(expired)
+            if expired and not dry_run:
+                self.store.delete_occurrences(expired)
+                stats.changed_recipients |= self._refresh({(o.key, o.recipient) for o in expired})
+
+        # 4. orphaned read state
+        stats.orphaned_read_state = (
+            self.store.count_orphaned_read_state() if dry_run else self.store.delete_orphaned_read_state()
+        )
+        stats.changed_recipients &= usernames
+        return stats
 
     def rebuild(self) -> int:
         """

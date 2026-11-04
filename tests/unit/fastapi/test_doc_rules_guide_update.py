@@ -16,8 +16,11 @@ from fastapi_app.lib.doc_rules.guide_update import (
     build_update_prompts,
     clean_model_answer,
     gather_guide_change,
+    Layer,
+    MOTIVATION_PROMPT_TEMPLATE,
     human_section_at_commit,
     layer_text,
+    resolve_layer,
 )
 
 HUMAN_URL = "https://github.com/o/r/blob/main/docs/guide.md#dates"
@@ -70,8 +73,16 @@ def _change(old_human: Optional[str] = OLD_HUMAN, machine: str = MACHINE, marker
     )
 
 
-def _layer_texts(texts: dict[str, tuple[str, str]]):
-    return lambda kind, url, store, owner: texts[url]
+def _layer_texts(texts: dict[str, tuple[str, ...]]):
+    """A resolve_layer() stand-in returning `texts[url]` as (text, source[, note])."""
+    def resolve(kind, url, store, owner):
+        text, source, *note = texts[url]
+        return Layer(text, source, note[0] if note else "")
+    return resolve
+
+
+def _override(text: str, note: Optional[str] = "") -> dict[str, Optional[str]]:
+    return {"text": text, "note": note}
 
 
 # ---------------------------------------------------------------------------
@@ -83,22 +94,39 @@ class TestLayerText(unittest.TestCase):
         kind = MagicMock()
         kind.resource_key.return_value = "key"
         store = MagicMock()
-        store.get_selected_override_text.return_value = "override text"
+        store.get_selected_override.return_value = _override("override text", "Why")
         self.assertEqual(layer_text(kind, HUMAN_URL, store, "alice"), ("override text", "override"))
-        store.get_selected_override_text.assert_called_once_with(kind.name, "key", "alice")
+        store.get_selected_override.assert_called_once_with(kind.name, "key", "alice")
         kind.resolve_original.assert_not_called()
+
+    def test_resolve_layer_returns_the_stripped_note(self):
+        store = MagicMock()
+        store.get_selected_override.return_value = _override("override text", "  Why we changed it.\n")
+        self.assertEqual(resolve_layer(MagicMock(), HUMAN_URL, store, "alice"), Layer("override text", "override", "Why we changed it."))
+
+    def test_resolve_layer_tolerates_a_null_note(self):
+        store = MagicMock()
+        store.get_selected_override.return_value = _override("override text", None)
+        self.assertEqual(resolve_layer(MagicMock(), HUMAN_URL, store, "alice").note, "")
+
+    def test_resolve_layer_original_has_no_note(self):
+        kind = MagicMock()
+        kind.resolve_original.return_value = "original text"
+        store = MagicMock()
+        store.get_selected_override.return_value = None
+        self.assertEqual(resolve_layer(kind, HUMAN_URL, store, "alice"), Layer("original text", "original", ""))
 
     def test_falls_back_to_original(self):
         kind = MagicMock()
         store = MagicMock()
-        store.get_selected_override_text.return_value = None
+        store.get_selected_override.return_value = None
         kind.resolve_original.return_value = "original text"
         self.assertEqual(layer_text(kind, HUMAN_URL, store, "alice"), ("original text", "original"))
 
     def test_wraps_resolve_original_errors(self):
         kind = MagicMock()
         store = MagicMock()
-        store.get_selected_override_text.return_value = None
+        store.get_selected_override.return_value = None
         kind.resolve_original.side_effect = RuntimeError("boom")
         with self.assertRaisesRegex(OriginalUnavailableError, "boom") as cm:
             layer_text(kind, HUMAN_URL, store, "alice")
@@ -107,7 +135,7 @@ class TestLayerText(unittest.TestCase):
     def test_store_errors_are_not_wrapped(self):
         kind = MagicMock()
         store = MagicMock()
-        store.get_selected_override_text.side_effect = RuntimeError("db down")
+        store.get_selected_override.side_effect = RuntimeError("db down")
         with self.assertRaises(RuntimeError):
             layer_text(kind, HUMAN_URL, store, "alice")
 
@@ -143,7 +171,7 @@ class TestHumanSectionAtCommit(unittest.TestCase):
 
 class TestGatherGuideChange(unittest.TestCase):
     def _gather(self, texts: dict[str, tuple[str, str]], synced_commit: Optional[str] = "abc123", old_section: Optional[str] = OLD_HUMAN):
-        with patch(f"{MODULE}.layer_text", side_effect=_layer_texts(texts)), \
+        with patch(f"{MODULE}.resolve_layer", side_effect=_layer_texts(texts)), \
              patch(f"{MODULE}.find_synced_human_commit", return_value=synced_commit) as find, \
              patch(f"{MODULE}.human_section_at_commit", return_value=old_section) as at_commit:
             change = gather_guide_change(MagicMock(), HUMAN_URL, MACHINE_URL, MagicMock(), "alice", MagicMock())
@@ -164,6 +192,11 @@ class TestGatherGuideChange(unittest.TestCase):
         change, _, _ = self._gather(texts)
         self.assertEqual(change.machine, MACHINE)
         self.assertEqual(change.machine_full, MACHINE_FULL)
+
+    def test_human_note_is_the_human_override_note(self):
+        texts = {HUMAN_URL: (NEW_HUMAN, "override", "Human reason"), MACHINE_URL: (MACHINE_FULL, "override", "Updated from guide with X")}
+        change, _, _ = self._gather(texts)
+        self.assertEqual(change.human_note, "Human reason")
         self.assertEqual(change.marker_line, MARKER)
 
     def test_crlf_machine_text(self):
@@ -246,6 +279,19 @@ class TestBuildUpdatePrompts(unittest.TestCase):
         _system, user = build_update_prompts(change, "Condense.")
         self.assertIn("<guide>\n{x}\n</guide>", user)
         self.assertIn("{y}", user)
+
+    def test_human_note_is_appended_as_motivation(self):
+        for old_human in (OLD_HUMAN, None):
+            change = _change(old_human=old_human)
+            _system, plain = build_update_prompts(change, "Condense.")
+            noted = GuideChange(**{**change.__dict__, "human_note": "Courts are {named} now."})
+            _system, user = build_update_prompts(noted, "Condense.")
+            self.assertEqual(user, plain + MOTIVATION_PROMPT_TEMPLATE.format(note="Courts are {named} now."))
+            self.assertIn("<change_motivation>\nCourts are {named} now.\n</change_motivation>", user)
+
+    def test_no_motivation_without_note(self):
+        _system, user = build_update_prompts(_change(), "Condense.")
+        self.assertNotIn("change_motivation", user)
 
 
 # ---------------------------------------------------------------------------
