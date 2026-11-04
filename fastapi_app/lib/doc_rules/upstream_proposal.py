@@ -14,7 +14,7 @@ text, the guide text the machine rules were derived from.
 import difflib
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import requests
 
@@ -28,7 +28,7 @@ from fastapi_app.lib.doc_rules.guide_sync import (
     split_sync_marker,
     with_sync_marker,
 )
-from fastapi_app.lib.doc_rules.guide_update import OriginalUnavailableError, layer_text
+from fastapi_app.lib.doc_rules.guide_update import OriginalUnavailableError, resolve_layer
 from fastapi_app.lib.doc_rules.interpretation_ref_kind import InterpretationRefKind
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
 from fastapi_app.lib.utils.annotation_rules_utils import (
@@ -85,6 +85,9 @@ class UpstreamProposal:
     branch differs from the pinned original, i.e. changes the patch replaces.
     `in_sync` is true iff the machine layer is included and its new marker's
     guide hash matches the human section upstream after the patch.
+    `notes` are the non-empty notes of the selected overrides of the
+    included layers (human first), as (layer name, note) pairs; see
+    note_heading().
     """
     files: list[ProposedFile]
     patch: str
@@ -92,6 +95,7 @@ class UpstreamProposal:
     branch: str
     upstream_changed: list[str]
     in_sync: bool
+    notes: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def base_hashes(self) -> dict[str, str]:
@@ -248,6 +252,11 @@ def includes_text(include_human: bool, include_machine: bool) -> str:
     return "guide section" if include_human else "machine rules"
 
 
+def note_heading(layer_name: str) -> str:
+    """The heading of a layer's override note in a proposal, e.g. `Note on the guide section`."""
+    return f"Note on the {layer_name}"
+
+
 def build_upstream_proposal(
     kind: InterpretationRefKind,
     human_url: str,
@@ -268,7 +277,9 @@ def build_upstream_proposal(
     else the pinned original), whether or not the human layer is included:
     that is the guide text the machine rules were derived from. If the
     human section left upstream differs from it, the machine rules read as
-    outdated there (`in_sync` is false).
+    outdated there (`in_sync` is false). The notes of the included layers'
+    selected overrides, which usually give the motivation of the change,
+    are returned as `notes` and added to the patch preamble.
 
     Raises:
         ProposalError: for the 422 cases (no layer selected, different
@@ -291,12 +302,16 @@ def build_upstream_proposal(
     human_anchor = section_anchor(human_url, cache)
     files: list[ProposedFile] = []
     upstream_changed: list[str] = []
+    notes: list[tuple[str, str]] = []
 
     human_before = _fetch_raw_file(human_main_url)
     upstream_human_section = _section(human_before, human_anchor, human_path, branch)
     # The user's current guide text: proposed if included, and what the machine rules were derived from
-    human_section = _proposed_text(layer_text(kind, human_url, store, owner)[0], human_url)
+    human_layer = resolve_layer(kind, human_url, store, owner)
+    human_section = _proposed_text(human_layer.text, human_url)
     if include_human:
+        if human_layer.note:
+            notes.append(("guide section", human_layer.note))
         files.append(ProposedFile(human_path, human_before, _splice(human_before, human_anchor, human_section, human_path, branch)))
         if _upstream_changed(kind, human_url, upstream_human_section):
             upstream_changed.append(human_path)
@@ -306,7 +321,10 @@ def build_upstream_proposal(
         machine_anchor = section_anchor(machine_url, cache)
         _, machine_main_url = _default_branch(_adapter(machine_url), machine_url, cache)
         machine_before = _fetch_raw_file(machine_main_url)
-        machine_text = _without_sync_markers(_proposed_text(layer_text(kind, machine_url, store, owner)[0], machine_url))
+        machine_layer = resolve_layer(kind, machine_url, store, owner)
+        if machine_layer.note:
+            notes.append(("machine rules", machine_layer.note))
+        machine_text = _without_sync_markers(_proposed_text(machine_layer.text, machine_url))
         guide_hash = human_section_hash(human_section, human_url)
         marker = SyncMarker(guide_hash=guide_hash, llm_hash=section_hash(machine_text))
         machine_section = with_sync_marker(machine_text, format_sync_marker(marker))
@@ -319,7 +337,7 @@ def build_upstream_proposal(
     files = [file for file in files if file.after != file.before]
     if not files:
         raise ProposalError("There are no changes to propose.")
-    patch = build_patch(files, label, owner, includes_text(include_human, include_machine))
+    patch = build_patch(files, label, owner, includes_text(include_human, include_machine), notes)
     return UpstreamProposal(
         files=files,
         patch=patch,
@@ -327,6 +345,7 @@ def build_upstream_proposal(
         branch=branch,
         upstream_changed=upstream_changed,
         in_sync=in_sync,
+        notes=notes,
     )
 
 
@@ -344,19 +363,32 @@ def _diff_lines(file: ProposedFile) -> list[str]:
     return lines
 
 
-def build_patch(files: list[ProposedFile], label: str, username: str, includes: str) -> str:
+def build_patch(
+    files: list[ProposedFile],
+    label: str,
+    username: str,
+    includes: str,
+    notes: list[tuple[str, str]] | None = None,
+) -> str:
     """
     A patch `git apply` accepts at the repository root: a `# ` preamble
     (ignored by git), then a `diff --git` section per file in the given order.
-    `label` and `username` are collapsed to one line, so they cannot add
-    lines (e.g. a forged `diff --git`) to the patch.
+    `notes` (layer name, note) are added to the preamble, each under its
+    note_heading(), every line prefixed with `# `. `label` and `username`
+    are collapsed to one line, and the notes' lines have their control
+    characters removed, so none of them can add lines (e.g. a forged
+    `diff --git`) to the patch.
     """
     parts = [
         f"# Annotation rules update: {one_line(label)}\n",
         f"# Proposed with the PDF-TEI-Editor by {one_line(username)}\n",
         f"# Includes: {includes}\n",
-        "\n",
     ]
+    for layer_name, note in notes or []:
+        parts.append("#\n")
+        parts.append(f"# {note_heading(layer_name)}:\n")
+        parts.extend(f"# {one_line(line)}".rstrip() + "\n" for line in note.splitlines())
+    parts.append("\n")
     for file in files:
         parts.append(f"diff --git a/{file.path} b/{file.path}\n")
         parts.extend(_diff_lines(file))

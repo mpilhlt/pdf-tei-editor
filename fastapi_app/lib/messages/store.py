@@ -315,6 +315,69 @@ class MessageStore:
             for table in ("occurrence", "message", "read_state"):
                 conn.execute(f"DELETE FROM {table} WHERE recipient = ?", (recipient,))
 
+    # ── Garbage collection ──────────────────────────────────────────────
+
+    def recipients(self) -> set[str]:
+        """All recipients that have rows in any table."""
+        rows = get_connection(self.db_path).execute(
+            "SELECT recipient FROM occurrence UNION SELECT recipient FROM message UNION SELECT recipient FROM read_state"
+        ).fetchall()
+        return {row["recipient"] for row in rows}
+
+    def count_recipient_rows(self, recipient: str) -> int:
+        """The number of rows of a recipient in all tables."""
+        conn = get_connection(self.db_path)
+        return sum(
+            conn.execute(f"SELECT COUNT(*) FROM {table} WHERE recipient = ?", (recipient,)).fetchone()[0]
+            for table in ("occurrence", "message", "read_state")
+        )
+
+    def direct_message_stable_ids(self) -> set[str]:
+        """The files that direct messages are about."""
+        rows = get_connection(self.db_path).execute("SELECT DISTINCT stable_id FROM message WHERE key LIKE 'd:%'").fetchall()
+        return {row["stable_id"] for row in rows}
+
+    def direct_messages_of_file(self, stable_id: str) -> list[tuple[str, str]]:
+        """The (key, recipient) of the direct messages about a file."""
+        rows = get_connection(self.db_path).execute(
+            "SELECT key, recipient FROM message WHERE key LIKE 'd:%' AND stable_id = ?", (stable_id,)
+        ).fetchall()
+        return [(row["key"], row["recipient"]) for row in rows]
+
+    def delete_direct_messages_of_file(self, stable_id: str) -> int:
+        """Deletes the direct messages about a file; returns their number."""
+        with transaction(self.db_path) as conn:
+            return conn.execute("DELETE FROM message WHERE key LIKE 'd:%' AND stable_id = ?", (stable_id,)).rowcount
+
+    def settled_review_occurrences(self) -> list[Occurrence]:
+        """The settled occurrences of review marks and review requests (`r:` and `q:` keys)."""
+        rows = get_connection(self.db_path).execute(
+            "SELECT * FROM occurrence WHERE settled = 1 AND (key LIKE 'r:%' OR key LIKE 'q:%')"
+        ).fetchall()
+        return [_row_to_occurrence(row) for row in rows]
+
+    def delete_occurrences(self, occurrences: list[Occurrence]) -> None:
+        """Deletes single occurrences (the messages must be refreshed afterwards)."""
+        with transaction(self.db_path) as conn:
+            conn.executemany(
+                "DELETE FROM occurrence WHERE key = ? AND recipient = ? AND stable_id = ?",
+                [(o.key, o.recipient, o.stable_id) for o in occurrences],
+            )
+
+    _ORPHANED_READ_STATE = (
+        "FROM read_state WHERE NOT EXISTS "
+        "(SELECT 1 FROM message m WHERE m.key = read_state.key AND m.recipient = read_state.recipient)"
+    )
+
+    def count_orphaned_read_state(self) -> int:
+        """The number of read-state rows whose message no longer exists."""
+        return get_connection(self.db_path).execute(f"SELECT COUNT(*) {self._ORPHANED_READ_STATE}").fetchone()[0]
+
+    def delete_orphaned_read_state(self) -> int:
+        """Deletes the read-state rows whose message no longer exists; returns their number."""
+        with transaction(self.db_path) as conn:
+            return conn.execute(f"DELETE {self._ORPHANED_READ_STATE}").rowcount
+
     def clear_index(self) -> None:
         """Removes all occurrences and messages derived from files, keeping the read state and the direct messages (before a rebuild)."""
         with transaction(self.db_path) as conn:

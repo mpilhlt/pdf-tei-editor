@@ -38,7 +38,11 @@ class InfoPlugin extends Plugin {
 
   #remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
 
-  #githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
+  /**
+   * GitHub's web editor only works on branches, not on tags, so edits always
+   * target the development branch, where documentation changes are merged.
+   */
+  #githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/devel/docs"
 
   #enableCache = true
 
@@ -78,7 +82,6 @@ class InfoPlugin extends Plugin {
         this.#ui.versionInfo.textContent = `v${version}`
         const versionTag = `v${version}`
         this.#remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
-        this.#githubEditBasePath = `https://github.com/mpilhlt/pdf-tei-editor/edit/${versionTag}/docs`
         logger.debug(`Remote docs path: ${this.#remoteDocsBasePath}`)
       }
     }).catch(error => {

@@ -18,7 +18,7 @@ from urllib.parse import quote, unquote
 
 import requests
 
-from fastapi_app.lib.doc_rules.upstream_proposal import ProposedFile, includes_text, one_line, patch_filename
+from fastapi_app.lib.doc_rules.upstream_proposal import ProposedFile, includes_text, note_heading, one_line, patch_filename
 from fastapi_app.lib.secrets import register_secret_service
 
 logger = logging.getLogger(__name__)
@@ -89,14 +89,20 @@ def default_pull_request_text(
     include_machine: bool,
     in_sync: bool,
     upstream_changed: list[str],
+    notes: list[tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
-    """The default (title, description) of the pull request of a proposal, see UpstreamProposal for `in_sync` and `upstream_changed`."""
+    """
+    The default (title, description) of the pull request of a proposal, see
+    UpstreamProposal for `in_sync`, `upstream_changed` and `notes`. The
+    description is also the body of the pull request's commit message; the
+    notes, which usually give the motivation of the change, follow its first
+    line, each under its note_heading().
+    """
     title = f"Annotation rules update: {one_line(label)}"
-    lines = [
-        f"Proposed with the PDF-TEI-Editor by {one_line(username)}.",
-        "",
-        f"Includes: {includes_text(include_human, include_machine)}.",
-    ]
+    lines = [f"Proposed with the PDF-TEI-Editor by {one_line(username)}.", ""]
+    for layer_name, note in notes or []:
+        lines.extend([f"{note_heading(layer_name)}:", "", note.replace("\r\n", "\n"), ""])
+    lines.append(f"Includes: {includes_text(include_human, include_machine)}.")
     if include_machine:
         lines.append("The sync marker of the machine rules is updated; the pair is in sync." if in_sync else "The machine rules are marked as outdated.")
     for path in upstream_changed:

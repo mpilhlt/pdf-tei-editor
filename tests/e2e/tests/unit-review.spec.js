@@ -16,6 +16,8 @@
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/plugins/unit-comments.js
  * @testCovers app/src/plugins/xml-annotation.js
+ * @testCovers app/src/plugins/tei-tools.js
+ * @testCovers app/src/modules/xmleditor.js
  * @testCovers app/src/templates/save-document-dialog.html
  */
 
@@ -145,6 +147,17 @@ test.describe('Unit review', () => {
       });
       expect(lines.cursor).toBe(lines.beta);
       await expect(page.locator('.cm-ur-ok')).toHaveCount(1);
+
+      // the first mark adds the reviewer's respStmt to the folded header: the header stays folded
+      // and the toggle stays in sync (#660)
+      const headerState = await page.evaluate(() => {
+        const w = /** @type {any} */ (window);
+        return {
+          folded: w.app.getDependency('xmleditor').isFoldedByXpath('//tei:teiHeader'),
+          toggleChecked: w.ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.checked
+        };
+      });
+      expect(headerState).toEqual({ folded: true, toggleChecked: false });
 
       // the new standOff is folded; a manual unfold lasts until the header is folded
       const content = page.locator('#codemirror-container .cm-content');
@@ -563,6 +576,8 @@ test.describe('Unit review', () => {
       await expect(page.locator('[name="annotationModeSwitch"]')).toBeVisible();
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation').dispatchStateChange({ view: 'annotation' }));
       await page.waitForFunction(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').isReadOnly());
+      // the header stays folded in annotation mode: its toggle is hidden, not just disabled (#660)
+      await expect(page.locator('[name="headerFoldToggle"]')).toBeHidden();
 
       // a click puts the cursor into the unit and the keyboard focus into the editor
       const alpha = await page.evaluate(() => {

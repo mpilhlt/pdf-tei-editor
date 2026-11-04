@@ -24,6 +24,12 @@ Low-level API (for advanced use):
     get_config_value(key, db_dir, default)
     set_config_value(key, value, db_dir)
     get_config_metadata(key, db_dir)
+
+Masked values (keys with ``{key}.masked = True``) are encrypted at rest with the key of the
+secret store (``SECRETS_ENCRYPTION_KEY`` or ``data/db/secrets.key``, see
+fastapi_app/lib/secrets/encryption.py). ``get()``/``get_config_value()`` decrypt them
+transparently; ``load()``/``load_full_config()`` return them as stored, i.e. as encrypted
+tokens, since none of their callers needs the secrets.
 """
 
 import json
@@ -34,6 +40,9 @@ from typing import Any, Optional
 from fastapi_app.lib.utils.data_utils import get_data_file_path
 
 MASKED_SENTINEL = "****"
+
+# Prefix of masked values that are encrypted at rest; the rest is a Fernet token of the JSON-encoded value
+ENCRYPTED_PREFIX = "fernet:"
 
 METADATA_SUFFIXES = ('.type', '.values', '.description', '.masked')
 
@@ -65,6 +74,140 @@ def _unlock_file(file_handle):
             pass
     else:
         fcntl.flock(file_handle, fcntl.LOCK_UN)
+
+
+class ConfigSecretError(RuntimeError):
+    """A masked config value cannot be encrypted or decrypted (missing or wrong encryption key)."""
+
+
+def is_encrypted_value(value: Any) -> bool:
+    """True if `value` is a masked config value encrypted at rest."""
+    return isinstance(value, str) and value.startswith(ENCRYPTED_PREFIX)
+
+
+def _needs_encryption(value: Any) -> bool:
+    """True if a masked value must be encrypted: it is set and not encrypted yet."""
+    return value not in (None, "") and not is_encrypted_value(value)
+
+
+def encrypt_config_value(value: Any, db_dir: Path) -> str:
+    """
+    Encrypt a masked config value for storage in config.json.
+
+    Creates the key file in `db_dir` if no encryption key is configured yet.
+
+    Raises:
+        ConfigSecretError: If the encryption key is invalid
+    """
+    from fastapi_app.lib.secrets.encryption import EncryptionKeyError, load_fernet
+    try:
+        fernet = load_fernet(db_dir, create=True)
+    except EncryptionKeyError as e:
+        raise ConfigSecretError(str(e)) from e
+    assert fernet is not None  # create=True always returns a key
+    return ENCRYPTED_PREFIX + fernet.encrypt(json.dumps(value).encode()).decode()
+
+
+def decrypt_config_value(value: Any, db_dir: Path, key: str = "") -> Any:
+    """
+    Decrypt a masked config value stored by encrypt_config_value(); other values are returned unchanged.
+
+    Args:
+        value: The stored value
+        db_dir: Directory of the application databases (holds the fallback key file)
+        key: The config key, for the error message
+
+    Raises:
+        ConfigSecretError: If no encryption key is configured or the value was encrypted with another key.
+            The message never contains the value.
+    """
+    if not is_encrypted_value(value):
+        return value
+    from cryptography.fernet import InvalidToken
+    from fastapi_app.lib.secrets.encryption import ENCRYPTION_KEY_ENV_VAR, KEY_FILE_NAME, EncryptionKeyError, load_fernet
+    label = f"'{key}'" if key else "a masked value"
+    try:
+        fernet = load_fernet(db_dir, create=False)
+    except EncryptionKeyError as e:
+        raise ConfigSecretError(f"Cannot decrypt config value {label}: {e}") from e
+    if fernet is None:
+        raise ConfigSecretError(
+            f"Cannot decrypt config value {label}: no encryption key is configured (set {ENCRYPTION_KEY_ENV_VAR} or restore {Path(db_dir) / KEY_FILE_NAME})"
+        )
+    try:
+        return json.loads(fernet.decrypt(value[len(ENCRYPTED_PREFIX):].encode()).decode())
+    except (InvalidToken, ValueError) as e:
+        raise ConfigSecretError(
+            f"Cannot decrypt config value {label}: it was encrypted with a different key than the configured one ({ENCRYPTION_KEY_ENV_VAR} or {Path(db_dir) / KEY_FILE_NAME})"
+        ) from e
+
+
+def check_config_secrets(db_dir: Path) -> tuple[int, list[str]]:
+    """
+    Check that every encrypted value in config.json can be decrypted with the configured key.
+
+    Args:
+        db_dir: Directory of the application databases
+
+    Returns:
+        Tuple of (number of encrypted values, keys of masked values still stored as plain text)
+
+    Raises:
+        ConfigSecretError: If any encrypted value cannot be decrypted; the message names the keys
+    """
+    config_data = load_full_config(db_dir)
+    encrypted = [k for k, v in config_data.items() if not k.endswith(METADATA_SUFFIXES) and is_encrypted_value(v)]
+    failed: list[str] = []
+    first_error: ConfigSecretError | None = None
+    for key in encrypted:
+        try:
+            decrypt_config_value(config_data[key], db_dir, key)
+        except ConfigSecretError as e:
+            failed.append(key)
+            first_error = first_error or e
+    if failed:
+        from fastapi_app.lib.secrets.encryption import ENCRYPTION_KEY_ENV_VAR, KEY_FILE_NAME
+        raise ConfigSecretError(
+            f"{len(failed)} masked value(s) in config.json cannot be decrypted ({', '.join(failed)}): {first_error}. "
+            f"Configure the key they were encrypted with ({ENCRYPTION_KEY_ENV_VAR} or {Path(db_dir) / KEY_FILE_NAME}), "
+            "or, if that key is lost, delete these values and set them again (see docs/user-manual/docker-deployment.md#encryption-of-secrets)."
+        )
+    plaintext = [
+        k for k, v in config_data.items()
+        if not k.endswith(METADATA_SUFFIXES) and config_data.get(f"{k}.masked") is True and _needs_encryption(v)
+    ]
+    return len(encrypted), plaintext
+
+
+def _encrypt_masked_entries(config_data: dict[str, Any], key: str, db_dir: Path, previous: Any = None) -> None:
+    """
+    Bring the stored form of `key` (a value key or its .masked flag) in line with its masked flag,
+    in place: encrypt the value of a masked key, decrypt it again when the flag is removed.
+
+    Args:
+        config_data: The config about to be written
+        key: The key that was just set
+        db_dir: Directory of the application databases
+        previous: The value stored for `key` before it was set. If it is encrypted and decrypts to
+            the new value, its token is kept, so that re-registering a plugin setting on startup does
+            not rewrite config.json with a new token.
+    """
+    base = key[:-len(".masked")] if key.endswith(".masked") else key
+    if base.endswith(METADATA_SUFFIXES) or base not in config_data:
+        return
+    value = config_data[base]
+    if config_data.get(f"{base}.masked") is True:
+        if _needs_encryption(value):
+            if base == key and is_encrypted_value(previous):
+                try:
+                    if decrypt_config_value(previous, db_dir, key) == value:
+                        config_data[base] = previous
+                        return
+                except ConfigSecretError:
+                    pass  # replaced by a value encrypted with the current key
+            config_data[base] = encrypt_config_value(value, db_dir)
+    elif is_encrypted_value(value):
+        config_data[base] = decrypt_config_value(value, db_dir, base)
 
 
 class Config:
@@ -172,6 +315,8 @@ def load_full_config(db_dir: Path, apply_masks: bool = False) -> dict:
     """
     Load complete configuration from config.json.
 
+    Masked values are returned as stored, i.e. encrypted (see decrypt_config_value()).
+
     Args:
         db_dir: Path to the database directory containing config.json
         apply_masks: When True, replace values of masked keys with MASKED_SENTINEL
@@ -206,7 +351,7 @@ def load_full_config(db_dir: Path, apply_masks: bool = False) -> dict:
 
 def get_config_value(key: str, db_dir: Path, default: Any = None, apply_masks: bool = False) -> Any:
     """
-    Get a configuration value with dot notation support.
+    Get a configuration value with dot notation support. Masked values encrypted at rest are decrypted.
 
     Args:
         key: The configuration key (supports dot notation like "session.timeout")
@@ -216,12 +361,15 @@ def get_config_value(key: str, db_dir: Path, default: Any = None, apply_masks: b
 
     Returns:
         The configuration value or default
+
+    Raises:
+        ConfigSecretError: If the value is encrypted and cannot be decrypted with the configured key
     """
     try:
         config_data = load_full_config(db_dir)
         if apply_masks and config_data.get(f"{key}.masked") is True and config_data.get(key) not in (None, ""):
             return MASKED_SENTINEL
-        return config_data.get(key, default)
+        return decrypt_config_value(config_data.get(key, default), db_dir, key)
     except (FileNotFoundError, ValueError):
         return default
 
@@ -313,6 +461,8 @@ def set_config_value(
                 if not _validate_config_value(config_data, key, value):
                     return False, "Value does not meet validation constraints"
 
+                previous = config_data.get(key)
+
                 # Set the value
                 config_data[key] = value
 
@@ -336,6 +486,9 @@ def set_config_value(
                     if masked is True:
                         config_data[f"{key}.masked"] = True
 
+                # Masked values are stored encrypted; removing the flag stores the value as plain text again
+                _encrypt_masked_entries(config_data, key, db_dir, previous)
+
                 # Atomic write: write to temp file then rename
                 tmp_fd, tmp_path = tempfile.mkstemp(dir=config_file.parent, suffix='.tmp')
                 try:
@@ -353,9 +506,11 @@ def set_config_value(
             finally:
                 _unlock_file(lf)
 
+        if config_data.get(f"{key}.masked") is True:
+            return True, f"Set {key}"
         return True, f"Set {key} to {json.dumps(value)}"
 
-    except (FileNotFoundError, ValueError) as e:
+    except (FileNotFoundError, ValueError, ConfigSecretError) as e:
         return False, str(e)
 
 

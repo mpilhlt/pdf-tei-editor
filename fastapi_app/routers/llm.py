@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
 from ..lib.llm import LLMProviderError, LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
 from ..lib.secrets import MissingSecretError, SecretsError, secret_required_detail
-from ..lib.llm.model_access import is_free_model, user_may_use_model
+from ..lib.llm.model_access import is_free_model, passes_model_filter, user_may_use_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -65,7 +65,9 @@ def list_providers(
     see why one has no models. Models rejected by the
     admin-configured `llm.model-filter.include`/`.exclude` filters (see
     fastapi_app/lib/llm/model_filter.py) are silently omitted rather than
-    returned with a flag - the picker should simply never offer them.
+    returned with a flag - the picker should simply never offer them. The
+    filter only applies to providers using the shared key, not to those
+    running on the current user's own API key.
     Models the current user may not use (non-free models for non-admins,
     except the default - see fastapi_app/lib/llm/model_access.py) are
     omitted the same way.
@@ -114,7 +116,7 @@ def list_providers(
                 ),
             )
             for model in models
-            if is_model_allowed(f"{provider.label}/{model['label']}")
+            if passes_model_filter(provider, model)
             and user_may_use_model(provider, model, current_user)
         ]
         result.append(ProviderResponse(

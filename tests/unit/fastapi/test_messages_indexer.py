@@ -320,5 +320,86 @@ class TestDirectMessages(IndexerTestCase):
             self.store.add_direct_message("c:doc1:abc", "jdoe", "doc1", "f1", "asmith", None, "Hi")
 
 
+class TestGarbageCollection(IndexerTestCase):
+    def settle_marks(self) -> None:
+        """Index f1, then remove its human not-OK marks so that they settle (at BASE_TIME + 10 min)."""
+        self.files.put("f1", self.xml, minutes=0)
+        self.indexer.index_file("f1")
+        changed = self.xml.replace(b'<note type="not-ok" n="de7bf13a">@jdoe the year is missing &amp; the title</note>', b"")
+        changed = changed.replace(b'<note type="not-ok" n="a5cc5d33.2"/>', b"")
+        self.files.put("f1", changed, minutes=10)
+        self.indexer.index_file("f1")
+
+    def test_removes_occurrences_of_missing_and_deleted_files(self) -> None:
+        self.files.put("f1", self.xml, minutes=0)
+        self.files.put("f2", self.xml, created_by="bkim", minutes=5)
+        self.indexer.index_file("f1")
+        self.indexer.index_file("f2")
+        del self.files.files["f1"]
+        self.files.files["f2"].deleted = True
+        dry = self.indexer.collect_garbage(set(USERS), dry_run=True)
+        self.assertEqual(dry.dead_files, 2)
+        self.assertEqual(self.store.indexed_stable_ids(), {"f1", "f2"})
+        stats = self.indexer.collect_garbage(set(USERS))
+        self.assertEqual(stats.dead_files, 2)
+        self.assertGreater(stats.dead_file_occurrences, 0)
+        self.assertIn("owner", stats.changed_recipients)
+        self.assertEqual(self.store.indexed_stable_ids(), set())
+        self.assertEqual(self.store.list_messages("owner"), [])
+
+    def test_removes_rows_of_removed_users_and_orphaned_read_state(self) -> None:
+        self.files.put("f1", self.xml)
+        self.indexer.index_file("f1")
+        self.store.set_read("jdoe", ["c:doc1:uc-aaa111"], True)
+        self.store.set_read("owner", ["c:doc1:gone"], True)  # message does not exist
+        stats = self.indexer.collect_garbage(set(USERS) - {"jdoe"})
+        self.assertEqual(stats.removed_recipients, 1)
+        self.assertGreater(stats.removed_recipient_rows, 0)
+        self.assertEqual(stats.orphaned_read_state, 1)
+        self.assertNotIn("jdoe", self.store.recipients())
+        self.assertNotIn("jdoe", stats.changed_recipients)
+        self.assertEqual(self.store.count_orphaned_read_state(), 0)
+
+    def test_removes_direct_messages_about_deleted_files_only(self) -> None:
+        self.files.put("f1", self.xml)
+        self.files.put("f2", self.xml, minutes=5)
+        self.store.add_direct_message("d:doc1:gone", "jdoe", "doc1", "f1", "asmith", None, "About f1")
+        self.store.add_direct_message("d:doc1:kept", "jdoe", "doc1", "f2", "asmith", None, "About f2")
+        self.store.set_read("jdoe", ["d:doc1:gone"], True)
+        self.files.files["f1"].deleted = True
+        dry = self.indexer.collect_garbage(set(USERS), dry_run=True)
+        self.assertEqual(dry.dead_file_direct_messages, 1)
+        self.assertIsNotNone(self.store.get_message("d:doc1:gone", "jdoe"))
+        stats = self.indexer.collect_garbage(set(USERS))
+        self.assertEqual(stats.dead_file_direct_messages, 1)
+        self.assertIn("jdoe", stats.changed_recipients)
+        self.assertEqual(stats.orphaned_read_state, 1)
+        self.assertIsNone(self.store.get_message("d:doc1:gone", "jdoe"))
+        self.assertIsNotNone(self.store.get_message("d:doc1:kept", "jdoe"))
+
+    def test_refuses_to_run_without_users(self) -> None:
+        with self.assertRaises(ValueError):
+            self.indexer.collect_garbage(set())
+
+    def test_settled_review_messages_are_kept_without_retention(self) -> None:
+        self.settle_marks()
+        stats = self.indexer.collect_garbage(set(USERS), settled_retention_days=0, now=BASE_TIME + timedelta(days=1000))
+        self.assertEqual(stats.expired_occurrences, 0)
+        self.assertIsNotNone(self.store.get_message("r:doc1:grobid:asmith:de7bf13a", "owner"))
+
+    def test_settled_review_messages_expire_after_the_retention_period(self) -> None:
+        self.settle_marks()
+        self.store.set_read("owner", ["r:doc1:grobid:asmith:de7bf13a"], True)
+        early = self.indexer.collect_garbage(set(USERS), settled_retention_days=30, now=BASE_TIME + timedelta(days=29))
+        self.assertEqual(early.expired_occurrences, 0)
+        stats = self.indexer.collect_garbage(set(USERS), settled_retention_days=30, now=BASE_TIME + timedelta(days=31))
+        self.assertGreater(stats.expired_occurrences, 0)
+        self.assertIsNone(self.store.get_message("r:doc1:grobid:asmith:de7bf13a", "owner"))
+        self.assertEqual(stats.orphaned_read_state, 1)
+        # unsettled messages and comments stay
+        self.assertIsNotNone(self.store.get_message("r:doc1:grobid:llm-openai-gpt:run-2026-10-22T08:30:00Z", "owner"))
+        self.assertTrue(any(k.startswith("c:") for k in self.messages("jdoe")))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,6 +83,7 @@ class _Fixture:
         human_url: str = HUMAN_URL,
         machine_url: str = MACHINE_URL,
         label: str = "Data correction",
+        notes: Optional[dict[str, str]] = None,
     ) -> UpstreamProposal:
         originals = {
             human_url: _served(_slice(HUMAN_FILE, "data-correction")),
@@ -94,11 +95,13 @@ class _Fixture:
         kind.resolve_original.side_effect = lambda url: originals[url]
         store = MagicMock()
 
-        def selected(kind_name: str, key: str, owner: str) -> Optional[str]:
+        def selected(kind_name: str, key: str, owner: str) -> Optional[dict[str, str]]:
             assert owner == "alice"
-            return overrides.get(key)
+            if key not in overrides:
+                return None
+            return {"text": overrides[key], "note": (notes or {}).get(key, "")}
 
-        store.get_selected_override_text.side_effect = selected
+        store.get_selected_override.side_effect = selected
         with ExitStack() as stack:
             stack.enter_context(patch(f"{MODULE}._fetch_raw_file", side_effect=self._fetch_raw))
             stack.enter_context(patch(f"{MODULE}.fetch_rule_excerpt", return_value=_served(MACHINE_FILE)))
@@ -135,6 +138,20 @@ class TestBuildUpstreamProposal(unittest.TestCase):
         self.assertNotIn("guidelines-llm.md", proposal.patch)
         self.assertEqual(proposal.branch, "main")
         self.assertIn("# Includes: guide section\n", proposal.patch)
+
+    def test_notes_of_included_override_layers(self) -> None:
+        notes = {HUMAN_URL: "Courts are named now.", MACHINE_URL: "Updated from guide with M"}
+        both = _Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT}, notes=notes)
+        self.assertEqual(both.notes, [("guide section", "Courts are named now."), ("machine rules", "Updated from guide with M")])
+        self.assertIn("#\n# Note on the guide section:\n# Courts are named now.\n#\n# Note on the machine rules:\n# Updated from guide with M\n\ndiff --git", both.patch)
+        human_only = _Fixture().build({HUMAN_URL: HUMAN_EDIT, MACHINE_URL: MACHINE_EDIT}, include_machine=False, notes=notes)
+        self.assertEqual(human_only.notes, [("guide section", "Courts are named now.")])
+        self.assertNotIn("Updated from guide", human_only.patch)
+
+    def test_no_notes_for_originals_or_empty_notes(self) -> None:
+        proposal = _Fixture().build({MACHINE_URL: MACHINE_EDIT}, notes={HUMAN_URL: "unused", MACHINE_URL: "  "})
+        self.assertEqual(proposal.notes, [])
+        self.assertNotIn("# Note on", proposal.patch)
 
     def test_machine_only_recomputes_the_marker(self) -> None:
         proposal = _Fixture().build({MACHINE_URL: MACHINE_EDIT}, include_human=False)
@@ -383,6 +400,15 @@ class TestBuildPatch(unittest.TestCase):
         self.assertEqual(
             preamble,
             "# Annotation rules update: Data correction diff --git a/x b/x +++ b/x\n# Proposed with the PDF-TEI-Editor by bob # Includes: x\n# Includes: guide section\n\n",
+        )
+
+    def test_multiline_notes_cannot_add_lines_outside_the_preamble(self) -> None:
+        note = "First line\n\ndiff --git a/x b/x\r\n+++ b/x\x00\u2028+evil"
+        patch_text = build_patch([ProposedFile("a.md", "x\n", "y\n")], "L", "bob", "guide section", [("guide section", note)])
+        preamble = patch_text.split("diff --git a/a.md")[0]
+        self.assertEqual(
+            preamble,
+            "# Annotation rules update: L\n# Proposed with the PDF-TEI-Editor by bob\n# Includes: guide section\n#\n# Note on the guide section:\n# First line\n#\n# diff --git a/x b/x\n# +++ b/x\n# +evil\n\n",
         )
 
     @unittest.skipIf(shutil.which("git") is None, "git is not on PATH")
