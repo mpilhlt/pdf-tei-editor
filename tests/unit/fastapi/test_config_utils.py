@@ -6,13 +6,16 @@ Self-contained tests that can be run independently.
 @testCovers fastapi_app/lib/utils/config_utils.py
 """
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+from fastapi_app.lib.secrets.encryption import ENCRYPTION_KEY_ENV_VAR, reset_fernet_cache
 from fastapi_app.lib.utils.config_utils import Config, get_config_metadata
 
 
@@ -24,6 +27,12 @@ class TestConfigUtils(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_dir = Path(self.temp_dir.name)
         self.config = Config(self.db_dir)
+        # Masked values are encrypted with a key file in the temporary directory, not the developer's key
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop(ENCRYPTION_KEY_ENV_VAR, None)
+        reset_fernet_cache()
 
     def tearDown(self):
         """Clean up temporary directory."""

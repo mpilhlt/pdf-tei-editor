@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
+from fastapi_app.lib.secrets.encryption import ENCRYPTION_KEY_ENV_VAR, reset_fernet_cache
 from fastapi_app.lib.utils.config_utils import MASKED_SENTINEL, Config, get_config_value
 
 KEY = "plugin.test.api.key"
@@ -28,6 +29,12 @@ class TestMaskedPluginConfig(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(shutil.rmtree, self.tmp)
         os.environ.pop(ENV, None)
+        # Masked values are encrypted with a key file in the temporary directory, not the developer's key
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop(ENCRYPTION_KEY_ENV_VAR, None)
+        reset_fernet_cache()
 
     def _register(self):
         return get_plugin_config(KEY, ENV, default=None, description="Shared key", masked=True)

@@ -2,16 +2,13 @@
 Fernet-encrypted storage of per-user, per-service secrets in SQLite.
 
 The encryption key comes from the ``SECRETS_ENCRYPTION_KEY`` environment variable
-(a Fernet key). Without it, a key is generated once and kept in
-``<db_dir>/secrets.key`` (mode 0600). That file protects against a leaked
-database or backup, not against someone with access to the data directory, so
-production deployments should set the environment variable instead.
+(a Fernet key) or the ``<db_dir>/secrets.key`` file, see encryption.py. The same
+key encrypts the masked values in ``config.json``.
 
 Secret values never appear in logs, listings or exceptions.
 """
 
 import logging
-import os
 import time
 from pathlib import Path
 
@@ -20,12 +17,13 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.db_utils import get_connection, init_database
 
+from .encryption import ENCRYPTION_KEY_ENV_VAR, KEY_FILE_NAME, EncryptionKeyError, load_fernet
 from .services import MissingSecretError
 
 logger = logging.getLogger(__name__)
 
-ENCRYPTION_KEY_ENV_VAR = "SECRETS_ENCRYPTION_KEY"
-KEY_FILE_NAME = "secrets.key"
+__all__ = ["ENCRYPTION_KEY_ENV_VAR", "KEY_FILE_NAME", "SecretStore", "SecretsError", "get_secret_store", "require_user_secret"]
+
 DB_FILE_NAME = "secrets.db"
 
 SECRETS_SCHEMA = """
@@ -46,27 +44,12 @@ class SecretsError(RuntimeError):
 
 def _load_fernet(db_dir: Path) -> Fernet:
     """The Fernet from the environment variable or the key file (created on first use)."""
-    env_key = os.environ.get(ENCRYPTION_KEY_ENV_VAR, "").strip()
     try:
-        if env_key:
-            return Fernet(env_key.encode())
-        key_file = db_dir / KEY_FILE_NAME
-        if not key_file.exists():
-            db_dir.mkdir(parents=True, exist_ok=True)
-            # Create with 0600 from the start so the key is never readable by others
-            fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(Fernet.generate_key().decode())
-            logger.info("Generated an encryption key for user secrets at %s", key_file)
-        # Every copy of the data directory (backups, sync mirrors) contains the key next to
-        # the secrets it encrypts
-        logger.warning(
-            "User secrets are encrypted with the key file %s, which is part of the data directory and its backups. Set %s to keep the key outside of it.",
-            key_file, ENCRYPTION_KEY_ENV_VAR,
-        )
-        return Fernet(key_file.read_text().strip().encode())
-    except (ValueError, OSError) as e:
+        fernet = load_fernet(db_dir, create=True)
+    except EncryptionKeyError as e:
         raise SecretsError(f"Invalid encryption key for user secrets: {e}") from e
+    assert fernet is not None  # create=True always returns a key
+    return fernet
 
 
 class SecretStore:

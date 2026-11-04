@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.dependencies import require_authenticated_user
+from fastapi_app.lib.secrets.encryption import reset_fernet_cache
 from fastapi_app.lib.secrets import (
     ENCRYPTION_KEY_ENV_VAR,
     MissingSecretError,
@@ -46,6 +47,7 @@ class TestSecretStore(unittest.TestCase):
         self.env = patch.dict(os.environ)
         self.env.start()
         os.environ.pop(ENCRYPTION_KEY_ENV_VAR, None)
+        reset_fernet_cache()
 
     def tearDown(self):
         self.env.stop()
@@ -91,14 +93,14 @@ class TestSecretStore(unittest.TestCase):
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
 
     def test_key_file_fallback_logs_a_warning(self):
-        with self.assertLogs("fastapi_app.lib.secrets.store", level="WARNING") as logs:
+        with self.assertLogs("fastapi_app.lib.secrets.encryption", level="WARNING") as logs:
             SecretStore(self.tmp)
         self.assertTrue(any(ENCRYPTION_KEY_ENV_VAR in line for line in logs.output))
 
     def test_environment_key_takes_precedence(self):
         from cryptography.fernet import Fernet
         os.environ[ENCRYPTION_KEY_ENV_VAR] = Fernet.generate_key().decode()
-        with self.assertNoLogs("fastapi_app.lib.secrets.store", level="WARNING"):
+        with self.assertNoLogs("fastapi_app.lib.secrets.encryption", level="WARNING"):
             SecretStore(self.tmp).set("alice", "s", SECRET)
         self.assertFalse((self.tmp / "secrets.key").exists())
         self.assertEqual(SecretStore(self.tmp).get("alice", "s"), SECRET)
@@ -140,6 +142,7 @@ class TestSecretsRouter(unittest.TestCase):
         self.env = patch.dict(os.environ)
         self.env.start()
         os.environ.pop(ENCRYPTION_KEY_ENV_VAR, None)
+        reset_fernet_cache()
         SecretServiceRegistry.clear()
         register_secret_service("anthropic", "Anthropic Claude", "Billed to you", "https://console.anthropic.com/")
         self.store = SecretStore(self.tmp)
@@ -273,6 +276,7 @@ class TestCli(unittest.TestCase):
         self.env = patch.dict(os.environ)
         self.env.start()
         os.environ.pop(ENCRYPTION_KEY_ENV_VAR, None)
+        reset_fernet_cache()
         self.cli = _load_cli()
 
     def tearDown(self):
