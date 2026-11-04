@@ -124,10 +124,11 @@ class TeiToolsPlugin extends Plugin {
     const inAnnotationMode = this.state.view === 'annotation'
     const isAnnotatorOnly = userIsAnnotatorOnly(this.state.user)
     this.#headerFoldToggle.disabled = !hasDocument || inAnnotationMode
-    // Reduce clutter for pure annotators: the toggle is hidden, not just disabled
-    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md). Manual
-    // fold/unfold via the gutter remains available regardless.
-    this.#headerFoldToggle.style.display = isAnnotatorOnly ? 'none' : ''
+    // Reduce clutter: the toggle is hidden, not just disabled, for pure annotators
+    // (docs/superpowers/specs/2026-09-28-annotator-teiheader-safeguard.md) and in annotation
+    // mode, which always keeps the header folded (#660). Manual fold/unfold via the gutter
+    // remains available regardless.
+    this.#headerFoldToggle.style.display = isAnnotatorOnly || inAnnotationMode ? 'none' : ''
 
     if (!hasDocument) {
       this.#revisionHistoryBtn.style.display = 'none'
