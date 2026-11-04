@@ -128,7 +128,10 @@ export function show(element, at, onClose) {
 
   /** @param {MouseEvent} event */
   const onDocMouseDown = event => {
-    if (!element.contains(/** @type {Node} */ (event.target))) close();
+    const target = /** @type {Node} */ (event.target);
+    // the mention autocomplete list is attached to the body, but belongs to the popover's input
+    if (element.contains(target) || (target instanceof Element && target.closest('.mention-list'))) return;
+    close();
   };
   /** @param {KeyboardEvent} event */
   const onKeyDown = event => {
