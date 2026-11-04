@@ -31,6 +31,9 @@ import ui from '../ui.js'
 
 await registerTemplate('document-people-dialog', 'document-people-dialog.html')
 
+/** XPath of the TEI header, whose fold state adding a person keeps */
+const HEADER_XPATH = '//tei:teiHeader'
+
 /** Maximum length of a message */
 const MAX_MESSAGE_LENGTH = 500
 
@@ -353,7 +356,10 @@ class DocumentPeoplePlugin extends Plugin {
     if (added) {
       prettyPrintXmlDom(xmlDoc, 'teiHeader')
       const header = xmlDoc.getElementsByTagNameNS('*', 'teiHeader')[0]
+      // replacing the header's text unfolds it: keep the fold state
+      const headerFolded = this.#xmlEditor.isFoldedByXpath(HEADER_XPATH)
       await this.#xmlEditor.updateEditorFromNode(header)
+      if (headerFolded && !this.#xmlEditor.isFoldedByXpath(HEADER_XPATH)) this.#xmlEditor.foldByXpath(HEADER_XPATH)
       await this.#xmlEditor.saveIfDirty()
     }
     testLog('DOCUMENT_PEOPLE_ADDED', { username: user.username, role: role.id, added })

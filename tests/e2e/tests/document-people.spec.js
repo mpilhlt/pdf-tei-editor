@@ -106,8 +106,13 @@ test.describe('Document people', () => {
       await selectValue(page, 'document-people-user', 'testannotator');
       expect(await optionValues(page, 'document-people-role')).toEqual(['annotator', 'commenter']);
       await selectValue(page, 'document-people-role', 'annotator');
+      const isHeaderFolded = () => page.evaluate(() =>
+        /** @type {any} */ (window).app.getDependency('xmleditor').isFoldedByXpath('//tei:teiHeader'));
+      expect(await isHeaderFolded()).toBe(true);
       await page.locator('[data-testid="document-people-add-btn"]').click();
       await waitForTestMessage(consoleLogs, 'DOCUMENT_PEOPLE_ADDED');
+      // the header keeps its fold state
+      expect(await isHeaderFolded()).toBe(true);
 
       // written into the header and saved
       const row = page.locator('[data-testid="document-people-row"][data-id="testannotator"]');
