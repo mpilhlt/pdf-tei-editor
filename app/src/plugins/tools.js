@@ -126,6 +126,22 @@ class ToolsPlugin extends Plugin {
   }
 
   /**
+   * Open the native dropdown with `item` focused; if `item` has a submenu,
+   * also open the submenu and focus its first entry (the same as pressing
+   * the right arrow key on the item).
+   * @param {HTMLElement} item - An item added via addMenuItems()
+   * @returns {Promise<void>}
+   * @throws {Error} If `item` is not in the native dropdown's menu
+   */
+  async openMenuItem(item) {
+    const dropdown = this.#ui.toolsDropdown
+    if (!dropdown.toolsMenu.contains(item)) throw new Error('The item is not in the Tools menu')
+    await dropdown.show()
+    item.focus()
+    item.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true }))
+  }
+
+  /**
    * Clear all items (and category labels) from the native frontend dropdown.
    */
   clearMenuItems() {
