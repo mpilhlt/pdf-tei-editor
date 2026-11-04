@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"{encrypted_count} masked config value(s) are encrypted at rest")
     if plaintext_keys:
         logger.warning(
-            f"{len(plaintext_keys)} masked config value(s) are stored as plain text ({', '.join(plaintext_keys)}); they are encrypted when set again, or run bin/migrations/encrypt-masked-config-values.py"
+            f"{len(plaintext_keys)} masked config value(s) are stored as plain text; they are encrypted when set again, or run bin/migrations/encrypt-masked-config-values.py"
         )
 
     config_data = config.load()
