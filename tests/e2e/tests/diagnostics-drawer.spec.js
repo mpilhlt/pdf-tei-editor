@@ -148,16 +148,17 @@ async function check(page, message) {
 
 /**
  * Adds diagnostics of a source at the start tags with the given indexes (negative: from the end),
- * without fixes. They are re-merged whenever another source replaces the diagnostic set. The
+ * with or without a fix (which keeps the text). They are re-merged whenever another source replaces the diagnostic set. The
  * document must not be edited afterwards (the positions are fixed).
  * @param {Page} page
  * @param {string} source
  * @param {number[]} tagIndexes
  * @param {string} prefix - The messages are `<prefix> <index>`
+ * @param {boolean} [fixable] - Whether the diagnostics have a fix
  * @returns {Promise<void>}
  */
-async function injectAtTags(page, source, tagIndexes, prefix) {
-  await page.evaluate(({ source, tagIndexes, prefix }) => {
+async function injectAtTags(page, source, tagIndexes, prefix, fixable = false) {
+  await page.evaluate(({ source, tagIndexes, prefix, fixable }) => {
     const app = /** @type {any} */ (window).app;
     const lintUtils = app.getDependency('lint-utils');
     const xmleditor = app.getDependency('xmleditor');
@@ -165,7 +166,7 @@ async function injectAtTags(page, source, tagIndexes, prefix) {
     const starts = Array.from(text.matchAll(/<[A-Za-z]+/g)).map(m => ({ from: m.index, to: m.index + m[0].length }));
     const items = tagIndexes.map(i => {
       const at = starts[i < 0 ? starts.length + i : i];
-      return { ...at, severity: 'info', message: `${prefix} ${i}` };
+      return { ...at, severity: 'info', message: `${prefix} ${i}`, ...(fixable ? { replacement: text.slice(at.from, at.to) } : {}) };
     });
     let rendering = false;
     const render = () => {
@@ -180,7 +181,7 @@ async function injectAtTags(page, source, tagIndexes, prefix) {
       if (lintUtils.replacesDiagnostics(update) && !rendering) setTimeout(render, 0);
     });
     render();
-  }, { source, tagIndexes, prefix });
+  }, { source, tagIndexes, prefix, fixable });
 }
 
 /**
@@ -225,6 +226,8 @@ test.describe('Diagnostics drawer', () => {
 
       await injectDiagnostics(page);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix A', 'fix B']);
+      // the added diagnostics with a fix are checked (#688)
+      await expect.poll(async () => (await drawerEntries(page)).filter(e => e.checked).map(e => e.message)).toEqual(['fix A', 'fix B']);
 
       // the injected source re-merges after every replacement of the diagnostic set: this must not
       // make it and the other sources replace the set in turn forever (#647)
@@ -311,7 +314,7 @@ test.describe('Diagnostics drawer', () => {
         const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
         await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<front', '<front '));
       });
-      await check(page, 'fix A');
+      await check(page, 'fix B'); // unchecks it, A stays checked
       await check(page, 'no fix C');
       // click Apply right after the diagnostic set was replaced (as a validation run does), before
       // the injected diagnostics are re-merged: the checked diagnostics must still be applied
@@ -346,7 +349,7 @@ test.describe('Diagnostics drawer', () => {
     }
   });
 
-  test('scrolls to and checks only the added diagnostics (#688)', async ({ page }) => {
+  test('scrolls to the added diagnostics and checks only the added ones with a fix (#688)', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
@@ -356,7 +359,7 @@ test.describe('Diagnostics drawer', () => {
       expect(loadResult.success).toBe(true);
       await loadEditableVersion(page);
 
-      // the first diagnostics of a document are listed, not checked
+      // diagnostics without a fix are listed, not checked
       const early = Array.from({ length: 30 }, (_v, i) => i);
       await injectAtTags(page, SOURCE, early, 'early');
       await expect.poll(async () => (await drawerEntries(page)).filter(e => e.message.startsWith('early')).length).toBe(30);
@@ -365,14 +368,20 @@ test.describe('Diagnostics drawer', () => {
       expect(entries.find(e => e.message === 'early 0')?.visible).toBe(true);
       await check(page, 'early 5');
 
-      // diagnostics added at the end of the document: scrolled into view, the only checked ones
-      await injectAtTags(page, `${SOURCE}-late`, [-2, -1], 'late');
+      // diagnostics with a fix added at the end of the document: scrolled into view, the only checked ones
+      await injectAtTags(page, `${SOURCE}-late`, [-2, -1], 'late', true);
       await expect.poll(async () => (await drawerEntries(page)).filter(e => e.message.startsWith('late')).length).toBe(2);
       await expect.poll(async () => (await drawerEntries(page))
         .filter(e => e.checked).map(e => e.message)).toEqual(['late -2', 'late -1']);
       entries = await drawerEntries(page);
       expect(entries.filter(e => e.message.startsWith('late')).every(e => e.visible)).toBe(true);
       expect(entries.find(e => e.message === 'early 0')?.visible).toBe(false);
+
+      // added diagnostics without a fix are scrolled to, but leave the checks alone
+      await injectAtTags(page, `${SOURCE}-plain`, [1], 'plain');
+      await expect.poll(async () => (await drawerEntries(page)).find(e => e.message === 'plain 1')?.visible).toBe(true);
+      entries = await drawerEntries(page);
+      expect(entries.filter(e => e.checked).map(e => e.message)).toEqual(['late -2', 'late -1']);
 
       // diagnostics that are listed again (a re-validation re-merges them) are not added ones
       await check(page, 'early 7');

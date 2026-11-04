@@ -14,9 +14,10 @@
  * the unit review and comment meters) is clicked.
  *
  * When diagnostics are added (by a validation run, an LLM review, ...), the list scrolls to show
- * them; if diagnostics were listed before, only the added ones are checked, so that they can be
- * applied or dismissed together (#688). Diagnostics that reappear (e.g. after a re-validation)
- * and those whose text was edited count as known, not as added.
+ * them. If some of the added diagnostics have a fix (e.g. LLM review suggestions), these become
+ * the checked ones, so that they can be applied right away (#688); added diagnostics without a
+ * fix (validation errors, comments, disputed reviews) are not checked. Diagnostics that reappear
+ * (e.g. after a re-validation) and those whose text was edited count as known, not as added.
  *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
  * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
@@ -270,7 +271,6 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #refresh() {
     const state = this.#xmlEditor.getView().state
-    const hadEntries = this.#entries.length > 0
     this.#entries = collectDiagnostics(state)
       .map(diagnostic => ({
         diagnostic,
@@ -282,7 +282,10 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const added = this.#takeAddedKeys()
     // otherwise, checks are kept for diagnostics that are not listed: replacing the diagnostic set
     // (e.g. a validation run) removes the diagnostics of other sources until they re-merge them
-    if (added.size && hadEntries) this.#checked = new Set(added)
+    const fixable = this.#entries
+      .filter(e => added.has(e.key) && typeof e.diagnostic.replacement === 'string')
+      .map(e => e.key)
+    if (fixable.length) this.#checked = new Set(fixable)
     this.#render()
     if (added.size) this.#scrollToEntries(added)
   }

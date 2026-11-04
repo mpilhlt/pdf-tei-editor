@@ -5,7 +5,7 @@
 `app/src/plugins/diagnostics-drawer.js` remembers the keys (`diagnosticKey()`: source, severity, message, text) of the diagnostics listed since the document was loaded. On each refresh, the keys not seen before are the added diagnostics:
 
 - The drawer body (the scroll container in the `sl-drawer` shadow DOM, below the sticky header) scrolls so that the added entries are visible, from the first one if they do not fit. The list is sorted by position, so added diagnostics are not necessarily at the end.
-- If diagnostics were listed before the refresh, the checks are replaced by the added diagnostics. On the first diagnostics of a document (empty list before), nothing is checked.
+- If some added diagnostics have a fix (`replacement`, e.g. LLM review suggestions), the checks are replaced by these, so that they can be applied at once. Added diagnostics without a fix (validation errors, comments, disputed reviews) are never checked (Christian, 2026-11-04).
 - A refresh after an edit adds its keys as known without scrolling or checking: editing the text under a diagnostic changes its key.
 - Diagnostics that disappear and come back (validation runs replace the set and other sources re-merge theirs) stay known.
 
