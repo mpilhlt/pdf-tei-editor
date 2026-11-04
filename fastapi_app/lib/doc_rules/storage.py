@@ -194,10 +194,14 @@ class DocumentRulesStore:
                 )
         return True
 
-    def get_selected_override_text(self, kind: str, resource_key: str, owner: str) -> Optional[str]:
-        """The selected override's text, or None if this resource currently uses the original."""
+    def get_selected_override(self, kind: str, resource_key: str, owner: str) -> Optional[OverrideRow]:
+        """The selected override, or None if this resource currently uses the original."""
         override_id = self.get_selection(kind, resource_key, owner)
         if override_id is None:
             return None
-        override = self.get_override(override_id)
+        return self.get_override(override_id)
+
+    def get_selected_override_text(self, kind: str, resource_key: str, owner: str) -> Optional[str]:
+        """The selected override's text, or None if this resource currently uses the original."""
+        override = self.get_selected_override(kind, resource_key, owner)
         return override["text"] if override else None

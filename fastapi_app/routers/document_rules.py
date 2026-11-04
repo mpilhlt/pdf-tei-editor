@@ -662,6 +662,7 @@ def propose_patch(
         request.include_machine,
         proposal.in_sync,
         proposal.upstream_changed,
+        proposal.notes,
     )
     repo_id = _github_repo_id(request.human_url)
     return ProposePatchResponse(

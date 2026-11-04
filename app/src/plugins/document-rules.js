@@ -379,6 +379,7 @@ class DocumentRulesPlugin extends Plugin {
     this._overridesWidget = PanelUtils.createText({
       text: 'Overrides active',
       icon: 'pencil-fill',
+      tooltip: 'Edit document rules',
       variant: 'primary',
       clickable: true,
       name: 'documentRulesOverridesStatus'
@@ -571,6 +572,7 @@ class DocumentRulesPlugin extends Plugin {
     if (!userHasRole(state.user, ['reviewer', 'admin']) || !state.xml) {
       this._resources = []
       this._editMenuItem.style.display = 'none'
+      this._clearOverrideIndicators()
       return
     }
 
@@ -585,6 +587,7 @@ class DocumentRulesPlugin extends Plugin {
     if (!xmlString) {
       this._resources = []
       this._editMenuItem.style.display = 'none'
+      this._clearOverrideIndicators()
       return
     }
 
@@ -652,18 +655,15 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * Reveal the document's editorialDecl: unfold the TEI header (it may be
-   * folded) and scroll editorialDecl into view - same two calls
-   * app/src/plugins/tei-tools.js's own "show header" toggle makes (that
-   * plugin's toggle logic is private, so this duplicates the calls rather
-   * than depending on it).
+   * Open the Tools menu with the "Edit document rules" submenu expanded, so
+   * the user can pick the overridden resource to edit (#686).
+   * @returns {Promise<void>}
    */
-  _onOverridesWidgetClick() {
+  async _onOverridesWidgetClick() {
     try {
-      this.#xmlEditor.unfoldByXpath('//tei:teiHeader')
-      this.#xmlEditor.selectByXpath('//tei:editorialDecl')
+      await this.getDependency('tools').openMenuItem(this._editMenuItem)
     } catch (error) {
-      this.#logger.warn('document-rules: could not reveal editorialDecl: ' + String(error))
+      this.#logger.warn('document-rules: could not open the "Edit document rules" menu: ' + String(error))
     }
   }
 
@@ -677,9 +677,7 @@ class DocumentRulesPlugin extends Plugin {
    */
   async _refreshOverrideIndicators() {
     if (this._resources.length === 0) {
-      this._selections = []
-      if (this._overridesWidget.isConnected) this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
-      this._refreshRefDecorations()
+      this._clearOverrideIndicators()
       return
     }
     try {
@@ -698,6 +696,18 @@ class DocumentRulesPlugin extends Plugin {
       this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
     }
     this._refreshRefDecorations()
+  }
+
+  /**
+   * Hide the "Overrides active" headerbar widget and the ref decorations,
+   * e.g. for a user without the reviewer/admin role (#686) or when no
+   * document is open. A no-op for the parts not created yet (before
+   * install() ran).
+   */
+  _clearOverrideIndicators() {
+    this._selections = []
+    if (this._overridesWidget?.isConnected) this.#xmlEditor.removeHeaderbarWidget(this._overridesWidget.id)
+    if (this._refDecorationSlot) this._refreshRefDecorations()
   }
 
   /**

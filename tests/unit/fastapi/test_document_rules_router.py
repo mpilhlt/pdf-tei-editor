@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.git_forge_adapters import GitHubAdapter
 from fastapi_app.lib.core.dependencies import get_file_storage, require_authenticated_user
-from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_PROMPT_TEMPLATE
+from fastapi_app.lib.doc_rules.guide_update import ALIGN_PROMPT_TEMPLATE, DELTA_PROMPT_TEMPLATE, MOTIVATION_PROMPT_TEMPLATE, Layer
 from fastapi_app.lib.doc_rules.resource_key import normalize_resource_key
 from fastapi_app.lib.doc_rules.rules_refresh import RefreshPreconditionError, ResourceRefreshOutcome
 from fastapi_app.lib.doc_rules.storage import DocumentRulesStore
@@ -785,7 +785,7 @@ class TestSyncStatusEndpoint(DocumentRulesRouterTestCase):
 
     def test_store_failure_is_not_reported_as_502(self):
         client = TestClient(self.app, raise_server_exceptions=False)
-        with patch.object(DocumentRulesStore, "get_selected_override_text", side_effect=RuntimeError("db down")):
+        with patch.object(DocumentRulesStore, "get_selected_override", side_effect=RuntimeError("db down")):
             response = client.post(
                 "/document-rules/sync-status", json={"human_url": self.HUMAN_URL, "machine_url": self.MACHINE_URL}
             )
@@ -918,6 +918,18 @@ class TestGuideChangeEndpoints(DocumentRulesRouterTestCase):
             DELTA_PROMPT_TEMPLATE.format(
                 old=self.OLD_HUMAN, new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n"
             ),
+        )
+
+    def test_update_sends_the_human_override_note_as_motivation(self):
+        store = DocumentRulesStore(self.db)
+        key = normalize_resource_key(self.HUMAN_URL)
+        override = store.create_override("interpretation-ref", key, "alice", " Courts are named now. ", self.NEW_HUMAN, "markdown", self.HUMAN_URL, "")
+        store.set_selection("interpretation-ref", key, "alice", override["id"])
+        self.assertEqual(self._update().status_code, 200)
+        self.assertEqual(
+            self.provider.calls[0][2],
+            DELTA_PROMPT_TEMPLATE.format(old=self.OLD_HUMAN, new=self.NEW_HUMAN, machine="## Data correction\n\nMachine rule.\n")
+            + MOTIVATION_PROMPT_TEMPLATE.format(note="Courts are named now."),
         )
 
     def test_update_resolves_the_condense_prompt_from_the_documents_content(self):
@@ -1105,6 +1117,17 @@ class TestProposePatchEndpoint(ProposalRouterTestCase):
         self.assertEqual(body["upstream_changed"], ["docs/guidelines.md", "docs/guidelines-llm.md"])
         self.assertTrue(body["in_sync"])
 
+    def test_override_note_is_in_the_patch_and_the_pull_request_description(self):
+        human = Layer(self._human_section_with_rule(), "override", "Courts are named now.")
+        with patch("fastapi_app.lib.doc_rules.upstream_proposal.resolve_layer", return_value=human):
+            body = self._post(include_machine=False).json()
+        self.assertIn("# Note on the guide section:\n# Courts are named now.\n", body["patch"])
+        self.assertIn("Note on the guide section:\n\nCourts are named now.\n", body["pull_request_body"])
+
+    def _human_section_with_rule(self) -> str:
+        range_ = markdown_section_range(HUMAN_FILE, "data-correction")
+        return "\n".join(HUMAN_FILE.splitlines()[range_[0] - 1:range_[1]]) + "\nA noted rule.\n"
+
     def test_human_only_is_not_in_sync(self):
         body = self._post(include_machine=False).json()
         self.assertFalse(body["in_sync"])
@@ -1118,7 +1141,7 @@ class TestProposePatchEndpoint(ProposalRouterTestCase):
                 self.assertIn("Cannot resolve the default branch", response.json()["detail"])
 
     def test_renamed_heading_is_422(self):
-        with patch("fastapi_app.lib.doc_rules.upstream_proposal.layer_text", return_value=("## Correcting data\n\nText.\n", "override")):
+        with patch("fastapi_app.lib.doc_rules.upstream_proposal.resolve_layer", return_value=Layer("## Correcting data\n\nText.\n", "override", "")):
             response = self._post(include_machine=False)
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["detail"], 'The proposed text for docs/guidelines.md must start with the heading of the section "data-correction".')

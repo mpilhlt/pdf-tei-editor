@@ -353,6 +353,13 @@ class DefaultTextTest(unittest.TestCase):
             ("Annotation rules update: Data correction", "Proposed with the PDF-TEI-Editor by alice.\n\nIncludes: guide section."),
         )
 
+    def test_notes_follow_the_first_line(self):
+        _title, body = default_pull_request_text("Data correction", "alice", True, True, True, [], [("guide section", "Why:\r\n- courts"), ("machine rules", "Updated from guide with M")])
+        self.assertEqual(
+            body,
+            "Proposed with the PDF-TEI-Editor by alice.\n\nNote on the guide section:\n\nWhy:\n- courts\n\nNote on the machine rules:\n\nUpdated from guide with M\n\nIncludes: guide section and machine rules.\nThe sync marker of the machine rules is updated; the pair is in sync.",
+        )
+
     def test_both_in_sync(self):
         self.assertEqual(
             default_pull_request_text("Data correction", "alice", True, True, True, []),

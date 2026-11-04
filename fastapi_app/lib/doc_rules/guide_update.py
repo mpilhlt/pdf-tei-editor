@@ -59,12 +59,29 @@ ALIGN_PROMPT_TEMPLATE = """Bring the machine rules in line with the guide sectio
 {machine}
 </machine_rules>"""
 
+# Appended to the user prompt when the user's guide section is an override with a note (#687)
+MOTIVATION_PROMPT_TEMPLATE = """
+
+The author of the guide text gave this reason for their change. Use it to understand the change; do not copy it into the machine rules.
+
+<change_motivation>
+{note}
+</change_motivation>"""
+
 _HEADING_RE = re.compile(r"^#{1,6}\s")
 _FENCE_RE = re.compile(r"\A(`{3,})(markdown|md)?[ \t]*\n(.*?)\n?\1[ \t]*\Z", re.DOTALL)
 
 
 class OriginalUnavailableError(Exception):
     """The original text of a layer could not be resolved; the cause is chained."""
+
+
+@dataclass(frozen=True)
+class Layer:
+    """The text a user currently uses for a layer, where it comes from, and the selected override's note ("" for the original)."""
+    text: str
+    source: LayerSource
+    note: str
 
 
 @dataclass(frozen=True)
@@ -91,28 +108,36 @@ class GuideChange:
     base_commit: Optional[str]
     human_source: LayerSource
     machine_source: LayerSource
+    human_note: str = ""  # the note of the selected human override, "" if the human section is the original
 
     @property
     def mode(self) -> Literal["delta", "align"]:
         return "delta" if self.old_human is not None else "align"
 
 
-def layer_text(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> tuple[str, LayerSource]:
+def resolve_layer(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> Layer:
     """
-    The text of `owner`'s selected override of `url`, else its original.
-    The key is derived leniently (see InterpretationRefKind.resource_key()).
+    `owner`'s selected override of `url` (its text and stripped note), else
+    its original. The key is derived leniently (see
+    InterpretationRefKind.resource_key()).
 
     Raises:
         OriginalUnavailableError: if resolving the original fails. Store
             errors propagate unchanged.
     """
-    override_text = store.get_selected_override_text(kind.name, kind.resource_key(url), owner)
-    if override_text is not None:
-        return override_text, "override"
+    override = store.get_selected_override(kind.name, kind.resource_key(url), owner)
+    if override is not None:
+        return Layer(override["text"], "override", (override["note"] or "").strip())
     try:
-        return kind.resolve_original(url), "original"
+        return Layer(kind.resolve_original(url), "original", "")
     except Exception as e:
         raise OriginalUnavailableError(str(e)) from e
+
+
+def layer_text(kind: InterpretationRefKind, url: str, store: DocumentRulesStore, owner: str) -> tuple[str, LayerSource]:
+    """The text and source of resolve_layer(). Raises what it raises."""
+    layer = resolve_layer(kind, url, store, owner)
+    return layer.text, layer.source
 
 
 def human_section_at_commit(human_url: str, sha: str, cache: UrlCache) -> Optional[str]:
@@ -140,10 +165,10 @@ def _normalized(text: str, url: str) -> str:
 def gather_guide_change(
     kind: InterpretationRefKind, human_url: str, machine_url: str, store: DocumentRulesStore, owner: str, cache: UrlCache
 ) -> GuideChange:
-    """Collect the inputs of a machine rules update for `owner`. Raises what layer_text() raises."""
-    new_human, human_source = layer_text(kind, human_url, store, owner)
-    machine_text, machine_source = layer_text(kind, machine_url, store, owner)
-    machine_text = _normalized(machine_text, machine_url)
+    """Collect the inputs of a machine rules update for `owner`. Raises what resolve_layer() raises."""
+    human = resolve_layer(kind, human_url, store, owner)
+    machine_layer = resolve_layer(kind, machine_url, store, owner)
+    machine_text = _normalized(machine_layer.text, machine_url)
     machine, marker_line = split_sync_marker(machine_text)
     marker = parse_sync_marker(machine_text)
     old_human: Optional[str] = None
@@ -158,14 +183,15 @@ def gather_guide_change(
                 base_commit = sha
     return GuideChange(
         old_human=old_human,
-        new_human=_normalized(new_human, human_url),
+        new_human=_normalized(human.text, human_url),
         machine=machine,
         machine_full=absolutize_markdown_urls(machine_text, machine_url),
         machine_url=machine_url,
         marker_line=marker_line,
         base_commit=base_commit,
-        human_source=human_source,
-        machine_source=machine_source,
+        human_source=human.source,
+        machine_source=machine_layer.source,
+        human_note=human.note,
     )
 
 
@@ -175,12 +201,18 @@ def guide_unchanged(change: GuideChange, human_url: str) -> bool:
 
 
 def build_update_prompts(change: GuideChange, condense_prompt: str) -> tuple[str, str]:
-    """The system prompt (`condense_prompt`, else the default) and the user prompt for `change`'s mode."""
+    """
+    The system prompt (`condense_prompt`, else the default) and the user
+    prompt for `change`'s mode, followed by the human override's note as the
+    motivation of the change if there is one.
+    """
     system_prompt = condense_prompt.strip() or DEFAULT_CONDENSE_PROMPT
     if change.old_human is not None:
         user_prompt = DELTA_PROMPT_TEMPLATE.format(old=change.old_human, new=change.new_human, machine=change.machine)
     else:
         user_prompt = ALIGN_PROMPT_TEMPLATE.format(new=change.new_human, machine=change.machine)
+    if change.human_note:
+        user_prompt += MOTIVATION_PROMPT_TEMPLATE.format(note=change.human_note)
     return system_prompt, user_prompt
 
 
