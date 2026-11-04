@@ -368,11 +368,12 @@ test.describe('Diagnostics drawer', () => {
       expect(entries.find(e => e.message === 'early 0')?.visible).toBe(true);
       await check(page, 'early 5');
 
-      // diagnostics with a fix added at the end of the document: scrolled into view, the only checked ones
+      // diagnostics with a fix added at the end of the document: scrolled into view and checked,
+      // the user's own checks stay
       await injectAtTags(page, `${SOURCE}-late`, [-2, -1], 'late', true);
       await expect.poll(async () => (await drawerEntries(page)).filter(e => e.message.startsWith('late')).length).toBe(2);
       await expect.poll(async () => (await drawerEntries(page))
-        .filter(e => e.checked).map(e => e.message)).toEqual(['late -2', 'late -1']);
+        .filter(e => e.checked).map(e => e.message)).toEqual(['early 5', 'late -2', 'late -1']);
       entries = await drawerEntries(page);
       expect(entries.filter(e => e.message.startsWith('late')).every(e => e.visible)).toBe(true);
       expect(entries.find(e => e.message === 'early 0')?.visible).toBe(false);
@@ -381,7 +382,7 @@ test.describe('Diagnostics drawer', () => {
       await injectAtTags(page, `${SOURCE}-plain`, [1], 'plain');
       await expect.poll(async () => (await drawerEntries(page)).find(e => e.message === 'plain 1')?.visible).toBe(true);
       entries = await drawerEntries(page);
-      expect(entries.filter(e => e.checked).map(e => e.message)).toEqual(['late -2', 'late -1']);
+      expect(entries.filter(e => e.checked).map(e => e.message)).toEqual(['early 5', 'late -2', 'late -1']);
 
       // diagnostics that are listed again (a re-validation re-merges them) are not added ones
       await check(page, 'early 7');
@@ -391,7 +392,17 @@ test.describe('Diagnostics drawer', () => {
       }, 'unrelated-source');
       await page.waitForTimeout(500);
       expect((await drawerEntries(page)).filter(e => e.checked).map(e => e.message).sort())
-        .toEqual(['early 7', 'late -1', 'late -2']);
+        .toEqual(['early 5', 'early 7', 'late -1', 'late -2']);
+
+      // fixable diagnostics added together with an edit elsewhere (as the LLM Reviewer writes its
+      // review marks to the standOff) are checked as well
+      await page.evaluate(() => {
+        const view = /** @type {any} */ (window).app.getDependency('xmleditor').getView();
+        view.dispatch({ changes: { from: view.state.doc.length, insert: '\n' } });
+      });
+      await injectAtTags(page, `${SOURCE}-llm`, [3], 'llm', true);
+      await expect.poll(async () => (await drawerEntries(page))
+        .filter(e => e.checked).map(e => e.message)).toEqual(['llm 3', 'early 5', 'early 7', 'late -2', 'late -1']);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

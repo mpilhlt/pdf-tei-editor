@@ -126,7 +126,7 @@ While the document has diagnostics, they are listed in a drawer on the left side
 - Click a diagnostic to select the text it applies to in the XML editor.
 - **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
 - Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply.
-- When diagnostics are added, for example by a validation run or an LLM review, the list scrolls to show them. Added diagnostics that have a fix (such as LLM review suggestions) become the checked ones, so that you can apply them right away; diagnostics without a fix (validation errors, comments, disputed reviews) and those listed before are not checked. Diagnostics that reappear after a re-validation, and those whose text you edited, do not count as added.
+- When diagnostics are added, for example by a validation run or an LLM review, the list scrolls to show them. Added diagnostics that have a fix (such as LLM review suggestions) are checked, so that you can apply them right away; diagnostics without a fix (validation errors, comments, disputed reviews) are not checked, and the checks you set yourself stay as they are. Diagnostics that reappear after a re-validation, and those whose text you edited, do not count as added.
 
 ---
 

@@ -14,9 +14,9 @@
  * the unit review and comment meters) is clicked.
  *
  * When diagnostics are added (by a validation run, an LLM review, ...), the list scrolls to show
- * them. If some of the added diagnostics have a fix (e.g. LLM review suggestions), these become
- * the checked ones, so that they can be applied right away (#688); added diagnostics without a
- * fix (validation errors, comments, disputed reviews) are not checked. Diagnostics that reappear
+ * them. Added diagnostics that have a fix (e.g. LLM review suggestions) are checked, so that they
+ * can be applied right away (#688); added diagnostics without a fix (validation errors, comments,
+ * disputed reviews) are not checked, and the checks of the other diagnostics are left as they are. Diagnostics that reappear
  * (e.g. after a re-validation) and those whose text was edited count as known, not as added.
  *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
@@ -95,8 +95,8 @@ class DiagnosticsDrawerPlugin extends Plugin {
   /** @type {Set<string>} Keys of the diagnostics listed since the document was loaded */
   #knownKeys = new Set()
 
-  /** True if the document changed since the last refresh */
-  #docChangedSinceRefresh = false
+  /** @type {{from: number, to: number}[]} Ranges of the current document edited since the last refresh */
+  #editedRanges = []
 
   /**
    * @param {ApplicationState} state
@@ -230,7 +230,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #onEditorUpdate(update) {
     if (revealsDiagnostics(update)) this.#setExpanded(true)
-    if (update.docChanged) this.#docChangedSinceRefresh = true
+    if (update.docChanged) this.#addEditedRanges(update)
     if (update.docChanged || replacesDiagnostics(update)) this.#scheduleRefresh()
   }
 
@@ -285,23 +285,42 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const fixable = this.#entries
       .filter(e => added.has(e.key) && typeof e.diagnostic.replacement === 'string')
       .map(e => e.key)
-    if (fixable.length) this.#checked = new Set(fixable)
+    // added to the checks, so that the suggestions of all parts of a chunked LLM review stay checked
+    for (const key of fixable) this.#checked.add(key)
     this.#render()
     if (added.size) this.#scrollToEntries(added)
   }
 
   /**
+   * Remembers the ranges an update changed, mapping those remembered before to the new document.
+   * @param {ViewUpdate} update
+   */
+  #addEditedRanges(update) {
+    const ranges = this.#editedRanges.map(({ from, to }) => ({
+      from: update.changes.mapPos(from, -1),
+      to: update.changes.mapPos(to, 1)
+    }))
+    update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => ranges.push({ from: fromB, to: toB }))
+    this.#editedRanges = ranges
+  }
+
+  /**
    * Returns the keys of the listed diagnostics that were not listed before since the document was
-   * loaded, and remembers all listed keys. After an edit, the diagnostics whose text was edited
-   * have new keys: they count as known.
+   * loaded, and remembers all listed keys. A diagnostic whose text was edited since the last
+   * refresh has a new key: it counts as known. Edits elsewhere (e.g. review marks written to the
+   * standOff along with LLM review suggestions) do not matter.
    * @returns {Set<string>}
    */
   #takeAddedKeys() {
-    const edited = this.#docChangedSinceRefresh
-    this.#docChangedSinceRefresh = false
-    const added = new Set(this.#entries.map(e => e.key).filter(key => !this.#knownKeys.has(key)))
-    for (const key of added) this.#knownKeys.add(key)
-    return edited ? new Set() : added
+    const edited = this.#editedRanges
+    this.#editedRanges = []
+    const added = new Set()
+    for (const { key, diagnostic } of this.#entries) {
+      if (this.#knownKeys.has(key)) continue
+      this.#knownKeys.add(key)
+      if (!edited.some(range => range.from <= diagnostic.to && range.to >= diagnostic.from)) added.add(key)
+    }
+    return added
   }
 
   /**
