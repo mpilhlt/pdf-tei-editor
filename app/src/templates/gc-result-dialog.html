@@ -1,0 +1,17 @@
+<sl-dialog name="gcResultDialog" label="Garbage Collection Result" class="dialog-width" style="--width: 70vw;">
+  <div name="summary" style="margin-bottom: 0.75rem;"></div>
+  <div style="overflow: auto; max-height: 60vh; border: 1px solid var(--sl-color-neutral-300);">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+      <thead style="position: sticky; top: 0; background: var(--sl-color-neutral-100); border-bottom: 2px solid var(--sl-color-neutral-300);">
+        <tr>
+          <th style="padding: 0.4rem 0.5rem; text-align: left; font-weight: 600;">Task</th>
+          <th style="padding: 0.4rem 0.5rem; text-align: right; font-weight: 600;">Items</th>
+          <th style="padding: 0.4rem 0.5rem; text-align: right; font-weight: 600;">Freed</th>
+          <th style="padding: 0.4rem 0.5rem; text-align: left; font-weight: 600;">Details</th>
+        </tr>
+      </thead>
+      <tbody name="taskTableBody"></tbody>
+    </table>
+  </div>
+  <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
+</sl-dialog>

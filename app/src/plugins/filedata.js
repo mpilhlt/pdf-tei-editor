@@ -10,6 +10,9 @@
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { DocumentItem } from '../modules/file-data-utils.js'
+ * @import { SlDialog } from '../ui.js'
+ * @import { gcResultDialogPart } from '../templates/gc-result-dialog.types.js'
+ * @import { GarbageCollectResponse, GarbageCollectTaskResult } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -22,6 +25,32 @@ import { notify } from '../modules/sl-utils.js'
 
 // Register templates
 await registerTemplate('gc-menu-item', 'gc-menu-item.html')
+await registerTemplate('gc-result-dialog', 'gc-result-dialog.html')
+
+/**
+ * Formats a byte count for display.
+ * @param {number} bytes
+ * @returns {string}
+ */
+function formatBytes(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * Formats the details of a GC task result, e.g. "records purged: 3, files deleted: 2".
+ * @param {GarbageCollectTaskResult} task
+ * @returns {string}
+ */
+function formatTaskDetails(task) {
+  if (task.skipped) return 'skipped (no dry run)';
+  return Object.entries(task.details || {})
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+    .join(', ');
+}
 
 /**
  * Thrown by {@link FiledataPlugin#saveXml} when the editor's XML is not well-formed.
@@ -77,6 +106,8 @@ class FiledataPlugin extends Plugin {
   #client;
   #dialog;
   #xmlEditor;
+  /** @type {(SlDialog & gcResultDialogPart) | null} */
+  #gcResultDialog = null;
 
   static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
 
@@ -199,16 +230,9 @@ class FiledataPlugin extends Plugin {
         deleted_before: deletedBefore
       });
 
-      const { purged_count, files_deleted, storage_freed } = response;
-      const storageMB = (storage_freed / (1024 * 1024)).toFixed(2);
-
-      notify(
-        `Garbage collection complete: ${purged_count} records purged, ${files_deleted} files deleted, ${storageMB} MB freed`,
-        'success',
-        'check-circle'
-      );
-
-      this.#logger.info(`GC complete: ${purged_count} records, ${files_deleted} files, ${storageMB} MB freed`);
+      const { totals } = response;
+      this.#logger.info(`GC complete: ${totals.items_deleted} items deleted, ${formatBytes(totals.bytes_freed) || '0 B'} freed`);
+      this.showGarbageCollectionResult(response);
 
       // Reload file data to update the UI
       await this.reload({ refresh: true });
@@ -216,6 +240,57 @@ class FiledataPlugin extends Plugin {
       this.#logger.error('Garbage collection failed: ' + String(error));
       notify('Garbage collection failed: ' + String(error), 'danger', 'exclamation-octagon');
     }
+  }
+
+  /**
+   * Shows the result of a garbage collection run, one row per task.
+   * @param {GarbageCollectResponse} response
+   */
+  showGarbageCollectionResult(response) {
+    if (!this.#gcResultDialog) {
+      this.#gcResultDialog = /** @type {SlDialog & gcResultDialogPart} */ (
+        this.createUi(createSingleFromTemplate('gc-result-dialog', document.body))
+      );
+      this.#gcResultDialog.closeBtn.addEventListener('click', () => this.#gcResultDialog?.hide());
+    }
+    const dialog = this.#gcResultDialog;
+    const { tasks = [], totals } = response;
+    const errorCount = tasks.reduce((sum, task) => sum + (task.errors?.length || 0), 0);
+    dialog.summary.textContent =
+      `${response.dry_run ? 'Would delete' : 'Deleted'} ${totals.items_deleted} items` +
+      (totals.bytes_freed ? `, ${formatBytes(totals.bytes_freed)} freed` : '') +
+      (errorCount ? `; ${errorCount} error${errorCount === 1 ? '' : 's'}` : '') + '.';
+
+    dialog.taskTableBody.replaceChildren(...tasks.map(task => {
+      const row = document.createElement('tr');
+      row.dataset.taskId = task.id;
+      row.style.borderBottom = '1px solid var(--sl-color-neutral-200)';
+      const details = formatTaskDetails(task);
+      const cells = [
+        { text: task.label, align: 'left' },
+        { text: task.skipped ? '–' : String(task.items_deleted), align: 'right' },
+        { text: formatBytes(task.bytes_freed), align: 'right' },
+        { text: details, align: 'left' }
+      ];
+      for (const { text, align } of cells) {
+        const cell = document.createElement('td');
+        cell.style.padding = '0.3rem 0.5rem';
+        cell.style.textAlign = align;
+        cell.textContent = text;
+        row.appendChild(cell);
+      }
+      if (!task.items_deleted && !task.bytes_freed && !details && !task.errors?.length) {
+        row.style.color = 'var(--sl-color-neutral-500)';
+      }
+      if (task.errors?.length) {
+        const errors = document.createElement('div');
+        errors.style.color = 'var(--sl-color-danger-600)';
+        errors.textContent = task.errors.join('; ');
+        row.lastElementChild?.appendChild(errors);
+      }
+      return row;
+    }));
+    dialog.show();
   }
 
   /**

@@ -32,6 +32,9 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `data_restore.py` | Staging and applying backup restores (`data/.restore/`, applied at worker start under a file lock) |
 | `worker_recycle.py` | Replacing the uvicorn workers via SIGHUP (`PTE_WORKER_RECYCLE`, set by `bin/start-prod`) |
 | `request_cancellation.py` | `CancelledRequestMiddleware`: ends requests that uvicorn cancels at shutdown/reload with a 503 and a one-line log instead of an "Exception in ASGI application" traceback. Routes need no own `CancelledError` handling |
+| `gc_registry.py` | Garbage-collection task registry (`register_gc_task`, `run_gc`, `GcContext`, `GcResult`); `POST /api/v1/files/garbage_collect` runs every registered task. A component that keeps data which can go stale registers a task at startup instead of changing the router |
+| `gc_tasks.py` | `register_core_gc_tasks()`, called in the lifespan: file tasks, message index, schema and annotation-rules caches, tmp dir |
+| `gc_hooks.py` | Deprecated `register_gc_handler` shim for plugins (wraps the handler into a `plugin:<id>` task) |
 | `migration_runner.py` | Migration execution |
 | `migrations/` | Migration system (`base.py`, `manager.py`, `utils.py`, `versions/`) |
 
@@ -72,7 +75,8 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `file_exporter.py` | File export utilities |
 | `file_zip_exporter.py` | ZIP export |
 | `file_zip_importer.py` | ZIP import |
-| `storage_gc.py` | Garbage collection |
+| `file_gc.py` | GC tasks of the file repository and storage (deleted files, orphaned storage files, duplicates, collections, orphaned XML) |
+| `storage_gc.py` | Reference-count garbage collection used by `bin/cli_storage_gc.py` |
 | `storage_references.py` | Reference counting |
 
 ### `permissions/` — Access Control
@@ -112,12 +116,12 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `standoff_reader.py` | Reads the unit review and unit comment stand-off lists; fingerprints mirror `app/src/modules/standoff-list.js` (checked against the shared fixture `tests/unit/fixtures/standoff/messages-sample.*`) |
 | `mentions.py` | `@id` mention rule, same pattern as `app/src/modules/mentions.js` |
 | `store.py` | `MessageStore` over `data/db/messages.db` (occurrences, messages, read state) |
-| `indexer.py` | `extract_occurrences`, `MessageIndexer` (index, settle, remove, rebuild) |
-| `service.py` | Store singletons, `document.saved`/`file.deleted` hooks, access filtering, `messagesChanged` SSE notification |
+| `indexer.py` | `extract_occurrences`, `MessageIndexer` (index, settle, remove, rebuild, `collect_garbage`) |
+| `service.py` | Store singletons, `document.saved`/`file.deleted` hooks, access filtering, `messagesChanged` SSE notification, `message-index` GC task |
 | `comment_edit.py` | Reply endpoint text edit (`add_reply`) |
 | `standoff_merge.py` | Text-level merge of the review and comment lists: contributions of users who cannot edit a file (`apply_contribution`, `PUT /files/{stable_id}/standoff`) and other users' changes kept when a file is saved over (`merge_foreign_standoff`) |
 
-The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messages/rebuild`, `manage-remote maintenance rebuild-messages`); it is built in the background at startup when `messages.db` is missing.
+The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messages/rebuild`, `manage-remote maintenance rebuild-messages`); it is built in the background at startup when `messages.db` is missing. The `message-index` GC task removes the rows of missing or soft-deleted files and removed users, settled review messages older than `messages.settled-retention-days` (0 = keep), and read states without a message. A rebuild is no substitute: it keeps orphaned read states and loses all settled messages.
 
 ### `sse/` — Server-Sent Events
 
