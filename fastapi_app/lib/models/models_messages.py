@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 
 
 class MessageItem(BaseModel):
-    """A review mark or comment addressed to the current user."""
+    """A review mark, comment, review request or direct message addressed to the current user."""
 
     key: str
-    kind: Literal["review", "comment", "mention", "review-request"]
-    reason: Literal["owner", "mention", "thread-author", "thread-mention", "reviewer"]
+    kind: Literal["review", "comment", "mention", "review-request", "direct"]
+    reason: Literal["owner", "mention", "thread-author", "thread-mention", "reviewer", "direct"]
     doc_id: str
     stable_id: str
     doc_label: str
@@ -47,6 +47,20 @@ class MarkReadRequest(BaseModel):
 
     keys: Annotated[list[str], Field(max_length=1000)]
     read: bool = True
+
+
+class DirectMessageRequest(BaseModel):
+    """A short message to a user about a document, which is not stored in the document."""
+
+    stable_id: Annotated[str, Field(min_length=1, description="The file the message is about")]
+    recipient: Annotated[str, Field(min_length=1, description="User name of the recipient")]
+    text: Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class DirectMessageResponse(BaseModel):
+    """The sent direct message."""
+
+    key: str
 
 
 class RebuildResponse(BaseModel):

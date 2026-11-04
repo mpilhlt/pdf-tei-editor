@@ -42,6 +42,7 @@ import {
   SsePlugin,
   StartPlugin,
   TeiHeaderEditorPlugin,
+  DocumentPeoplePlugin,
   TeiToolsPlugin,
   TeiValidationPlugin,
   ToolbarPlugin,
@@ -97,6 +98,7 @@ const plugins = [
   XslViewerPlugin,
   TeiToolsPlugin,
   TeiHeaderEditorPlugin,  // Edit header metadata (fileDesc) from the XML editor toolbar
+  DocumentPeoplePlugin,   // People of the document (respStmt), next to Edit header metadata
   FileSelectionPlugin,
   FileSelectionDrawerPlugin,
   DocumentActionsPlugin,

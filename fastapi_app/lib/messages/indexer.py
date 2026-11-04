@@ -281,6 +281,8 @@ class MessageGcStats:
     dead_files: int = 0
     """Files that are gone or soft-deleted and still had occurrences."""
     dead_file_occurrences: int = 0
+    dead_file_direct_messages: int = 0
+    """Direct messages about files that are gone or soft-deleted."""
     removed_recipients: int = 0
     """Recipients that are no longer user accounts."""
     removed_recipient_rows: int = 0
@@ -292,8 +294,8 @@ class MessageGcStats:
 
     @property
     def rows_deleted(self) -> int:
-        return (self.dead_file_occurrences + self.removed_recipient_rows + self.expired_occurrences
-                + self.orphaned_read_state)
+        return (self.dead_file_occurrences + self.dead_file_direct_messages + self.removed_recipient_rows
+                + self.expired_occurrences + self.orphaned_read_state)
 
 
 def _parse_time(value: str) -> datetime | None:
@@ -402,7 +404,7 @@ class MessageIndexer:
         """
         Removes rows that no file or user account backs any more.
 
-        1. Occurrences of files that are missing or soft-deleted
+        1. Occurrences of files that are missing or soft-deleted, and direct messages about them
         2. All rows of recipients that are not in `usernames`
         3. Settled review-mark and review-request occurrences whose `file_updated_at` (the time
            they were settled) is older than `settled_retention_days` (0 keeps them forever)
@@ -430,6 +432,16 @@ class MessageIndexer:
             stats.dead_file_occurrences += len(self.store.occurrences_of_file(stable_id))
             if not dry_run:
                 stats.changed_recipients |= self.remove_file(stable_id)
+
+        for stable_id in self.store.direct_message_stable_ids():
+            file = self.file_repo.get_file_by_stable_id(stable_id)
+            if file is not None and not file.deleted:
+                continue
+            messages = self.store.direct_messages_of_file(stable_id)
+            stats.dead_file_direct_messages += len(messages)
+            if not dry_run:
+                self.store.delete_direct_messages_of_file(stable_id)
+                stats.changed_recipients |= {recipient for _key, recipient in messages}
 
         # 2. removed users
         for recipient in self.store.recipients() - usernames:

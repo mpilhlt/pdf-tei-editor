@@ -7,7 +7,8 @@
  * expanded by loading a document, the floating button and the statusbar
  * meters; selects the text of a clicked diagnostic, and applies or dismisses the checked
  * diagnostics (switching off the merge view). Also checks that the drawer,
- * which stays open permanently, does not hide the help icon.
+ * which stays open permanently, does not hide the help icon, and that added
+ * diagnostics are scrolled into view and checked (#688).
  *
  * @testCovers app/src/plugins/diagnostics-drawer.js
  * @testCovers app/src/templates/help-widget.html
@@ -145,6 +146,66 @@ async function check(page, message) {
   await page.locator('.diagnostics-drawer-item', { hasText: message }).locator('sl-checkbox').click();
 }
 
+/**
+ * Adds diagnostics of a source at the start tags with the given indexes (negative: from the end),
+ * with or without a fix (which keeps the text). They are re-merged whenever another source replaces the diagnostic set. The
+ * document must not be edited afterwards (the positions are fixed).
+ * @param {Page} page
+ * @param {string} source
+ * @param {number[]} tagIndexes
+ * @param {string} prefix - The messages are `<prefix> <index>`
+ * @param {boolean} [fixable] - Whether the diagnostics have a fix
+ * @returns {Promise<void>}
+ */
+async function injectAtTags(page, source, tagIndexes, prefix, fixable = false) {
+  await page.evaluate(({ source, tagIndexes, prefix, fixable }) => {
+    const app = /** @type {any} */ (window).app;
+    const lintUtils = app.getDependency('lint-utils');
+    const xmleditor = app.getDependency('xmleditor');
+    const text = xmleditor.getView().state.doc.toString();
+    const starts = Array.from(text.matchAll(/<[A-Za-z]+/g)).map(m => ({ from: m.index, to: m.index + m[0].length }));
+    const items = tagIndexes.map(i => {
+      const at = starts[i < 0 ? starts.length + i : i];
+      return { ...at, severity: 'info', message: `${prefix} ${i}`, ...(fixable ? { replacement: text.slice(at.from, at.to) } : {}) };
+    });
+    let rendering = false;
+    const render = () => {
+      rendering = true;
+      try {
+        lintUtils.applyMergedDiagnostics(xmleditor.getView(), source, items, { openPanel: false });
+      } finally {
+        rendering = false;
+      }
+    };
+    xmleditor.addUpdateListener((/** @type {any} */ update) => {
+      if (lintUtils.replacesDiagnostics(update) && !rendering) setTimeout(render, 0);
+    });
+    render();
+  }, { source, tagIndexes, prefix, fixable });
+}
+
+/**
+ * Returns the drawer entries with their checkbox state and whether they are visible in the
+ * drawer body (below its sticky header).
+ * @param {Page} page
+ * @returns {Promise<{message: string, checked: boolean, visible: boolean}[]>}
+ */
+async function drawerEntries(page) {
+  return page.evaluate(() => {
+    const drawer = /** @type {any} */ (window).ui.pdfViewer.diagnosticsDrawer;
+    const body = drawer.shadowRoot.querySelector('[part~="body"]').getBoundingClientRect();
+    const headerBottom = drawer.header.getBoundingClientRect().bottom;
+    return Array.from(drawer.list.children).map((/** @type {HTMLElement} */ item) => {
+      const box = item.getBoundingClientRect();
+      return {
+        message: item.querySelector('.diagnostics-drawer-message')?.textContent ?? '',
+        checked: Boolean(/** @type {any} */ (item.querySelector('sl-checkbox')).checked),
+        visible: box.top >= headerBottom - 1 && box.bottom <= body.bottom + 1
+      };
+    });
+  });
+}
+
 test.describe('Diagnostics drawer', () => {
 
   test('lists, retracts, selects, applies and dismisses diagnostics', async ({ page }) => {
@@ -165,6 +226,8 @@ test.describe('Diagnostics drawer', () => {
 
       await injectDiagnostics(page);
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['no fix C', 'fix A', 'fix B']);
+      // the added diagnostics with a fix are checked (#688)
+      await expect.poll(async () => (await drawerEntries(page)).filter(e => e.checked).map(e => e.message)).toEqual(['fix A', 'fix B']);
 
       // the injected source re-merges after every replacement of the diagnostic set: this must not
       // make it and the other sources replace the set in turn forever (#647)
@@ -251,7 +314,7 @@ test.describe('Diagnostics drawer', () => {
         const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
         await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<front', '<front '));
       });
-      await check(page, 'fix A');
+      await check(page, 'fix B'); // unchecks it, A stays checked
       await check(page, 'no fix C');
       // click Apply right after the diagnostic set was replaced (as a validation run does), before
       // the injected diagnostics are re-merged: the checked diagnostics must still be applied
@@ -279,6 +342,67 @@ test.describe('Diagnostics drawer', () => {
       const text = await page.evaluate(() =>
         (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
       expect(text).toContain('<!--B--><body');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('scrolls to the added diagnostics and checks only the added ones with a fix (#688)', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadEditableVersion(page);
+
+      // diagnostics without a fix are listed, not checked
+      const early = Array.from({ length: 30 }, (_v, i) => i);
+      await injectAtTags(page, SOURCE, early, 'early');
+      await expect.poll(async () => (await drawerEntries(page)).filter(e => e.message.startsWith('early')).length).toBe(30);
+      let entries = await drawerEntries(page);
+      expect(entries.some(e => e.checked)).toBe(false);
+      expect(entries.find(e => e.message === 'early 0')?.visible).toBe(true);
+      await check(page, 'early 5');
+
+      // diagnostics with a fix added at the end of the document: scrolled into view and checked,
+      // the user's own checks stay
+      await injectAtTags(page, `${SOURCE}-late`, [-2, -1], 'late', true);
+      await expect.poll(async () => (await drawerEntries(page)).filter(e => e.message.startsWith('late')).length).toBe(2);
+      await expect.poll(async () => (await drawerEntries(page))
+        .filter(e => e.checked).map(e => e.message)).toEqual(['early 5', 'late -2', 'late -1']);
+      entries = await drawerEntries(page);
+      expect(entries.filter(e => e.message.startsWith('late')).every(e => e.visible)).toBe(true);
+      expect(entries.find(e => e.message === 'early 0')?.visible).toBe(false);
+
+      // added diagnostics without a fix are scrolled to, but leave the checks alone
+      await injectAtTags(page, `${SOURCE}-plain`, [1], 'plain');
+      await expect.poll(async () => (await drawerEntries(page)).find(e => e.message === 'plain 1')?.visible).toBe(true);
+      entries = await drawerEntries(page);
+      expect(entries.filter(e => e.checked).map(e => e.message)).toEqual(['early 5', 'late -2', 'late -1']);
+
+      // diagnostics that are listed again (a re-validation re-merges them) are not added ones
+      await check(page, 'early 7');
+      await page.evaluate((source) => {
+        const app = /** @type {any} */ (window).app;
+        app.getDependency('lint-utils').applyMergedDiagnostics(app.getDependency('xmleditor').getView(), source, []);
+      }, 'unrelated-source');
+      await page.waitForTimeout(500);
+      expect((await drawerEntries(page)).filter(e => e.checked).map(e => e.message).sort())
+        .toEqual(['early 5', 'early 7', 'late -1', 'late -2']);
+
+      // fixable diagnostics added together with an edit elsewhere (as the LLM Reviewer writes its
+      // review marks to the standOff) are checked as well
+      await page.evaluate(() => {
+        const view = /** @type {any} */ (window).app.getDependency('xmleditor').getView();
+        view.dispatch({ changes: { from: view.state.doc.length, insert: '\n' } });
+      });
+      await injectAtTags(page, `${SOURCE}-llm`, [3], 'llm', true);
+      await expect.poll(async () => (await drawerEntries(page))
+        .filter(e => e.checked).map(e => e.message)).toEqual(['llm 3', 'early 5', 'early 7', 'late -2', 'late -1']);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

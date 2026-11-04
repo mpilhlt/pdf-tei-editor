@@ -1,7 +1,8 @@
 /**
  * API tests for messages (reviews and comments addressed to users), replies to comment threads and
- * reviews and comments saved into files the user cannot edit
+ * reviews and comments saved into files the user cannot edit, and direct messages
  * @testCovers fastapi_app/routers/messages.py
+ * @testCovers fastapi_app/lib/messages/store.py
  * @testCovers fastapi_app/routers/files_comments.py
  * @testCovers fastapi_app/routers/files_save.py
  * @testCovers fastapi_app/lib/messages/service.py
@@ -233,6 +234,44 @@ describe('Messages API tests', () => {
     await authenticatedApiCall(annotator.sessionId, '/files/release_lock', 'POST', { file_id: saved.file_id }, BASE_URL);
     const settled = await waitForMessages(reviewer.sessionId, items => items.some(m => m.key === key && m.settled));
     assert.strictEqual(settled.items.find(m => m.key === key)?.settled_note, 'status-changed');
+  });
+
+  test('a direct message reaches the recipient, is not stored in the file and survives a rebuild', async () => {
+    const sent = await authenticatedApiCall(reviewer.sessionId, '/messages/direct', 'POST', {
+      stable_id: state.fileId, recipient: 'annotator', text: '  Please check the dates  '
+    }, BASE_URL);
+    assert.match(sent.key, new RegExp(`^d:${docId}:[0-9a-f]{32}$`));
+    const list = await authenticatedApiCall(annotator.sessionId, '/messages?kind=direct', 'GET', null, BASE_URL);
+    const message = list.items.find(m => m.key === sent.key);
+    assert.ok(message, 'direct message for the annotator');
+    assert.strictEqual(message.kind, 'direct');
+    assert.strictEqual(message.reason, 'direct');
+    assert.strictEqual(message.author, 'reviewer');
+    assert.strictEqual(message.text, 'Please check the dates');
+    assert.strictEqual(message.stable_id, state.fileId);
+    assert.strictEqual(message.read, false);
+    assert.ok(list.items.every(m => m.key.startsWith('d:')), 'kind filter');
+
+    const xml = await authenticatedApiCall(reviewer.sessionId, `/api/files/${state.fileId}`, 'GET', null, BASE_URL);
+    assert.ok(!xml.includes('Please check the dates'), 'not stored in the document');
+
+    const admin = await login('admin', 'admin', BASE_URL);
+    await authenticatedApiCall(admin.sessionId, '/messages/rebuild', 'POST', {}, BASE_URL);
+    const after = await authenticatedApiCall(annotator.sessionId, '/messages', 'GET', null, BASE_URL);
+    assert.ok(after.items.some(m => m.key === sent.key), 'kept after a rebuild');
+  });
+
+  test('direct messages to oneself, to unknown users, about unknown files or empty are refused', async () => {
+    const self = await authenticatedRequest(reviewer.sessionId, '/messages/direct', 'POST', { stable_id: state.fileId, recipient: 'reviewer', text: 'x' }, BASE_URL);
+    assert.strictEqual(self.status, 400);
+    const unknown = await authenticatedRequest(reviewer.sessionId, '/messages/direct', 'POST', { stable_id: state.fileId, recipient: 'nobody-here', text: 'x' }, BASE_URL);
+    assert.strictEqual(unknown.status, 404);
+    const noFile = await authenticatedRequest(reviewer.sessionId, '/messages/direct', 'POST', { stable_id: 'no-such-file', recipient: 'annotator', text: 'x' }, BASE_URL);
+    assert.strictEqual(noFile.status, 404);
+    const blank = await authenticatedRequest(reviewer.sessionId, '/messages/direct', 'POST', { stable_id: state.fileId, recipient: 'annotator', text: '   ' }, BASE_URL);
+    assert.strictEqual(blank.status, 400);
+    const long = await authenticatedRequest(reviewer.sessionId, '/messages/direct', 'POST', { stable_id: state.fileId, recipient: 'annotator', text: 'x'.repeat(501) }, BASE_URL);
+    assert.strictEqual(long.status, 422);
   });
 
   test('read-all marks everything read', async () => {

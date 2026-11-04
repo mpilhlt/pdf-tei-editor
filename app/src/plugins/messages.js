@@ -1,6 +1,7 @@
 /**
  * Messages plugin: lists the review marks and comments addressed to the current user (not-OK
- * marks on documents they own, comments that mention them or answer their threads), shows the
+ * marks on documents they own, comments that mention them or answer their threads, review
+ * requests) and the direct messages other users sent them about a document, shows the
  * number of unread messages on the toolbar menu button, and opens a message's document with the
  * review or comment focused. See docs/user-manual/messages.md.
  *
@@ -54,6 +55,7 @@ const CSS = `
 .message-row .message-kind.review { color: var(--sl-color-danger-600); }
 .message-row .message-kind.comment { color: var(--sl-color-primary-600); }
 .message-row .message-kind.request { color: var(--sl-color-warning-600); }
+.message-row .message-kind.direct { color: var(--sl-color-success-600); }
 .message-row .message-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .message-row .message-head { display: flex; gap: 6px; align-items: baseline; font-size: 13px; }
 .message-row .message-head b { font-weight: 600; }
@@ -235,11 +237,11 @@ class MessagesPlugin extends Plugin {
 
   // ── List ────────────────────────────────────────────────────────────
 
-  /** @returns {{status: 'unread'|'all', kind?: 'review'|'comment'}} */
+  /** @returns {{status: 'unread'|'all', kind?: 'review'|'comment'|'direct'}} */
   #filter() {
     const status = /** @type {SlRadioGroup} */ (this.#dialogUi.statusFilter).value === 'all' ? 'all' : 'unread'
     const kind = String(this.#dialogUi.kindFilter.value)
-    return kind === 'review' || kind === 'comment' ? { status, kind } : { status }
+    return kind === 'review' || kind === 'comment' || kind === 'direct' ? { status, kind } : { status }
   }
 
   async #reload() {
@@ -279,6 +281,7 @@ class MessagesPlugin extends Plugin {
   #row(item) {
     const isReview = item.key.startsWith('r:')
     const isRequest = item.key.startsWith('q:')
+    const isDirect = item.key.startsWith('d:')
     const unread = !item.read && !item.settled
     const row = document.createElement('div')
     row.className = `message-row${unread ? ' unread' : ''}${item.settled ? ' settled' : ''}`
@@ -288,9 +291,9 @@ class MessagesPlugin extends Plugin {
     const dot = document.createElement('span')
     dot.className = 'message-dot'
     const kind = document.createElement('sl-icon')
-    kind.className = `message-kind ${isRequest ? 'request' : isReview ? 'review' : 'comment'}`
-    kind.setAttribute('name', isRequest ? 'clipboard-check' : isReview ? 'x-circle-fill' : 'chat-left-text')
-    kind.setAttribute('label', isRequest ? 'Review request' : isReview ? 'Review' : 'Comment')
+    kind.className = `message-kind ${isDirect ? 'direct' : isRequest ? 'request' : isReview ? 'review' : 'comment'}`
+    kind.setAttribute('name', isDirect ? 'chat-dots' : isRequest ? 'clipboard-check' : isReview ? 'x-circle-fill' : 'chat-left-text')
+    kind.setAttribute('label', isDirect ? 'Message' : isRequest ? 'Review request' : isReview ? 'Review' : 'Comment')
 
     const main = document.createElement('div')
     main.className = 'message-main'
@@ -344,7 +347,7 @@ class MessagesPlugin extends Plugin {
       })
       actions.appendChild(toggle)
     }
-    const canReply = !item.settled && !isRequest && (isReview ? item.reason === 'owner' && !item.author.startsWith('llm-') : Boolean(item.thread_id))
+    const canReply = !item.settled && !isRequest && (isDirect || (isReview ? item.reason === 'owner' && !item.author.startsWith('llm-') : Boolean(item.thread_id)))
     if (canReply) {
       const reply = document.createElement('sl-icon-button')
       reply.setAttribute('name', 'reply')
@@ -375,12 +378,14 @@ class MessagesPlugin extends Plugin {
       case 'reviewer': return 'asks for a review of'
       case 'thread-author': return 'replied to your comment'
       case 'thread-mention': return 'replied in a thread you were mentioned in'
+      case 'direct': return 'sent you a message about'
       default: return item.kind === 'mention' ? 'mentioned you in a review' : 'mentioned you'
     }
   }
 
   /**
-   * Shows or hides an inline reply field under a comment message.
+   * Shows or hides an inline reply field under a comment or direct message. A reply to a direct
+   * message is a direct message to its author.
    * @param {HTMLElement} row
    * @param {MessageItem} item
    */
@@ -390,8 +395,9 @@ class MessagesPlugin extends Plugin {
       existing.remove()
       return
     }
-    // a reply to the document that is open for editing goes into the editor, so that it is saved with it
-    if (item.stable_id === this.state?.xml && !this.state?.editorReadOnly) {
+    const isDirect = item.key.startsWith('d:')
+    // a reply to a comment in the document that is open for editing goes into the editor, so that it is saved with it
+    if (!isDirect && item.stable_id === this.state?.xml && !this.state?.editorReadOnly) {
       this.open(item)
       return
     }
@@ -401,6 +407,7 @@ class MessagesPlugin extends Plugin {
     const input = document.createElement('sl-input')
     input.setAttribute('size', 'small')
     input.setAttribute('placeholder', 'Reply')
+    if (isDirect) input.setAttribute('maxlength', '500')
     input.dataset.testid = 'message-reply-input'
     const send = document.createElement('sl-button')
     send.setAttribute('size', 'small')
@@ -408,9 +415,13 @@ class MessagesPlugin extends Plugin {
     send.textContent = 'Send'
     const submit = async () => {
       const text = String(/** @type {any} */ (input).value ?? '').trim()
-      if (!text || !item.thread_id) return
+      if (!text || (!isDirect && !item.thread_id)) return
       try {
-        await this.#client.apiClient.filesCommentReply(item.stable_id, item.thread_id, { text })
+        if (isDirect) {
+          await this.#client.apiClient.messagesSendDirect({ stable_id: item.stable_id, recipient: item.author, text })
+        } else {
+          await this.#client.apiClient.filesCommentReply(item.stable_id, /** @type {string} */ (item.thread_id), { text })
+        }
       } catch (error) {
         notify(`The reply could not be saved: ${String(error)}`, 'danger', 'exclamation-octagon')
         return

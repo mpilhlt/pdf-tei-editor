@@ -751,9 +751,9 @@
 
 /**
  * @typedef {Object} MessageItem
- * @property {string} key - Message key: `c:<doc_id>:<comment id>` or `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`
- * @property {'review'|'comment'|'mention'|'review-request'} kind
- * @property {'owner'|'mention'|'thread-author'|'thread-mention'|'reviewer'} reason - Why the user receives it
+ * @property {string} key - Message key: `c:<doc_id>:<comment id>`, `r:<doc_id>:<variant>:<reviewer>:<fingerprint>`, `q:<doc_id>:<variant>:<when>` or `d:<doc_id>:<uuid>` (direct messages)
+ * @property {'review'|'comment'|'mention'|'review-request'|'direct'} kind
+ * @property {'owner'|'mention'|'thread-author'|'thread-mention'|'reviewer'|'direct'} reason - Why the user receives it
  * @property {string} doc_id
  * @property {string} stable_id - The file of the newest occurrence, which the message opens
  * @property {string} doc_label
@@ -785,6 +785,18 @@
  * @typedef {Object} MarkReadRequest
  * @property {Array<string>} keys
  * @property {boolean=} read - Default true
+ */
+
+/**
+ * @typedef {Object} DirectMessageRequest
+ * @property {string} stable_id - The file the message is about
+ * @property {string} recipient - User name of the recipient
+ * @property {string} text - At most 500 characters
+ */
+
+/**
+ * @typedef {Object} DirectMessageResponse
+ * @property {string} key - The key of the new message (`d:...`)
  */
 
 /**
@@ -2208,7 +2220,7 @@ export class ApiClientV1 {
   /**
    * The messages of the current user (reviews and comments addressed to them), newest first.
    *
-   * @param {{status?: 'unread'|'all', kind?: 'review'|'comment', limit?: number, offset?: number}} [params]
+   * @param {{status?: 'unread'|'all', kind?: 'review'|'comment'|'direct', limit?: number, offset?: number}} [params]
    * @returns {Promise<MessageListResponse>}
    */
   async messagesList(params = {}) {
@@ -2235,6 +2247,18 @@ export class ApiClientV1 {
   async messagesMarkAllRead() {
     const endpoint = `/messages/read-all`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Sends a short message about a document to another user. It is shown in the recipient's
+   * messages and not stored in the document; both users must be able to view the file.
+   *
+   * @param {DirectMessageRequest} requestBody
+   * @returns {Promise<DirectMessageResponse>}
+   */
+  async messagesSendDirect(requestBody) {
+    const endpoint = `/messages/direct`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**

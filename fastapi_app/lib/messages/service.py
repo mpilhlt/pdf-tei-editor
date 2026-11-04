@@ -123,6 +123,7 @@ def collect_message_garbage(ctx: GcContext) -> GcResult:
         details={
             "dead_files": stats.dead_files,
             "dead_file_occurrences": stats.dead_file_occurrences,
+            "dead_file_direct_messages": stats.dead_file_direct_messages,
             "removed_users": stats.removed_recipients,
             "removed_user_rows": stats.removed_recipient_rows,
             "expired_settled_occurrences": stats.expired_occurrences,
