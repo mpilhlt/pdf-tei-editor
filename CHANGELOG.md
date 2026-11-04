@@ -2,6 +2,31 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.81.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.80.0...v0.81.0) (2026-11-04)
+
+
+### Bug Fixes
+
+* **access-control:** defer permission checks until the mode is loaded ([345e37e](https://github.com/mpilhlt/pdf-tei-editor/commit/345e37e352933311391a010e3c15aed33a0a788f)), closes [#654](https://github.com/mpilhlt/pdf-tei-editor/issues/654)
+* **diagnostics-drawer:** check LLM review suggestions that arrive with review marks ([a5c95ca](https://github.com/mpilhlt/pdf-tei-editor/commit/a5c95ca631d63b14940072ae18ec6228b9404df7))
+* **diagnostics-drawer:** check only added diagnostics that have a fix ([1af84b4](https://github.com/mpilhlt/pdf-tei-editor/commit/1af84b405ea47967ec28ab4d6a52f54b0f221260))
+* **document-people:** do not unfold the header when adding a person ([9ae3628](https://github.com/mpilhlt/pdf-tei-editor/commit/9ae362888a573818293547a670b3f29182bd162a))
+* **document-people:** keep the header's fold state when adding a person ([84ef958](https://github.com/mpilhlt/pdf-tei-editor/commit/84ef958c166cf0d4e65311bba8e7ec9cca672237))
+* **info:** point "Edit on GitHub" at the devel branch ([80c05ce](https://github.com/mpilhlt/pdf-tei-editor/commit/80c05cea1ceb3c0d8d6df8828198b7818382e40e)), closes [#659](https://github.com/mpilhlt/pdf-tei-editor/issues/659)
+* **llm:** apply the model filter only to providers using the shared key ([5facaf8](https://github.com/mpilhlt/pdf-tei-editor/commit/5facaf8bf9c1cbcacf365e2cd42a8de7b301eea1)), closes [#685](https://github.com/mpilhlt/pdf-tei-editor/issues/685)
+* **plugins:** drop runtime-installed plugins whose site directory is gone ([635d76c](https://github.com/mpilhlt/pdf-tei-editor/commit/635d76c0c0e652b65c1f89860cb87d2463b818e6))
+* **unit-review:** keep the popover open when picking an @-mention ([554fadb](https://github.com/mpilhlt/pdf-tei-editor/commit/554fadb9402ded9e1697a27d4bb0b4445884c0ee)), closes [#697](https://github.com/mpilhlt/pdf-tei-editor/issues/697)
+* **xmleditor:** keep the header folded when a unit review is recorded ([685ade0](https://github.com/mpilhlt/pdf-tei-editor/commit/685ade0a580a2054a281a0ea30a46fe291706a5b)), closes [#660](https://github.com/mpilhlt/pdf-tei-editor/issues/660)
+
+
+### Features
+
+* **config:** encrypt masked config.json values at rest ([2222249](https://github.com/mpilhlt/pdf-tei-editor/commit/22222491d833c709b5be7654aea24c7d332dacb5)), closes [#667](https://github.com/mpilhlt/pdf-tei-editor/issues/667)
+* **document-rules:** open the Edit document rules menu from the Overrides active label ([90ea3cb](https://github.com/mpilhlt/pdf-tei-editor/commit/90ea3cbd88c8c54e4e9747f024fcfce28ce7bec0)), closes [#686](https://github.com/mpilhlt/pdf-tei-editor/issues/686)
+* **document-rules:** send override notes with machine rule updates and upstream proposals ([187b022](https://github.com/mpilhlt/pdf-tei-editor/commit/187b022eb41c893db35443f2f1f5eb783c1337b5)), closes [#687](https://github.com/mpilhlt/pdf-tei-editor/issues/687)
+* **gc:** run garbage collection as a registry of tasks with per-task statistics ([c13ed60](https://github.com/mpilhlt/pdf-tei-editor/commit/c13ed602ab924c253ddfe351a44fc356a89ed068)), closes [#665](https://github.com/mpilhlt/pdf-tei-editor/issues/665) [#664](https://github.com/mpilhlt/pdf-tei-editor/issues/664)
+* people dialog with direct messages; scroll to and check added diagnostics ([ee31587](https://github.com/mpilhlt/pdf-tei-editor/commit/ee31587706df4b54af4b6966aad16be354b05355)), closes [#689](https://github.com/mpilhlt/pdf-tei-editor/issues/689) [#688](https://github.com/mpilhlt/pdf-tei-editor/issues/688) [#688](https://github.com/mpilhlt/pdf-tei-editor/issues/688) [#689](https://github.com/mpilhlt/pdf-tei-editor/issues/689)
+
 # [0.80.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.79.0...v0.80.0) (2026-11-03)
 
 
