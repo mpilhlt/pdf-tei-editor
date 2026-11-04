@@ -31,9 +31,6 @@ import ui from '../ui.js'
 
 await registerTemplate('document-people-dialog', 'document-people-dialog.html')
 
-/** XPath of the TEI header, whose fold state adding a person keeps */
-const HEADER_XPATH = '//tei:teiHeader'
-
 /** Maximum length of a message */
 const MAX_MESSAGE_LENGTH = 500
 
@@ -77,6 +74,9 @@ class DocumentPeoplePlugin extends Plugin {
   /** @type {DocumentPerson[]} */
   #people = []
 
+  /** @type {boolean|null} Whether the teiHeader was folded when the dialog opened */
+  #headerFolded = null
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -100,6 +100,10 @@ class DocumentPeoplePlugin extends Plugin {
   async start() {
     this.#button.addEventListener('widget-click', () => this.show())
     this.#dialogUi.closeBtn.addEventListener('click', () => this.#dialogUi.hide())
+    this.#dialogUi.addEventListener('sl-after-hide', event => {
+      // nested Shoelace elements (selects) emit their own, bubbling sl-after-hide
+      if (event.target === this.#dialogUi) this.#restoreHeaderFold()
+    })
     this.#dialogUi.addSection.userSelect.addEventListener('sl-change', () => this.#updateRoleSelect())
     this.#dialogUi.addSection.roleSelect.addEventListener('sl-change', () => this.#updateAddButton())
     this.#dialogUi.addSection.addBtn.addEventListener('click', () => this.#onAdd())
@@ -131,6 +135,7 @@ class DocumentPeoplePlugin extends Plugin {
       this.#users = []
     }
     await this.#refresh()
+    this.#headerFolded = this.#isHeaderFolded()
     await this.#dialogUi.show()
   }
 
@@ -331,6 +336,33 @@ class DocumentPeoplePlugin extends Plugin {
   }
 
   /**
+   * @returns {boolean|null} Whether the teiHeader is folded, null without a header
+   */
+  #isHeaderFolded() {
+    try {
+      if (!this.#xmlEditor.getDomNodeByXpath(HEADER_XPATH)) return null
+      return this.#xmlEditor.isFoldedByXpath(HEADER_XPATH)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Folds or unfolds the teiHeader as it was when the dialog opened.
+   */
+  #restoreHeaderFold() {
+    const wanted = this.#headerFolded
+    const current = this.#isHeaderFolded()
+    if (wanted === null || current === null || wanted === current) return
+    try {
+      if (wanted) this.#xmlEditor.foldByXpath(HEADER_XPATH)
+      else this.#xmlEditor.unfoldByXpath(HEADER_XPATH)
+    } catch (error) {
+      this.getDependency('logger').debug(`Cannot restore the header fold: ${String(error)}`)
+    }
+  }
+
+  /**
    * Adds the selected user with the selected responsibility to the document and saves it.
    */
   async #onAdd() {
@@ -355,11 +387,9 @@ class DocumentPeoplePlugin extends Plugin {
     }
     if (added) {
       prettyPrintXmlDom(xmlDoc, 'teiHeader')
-      const header = xmlDoc.getElementsByTagNameNS('*', 'teiHeader')[0]
-      // replacing the header's text unfolds it: keep the fold state
-      const headerFolded = this.#xmlEditor.isFoldedByXpath(HEADER_XPATH)
-      await this.#xmlEditor.updateEditorFromNode(header)
-      if (headerFolded && !this.#xmlEditor.isFoldedByXpath(HEADER_XPATH)) this.#xmlEditor.foldByXpath(HEADER_XPATH)
+      // replaces only the changed ranges, so that the folds (e.g. of the teiHeader) stay
+      await this.#xmlEditor.updateEditorFromXmlTree()
+      this.#restoreHeaderFold()
       await this.#xmlEditor.saveIfDirty()
     }
     testLog('DOCUMENT_PEOPLE_ADDED', { username: user.username, role: role.id, added })
@@ -367,6 +397,9 @@ class DocumentPeoplePlugin extends Plugin {
     await this.#refresh()
   }
 }
+
+/** XPath of the TEI header, whose fold state the dialog keeps */
+const HEADER_XPATH = '//tei:teiHeader'
 
 /**
  * @param {number} count

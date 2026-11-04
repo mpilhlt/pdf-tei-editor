@@ -111,7 +111,9 @@ test.describe('Document people', () => {
       expect(await isHeaderFolded()).toBe(true);
       await page.locator('[data-testid="document-people-add-btn"]').click();
       await waitForTestMessage(consoleLogs, 'DOCUMENT_PEOPLE_ADDED');
-      // the header keeps its fold state
+      // the header keeps its fold state, also after the save and when the dialog is closed
+      expect(await isHeaderFolded()).toBe(true);
+      await page.waitForTimeout(1500);
       expect(await isHeaderFolded()).toBe(true);
 
       // written into the header and saved
@@ -134,6 +136,16 @@ test.describe('Document people', () => {
       await input.press('Enter');
       await waitForTestMessage(consoleLogs, 'DOCUMENT_PEOPLE_MESSAGE_SENT');
       await expect(row.locator('[data-testid="document-people-message-input"]')).toHaveCount(0);
+      await page.locator('sl-dialog[name="documentPeopleDialog"] sl-button[name="closeBtn"]').click();
+      await page.waitForTimeout(1000);
+      expect(await isHeaderFolded()).toBe(true);
+
+      // closing the dialog restores the header's fold state from when it was opened
+      await openDialog(page);
+      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').unfoldByXpath('//tei:teiHeader'));
+      expect(await isHeaderFolded()).toBe(false);
+      await page.locator('sl-dialog[name="documentPeopleDialog"] sl-button[name="closeBtn"]').click();
+      await expect.poll(isHeaderFolded).toBe(true);
       const saved = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getXML());
       expect(saved).not.toContain(MESSAGE);
     } finally {
