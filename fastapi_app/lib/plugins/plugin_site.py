@@ -100,6 +100,31 @@ def activate(entries: Iterable[InstalledPlugin], site_dir: Path | None = None) -
     return added
 
 
+def missing(entries: Iterable[InstalledPlugin], site_dir: Path | None = None) -> list[InstalledPlugin]:
+    """
+    Installed plugins whose package directory does not exist (anymore) in the site directory.
+
+    Entries with a path outside the site directory are included, since they cannot be loaded either.
+
+    Args:
+        entries: Installed plugins (``installed`` of the plugin state)
+        site_dir: Site directory (default: :func:`get_site_dir`)
+
+    Returns:
+        The entries without a package directory
+    """
+    result: list[InstalledPlugin] = []
+    for entry in entries:
+        try:
+            directory = package_dir(entry, site_dir)
+        except ValueError:
+            result.append(entry)
+            continue
+        if not directory.is_dir():
+            result.append(entry)
+    return result
+
+
 def remove_pending(state: PluginState, site_dir: Path | None = None) -> list[str]:
     """
     Delete the site directories marked for removal (called at startup, before :func:`activate`).
