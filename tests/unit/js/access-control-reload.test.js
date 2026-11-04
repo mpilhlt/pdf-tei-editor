@@ -9,6 +9,9 @@
  * made AccessControlPlugin compute `owner = null` in owner-based mode, show the "no owner" toast
  * and cache the result for that document, so the real owner was never picked up.
  *
+ * Also covers issue #654: a state update arriving before start() has loaded the access control
+ * mode, and the owner fallback when changing permissions in granular mode.
+ *
  * @testCovers app/src/plugins/access-control.js
  */
 
@@ -40,6 +43,8 @@ const { default: AccessControlPlugin } = await import('../../../app/src/plugins/
 const { createIdLookupIndex } = await import('../../../app/src/modules/file-data-utils.js');
 
 const XML_ID = 'xml-stable-id';
+/** @type {HTMLElement[]} */
+const statusbarWidgets = [];
 const user = { username: 'alice', fullname: 'Alice', roles: ['annotator', 'reviewer'] };
 
 /**
@@ -55,9 +60,13 @@ function fileData(createdBy) {
 }
 
 /**
- * Creates the plugin in owner-based mode with stubbed dependencies and a mutable state object.
+ * Creates the plugin with stubbed dependencies and a mutable state object.
+ * @param {object} [options]
+ * @param {'role-based'|'owner-based'|'granular'} [options.mode]
+ * @param {boolean} [options.start] - Whether to call start() before returning
+ * @param {object} [options.apiClient] - Additional API client stubs
  */
-async function makePlugin() {
+async function makePlugin({ mode = 'owner-based', start = true, apiClient = {} } = {}) {
   const app = new Application(new PluginManager(), new StateManager());
   const plugin = new AccessControlPlugin(app.getPluginContext());
   const state = { xml: XML_ID, user, editorReadOnly: false, fileData: fileData('bob') }
@@ -67,17 +76,18 @@ async function makePlugin() {
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
   const deps = {
     logger,
-    client: { apiClient: { filesAccessControlMode: async () => ({ mode: 'owner-based', default_visibility: 'collection', default_editability: 'owner' }) } },
+    client: { apiClient: { filesAccessControlMode: async () => ({ mode, default_visibility: 'collection', default_editability: 'owner' }), ...apiClient } },
     authentication: { getUser: () => user },
-    xmleditor: { setReadOnlyContext() {} }
+    xmleditor: { setReadOnlyContext() {}, addStatusbarWidget(widget) { statusbarWidgets.push(widget); } }
   };
   plugin.getDependency = (name) => deps[name];
-  await plugin.start();
+  if (start) await plugin.start();
   return { plugin, state, scheduled };
 }
 
 beforeEach(() => {
   notifyCalls.length = 0;
+  statusbarWidgets.length = 0;
   createIdLookupIndex([]);
 });
 
@@ -118,5 +128,58 @@ describe('AccessControlPlugin on page reload (owner-based mode)', () => {
 
     assert.strictEqual(notifyCalls.length, 1);
     assert.match(notifyCalls[0][0], /has no owner/);
+  });
+});
+
+describe('AccessControlPlugin before the access control mode is loaded (#654)', () => {
+  it('runs owner-based checks once start() has loaded the mode', async () => {
+    createIdLookupIndex(fileData('bob'));
+    const { plugin, scheduled } = await makePlugin({ start: false });
+
+    // state update before start(): mode unknown, must not be treated as role-based and cached
+    await plugin.onStateUpdate(['xml']);
+    assert.strictEqual(notifyCalls.length, 0);
+    assert.deepStrictEqual(scheduled, []);
+
+    await plugin.start();
+
+    assert.strictEqual(plugin.getMode(), 'owner-based');
+    assert.strictEqual(plugin.getDocumentPermissions().owner, 'bob');
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.match(notifyCalls[0][0], /owned by bob/);
+    assert.deepStrictEqual(scheduled, [{ editorReadOnly: true }]);
+
+    // later updates for the same document use the cached result
+    await plugin.onStateUpdate(['fileData']);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.deepStrictEqual(scheduled, [{ editorReadOnly: true }]);
+  });
+});
+
+describe('AccessControlPlugin permission changes in granular mode (#654)', () => {
+  it('falls back to the artifact creator as owner', async () => {
+    createIdLookupIndex(fileData('bob'));
+    const setCalls = [];
+    const { plugin } = await makePlugin({
+      mode: 'granular',
+      apiClient: {
+        filesPermissions: async () => { throw new Error('no permissions record'); },
+        filesSetPermissions: async (params) => { setCalls.push(params); return params; }
+      }
+    });
+    await plugin.onStateUpdate(['xml']);
+    assert.strictEqual(plugin.getDocumentPermissions().owner, 'bob');
+
+    // owner unknown in the current permissions: must use fileData.item.created_by
+    plugin.getDocumentPermissions().owner = null;
+    await plugin.install(plugin.state);
+    const switchEl = statusbarWidgets.flatMap(w => [w, ...w.querySelectorAll('*')])
+      .find(el => el.getAttribute?.('name') === 'visibilitySwitch');
+    assert.ok(switchEl, 'visibility switch not found');
+    switchEl.dispatchEvent(new CustomEvent('widget-change', { detail: { checked: false } }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    assert.strictEqual(setCalls.length, 1);
+    assert.strictEqual(setCalls[0].owner, 'bob');
   });
 });

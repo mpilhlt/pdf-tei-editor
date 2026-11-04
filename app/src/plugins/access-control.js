@@ -128,6 +128,11 @@ class AccessControlPlugin extends Plugin {
         default_editability: 'owner'
       }
     }
+    // A state update for a document may have arrived before the mode was loaded and been
+    // deferred (#654): compute the permissions now.
+    if (this.state?.xml && this.state.xml !== this.#xmlCache) {
+      await this.onStateUpdate([])
+    }
   }
 
   /**
@@ -139,6 +144,15 @@ class AccessControlPlugin extends Plugin {
     if (!state.xml) {
       this.#hideAccessControlWidgets()
       this.#xmlCache = null
+      return
+    }
+
+    if (!this.#accessControlConfig) {
+      // start() has not loaded the access control mode yet. Computing permissions now would
+      // treat the document as role-based and cache that result, so owner-based or granular
+      // checks would never run for it (#654). start() computes them once the mode is known.
+      this.getDependency('logger').debug(`Access control: mode not loaded yet, deferring ${state.xml}`)
+      this.#hideAccessControlWidgets()
       return
     }
 
@@ -441,7 +455,7 @@ class AccessControlPlugin extends Plugin {
       stable_id: this.state.xml,
       visibility,
       editability,
-      owner: this.#currentPermissions.owner || fileData?.created_by || ''
+      owner: this.#currentPermissions.owner || fileData?.item?.created_by || ''
     })
 
     this.#currentPermissions.visibility = response.visibility
