@@ -1034,12 +1034,15 @@ class UnitReviewPlugin extends Plugin {
         .filter(r => r.mark.state === 'not-ok')
         .map(r => `${this.#reviewerName(r.reviewer)}${r.mark.comment ? `: ${r.mark.comment}` : ''}`)
       const what = recheck ? 'Changed after a not-OK review' : combined.state === 'disputed' ? 'Review disputed' : 'Marked not OK'
+      // the diagnostics drawer gives the entry the stripe the review gutter shows for the unit
+      const kind = recheck ? 'changed' : combined.state === 'disputed' ? 'disputed' : 'not-ok'
       const line = state.doc.lineAt(unit.from)
       const fp = unit.fingerprint
       own.push({
         from: unit.from,
         to: Math.min(unit.to, line.to),
         severity: 'info',
+        markClass: `cm-unit-review-${kind}`,
         message: `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`,
         // only reviewers can mark units
         actions: [
