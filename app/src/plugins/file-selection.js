@@ -8,6 +8,7 @@
  * @import { SlSelect } from '../ui.js'
  * @import { DocumentItem, Artifact } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { PanelContribution } from '../modules/panels/base-panel.js'
  */
 import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
@@ -43,14 +44,23 @@ class FileSelectionPlugin extends Plugin {
   /**
    * Extension point handler for `ep.toolbar.contentItems`.
    * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
-   * Returns all five file-selection controls with their individual priorities.
-   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   * Returns all five file-selection controls in the order Collection, Model Variant, Source File,
+   * Target XML, Compare with version (`order`, left of the Document actions at 8). On overflow,
+   * Collection and Model Variant are hidden first and Source File and Target XML last (`priority`).
+   * @returns {PanelContribution[]}
    */
   [ep.toolbar.contentItems]() {
-    const priorities = { collection: 12, variant: 11, pdf: 10, xml: 10, diff: 10 }
-    return [this.#pdf, this.#xml, this.#diff, this.#variant, this.#collection]
+    /** @type {Record<string, {order: number, priority: number}>} */
+    const placement = {
+      collection: { order: 14, priority: 5 },
+      variant: { order: 13, priority: 5 },
+      pdf: { order: 12, priority: 10 },
+      xml: { order: 11, priority: 10 },
+      diff: { order: 10, priority: 9 }
+    }
+    return [this.#collection, this.#variant, this.#pdf, this.#xml, this.#diff]
       .filter(Boolean)
-      .map(el => ({ element: el, priority: priorities[el.getAttribute('name')] || 1, position: 'center' }))
+      .map(el => ({ element: el, ...(placement[el.getAttribute('name') ?? ''] ?? { order: 1, priority: 1 }), position: 'center' }))
   }
 
   get #logger() { return this.getDependency('logger') }

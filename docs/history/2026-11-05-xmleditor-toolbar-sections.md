@@ -25,3 +25,12 @@ The theme picker moves to the far right of the statusbar, with the lowest priori
 - `docs/user-manual/editing-workflow.md` - toolbar table rewritten in toolbar order; core buttons only (added the strict diff toggle, the header editor, the XSL viewer note), plugin buttons (TEI Wizard) in a separate table; removed *Save revision* and *Delete*, which live in the main toolbar; statusbar description mentions the theme picker.
 - `docs/user-manual/interface-overview.md` - XML editor components and the main toolbar updated to what the application ships; the previously listed *Copy*, *Move*, *Sync*, *Edit Instructions* buttons no longer exist in the core toolbar (Sync comes from the WebDAV sync plugin).
 - `docs/code-assistant/plugin-development.md` - new section *Adding Buttons to the XML Editor*.
+
+## Follow-up: sections in the panels library, order separate from priority (#340)
+
+Christian asked to move the section code out of the plugin (2026-11-05, after PR #704 was merged).
+
+- `ToolBar.defineSections(names, separatorPriority)` and `ToolBar.addToSection(section, widget, priority, order)` (`app/src/modules/panels/tool-bar.js`) replace the separator bookkeeping and the `MutationObserver` in `XmlEditorPlugin`. The toolbar creates the section separators itself; the template only has the spacer and the upload/download buttons, which go into the `'import-export'` section.
+- `order` decides the position within a section (default: the priority), `priority` only the overflow hiding. The revision history button is back at priority 1 (it had been raised to 94 just to sit left of the review toggle) and gets order 2, the review toggle order 1.
+- Issue #340: `PanelContribution` gets the same `order` field. `resolveContributions()` sorts by `order ?? priority`. The file selection controls now have order 14 to 10 (Collection, Model Variant, Source File, Target XML, Compare) and priorities 5, 5, 10, 10, 9, so Collection and Model Variant are hidden first instead of last. The main toolbar currently runs with `smart-overflow="off"`, so this only takes effect once overflow hiding is switched on there.
+- Tests: `tests/unit/js/toolbar-sections.test.js`.

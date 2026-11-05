@@ -377,6 +377,110 @@ class ToolBar extends BasePanel {
 
     return this.add(button, priority);
   }
+
+  /**
+   * Appends a row of named sections to the toolbar, separated by `<status-separator>`s:
+   * `[a] | [b] | [c]`. Widgets are added to a section with {@link ToolBar#addToSection}.
+   * A section separator is only shown while there is a visible widget on both of its sides,
+   * so that an empty section leaves no stray or doubled separator.
+   * @param {string[]} names - Section names, from left to right
+   * @param {number} [separatorPriority] - Overflow priority of the separators (default: 0)
+   */
+  defineSections(names, separatorPriority = 0) {
+    if (!this.sections) {
+      /** @type {Map<string, {index: number, separator: HTMLElement|null}>} */
+      this.sections = new Map();
+      // follow widgets that appear, disappear or are hidden by overflow
+      this.sectionObserver = new MutationObserver(records => {
+        if (records.some(record => !(record.target instanceof HTMLElement && record.target.dataset.sectionSeparator))) {
+          this.syncSectionSeparators();
+        }
+      });
+      this.sectionObserver.observe(this, { childList: true, attributes: true, attributeFilter: ['style', 'hidden', 'data-overflow-hidden'] });
+    }
+    for (const name of names) {
+      if (this.sections.has(name)) throw new Error(`Toolbar section "${name}" is already defined`);
+      let separator = null;
+      if (this.sections.size > 0) {
+        separator = document.createElement('status-separator');
+        separator.setAttribute('variant', 'vertical');
+        separator.dataset.sectionSeparator = name;
+        this.add(separator, separatorPriority);
+      }
+      this.sections.set(name, { index: this.sections.size, separator });
+    }
+    this.syncSectionSeparators();
+  }
+
+  /**
+   * Adds a widget to a section defined with {@link ToolBar#defineSections}. Within the
+   * section, widgets are sorted by `order`, the highest leftmost, independent of the
+   * order of the calls.
+   * @param {string} section - Section name
+   * @param {HTMLElement} widget - The widget element
+   * @param {number} [priority] - Higher priority widgets stay visible longer (default: 0)
+   * @param {number} [order] - Position in the section, highest leftmost (default: the priority)
+   * @returns {string} The widget ID
+   */
+  addToSection(section, widget, priority = 0, order = priority) {
+    const definition = this.sections?.get(section);
+    if (!definition) throw new Error(`Unknown toolbar section "${section}"`);
+    widget.dataset.section = section;
+    widget.dataset.sectionOrder = String(order);
+    const members = this.#sectionMembers(section);
+    const before = members.find(el => Number(el.dataset.sectionOrder) < order);
+    let id;
+    if (before) {
+      id = this.addBefore(widget, priority, before);
+    } else if (members.length > 0) {
+      id = this.addAfter(widget, priority, members[members.length - 1]);
+    } else if (definition.separator) {
+      id = this.addAfter(widget, priority, definition.separator);
+    } else {
+      // first section without widgets yet: right before the next section's separator
+      const next = [...this.sections.values()].find(s => s.index === definition.index + 1);
+      id = next?.separator ? this.addBefore(widget, priority, next.separator) : this.add(widget, priority);
+    }
+    this.syncSectionSeparators();
+    return id;
+  }
+
+  /**
+   * Shows each section separator only while a visible widget is on both of its sides.
+   * Called automatically when widgets are added, removed, shown or hidden.
+   */
+  syncSectionSeparators() {
+    if (!this.sections) return;
+    /** @param {Element} el */
+    const isVisible = el => el instanceof HTMLElement && !el.hidden && el.style.display !== 'none' && !el.hasAttribute('data-overflow-hidden');
+    /**
+     * @param {HTMLElement} separator
+     * @param {'previousElementSibling'|'nextElementSibling'} direction
+     */
+    const sideHasVisibleWidget = (separator, direction) => {
+      for (let el = separator[direction]; el; el = el[direction]) {
+        if (!(el instanceof HTMLElement) || el.dataset.sectionSeparator) break;
+        if (!el.dataset.section) break;
+        if (isVisible(el)) return true;
+      }
+      return false;
+    };
+    for (const { separator } of this.sections.values()) {
+      if (!separator) continue;
+      const shown = sideHasVisibleWidget(separator, 'previousElementSibling') && sideHasVisibleWidget(separator, 'nextElementSibling');
+      const display = shown ? '' : 'none';
+      if (separator.style.display !== display) separator.style.display = display;
+    }
+  }
+
+  /**
+   * @param {string} section
+   * @returns {HTMLElement[]} The widgets of the section in DOM order
+   */
+  #sectionMembers(section) {
+    return /** @type {HTMLElement[]} */ (Array.from(this.children))
+      .filter(el => el instanceof HTMLElement && el.dataset.section === section);
+  }
 }
 
 customElements.define('tool-bar', ToolBar);

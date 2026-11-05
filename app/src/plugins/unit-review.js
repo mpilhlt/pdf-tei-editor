@@ -175,7 +175,7 @@ class UnitReviewPlugin extends Plugin {
       tooltip: REVIEW_TOOLTIP
     })
     this.#toggle.addEventListener('widget-change', () => this.setEnabled(Boolean(this.#toggle.checked)))
-    this.#xmlEditor.addToolbarWidget(this.#toggle, 93, 'review')
+    this.#xmlEditor.addToolbarWidget(this.#toggle, 93, 'review', 1)
 
     this.#meter = this.#createMeter()
     this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 4)
