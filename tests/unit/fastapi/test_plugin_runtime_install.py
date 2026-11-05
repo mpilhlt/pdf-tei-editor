@@ -13,6 +13,7 @@ live route registration, upgrade, removal and the admin API.
 
 import asyncio
 import hashlib
+import importlib
 import json
 import os
 import signal
@@ -442,6 +443,48 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
         record = worker.registry.get_record(PLUGIN_ID)
         self.assertTrue(record is not None and not record.deferred and record.site)
         self.assertTrue(worker.registry.is_active(PLUGIN_ID))
+
+    def test_editable_install_replaces_the_runtime_installed_version(self):
+        self.install(self.mgr)
+        asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))
+        forget_plugin_modules()
+
+        def editable(distribution: str) -> str | None:
+            return "file:///checkouts/pte-plugins/plugins/rt-hello" if distribution == "pte-plugin-rt-hello" else None
+
+        with patch.object(plugin_site, "editable_install", side_effect=editable):
+            worker = self.new_manager()
+            with self.assertLogs("fastapi_app.lib.plugins.plugin_manager", "WARNING") as logs:
+                self.discover(worker)
+            self.assertIn("is installed editable from file:///checkouts/pte-plugins/plugins/rt-hello", "\n".join(logs.output))
+            self.assertIsNone(worker.registry.get_record(PLUGIN_ID))
+            self.assertFalse(any("pte-plugin-rt-hello" in p for p in sys.path))
+            # other workers' sync leaves it alone too
+            worker.generation = 0
+            asyncio.run(worker.reconcile())
+            self.assertIsNone(worker.registry.get_record(PLUGIN_ID))
+        # without the editable install, the runtime-installed version is loaded again
+        worker = self.new_manager()
+        self.discover(worker)
+        record = worker.registry.get_record(PLUGIN_ID)
+        self.assertTrue(record is not None and record.site and worker.registry.is_active(PLUGIN_ID))
+
+    def test_editable_install_is_read_from_direct_url(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name, direct_url in (("pte_plugin_ed", {"url": "file:///src/ed", "dir_info": {"editable": True}}),
+                                     ("pte_plugin_wheel", {"url": "https://example.org/x.whl", "archive_info": {}}),
+                                     ("pte_plugin_plain", None)):
+                dist_info = Path(d) / f"{name}-1.0.0.dist-info"
+                dist_info.mkdir()
+                (dist_info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name.replace('_', '-')}\nVersion: 1.0.0\n")
+                if direct_url is not None:
+                    (dist_info / "direct_url.json").write_text(json.dumps(direct_url))
+            sys.path.insert(0, d)
+            self.addCleanup(sys.path.remove, d)
+            importlib.invalidate_caches()
+            self.assertEqual(plugin_site.editable_install("pte-plugin-ed"), "file:///src/ed")
+            for name in ("pte-plugin-wheel", "pte-plugin-plain", "pte-plugin-not-installed"):
+                self.assertIsNone(plugin_site.editable_install(name), name)
 
     def test_incompatible_or_unmet_requirements_are_refused(self):
         with self.assertRaises(InstallError) as ctx:

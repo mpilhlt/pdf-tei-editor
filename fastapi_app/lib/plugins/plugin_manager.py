@@ -146,6 +146,14 @@ class PluginManager:
         """
         state = self._remove_pending_directories(self.state_store.read())
         state = self._prune_missing_installed(state)
+        # A plugin installed editable from a checkout replaces its runtime-installed version
+        active = plugin_site.without_editable(state.installed)
+        for entry in state.installed:
+            if entry not in active:
+                logger.warning(
+                    f"Runtime-installed plugin {entry.id} {entry.version} is not loaded: {entry.distribution} is installed editable from {plugin_site.editable_install(entry.distribution)}"
+                )
+        state = replace(state, installed=active)
         plugin_site.activate(state.installed)
         deferred, site_dirs = self._site_records(state)
         plugin_dirs = get_plugin_dirs()
@@ -253,10 +261,12 @@ class PluginManager:
 
         New plugins are listed (not imported); a not-imported plugin whose version changed
         is listed with the new version; removed plugins that were never imported are dropped.
-        Imported plugins keep running their code until the worker restarts.
+        Imported plugins keep running their code until the worker restarts. Plugins installed
+        editable from a checkout are left alone (see plugin_site.without_editable()).
         """
-        installed = {e.id: e for e in state.installed}
-        for entry in state.installed:
+        entries = plugin_site.without_editable(state.installed)
+        installed = {e.id: e for e in entries}
+        for entry in entries:
             record = self.registry.get_record(entry.id)
             if record is not None and not (record.deferred and record.site):
                 continue
