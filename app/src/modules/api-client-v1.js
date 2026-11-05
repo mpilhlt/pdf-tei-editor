@@ -894,6 +894,7 @@
  * @typedef {Object} UpstreamStatusRequest
  * @property {string} xml - Stable id of the open document
  * @property {string} url - One of the document's refs
+ * @property {boolean} [refetch] - Ignore cached upstream lookups such as branch heads (upstream-status only)
  */
 
 /**
