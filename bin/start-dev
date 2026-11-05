@@ -21,6 +21,7 @@ from fastapi_app.lib.utils.server_startup import (
     print_server_starting_message,
     kill_server_on_port
 )
+from fastapi_app.lib.plugins.plugin_paths import get_plugin_reload_dirs
 
 
 if __name__ == '__main__':
@@ -79,6 +80,14 @@ if __name__ == '__main__':
         for dot_dir in sorted(project_root.glob('.*')):
             if dot_dir.is_dir():
                 cmd.extend(['--reload-exclude', str(dot_dir)])
+        # Also reload on changes to plugins outside the project (FASTAPI_PLUGIN_PATHS, editable
+        # installs of a plugin checkout). With --reload-dir, uvicorn watches only the listed
+        # directories, so the project root is listed too.
+        plugin_dirs = get_plugin_reload_dirs(project_root)
+        if plugin_dirs:
+            for watched_dir in [project_root, *plugin_dirs]:
+                cmd.extend(['--reload-dir', str(watched_dir)])
+            print(f"Also watching {len(plugin_dirs)} plugin directories outside the project for changes")
 
     try:
         # Run uvicorn and stream output to log file
