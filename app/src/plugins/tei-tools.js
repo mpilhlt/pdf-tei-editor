@@ -71,7 +71,8 @@ class TeiToolsPlugin extends Plugin {
       name: 'revisionHistoryBtn'
     })
     this.#revisionHistoryBtn.style.display = 'none'
-    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 1)
+    // first button of the toolbar's history & review section, left of the review mode toggle
+    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 94, 'review')
 
     this.#ui = this.createUi(createSingleFromTemplate('tei-revision-history-drawer', document.body))
 

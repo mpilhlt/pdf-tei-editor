@@ -192,6 +192,25 @@ class DocumentActionsPlugin extends Plugin {
 
 Only add a plugin to `deps` when it must be fully installed before this plugin's own `install()` runs. Plugins only needed at action time don't need a `deps` entry.
 
+## Adding Buttons to the XML Editor
+
+The `xmleditor` dependency adds widgets to the editor's bars: `addToolbarWidget(widget, priority, section)`, `addStatusbarWidget(widget, position, priority)` and `addHeaderbarWidget(widget, position, priority)`. The priority decides which widgets stay visible longest when the bar runs out of space.
+
+The right-hand side of the toolbar has three sections, separated by separators that are only shown while both neighbouring sections have a visible button:
+
+```text
+[document history & review] | [import & export] | [plugin additions]
+```
+
+- `section = 'review'` - document history and review (`tei-tools` revision history at 94, `unit-review` toggle at 93).
+- `section = 'plugins'` (default) - everything else a plugin adds (TEI Wizard at 51.5, XSL viewer at 50.5).
+
+Within a section, widgets are ordered by priority, highest leftmost, independent of the order in which the plugins are installed. The import & export buttons and the editor theme picker (at the far right of the statusbar) belong to the `xmleditor` plugin itself.
+
+```javascript
+this.getDependency('xmleditor').addToolbarWidget(button, 51.5, 'plugins')
+```
+
 ## Common Patterns
 
 ```javascript

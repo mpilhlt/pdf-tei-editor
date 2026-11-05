@@ -123,9 +123,9 @@ export class XslViewerPlugin extends Plugin {
     xmlEditorApi.appendToEditor(overlayElement);
     this.#overlay = /** @type {HTMLDivElement & xslViewerOverlayPart} */ (this.createUi(overlayElement));
 
-    // Add button to toolbar (priority 50.5 - between TEI buttons and spacer)
+    // Add button to the toolbar's plugin section, right of the TEI wizard (51.5)
     const buttonElement = createSingleFromTemplate('xsl-viewer-button');
-    xmlEditorApi.addToolbarWidget(buttonElement, 50.5);
+    xmlEditorApi.addToolbarWidget(buttonElement, 50.5, 'plugins');
 
     // Store direct references to nested elements (sl-dropdown doesn't expose them via name navigation)
     this.#xslViewerBtn = /** @type {import('../ui.js').SlButton} */ (buttonElement.querySelector('[name="xslViewerBtn"]'));

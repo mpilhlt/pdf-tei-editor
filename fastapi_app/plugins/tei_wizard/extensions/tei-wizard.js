@@ -26,7 +26,7 @@
 
 const ENHANCEMENTS_URL = '/api/plugins/tei-wizard/enhancements.js';
 
-/** Position of the button in the XML editor toolbar */
+/** Priority of the button in the plugin section of the XML editor toolbar (left of the XSL viewer, 50.5) */
 const TOOLBAR_PRIORITY = 51.5;
 
 export default class TeiWizardExtension extends FrontendExtensionPlugin {
@@ -57,7 +57,7 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
     this._button.setAttribute('tooltip', 'Enhance TEI');
     this._button.setAttribute('action', 'tei-wizard');
     this._button.addEventListener('widget-click', () => this._runTeiWizard());
-    this.getDependency('xmleditor').addToolbarWidget(this._button, TOOLBAR_PRIORITY);
+    this.getDependency('xmleditor').addToolbarWidget(this._button, TOOLBAR_PRIORITY, 'plugins');
 
     this._dialog = this._createDialog();
     document.body.appendChild(this._dialog);

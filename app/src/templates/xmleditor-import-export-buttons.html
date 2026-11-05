@@ -1,5 +1,10 @@
-<!-- XML Editor import/export buttons -->
+<!-- XML Editor right-hand toolbar sections:
+     [document history & review] | [import & export] | [plugin additions]
+     Plugins add their buttons to a section with `addToolbarWidget(widget, priority, section)`.
+     A section separator is only shown while the section before or after it has a visible button. -->
 <status-spacer></status-spacer>
+
+<status-separator name="reviewSectionSeparator" variant="vertical"></status-separator>
 
 <status-button
   name="uploadBtn"
@@ -14,3 +19,5 @@
   tooltip="Download XML document"
   action="xml-download">
 </status-button>
+
+<status-separator name="pluginSectionSeparator" variant="vertical"></status-separator>
