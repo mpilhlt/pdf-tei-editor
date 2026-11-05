@@ -293,6 +293,33 @@ class TestInstalledPlugins(unittest.TestCase):
         self.assertEqual(client.get("/api/plugins/ep-fixture/hello").json(), {"greeting": "hello from an entry point"})
 
 
+class TestPluginReloadDirs(unittest.TestCase):
+    """Plugin directories outside the project that the dev server watches (bin/start-dev)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_external_and_editable_plugins_outside_the_project_are_watched(self):
+        project = self.tmp / "editor"
+        repos = self.tmp / "repos"
+        external = write_plugin(repos, "ext", "ext-reload", "external")
+        inside_project = write_plugin(project / "plugins", "inner", "ext-inner", "inner")
+        editable = self.tmp / "pte-plugins" / "plugins" / "x" / "src" / "pte_plugin_x"
+        released = self.tmp / "venv" / "lib" / "site-packages" / "pte_plugin_y"
+        for directory in (editable, released):
+            directory.mkdir(parents=True)
+
+        with patch.object(plugin_paths, "get_external_plugin_dirs", return_value=[repos, project / "plugins"]), \
+                patch.object(plugin_paths, "get_installed_plugin_dirs", return_value=[editable, released, external]):
+            dirs = plugin_paths.get_plugin_reload_dirs(project)
+
+        self.assertEqual(dirs, [external, editable])
+        self.assertNotIn(inside_project, dirs)
+
+
 class TestPluginManifest(unittest.TestCase):
     """version and engines.pte in pte-plugin.json."""
 

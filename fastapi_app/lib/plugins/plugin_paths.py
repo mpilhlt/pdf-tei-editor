@@ -162,6 +162,32 @@ def get_plugin_dirs() -> list[Path]:
     return dirs
 
 
+def get_plugin_reload_dirs(project_root: Path) -> list[Path]:
+    """
+    Return the plugin directories outside the project that the dev server should watch.
+
+    These are the external plugins found in FASTAPI_PLUGIN_PATHS and the installed plugins
+    whose package is not in ``site-packages``, i.e. editable installs of a plugin checkout.
+    Plugins inside ``project_root`` are already watched; released packages do not change.
+
+    Args:
+        project_root: Root of the editor checkout
+
+    Returns:
+        Resolved plugin directories, without duplicates
+    """
+    root = project_root.resolve()
+    candidates = [plugin for base in get_external_plugin_dirs() for plugin in find_external_plugins(base)]
+    candidates += [d for d in get_installed_plugin_dirs() if "site-packages" not in d.resolve().parts]
+    dirs: list[Path] = []
+    for directory in candidates:
+        resolved = directory.resolve()
+        if resolved.is_relative_to(root) or resolved in dirs:
+            continue
+        dirs.append(resolved)
+    return dirs
+
+
 def is_builtin_plugin_dir(plugin_path: Path) -> bool:
     """
     Whether a plugin directory is a built-in plugin (inside fastapi_app/plugins/).
