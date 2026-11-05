@@ -93,8 +93,8 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
  * @property {StatusButton} revisionHistoryBtn - Revision history button (added by tei-tools plugin)
- * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
- * @property {SlMenu} themeMenu - Editor theme picker menu
+ * @property {HTMLElement} reviewSectionSeparator - Separator after the history & review section
+ * @property {HTMLElement} pluginSectionSeparator - Separator before the plugin section
  */
 
 /**
@@ -108,6 +108,8 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
+ * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
+ * @property {SlMenu} themeMenu - Editor theme picker menu
  */
 
 /**
@@ -118,6 +120,11 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  * @property {UIPart<HTMLDivElement, xslViewerOverlayPart>} xslViewerOverlay - XSL transformation overlay (added by xsl-viewer plugin)
+ */
+
+/**
+ * Section of the XML editor toolbar's right-hand side that a widget is added to
+ * @typedef {'review'|'plugins'} ToolbarSection
  */
 
 /** Reasons of `fileDataChanged` events after which a read-only document is reloaded */
@@ -192,6 +199,10 @@ class XmlEditorPlugin extends Plugin {
   #themeDropdown = null;
   /** @type {SlMenu|null} */
   #themeMenu = null;
+  /** @type {HTMLElement|null} Separator between the history & review and the import & export toolbar sections */
+  #reviewSectionSeparator = null;
+  /** @type {HTMLElement|null} Separator between the import & export and the plugin toolbar sections */
+  #pluginSectionSeparator = null;
 
   // Statusbar widget references
   /** @type {StatusToggleButton} */
@@ -349,20 +360,31 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // Create import/export buttons and add to toolbar (right side)
+    // Create the right-hand toolbar sections: [history & review] | [import & export] | [plugin additions].
+    // The spacer and the section separators carry priority 50; upload/download go first when space is short.
     const importExportButtons = createFromTemplate('xmleditor-import-export-buttons');
-    const importExportPriorities = [50, 3, 2]; // spacer, upload, download
+    const importExportPriorities = [50, 50, 3, 2, 50]; // spacer, review separator, upload, download, plugin separator
     importExportButtons.forEach((widget, index) => {
       if (widget instanceof HTMLElement) {
-        this.#toolbar.add(widget, importExportPriorities[index] || 1);
+        this.#toolbar.add(widget, importExportPriorities[index] ?? 1);
       }
     });
+    this.#reviewSectionSeparator = /** @type {HTMLElement} */ (importExportButtons.find(el => el instanceof HTMLElement && el.getAttribute('name') === 'reviewSectionSeparator'));
+    this.#pluginSectionSeparator = /** @type {HTMLElement} */ (importExportButtons.find(el => el instanceof HTMLElement && el.getAttribute('name') === 'pluginSectionSeparator'));
+    // show a section separator only while there is a visible button on both of its sides
+    new MutationObserver(records => {
+      if (records.some(r => r.target !== this.#reviewSectionSeparator && r.target !== this.#pluginSectionSeparator)) {
+        this.#syncToolbarSectionSeparators();
+      }
+    }).observe(this.#toolbar, { childList: true, attributes: true, attributeFilter: ['style', 'hidden', 'data-overflow-hidden'] });
+    this.#syncToolbarSectionSeparators();
 
-    // Create theme selector button and add to toolbar (priority 1 - far right)
+    // Theme selector: rightmost item of the statusbar, the first one to go when space is short
     const themeButtonEl = createSingleFromTemplate('xmleditor-theme-button');
-    this.#toolbar.add(themeButtonEl, 1);
+    themeButtonEl.style.order = '1';
+    this.#statusbar.add(themeButtonEl, 'right', -3);
 
-    const themeDropdown = /** @type {SlDropdown} */ (themeButtonEl.querySelector('[name="themeDropdown"]'));
+    const themeDropdown = /** @type {SlDropdown} */ (themeButtonEl);
     this.#themeDropdown = themeDropdown;
     this.#themeMenu = /** @type {SlMenu} */ (themeButtonEl.querySelector('[name="themeMenu"]'));
 
@@ -391,16 +413,6 @@ class XmlEditorPlugin extends Plugin {
         /** @type {SlMenuItem} */ (el).checked = el.dataset.themeId === themeId;
       });
     });
-
-    // Fix z-index stacking context so the dropdown appears above the editor
-    if (themeDropdown) {
-      themeDropdown.addEventListener('sl-show', () => {
-        themeDropdown.closest('tool-bar')?.classList.add('dropdown-open');
-      });
-      themeDropdown.addEventListener('sl-hide', () => {
-        themeDropdown.closest('tool-bar')?.classList.remove('dropdown-open');
-      });
-    }
 
     // Read-only status widget (added dynamically when needed)
     this.#readOnlyStatusWidget = PanelUtils.createText({
@@ -1181,12 +1193,60 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Add a widget to the XML editor toolbar.
+   * Add a widget to one of the sections on the right of the XML editor toolbar:
+   * `[review]` (document history and review) `|` import & export `|` `[plugins]` (other additions).
+   * Within a section, widgets are ordered by priority, the highest leftmost. The priority also
+   * decides which widgets stay visible longest when the toolbar runs out of space.
    * @param {HTMLElement} widget
    * @param {number} priority
+   * @param {ToolbarSection} [section] - Defaults to `'plugins'`
    */
-  addToolbarWidget(widget, priority) {
-    this.#toolbar.add(widget, priority)
+  addToolbarWidget(widget, priority, section = 'plugins') {
+    const separator = section === 'review' ? this.#reviewSectionSeparator : this.#pluginSectionSeparator
+    if (!separator) {
+      this.#toolbar.add(widget, priority)
+      return
+    }
+    widget.dataset.toolbarSection = section
+    // the widgets of the section, which start after the spacer (review) or the plugin separator (plugins)
+    const sectionWidgets = Array.from(this.#toolbar.children)
+      .filter(el => el instanceof HTMLElement && el.dataset.toolbarSection === section)
+    const before = sectionWidgets.find(el => Number(/** @type {HTMLElement} */ (el).dataset.priority) < priority)
+    if (before) {
+      this.#toolbar.addBefore(widget, priority, /** @type {HTMLElement} */ (before))
+    } else if (section === 'review') {
+      this.#toolbar.addBefore(widget, priority, separator)
+    } else {
+      this.#toolbar.add(widget, priority)
+    }
+    this.#syncToolbarSectionSeparators()
+  }
+
+  /**
+   * Shows each toolbar section separator only while a visible widget is on both of its sides,
+   * so that an empty section (no plugin buttons, revision history not available) leaves no
+   * stray or doubled separator.
+   */
+  #syncToolbarSectionSeparators() {
+    /** @param {Element} el */
+    const isVisible = el => el instanceof HTMLElement && !el.hidden && el.style.display !== 'none' && !el.hasAttribute('data-overflow-hidden')
+    /** @param {Element} el */
+    const isBoundary = el => el.tagName === 'STATUS-SEPARATOR' || el.tagName === 'STATUS-SPACER'
+    /**
+     * @param {Element} start
+     * @param {'previousElementSibling'|'nextElementSibling'} direction
+     */
+    const hasVisibleWidget = (start, direction) => {
+      for (let el = start[direction]; el && !isBoundary(el); el = el[direction]) {
+        if (isVisible(el)) return true
+      }
+      return false
+    }
+    for (const separator of [this.#reviewSectionSeparator, this.#pluginSectionSeparator]) {
+      if (!separator) continue
+      const display = hasVisibleWidget(separator, 'previousElementSibling') && hasVisibleWidget(separator, 'nextElementSibling') ? '' : 'none'
+      if (separator.style.display !== display) separator.style.display = display
+    }
   }
 
   /**
