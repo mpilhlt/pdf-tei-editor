@@ -3,10 +3,8 @@
 
 /**
  * @typedef {object} xmleditorImportExportButtonsPart
- * @property {HTMLElement} reviewSectionSeparator
  * @property {HTMLElement} uploadBtn
  * @property {HTMLElement} downloadBtn
- * @property {HTMLElement} pluginSectionSeparator
  */
 
 export {}
