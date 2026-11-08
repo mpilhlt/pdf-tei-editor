@@ -20,7 +20,6 @@
  * Paths that return 401 without auth are still measured (timing includes the 401 response).
  */
 
-import { createHash } from "crypto";
 import { readFileSync } from "fs";
 
 const DEFAULTS = {
@@ -90,14 +89,6 @@ function parseEnvFile(filePath) {
 }
 
 /**
- * @param {string} password
- * @returns {string}
- */
-function hashPassword(password) {
-  return createHash("sha256").update(password).digest("hex");
-}
-
-/**
  * Log in and return session ID.
  * @param {string} baseUrl
  * @param {string} username
@@ -108,7 +99,7 @@ async function login(baseUrl, username, password) {
   const res = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, passwd_hash: hashPassword(password) }),
+    body: JSON.stringify({ username, password }),
   });
   if (!res.ok) throw new Error(`Login to ${baseUrl} failed: ${res.status} ${await res.text()}`);
   const data = await res.json();

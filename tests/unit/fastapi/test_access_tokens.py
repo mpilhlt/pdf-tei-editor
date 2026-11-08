@@ -353,11 +353,11 @@ class TestAccessTokensApi(TempDbTestCase):
 
     def test_password_login_is_rate_limited_per_user(self):
         for _ in range(10):
-            response = self.client.post("/auth/login", json={"username": "rev", "passwd_hash": "wrong"})
+            response = self.client.post("/auth/login", json={"username": "rev", "password": "wrong"})
             self.assertEqual(response.status_code, 401)
-        response = self.client.post("/auth/login", json={"username": "rev", "passwd_hash": "wrong"})
+        response = self.client.post("/auth/login", json={"username": "rev", "password": "wrong"})
         self.assertEqual(response.status_code, 429)
-        response = self.client.post("/auth/login", json={"username": "ann", "passwd_hash": "wrong"})
+        response = self.client.post("/auth/login", json={"username": "ann", "password": "wrong"})
         self.assertEqual(response.status_code, 401)
 
 

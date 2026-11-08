@@ -6,6 +6,10 @@ This guide covers authentication, user account management, and access control fo
 
 User, group, and collection data is managed via the ["Manage Access & Projects" tool](./rbac-manager.md), or via [`npm run manage-remote`](./cli-manage-remote.md) (using the http API).
 
+The login dialog sends the password to the server, so serve the editor over HTTPS. The server stores only a salted scrypt hash of each password in `data/db/users.json`. Scripts should log in with a [personal access token](./access-tokens.md) instead of a password.
+
+Earlier versions stored a bare SHA-256 hash, which worked as a password in its own right. The server converts these hashes to scrypt at startup, so users keep their passwords. Clients that send `passwd_hash` to `/api/v1/auth/login` instead of `password` are refused with HTTP 400 and have to be updated.
+
 ## User Roles
 
 The application currently supports four user roles:

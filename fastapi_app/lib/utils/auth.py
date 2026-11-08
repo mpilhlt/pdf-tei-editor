@@ -11,6 +11,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from .password_hash import verify_password as verify_password_hash
+
 
 # Platform-specific imports for file locking
 if sys.platform == 'win32':
@@ -45,8 +47,8 @@ class AuthManager:
     """
     Authentication manager with dependency injection.
 
-    Manages user authentication and password verification.
-    Uses SHA-256 password hashing for compatibility with existing system.
+    Manages user authentication and password verification
+    (salted scrypt hashes, see `fastapi_app.lib.utils.password_hash`).
     """
 
     def __init__(self, db_dir: Path, logger=None):
@@ -120,21 +122,19 @@ class AuthManager:
                 return user_copy
         return None
 
-    def verify_password(self, username: str, passwd_hash: str) -> Optional[dict]:
+    def verify_password(self, username: str, password: str) -> Optional[dict]:
         """
-        Verify password hash and return user if valid.
-
-        Uses SHA-256 password hashing for compatibility.
+        Verify a plain text password and return the user if valid.
 
         Args:
             username: Username to verify
-            passwd_hash: SHA-256 hash of the password
+            password: Plain text password
 
         Returns:
             User dictionary if credentials valid, None otherwise
         """
         user = self.get_user_by_username(username)
-        if user and user.get('passwd_hash') == passwd_hash:
+        if user and verify_password_hash(password, user.get('passwd_hash') or ''):
             if self.logger:
                 self.logger.info(f"Password verified for user {username}")
             return user
@@ -174,7 +174,7 @@ class AuthManager:
 
         Args:
             username: Username for the new user
-            passwd_hash: SHA-256 hash of the password
+            passwd_hash: Stored password hash (from `password_hash.hash_password`)
             **kwargs: Additional user attributes (e.g., email, role)
 
         Returns:

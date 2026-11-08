@@ -288,11 +288,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 /**
  * Logs in a user
  * @param {string} username
- * @param {string} passwd_hash
+ * @param {string} password - Plain text password (protected in transit by HTTPS)
  * @returns {Promise<AuthenticationData>}
  */
-async function login(username, passwd_hash) {
-  return await apiClient.authLogin({ username, passwd_hash });
+async function login(username, password) {
+  return await apiClient.authLogin({ username, password });
 }
 
 /**

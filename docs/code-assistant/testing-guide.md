@@ -1053,7 +1053,7 @@ async function loginAsAdmin() {
     method: 'POST',
     body: JSON.stringify({
       username: 'admin',
-      password: 'admin'  // Wrong! Should be passwd_hash with hashing
+      password: 'admin'  // Wrong! Duplicates the login flow; missing Content-Type header
     })
   });
 }
@@ -1078,7 +1078,6 @@ import {
   login,
   logout,
   createAdminSession,
-  hashPassword,
   authenticatedApiCall,
   authenticatedRequest
 } from '../helpers/test-auth.js';

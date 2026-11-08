@@ -239,7 +239,7 @@ The script is a thin client for these endpoints. You can call them from other to
 
 | Method and path | Role | Purpose |
 | --- | --- | --- |
-| `POST /api/v1/auth/login` | none | Log in; body `{"username": "...", "passwd_hash": "<SHA-256 hex of the password>"}`; returns `sessionId` |
+| `POST /api/v1/auth/login` | none | Log in; body `{"username": "...", "password": "..."}`; returns `sessionId` |
 | `GET /api/plugins/backup-restore/download` | `backup` | Download the backup ZIP |
 | `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore; 400 if the backup is invalid or of an incompatible version |
 | `POST /api/v1/auth/logout` | session | End the session |
@@ -250,9 +250,9 @@ Example with `curl`:
 
 ```bash
 BASE=https://editor.example.org
-HASH=$(tr -d '\n' < /etc/pdf-tei-editor/backup.pw | sha256sum | cut -d' ' -f1)
-SID=$(curl -fsS -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"username\":\"backup-bot\",\"passwd_hash\":\"$HASH\"}" | python3 -c 'import sys,json; print(json.load(sys.stdin)["sessionId"])')
+SID=$(python3 -c 'import json,sys; print(json.dumps({"username": "backup-bot", "password": open(sys.argv[1]).read().strip()}))' /etc/pdf-tei-editor/backup.pw \
+  | curl -fsS -X POST "$BASE/api/v1/auth/login" -H 'Content-Type: application/json' --data-binary @- \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["sessionId"])')
 curl -fsS -D headers.txt -o backup.zip -H "X-Session-ID: $SID" "$BASE/api/plugins/backup-restore/download"
 grep -i '^x-content-sha256' headers.txt
 sha256sum backup.zip

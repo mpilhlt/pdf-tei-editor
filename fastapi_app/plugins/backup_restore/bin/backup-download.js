@@ -257,14 +257,6 @@ export function acquireLock(lockPath) {
 // ============================================================================
 
 /**
- * @param {string} password
- * @returns {string} hex SHA-256
- */
-function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-/**
  * Log in and return the session id.
  * @param {string} baseUrl
  * @param {string} username
@@ -278,7 +270,7 @@ async function login(baseUrl, username, password, signal) {
     res = await fetch(`${baseUrl}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, passwd_hash: hashPassword(password) }),
+      body: JSON.stringify({ username, password }),
       signal,
     });
   } catch (err) {

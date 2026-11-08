@@ -62,6 +62,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing database from config: {e}")
         raise
 
+    # Wrap legacy SHA-256 password hashes in scrypt, so users.json holds no hash that works as a credential
+    from .lib.utils.password_hash import upgrade_stored_hashes
+    upgraded_hashes = upgrade_stored_hashes(settings.db_dir / 'users.json')
+    if upgraded_hashes:
+        logger.info(f"Upgraded {upgraded_hashes} legacy SHA-256 password hash(es) to scrypt")
+
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
     from .lib.utils.config_utils import ConfigSecretError, check_config_secrets, get_config

@@ -543,7 +543,7 @@
 /**
  * @typedef {Object} LoginRequest
  * @property {string} username
- * @property {string} passwd_hash
+ * @property {string} password - Plain text password
  */
 
 /**
@@ -1313,7 +1313,7 @@
  *
  * @example
  * const client = new ApiClientV1(callApi);
- * const { sessionId } = await client.authLogin({ username: 'admin', passwd_hash: '...' });
+ * const { sessionId } = await client.authLogin({ username: 'admin', password: '...' });
  */
 export class ApiClientV1 {
   /**
