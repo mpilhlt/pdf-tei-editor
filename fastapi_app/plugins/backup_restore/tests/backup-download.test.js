@@ -153,6 +153,10 @@ describe('runBackup', () => {
         req.resume();
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ sessionId: 'sess1' }));
+      } else if (req.url === '/api/v1/auth/token-login') {
+        if (req.headers.authorization !== 'Bearer pte_test') { res.statusCode = 401; return res.end(); }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ sessionId: 'sess1' }));
       } else if (req.url === '/api/v1/auth/logout') {
         res.end('{}');
       } else if (req.url === '/api/plugins/backup-restore/download') {
@@ -193,6 +197,14 @@ describe('runBackup', () => {
     assert.deepStrictEqual(readdirSync(dir).filter(n => !n.startsWith('.')).length, 1);
     assert.ok(readdirSync(dir).every(n => !n.endsWith('.part')));
     assert.ok(state.calls.includes('POST /api/v1/auth/logout'));
+    rmSync(dir, { recursive: true });
+  });
+
+  it('logs in with an access token instead of the password', async () => {
+    reset();
+    await runBackup(options({ token: 'pte_test', username: undefined, password: undefined }));
+    assert.ok(state.calls.includes('POST /api/v1/auth/token-login'));
+    assert.ok(!state.calls.includes('POST /api/v1/auth/login'));
     rmSync(dir, { recursive: true });
   });
 

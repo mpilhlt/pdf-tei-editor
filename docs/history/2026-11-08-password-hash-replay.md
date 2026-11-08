@@ -20,3 +20,7 @@ Clients outside this repository that send `passwd_hash` must be updated. The aut
 ## Not covered
 
 Items 1 and 3 of #246 (session IDs in URL query parameters, session binding) are unchanged. A challenge-response login (issue option A) was not used: it would require the server to keep a password-equivalent secret, which is the weakness this change removes from `users.json`.
+
+## Follow-up: access tokens as the documented default
+
+The `.env` template (`.env.development`), the backup-download documentation and `docs/development/api-reference.md` now show `API_TOKEN` first, with `API_USER`/`API_PASSWORD` as the fallback. `backup-download.js` accepts a token (`--token-file` or `API_TOKEN`) and logs in at `/api/v1/auth/token-login`; `scripts/deploy/benchmark-deployment.js` uses the shared `bin/lib/api-auth.js` login and accepts `API_TOKEN` in its `.env` files.
