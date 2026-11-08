@@ -1345,6 +1345,14 @@ class TestUpstreamCleanupRoutes(DocumentRulesRouterTestCase):
             },
         )
 
+    def test_status_uses_the_cache_ttl_unless_refetch_is_set(self):
+        with patch("fastapi_app.routers.document_rules.upstream_status", return_value=self._status()) as status:
+            self._post("upstream-status")
+            self.client.post("/document-rules/upstream-status", json={"xml": "abc", "url": self.URL, "refetch": True})
+        default_cache, refetch_cache = (call.args[4] for call in status.call_args_list)
+        self.assertGreater(default_cache.ttl_seconds, 0)
+        self.assertEqual(refetch_cache.ttl_seconds, 0)
+
     def test_unknown_url_is_400(self):
         with patch("fastapi_app.routers.document_rules.upstream_status", side_effect=CategoryNotFoundError()):
             response = self._post("upstream-status")

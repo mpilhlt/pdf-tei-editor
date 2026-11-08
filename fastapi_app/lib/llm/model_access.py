@@ -32,7 +32,7 @@ def _ensure_registered() -> None:
             FREE_MODELS_CONFIG_KEY,
             FREE_MODELS_ENV_VAR,
             default="",
-            description=PATTERN_SYNTAX + "Matching models are treated as free (e.g. models on a provider's free tier), so non-admin users may select and use them; empty means only models the provider reports as free.",
+            description=PATTERN_SYNTAX + 'Patterns are case-sensitive and are also matched against "<provider id>/<model id>" (e.g. "google/gemini-.*flash"). Matching models are treated as free (e.g. models on a provider\'s free tier), so non-admin users may select and use them; empty means only models the provider reports as free.',
         )
         _registered = True
 
@@ -52,8 +52,9 @@ def is_free_model(provider: LLMProvider, model: LLMModel) -> bool:
     if model.get("free"):
         return True
     _ensure_registered()
-    label = f"{provider.label}/{model['label']}"
-    return any(pattern.search(label) for pattern in parse_patterns(get_config().get(FREE_MODELS_CONFIG_KEY, "")))
+    candidates = (f"{provider.label}/{model['label']}", f"{provider.id}/{model['id']}")
+    patterns = parse_patterns(get_config().get(FREE_MODELS_CONFIG_KEY, ""))
+    return any(pattern.search(candidate) for pattern in patterns for candidate in candidates)
 
 
 def passes_model_filter(provider: LLMProvider, model: LLMModel) -> bool:

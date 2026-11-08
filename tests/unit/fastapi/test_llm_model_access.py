@@ -117,6 +117,10 @@ class TestIsFreeModel(unittest.TestCase):
         self.assertTrue(self._is_free("paid", "Paid One"))
         self.assertFalse(self._is_free("paid", '"^Other/"'))
 
+    def test_pattern_matches_provider_and_model_id(self):
+        self.assertTrue(self._is_free("paid", '"^prov/pa"'))
+        self.assertFalse(self._is_free("paid", '"^other/paid"'))
+
 
 if __name__ == "__main__":
     unittest.main()

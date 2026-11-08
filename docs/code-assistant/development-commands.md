@@ -83,7 +83,7 @@ npm run manage-remote -- config set <key> <json_value>
 
 1. **Frontend changes**: Edit files in `app/src/`, test with `?dev` URL parameter
 2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
-3. **Backend changes**: Server auto-reloads automatically (FastAPI dev server detects changes)
+3. **Backend changes**: Server auto-reloads automatically (FastAPI dev server detects changes), including changes to plugins installed as editable packages from a pte-plugins checkout (`npm run dev:install` there) and to `FASTAPI_PLUGIN_PATHS` plugins
 4. **Schema updates**: Delete `schema/cache/` to refresh XSD cache
 5. **Building is only needed for production** and is handled by pre-push git hooks
 

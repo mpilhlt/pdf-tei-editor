@@ -375,6 +375,8 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const { diagnostic, key } = entry
     const item = document.createElement('div')
     item.className = `diagnostics-drawer-item diagnostics-drawer-${diagnostic.severity}`
+    // lets a source style its entries' stripe (e.g. unit review states, see app.css)
+    if (diagnostic.markClass) item.classList.add(...diagnostic.markClass.split(/\s+/).filter(Boolean))
     item.classList.toggle('selected', key === this.#selectedKey)
     item.setAttribute('role', 'listitem')
     item.title = 'Show in the XML editor'

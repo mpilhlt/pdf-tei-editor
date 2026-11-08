@@ -112,7 +112,7 @@ dev = [
     "pdoc>=15.0.0",
     "pydeps>=3.0.1",
     "pytest>=8.4.0",
-    "pytest-tap>=3.3",
+    "tap-py>=3.2",
     "send2trash>=2.1.0",
 ]
 

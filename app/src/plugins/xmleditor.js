@@ -93,8 +93,6 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusButton} uploadBtn - Upload document button
  * @property {StatusButton} downloadBtn - Download document button
  * @property {StatusButton} revisionHistoryBtn - Revision history button (added by tei-tools plugin)
- * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
- * @property {SlMenu} themeMenu - Editor theme picker menu
  */
 
 /**
@@ -108,6 +106,8 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
+ * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
+ * @property {SlMenu} themeMenu - Editor theme picker menu
  */
 
 /**
@@ -118,6 +118,11 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  * @property {UIPart<HTMLDivElement, xslViewerOverlayPart>} xslViewerOverlay - XSL transformation overlay (added by xsl-viewer plugin)
+ */
+
+/**
+ * Section of the XML editor toolbar's right-hand side that a widget is added to
+ * @typedef {'review'|'import-export'|'plugins'} ToolbarSection
  */
 
 /** Reasons of `fileDataChanged` events after which a read-only document is reloaded */
@@ -349,20 +354,24 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // Create import/export buttons and add to toolbar (right side)
-    const importExportButtons = createFromTemplate('xmleditor-import-export-buttons');
-    const importExportPriorities = [50, 3, 2]; // spacer, upload, download
-    importExportButtons.forEach((widget, index) => {
-      if (widget instanceof HTMLElement) {
-        this.#toolbar.add(widget, importExportPriorities[index] || 1);
-      }
+    // Right-hand toolbar sections: [history & review] | [import & export] | [plugin additions].
+    // The spacer and the section separators carry priority 50; upload/download go first when space is short.
+    const importExportButtons = /** @type {HTMLElement[]} */ (createFromTemplate('xmleditor-import-export-buttons')
+      .filter(widget => widget instanceof HTMLElement));
+    const [spacer, ...transferButtons] = importExportButtons;
+    this.#toolbar.add(spacer, 50);
+    this.#toolbar.defineSections(['review', 'import-export', 'plugins'], 50);
+    const transferPriorities = [3, 2]; // upload, download
+    transferButtons.forEach((widget, index) => {
+      this.#toolbar.addToSection('import-export', widget, transferPriorities[index] ?? 1, -index);
     });
 
-    // Create theme selector button and add to toolbar (priority 1 - far right)
+    // Theme selector: rightmost item of the statusbar, the first one to go when space is short
     const themeButtonEl = createSingleFromTemplate('xmleditor-theme-button');
-    this.#toolbar.add(themeButtonEl, 1);
+    themeButtonEl.style.order = '1';
+    this.#statusbar.add(themeButtonEl, 'right', -3);
 
-    const themeDropdown = /** @type {SlDropdown} */ (themeButtonEl.querySelector('[name="themeDropdown"]'));
+    const themeDropdown = /** @type {SlDropdown} */ (themeButtonEl);
     this.#themeDropdown = themeDropdown;
     this.#themeMenu = /** @type {SlMenu} */ (themeButtonEl.querySelector('[name="themeMenu"]'));
 
@@ -391,16 +400,6 @@ class XmlEditorPlugin extends Plugin {
         /** @type {SlMenuItem} */ (el).checked = el.dataset.themeId === themeId;
       });
     });
-
-    // Fix z-index stacking context so the dropdown appears above the editor
-    if (themeDropdown) {
-      themeDropdown.addEventListener('sl-show', () => {
-        themeDropdown.closest('tool-bar')?.classList.add('dropdown-open');
-      });
-      themeDropdown.addEventListener('sl-hide', () => {
-        themeDropdown.closest('tool-bar')?.classList.remove('dropdown-open');
-      });
-    }
 
     // Read-only status widget (added dynamically when needed)
     this.#readOnlyStatusWidget = PanelUtils.createText({
@@ -1181,12 +1180,15 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Add a widget to the XML editor toolbar.
+   * Add a widget to one of the sections on the right of the XML editor toolbar:
+   * `'review'` (document history and review) `|` `'import-export'` `|` `'plugins'` (other additions).
    * @param {HTMLElement} widget
-   * @param {number} priority
+   * @param {number} priority - Higher priority widgets stay visible longer when the toolbar runs out of space
+   * @param {ToolbarSection} [section] - Defaults to `'plugins'`
+   * @param {number} [order] - Position in the section, highest leftmost. Defaults to the priority
    */
-  addToolbarWidget(widget, priority) {
-    this.#toolbar.add(widget, priority)
+  addToolbarWidget(widget, priority, section = 'plugins', order = priority) {
+    this.#toolbar.addToSection(section, widget, priority, order)
   }
 
   /**

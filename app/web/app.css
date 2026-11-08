@@ -833,6 +833,18 @@ sl-drawer.diagnostics-drawer::part(footer) {
 .diagnostics-drawer-info { border-left-color: #999; }
 .diagnostics-drawer-hint { border-left-color: #66d; }
 
+/* unit review entries mirror the review gutter strip (unit-review-gutter.js) */
+.diagnostics-drawer-item.cm-unit-review-not-ok { border-left-color: #d64545; }
+.diagnostics-drawer-item.cm-unit-review-changed { border-left-style: dotted; border-left-color: #8a8f98; }
+.diagnostics-drawer-item.cm-unit-review-disputed {
+  border-left-color: transparent;
+  background-image: linear-gradient(180deg, #d64545 0 50%, #2f9e57 50% 100%);
+  background-size: 4px 100%;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: left top;
+}
+
 .diagnostics-drawer-item sl-checkbox {
   margin-top: 2px;
 }

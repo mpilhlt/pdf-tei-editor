@@ -832,8 +832,8 @@ dev = [
     { name = "pdoc" },
     { name = "pydeps" },
     { name = "pytest" },
-    { name = "pytest-tap" },
     { name = "send2trash" },
+    { name = "tap-py" },
 ]
 
 [package.metadata]
@@ -916,8 +916,8 @@ dev = [
     { name = "pdoc", specifier = ">=15.0.0" },
     { name = "pydeps", specifier = ">=3.0.1" },
     { name = "pytest", specifier = ">=8.4.0" },
-    { name = "pytest-tap", specifier = ">=3.3" },
     { name = "send2trash", specifier = ">=2.1.0" },
+    { name = "tap-py", specifier = ">=3.2" },
 ]
 
 [[package]]
@@ -1248,19 +1248,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/79/42/bb4641652e58dedeac2ec51abc1f8cae4fee4ec63899a0999016229a0f2a/pytest-9.2.0.tar.gz", hash = "sha256:97c4f3b1f3c7414aa36465e09b8220f1d03627993bd51b1282e193753c80557b", size = 1797555, upload-time = "2026-10-27T21:30:20.728Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl", hash = "sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588", size = 411776, upload-time = "2026-10-27T21:30:19.131Z" },
-]
-
-[[package]]
-name = "pytest-tap"
-version = "3.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pytest" },
-    { name = "tap-py" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/85/7c9004fc12ab0ac4ab4fd133f711b5278a24d0a6a5c02e746e6a712b0f64/pytest_tap-3.5.tar.gz", hash = "sha256:11b3b475b919e9d5c0e995b441fab0b92c57a46cec818132b71264fdfbd56a32", size = 7870, upload-time = "2025-01-30T05:01:49.922Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/e6/1cc18228e46996b57a10350c0aad0fa5ce2de2ba8810f80d3a786764d832/pytest_tap-3.5-py3-none-any.whl", hash = "sha256:bce47102465db4fa09c0948bbf8867543143a9b9d16af77a2efbaffb4ec1072a", size = 6543, upload-time = "2025-01-30T05:01:48.187Z" },
 ]
 
 [[package]]
