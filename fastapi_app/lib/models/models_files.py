@@ -149,6 +149,18 @@ class DeleteFilesResponse(BaseModel):
     result: str         # 'ok'
 
 
+class DeleteHistoryRequest(BaseModel):
+    """Request for POST /api/v1/files/delete_history"""
+    file_id: str                 # Stable ID or hash of the version to delete
+    dry_run: bool = False        # Only return the files that would be deleted
+
+
+class DeleteHistoryResponse(BaseModel):
+    """Response for POST /api/v1/files/delete_history"""
+    files: List[str]             # Stable IDs, the version first, then its ancestors
+    deleted: bool                # False for a dry run
+
+
 class MoveFilesRequest(BaseModel):
     """Request for POST /api/files/move"""
     pdf_id: str                  # Hash or stable_id

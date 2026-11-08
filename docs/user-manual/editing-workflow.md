@@ -159,6 +159,8 @@ As soon as a new version is saved from a version, the source version is supersed
 
 The **Target XML** and **Compare with version** menus group the versions by line: the current versions that were copied from the same version come first, followed by the superseded versions they descend from, joined to them by a line with an arrow pointing up, and a divider separates one line from the next. Superseded versions can be opened (read-only), compared with the current one, or copied into a new version. The file drawer lists only the latest version of each line.
 
+**Delete > Delete current version with its history** deletes the current version together with the superseded versions it descends from, up to the first one that another version also descends from: that version and everything above it are kept, and so is the Gold Standard. For example, if a version was copied from a version that was itself copied from a third one, all three are deleted, unless another version was copied from the second or third. A confirmation lists the versions that will be deleted. The entry is available for current versions that were copied from another version; you need the right to delete each of the versions.
+
 Each saved revision records a short hash of the document text in its `<change xml:id="h-…">`, chained to the hash of the previous revision. This makes it possible to check that the text of a recorded revision has not been changed afterwards.
 
 ---
