@@ -80,6 +80,7 @@ Options:
   --option <key=value>   Extractor option (repeatable)
   --recursive            Recursively search directories (default: false)
   --extract-only         Extract from existing files in collection (no upload) (default: false)
+  --doc <id>             With --extract-only: only this document, by its filename without extension (repeatable)
   -h, --help             display help for command
 
 DOI Filename Encoding:

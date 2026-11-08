@@ -18,6 +18,7 @@
  *   --option <key=value>      Extractor option (can be specified multiple times)
  *   --recursive               Recursively search directories
  *   --extract-only            Extract from existing files in collection (no upload)
+ *   --doc <id>                With --extract-only: only this document, by its filename without extension (repeatable)
  *
  * Arguments:
  *   path                      Directory containing PDF files (required unless --extract-only)
@@ -309,6 +310,25 @@ async function getCollectionFiles(baseUrl, sessionId, collectionId) {
 }
 
 /**
+ * Restrict collection files to the given documents, identified by their filename without extension
+ * @param {Array<{filename: string, stable_id: string}>} files - Files of the collection
+ * @param {string[]=} docIds - Document IDs; all files are returned if empty or undefined
+ * @returns {Array<{filename: string, stable_id: string}>} - The selected files
+ * @throws {Error} If a document is not in the collection
+ */
+function selectDocuments(files, docIds) {
+  if (!docIds || docIds.length === 0) {
+    return files;
+  }
+  const docIdOf = (/** @type {string} */ filename) => filename.replace(/\.[^.]+$/, '');
+  const missing = docIds.filter(id => !files.some(f => docIdOf(f.filename) === id));
+  if (missing.length > 0) {
+    throw new Error(`Document(s) not found in collection: ${missing.join(', ')}`);
+  }
+  return files.filter(f => docIds.includes(docIdOf(f.filename)));
+}
+
+/**
  * Main batch upload and extract function
  * @param {Object} options - Command options
  */
@@ -501,6 +521,7 @@ async function batchExtractOnly(options) {
     collection,
     extractor: extractors,
     option: optionPairs,
+    doc: docIds,
   } = options;
 
   if (!collection) {
@@ -554,7 +575,8 @@ async function batchExtractOnly(options) {
 
   // Get files from collection
   console.log('Fetching files from collection...');
-  const collectionFiles = await getCollectionFiles(baseUrl, sessionId, collection);
+  const allCollectionFiles = await getCollectionFiles(baseUrl, sessionId, collection);
+  const collectionFiles = selectDocuments(allCollectionFiles, docIds);
 
   if (collectionFiles.length === 0) {
     console.log(`No files found in collection '${collection}'`);
@@ -670,6 +692,9 @@ Examples:
   })
   .option('--recursive', 'Recursively search directories', false)
   .option('--extract-only', 'Extract from existing files in collection (no upload)', false)
+  .option('--doc <id>', 'With --extract-only: only this document, by its filename without extension (repeatable)', (value, previous) => {
+    return previous ? [...previous, value] : [value];
+  })
   .action(async (path, cmdOptions) => {
     try {
       if (cmdOptions.extractOnly) {
