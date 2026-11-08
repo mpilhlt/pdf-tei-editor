@@ -11,6 +11,7 @@
  * @property {import('../ui.js').SlButton} saveRevision
  * @property {import('../ui.js').SlButton} deleteBtn
  * @property {import('../ui.js').SlMenuItem} deleteCurrentVersion
+ * @property {import('../ui.js').SlMenuItem} deleteVersionHistory
  * @property {import('../ui.js').SlMenuItem} deleteAllVersions
  * @property {import('../ui.js').SlMenuItem} deleteAll
  */

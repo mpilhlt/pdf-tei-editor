@@ -330,6 +330,18 @@
  */
 
 /**
+ * @typedef {Object} DeleteHistoryRequest
+ * @property {string} file_id - Stable ID or hash of the version to delete
+ * @property {boolean=} dry_run - Only return the files that would be deleted
+ */
+
+/**
+ * @typedef {Object} DeleteHistoryResponse
+ * @property {Array<string>} files - Stable IDs, the version first, then its ancestors
+ * @property {boolean} deleted - False for a dry run
+ */
+
+/**
  * @typedef {Object} DocumentGroupModel
  * @property {string} doc_id
  * @property {Array<string>} collections
@@ -2498,6 +2510,22 @@ export class ApiClientV1 {
    */
   async filesDelete(requestBody) {
     const endpoint = `/files/delete`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete a version together with its history: the ancestors that no other version descends
+   * from. The walk stops before the first ancestor that has another descendant or is a gold
+   * standard. Permissions are checked for all files before any is deleted. With `dry_run`, only
+   * the files that would be deleted are returned.
+   * Errors: 404 file not found, 400 gold standard or non-TEI file, 409 other versions were copied
+   * from the file, 403 a file may not be deleted.
+   *
+   * @param {DeleteHistoryRequest} requestBody
+   * @returns {Promise<DeleteHistoryResponse>}
+   */
+  async filesDeleteHistory(requestBody) {
+    const endpoint = `/files/delete_history`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
