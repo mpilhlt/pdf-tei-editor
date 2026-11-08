@@ -404,48 +404,54 @@ class BasePanel extends HTMLElement {
  * A single toolbar/panel contribution from a plugin.
  * @typedef {Object} PanelContribution
  * @property {HTMLElement} element - The element to add to the panel.
- * @property {number} [priority] - Higher values stay visible longer during overflow. Default: 0.
+ * @property {number} [priority] - Overflow priority: higher values stay visible longer when the panel runs out of space. Default: 0.
+ * @property {number} [order] - Order within the zone, see {@link resolveContributions}. Default: the priority, so that contributions without an `order` keep their position.
  * @property {'left'|'center'|'right'|number} [position] - Placement hint. Default: 'center'.
  */
 
 /**
  * Resolves an array of panel contributions into display order.
  *
+ * The display order is decided by `order` (falling back to `priority`), while `priority` alone
+ * decides which items are hidden first on overflow, so that an item can sit at the far left
+ * and still be among the first to go.
+ *
  * Position semantics:
- * - `'left'`   — left zone; higher-priority items appear furthest left.
- * - `'center'` — center zone (default); higher-priority items appear leftmost in zone.
- * - `'right'`  — right zone; higher-priority items appear furthest right.
+ * - `'left'`   — left zone; higher-order items appear furthest left.
+ * - `'center'` — center zone (default); higher-order items appear leftmost in zone.
+ * - `'right'`  — right zone; higher-order items appear furthest right.
  * - `1`, `2`   — absolute positions from the start (1 = first, 2 = second).
  * - `-1`, `-2` — absolute positions from the end (−1 = last, −2 = second-to-last).
  *
  * Conflict resolution for absolute positions: when two items claim the same slot,
- * the higher-priority item keeps it; the lower-priority item moves one step toward
+ * the higher-order item keeps it; the lower-order item moves one step toward
  * center (right for start-edge items, left for end-edge items).
  *
  * @param {PanelContribution[]} contributions
  * @returns {PanelContribution[]} Contributions sorted into resolved display order
  */
 function resolveContributions(contributions) {
-  const prio = c => c.priority ?? 0;
+  /** @param {PanelContribution} c */
+  const ord = c => c.order ?? c.priority ?? 0;
 
   // Separate absolute-edge items (numeric position) from zone items (string position)
   const edgeItems = contributions.filter(c => typeof c.position === 'number');
   const zoneItems = contributions.filter(c => typeof c.position !== 'number');
 
-  // Within each zone, sort by priority:
-  //   left/center → high priority first (= furthest left / leftmost in zone)
-  //   right       → low priority first (so high priority ends up furthest right)
+  // Within each zone, sort by order:
+  //   left/center → high order first (= furthest left / leftmost in zone)
+  //   right       → low order first (so high order ends up furthest right)
   const left = zoneItems
     .filter(c => c.position === 'left')
-    .sort((a, b) => prio(b) - prio(a));
+    .sort((a, b) => ord(b) - ord(a));
 
   const center = zoneItems
     .filter(c => !c.position || c.position === 'center')
-    .sort((a, b) => prio(b) - prio(a));
+    .sort((a, b) => ord(b) - ord(a));
 
   const right = zoneItems
     .filter(c => c.position === 'right')
-    .sort((a, b) => prio(a) - prio(b));
+    .sort((a, b) => ord(a) - ord(b));
 
   const ordered = [...left, ...center, ...right];
 
@@ -457,7 +463,7 @@ function resolveContributions(contributions) {
   for (const item of startEdge) {
     const idx = Math.min(item.position - 1, ordered.length);
     const existing = ordered[idx];
-    if (!existing || prio(item) >= prio(existing)) {
+    if (!existing || ord(item) >= ord(existing)) {
       ordered.splice(idx, 0, item);
     } else {
       // Yield: move one step toward center (right)
@@ -475,7 +481,7 @@ function resolveContributions(contributions) {
     // position -1 → last slot (index = length), -2 → second-to-last, etc.
     const idx = Math.max(0, ordered.length + item.position + 1);
     const existing = ordered[idx];
-    if (!existing || prio(item) >= prio(existing)) {
+    if (!existing || ord(item) >= ord(existing)) {
       ordered.splice(idx, 0, item);
     } else {
       // Yield: move one step toward center (left)
