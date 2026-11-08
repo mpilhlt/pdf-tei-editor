@@ -71,6 +71,20 @@ test.describe('Inference model submenu', () => {
       const copyButton = item.locator('sl-icon-button[data-copy-model-id]');
       await expect(copyButton).toBeVisible();
       await expect(copyButton).toHaveAttribute('data-copy-model-id', 'e2e-provider/gemma-3-27b-it');
+      // The button must not make the rows taller than a row without it
+      const heightWithButton = (await item.boundingBox())?.height;
+      const heightWithout = await page.evaluate(() => {
+        const plain = /** @type {HTMLElement} */ (document.querySelector('sl-menu-item[data-model-id="glm-4.7"]').cloneNode(true));
+        plain.querySelector('sl-icon-button')?.remove();
+        plain.querySelector('sl-tooltip')?.remove();
+        document.querySelector('sl-menu-item[data-model-id="glm-4.7"]').after(plain);
+        return new Promise(resolve => requestAnimationFrame(() => {
+          const height = plain.getBoundingClientRect().height;
+          plain.remove();
+          resolve(height);
+        }));
+      });
+      expect(heightWithButton).toBe(heightWithout);
       if (process.env.E2E_SCREENSHOT_DIR) {
         await page.screenshot({ path: `${process.env.E2E_SCREENSHOT_DIR}/inference-copy-model-id.png` });
       }

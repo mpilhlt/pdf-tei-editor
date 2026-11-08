@@ -359,6 +359,12 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
+/* Inference model submenu: the admin-only copy button must not make the rows taller
+   (sl-icon-button's default padding would, see inference-settings.js) */
+sl-icon-button.inference-copy-model-id::part(base) {
+  padding: 0;
+}
+
 /* "Target XML" and "Compare with version" menus: superseded ancestors of a lineage are connected
    to the current versions above them by a line with an arrow pointing up (see file-selection.js) */
 #toolbar sl-select[name="xml"],
