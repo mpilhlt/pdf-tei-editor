@@ -825,6 +825,36 @@ class FileRepository:
         """
         return bool(self.get_child_stable_ids(stable_id))
 
+    def get_exclusive_history(self, stable_id: str) -> list[FileMetadata]:
+        """
+        Get a version together with the ancestors that exist only for it: walks up the
+        `parent_stable_id` chain and stops before the first ancestor that has another non-deleted
+        descendant, is a gold standard, or is missing or deleted. That ancestor and everything
+        above it belong to other versions as well.
+
+        Args:
+            stable_id: Stable ID of the version (must not have descendants itself)
+
+        Returns:
+            The version first, then its exclusive ancestors, nearest first
+        """
+        start = self.get_file_by_stable_id(stable_id)
+        if start is None:
+            return []
+        history = [start]
+        seen = {start.stable_id}
+        current = start
+        while current.parent_stable_id and current.parent_stable_id not in seen:
+            parent = self.get_file_by_stable_id(current.parent_stable_id)
+            if parent is None or parent.is_gold_standard:
+                break
+            if [c for c in self.get_child_stable_ids(parent.stable_id) if c != current.stable_id]:
+                break
+            history.append(parent)
+            seen.add(parent.stable_id)
+            current = parent
+        return history
+
     def get_frozen_stable_ids(self) -> set[str]:
         """
         Get the stable_ids of all frozen files (files that a non-deleted file was copied from).
