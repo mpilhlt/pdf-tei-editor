@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createAdminSession, hashPassword } from '../helpers/test-auth.js';
+import { createAdminSession } from '../helpers/test-auth.js';
 
 const API_BASE = process.env.E2E_BASE_URL || 'http://127.0.0.1:8014';
 
@@ -372,7 +372,7 @@ test('user - Password is hashed on create', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: 'password-test-user',
-        passwd_hash: hashPassword('plaintext-password')
+        password: 'plaintext-password'
       })
     });
 

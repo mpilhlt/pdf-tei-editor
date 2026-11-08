@@ -40,7 +40,7 @@ Access control is configured through JSON files in the `data/db/` directory (or 
     "username": "editor1",
     "fullname": "Jane Editor",
     "email": "editor1@example.com",
-    "passwd_hash": "...",
+    "passwd_hash": "scrypt$16384$8$1$<salt>$<hash>",
     "roles": ["user", "annotator"],
     "groups": ["editors"],
     "session_id": null

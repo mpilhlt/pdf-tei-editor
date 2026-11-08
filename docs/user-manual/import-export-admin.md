@@ -276,7 +276,7 @@ Recommendations:
 - Copy the backup directory off-host (`rclone`, `restic`, `rsync`): 3 copies, 2 media, 1 off-site. Encrypt off-site copies.
 - Test a restore on a scratch instance regularly.
 - Alert on a missing or stale backup (`--ping-url` or the age of the newest file); a failure mail alone is easily overlooked.
-- Use HTTPS; the password hash sent at login is equivalent to the password.
+- Use HTTPS; the password is sent in plain text at login.
 - Rotate the password file when staff change.
 
 ---

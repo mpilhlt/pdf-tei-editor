@@ -18,7 +18,20 @@ describe('Authentication API', () => {
             body: JSON.stringify({ username: 'admin' })
         });
 
-        assert.strictEqual(response.status, 422); // Validation error
+        assert.strictEqual(response.status, 400);
+    });
+
+    test('should reject login with a password hash instead of the password', async () => {
+        const response = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'admin',
+                passwd_hash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'
+            })
+        });
+
+        assert.strictEqual(response.status, 400);
     });
 
     test('should reject login with invalid credentials', async () => {
@@ -27,7 +40,7 @@ describe('Authentication API', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: 'admin',
-                passwd_hash: 'invalid_hash'
+                password: 'wrong-password'
             })
         });
 

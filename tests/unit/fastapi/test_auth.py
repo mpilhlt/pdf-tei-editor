@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from fastapi_app.lib.utils.auth import AuthManager
+from fastapi_app.lib.utils.password_hash import hash_password
 from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.core.db_utils import close_all_connections
 
@@ -89,24 +90,24 @@ class TestAuthManager(unittest.TestCase):
 
     def test_verify_password_success(self):
         """Test successful password verification."""
-        self.auth.create_user('testuser', 'hash123')
+        self.auth.create_user('testuser', hash_password('secret'))
 
-        user = self.auth.verify_password('testuser', 'hash123')
+        user = self.auth.verify_password('testuser', 'secret')
 
         self.assertIsNotNone(user)
         self.assertEqual(user['username'], 'testuser')
 
     def test_verify_password_wrong_password(self):
         """Test password verification with wrong password."""
-        self.auth.create_user('testuser', 'hash123')
+        self.auth.create_user('testuser', hash_password('secret'))
 
-        user = self.auth.verify_password('testuser', 'wrong_hash')
+        user = self.auth.verify_password('testuser', 'wrong')
 
         self.assertIsNone(user)
 
     def test_verify_password_nonexistent_user(self):
         """Test password verification for nonexistent user."""
-        user = self.auth.verify_password('nonexistent', 'hash123')
+        user = self.auth.verify_password('nonexistent', 'secret')
         self.assertIsNone(user)
 
     def test_update_user(self):
@@ -286,11 +287,11 @@ class TestAuthManagerWithSessions(unittest.TestCase):
     def test_full_auth_flow(self):
         """Test complete authentication flow."""
         # Create user
-        success = self.auth.create_user('testuser', 'hash123', role='user')
+        success = self.auth.create_user('testuser', hash_password('secret'), role='user')
         self.assertTrue(success)
 
         # Verify password
-        user = self.auth.verify_password('testuser', 'hash123')
+        user = self.auth.verify_password('testuser', 'secret')
         self.assertIsNotNone(user)
 
         # Create session after successful login

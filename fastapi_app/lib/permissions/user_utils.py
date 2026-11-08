@@ -1,9 +1,9 @@
 """User management utilities for PDF-TEI-Editor."""
 
-import hashlib
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi_app.lib.permissions.role_utils import validate_role
+from fastapi_app.lib.utils import password_hash
 from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
 
 
@@ -37,15 +37,15 @@ def user_exists(username: str, users_data: List[Dict[str, Any]]) -> bool:
 
 
 def hash_password(password: str) -> str:
-    """Hashes a password using SHA256.
+    """Hashes a password for storage in users.json (salted scrypt, see `password_hash`).
 
     Args:
-        password: The password to hash
+        password: The plain text password
 
     Returns:
-        The hashed password
+        The encoded password hash
     """
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    return password_hash.hash_password(password)
 
 
 def create_user(username: str, password: str, fullname: str = "", email: str = "",

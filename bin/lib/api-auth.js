@@ -6,23 +6,12 @@
  * Both return a session ID to send as `X-Session-ID`.
  */
 
-import { createHash } from 'crypto';
-
 /**
  * @typedef {object} ApiCredentials
  * @property {string=} token - Personal access token (`pte_...`); preferred if set
  * @property {string=} username - Username for password login
  * @property {string=} password - Plain text password for password login
  */
-
-/**
- * Hash a password with SHA-256 (matching the frontend authentication).
- * @param {string} password - Plain text password
- * @returns {string} Hex hash
- */
-export function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
 
 /**
  * Read the session ID from a login response or throw with the server's message.
@@ -43,7 +32,7 @@ async function sessionIdFromResponse(response) {
 }
 
 /**
- * Log in with a username and password.
+ * Log in with a username and password. The password is sent in plain text, so use HTTPS for remote servers.
  * @param {string} baseUrl - API base URL
  * @param {string} username - Username
  * @param {string} password - Plain text password
@@ -53,7 +42,7 @@ export async function loginWithPassword(baseUrl, username, password) {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, passwd_hash: hashPassword(password) }),
+    body: JSON.stringify({ username, password }),
   });
   return sessionIdFromResponse(response);
 }

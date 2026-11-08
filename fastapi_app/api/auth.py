@@ -5,8 +5,9 @@ Provides login (with a password or a personal access token), logout, and session
 """
 
 from typing import Any, Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, Request, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ..lib.core.access_tokens import AccessTokenStore, get_access_token_store
 from ..lib.core.login_rate_limit import check_login_allowed, client_ip, login_rate_limiter
@@ -25,9 +26,10 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 # Pydantic Models
 
 class LoginRequest(BaseModel):
-    """Request model for user login"""
+    """Request model for user login. Send the plain text password; HTTPS protects it in transit."""
     username: str
-    passwd_hash: str
+    password: Optional[str] = None
+    passwd_hash: Optional[str] = Field(None, description="Removed: the SHA-256 hash of the password is no longer accepted. Send `password` instead.")
 
 
 class TokenLoginRequest(BaseModel):
@@ -78,8 +80,10 @@ async def login(request_data: LoginRequest, request: Request):
 
     Returns user data and session ID for client to store in state.
     """
-    if not request_data.username or not request_data.passwd_hash:
-        raise HTTPException(status_code=400, detail="Missing username or password hash")
+    if request_data.passwd_hash is not None and request_data.password is None:
+        raise HTTPException(status_code=400, detail="Login with a password hash (passwd_hash) is no longer supported: send the plain text password as 'password', or log in with an access token at /api/v1/auth/token-login")
+    if not request_data.username or not request_data.password:
+        raise HTTPException(status_code=400, detail="Missing username or password")
 
     auth_manager = get_auth_manager()
     session_manager = get_session_manager()
@@ -88,7 +92,8 @@ async def login(request_data: LoginRequest, request: Request):
     check_login_allowed(rate_key)
 
     # Verify credentials
-    user = auth_manager.verify_password(request_data.username, request_data.passwd_hash)
+    # scrypt takes tens of milliseconds of CPU time, so keep it off the event loop
+    user = await run_in_threadpool(auth_manager.verify_password, request_data.username, request_data.password)
     if not user:
         login_rate_limiter.record_failure(rate_key)
         raise HTTPException(status_code=401, detail="Invalid credentials")

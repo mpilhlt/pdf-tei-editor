@@ -67,7 +67,7 @@ async filesList(params) {
 ### Authentication
 
 ```javascript
-await apiClient.authLogin({ username: 'user', passwd_hash: 'hash' });
+await apiClient.authLogin({ username: 'user', password: 'secret' });
 await apiClient.authLogout();
 await apiClient.authStatus();
 ```
@@ -257,7 +257,7 @@ test('auth login calls correct endpoint', async () => {
   const client = new ApiClientV1(mockCallApi);
   const result = await client.authLogin({
     username: 'test',
-    passwd_hash: 'hash'
+    password: 'secret'
   });
 
   assert.strictEqual(result.session_id, 'abc');
