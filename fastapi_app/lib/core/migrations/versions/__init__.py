@@ -18,6 +18,7 @@ from .m008_change_primary_key import Migration008ChangePrimaryKey
 from .m009_document_rules_tables import Migration009DocumentRulesTables
 from .m010_add_parent_stable_id_column import Migration010AddParentStableIdColumn
 from .m011_document_rules_section_overrides import Migration011DocumentRulesSectionOverrides
+from .m012_sessions_token_columns import Migration012SessionsTokenColumns
 
 # Migrations by target database
 LOCKS_MIGRATIONS = [
@@ -37,6 +38,14 @@ METADATA_MIGRATIONS = [
     Migration011DocumentRulesSectionOverrides,
 ]
 
+SESSIONS_MIGRATIONS = [
+    Migration012SessionsTokenColumns,
+]
+
+# Access tokens database migrations (for future schema changes)
+# Base schema is created by AccessTokenStore in access_tokens.py
+ACCESS_TOKENS_MIGRATIONS = []
+
 # Permissions database migrations (for future schema changes)
 # Base schema is created by initialize_permissions_schema() in permissions_db.py
 PERMISSIONS_MIGRATIONS = []
@@ -54,7 +63,15 @@ ALL_MIGRATIONS = [
     Migration009DocumentRulesTables,
     Migration010AddParentStableIdColumn,
     Migration011DocumentRulesSectionOverrides,
+    Migration012SessionsTokenColumns,
 ]
 
-__all__ = ["ALL_MIGRATIONS", "LOCKS_MIGRATIONS", "METADATA_MIGRATIONS", "PERMISSIONS_MIGRATIONS"]
+__all__ = [
+    "ACCESS_TOKENS_MIGRATIONS",
+    "ALL_MIGRATIONS",
+    "LOCKS_MIGRATIONS",
+    "METADATA_MIGRATIONS",
+    "PERMISSIONS_MIGRATIONS",
+    "SESSIONS_MIGRATIONS",
+]
 

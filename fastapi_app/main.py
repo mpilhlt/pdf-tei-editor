@@ -251,6 +251,7 @@ app.add_middleware(CancelledRequestMiddleware)
 # Import API routers
 from .api import auth, config
 from .routers import (
+    access_tokens,
     plugins,
     plugins_admin,
     files_list,
@@ -288,6 +289,7 @@ from .routers import (
 # Note: No unversioned compatibility routes - frontend uses client shim (app/src/plugins/client.js)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
+api_v1.include_router(access_tokens.router)  # Personal access tokens (/auth/tokens)
 api_v1.include_router(config.router)
 api_v1.include_router(collections.router)
 api_v1.include_router(users.router)

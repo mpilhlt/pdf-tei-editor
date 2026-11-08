@@ -930,3 +930,62 @@ sl-drawer.diagnostics-drawer::part(footer) {
 .diagnostics-drawer-button:hover {
   background: #2b333b;
 }
+
+/* Access tokens dialog (access-tokens plugin) */
+.access-tokens-list {
+  max-height: 40vh;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.access-tokens-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sl-font-size-small);
+}
+
+.access-tokens-table th,
+.access-tokens-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--sl-color-neutral-200);
+  vertical-align: middle;
+}
+
+.access-tokens-table th {
+  font-weight: var(--sl-font-weight-semibold);
+  color: var(--sl-color-neutral-600);
+}
+
+.access-tokens-table tr.expired td:not(:last-child) {
+  color: var(--sl-color-neutral-400);
+}
+
+.access-tokens-empty {
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-600);
+}
+
+.access-tokens-new {
+  margin-bottom: 1rem;
+}
+
+.access-tokens-form-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr;
+  gap: 10px;
+}
+
+.access-tokens-form .help-text {
+  margin-left: 0;
+}
+
+.access-tokens-once {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--sl-color-warning-500);
+  background: var(--sl-color-warning-50);
+  font-size: var(--sl-font-size-small);
+}

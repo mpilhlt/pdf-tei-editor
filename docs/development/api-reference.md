@@ -40,6 +40,8 @@ This schema is used to auto-generate the frontend API client.
 **Authentication**
 
 - `/api/v1/auth/login` - User login
+- `/api/v1/auth/token-login` - Exchange a personal access token (`Authorization: Bearer pte_...`) for a session
+- `/api/v1/auth/tokens` - List, create (`POST`) and revoke (`DELETE /{token_id}`) personal access tokens; `/eligible-users` lists the users the caller may create tokens for
 - `/api/v1/auth/logout` - User logout
 - `/api/v1/auth/session` - Session validation
 
@@ -299,7 +301,9 @@ Removes all generated documentation files.
 All CLI scripts and external tools that access the HTTP API should support these environment variables (from `.env` file):
 
 ```bash
-# API credentials
+# API credentials: a personal access token (preferred) ...
+API_TOKEN=pte_...
+# ... or username and password (used if API_TOKEN is not set)
 API_USER=admin
 API_PASSWORD=admin
 

@@ -33,7 +33,8 @@ function walk(dir) {
 const EXPECTED_BIN = [
   'start-dev', 'start-prod', 'manage.py', 'manage-remote.js', 'import_files.py',
   'export_files.py', 'batch-extract.js', 'cli_storage_gc.py', 'cleanup-orphaned-xml.py',
-  'user-secrets.py'
+  'user-secrets.py',
+  'lib' // modules shared by the scripts (e.g. lib/api-auth.js)
 ];
 const EXPECTED_BIN_MIGRATIONS = [
   'run-migration.py', 'migrate-tei-fileref-to-xml-id.py', 'migrate-tei-flavor-rename.py',

@@ -271,7 +271,9 @@ test('auth login calls correct endpoint', async () => {
 When creating CLI scripts or external tools that access the HTTP API programmatically, support these standard environment variables:
 
 ```bash
-# API credentials
+# API credentials: a personal access token (preferred) ...
+API_TOKEN=pte_...
+# ... or username and password (used if API_TOKEN is not set)
 API_USER=admin
 API_PASSWORD=admin
 
@@ -279,35 +281,19 @@ API_PASSWORD=admin
 API_BASE_URL=http://localhost:8000
 ```
 
-**Standard pattern for CLI scripts:**
+**Standard pattern for CLI scripts:** use the shared login helper in [bin/lib/api-auth.js](../../bin/lib/api-auth.js), which prefers a token (`POST /api/v1/auth/token-login` with `Authorization: Bearer`) and falls back to password login:
 
 ```javascript
 import dotenv from 'dotenv';
-import { createHash } from 'crypto';
+import { login, resolveCredentials } from './lib/api-auth.js';
 
 // Load .env file
 dotenv.config({ path: envPath });
 
-// Get credentials from env or CLI args
-const username = cliUser || process.env.API_USER;
-const password = cliPassword || process.env.API_PASSWORD;
+// --token/--user/--password override API_TOKEN/API_USER/API_PASSWORD; a token overrides user and password
+const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
 const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
-
-// Hash password (SHA-256, matching frontend)
-function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-// Login and get session
-const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    username,
-    passwd_hash: hashPassword(password)
-  })
-});
-const { sessionId } = await response.json();
+const sessionId = await login(baseUrl, credentials);
 
 // Make authenticated requests with X-Session-ID header
 await fetch(`${baseUrl}/api/v1/files/list`, {
@@ -318,6 +304,7 @@ await fetch(`${baseUrl}/api/v1/files/list`, {
 **CLI parameter conventions:**
 
 - `--env <path>` - Path to .env file (default: `./.env`)
+- `--token <token>` - Override API_TOKEN from env
 - `--user <username>` - Override API_USER from env
 - `--password <password>` - Override API_PASSWORD from env
 - `--base-url <url>` - Override API_BASE_URL from env
@@ -334,7 +321,7 @@ await fetch(`${baseUrl}/api/v1/files/list`, {
 - **Use typed parameters**: Let IDE autocomplete guide you
 - **Handle errors at transport layer**: Let `callApi` manage retries
 - **Add JSDoc to shims**: Type annotations in wrapper functions
-- **Support standard env vars in CLI scripts**: Use API_USER, API_PASSWORD, API_BASE_URL
+- **Support standard env vars in CLI scripts**: Use API_TOKEN, API_USER, API_PASSWORD, API_BASE_URL (via `bin/lib/api-auth.js`)
 
 ### DON'T ❌
 

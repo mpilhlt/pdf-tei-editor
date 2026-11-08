@@ -9,6 +9,7 @@
  *
  * Options:
  *   --env <path>              Path to .env file (default: ./.env)
+ *   --token <token>           Personal access token (default: from .env API_TOKEN); preferred over --user/--password
  *   --user <username>         Username for authentication (default: from .env API_USER)
  *   --password <password>     Password for authentication (default: from .env API_PASSWORD)
  *   --base-url <url>          API base URL (default: from .env API_BASE_URL or http://localhost:8000)
@@ -22,6 +23,7 @@
  *   path                      Directory containing PDF files (required unless --extract-only)
  *
  * Environment variables (from .env file):
+ *   API_TOKEN                 Personal access token (used instead of API_USER/API_PASSWORD if set)
  *   API_USER                  Username for authentication
  *   API_PASSWORD              Password for authentication
  *   API_BASE_URL              API base URL
@@ -31,9 +33,9 @@ import { Command } from 'commander';
 import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { glob } from 'glob';
-import { createHash } from 'crypto';
 import dotenv from 'dotenv';
 import { stdout } from 'process';
+import { login, resolveCredentials } from './lib/api-auth.js';
 
 /**
  * Create a progress bar string
@@ -88,42 +90,6 @@ function extractDOIFromFilename(filename) {
   }
 
   return null;
-}
-
-/**
- * Hash password using SHA-256 (matching frontend authentication)
- * @param {string} password - Plain text password
- * @returns {string} - Hex hash
- */
-function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-/**
- * Login to the API and get session ID
- * @param {string} baseUrl - API base URL
- * @param {string} username - Username
- * @param {string} password - Plain text password
- * @returns {Promise<string>} - Session ID
- */
-async function login(baseUrl, username, password) {
-  const passwdHash = hashPassword(password);
-
-  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, passwd_hash: passwdHash }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Login failed: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-  return data.sessionId;
 }
 
 /**
@@ -349,6 +315,7 @@ async function getCollectionFiles(baseUrl, sessionId, collectionId) {
 async function batchUpload(options) {
   const {
     env: envPath,
+    token: cliToken,
     user: cliUser,
     password: cliPassword,
     baseUrl: cliBaseUrl,
@@ -369,12 +336,11 @@ async function batchUpload(options) {
   }
 
   // Get credentials - CLI args override env vars
-  const username = cliUser || process.env.API_USER;
-  const password = cliPassword || process.env.API_PASSWORD;
+  const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
   const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
 
-  if (!username || !password) {
-    throw new Error('Username and password must be provided via --user/--password or API_USER/API_PASSWORD in .env file');
+  if (!credentials.token && (!credentials.username || !credentials.password)) {
+    throw new Error('Provide an access token via --token or API_TOKEN, or username and password via --user/--password or API_USER/API_PASSWORD in .env file');
   }
 
   // Default collection to directory basename if not provided
@@ -412,7 +378,7 @@ async function batchUpload(options) {
 
   // Login
   console.log('\nLogging in...');
-  const sessionId = await login(baseUrl, username, password);
+  const sessionId = await login(baseUrl, credentials);
   console.log('Login successful');
 
   // Validate extractors exist
@@ -528,6 +494,7 @@ async function batchUpload(options) {
 async function batchExtractOnly(options) {
   const {
     env: envPath,
+    token: cliToken,
     user: cliUser,
     password: cliPassword,
     baseUrl: cliBaseUrl,
@@ -550,12 +517,11 @@ async function batchExtractOnly(options) {
   }
 
   // Get credentials - CLI args override env vars
-  const username = cliUser || process.env.API_USER;
-  const password = cliPassword || process.env.API_PASSWORD;
+  const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
   const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
 
-  if (!username || !password) {
-    throw new Error('Username and password must be provided via --user/--password or API_USER/API_PASSWORD in .env file');
+  if (!credentials.token && (!credentials.username || !credentials.password)) {
+    throw new Error('Provide an access token via --token or API_TOKEN, or username and password via --user/--password or API_USER/API_PASSWORD in .env file');
   }
 
   // Parse extractor options
@@ -580,7 +546,7 @@ async function batchExtractOnly(options) {
 
   // Login
   console.log('\nLogging in...');
-  const sessionId = await login(baseUrl, username, password);
+  const sessionId = await login(baseUrl, credentials);
   console.log('Login successful');
 
   // Validate extractors exist
@@ -691,6 +657,7 @@ Examples:
   .showHelpAfterError()
   .argument('[path]', 'Directory containing PDF files (required unless --extract-only)')
   .option('--env <path>', 'Path to .env file', './.env')
+  .option('--token <token>', 'Personal access token (default: from .env API_TOKEN); preferred over --user/--password')
   .option('--user <username>', 'Username for authentication (default: from .env API_USER)')
   .option('--password <password>', 'Password for authentication (default: from .env API_PASSWORD)')
   .option('--base-url <url>', 'API base URL (default: from .env API_BASE_URL or http://localhost:8000)')

@@ -1,0 +1,38 @@
+<sl-dialog name="accessTokensDialog" label="Access tokens" class="access-tokens-dialog" style="--width: 760px;">
+  <p name="intro" style="margin-top: 0;">
+    Scripts can use an access token instead of a username and password to call the API. A token acts
+    with the current roles of its user. Revoke a token as soon as it is no longer needed.
+  </p>
+  <div name="tokenList" class="access-tokens-list"></div>
+
+  <div name="newTokenPanel" class="dialog-column access-tokens-new" style="display: none;">
+    <div class="access-tokens-once">
+      <sl-icon name="exclamation-triangle"></sl-icon>
+      Copy the token now. It will not be shown again.
+    </div>
+    <sl-input name="newTokenInput" label="Token" readonly size="small">
+      <sl-icon-button slot="suffix" data-name="copyTokenBtn" name="clipboard" library="default" label="Copy token"></sl-icon-button>
+    </sl-input>
+    <sl-input name="envLineInput" label="Line for a .env file" readonly size="small">
+      <sl-icon-button slot="suffix" data-name="copyEnvLineBtn" name="clipboard" library="default" label="Copy line"></sl-icon-button>
+    </sl-input>
+  </div>
+
+  <form name="createForm" class="dialog-column access-tokens-form">
+    <h4 style="margin: 0;">New token</h4>
+    <div class="access-tokens-form-row">
+      <sl-input name="labelInput" label="Label" placeholder="e.g. batch extraction on the lab server" size="small" required maxlength="100"></sl-input>
+      <sl-select name="userSelect" label="User" size="small"></sl-select>
+      <sl-select name="expirySelect" label="Expires" size="small" value="90"></sl-select>
+    </div>
+    <div name="attributionNote" class="help-text" style="display: none;">
+      Changes made with this token are recorded as changes by the selected user, not by you.
+    </div>
+    <div>
+      <sl-button name="createBtn" type="submit" variant="primary" size="small">Create token</sl-button>
+    </div>
+  </form>
+
+  <div name="errorMessage" style="color: var(--sl-color-danger-600); margin-top: 1rem; display: none;"></div>
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>

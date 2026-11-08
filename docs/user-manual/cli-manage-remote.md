@@ -21,6 +21,7 @@ node bin/manage-remote.js <command> <subcommand> [options]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--env <path>` | Path to .env file | `./.env` |
+| `--token <token>` | Personal access token, used instead of `--user`/`--password` | from `API_TOKEN` in .env |
 | `--user <username>` | Username for authentication | from `API_USER` in .env |
 | `--password <password>` | Password for authentication | from `API_PASSWORD` in .env |
 | `--base-url <url>` | API base URL | from `API_BASE_URL` in .env or `http://localhost:8000` |
@@ -30,7 +31,8 @@ node bin/manage-remote.js <command> <subcommand> [options]
 Configure these in your `.env` file:
 
 ```bash
-API_USER=admin
+API_TOKEN=pte_...          # personal access token (preferred, see access-tokens.md)
+API_USER=admin             # used if API_TOKEN is not set
 API_PASSWORD=admin
 API_BASE_URL=http://localhost:8000
 ```
@@ -187,6 +189,20 @@ npm run manage-remote -- config set app.name '"My App"'
 # Set a number value
 npm run manage-remote -- config set session.timeout 3600
 ```
+
+## Access Token Management
+
+```bash
+npm run manage-remote -- token <subcommand> [options]
+```
+
+| Command | Description |
+| --- | --- |
+| `token list` | List the tokens you may see (all tokens for admins) |
+| `token create <label>` | Create a token (reviewers and admins); the token is printed once |
+| `token revoke <token_id>` | Revoke a token and end its sessions |
+
+`token create` options: `--for <username>` (the user the token authenticates as, default: you), `--days <n>` (default: 90), `--no-expiry` (admins, if `auth.access-tokens.allow-no-expiry` is true). See [Personal Access Tokens](access-tokens.md) for the rules on who may create tokens for whom.
 
 ## Maintenance Mode
 

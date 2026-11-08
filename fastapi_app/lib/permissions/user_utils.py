@@ -108,7 +108,7 @@ def add_user(db_dir: Path, username: str, password: str, fullname: str = "",
 
 
 def remove_user(db_dir: Path, username: str) -> tuple[bool, str]:
-    """Removes a user from the users.json file.
+    """Removes a user from the users.json file and revokes the user's access tokens.
 
     Args:
         db_dir: Path to the db directory
@@ -124,7 +124,11 @@ def remove_user(db_dir: Path, username: str) -> tuple[bool, str]:
 
     users_data = [user for user in users_data if user.get('username') != username]
     save_entity_data(db_dir, 'users', users_data)
-    return True, f"User '{username}' removed successfully."
+
+    from fastapi_app.lib.core.access_tokens import revoke_user_tokens
+    revoked = revoke_user_tokens(db_dir, username)
+    suffix = f" Revoked {revoked} access token(s)." if revoked else ""
+    return True, f"User '{username}' removed successfully.{suffix}"
 
 
 def update_user_password(db_dir: Path, username: str, password: str) -> tuple[bool, str]:
