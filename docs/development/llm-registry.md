@@ -95,7 +95,7 @@ The admin-chosen default is stored under `llm.default-model.provider` / `llm.def
 
 Pass the provider returned by `get_provider_for_user()`, not the registered one, so that `uses_user_key` is set.
 
-A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Use this for models on a provider's free tier, e.g. `"^Google Gemini/Gemini Flash"`.
+A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` (as shown in the picker) or `<provider id>/<model id>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Patterns are case-sensitive regular expressions. Use this for models on a provider's free tier, e.g. `"^Google Gemini/.*Flash"` or `"^google/gemini-.*flash"`. A pattern that matches nothing silently hides the models from non-admins, so check it against the labels returned by `GET /api/v1/llm/providers`.
 
 `GET /api/v1/llm/providers` lists only the models the current user may use, so non-admins never see models they cannot pick.
 
