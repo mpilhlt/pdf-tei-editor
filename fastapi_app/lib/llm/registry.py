@@ -12,7 +12,7 @@ between provider and consumer plugins never matters.
 
 import logging
 
-from fastapi_app.lib.secrets import require_user_secret
+from fastapi_app.lib.secrets import MissingSecretError, require_user_secret
 
 from .base import LLMProvider
 
@@ -61,18 +61,27 @@ class LLMProviderRegistry:
     def get_provider_for_user(self, provider_id: str, username: str | None) -> LLMProvider:
         """Get a provider that is ready to be used on behalf of `username`.
 
-        Returns the registered provider if it carries a shared key (or needs none),
-        else a copy using the user's own key from the secret store, marked with
-        `uses_user_key`.
+        If the provider supports per-user keys and the user has stored one, a copy
+        using that key is returned, marked with `uses_user_key` (it takes
+        precedence over a shared key, since usage is then billed to the user).
+        Otherwise the registered provider is returned if it carries a shared key
+        (or needs none).
 
         Raises:
             KeyError: If no provider with that id is registered.
-            MissingSecretError: If the provider needs a per-user key the user has not stored.
+            MissingSecretError: If the provider has no shared key and the user has not stored one.
+            SecretsError: If the user's stored key cannot be decrypted.
         """
         provider = self.get_provider(provider_id)
-        if provider.has_shared_key() or not provider.secret_service:
+        if not provider.secret_service:
             return provider
-        user_provider = provider.with_api_key(require_user_secret(username, provider.secret_service))
+        try:
+            user_key = require_user_secret(username, provider.secret_service)
+        except MissingSecretError:
+            if provider.has_shared_key():
+                return provider
+            raise
+        user_provider = provider.with_api_key(user_key)
         user_provider.uses_user_key = True
         return user_provider
 
