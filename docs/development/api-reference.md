@@ -314,20 +314,18 @@ API_BASE_URL=http://localhost:8000
 **Example usage:**
 
 ```bash
-# Create .env file with credentials
+# Create .env file with a personal access token (see docs/user-manual/access-tokens.md)
 cat > .env << EOF
-API_USER=admin
-API_PASSWORD=admin
+API_TOKEN=pte_...
 API_BASE_URL=http://localhost:8000
 EOF
 
 # Run CLI script (will read credentials from .env)
 node bin/batch-extract.js /path/to/pdfs --collection my_collection --extractor mock-extractor
 
-# Or override via CLI parameters
+# Or override via CLI parameters (--user/--password work instead of --token)
 node bin/batch-extract.js /path/to/pdfs \
-  --user admin \
-  --password admin \
+  --token pte_... \
   --base-url http://localhost:8000 \
   --collection my_collection \
   --extractor mock-extractor
@@ -335,8 +333,8 @@ node bin/batch-extract.js /path/to/pdfs \
 
 **CLI scripts should:**
 - Accept optional `--env <path>` parameter (default: `./.env`)
-- Support `--user`, `--password`, `--base-url` CLI parameters that override env vars
-- Use SHA-256 password hashing for authentication (matching frontend)
+- Support `--token`, `--user`, `--password`, `--base-url` CLI parameters that override env vars
+- Log in with the shared helper in `bin/lib/api-auth.js`: a token at `/api/v1/auth/token-login`, otherwise the plain text password at `/api/v1/auth/login`
 - Make authenticated requests with `X-Session-ID` header
 
 **Example implementations:**

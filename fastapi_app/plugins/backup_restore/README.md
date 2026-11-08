@@ -151,15 +151,26 @@ The password is briefly visible in the process list during the second command; r
 
 Open the user management as an administrator, create a user `backup-bot`, set a long random password and give it the role `backup` only (not `user`, `admin` or any other role). Save the password into the password file as above.
 
+#### Create an access token for the bot
+
+The script should log in with a [personal access token](../../../docs/user-manual/access-tokens.md) rather than the password: a token can be revoked without touching the account and expires on its own. As an administrator, open **user menu > Access Tokens**, create a token for `backup-bot` and save it to a file only the cron user can read:
+
+```bash
+# Paste the token, then press Enter and Ctrl-D (keeps it out of the shell history)
+sudo -u backup sh -c 'umask 077; cat > /etc/pdf-tei-editor/backup.token'
+```
+
+On the server, `uv run python bin/manage.py token create backup-bot --label backup-cron --days 365` creates the token without the web interface. When the token expires, the script fails with exit code 2; create a new one before that.
+
 #### Check the setup
 
 ```bash
 node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor \
-  --base-url https://editor.example.org --user backup-bot \
-  --password-file /etc/pdf-tei-editor/backup.pw --dry-run
+  --base-url https://editor.example.org \
+  --token-file /etc/pdf-tei-editor/backup.token --dry-run
 ```
 
-`--dry-run` prints what would happen without contacting the server. Run it without `--dry-run` once by hand to check the login and the download. A wrong password or missing role gives exit code 2.
+`--dry-run` prints what would happen without contacting the server. Run it without `--dry-run` once by hand to check the login and the download. A wrong, revoked or expired token, a wrong password or a missing role gives exit code 2. Without a token, pass `--user backup-bot --password-file /etc/pdf-tei-editor/backup.pw` instead of `--token-file`.
 
 ### Schedule it
 
@@ -167,7 +178,7 @@ Example `/etc/cron.d/pdf-tei-editor-backup` (daily at 02:17, run as the user `ba
 
 ```bash
 MAILTO=admin@example.org
-17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --user backup-bot --password-file /etc/pdf-tei-editor/backup.pw --quiet --ping-url https://hc-ping.com/YOUR-UUID
+17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --base-url https://editor.example.org --token-file /etc/pdf-tei-editor/backup.token --quiet --ping-url https://hc-ping.com/YOUR-UUID
 ```
 
 With `--quiet` the script prints only errors, so cron sends mail only when something went wrong.
@@ -176,18 +187,19 @@ Alternatively, put the settings into a `.env` file and pass `--env /path/to/back
 
 ```text
 API_BASE_URL=https://editor.example.org
-API_USER=backup-bot
+API_TOKEN=pte_...
 ```
 
-The password should still come from `--password-file`; `API_PASSWORD` in an `.env` file also works but is easier to leak.
+Make the `.env` file readable only by the cron user. Without a token, set `API_USER=backup-bot` and pass the password with `--password-file`; `API_PASSWORD` in an `.env` file also works but is easier to leak.
 
 ### Options
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `--dest-dir <dir>` | required | Target directory, created with mode 0700 if missing |
-| `--env <path>` | `./.env` | `.env` file with `API_BASE_URL`, `API_USER`, `API_PASSWORD` |
+| `--env <path>` | `./.env` | `.env` file with `API_BASE_URL` and `API_TOKEN` (or `API_USER`, `API_PASSWORD`) |
 | `--base-url <url>` | `API_BASE_URL` or `http://localhost:8000` | Server URL |
+| `--token-file <path>` | `API_TOKEN` | File containing a personal access token; used instead of username and password |
 | `--user <name>` | `API_USER` | Username |
 | `--password-file <path>` | `API_PASSWORD` | File containing the password |
 | `--prefix <str>` | `pdf-tei-editor` | File name prefix. Use different prefixes for several instances in one directory. |
@@ -239,7 +251,8 @@ The script is a thin client for these endpoints. You can call them from other to
 
 | Method and path | Role | Purpose |
 | --- | --- | --- |
-| `POST /api/v1/auth/login` | none | Log in; body `{"username": "...", "password": "..."}`; returns `sessionId` |
+| `POST /api/v1/auth/token-login` | none | Log in with `Authorization: Bearer <token>`; returns `sessionId` |
+| `POST /api/v1/auth/login` | none | Log in with a password; body `{"username": "...", "password": "..."}`; returns `sessionId` |
 | `GET /api/plugins/backup-restore/download` | `backup` | Download the backup ZIP |
 | `POST /api/plugins/backup-restore/restore` | `restore` | Upload a ZIP (multipart field `file`) and schedule the restore; 400 if the backup is invalid or of an incompatible version |
 | `POST /api/v1/auth/logout` | session | End the session |

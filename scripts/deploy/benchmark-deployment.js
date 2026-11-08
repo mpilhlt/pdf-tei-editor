@@ -11,8 +11,8 @@
  *   --concurrency <n>    Concurrent requests per round (default: 1)
  *   --url1 <url>         First URL to benchmark (default: containerized deployment)
  *   --url2 <url>         Second URL to benchmark (default: non-containerized deployment)
- *   --env-path1 <file>   .env file with API_USER/API_PASSWORD/API_BASE_URL for url1 (optional)
- *   --env-path2 <file>   .env file with API_USER/API_PASSWORD/API_BASE_URL for url2 (optional)
+ *   --env-path1 <file>   .env file with API_TOKEN (or API_USER/API_PASSWORD) and API_BASE_URL for url1 (optional)
+ *   --env-path2 <file>   .env file with API_TOKEN (or API_USER/API_PASSWORD) and API_BASE_URL for url2 (optional)
  *   --paths <json>       JSON array of paths to test (default: see PATHS below)
  *   --delay <ms>         Delay between rounds in ms (default: 500)
  *
@@ -21,6 +21,7 @@
  */
 
 import { readFileSync } from "fs";
+import { login } from "../../bin/lib/api-auth.js";
 
 const DEFAULTS = {
   rounds: 10,
@@ -89,26 +90,6 @@ function parseEnvFile(filePath) {
 }
 
 /**
- * Log in and return session ID.
- * @param {string} baseUrl
- * @param {string} username
- * @param {string} password
- * @returns {Promise<string>}
- */
-async function login(baseUrl, username, password) {
-  const res = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!res.ok) throw new Error(`Login to ${baseUrl} failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  const sessionId = data.sessionId || data.session_id;
-  if (!sessionId) throw new Error(`Login response missing sessionId: ${JSON.stringify(data)}`);
-  return sessionId;
-}
-
-/**
  * Resolve session ID from an optional env file, using the base URL from the env or the fallback.
  * @param {string|null} envPath
  * @param {string} fallbackUrl
@@ -118,9 +99,9 @@ async function resolveSession(envPath, fallbackUrl) {
   if (!envPath) return { sessionId: null, baseUrl: fallbackUrl };
   const env = parseEnvFile(envPath);
   const baseUrl = env.API_BASE_URL || fallbackUrl;
-  const { API_USER: username, API_PASSWORD: password } = env;
-  if (!username || !password) throw new Error(`${envPath} must define API_USER and API_PASSWORD`);
-  const sessionId = await login(baseUrl, username, password);
+  const { API_TOKEN: token, API_USER: username, API_PASSWORD: password } = env;
+  if (!token && (!username || !password)) throw new Error(`${envPath} must define API_TOKEN, or API_USER and API_PASSWORD`);
+  const sessionId = await login(baseUrl, token ? { token } : { username, password });
   return { sessionId, baseUrl };
 }
 
