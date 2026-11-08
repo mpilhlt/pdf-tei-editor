@@ -35,7 +35,14 @@ uv sync # only for the python scripts
 
 ## Authentication
 
-In order to use the scripts, you need to store your credentials in a file called `.env` in the directory from which you launch the scripts. The file should contain the following lines:
+In order to use the scripts, you need to store your credentials in a file called `.env` in the directory from which you launch the scripts. Preferably, use a [personal access token](access-tokens.md) (user menu > Access Tokens):
+
+```env
+API_TOKEN=<your access token>
+API_BASE_URL=<the url of the PDF-TEI-Editor instance>
+```
+
+Alternatively, use your user name and password:
 
 ```env
 API_USER=<your user name>
@@ -64,6 +71,7 @@ Arguments:
 
 Options:
   --env <path>           Path to .env file (default: "./.env")
+  --token <token>        Personal access token (default: from .env API_TOKEN); preferred over --user/--password
   --user <username>      Username for authentication (default: from .env API_USER)
   --password <password>  Password for authentication (default: from .env API_PASSWORD)
   --base-url <url>       API base URL (default: from .env API_BASE_URL or http://localhost:8000)

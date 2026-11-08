@@ -560,6 +560,47 @@
  */
 
 /**
+ * @typedef {Object} TokenLoginRequest
+ * @property {string} token - Personal access token (`pte_...`)
+ */
+
+/**
+ * @typedef {Object} AccessTokenInfo
+ * @property {string} token_id - Public id of the token, part of the token string
+ * @property {string} label
+ * @property {string} username - The user the token authenticates as
+ * @property {string} created_by - The user who created the token
+ * @property {number} created_at - Epoch seconds
+ * @property {number|null=} expires_at - Epoch seconds; null if the token does not expire
+ * @property {number|null=} last_used_at - Epoch seconds of the last token login
+ * @property {boolean} expired
+ */
+
+/**
+ * @typedef {Object} CreateAccessTokenRequest
+ * @property {string} label
+ * @property {string|null=} username - The user the token authenticates as (default: the current user)
+ * @property {number|null=} expires_in_days - Days until the token expires (default 90); null for no expiry (admins only, if allowed by config)
+ */
+
+/**
+ * @typedef {Object} CreateAccessTokenResponse
+ * @property {string} token - The full token; returned only by this call
+ * @property {AccessTokenInfo} info
+ */
+
+/**
+ * @typedef {Object} EligibleUser
+ * @property {string} username
+ * @property {string|null=} fullname
+ */
+
+/**
+ * @typedef {Object} RevokeAccessTokenResponse
+ * @property {boolean} revoked
+ */
+
+/**
  * @typedef {Object} DataRestoreInfo
  * @property {string} id
  * @property {string} applied_at
@@ -1314,6 +1355,61 @@ export class ApiClientV1 {
    */
   async authStatus() {
     const endpoint = `/auth/status`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Exchange a personal access token for a session. Scripts send the token as
+   * `Authorization: Bearer pte_...`; this method sends it in the body.
+   *
+   * @param {TokenLoginRequest} requestBody
+   * @returns {Promise<LoginResponse>}
+   */
+  async authTokenLogin(requestBody) {
+    const endpoint = `/auth/token-login`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List the access tokens the current user may see and revoke (all tokens for admins).
+   * Revoked tokens are not listed; the tokens themselves are never returned.
+   *
+   * @returns {Promise<Array<AccessTokenInfo>>}
+   */
+  async authListTokens() {
+    const endpoint = `/auth/tokens`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create an access token (reviewers and admins). The full token is only in this response.
+   *
+   * @param {CreateAccessTokenRequest} requestBody
+   * @returns {Promise<CreateAccessTokenResponse>}
+   */
+  async authCreateToken(requestBody) {
+    const endpoint = `/auth/tokens`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Revoke an access token and end the sessions created from it.
+   *
+   * @param {string} tokenId
+   * @returns {Promise<RevokeAccessTokenResponse>}
+   */
+  async authRevokeToken(tokenId) {
+    const endpoint = `/auth/tokens/${encodeURIComponent(tokenId)}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * The users the current user may create access tokens for (reviewers and admins).
+   *
+   * @returns {Promise<Array<EligibleUser>>}
+   */
+  async authTokenEligibleUsers() {
+    const endpoint = `/auth/tokens/eligible-users`
     return this.callApi(endpoint);
   }
 

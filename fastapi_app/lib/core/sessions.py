@@ -5,6 +5,7 @@ This module provides SQLite-based session management with dependency injection.
 No Flask or FastAPI dependencies - all parameters are explicitly passed.
 """
 
+import sqlite3
 import time
 import uuid
 from pathlib import Path
@@ -19,6 +20,10 @@ class SessionDict(TypedDict):
     username: str
     created_at: float
     last_access: float
+    token_id: Optional[str]
+    """The personal access token the session was created from (None for a password login)"""
+    expires_at: Optional[float]
+    """Absolute expiry (the token's expiry); None if the session only expires through inactivity"""
 
 
 # SQLite schema for sessions table
@@ -27,12 +32,28 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
     created_at REAL NOT NULL,
-    last_access REAL NOT NULL
+    last_access REAL NOT NULL,
+    token_id TEXT,
+    expires_at REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_username ON sessions(username);
 CREATE INDEX IF NOT EXISTS idx_last_access ON sessions(last_access);
 """
+
+_SESSION_COLUMNS = "session_id, username, created_at, last_access, token_id, expires_at"
+
+
+def _row_to_session(row: sqlite3.Row) -> SessionDict:
+    """Convert a sessions row into a SessionDict."""
+    return {
+        'session_id': row['session_id'],
+        'username': row['username'],
+        'created_at': row['created_at'],
+        'last_access': row['last_access'],
+        'token_id': row['token_id'],
+        'expires_at': row['expires_at'],
+    }
 
 
 class SessionManager:
@@ -57,15 +78,28 @@ class SessionManager:
         self._init_db()
 
     def _init_db(self):
-        """Initialize sessions database and table."""
-        init_database(self.db_path, SESSIONS_SCHEMA, self.logger)
+        """Initialize sessions database and table, and run the sessions migrations."""
+        from fastapi_app.lib.core.migration_runner import run_migrations_if_needed
+        from fastapi_app.lib.core.migrations.versions import SESSIONS_MIGRATIONS
 
-    def create_session(self, username: str) -> str:
+        init_database(self.db_path, SESSIONS_SCHEMA, self.logger)
+        run_migrations_if_needed(db_path=self.db_path, migrations=SESSIONS_MIGRATIONS, logger=self.logger)
+        # Needs the token_id column, which databases created before migration 012 only have afterwards
+        init_database(self.db_path, "CREATE INDEX IF NOT EXISTS idx_token_id ON sessions(token_id);", self.logger)
+
+    def create_session(
+        self,
+        username: str,
+        token_id: Optional[str] = None,
+        expires_at: Optional[float] = None,
+    ) -> str:
         """
         Create new session for a user.
 
         Args:
             username: Username to create session for
+            token_id: The personal access token the session is created from, if any
+            expires_at: Absolute expiry of the session (epoch seconds), e.g. the token's expiry
 
         Returns:
             Generated UUID session ID
@@ -76,10 +110,10 @@ class SessionManager:
         conn = get_connection(self.db_path)
         conn.execute(
             """
-            INSERT INTO sessions (session_id, username, created_at, last_access)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sessions (session_id, username, created_at, last_access, token_id, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (session_id, username, current_time, current_time)
+            (session_id, username, current_time, current_time, token_id, expires_at)
         )
         conn.commit()
 
@@ -88,7 +122,7 @@ class SessionManager:
 
         return session_id
 
-    def get_session(self, session_id: str) -> Optional[dict]:
+    def get_session(self, session_id: str) -> Optional[SessionDict]:
         """
         Get session data by session ID.
 
@@ -103,24 +137,12 @@ class SessionManager:
 
         conn = get_connection(self.db_path)
         cursor = conn.execute(
-            """
-            SELECT session_id, username, created_at, last_access
-            FROM sessions
-            WHERE session_id = ?
-            """,
+            f"SELECT {_SESSION_COLUMNS} FROM sessions WHERE session_id = ?",
             (session_id,)
         )
 
         row = cursor.fetchone()
-        if row:
-            return {
-                'session_id': row['session_id'],
-                'username': row['username'],
-                'created_at': row['created_at'],
-                'last_access': row['last_access']
-            }
-
-        return None
+        return _row_to_session(row) if row else None
 
     def get_username_by_session_id(self, session_id: str) -> Optional[str]:
         """
@@ -151,6 +173,8 @@ class SessionManager:
             return False
 
         current_time = time.time()
+        if session['expires_at'] is not None and current_time >= session['expires_at']:
+            return False
         last_access = session['last_access']
         return current_time - last_access <= timeout_seconds
 
@@ -240,6 +264,25 @@ class SessionManager:
 
         return count
 
+    def delete_token_sessions(self, token_id: str) -> int:
+        """
+        Delete all sessions created from a personal access token.
+
+        Args:
+            token_id: Public id of the token
+
+        Returns:
+            Number of sessions deleted
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.execute("DELETE FROM sessions WHERE token_id = ?", (token_id,))
+        conn.commit()
+
+        count = cursor.rowcount
+        if count > 0 and self.logger:
+            self.logger.info(f"Deleted {count} sessions of access token {token_id}")
+        return count
+
     def cleanup_expired_sessions(self, timeout_seconds: int) -> int:
         """
         Remove sessions that haven't been accessed within the timeout period.
@@ -261,9 +304,9 @@ class SessionManager:
                 """
                 SELECT session_id, username
                 FROM sessions
-                WHERE last_access < ?
+                WHERE last_access < ? OR (expires_at IS NOT NULL AND expires_at <= ?)
                 """,
-                (expiry_time,)
+                (expiry_time, current_time)
             )
             expired_sessions = cursor.fetchall()
 
@@ -274,8 +317,8 @@ class SessionManager:
 
         # Delete expired sessions
         cursor = conn.execute(
-            "DELETE FROM sessions WHERE last_access < ?",
-            (expiry_time,)
+            "DELETE FROM sessions WHERE last_access < ? OR (expires_at IS NOT NULL AND expires_at <= ?)",
+            (expiry_time, current_time)
         )
         conn.commit()
 
@@ -305,23 +348,8 @@ class SessionManager:
         Get all active sessions.
 
         Returns:
-            List of session dictionaries with keys: session_id, username, created_at, last_access
+            List of session dictionaries (see SessionDict)
         """
         conn = get_connection(self.db_path)
-        cursor = conn.execute(
-            """
-            SELECT session_id, username, created_at, last_access
-            FROM sessions
-            ORDER BY last_access DESC
-            """
-        )
-
-        return [
-            {
-                'session_id': row['session_id'],
-                'username': row['username'],
-                'created_at': row['created_at'],
-                'last_access': row['last_access']
-            }
-            for row in cursor.fetchall()
-        ]
+        cursor = conn.execute(f"SELECT {_SESSION_COLUMNS} FROM sessions ORDER BY last_access DESC")
+        return [_row_to_session(row) for row in cursor.fetchall()]

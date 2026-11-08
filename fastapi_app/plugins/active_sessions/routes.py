@@ -2,6 +2,7 @@
 Custom routes for Active Sessions admin plugin.
 """
 
+import html
 import json
 import logging
 from datetime import datetime
@@ -18,6 +19,7 @@ from fastapi_app.lib.core.dependencies import (
     require_admin_user,
     require_session_id,
 )
+from fastapi_app.lib.core.access_tokens import AccessTokenStore, get_access_token_store
 from fastapi_app.lib.utils.auth import AuthManager
 from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.sse.sse_service import SSEService
@@ -103,6 +105,7 @@ async def get_sessions_data(
     _user: dict = Depends(require_admin_user),
     session_manager: SessionManager = Depends(get_session_manager),
     auth_manager: AuthManager = Depends(get_auth_manager),
+    token_store: AccessTokenStore = Depends(get_access_token_store),
 ) -> dict[str, list[list[str | dict[str, str | int]]]]:
     """
     Return sessions as a DataTables-compatible JSON object.
@@ -121,6 +124,10 @@ async def get_sessions_data(
         user_data = auth_manager.get_user_by_username(s["username"]) or {}
         fullname = user_data.get("fullname") or s["username"]
         owner = f"{fullname} ({s['username']})"
+        if s["token_id"]:
+            token = token_store.get(s["token_id"])
+            owner += f" via access token '{token['label'] if token else s['token_id']}'"
+        owner = html.escape(owner)
 
         is_current = sid == session_id
         if is_current:

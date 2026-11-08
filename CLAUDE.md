@@ -85,7 +85,7 @@ node scripts/dev/debug-api.js GET /api/v1/collections/test/files
 
 The script:
 
-- Authenticates using credentials from `.env` file (API_USER, API_PASSWORD)
+- Authenticates using a personal access token (`API_TOKEN`) from the `.env` file if set, otherwise with `API_USER`/`API_PASSWORD`
 - Uses SHA-256 password hashing (matching the auth API requirements)
 - Handles GET requests with query parameters
 - Handles POST/PUT/DELETE requests with JSON body

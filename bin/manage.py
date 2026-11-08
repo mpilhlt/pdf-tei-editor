@@ -499,6 +499,62 @@ def clear_caches(args):
     success, message = clear_schema_cache()
     print(message)
 
+def _token_store(args):
+    """Open the access token store of the db directory."""
+    from fastapi_app.lib.core.access_tokens import AccessTokenStore  # type: ignore
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
+    return db_dir, AccessTokenStore(db_dir)
+
+def _format_time(timestamp):
+    """Format epoch seconds for display, or '-' for None."""
+    from datetime import datetime
+    return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M') if timestamp else '-'
+
+def create_token(args):
+    """Creates a personal access token for a user and prints it. The token is shown only once."""
+    import time
+    db_dir, store = _token_store(args)
+    if not any(u.get('username') == args.username for u in user_list_users(db_dir)):
+        print(f"User '{args.username}' not found.")
+        sys.exit(1)
+    if args.no_expiry:
+        expires_at = None
+    elif args.days < 1:
+        print("--days must be at least 1.")
+        sys.exit(1)
+    else:
+        expires_at = time.time() + args.days * 86400
+    token, info = store.create(args.username, args.created_by, args.label, expires_at)
+    print(f"Created access token {info['token_id']} ('{info['label']}') for {info['username']}, expires: {_format_time(info['expires_at'])}")
+    print("This token will not be shown again:")
+    print(token)
+
+def list_tokens(args):
+    """Lists personal access tokens (not the tokens themselves)."""
+    from fastapi_app.lib.core.access_tokens import is_token_expired  # type: ignore
+    _, store = _token_store(args)
+    tokens = store.list_tokens(username=args.user, include_revoked=args.all)
+    if not tokens:
+        print("No access tokens.")
+        return
+    print(f"{'ID':<10} {'User':<16} {'Created by':<16} {'Created':<17} {'Expires':<17} {'Last used':<17} {'State':<8} Label")
+    for t in tokens:
+        state = 'revoked' if t['revoked_at'] else ('expired' if is_token_expired(t) else 'active')
+        print(f"{t['token_id']:<10} {t['username']:<16} {t['created_by']:<16} {_format_time(t['created_at']):<17} {_format_time(t['expires_at']):<17} {_format_time(t['last_used_at']):<17} {state:<8} {t['label']}")
+
+def revoke_token(args):
+    """Revokes a personal access token and ends the sessions created from it."""
+    from fastapi_app.lib.core.access_tokens import revoke_token as _revoke  # type: ignore
+    from fastapi_app.lib.core.sessions import SessionManager  # type: ignore
+    db_dir, store = _token_store(args)
+    if store.get(args.token_id) is None:
+        print(f"Access token '{args.token_id}' not found.")
+        sys.exit(1)
+    if _revoke(store, SessionManager(db_dir), args.token_id):
+        print(f"Revoked access token {args.token_id}.")
+    else:
+        print(f"Access token {args.token_id} was already revoked.")
+
 if __name__ == '__main__':
     # Print deprecation warning
     print("\033[33mDEPRECATION WARNING: manage.py is deprecated and will be removed in a future version.\033[0m", file=sys.stderr)
@@ -665,12 +721,33 @@ if __name__ == '__main__':
     parser_config_delete.add_argument('--default', action='store_true', help='Delete from both db/config.json and config/config.json.')
     parser_config_delete.set_defaults(func=delete_config)
 
+    # --- Access token management ---
+    token_parser = subparsers.add_parser('token', help='Manage personal access tokens', description='Provides commands to manage personal access tokens for API authentication.')
+    token_subparsers = token_parser.add_subparsers(dest='subcommand', title='Access token commands', description="Use 'manage.py token <subcommand> --help' for details on each command.")
+
+    parser_token_create = token_subparsers.add_parser('create', help='Create an access token for a user', description=create_token.__doc__)
+    parser_token_create.add_argument('username', help='The user the token authenticates as.')
+    parser_token_create.add_argument('--label', required=True, help='Name of the token, e.g. the script or machine that uses it.')
+    parser_token_create.add_argument('--days', type=int, default=90, help='Days until the token expires (default: 90).')
+    parser_token_create.add_argument('--no-expiry', action='store_true', help='Create a token that does not expire.')
+    parser_token_create.add_argument('--created-by', default='manage.py', help="Recorded as the token's creator (default: manage.py).")
+    parser_token_create.set_defaults(func=create_token)
+
+    parser_token_list = token_subparsers.add_parser('list', help='List access tokens', description=list_tokens.__doc__)
+    parser_token_list.add_argument('--user', help='Only tokens of this user.')
+    parser_token_list.add_argument('--all', action='store_true', help='Include revoked tokens.')
+    parser_token_list.set_defaults(func=list_tokens)
+
+    parser_token_revoke = token_subparsers.add_parser('revoke', help='Revoke an access token', description=revoke_token.__doc__)
+    parser_token_revoke.add_argument('token_id', help='The id of the token (the 8 characters after "pte_").')
+    parser_token_revoke.set_defaults(func=revoke_token)
+
     # --- Cache management ---
     cache_parser = subparsers.add_parser('clear-caches', help='Clear application caches', description=clear_caches.__doc__)
     cache_parser.set_defaults(func=clear_caches)
 
     # --- Help command ---
-    all_subparsers = {'user': user_parser, 'group': group_parser, 'collection': collection_parser, 'config': config_parser}
+    all_subparsers = {'user': user_parser, 'group': group_parser, 'collection': collection_parser, 'config': config_parser, 'token': token_parser}
     def show_help(args):
         command = args.command_name
         if command:
@@ -700,5 +777,7 @@ if __name__ == '__main__':
              collection_parser.print_help()
         elif hasattr(args, 'command') and args.command == 'config' and not args.subcommand:
              config_parser.print_help()
+        elif hasattr(args, 'command') and args.command == 'token' and not args.subcommand:
+             token_parser.print_help()
         else:
              parser.print_help()

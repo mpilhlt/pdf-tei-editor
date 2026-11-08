@@ -6,6 +6,21 @@ This document provides the reference documentation for the PDF-TEI Editor comman
 
 The `manage-remote.js` script provides a command-line interface for managing users, groups, collections, and application configuration via the HTTP API. This works with both local and remote instances. see the dedication documentation on [CLI for Access Control Management and Application Configuration](./cli-manage-remote.md).
 
+## Personal Access Tokens
+
+Scripts can authenticate with a personal access token instead of a username and password (see [Personal Access Tokens](access-tokens.md)). `batch-extract.js`, `manage-remote.js` and `scripts/dev/debug-api.js` accept `--token <token>` or `API_TOKEN` in `.env`, which take precedence over `--user`/`--password` and `API_USER`/`API_PASSWORD`.
+
+`manage-remote.js token list|create|revoke` manages tokens through the API (see [manage-remote](cli-manage-remote.md#access-token-management)). On the server, `bin/manage.py token` works directly on the database, which is needed to create a first token without the web interface, e.g. in a container:
+
+```bash
+# Create a token for a user (printed once); --days defaults to 90, --no-expiry creates a token that does not expire
+uv run python bin/manage.py token create auto-annotation --label "auto-annotation on gpu01" --days 365
+# List tokens (--user to filter, --all to include revoked tokens)
+uv run python bin/manage.py token list
+# Revoke a token by its id (the 8 characters after "pte_")
+uv run python bin/manage.py token revoke abcdefgh
+```
+
 ## User API Keys
 
 Extractors and plugins that call services billed to the user (e.g. Claude) use the user's own API key. Users enter their keys in the web interface (user menu > API Keys, or in the prompt that appears when a key is missing); the keys are stored Fernet-encrypted in `data/db/secrets.db`. The "Remove all keys" button in the API Keys dialog removes all keys of the current user at once (after a confirmation), including keys of services that are no longer installed. `bin/user-secrets.py` manages the same store from the command line, e.g. for administrators or for agents that need a key in a script:
