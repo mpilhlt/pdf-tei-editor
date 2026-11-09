@@ -9,6 +9,7 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 | Module | Purpose |
 | --- | --- |
 | `base.py` | `LLMProvider` ABC, `LLMModel` and `ModelStatus` TypedDicts, `LLMProviderError` |
+| `rate_limit.py` | `LLMRateLimitError`, `post_completion()`, per-key rate-limit state |
 | `registry.py` | `LLMProviderRegistry` singleton |
 | `openai_compatible.py` | `OpenAICompatibleProvider` for endpoints speaking the OpenAI `chat/completions` format; `chat_completion_sync()` |
 | `default_model.py` | Installation-wide default model (stored in config) |
@@ -52,7 +53,8 @@ class MyProvider(LLMProvider):
 - `LLMModel.status`: optional live load state (`availability`: `available`, `busy` or `very_busy`, plus a free-text `detail`); the frontend shows a warning icon when not `available`.
 - `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used. It is not about API keys.
 - Per-user keys: set `secret_service` to the id of a registered secret service, return `has_shared_key()` `True` only if a configured key exists, and implement `with_api_key(key)` returning a copy that uses the given key. Consumers get a provider for the requesting user with `LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, username)`, which prefers the user's own key over a shared one and raises `MissingSecretError` when there is neither (map it to HTTP 428 with `secret_required_detail(error)`; the extraction endpoint does this already). Do not use `get_provider()` for requests made on behalf of a user.
-- Raise `LLMProviderError` with a user-presentable message for upstream failures (rate limit, overload, bad request); routes map it to HTTP 502.
+- Raise `LLMProviderError` with a user-presentable message for upstream failures (overload, bad request); routes map it to HTTP 502.
+- Raise `LLMRateLimitError` (a subclass, with `available_at`) when a rate limit or quota is reached; routes map it to HTTP 429 with `rate_limit_http_error()`, and must check for it before treating an error as retryable. Providers making their own HTTP requests get this from `post_completion()`, with a session from `get_completion_session()`, so that urllib3 does not retry the 429.
 - Multimodal input is optional: override `supports_pdf_input(model_id)` and `chat_completion_with_pdf()` to accept a PDF file, and `supports_image_input(model_id)` and `chat_completion_with_images(model_id, system_prompt, user_prompt, images)` to accept a list of `LLMImage` (`{"data": bytes, "media_type": "image/png"}`), sent in order ahead of the prompt. Consumers check the `supports_*` method before calling. The Anthropic provider implements both.
 - Only offer chat models in `list_models()`. Commercial APIs mostly expose no machine-readable modality field, so the Google provider filters non-chat models (image, embedding, etc.) by name markers.
 
