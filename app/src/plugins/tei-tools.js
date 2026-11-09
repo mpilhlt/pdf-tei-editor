@@ -265,8 +265,8 @@ class TeiToolsPlugin extends Plugin {
       const cellStyle = 'padding: 0.75rem 1rem; color: var(--sl-color-neutral-700);'
 
       const dateCell = document.createElement('td')
-      dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: nowrap;'
-      dateCell.textContent = this.#formatDate(changeNode.getAttribute('when'))
+      dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: pre;'
+      dateCell.textContent = this.#formatDate(changeNode.getAttribute('when')).replace(' ', '\n')
       row.appendChild(dateCell)
 
       const descCell = document.createElement('td')
