@@ -11,9 +11,12 @@ without either one depending on the other's class hierarchy.
 import asyncio
 import logging
 
+import requests
+
 from fastapi_app.lib.extraction.http_utils import get_retry_session
 
 from .base import LLMModel, LLMProvider
+from .rate_limit import post_completion
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +24,33 @@ logger = logging.getLogger(__name__)
 COMPLETION_TIMEOUT_SECONDS = 180
 
 
+def get_completion_session(retries: int = 3, backoff_factor: float = 2.0, read_retries: int = 1) -> requests.Session:
+    """A session for post_completion(), retrying overload and timeouts but leaving a 429 to post_completion().
+
+    urllib3 retries a response with Retry-After even if its status is not in the retry list, and then waits as long as
+    the server asks, so honouring that header has to be switched off as well.
+    """
+    return get_retry_session(retries=retries, backoff_factor=backoff_factor, status_forcelist=[500, 502, 503, 504], read_retries=read_retries, respect_retry_after=False)
+
+
 def chat_completion_sync(
     base_url: str,
-    api_key: str,
+    api_key: str | None,
     model_id: str,
     system_prompt: str,
     user_prompt: str,
     temperature: float = 0.2,
 ) -> str:
-    """Synchronously call an OpenAI-compatible chat/completions endpoint."""
-    session = get_retry_session(retries=3, backoff_factor=2.0)
-    url = f"{base_url.rstrip('/')}/chat/completions"
+    """Synchronously call an OpenAI-compatible chat/completions endpoint.
+
+    A stalled request is repeated once: it usually succeeds then, and a model that never answers fails after two timeouts.
+
+    Raises:
+        LLMRateLimitError: if the rate limit or quota is reached (see rate_limit.py).
+    """
+    session = get_completion_session()
+    endpoint = base_url.rstrip("/")
+    url = f"{endpoint}/chat/completions"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -45,7 +64,7 @@ def chat_completion_sync(
         ],
         "temperature": temperature,
     }
-    response = session.post(url, headers=headers, json=data, timeout=COMPLETION_TIMEOUT_SECONDS)
+    response = post_completion(session, url, endpoint=endpoint, api_key=api_key, model_id=model_id, headers=headers, json=data, timeout=COMPLETION_TIMEOUT_SECONDS)
     response.raise_for_status()
     result = response.json()
     choices = result.get("choices", [])

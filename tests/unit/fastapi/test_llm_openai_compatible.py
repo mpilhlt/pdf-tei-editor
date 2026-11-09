@@ -11,6 +11,7 @@ from fastapi_app.lib.llm.openai_compatible import (
     OpenAICompatibleProvider,
     chat_completion_sync,
 )
+from fastapi_app.lib.llm.rate_limit import LLMRateLimitError
 
 
 class TestChatCompletionSync(unittest.TestCase):
@@ -66,6 +67,34 @@ class TestChatCompletionSync(unittest.TestCase):
             user_prompt="u",
         )
         self.assertEqual(result, "")
+
+    @patch("fastapi_app.lib.llm.openai_compatible.get_retry_session")
+    def test_session_leaves_429_to_the_rate_limit_handling_and_repeats_a_timeout_once(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_session.post.return_value.json.return_value = {"choices": []}
+        mock_get_session.return_value = mock_session
+
+        chat_completion_sync(base_url="https://example.com/v1", api_key="k", model_id="m", system_prompt="s", user_prompt="u")
+
+        options = mock_get_session.call_args.kwargs
+        self.assertNotIn(429, options["status_forcelist"])
+        self.assertEqual(options["read_retries"], 1)
+        self.assertFalse(options["respect_retry_after"])
+
+    @patch("fastapi_app.lib.llm.openai_compatible.get_retry_session")
+    def test_exhausted_quota_raises_and_later_calls_skip_the_request(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_session.post.return_value.status_code = 429
+        mock_session.post.return_value.headers = {"Retry-After": "3600"}
+        mock_get_session.return_value = mock_session
+        args = {"base_url": "https://quota.example/v1", "api_key": "k", "model_id": "m", "system_prompt": "s", "user_prompt": "u"}
+
+        with self.assertRaises(LLMRateLimitError) as raised:
+            chat_completion_sync(**args)
+        self.assertIsNotNone(raised.exception.available_at)
+        with self.assertRaises(LLMRateLimitError):
+            chat_completion_sync(**args)
+        self.assertEqual(mock_session.post.call_count, 1)
 
 
 class TestOpenAICompatibleProvider(unittest.IsolatedAsyncioTestCase):

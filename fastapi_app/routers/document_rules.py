@@ -70,7 +70,7 @@ from ..lib.doc_rules.rules_refresh import (
     resolve_refresh_target,
 )
 from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
-from ..lib.llm import LLMProviderError, LLMProviderRegistry
+from ..lib.llm import LLMProviderError, LLMProviderRegistry, LLMRateLimitError, rate_limit_http_error
 from ..lib.llm.model_access import ModelAccessDenied, check_model_access
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
@@ -580,8 +580,10 @@ def _upstream_error_message(error: requests.RequestException) -> str:
 
 
 def _llm_request_error(provider_id: str, error: LLMProviderError | requests.RequestException) -> HTTPException:
-    """The 502 for a failed request to the language model provider (logged)."""
+    """The HTTP error for a failed request to the language model provider (logged): 429 for a rate limit, otherwise 502."""
     logger.warning(f"document-rules: provider '{provider_id}' failed: {error}")
+    if isinstance(error, LLMRateLimitError):
+        return rate_limit_http_error(error)
     message = _upstream_error_message(error) if isinstance(error, requests.RequestException) else str(error)
     return HTTPException(status_code=502, detail=f"LLM provider request failed: {message}")
 
