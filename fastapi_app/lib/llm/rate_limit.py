@@ -7,7 +7,6 @@ it accepts requests again. State is held per endpoint, API key and model, in mem
 or in another worker process, the limit is learned again from the next 429.
 """
 
-import hashlib
 import logging
 import math
 import threading
@@ -100,13 +99,14 @@ class RateLimitTracker:
     def __init__(self, now: Callable[[], datetime] = utc_now):
         self._now = now
         self._lock = threading.Lock()
-        self._limited: dict[tuple[str, str, str], datetime] = {}
-        self._headers: dict[tuple[str, str, str], dict[str, str]] = {}
+        self._limited: dict[tuple[str, int, str], datetime] = {}
+        self._headers: dict[tuple[str, int, str], dict[str, str]] = {}
         self._reported_endpoints: set[str] = set()
 
     @staticmethod
-    def _key(endpoint: str, api_key: str | None, model_id: str) -> tuple[str, str, str]:
-        return endpoint, hashlib.sha256((api_key or "").encode()).hexdigest()[:16], model_id
+    def _key(endpoint: str, api_key: str | None, model_id: str) -> tuple[str, int, str]:
+        # The state only lives in this process, so the built-in hash is enough to avoid keeping the API key in it
+        return endpoint, hash(api_key or ""), model_id
 
     def now(self) -> datetime:
         """The tracker's current time."""
