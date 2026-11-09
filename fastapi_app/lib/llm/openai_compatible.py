@@ -17,6 +17,9 @@ from .base import LLMModel, LLMProvider
 
 logger = logging.getLogger(__name__)
 
+# Read timeout of one completion, per attempt. Slow hosted models need about 60 s for 8 annotation units; a stalled request is only detected after this time.
+COMPLETION_TIMEOUT_SECONDS = 180
+
 
 def chat_completion_sync(
     base_url: str,
@@ -42,7 +45,7 @@ def chat_completion_sync(
         ],
         "temperature": temperature,
     }
-    response = session.post(url, headers=headers, json=data, timeout=120)
+    response = session.post(url, headers=headers, json=data, timeout=COMPLETION_TIMEOUT_SECONDS)
     response.raise_for_status()
     result = response.json()
     choices = result.get("choices", [])
