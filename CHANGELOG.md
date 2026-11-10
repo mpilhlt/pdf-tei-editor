@@ -2,6 +2,36 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.82.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.81.0...v0.82.0) (2026-11-10)
+
+
+### Bug Fixes
+
+* **auth:** stop accepting the password's SHA-256 hash as a login credential ([25008ed](https://github.com/mpilhlt/pdf-tei-editor/commit/25008ed847cf9559c7c8a10a60289de61e03d725)), closes [#246](https://github.com/mpilhlt/pdf-tei-editor/issues/246)
+* **deps:** replace unused pytest-tap with tap-py ([ca60c84](https://github.com/mpilhlt/pdf-tei-editor/commit/ca60c84d6a67f84a7f66583cbc2ef76f98a909fc))
+* **dev:** make browsers revalidate /src files on every load ([125a7c1](https://github.com/mpilhlt/pdf-tei-editor/commit/125a7c1dcae4dc9fdf7b7615633ce32b91b140b8))
+* **document-rules:** rules editor workflow ([eba95cd](https://github.com/mpilhlt/pdf-tei-editor/commit/eba95cdc0c47b4b9c817e574b9ccbab7254e0ca9)), closes [#702](https://github.com/mpilhlt/pdf-tei-editor/issues/702)
+* **inference-settings:** keep model rows compact with the copy button ([f13ff9a](https://github.com/mpilhlt/pdf-tei-editor/commit/f13ff9acaa4b7b8aa1a42c0841f198aa124e30f1))
+* **llm:** identify API keys in the rate-limit state with the built-in hash ([3347a8c](https://github.com/mpilhlt/pdf-tei-editor/commit/3347a8cc6a7d8c9bc938e8fecf9ecf73441dd8ef))
+* **llm:** match llm.free-models patterns against provider/model ids as well as labels ([cc30459](https://github.com/mpilhlt/pdf-tei-editor/commit/cc304592edafdd5288f9ac952661f3f885d00087))
+* **llm:** prefer a user's own API key over the shared key ([6afc1b7](https://github.com/mpilhlt/pdf-tei-editor/commit/6afc1b721d639dcae032d3ed8c8a85d5854da191))
+* **llm:** raise the OpenAI-compatible completion timeout to 180 s ([6158177](https://github.com/mpilhlt/pdf-tei-editor/commit/6158177340f3b1a8856195bcc3a35def126f8eb9))
+* **plugins:** editable plugin installs take precedence over runtime-installed versions ([95f3da7](https://github.com/mpilhlt/pdf-tei-editor/commit/95f3da7a17e81278b16126ec592d91b71aaa3a30))
+* **tei-tools:** shrink the revision history date column and wrap its timestamp ([df614f4](https://github.com/mpilhlt/pdf-tei-editor/commit/df614f42610bcb197af8b55d180635f6b00dd118))
+
+
+### Features
+
+* **auth:** personal access tokens for API authentication ([de3c8ea](https://github.com/mpilhlt/pdf-tei-editor/commit/de3c8ea9eb85872c5a6654dc9456583972fd782a)), closes [#709](https://github.com/mpilhlt/pdf-tei-editor/issues/709)
+* **backup-restore:** log in with an access token; document API_TOKEN as the default ([07c1a60](https://github.com/mpilhlt/pdf-tei-editor/commit/07c1a604c30649dca79ec2d3efe89067e3540879))
+* **batch-extract:** select single documents with --doc in extract-only mode ([64cff68](https://github.com/mpilhlt/pdf-tei-editor/commit/64cff68c5ba1a1161ad2d196740f27caa66db65f))
+* **delete:** delete the current version with its exclusive history ([28c56dd](https://github.com/mpilhlt/pdf-tei-editor/commit/28c56dda24659452f4f55838ba42b4d31785a1f1))
+* **dev:** reload the dev server on changes to plugins outside the project ([984d9a6](https://github.com/mpilhlt/pdf-tei-editor/commit/984d9a60541517df314b3f8e75ea9a146d1b4b42))
+* **diagnostics:** color unit review entries like the review gutter ([9127018](https://github.com/mpilhlt/pdf-tei-editor/commit/912701854c2a1d625b09a6e28c52b0f4015dfc35))
+* **inference-settings:** admin button to copy a model's full id ([afbd961](https://github.com/mpilhlt/pdf-tei-editor/commit/afbd96196b1f8b5ceadc6de353cf9471e4bd6b1e))
+* **llm:** recognize rate limits and exhausted quotas of LLM services ([9a8b9d3](https://github.com/mpilhlt/pdf-tei-editor/commit/9a8b9d3d46cff592ea4ff97f0f3224fe3e966e15)), closes [#721](https://github.com/mpilhlt/pdf-tei-editor/issues/721)
+* **xmleditor:** group the right toolbar into history & review, import & export and plugin sections ([504ce28](https://github.com/mpilhlt/pdf-tei-editor/commit/504ce28f73389c4b5c2b6096f27a8144b58a228e))
+
 # [0.81.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.80.0...v0.81.0) (2026-11-04)
 
 
