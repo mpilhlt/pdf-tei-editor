@@ -18,12 +18,13 @@
  * range when the user applies its fix from the drawer.
  *
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { StateEffectType, Extension } from '@codemirror/state'
+ * @import { StateEffectType, Extension, Range } from '@codemirror/state'
  * @import { EditorView, ViewUpdate } from '@codemirror/view'
  */
 
 import { forEachDiagnostic, setDiagnostics, setDiagnosticsEffect, linter, lintGutter } from '@codemirror/lint';
-import { EditorState, StateEffect, Facet } from '@codemirror/state';
+import { EditorState, StateEffect, StateField, Facet, RangeSet } from '@codemirror/state';
+import { GutterMarker, gutterLineClass } from '@codemirror/view';
 
 /**
  * A diagnostic that may carry an automatically applicable fix.
@@ -69,6 +70,63 @@ const drawerOnlyConfig = [
  */
 export function drawerOnlyDiagnostics(source) {
   return [drawerOnlySources.of(source), drawerOnlyConfig];
+}
+
+/** @type {Map<string, GutterMarker>} */
+const lineClassMarkers = new Map();
+
+/**
+ * @param {string} elementClass
+ * @returns {GutterMarker}
+ */
+function lineClassMarker(elementClass) {
+  let marker = lineClassMarkers.get(elementClass);
+  if (!marker) {
+    marker = new class extends GutterMarker {}();
+    // GutterMarker.elementClass is a prototype field: set it on the instance
+    Object.defineProperty(marker, 'elementClass', { value: elementClass });
+    lineClassMarkers.set(elementClass, marker);
+  }
+  return marker;
+}
+
+/**
+ * Gutter line classes `cm-lint-line-<class>` for the `markClass` classes of the diagnostics on each
+ * line, including drawer-only ones.
+ * @param {EditorState} state
+ * @returns {RangeSet<GutterMarker>}
+ */
+function markClassLines(state) {
+  /** @type {Range<GutterMarker>[]} */
+  const ranges = [];
+  forEachDiagnostic(state, (d, from) => {
+    if (!d.markClass) return;
+    const lineStart = state.doc.lineAt(from).from;
+    for (const cls of d.markClass.split(/\s+/).filter(Boolean)) {
+      ranges.push(lineClassMarker(`cm-lint-line-${cls}`).range(lineStart));
+    }
+  });
+  return RangeSet.of(ranges, true);
+}
+
+const markClassLinesField = StateField.define({
+  create: markClassLines,
+  update(lines, tr) {
+    if (tr.effects.some(e => e.is(setDiagnosticsEffect))) return markClassLines(tr.state);
+    return tr.docChanged ? lines.map(tr.changes) : lines;
+  },
+  provide: field => gutterLineClass.from(field)
+});
+
+/**
+ * Editor extension that gives the gutter elements of a line the classes `cm-lint-line-<class>` for
+ * the `markClass` classes of the diagnostics on that line, also of drawer-only ones. A source can so
+ * restyle the lint gutter marker of the lines its diagnostics mark (e.g. unit review colors the
+ * marker of a line with a not-OK review red, see app.css).
+ * @returns {Extension}
+ */
+export function markClassGutterLines() {
+  return markClassLinesField;
 }
 
 /**

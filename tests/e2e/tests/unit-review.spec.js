@@ -353,6 +353,8 @@ test.describe('Unit review', () => {
       await expect(entry.getByText('✕ Not OK')).toHaveCount(0);
       // its stripe has the not-OK color of the review gutter
       await expect(page.locator('.diagnostics-drawer-item.cm-unit-review-not-ok')).toHaveCount(1);
+      // the lint gutter element of its line gets the class coloring a lint marker there red
+      await expect(page.locator('.cm-gutter-lint .cm-gutterElement.cm-lint-line-cm-unit-review-not-ok')).toHaveCount(1);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);

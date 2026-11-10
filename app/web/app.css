@@ -851,6 +851,19 @@ sl-drawer.diagnostics-drawer::part(footer) {
   background-position: left top;
 }
 
+/* the lint gutter marker (info/hint, e.g. LLM findings) of a line whose unit has a not-OK, disputed
+   or changed review takes the review's color instead of the neutral purple (lint-utils.js
+   markClassGutterLines); error and warning markers keep theirs */
+.cm-gutter-lint .cm-gutterElement.cm-lint-line-cm-unit-review-not-ok :is(.cm-lint-marker-info, .cm-lint-marker-hint) {
+  content: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cpath%20fill%3D%22%23f19a9a%22%20stroke%3D%22%23d64545%22%20stroke-width%3D%226%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%205L35%205L35%2035L5%2035Z%22%2F%3E%3C%2Fsvg%3E');
+}
+.cm-gutter-lint .cm-gutterElement.cm-lint-line-cm-unit-review-disputed :is(.cm-lint-marker-info, .cm-lint-marker-hint) {
+  content: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cpath%20fill%3D%22%23f19a9a%22%20d%3D%22M5%205L35%205L35%2020L5%2020Z%22%2F%3E%3Cpath%20fill%3D%22%2398d4ad%22%20d%3D%22M5%2020L35%2020L35%2035L5%2035Z%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23d64545%22%20stroke-width%3D%226%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2020L5%205L35%205L35%2020%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%232f9e57%22%20stroke-width%3D%226%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2020L5%2035L35%2035L35%2020%22%2F%3E%3C%2Fsvg%3E');
+}
+.cm-gutter-lint .cm-gutterElement.cm-lint-line-cm-unit-review-changed :is(.cm-lint-marker-info, .cm-lint-marker-hint) {
+  content: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cpath%20fill%3D%22%23d4d6da%22%20stroke%3D%22%238a8f98%22%20stroke-width%3D%226%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%205L35%205L35%2035L5%2035Z%22%2F%3E%3C%2Fsvg%3E');
+}
+
 .diagnostics-drawer-item sl-checkbox {
   margin-top: 2px;
 }
