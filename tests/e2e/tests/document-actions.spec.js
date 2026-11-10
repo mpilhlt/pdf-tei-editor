@@ -772,4 +772,71 @@ test.describe('Document Actions', () => {
       await page.close();
     }
   });
+
+  test('should load the next version without error after deleting the current version', async ({ page }) => {
+    // Regression test: the xml selectbox was repopulated after a delay, so the deleted version
+    // was still its first option and was loaded again ("ApiError: File not found")
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    page.on('dialog', dialog => dialog.accept());
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await page.waitForTimeout(1000);
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+
+      // Create a copy, which becomes the first option of the xml selectbox
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+      await page.waitForSelector('sl-dialog[name="saveDocumentDialog"][open]', { timeout: 5000 });
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.saveDocumentDialog.options.saveToNewCopySection.saveToNewCopy.checked = true;
+        ui.saveDocumentDialog.options.saveToNewCopySection.copyLabel.value = 'Version to delete';
+        ui.saveDocumentDialog.changeDesc.value = 'To be deleted';
+      });
+      await page.waitForTimeout(500);
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.saveDocumentDialog.submit.click();
+      });
+      const versionLoadedLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED', 10000);
+      const newFileId = versionLoadedLog.value.fileId;
+
+      await page.waitForFunction(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return !ui.toolbar.documentActions.deleteCurrentVersion.disabled;
+      }, { timeout: 5000 });
+
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.deleteCurrentVersion.click();
+      });
+
+      const deletedLog = await waitForTestMessage(consoleLogs, 'VERSION_DELETED', 10000);
+      expect(deletedLog.value.deletedId).toBe(newFileId);
+      expect(deletedLog.value.loadedId).toBeTruthy();
+      expect(deletedLog.value.loadedId).not.toBe(newFileId);
+
+      const xmlOptions = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return Array.from(ui.toolbar.xml.querySelectorAll('sl-option')).map(o => /** @type {any} */(o).value);
+      });
+      expect(xmlOptions).not.toContain(newFileId);
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
 });

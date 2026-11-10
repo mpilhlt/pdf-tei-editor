@@ -168,6 +168,7 @@ class DocumentActionsPlugin extends Plugin {
         await this.getDependency('file-selection').reload()
         const xml = this.getDependency('file-selection').getOptionValues('xml')[0]?.value
         await this.#services.load({ xml })
+        testLog('VERSION_DELETED', { deletedId: xmlValue, loadedId: xml ?? null })
         notify(`Version "${versionName}" has been deleted.`)
         this.context.invokePluginEndpoint(ep.sync.syncFiles, state)
           .then(summary => summary && console.debug(summary))
