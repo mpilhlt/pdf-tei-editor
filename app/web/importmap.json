@@ -109,7 +109,7 @@
     "../../node_modules/markdown-it/": {
       "punycode.js": "../../node_modules/punycode.js/punycode.es6.js",
       "linkify-it": "../../node_modules/linkify-it/build/index.mjs",
-      "entities": "../../node_modules/entities/dist/index.js",
+      "entities": "../../node_modules/markdown-it/node_modules/entities/dist/index.js",
       "uc.micro": "../../node_modules/uc.micro/build/index.mjs",
       "mdurl": "../../node_modules/mdurl/index.mjs"
     },

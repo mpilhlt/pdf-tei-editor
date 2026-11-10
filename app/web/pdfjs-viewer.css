@@ -110,6 +110,13 @@
   /* Don't override position, z-index, or dimensions - let PDF.js handle all positioning */
 }
 
+/* Links and other annotations are not interactive: their HTML layer showed
+ * through overlays such as the diagnostics drawer and opened links when clicked.
+ * Annotation appearances are still drawn on the canvas (see pdfviewer.js). */
+.pdfViewer .annotationLayer {
+  display: none;
+}
+
 /* Text layer alignment fix
  * PDF.js text layer calculations assume content-box sizing.
  * Global box-sizing: border-box (from app.css) causes misalignment.
