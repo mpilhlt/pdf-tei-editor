@@ -30,6 +30,7 @@ import {
   renderMarkdown,
   spliceMarkdownSection
 } from '../modules/markdown-utils.js'
+import { fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
 
 /**
  * Annotation guide information from extractor plugins
@@ -78,7 +79,7 @@ class AnnotationGuidePlugin extends Plugin {
     this.#ui = this.createUi(createSingleFromTemplate('annotation-guide-drawer', document.body))
     this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide())
     this.#ui.openInNewWindowBtn.addEventListener('click', () => this.#openInNewWindow())
-    this.#ui.tocDropdown.addEventListener('sl-show', () => this.#fitTocMenu())
+    this.#ui.tocDropdown.addEventListener('sl-show', () => fitTocMenu(this.#ui, this.#ui.tocDropdown.tocMenu))
     this.#ui.tocDropdown.tocMenu.addEventListener('sl-select', event => {
       const item = /** @type {SlMenuItem} */ (/** @type {CustomEvent} */ (event).detail.item)
       this.#scrollToHeading(Number(item.value))
@@ -168,48 +169,13 @@ class AnnotationGuidePlugin extends Plugin {
   }
 
   /**
-   * Rebuilds the table of contents menu from the given headings, indenting
-   * each entry by its level relative to the topmost level present (whose
-   * entries are bold if there are deeper levels). Hides the TOC trigger
-   * button if there are no headings.
+   * Rebuilds the table of contents menu from the given headings. Hides the
+   * TOC trigger button if there are no headings.
    * @param {MarkdownHeading[]} headings
    */
   #updateToc(headings) {
     this.#headings = headings
-    const menu = this.#ui.tocDropdown.tocMenu
-    menu.replaceChildren()
-    const minLevel = Math.min(...headings.map(h => h.level))
-    const nested = headings.some(h => h.level !== minLevel)
-    headings.forEach((heading, index) => {
-      const item = document.createElement('sl-menu-item')
-      item.value = String(index)
-      item.dataset.level = String(heading.level)
-      const label = document.createElement('span')
-      label.style.display = 'block'
-      label.style.paddingLeft = `${(heading.level - minLevel) * 1.25}rem`
-      if (nested && heading.level === minLevel) label.style.fontWeight = '600'
-      label.textContent = heading.text
-      item.append(label)
-      menu.append(item)
-    })
-    this.#ui.tocDropdown.hidden = headings.length === 0
-  }
-
-  /**
-   * Limits the TOC menu to the size of the drawer's scrollable body, so that
-   * the menu shows the whole TOC and only scrolls if it would be taller than
-   * the guide container.
-   */
-  #fitTocMenu() {
-    const body = /** @type {HTMLElement | null} */ (this.#ui.shadowRoot?.querySelector('[part="body"]'))
-    if (!body) return
-    // sl-dropdown sizes a slotted sl-menu with an !important max-height/width
-    // from these properties, which it inherits from the popup; overriding them
-    // on the menu is the only way to change that. The space above the trigger
-    // is always at least the body height, so the menu still fits the viewport.
-    const menu = this.#ui.tocDropdown.tocMenu
-    menu.style.setProperty('--auto-size-available-height', `${body.clientHeight}px`)
-    menu.style.setProperty('--auto-size-available-width', `${body.clientWidth}px`)
+    populateTocMenu(this.#ui.tocDropdown, this.#ui.tocDropdown.tocMenu, headings)
   }
 
   /**
@@ -219,11 +185,7 @@ class AnnotationGuidePlugin extends Plugin {
   #scrollToHeading(index) {
     const heading = this.#headings[index]
     if (!heading) return
-    const candidates = this.#ui.content.querySelectorAll(`[id="${CSS.escape(heading.anchor)}"]`)
-    const target = candidates[heading.occurrence] || candidates[0]
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    } else {
+    if (!scrollToHeading(this.#ui.content, heading)) {
       this.getDependency('logger').warn(`Heading #${heading.anchor} not found in annotation guide`)
     }
   }

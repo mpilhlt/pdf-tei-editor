@@ -45,6 +45,8 @@ curl -H "X-Session-ID: <sessionId>" https://pdf-tei-editor.example.org/api/v1/au
 
 A session created from a token ends when the token is revoked or expires, or after the usual inactivity timeout.
 
+For complete Node.js and Python examples, see [Programmatic API Access](../development/api-reference.md#programmatic-api-access).
+
 ## Revoking a token
 
 Click **Revoke** next to the token in the dialog. Scripts using it can no longer log in, and their current sessions end. Deleting a user revokes all of the user's tokens. Revoked tokens, and tokens that expired more than 30 days ago, are removed by garbage collection.

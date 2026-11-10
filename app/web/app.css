@@ -995,3 +995,17 @@ sl-drawer.diagnostics-drawer::part(footer) {
   background: var(--sl-color-warning-50);
   font-size: var(--sl-font-size-small);
 }
+
+/* "Copy link" button of headings in rendered Markdown (markdown-toc.js addHeadingLinkButtons) */
+.markdown-body .heading-link {
+  font-size: 0.75em;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6):hover .heading-link,
+.markdown-body .heading-link:focus-within {
+  opacity: 1;
+}
